@@ -11,6 +11,12 @@ import logging
 logger = logging.getLogger(__name__)
 
 def get_node_repository(user, id="localhost"):
+    if user.is_anonymous:
+        repo, _ = Repository.objects.get_or_create(type=f"flow", defaults={"name": f"flow_{id}"})
+        return repo
+
+
+
     repo, _ = Repository.objects.filter(creator=user).get_or_create(type=f"flow", defaults={"name": f"flow_{id}", "creator": user})
     return repo
 
@@ -31,7 +37,7 @@ class CreateNode(BalderMutation):
         type = types.Node
 
     
-    @bounced()
+    @bounced(anonymous=True)
     def mutate(root, info, package=None, interface=None, description="Not description", outputs=[], inputs=[], type=None, name="name"):
         repository = get_node_repository(info.context.user)
         

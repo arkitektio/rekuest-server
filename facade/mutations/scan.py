@@ -1,6 +1,6 @@
-from facade.scan import scan_service_for_models
+from facade.scan import scan_service
 from facade import types
-from facade.models import DataPoint
+from facade.models import  Service
 from balder.types import BalderMutation
 from herre import bounced
 import graphene
@@ -8,7 +8,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class Scan(BalderMutation):
+class ScanMutation(BalderMutation):
     """Scan allows you to add Datapoints to your Arnheim Schema, this is only available to Admin users"""
 
     class Arguments:
@@ -18,24 +18,25 @@ class Scan(BalderMutation):
 
 
     class Meta:
-        type = types.DataQuery
+        type = types.Service
+        operation = "scan"
 
     
     @bounced()
     def mutate(root, info, host=None, port = 8080, force=False):
         try:
-            datapoint = DataPoint.objects.get(inward=host, port=port)
+            service = Service.objects.get(inward=host, port=port)
 
             if not force:
-                return types.DataQuery(point=datapoint, models=datapoint.models.all())
+                return service
 
-        except DataPoint.DoesNotExist:
+        except Service.DoesNotExist:
             logger.info("Didn't exist.. forcing scan!")
 
         
-        datapoint, models = scan_service_for_models(host, port)
+        service = scan_service(host, port)
         
 
-        return types.DataQuery(point=datapoint, models=models)
+        return service
             
 

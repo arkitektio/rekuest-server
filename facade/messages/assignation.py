@@ -40,7 +40,7 @@ class AssignationMessage(MessageModel):
         data = {
             "reference": assignation.reference,
             "id" : assignation.id,
-            "node": assignation.node.id,
+            "node": assignation.node.id if assignation.node else None,
             "template": assignation.template.id if assignation.template else None,
             "pod": assignation.pod.id if assignation.pod else None,
             "callback": assignation.callback,
@@ -52,7 +52,12 @@ class AssignationMessage(MessageModel):
         meta = {
             "reference": assignation.reference,
             "type" : ASSIGNATION,
-            "extensions": extensions
+            "extensions": {
+                **extensions,
+                "callback": assignation.callback,
+                "progress": assignation.progress
+
+            }
         }
 
         return cls(**{"data": data, "meta": meta})

@@ -12,6 +12,27 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+
+class Service(models.Model):
+    version = models.CharField(max_length=100, help_text="The version of the bergen API this endpoint uses")
+    inward = models.CharField(max_length=100, help_text="Inward facing hostname (for Docker powered access)")
+    outward = models.CharField(max_length=100, help_text="Outward facing hostname for external clients")
+    types = models.JSONField(help_text="The extensions to the protocol it provides")
+    name = models.CharField(max_length=100, unique=True)
+    port = models.IntegerField(help_text="Listening port")
+    
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["inward","port"], name="Unique Service")
+        ]
+
+
+    def __str__(self):
+        return f"{self.name} for {self.inward}:{self.port}"
+
+
+
 class DataPoint(models.Model):
     """A Datapoint constitues Arkitekts Representation of a Host of Data.
 
@@ -72,21 +93,35 @@ class Repository(models.Model):
 class Provider(models.Model):
     """ A provider is the intermediate step from a template to a pod, it takes an associated template
     and transfers it to a pod, given the current restrictions of the setup"""
-    app = models.CharField(max_length=600, help_text="Do we have an external client? The Client ID of the App connecting, Default to internal if this is internal", default=uuid.uuid4) 
-    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, help_text="The provide might be limited to a instance like ImageJ belonging to a specific person. Is nullable for backend users", null=True)
     name = models.CharField(max_length=2000, help_text="This providers Name", default="Nana")    
     installed_at = models.DateTimeField(auto_created=True, auto_now_add=True)
-    unique = models.CharField(max_length=1000, default=uuid.uuid4)
-    internal = models.BooleanField(default=False)
+    unique = models.CharField(max_length=1000, default=uuid.uuid4, help_text="The Channel we are listening to")
     active = models.BooleanField(default=False, help_text="Is this Provider active right now?")
 
+    
+
+
+class AppProvider(Provider):
+    client_id = models.CharField(max_length=6000, help_text="External Clients are authorized via the App ID")
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, help_text="The provide might be limited to a instance like ImageJ belonging to a specific person. Is nullable for backend users", null=True)
+    
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["app","user"], name="No multiple Providers for same App and User allowed")
+            models.UniqueConstraint(fields=["client_id","user"], name="No multiple Providers for same App and User allowed")
         ]
 
     def __str__(self):
         return f"{self.name} for {self.user}"
+
+
+class ServiceProvider(Provider):
+    service = models.OneToOneField(Service, on_delete=models.CASCADE, help_text="The Associated Service for this Provider")
+
+
+    def __str__(self):
+        return f"{self.name} for {self.service}"
+
+
 
 
 
@@ -124,6 +159,7 @@ class Template(models.Model):
     name = models.CharField(max_length=1000, default=generate_random_name, help_text="A name for this Template")
 
     params = ParamsField(default=dict, help_text="Params for this Template")
+    channel = models.CharField(max_length=1000, default=uuid.uuid4, help_text="The unique channel where we can reach pods of this template", unique=True)
 
     creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, help_text="Who created this template on this instance")
     version = models.CharField(max_length=400, help_text="A short descriptor for the kind of version") #Subject to change
@@ -137,6 +173,10 @@ class Template(models.Model):
 
     def __str__(self):
         return f"{self.node} implemented by {self.provider}"
+
+    @property
+    def is_active(self):
+        return len(self.pods.all()) > 0
 
 
 

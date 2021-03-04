@@ -14,5 +14,10 @@
             "type": "shell",
             "command": "python manage.py makemigrations && python manage.py migrate"
         },
+        {
+            "label": "Assigner",
+            "type": "shell",
+            "command": "python manage.py runassigner"
+        },
     ]
 }

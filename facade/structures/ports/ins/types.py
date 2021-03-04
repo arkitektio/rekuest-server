@@ -5,6 +5,7 @@ import graphene
 get_port_types = lambda: {
             "int": IntInPort,
             "model": ModelInPort,
+            "string": StringInPort
 }
 
 @register_type
@@ -23,13 +24,28 @@ class InPort(graphene.Interface):
 
 @register_type
 class IntInPort(graphene.ObjectType):
+    """Integer Port"""
     default = graphene.Int(description="Default value")
 
     class Meta:
         interfaces = (InPort,)
 
+
+@register_type
+class StringInPort(graphene.ObjectType):
+    """String Port"""
+    default = graphene.String(description="Default value")
+
+    class Meta:
+        interfaces = (InPort,)
+
+
+
+
+
 @register_type
 class ModelInPort(graphene.ObjectType):
+    """Model Port"""
     identifier = graphene.String(description="The identifier of this Model")
 
     class Meta:
