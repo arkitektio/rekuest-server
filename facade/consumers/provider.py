@@ -25,7 +25,7 @@ def activatePod(pod_id, channel):
     pod.status = PodStatus.ACTIVE
     pod.channel = channel
     pod.save()
-    return pod
+    return pod.id, pod.template.channel
 
 @sync_to_async
 def deactivatePods(podids):
@@ -43,14 +43,18 @@ NOT_AUTHENTICATED_CODE = 3
 
 
 
-class ProviderConsumer(BaseConsumer):
+class ProviderConsumer(BaseConsumer): #TODO: Seperate that bitch
 
     @bounced_ws(only_jwt=True)
     async def connect(self):
         await self.accept()
+        #TODO: Check if in provider mode
         self.provider = await activateProviderForClientID(self.scope["bounced"].client_id)
         logger.warning(f"Connecting {self.provider.name}") 
-        self.pods = []
+
+        self.pod_queues = {}
+
+
         self.channel_name = await self.connect_to_rabbit()
 
     async def connect_to_rabbit(self):
@@ -58,13 +62,19 @@ class ProviderConsumer(BaseConsumer):
         self.connection = await aiormq.connect(f"amqp://guest:guest@mister/")
         self.channel = await self.connection.channel()
         # Declaring queue
-        self.assignment_queue = await self.channel.queue_declare()
+        self.on_provision_queue = await self.channel.queue_declare(auto_delete=True)
 
         # Start listening the queue with name 'hello'
-        await self.channel.basic_consume(self.assignment_queue.queue, self.on_message)
-        return self.assignment_queue.queue
+        await self.channel.basic_consume(self.on_provision_queue.queue, self.on_provision)
+        return self.on_provision_queue.queue
         
-    async def on_message(self, message):
+    async def on_assign_to_pod(self, message: aiormq.types.DeliveredMessage):
+        logger.error(message.body.decode())
+        await self.send(text_data=message.body.decode()) # No need to go through pydantic???
+        await message.channel.basic_ack(message.delivery.delivery_tag)
+
+
+    async def on_provision(self, message: aiormq.types.DeliveredMessage):
         logger.error(message.body.decode())
         await self.send(text_data=message.body.decode()) # No need to go through pydantic???
         await message.channel.basic_ack(message.delivery.delivery_tag)
@@ -74,17 +84,22 @@ class ProviderConsumer(BaseConsumer):
         try:
             logger.warning(f"Disconnecting {self.provider.name} with close_code {close_code}") 
             #TODO: Depending on close code send message to all running Assignations
-            await deactivatePods(self.pods)
+            await deactivatePods([id for id, queue in self.pod_queues.items()])
             await self.connection.close()
         except:
             logger.error("Something weird happened in disconnection!")
 
 
     async def on_activate_pod(self, message: ActivatePodMessage):
-        logger.info("Activating Pod")
-        pod = await activatePod(message.data.pod, self.channel_name)
-        self.pods.append(pod.id)
-        # await self.send(text_data=message.body.decode()) # No need to go through pydantic???
+        logger.warn("Activating Pod")
+
+        podid, queuename = await activatePod(message.data.pod, self.channel_name)
+        declared_queue = await self.channel.queue_declare(queuename)
+        # Each pod through podman listens to the same pod
+
+        await self.channel.basic_consume(declared_queue.queue, self.on_assign_to_pod)
+        self.pod_queues[podid] = declared_queue
+        
 
     async def on_assignation(self, assignation: AssignationMessage):
         

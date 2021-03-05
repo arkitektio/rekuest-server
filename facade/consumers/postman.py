@@ -1,4 +1,7 @@
 # chat/consumers.py
+from facade.messages.postman import cancel
+from facade.messages.postman.cancel import CancelAssignMessage
+from facade.messages.postman.assign import AssignMessage
 from facade.messages.assignation import AssignationMessage
 from facade.models import Assignation
 from asgiref.sync import sync_to_async
@@ -34,7 +37,25 @@ def create_assignation_from_request(request: AssignationRequestMessage, user, ca
 
     return AssignationMessage.fromAssignation(assignation)
 
+@sync_to_async
+def create_assignation_from_assign(assign: AssignMessage, user, callback, progress) -> AssignationMessage:
 
+    try:
+        return Assignation.objects.get(reference=assign.meta.reference)
+    except Assignation.DoesNotExist:
+        assignation = Assignation.objects.create(**{
+            "inputs": assign.data.inputs,
+            "node_id": assign.data.node,
+            "pod_id":assign.data.pod,
+            "template_id": assign.data.template,
+            "creator": user,
+            "callback": callback,
+            "progress": progress,
+            "reference": assign.meta.reference
+        }
+        )
+
+    return AssignationMessage.fromAssignation(assignation)
 
 
 class PostmanConsumer(BaseConsumer):
@@ -44,6 +65,9 @@ class PostmanConsumer(BaseConsumer):
         logger.error(f"Connecting Postman {self.scope['user']}")
         await self.accept()
         self.callback_name, self.progress_name = await self.connect_to_rabbit()
+
+
+        self.user = self.scope["user"]
         
 
     async def connect_to_rabbit(self):
@@ -51,8 +75,8 @@ class PostmanConsumer(BaseConsumer):
         self.connection = await aiormq.connect(f"amqp://guest:guest@mister/")
         self.channel = await self.connection.channel()
         # Declaring queue
-        self.callback_queue = await self.channel.queue_declare()
-        self.progress_queue = await self.channel.queue_declare()
+        self.callback_queue = await self.channel.queue_declare(auto_delete=True)
+        self.progress_queue = await self.channel.queue_declare(auto_delete=True)
 
         # Start listening the queue with name 'hello'
         await self.channel.basic_consume(self.callback_queue.queue, self.on_callback)
@@ -92,7 +116,7 @@ class PostmanConsumer(BaseConsumer):
 
 
     async def on_assignation_request(self, assignation_request: AssignationRequestMessage):
-        assignation = await create_assignation_from_request(assignation_request, self.scope["user"], self.callback_name, self.progress_name)
+        assignation = await create_assignation_from_request(assignation_request, self.user, self.callback_name, self.progress_name)
 
         await self.channel.basic_publish(
             assignation.to_message(), routing_key="assignation_in",
@@ -101,6 +125,23 @@ class PostmanConsumer(BaseConsumer):
                 reply_to=self.callback_name
         )
         )
+
+
+    async def on_assign(self, assign: AssignMessage):
+        assignation: AssignationMessage = await create_assignation_from_assign(assign, self.user, self.callback_name, self.progress_name)
+        print(assignation)
+        await self.channel.basic_publish(
+            assignation.to_message(), routing_key="assignation_in",
+            properties=aiormq.spec.Basic.Properties(
+                correlation_id=assignation.meta.reference,
+                reply_to=self.callback_name
+        )
+        )
+
+    async def on_cancel_assign(self, cancel_assign: CancelAssignMessage):
+        print(cancel_assign)
+
+
 
 
             

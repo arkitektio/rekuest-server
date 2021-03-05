@@ -1,11 +1,15 @@
+from balder.fields.enum import EnumFilter
 import graphene
 from graphene_django.converter import convert_django_field
 from django.db import models
 from graphene.types.generic import GenericScalar
+from balder.enum import InputEnum
+
 
 @convert_django_field.register(models.JSONField)
 def convert_json_field_to_string(field, registry=None):
     return GenericScalar()
+
 
 class BalderRegistry:
 

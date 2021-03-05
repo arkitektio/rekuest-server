@@ -1,6 +1,7 @@
-from facade.enums import PodStatus
+from facade.messages.exception import ExceptionMessage
+from facade.enums import AssignationStatus, PodStatus
 from facade.messages import AssignationMessage, AssignationAction, AssignationRequestMessage
-from facade.models import Assignation, Pod
+from facade.models import Assignation, Pod, Template
 import logging
 import aiormq
 from asgiref.sync import sync_to_async
@@ -25,6 +26,23 @@ def find_pods_for_assignation(assignation: AssignationMessage):
     assert assignation, "Please first create an Assignation"
     pods = [pod for pod in Pod.objects.filter(template__node_id=assignation.data.node, status=PodStatus.ACTIVE.value) ]
     return pods
+
+
+@sync_to_async
+def find_template_for_assignation(assignation: AssignationMessage):
+    template = assignation.data.template
+    if template:
+        template = Template.objects.get(id=template)
+        assert template.is_active, "You cannot assign to an unactive Template"
+        return template,
+
+    node = assignation.data.node
+    if node:
+        template = Template.objects.filter(pods__status=PodStatus.ACTIVE).first()
+        return template
+
+    raise Exception("Did not find an Assignation")
+
 
 @sync_to_async
 def update_assignation_with_pod(assignation: AssignationMessage, pod: Pod):
@@ -96,25 +114,31 @@ class AssignationRabbit(BaseHare):
     async def on_assignation_in(self, assignation: AssignationMessage, message: aiormq.types.DeliveredMessage):
         logger.info(f"Received Assignation {str(message.body.decode())}")
 
-        pods = await find_pods_for_assignation(assignation)
-        # We are routing it to Pod One / This Pod will then reply to
-        logger.info("Found the Following Pods we can assign too!")
+        try:
+            template = await find_template_for_assignation(assignation)
+            # We are routing it to the Template channel (pods will pick up and then reply to)
+            logger.info("Found the Following Templates we can assign too!")
+            logger.warning(f"Assigning to {template.name + template.channel}")
+            assignation.data.template = template.id
 
-        if len(pods) >= 1:
 
-            pod = pods[0]
-            assignation.data.pod = pod.id
-
-            logger.warning(f"Assigning to {pod.id}")
             await message.channel.basic_publish(
-                assignation.to_message(), routing_key=pod.channel, # Lets take the first best one
+                assignation.to_message(), routing_key=template.channel, # Lets take the first best one
                 properties=aiormq.spec.Basic.Properties(
                     correlation_id=assignation.data.reference,
                     reply_to=self.assignation_done.queue
                 )
             )
+        except Exception as e:
 
-            await update_assignation_with_pod(assignation, pod)
+            exception = ExceptionMessage.fromException(e, assignation.meta.reference)
+            await message.channel.basic_publish(
+                exception.to_message(), routing_key=assignation.meta.extensions.callback, # Lets take the first best one
+                properties=aiormq.spec.Basic.Properties(
+                    correlation_id=assignation.data.reference,
+                    reply_to=self.assignation_done.queue
+                )
+            )
 
         # This should then expand this to an assignation message that can be delivered to the Providers
         await message.channel.basic_ack(message.delivery.delivery_tag)

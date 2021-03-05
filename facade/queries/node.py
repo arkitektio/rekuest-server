@@ -1,3 +1,4 @@
+from facade.filters import NodeFilter
 from typing_extensions import Annotated
 from balder.types import BalderQuery
 from facade import types
@@ -28,3 +29,4 @@ class Nodes(BalderQuery):
     class Meta:
         type = types.Node
         list = True
+        filter = NodeFilter
