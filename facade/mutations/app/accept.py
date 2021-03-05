@@ -1,5 +1,5 @@
 from facade.enums import PodStatus
-from facade.models import Provider, Template, Pod
+from facade.models import AppProvider, Provider, Template, Pod
 from facade import types
 from balder.types import BalderMutation
 import graphene
@@ -14,7 +14,7 @@ class Accept(BalderMutation):
 
     @bounced(only_jwt=True)
     def mutate(root, info, template=None, provider=None):
-        provider = Provider.objects.get(app=info.context.auth.client_id, user=info.context.user)
+        provider = AppProvider.objects.get(client_id=info.context.auth.client_id, user=info.context.user)
         template = Template.objects.get(id=template)
 
         pod, created = Pod.objects.update_or_create(

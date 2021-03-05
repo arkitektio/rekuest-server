@@ -16,6 +16,16 @@ class DataModel(BalderObject):
         model = models.DataModel
 
 
+class Service(BalderObject):
+
+    class Meta:
+        model = models.Service
+
+
+class Scan(graphene.ObjectType):
+    ok = graphene.Boolean()
+
+
 class DataQuery(graphene.ObjectType):
     point = graphene.Field(DataPoint, description="The queried Datapoint")
     models = graphene.List(DataModel, description="The queried models on the Datapoint")
@@ -40,6 +50,11 @@ class Provider(BalderObject):
     class Meta:
         model = models.Provider
 
+
+class AppProvider(BalderObject):
+    
+    class Meta:
+        model = models.AppProvider
 
 class Pod(BalderObject):
     

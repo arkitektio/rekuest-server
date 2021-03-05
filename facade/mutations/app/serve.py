@@ -1,4 +1,4 @@
-from facade.models import Provider
+from facade.models import AppProvider, Provider
 from facade import types
 from balder.types import BalderMutation
 import graphene
@@ -12,9 +12,9 @@ class Serve(BalderMutation):
 
     @bounced(only_jwt=True)
     def mutate(root, info, name):
-        provider , _ = Provider.objects.update_or_create(app=info.context.auth.client_id, user=info.context.user, defaults= {"name": name})
+        provider , _ = AppProvider.objects.update_or_create(client_id=info.context.auth.client_id, user=info.context.user, defaults= {"name": name})
         return provider
 
 
     class Meta:
-        type = types.Provider
+        type = types.AppProvider

@@ -2,7 +2,7 @@
 from facade.messages.activatepod import ActivatePodMessage
 from herre.bouncer.utils import bounced_ws
 from ..messages import AssignationMessage
-from ..models import Pod, Provider
+from ..models import AppProvider, Pod, Provider
 from ..enums import AssignationStatus, PodStatus
 from asgiref.sync import sync_to_async
 from .base import BaseConsumer
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 @sync_to_async
 def activateProviderForClientID(client_id):
     print(client_id)
-    provider = Provider.objects.get(app=client_id)
+    provider = AppProvider.objects.get(client_id=client_id)
     provider.active = True
     return provider
 

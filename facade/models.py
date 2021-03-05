@@ -12,6 +12,27 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+
+class Service(models.Model):
+    version = models.CharField(max_length=100, help_text="The version of the bergen API this endpoint uses")
+    inward = models.CharField(max_length=100, help_text="Inward facing hostname (for Docker powered access)")
+    outward = models.CharField(max_length=100, help_text="Outward facing hostname for external clients")
+    types = models.JSONField(help_text="The extensions to the protocol it provides")
+    name = models.CharField(max_length=100, unique=True)
+    port = models.IntegerField(help_text="Listening port")
+    
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["inward","port"], name="Unique Service")
+        ]
+
+
+    def __str__(self):
+        return f"{self.name} for {self.inward}:{self.port}"
+
+
+
 class DataPoint(models.Model):
     """A Datapoint constitues Arkitekts Representation of a Host of Data.
 
@@ -74,12 +95,10 @@ class Provider(models.Model):
     and transfers it to a pod, given the current restrictions of the setup"""
     name = models.CharField(max_length=2000, help_text="This providers Name", default="Nana")    
     installed_at = models.DateTimeField(auto_created=True, auto_now_add=True)
-    unique = models.CharField(max_length=1000, default=uuid.uuid4)
-    internal = models.BooleanField(default=False)
+    unique = models.CharField(max_length=1000, default=uuid.uuid4, help_text="The Channel we are listening to")
     active = models.BooleanField(default=False, help_text="Is this Provider active right now?")
 
     
-
 
 class AppProvider(Provider):
     client_id = models.CharField(max_length=6000, help_text="External Clients are authorized via the App ID")
@@ -95,16 +114,13 @@ class AppProvider(Provider):
 
 
 class ServiceProvider(Provider):
-    host = models.CharField(max_length=6000, help_text="External Clients are authorized via the App ID")
-    port = models.IntegerField()
+    service = models.OneToOneField(Service, on_delete=models.CASCADE, help_text="The Associated Service for this Provider")
 
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["host","port"], name="No multiple Providers for same Service allowed")
-        ]
 
     def __str__(self):
-        return f"{self.name} for {self.user}"
+        return f"{self.name} for {self.service}"
+
+
 
 
 

@@ -1,4 +1,4 @@
-from facade.models import Provider, Template
+from facade.models import AppProvider, Provider, ServiceProvider, Template
 from facade import types
 from balder.types import BalderMutation
 import graphene
@@ -7,16 +7,16 @@ from graphene.types.generic import GenericScalar
 
 
 
-class Offer(BalderMutation):
+class CreateTemplate(BalderMutation):
 
     class Arguments:
         node = graphene.ID(required=True, description="The Node you offer to give an implementation for")
         params  = GenericScalar(required=False, description="Some additional Params for your offering")
 
 
-    @bounced(only_jwt=True)
     def mutate(root, info, node=None, name=None, params=None):
-        provider = Provider.objects.get(app=info.context.auth.client_id, user=info.context.user)
+        provider = ServiceProvider.objects.get(service__name="port")
+
 
         try:
             template = Template.objects.get(node=node, params=params)
@@ -27,7 +27,8 @@ class Offer(BalderMutation):
                 provider=provider,
             )
 
-        assert template.provider == provider, "Template cannot be offered because it already existed on another Provider, considering Implementing it differently or copy that implementation!"
+        # We check ids because AppProvider is not Provider subclass
+        assert template.provider.id == provider.id, "Template cannot be offered because it already existed on another Provider, considering Implementing it differently or copy that implementation!"
         return template
         
 
