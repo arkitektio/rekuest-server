@@ -1,5 +1,6 @@
-from facade.structures.ports.ins.types import InPort
-from facade.structures.ports.out.types import OutPort
+from facade.structures.ports.returns.types import ReturnPort
+from facade.structures.ports.kwargs.types import KwargPort
+from facade.structures.ports.args.types import ArgPort
 from facade import models
 from balder.types import BalderObject
 import graphene
@@ -33,17 +34,23 @@ class DataQuery(graphene.ObjectType):
 
 
 class Node(BalderObject):
-    inputs = graphene.List(InPort)
-    outputs = graphene.List(OutPort)
+    args = graphene.List(ArgPort)
+    kwargs = graphene.List(KwargPort)
+    returns = graphene.List(ReturnPort)
 
     class Meta:
         model = models.Node
-
 
 class Template(BalderObject):
     
     class Meta:
         model = models.Template
+
+class Reservation(BalderObject):
+    
+    class Meta:
+        model = models.Reservation
+
 
 class Provider(BalderObject):
     

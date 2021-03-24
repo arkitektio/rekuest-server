@@ -30,10 +30,9 @@ class DataQuery(BaseModel):
 
 
 class ServiceType(str, Enum):
-    DATA = "DATA"
+    POINT = "POINT"
     PROVIDER = "PROVIDER"
-    SERVICE = "SERVICE"
-    WORKER = "WORKER"
+    NEGOTIATE = "NEGOTIATE"
 
 class Service(BaseModel):
     types: List[ServiceType]

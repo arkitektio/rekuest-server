@@ -1,5 +1,5 @@
 from facade.enums import PodStatus
-from facade.models import AppProvider, Provider, Template, Pod
+from facade.models import AppProvider, Provider, Template, Pod, Provision
 from facade import types
 from balder.types import BalderMutation
 import graphene
@@ -11,20 +11,25 @@ class Accept(BalderMutation):
 
     class Arguments:
         template = graphene.ID(required=True, description="The Template you are giving an implementation for!")
+        provision = graphene.String(required=True, description="The Provision we need")
 
     @bounced(only_jwt=True)
-    def mutate(root, info, template=None, provider=None):
-        provider = AppProvider.objects.get(client_id=info.context.auth.client_id, user=info.context.user)
-        template = Template.objects.get(id=template)
+    def mutate(root, info, template=None, provision=None):
+        provider, created = AppProvider.objects.update_or_create(client_id=info.context.bounced.client_id, user=info.context.bounced.user , defaults = {
+            "name": info.context.bounced.app_name + " " + info.context.bounced.user.username
+        })
 
-        pod, created = Pod.objects.update_or_create(
-            name = f"{provider.name}-{template.id}",
-            defaults= {
-                "template": template,
+        provision = Provision.objects.get(reference=provision)
+
+        pod = Pod.objects.create(**{
+                "template_id": template,
                 "status": PodStatus.PENDING,
+                "created_by": provision
             }
         )
         pod.save()
+
+        print(pod)
 
         return pod
 

@@ -1,43 +1,35 @@
+from delt.service.types import ServiceType
 from herre.utils import decode_token
-from facade.structures.transcript import PostmanProtocol, PostmanSettings, Transcript
+from facade.structures.transcript import HostProtocol, HostSettings, PostmanProtocol, PostmanSettings, ProviderProtocol, ProviderSettings, Transcript
 from facade import types
-from facade.models import DataModel, DataPoint, Repository, Node
+from facade.models import AppProvider, DataModel, DataPoint, Repository, Node, Service
 from balder.types import BalderMutation
 from balder.enum import InputEnum
 from facade.enums import ClientType, NodeType
 from herre import bounced
 import graphene
 import logging
+import namegenerator
 
 logger = logging.getLogger(__name__)
-
-def get_node_repository(user, id="localhost"):
-    repo, _ = Repository.objects.filter(creator=user).get_or_create(type=f"flow", defaults={"name": f"flow_{id}", "creator": user})
-    return repo
 
 class Negotiate(BalderMutation):
     """Create Node according to the specifications"""
 
     class Arguments:
         client_type = graphene.Argument(InputEnum.from_choices(ClientType),description="The type of Client")
-
+        name = graphene.String(description="The Apps name")
 
     class Meta:
         type = Transcript
 
     
-    @bounced(anonymous=False)
-    def mutate(root, info, client_type = ClientType.HOST):
+    @bounced(only_jwt=True)
+    def mutate(root, info, client_type = ClientType.HOST, name=None):
 
-        print(client_type)
-        print(info.context.auth)
-
-
-        extensions = []
-        for datapoint in DataPoint.objects.all():
-            extensions.append(datapoint.negotiate(info.context.auth))
-
-        print(extensions)
+        extensions = {}
+        for service in Service.objects.filter(types__contains=ServiceType.NEGOTIATE.value).all():
+            extensions[service.name] = service.negotiate(info.context.auth)
 
         transcript_dict = {
             "extensions": extensions,
@@ -57,7 +49,40 @@ class Negotiate(BalderMutation):
             )
         }
 
+        print(client_type)
+        print(ClientType.PROVIDER.value)
 
+        if client_type == ClientType.PROVIDER.value:
+            provider , _ = AppProvider.objects.update_or_create(client_id=info.context.auth.client_id, user=info.context.user, defaults= {"name": name})
+            #TODO: Check if this client can register as item
+            transcript_dict["provider"] = ProviderSettings(
+                type = ProviderProtocol.WEBSOCKET,
+                kwargs = {
+                        "host": "p-tnagerl-lab1",
+                        "protocol": "ws",
+                        "port": 8090,
+                        "provider": provider.id,
+                        "auth": {
+                            "type": "token",
+                            "token": info.context.auth.token
+                        }
+                }
+            )
 
-    
+        if client_type == ClientType.HOST.value or client_type == ClientType.PROVIDER.value:
+            transcript_dict["host"] = HostSettings(
+                type = HostProtocol.WEBSOCKET,
+                kwargs = {
+                        "host": "p-tnagerl-lab1",
+                        "protocol": "ws",
+                        "port": 8090,
+                        "auth": {
+                            "type": "token",
+                            "token": info.context.auth.token
+                        }
+                }
+            )
+
+        print(transcript_dict)
+
         return Transcript(**transcript_dict)

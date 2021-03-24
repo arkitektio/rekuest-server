@@ -5,6 +5,18 @@ class InPortsField(models.JSONField):
     pass
 
 
+class ArgsField(models.JSONField):
+    pass
+
+class KwargsField(models.JSONField):
+    pass
+
+class ReturnField(models.JSONField):
+    pass
+
+
+
+
 class OutPortsField(models.JSONField):
     pass
 

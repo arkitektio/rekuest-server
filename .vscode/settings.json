@@ -37,5 +37,8 @@
         "menubar.selectionForeground": "#5C6BC0",
         "editor.findMatchBorder": "#5C6BC0",
         "selection.background": "#5C6BC040",
+        "activityBar.background": "#302949",
+        "titleBar.activeBackground": "#433967",
+        "titleBar.activeForeground": "#FAFAFC"
     },
 }

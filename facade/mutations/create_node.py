@@ -1,4 +1,4 @@
-from facade.structures.ports.input import InPortInput, OutPortInput
+from facade.structures.ports.input import ArgPortInput, KwargPortInput, ReturnPortInput
 from facade import types
 from facade.models import Repository, Node
 from balder.types import BalderMutation
@@ -26,11 +26,13 @@ class CreateNode(BalderMutation):
     class Arguments:
         description = graphene.String(description="A description for the Node", required=False)
         name = graphene.String(description="The name of this template", required=True)
-        outputs = graphene.List(OutPortInput, description="The Outputs")
-        inputs = graphene.List(InPortInput, description="The Inputs")
-        type = graphene.Argument(InputEnum.from_choices(NodeType),description="The variety")
+        args = graphene.List(ArgPortInput, description="The Args")
+        kwargs = graphene.List(KwargPortInput, description="The Kwargs")
+        returns = graphene.List(ReturnPortInput, description="The Returns")
+        type = graphene.Argument(InputEnum.from_choices(NodeType),description="The variety", default_value=NodeType.FUNCTION.value)
         interface = graphene.String(description="The Interface", required=True)
         package = graphene.String(description="The Package", required=True)
+
 
 
     class Meta:
@@ -38,14 +40,17 @@ class CreateNode(BalderMutation):
 
     
     @bounced(anonymous=True)
-    def mutate(root, info, package=None, interface=None, description="Not description", outputs=[], inputs=[], type=None, name="name"):
+    def mutate(root, info, package=None, interface=None, description="Not description", args=[], kwargs=[], returns=[], type=None, name="name"):
         repository = get_node_repository(info.context.user)
         
+        print(type)
         node, created = Node.objects.update_or_create(package=package, interface=interface, repository=repository, defaults={
             "description": description,
-            "outputs": outputs,
-            "inputs": inputs,
-            "name": name
+            "args": args,
+            "kwargs": kwargs,
+            "returns": returns,
+            "name": name,
+            "type": type
         })
    
         return node

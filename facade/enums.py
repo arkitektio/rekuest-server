@@ -14,9 +14,17 @@ class RepositoryType(TextChoices):
     MIRROR = "mirror", "Repository mirrors online"
 
 
+class PodStrategy(TextChoices):
+    """ How this pod listens to events """
+    EXCLUSIVE = "exclusive", "Pod listens only to event that are happening through provisions"
+    TEMPLATE = "template", "Pod listens too template events"
+    NODE = "node", "Pod listens too Node assignation events"
+
+
 class ClientType(TextChoices):
     HOST = "Host", "Hosting Client"
-    CLIENT = "Client", "Client client" 
+    CLIENT = "Client", "Client client"
+    PROVIDER = "Provider", "Providing client" 
 
 
 

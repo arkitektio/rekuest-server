@@ -6,42 +6,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def scan_service_for_models(host, port) -> Tuple[DataPoint, List[DataModel]]:
-    """Scans a microservice for available datamodels and their identifiers according tot he well-known challenge
-
-    See online Documentation for details how to setup your own Microservice
-
-    Args:
-        host ([type]): Inward facing hostadress for the well-known challange
-        port ([type]): The port we should be choosing
-
-    Returns:
-        Tuple[DataPoint, List[DataModel]]: Datapoint and the models created
-    """
-    url = f"http://{host}:{port}/.well-known/arnheim_query"
-    logger.info(f"Scannning {host} at {url}")
-
-    result = requests.get(url)
-    data_query = types.DataQuery(**result.json())
-    point = data_query.point
-
-    datapoint, created = DataPoint.objects.update_or_create(inward=point.inward, port=point.port, defaults = {
-        "type":point.type,
-        "outward": point.outward,
-        "version":data_query.version
-    })
-
-    models = []
-    for model in data_query.models:
-        model, created = DataModel.objects.update_or_create(point= datapoint, identifier=model.identifier, defaults = {
-            "extenders": model.extenders
-        })
-        models.append(model)
-
-    return datapoint, models
-
-
-
 def scan_service(host, port) -> Tuple[DataPoint, List[DataModel]]:
     """Scans a microservice for available datamodels and their identifiers according tot he well-known challenge
 
@@ -50,11 +14,8 @@ def scan_service(host, port) -> Tuple[DataPoint, List[DataModel]]:
     Args:
         host ([type]): Inward facing hostadress for the well-known challange
         port ([type]): The port we should be choosing
-
-    Returns:
-        Tuple[DataPoint, List[DataModel]]: Datapoint and the models created
     """
-    url = f"http://{host}:{port}/.well-known/arkitekt"
+    url = f"http://{host}:{port}/.well-known/arkitekt_service"
     logger.info(f"Scannning {host} at {url}")
 
     result = requests.get(url)
@@ -74,24 +35,38 @@ def scan_service(host, port) -> Tuple[DataPoint, List[DataModel]]:
             depservice = Service.objects.get_or_create(name=name, defaults={"inward": "FAKE", "outward": "FAKE", "port": 0})
             depservice.parent.add(service)
 
-    if types.ServiceType.DATA in serialized_service.types:
+    if types.ServiceType.POINT in serialized_service.types:
         # This Service provides Datamodels that we want to register with the Framework
-        url = f"http://{service.inward}:{service.port}/.well-known/arnheim_query"
-        logger.info(f"Scannning {host} at {url}")
+        url = f"http://{service.inward}:{service.port}/.well-known/arkitekt_point"
+        logger.info(f"Is Point: Scannning {host} at {url}")
+        result = requests.post(url, {"unique": "help"})
+        data_query = types.DataQuery(**result.json())
+        point = data_query.point
+
+        datapoint, created = DataPoint.objects.update_or_create(inward=point.inward, port=point.port, defaults = {
+            "type":point.type,
+            "outward": point.outward,
+            "version":data_query.version
+        })
+
+        models = []
+
+        for model in data_query.models:
+            model, created = DataModel.objects.update_or_create(point= datapoint, identifier=model.identifier, defaults = {
+                "extenders": model.extenders
+            }) 
+            models.append(model)
+
+        print(datapoint, models)
 
     if types.ServiceType.PROVIDER in serialized_service.types:
 
-        url = f"http://{service.inward}:{service.port}/.well-known/provider"
+        url = f"http://{service.inward}:{service.port}/.well-known/arkitekt_provider"
         provider, created = ServiceProvider.objects.update_or_create(service=service, defaults = {
             "name": service.name
         })
         logger.info(f"Is Provider: Scannning {service.name} at {url}")
         result = requests.post(url, {"unique": provider.unique})
-
-
-
-
-
 
 
     return service

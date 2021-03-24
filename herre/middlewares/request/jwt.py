@@ -56,7 +56,7 @@ def JWTTokenMiddleWare(get_response):
                     request = await set_request_async(request, decoded, token)
             except Exception as e:
                 logger.error(e)
-                return HttpResponseBadRequest("JWT Error {e}")
+                raise PermissionDenied(str(e))
             response = await get_response(request)
             return response
 
@@ -69,7 +69,7 @@ def JWTTokenMiddleWare(get_response):
                     request = set_request_sync(request, decoded, token)
             except Exception as e:
                 logger.error(e)
-                return HttpResponseBadRequest("JWT Error {e}")
+                raise PermissionDenied(str(e))
             response = get_response(request)
             return response
 

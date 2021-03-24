@@ -1,10 +1,10 @@
-from facade.models import AppProvider, Provider, ServiceProvider, Template
+from facade.models import AppProvider, Provider, ServiceProvider, Template, Service
 from facade import types
 from balder.types import BalderMutation
 import graphene
 from herre import bounced
 from graphene.types.generic import GenericScalar
-
+import socket
 
 
 class CreateTemplate(BalderMutation):
@@ -14,9 +14,11 @@ class CreateTemplate(BalderMutation):
         params  = GenericScalar(required=False, description="Some additional Params for your offering")
 
 
+    @bounced(only_jwt=True, required_scopes=["provider"])
     def mutate(root, info, node=None, name=None, params=None):
-        provider = ServiceProvider.objects.get(service__name="port")
-
+        provider, created = AppProvider.objects.update_or_create(client_id=info.context.bounced.client_id, user=info.context.bounced.user , defaults = {
+            "name": info.context.bounced.app_name + " " + info.context.bounced.user.username
+        })
 
         try:
             template = Template.objects.get(node=node, params=params)
@@ -24,7 +26,7 @@ class CreateTemplate(BalderMutation):
             template = Template.objects.create(
                 node_id=node,
                 params=params,
-                provider=provider,
+                provider=provider.provider_ptr,
             )
 
         # We check ids because AppProvider is not Provider subclass

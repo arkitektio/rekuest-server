@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class Bounced:
 
-    def __init__(self, user, scopes, roles, type, client_id = None, token=None, is_jwt=False) -> None:
+    def __init__(self, user, scopes, roles, type, client_id = None, token=None, is_jwt=False, app_name=None) -> None:
 
         self._user = user
         self._scopes = scopes or []
@@ -21,6 +21,7 @@ class Bounced:
         self.roleset = set(self._roles)
         self.is_jwt = is_jwt
         self.token = token
+        self.app_name = app_name
         self.client_id = client_id
         logger.info(f"Bounced Context of Type {self._type} created")
 
@@ -57,7 +58,7 @@ class Bounced:
 
     @classmethod
     def from_auth(cls, auth: JwtToken):
-        return cls(auth.user, auth.scopes, auth.roles, auth.type, client_id = auth.client_id, token=auth.token, is_jwt=True)
+        return cls(auth.user, auth.scopes, auth.roles, auth.type, client_id = auth.client_id, app_name=auth.app, token=auth.token, is_jwt=True)
 
     @classmethod
     def from_session_and_user(cls, session: SessionStore, user):

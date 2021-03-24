@@ -1,7 +1,7 @@
 from channels.auth import AuthMiddlewareStack
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.conf.urls import url
-from facade.consumers import PostmanConsumer, ProviderConsumer
+from facade.consumers import PostmanConsumer, ProviderConsumer, HostConsumer
 from django.core.asgi import get_asgi_application
 from balder.consumers import MyGraphqlWsConsumer
 from herre.middlewares.scope.bouncer import BouncerChannelMiddleware
@@ -29,6 +29,7 @@ application = ProtocolTypeRouter({
         url('graphql/', MyGraphqlWsConsumer.as_asgi()),
         url('graphql', MyGraphqlWsConsumer.as_asgi()),
         url(r'provider\/$', ProviderConsumer.as_asgi()),
+        url(r'host\/$', HostConsumer.as_asgi()),
         url(r'postman\/$', PostmanConsumer.as_asgi())
     ])),
 })

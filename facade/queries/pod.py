@@ -32,6 +32,7 @@ class Pods(BalderQuery):
 
     @bounced(anonymous=True)
     def resolve(root, info, status = None, provider=None):
+        print(status)
         qs = Pod.objects
         qs = qs.filter(status=status) if status else qs
         qs = qs.filter(template__provider__name=provider) if provider else qs

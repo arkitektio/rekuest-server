@@ -19,5 +19,15 @@
             "type": "shell",
             "command": "python manage.py runassigner"
         },
+        {
+            "label": "Provider",
+            "type": "shell",
+            "command": "python manage.py runprovider"
+        },
+        {
+            "label": "Reserver",
+            "type": "shell",
+            "command": "python manage.py runreserver"
+        },
     ]
 }

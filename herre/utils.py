@@ -16,7 +16,7 @@ def decode_token(token):
     try:
         headers_enc, payload_enc, verify_signature = token.split(".")
     except ValueError:
-        raise jwt.InvalidTokenError()
+        raise jwt.InvalidTokenError(f"Token does not conform to standard JWT {token}")
 
     payload_enc += '=' * (-len(payload_enc) % 4)  # add padding
     payload = json.loads(base64.b64decode(payload_enc).decode("utf-8"))
@@ -42,6 +42,7 @@ def token_from_authorization(authorization):
 
 
 def check_token_from_request(request):
+    
 
     if request.META.get("HTTP_AUTHORIZATION", "").startswith("Bearer"):
             if not hasattr(request, "user") or request.user.is_anonymous:

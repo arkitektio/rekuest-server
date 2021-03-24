@@ -1,4 +1,4 @@
-from facade.filters import PodFilter
+from facade.filters import PodFilter, TemplateFilter
 from typing_extensions import Annotated
 from balder.types import BalderQuery
 from facade import types
@@ -25,19 +25,7 @@ class TemplateDetailQuery(BalderQuery):
 
 class Templates(BalderQuery):
 
-    class Arguments:
-        active = graphene.Boolean(description="Does the template have active pods?")
-        provider = graphene.String(description="The Name of the provider")
-
-
-    @bounced(anonymous=True)
-    def resolve(root, info, active = None, provider=None):
-        qs = Template.objects
-        qs = qs.filter(pods__status=PodStatus.ACTIVE) if active else qs
-        qs = qs.filter(provider__name=provider) if provider else qs
-        return qs.all()
-
-
     class Meta:
         type = types.Template
         list = True
+        filter = TemplateFilter
