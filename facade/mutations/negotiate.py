@@ -49,11 +49,8 @@ class Negotiate(BalderMutation):
             )
         }
 
-        print(client_type)
-        print(ClientType.PROVIDER.value)
-
         if client_type == ClientType.PROVIDER.value:
-            provider , _ = AppProvider.objects.update_or_create(client_id=info.context.auth.client_id, user=info.context.user, defaults= {"name": name})
+            provider , _ = AppProvider.objects.update_or_create(client_id=info.context.auth.client_id, user=info.context.user, defaults= {"name": name + " by " + info.context.user.username})
             #TODO: Check if this client can register as item
             transcript_dict["provider"] = ProviderSettings(
                 type = ProviderProtocol.WEBSOCKET,

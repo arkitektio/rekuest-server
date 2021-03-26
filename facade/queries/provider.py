@@ -1,4 +1,4 @@
-from facade.filters import PodFilter
+from facade.filters import PodFilter, ProviderFilter
 from typing_extensions import Annotated
 from balder.types import BalderQuery
 from facade import types
@@ -28,3 +28,4 @@ class Providers(BalderQuery):
     class Meta:
         type = types.Provider
         list = True
+        filter = ProviderFilter

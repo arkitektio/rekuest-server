@@ -5,6 +5,7 @@ from .models import *
 admin.site.register(Node)
 admin.site.register(Pod)
 admin.site.register(Provider)
+admin.site.register(AppProvider)
 admin.site.register(Template)
 admin.site.register(Assignation)
 admin.site.register(Reservation)

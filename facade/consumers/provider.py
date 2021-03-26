@@ -11,28 +11,25 @@ import aiormq
 logger = logging.getLogger(__name__)
 
 @sync_to_async
-def activateProviderForClientID(client_id):
-    print(client_id)
-    provider = AppProvider.objects.get(client_id=client_id)
+def activateProviderForClientID(client_id, user):
+    provider = AppProvider.objects.get(client_id=client_id, user=user)
     provider.active = True
+    provider.save()
 
     return provider
 
+
 @sync_to_async
-def get_provisions(provider: AppProvider):
+def deactivateProvider(provider: AppProvider):
     provisions = Provision.objects.filter(template__provider_id=provider.id)
-    return {provision.reference: provision for provision in provisions}
+    for provision in provisions:
+        print(provision)
+        # TODO: Maybe send a signal here to the provisions
 
-@sync_to_async
-def deactivateProviderForClientID(client_id):
-    provider = AppProvider.objects.get(client_id=client_id)
+
     provider.active = False
+    provider.save()
     return provider
-
-
-NO_PODS_CODE = 2
-NOT_AUTHENTICATED_CODE = 3
-
 
 
 class ProviderConsumer(BaseConsumer): #TODO: Seperate that bitch
@@ -46,11 +43,9 @@ class ProviderConsumer(BaseConsumer): #TODO: Seperate that bitch
     async def connect(self):
         await self.accept()
         #TODO: Check if in provider mode
-        self.provider = await activateProviderForClientID(self.scope["bounced"].client_id)
+        self.provider = await activateProviderForClientID(self.scope["bounced"].client_id, self.scope["bounced"].user)
         logger.warning(f"Connecting {self.provider.name}") 
-        self.provisions = await get_provisions(self.provider)
-        print(self.provisions.keys())
-
+        logger.info("This provide is now active and will be able to provide Pods")
 
         await self.connect_to_rabbit()
 
@@ -58,12 +53,10 @@ class ProviderConsumer(BaseConsumer): #TODO: Seperate that bitch
         # Perform connection
         self.connection = await aiormq.connect(f"amqp://guest:guest@mister/")
         self.channel = await self.connection.channel()
-
         # Declaring queue
         self.on_provide_queue = await self.channel.queue_declare(f"provision_in_{self.provider.unique}", auto_delete=True)
         # Start listening the queue with name 'hello'
         await self.channel.basic_consume(self.on_provide_queue.queue, self.on_provide)
-
 
 
     async def on_provide(self, message: aiormq.types.DeliveredMessage):
@@ -77,8 +70,8 @@ class ProviderConsumer(BaseConsumer): #TODO: Seperate that bitch
     async def disconnect(self, close_code):
         try:
             logger.warning(f"Disconnecting {self.provider.name} with close_code {close_code}") 
-            #TODO: Depending on close code send message to all running Assignations
-            await deactivateProviderForClientID(self.scope["bounced"].client_id)
+            # We are deleting all associated Provisions for this Provider 
+            await deactivateProvider(self.provider)
             await self.connection.close()
         except:
             logger.error("Something weird happened in disconnection!")

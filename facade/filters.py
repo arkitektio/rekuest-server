@@ -8,6 +8,11 @@ class PodFilter(django_filters.FilterSet):
     provider = django_filters.ModelChoiceFilter(queryset=Provider.objects.all(),field_name= "template__provider")
     status = EnumFilter(choices=PodStatus.choices)
 
+class ProviderFilter(django_filters.FilterSet):
+
+    class Meta:
+        model = Provider
+        fields = ("active",)
 
 class NodeFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method="search_filter",label="Search")

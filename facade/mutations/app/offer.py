@@ -17,9 +17,7 @@ class Offer(BalderMutation):
 
     @bounced(only_jwt=True, required_scopes=["provider"])
     def mutate(root, info, node=None, name=None, params=None, policy=None):
-        provider, created = AppProvider.objects.update_or_create(client_id=info.context.bounced.client_id, user=info.context.bounced.user , defaults = {
-            "name": info.context.bounced.app_name + " " + info.context.bounced.user.username
-        })
+        provider = AppProvider.objects.get(client_id=info.context.bounced.client_id, user=info.context.bounced.user)
 
         try:
             template = Template.objects.get(node=node, params=params)

@@ -15,18 +15,20 @@ class Accept(BalderMutation):
 
     @bounced(only_jwt=True)
     def mutate(root, info, template=None, provision=None):
-        provider, created = AppProvider.objects.update_or_create(client_id=info.context.bounced.client_id, user=info.context.bounced.user , defaults = {
-            "name": info.context.bounced.app_name + " " + info.context.bounced.user.username
-        })
-
+        provider = AppProvider.objects.get(client_id=info.context.bounced.client_id, user=info.context.bounced.user)
+        
         provision = Provision.objects.get(reference=provision)
 
         pod = Pod.objects.create(**{
                 "template_id": template,
                 "status": PodStatus.PENDING,
-                "created_by": provision
+                "provision": provision
             }
         )
+
+        reservation = provision.reservation
+        pod.reservations.add(reservation)
+
         pod.save()
 
         print(pod)

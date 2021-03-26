@@ -181,6 +181,7 @@ class PostmanConsumer(BaseConsumer):
     async def on_callback(self, message):
         text_data = message.body.decode()
         json.loads(text_data)
+        logger.warn(f"Sending {text_data} to Postman Callback")
 
 
         logger.error(message)
@@ -189,6 +190,8 @@ class PostmanConsumer(BaseConsumer):
 
     async def on_progress(self, message):
         logger.info(message)
+
+        logger.warn(f"Sending {message} to Postman Progress")
         await self.send(text_data=message.body.decode()) # No need to go through pydantic???
         await message.channel.basic_ack(message.delivery.delivery_tag)
 

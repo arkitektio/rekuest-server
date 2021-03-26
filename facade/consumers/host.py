@@ -1,7 +1,9 @@
 # chat/consumers.py
+import asyncio
 import json
 from aiormq import channel
-from delt.messages.postman.provide.provide_done import ProvideDoneMessage
+from delt.messages.postman.reserve import ReserveDoneMessage, ReserveCriticalMessage
+from delt.messages.postman.provide import ProvideDoneMessage, ProvideCriticalMessage
 from delt.messages.postman.assign import AssignYieldsMessage, AssignReturnMessage, AssignProgressMessage, AssignCriticalMessage
 from delt.messages.host import ActivatePodMessage
 from herre.bouncer.utils import bounced_ws
@@ -17,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 @sync_to_async
 def activatePod(pod_id):
-    pod = Pod.objects.select_related("created_by").get(id=pod_id)
+    pod = Pod.objects.select_related("provision").prefetch_related("reservations").get(id=pod_id)
     pod.status = PodStatus.ACTIVE
     pod.save()
     return pod, pod.template.channel, pod.template.node.channel
@@ -26,11 +28,17 @@ def activatePod(pod_id):
 def deactivatePods(podids):
     pods = []
     for pod in Pod.objects.filter(pk__in=podids):
-        pod.status = PodStatus.DOWN.value
-        pod.save()
-        pods.append(pod)
+        pod.delete()
 
     return True
+
+@sync_to_async
+def deactivatePod(podid):
+    pod = Pod.objects.select_related("provision").prefetch_related("reservations").get(id=podid)
+    pod.delete()
+    return pod
+
+
 
 NO_PODS_CODE = 2
 NOT_AUTHENTICATED_CODE = 3
@@ -74,10 +82,59 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
         try:
             logger.warning(f"Disconnecting Host with close_code {close_code}") 
             #TODO: Depending on close code send message to all running Assignations
-            await deactivatePods([id for id, queue in self.pod_queues.items()])
+
+            # We are assuming that every shutdown was ungently and check if we need to deactivate the pods
+            await asyncio.gather(*[self.destroy_pod(id) for id, queue in self.pod_queues.items()])
+
+
             await self.connection.close()
         except Exception as e:
             logger.error(f"Something weird happened in disconnection! {e}")
+
+
+    async def destroy_pod(self, pod_id, message="Pod Just Failed"):
+        pod = await deactivatePod(pod_id)
+
+        assert pod.provision is not None, "This should never happen"
+
+        for reservation in pod.reservations.all():
+            logger.info("Telling Reserving Clients that we went bye bye")
+            await self.forward(ReserveCriticalMessage(
+                data= {
+                    "message": message
+                },
+                meta= {
+                    "reference": reservation.reference,
+                    "extensions": {
+                        "callback": reservation.callback,
+                        "progress": reservation.progress
+                    }
+                }), reservation.callback)
+
+        
+        if pod.provision.callback is not None:
+            logger.info("Telling Our Providing Client that we went bye bye")
+            await self.forward(ProvideCriticalMessage(
+                data= {
+                    "message": pod.id
+                },
+                meta= {
+                    "reference": pod.provision.reference,
+                    "extensions": {
+                        "callback": pod.provision.callback,
+                        "progress": pod.provision.progress
+                    }
+                }), pod.provision.callback)
+
+
+        del self.pod_queues[pod_id]
+
+
+
+
+    async def on_deactivate_pod(self, message: str):
+        logger.warn("Deactiving Pod")
+
 
 
     async def on_activate_pod(self, message: ActivatePodMessage):
@@ -99,19 +156,39 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
         #await self.channel.basic_consume(node_queue.queue, lambda x: self.on_assign_to_pod(pod_id, x))
 
 
-        await self.forward(ProvideDoneMessage(
-            data= {
-                "pod": pod.id
-            },
-            meta= {
-                "reference": pod.created_by.reference,
-                "extensions": {
-                    "callback": pod.created_by.callback,
-                    "progress": pod.created_by.progress
-                }
-            }), pod.created_by.callback)
-
         self.pod_queues[pod_id] = (pod_queue, template_queue, node_queue)
+
+
+        assert pod.provision is not None, "This should never happen"
+        for reservation in pod.reservations.all():
+            logger.info(f"Sending ReserveDone {reservation.reference}")
+            await self.forward(ReserveDoneMessage(
+                data= {
+                    "channel": pod.channel
+                },
+                meta= {
+                    "reference": reservation.reference,
+                    "extensions": {
+                        "callback": reservation.callback,
+                        "progress": reservation.progress
+                    }
+                }), reservation.callback)
+
+        
+        if pod.provision.callback is not None:
+            logger.info(f"Sending ProvideDone {pod.provision.reference}")
+            await self.forward(ProvideDoneMessage(
+                data= {
+                    "pod": pod.id
+                },
+                meta= {
+                    "reference": pod.provision.reference,
+                    "extensions": {
+                        "callback": pod.provision.callback,
+                        "progress": pod.provision.progress
+                    }
+                }), pod.provision.callback)
+
         
 
     async def on_assign_critical(self, assign_critical: AssignCriticalMessage):

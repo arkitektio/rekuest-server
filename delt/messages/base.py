@@ -6,6 +6,9 @@ from typing import Any, Callable, Optional, Type, TypeVar
 from pydantic.types import Json
 from pydantic import Field
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 class MessageMetaExtensionsModel(BaseModel):
     """ Extensions to the AMQP Message protocol
@@ -15,7 +18,7 @@ class MessageMetaExtensionsModel(BaseModel):
 
 class MessageMetaModel(BaseModel):
     type: str
-    reference: str = Field(default_factory=uuid.uuid4)
+    reference: str = Field(default_factory=lambda: str(uuid.uuid4))
     extensions: Optional[MessageMetaExtensionsModel] = { }
 
 

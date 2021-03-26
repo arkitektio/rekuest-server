@@ -113,7 +113,7 @@ class AppProvider(Provider):
         ]
 
     def __str__(self):
-        return f"{self.name} for {self.user}"
+        return f"{self.name}"
 
 
 class ServiceProvider(Provider):
@@ -183,12 +183,41 @@ class Template(models.Model):
     def is_active(self):
         return len(self.pods.all()) > 0
 
+class Provision(models.Model):
+
+    reservation = models.ForeignKey("Reservation", on_delete=models.CASCADE, null=True, blank=True, help_text="The Reservation that created this Provision", related_name="provisions")
+    #1 Inputs to the the Provision (it can be either already a template to provision or just a node)
+    template = models.ForeignKey(Template, on_delete=models.CASCADE, help_text="The node this provision connects", related_name="provisions", null=True, blank=True)
+    
+    # Selection criteria for finding a right Pod
+    params = models.JSONField(null=True, blank=True, help_text="Params for the Policy (including Provider etc..)") 
+
+    #Status Field
+    status = models.CharField(max_length=300, choices=ProvisionStatus.choices, default=ProvisionStatus.PENDING, help_text="Current lifecycle of Provision")
+    statusmessage = models.CharField(max_length=1000, help_text="Clear Text status of the Provision as for now", blank=True)
+
+    #Callback
+    callback =  models.CharField(max_length=1000, help_text="Callback", blank=True , null=True)
+    progress =  models.CharField(max_length=1000, help_text="Provider", blank=True , null=True)
+    # Meta fields
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, help_text="The Provisions parent", related_name="children")
+    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, max_length=1000, help_text="This provision creator")
+    reference = models.CharField(max_length=1000, unique=True, default=uuid.uuid4, help_text="The Unique identifier of this Assignation")
+
+
+
+    def __str__(self):
+        return f"Provision for Template: {self.template if self.template else ''} Referenced {self.reference} || Reserved {self.reservation if self.reservation else 'without Reservation'}"
+
+
+
 
 
 class Pod(models.Model):
     """ The last step in any provision, pods are running implementations of templates (think workers)"""
-
-    created_by = models.ForeignKey("Provision", on_delete=models.CASCADE, help_text="The provision that created this pod", related_name="created_pods", null=True)
+    provision = models.ForeignKey("Provision", on_delete=models.CASCADE, help_text="The provision that created this pod", related_name="created_pods", null=True)
     template = models.ForeignKey(Template, on_delete=models.CASCADE, help_text="The template that created this pod", related_name="pods")
     status = models.CharField(max_length=300, choices=PodStatus.choices, default=PodStatus.PENDING, help_text="Which lifecycle moment is this pod in")
     mode = models.CharField(max_length=100, choices=PodMode.choices, default=PodMode.PRODUCTION, help_text="The mode this pod is running in")
@@ -233,8 +262,8 @@ class Reservation(models.Model):
     statusmessage = models.CharField(max_length=1000, help_text="Clear Text status of the Provision as for now", blank=True)
 
     #Callback
-    callback =  models.CharField(max_length=1000, help_text="Callback", blank=True)
-    progress =  models.CharField(max_length=1000, help_text="Provider", blank=True)
+    callback =  models.CharField(max_length=1000, help_text="Callback", blank=True, null=True)
+    progress =  models.CharField(max_length=1000, help_text="Provider", blank=True, null=True)
 
     # Meta fields
     created_at = models.DateTimeField(auto_now_add=True)
@@ -247,36 +276,6 @@ class Reservation(models.Model):
     def __str__(self):
         return f"Reservation for Node: {self.node.interface if self.node else ''} | Template: {self.template if self.template else ''} to {self.pod} Referenced {self.reference}"
 
-
-class Provision(models.Model):
-
-    #1 Inputs to the the Provision (it can be either already a template to provision or just a node)
-    template = models.ForeignKey(Template, on_delete=models.CASCADE, help_text="The node this provision connects", related_name="provisions", null=True, blank=True)
-    
-    # Selection criteria for finding a right Pod
-    params = models.JSONField(null=True, blank=True, help_text="Params for the Policy (including Provider etc..)") 
-
-    # 2. The result (provider is stored already in pod, no need to)
-    pod = models.OneToOneField(Pod, on_delete=models.CASCADE, help_text="The pod this provision connects", related_name="provision", null=True, blank=True)
-    
-    #Status Field
-    status = models.CharField(max_length=300, choices=ProvisionStatus.choices, default=ProvisionStatus.PENDING, help_text="Current lifecycle of Provision")
-    statusmessage = models.CharField(max_length=1000, help_text="Clear Text status of the Provision as for now", blank=True)
-
-    #Callback
-    callback =  models.CharField(max_length=1000, help_text="Callback", blank=True)
-    progress =  models.CharField(max_length=1000, help_text="Provider", blank=True)
-    # Meta fields
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, help_text="The Provisions parent", related_name="children")
-    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, max_length=1000, help_text="This provision creator")
-    reference = models.CharField(max_length=1000, unique=True, default=uuid.uuid4, help_text="The Unique identifier of this Assignation")
-
-
-
-    def __str__(self):
-        return f"Provision for Template: {self.template if self.template else ''} to {self.pod} Referenced {self.reference}"
 
 
 

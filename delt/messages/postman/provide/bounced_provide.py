@@ -20,7 +20,6 @@ class MetaModel(MessageMetaModel):
     token: Token
 
 class DataModel(MessageDataModel):
-    node: Optional[str] #TODO: Maybe not optional
     template: Optional[str]
     params: Optional[ProvideParams]
 
