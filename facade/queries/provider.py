@@ -3,7 +3,7 @@ from typing_extensions import Annotated
 from balder.types import BalderQuery
 from facade import types
 from facade.enums import PodStatus
-from facade.models import Provider
+from facade.models import BaseProvider
 import graphene
 from herre import bounced
 from balder.enum import InputEnum
@@ -15,7 +15,7 @@ class ProviderDetailQuery(BalderQuery):
 
     @bounced(anonymous=True)
     def resolve(root, info, id=None):
-        return Provider.objects.get(id=id)
+        return BaseProvider.objects.get(id=id)
 
     class Meta:
         type = types.Provider

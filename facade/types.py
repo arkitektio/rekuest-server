@@ -32,6 +32,16 @@ class DataQuery(graphene.ObjectType):
     models = graphene.List(DataModel, description="The queried models on the Datapoint")
 
 
+class Repository(BalderObject):
+
+    class Meta:
+        model = models.BaseRepository
+
+class AppRepository(BalderObject):
+
+    class Meta:
+        model = models.AppRepository
+
 
 class Node(BalderObject):
     args = graphene.List(ArgPort)
@@ -55,7 +65,7 @@ class Reservation(BalderObject):
 class Provider(BalderObject):
     
     class Meta:
-        model = models.Provider
+        model = models.BaseProvider
 
 
 class AppProvider(BalderObject):

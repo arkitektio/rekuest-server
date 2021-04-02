@@ -45,12 +45,12 @@ def bounced(required_roles=[], required_scopes=[], allowed_types=["m2m","u2m"], 
 
         if asyncio.iscoroutinefunction(function):
             async def bounced_function(root, info, *args, **kwargs):
-                info.context = bounce(info.context, required_roles=required_roles, required_scopes=required_scopes, allowed_types=allowed_types, anonymous=anonymous, only_jwt=only_jwt)
+                bounce(info.context, required_roles=required_roles, required_scopes=required_scopes, allowed_types=allowed_types, anonymous=anonymous, only_jwt=only_jwt)
                 return await function(root, info, *args, **kwargs)
 
         else:
             def bounced_function(root, info, *args, **kwargs):
-                info.context = bounce(info.context, required_roles=required_roles, required_scopes=required_scopes, allowed_types=allowed_types, anonymous=anonymous, only_jwt=only_jwt)
+                bounce(info.context, required_roles=required_roles, required_scopes=required_scopes, allowed_types=allowed_types, anonymous=anonymous, only_jwt=only_jwt)
                 return function(root, info, *args, **kwargs)
 
 
@@ -69,7 +69,7 @@ def bounced_ws(required_roles=[], required_scopes=[], allowed_types=["m2m","u2m"
         if asyncio.iscoroutinefunction(function):
             async def bounced_function(self, *args, **kwargs):
                 try:
-                    self.scope = bounce(self.scope, required_roles=required_roles, required_scopes=required_scopes, allowed_types=allowed_types, anonymous=anonymous, only_jwt=only_jwt)
+                    bounce(self.scope, required_roles=required_roles, required_scopes=required_scopes, allowed_types=allowed_types, anonymous=anonymous, only_jwt=only_jwt)
                 except BounceException as e:
                     logger.error(f"Closed because of bouncing {e}")
                     await self.close(e)
@@ -79,7 +79,7 @@ def bounced_ws(required_roles=[], required_scopes=[], allowed_types=["m2m","u2m"
         else:
             def bounced_function(self, *args, **kwargs):
                 try:
-                    self.scope = bounce(self.scope, required_roles=required_roles, required_scopes=required_scopes, allowed_types=allowed_types, anonymous=anonymous, only_jwt=only_jwt)
+                   bounce(self.scope, required_roles=required_roles, required_scopes=required_scopes, allowed_types=allowed_types, anonymous=anonymous, only_jwt=only_jwt)
                 except BounceException as e:
                     logger.error(f"Closed because of bouncing {e}")
                     self.close(e)

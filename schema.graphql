@@ -1,0 +1,421 @@
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+type AppProvider {
+  id: ID!
+  installedAt: DateTime!
+  name: String!
+  unique: String!
+  active: Boolean!
+  baseproviderPtr: Provider!
+  clientId: String!
+}
+
+type AppRepository {
+  id: ID!
+  installedAt: DateTime!
+  name: String!
+  unique: String!
+  baserepositoryPtr: Repository!
+  clientId: String!
+  nodes: [Node!]!
+}
+
+interface ArgPort {
+  key: String
+  type: String
+  label: String
+  description: String
+  required: Boolean
+  widget: Widget
+}
+
+input ArgPortInput {
+  key: String!
+  type: String!
+  description: String
+  label: String
+  identifier: String
+  widget: WidgetInput
+}
+
+enum ClientTypeInput {
+  HOST
+  CLIENT
+  PROVIDER
+}
+
+type DataModel {
+  id: ID!
+  point: DataPoint!
+  extenders: GenericScalar
+  identifier: String!
+}
+
+type DataPoint {
+  id: ID!
+  installedAt: DateTime!
+  version: String!
+  inward: String!
+  outward: String!
+  port: Int!
+  type: DataPointType!
+  models: [DataModel!]!
+}
+
+enum DataPointType {
+  GRAPHQL
+  REST
+}
+
+scalar DateTime
+
+scalar GenericScalar
+
+enum HostProtocol {
+  WEBSOCKET
+}
+
+type HostSettings {
+  type: HostProtocol
+  kwargs: GenericScalar
+}
+
+type IntArgPort implements ArgPort {
+  key: String
+  type: String
+  label: String
+  description: String
+  required: Boolean
+  widget: Widget
+  default: Int
+}
+
+type IntKwargPort implements KwargPort {
+  key: String
+  type: String
+  label: String
+  description: String
+  required: Boolean
+  widget: Widget
+  default: Int
+}
+
+type IntReturnPort implements ReturnPort {
+  type: String
+  key: String
+  label: String
+  description: String
+}
+
+type IntWidget implements Widget {
+  type: String
+  dependencies: [String]
+  query: String
+}
+
+interface KwargPort {
+  key: String
+  type: String
+  label: String
+  description: String
+  required: Boolean
+  widget: Widget
+}
+
+input KwargPortInput {
+  key: String!
+  type: String!
+  description: String
+  label: String
+  default: GenericScalar
+  identifier: String
+  widget: WidgetInput
+}
+
+type ModelArgPort implements ArgPort {
+  key: String
+  type: String
+  label: String
+  description: String
+  required: Boolean
+  widget: Widget
+  identifier: String
+}
+
+type ModelKwargPort implements KwargPort {
+  key: String
+  type: String
+  label: String
+  description: String
+  required: Boolean
+  widget: Widget
+  identifier: String
+}
+
+type ModelReturnPort implements ReturnPort {
+  type: String
+  key: String
+  label: String
+  description: String
+  identifier: String
+}
+
+type Mutation {
+  scan(force: Boolean, host: String!, port: Int): Service
+  createNode(args: [ArgPortInput], description: String, interface: String!, kwargs: [KwargPortInput], name: String!, package: String!, returns: [ReturnPortInput], type: NodeTypeInput = function): Node
+  createPod(template: ID): Pod
+  negotiate(clientType: ClientTypeInput, name: String): Transcript
+  accept(provision: String!, template: ID!): Pod
+  offer(node: ID!, params: GenericScalar, policy: GenericScalar): Template
+  createTemplate(node: ID!, params: GenericScalar): Template
+}
+
+type Node {
+  id: ID!
+  type: NodeType!
+  repository: AppRepository
+  channel: String!
+  name: String!
+  package: String!
+  interface: String!
+  description: String!
+  image: String
+  args: [ArgPort]
+  kwargs: [KwargPort]
+  returns: [ReturnPort]
+  templateSet: [Template!]!
+  reservations: [Reservation!]!
+}
+
+enum NodeType {
+  GENERATOR
+  FUNCTION
+}
+
+enum NodeTypeInput {
+  GENERATOR
+  FUNCTION
+}
+
+type Pod {
+  id: ID!
+  template: Template!
+  status: PodStatus!
+  mode: PodMode!
+  strategy: PodStrategy!
+  name: String!
+  unique: UUID!
+  channel: String!
+  statusmessage: String!
+  reservations: [Reservation!]!
+}
+
+enum PodMode {
+  PRODUCTON
+  DEBUG
+  TEST
+}
+
+enum PodStatus {
+  DOWN
+  ERROR
+  PENDING
+  ACTIVE
+}
+
+enum PodStatusInput {
+  DOWN
+  ERROR
+  PENDING
+  ACTIVE
+}
+
+enum PodStrategy {
+  EXCLUSIVE
+  TEMPLATE
+  NODE
+}
+
+enum PostmanProtocol {
+  WEBSOCKET
+  KAFKA
+  RABBITMQ
+}
+
+type PostmanSettings {
+  type: PostmanProtocol
+  kwargs: GenericScalar
+}
+
+type Provider {
+  id: ID!
+  installedAt: DateTime!
+  name: String!
+  unique: String!
+  active: Boolean!
+  appprovider: AppProvider
+  templateSet: [Template!]!
+}
+
+enum ProviderProtocol {
+  WEBSOCKET
+}
+
+type ProviderSettings {
+  type: ProviderProtocol
+  kwargs: GenericScalar
+}
+
+type Query {
+  hello: String
+  void: String
+  node(id: ID, package: String, interface: String): Node
+  nodes(name: String, search: String, type: String): [Node]
+  pod(id: ID): Pod
+  pods(status: PodStatusInput, provider: String): [Pod]
+  template(id: ID): Template
+  templates(package: String, interface: String, active: Boolean): [Template]
+  provider(id: ID): Provider
+  providers(active: Boolean): [Provider]
+  model(id: ID!): DataModel
+  models: [DataModel]
+  service(id: ID): Service
+  services: [Service]
+}
+
+type QueryWidget implements Widget {
+  type: String
+  dependencies: [String]
+  query: String
+}
+
+type Repository {
+  id: ID!
+  installedAt: DateTime!
+  name: String!
+  unique: String!
+  apprepository: AppRepository
+}
+
+type Reservation {
+  id: ID!
+  node: Node
+  template: Template
+  pod: Pod
+  params: GenericScalar
+  channel: String!
+  status: ReservationStatus!
+  statusmessage: String!
+  callback: String
+  progress: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  parent: Reservation
+  reference: String!
+  children: [Reservation!]!
+}
+
+enum ReservationStatus {
+  PENDING
+  DENIED
+  PROGRESS
+  ERROR
+  CRITICAL
+  CANCEL
+  CANCELLED
+  DONE
+}
+
+interface ReturnPort {
+  type: String
+  key: String
+  label: String
+  description: String
+}
+
+input ReturnPortInput {
+  key: String!
+  type: String!
+  description: String
+  label: String
+  identifier: String
+}
+
+type Service {
+  id: ID!
+  version: String!
+  inward: String!
+  outward: String!
+  types: GenericScalar
+  name: String!
+  port: Int!
+}
+
+type StringArgPort implements ArgPort {
+  key: String
+  type: String
+  label: String
+  description: String
+  required: Boolean
+  widget: Widget
+  default: String
+}
+
+type StringKwargPort implements KwargPort {
+  key: String
+  type: String
+  label: String
+  description: String
+  required: Boolean
+  widget: Widget
+  default: String
+}
+
+type StringReturnPort implements ReturnPort {
+  type: String
+  key: String
+  label: String
+  description: String
+}
+
+type Template {
+  id: ID!
+  node: Node!
+  provider: Provider!
+  name: String!
+  policy: GenericScalar
+  params: GenericScalar
+  channel: String!
+  version: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  pods: [Pod!]!
+  reservations: [Reservation!]!
+}
+
+type Transcript {
+  extensions: GenericScalar
+  postman: PostmanSettings
+  host: HostSettings
+  provider: ProviderSettings
+  timestamp: DateTime
+  models: [DataModel]
+}
+
+scalar UUID
+
+interface Widget {
+  type: String
+  dependencies: [String]
+}
+
+input WidgetInput {
+  type: String!
+  query: String
+  dependencies: [String]
+  max: String
+  min: String
+}

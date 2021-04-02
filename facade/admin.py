@@ -4,7 +4,9 @@ from .models import *
 
 admin.site.register(Node)
 admin.site.register(Pod)
-admin.site.register(Provider)
+admin.site.register(BaseProvider)
+admin.site.register(BaseRepository)
+admin.site.register(AppRepository)
 admin.site.register(AppProvider)
 admin.site.register(Template)
 admin.site.register(Assignation)

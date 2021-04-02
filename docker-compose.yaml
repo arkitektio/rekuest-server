@@ -14,6 +14,13 @@ services:
     image: postgres:12.6-alpine
     env_file:
       - elements.env
+  mister:
+    image: jhnnsrs/mister:fancy
+    hostname: localhost
+    command: rabbitmq-server
+    ports:
+       - 5672:5672
+       - 15672:15672
 
 
 

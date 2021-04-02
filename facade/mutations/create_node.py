@@ -1,6 +1,6 @@
 from facade.structures.ports.input import ArgPortInput, KwargPortInput, ReturnPortInput
 from facade import types
-from facade.models import Repository, Node
+from facade.models import AppRepository, Node
 from balder.types import BalderMutation
 from balder.enum import InputEnum
 from facade.enums import NodeType
@@ -9,16 +9,6 @@ import graphene
 import logging
 
 logger = logging.getLogger(__name__)
-
-def get_node_repository(user, id="localhost"):
-    if user.is_anonymous:
-        repo, _ = Repository.objects.get_or_create(type=f"flow", defaults={"name": f"flow_{id}"})
-        return repo
-
-
-
-    repo, _ = Repository.objects.filter(creator=user).get_or_create(type=f"flow", defaults={"name": f"flow_{id}", "creator": user})
-    return repo
 
 class CreateNode(BalderMutation):
     """Create Node according to the specifications"""
@@ -41,7 +31,13 @@ class CreateNode(BalderMutation):
     
     @bounced(anonymous=True)
     def mutate(root, info, package=None, interface=None, description="Not description", args=[], kwargs=[], returns=[], type=None, name="name"):
-        repository = get_node_repository(info.context.user)
+        if info.context.bounced.user is not None:
+            app_name = info.context.bounced.app_name + " by " + info.context.bounced.user.username
+        else:
+            app_name = info.context.bounced.app_name
+        
+        
+        repository , _ = AppRepository.objects.update_or_create(client_id=info.context.bounced.client_id, user=info.context.user, defaults= {"name": app_name})
         
         print(type)
         node, created = Node.objects.update_or_create(package=package, interface=interface, repository=repository, defaults={

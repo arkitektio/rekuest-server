@@ -1,9 +1,9 @@
+from balder.types.mutation.base import BalderMutation
 from delt.service.types import ServiceType
 from herre.utils import decode_token
 from facade.structures.transcript import HostProtocol, HostSettings, PostmanProtocol, PostmanSettings, ProviderProtocol, ProviderSettings, Transcript
 from facade import types
-from facade.models import AppProvider, DataModel, DataPoint, Repository, Node, Service
-from balder.types import BalderMutation
+from facade.models import AppProvider, DataModel, Service
 from balder.enum import InputEnum
 from facade.enums import ClientType, NodeType
 from herre import bounced
@@ -49,8 +49,14 @@ class Negotiate(BalderMutation):
             )
         }
 
+
         if client_type == ClientType.PROVIDER.value:
-            provider , _ = AppProvider.objects.update_or_create(client_id=info.context.auth.client_id, user=info.context.user, defaults= {"name": name + " by " + info.context.user.username})
+            if info.context.bounced.user is not None:
+                app_name = info.context.bounced.app_name + " by " + info.context.bounced.user.username
+            else:
+                app_name = info.context.bounced.app_name
+
+            provider , _ = AppProvider.objects.update_or_create(client_id=info.context.bounced.client_id, user=info.context.user, defaults= {"name": app_name })
             #TODO: Check if this client can register as item
             transcript_dict["provider"] = ProviderSettings(
                 type = ProviderProtocol.WEBSOCKET,

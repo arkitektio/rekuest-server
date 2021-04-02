@@ -3,9 +3,9 @@ from balder.registry import register_type
 
 
 get_port_types = lambda: {
-            "int": IntReturnPort,
-            "model": ModelReturnPort,
-            "string": StringReturnPort,
+            "IntReturnPort": IntReturnPort,
+            "ModelReturnPort": ModelReturnPort,
+            "StringReturnPort": StringReturnPort,
 }
 
 @register_type

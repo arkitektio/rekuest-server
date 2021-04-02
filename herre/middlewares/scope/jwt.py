@@ -1,3 +1,4 @@
+from herre.middlewares.utils import set_scope_async
 from herre.utils import decode_token
 from herre.token import JwtToken
 from django.utils.decorators import sync_and_async_middleware
@@ -11,23 +12,6 @@ logger = logging.getLogger(__name__)
 
 UserModel = get_user_model()
 
-
-@sync_to_async
-def set_scope_async(scope, decoded, token):
-    if "email" in decoded:
-        try:
-            user = UserModel.objects.get(email=decoded["email"])
-        except UserModel.DoesNotExist:
-            raise PermissionDenied("This user does not exist. Please create the User in the Database!!")
-    else:
-        user = None
-
-    scope["auth"] = JwtToken(decoded, user, token)
-    scope["user"] = user
-    return scope
-
-
-    
 
 class JWTChannelMiddleware:
     """

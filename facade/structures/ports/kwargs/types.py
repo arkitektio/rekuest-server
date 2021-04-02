@@ -3,9 +3,9 @@ from balder.registry import register_type
 import graphene
 
 get_port_types = lambda: {
-            "int": IntKwargPort,
-            "model": ModelKwargPort,
-            "string": StringKwargPort
+            "IntKwargPort": IntKwargPort,
+            "ModelKwargPort": ModelKwargPort,
+            "StringKwargPort": StringKwargPort
 }
 
 @register_type

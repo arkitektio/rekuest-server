@@ -80,18 +80,19 @@ class DataModel(models.Model):
         return f"{self.identifier} at {self.point}"
 
 
-class Repository(models.Model):
+class BaseRepository(models.Model):
     """ A Repository is the housing conatinaer for a Node, Multiple Nodes belong to one repository.
 
     Repositories can be replicas of online sources (think pypi repository), but also containers for
     local user generated nodes (think nodes that were generated through the flow provider)
     """
-    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=True, help_text="The Person that created this repository")
     name = models.CharField(max_length=1000, help_text="The name of this Repository")
-    type = models.CharField(max_length=200,choices=RepositoryType.choices, default=RepositoryType.LOCAL, help_text="Type of repository")
+    installed_at = models.DateTimeField(auto_created=True, auto_now_add=True)
+    unique = models.CharField(max_length=1000, default=uuid.uuid4, help_text="A world-unique identifier")
 
 
-class Provider(models.Model):
+
+class BaseProvider(models.Model):
     """ A provider is the intermediate step from a template to a pod, it takes an associated template
     and transfers it to a pod, given the current restrictions of the setup"""
     name = models.CharField(max_length=2000, help_text="This providers Name", default="Nana")    
@@ -103,7 +104,19 @@ class Provider(models.Model):
         return f"{self.name} "
 
 
-class AppProvider(Provider):
+class AppRepository(BaseRepository):
+    client_id = models.CharField(max_length=6000, help_text="External Clients are authorized via the App ID")
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, help_text="The provide might be limited to a instance like ImageJ belonging to a specific person. Is nullable for backend users", null=True)
+    
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["client_id","user"], name="No multiple Repositories for same App and User allowed")
+        ]
+
+    def __str__(self):
+        return f"{self.name}"
+
+class AppProvider(BaseProvider):
     client_id = models.CharField(max_length=6000, help_text="External Clients are authorized via the App ID")
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, help_text="The provide might be limited to a instance like ImageJ belonging to a specific person. Is nullable for backend users", null=True)
     
@@ -116,7 +129,7 @@ class AppProvider(Provider):
         return f"{self.name}"
 
 
-class ServiceProvider(Provider):
+class ServiceProvider(BaseProvider):
     service = models.OneToOneField(Service, on_delete=models.CASCADE, help_text="The Associated Service for this Provider")
 
 
@@ -129,7 +142,7 @@ class Node(models.Model):
 
     See online Documentation"""
     type = models.CharField(max_length=1000, choices=NodeType.choices, default=NodeType.FUNCTION, help_text="Function, generator? Check async Programming Textbook")
-    repository = models.ForeignKey(Repository, on_delete=models.CASCADE, related_name="nodes")
+    repository = models.ForeignKey(AppRepository, on_delete=models.CASCADE, null=True, blank=True, related_name="nodes")
     channel = models.CharField(max_length=1000, default=uuid.uuid4, help_text="The unique channel where we can reach pods of this node [depending on Stragey]", unique=True)
 
 
@@ -158,7 +171,7 @@ class Template(models.Model):
     """ A Template is a conceptual implementation of A Node. It represents its implementation as well as its performance"""
 
     node = models.ForeignKey(Node, on_delete=models.CASCADE, help_text="The node this template is implementatig")
-    provider = models.ForeignKey(Provider, on_delete=models.CASCADE, help_text="The associated provider for this Template")
+    provider = models.ForeignKey(BaseProvider, on_delete=models.CASCADE, help_text="The associated provider for this Template")
     name = models.CharField(max_length=1000, default=generate_random_name, help_text="A name for this Template")
 
     policy = models.JSONField(max_length=2000, default=dict, help_text="The attached policy for this template")

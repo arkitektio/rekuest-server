@@ -2,8 +2,8 @@ from balder.registry import register_type
 import graphene
 
 get_widget_types = lambda: {
-            "query": QueryWidget,
-            "int": IntWidget
+            "QueryWidget": QueryWidget,
+            "IntWidget": IntWidget
 }
 
 @register_type

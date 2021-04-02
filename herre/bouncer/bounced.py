@@ -15,8 +15,9 @@ class Bounced:
 
         self._user = user
         self._scopes = scopes or []
-        self._roles = roles
-        self._type = "m2m" if type == "client-credentials" else "u2m"
+        self._roles = roles or  []
+        self._type = type
+        self._apptype = "m2m" if type == "client-credentials" else "u2m"
         self.scopeset = set(self._scopes)
         self.roleset = set(self._roles)
         self.is_jwt = is_jwt
@@ -43,17 +44,26 @@ class Bounced:
         required_scopes = set(required_scopes)
         required_roles = set(required_roles)
 
-        if not anonymous and self.user.is_anonymous:
-            raise BounceException("Only signed in users are allowed here")
+        if self._apptype not in allowed_types:
+            raise BounceException("Wrong App type")
+
         if only_jwt and not self.is_jwt:
             raise BounceException("Only Apps authorized via JWT are allowed here")
-        if self._type not in allowed_types:
-            raise BounceException("Wrong App type")
-        if not required_scopes.issubset(self.scopeset):
-            raise BounceException("App has not the required Scopes")
-        if not required_roles.issubset(self.roleset):
-            raise BounceException("User has not the required Roles")
-        
+       
+
+        if self._type == "client-credientals":
+            if not required_scopes.issubset(self.scopeset):
+                raise BounceException("App has not the required Scopes")
+            if not required_roles.issubset(self.roleset):
+                raise BounceException("User has not the required Roles")
+
+        if self._type == "implicit":
+            if not anonymous and self.user.is_anonymous:
+                raise BounceException("Only signed in users are allowed here")
+    
+        # Scope tests
+        if self._type == "password":
+            return True
 
 
     @classmethod

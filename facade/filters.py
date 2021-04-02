@@ -1,20 +1,21 @@
 from facade.enums import NodeType, PodStatus
 import django_filters
-from .models import Pod, Provider
+from .models import Pod, BaseProvider
 from balder.fields.enum import EnumFilter
 from django.db.models import Q
 
 class PodFilter(django_filters.FilterSet):
-    provider = django_filters.ModelChoiceFilter(queryset=Provider.objects.all(),field_name= "template__provider")
+    provider = django_filters.ModelChoiceFilter(queryset=BaseProvider.objects.all(),field_name= "template__provider")
     status = EnumFilter(choices=PodStatus.choices)
 
 class ProviderFilter(django_filters.FilterSet):
 
     class Meta:
-        model = Provider
+        model = BaseProvider
         fields = ("active",)
 
 class NodeFilter(django_filters.FilterSet):
+    name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
     search = django_filters.CharFilter(method="search_filter",label="Search")
     type = EnumFilter(choices=NodeType.choices)
 

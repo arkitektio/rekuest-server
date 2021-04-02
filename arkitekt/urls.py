@@ -19,12 +19,8 @@ from django.shortcuts import render
 from graphene_django.views import GraphQLView
 from django.views.decorators.csrf import csrf_exempt
 from django.conf.urls import url
-from balder.autodiscover import autodiscover
 
 
-# Autodiscover for all of the Balder Modules in the installed Apps
-
-autodiscover()
 
 
 def index(request):

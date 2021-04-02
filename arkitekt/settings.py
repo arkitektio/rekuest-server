@@ -179,6 +179,8 @@ CHANNEL_LAYERS = {
     },
 }
 
+AUTH_USER_MODEL = 'herre.HerreUser'
+
 AUTHENTICATION_BACKENDS = ('django.contrib.auth.backends.ModelBackend', 'guardian.backends.ObjectPermissionBackend')
 
 # Password validation

@@ -1,5 +1,5 @@
 from facade.enums import PodStatus
-from facade.models import AppProvider, Provider, Template, Pod, Provision
+from facade.models import AppProvider, Template, Pod, Provision
 from facade import types
 from balder.types import BalderMutation
 import graphene
@@ -15,7 +15,6 @@ class Accept(BalderMutation):
 
     @bounced(only_jwt=True)
     def mutate(root, info, template=None, provision=None):
-        provider = AppProvider.objects.get(client_id=info.context.bounced.client_id, user=info.context.bounced.user)
         
         provision = Provision.objects.get(reference=provision)
 

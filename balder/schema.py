@@ -2,6 +2,7 @@ from balder.types.query import BalderQuery
 from herre.bouncer.utils import bounced
 from balder.registry import get_balder_registry
 import graphene
+from balder.autodiscover import autodiscover
 
 class Query(graphene.ObjectType):
     hello = graphene.String(default_value="Hi!")
@@ -11,5 +12,8 @@ class Query(graphene.ObjectType):
         return "Hallo"
 
 
+# Autodiscover for all of the Balder Modules in the installed Apps
+
+autodiscover()
 
 graphql_schema = get_balder_registry().buildSchema(query = Query)

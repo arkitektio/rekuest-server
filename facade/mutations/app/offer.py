@@ -1,4 +1,4 @@
-from facade.models import AppProvider, Provider, Template
+from facade.models import AppProvider, Template
 from facade import types
 from balder.types import BalderMutation
 import graphene

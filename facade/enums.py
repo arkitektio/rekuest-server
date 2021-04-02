@@ -10,8 +10,8 @@ class DataPointType(TextChoices):
 
 class RepositoryType(TextChoices):
     """ Repository Types expresses what sort of Repository we are dealing with, e.g is this a local, mirror??"""
-    LOCAL = "local", "Repository only exists locally"
-    MIRROR = "mirror", "Repository mirrors online"
+    APP = "app", "Repository that is hosted by an App"
+    MIRROR = "mirror", "Repository mirrors online Repository"
 
 
 class PodStrategy(TextChoices):
