@@ -20,18 +20,9 @@ class MetaModel(MessageMetaModel):
     token: Token
 
 class DataModel(MessageDataModel):
-    node: Optional[str] #TODO: Maybe not optional
-    template: Optional[str]
-    pod: Optional[str]
-
-
-    reservation: Optional[str]
-    
-    params: Optional[AssignParams]
-
-    args: Optional[dict]
+    reservation: str # The reservation reference we are going to assign to
+    args: dict
     kwargs: Optional[dict]
-
 
 class BouncedAssignMessage(MessageModel):
     data: DataModel

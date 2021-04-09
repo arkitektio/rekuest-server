@@ -11,9 +11,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 class BaseConsumer(AsyncWebsocketConsumer):
+    mapper = None
 
     def __init__(self, *args, **kwargs):
         self.channel = None # The connection layer will be async set by the provider
+        assert self.mapper is not None; "Cannot instatiate this Consumer without a Mapper"
         super().__init__(*args, **kwargs)
 
     async def catch(self, text_data, exception=None):

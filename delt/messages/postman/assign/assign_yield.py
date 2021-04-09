@@ -14,7 +14,7 @@ class MetaModel(MessageMetaModel):
     extensions: Optional[MetaExtensionsModel]
 
 class DataModel(MessageDataModel):
-    yields: Optional[List] #TODO: Maybe not optional
+    returns: Optional[List] #TODO: Maybe not optional
 
 class AssignYieldsMessage(MessageModel):
     data: DataModel

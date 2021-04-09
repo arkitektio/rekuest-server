@@ -14,7 +14,7 @@ class MetaModel(MessageMetaModel):
     extensions: Optional[MetaExtensionsModel]
 
 class DataModel(MessageDataModel):
-    channel: Optional[str] #TODO: Maybe not optional
+    topic: Optional[str] #TODO: Maybe not optional
 
 class ReserveDoneMessage(MessageModel):
     data: DataModel

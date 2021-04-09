@@ -1,28 +1,25 @@
+from .params import ReserveParams
 from pydantic.main import BaseModel
 from ....messages.types import  RESERVE
 from ....messages.base import MessageDataModel, MessageMetaExtensionsModel, MessageMetaModel, MessageModel
 from typing import List, Optional
 
-class ProvideParams(BaseModel):
-    providers: Optional[List[str]]
 
 
-class ProvideMetaExtensionsModel(MessageMetaExtensionsModel):
+class MetaExtensionsModel(MessageMetaExtensionsModel):
     # Set by postman consumer
-    progress: Optional[str]
-    callback: Optional[str]
+    with_progress: Optional[bool] = False
 
-class ProvideMetaModel(MessageMetaModel):
+class MetaModel(MessageMetaModel):
     type: str = RESERVE
-    extensions: Optional[ProvideMetaExtensionsModel]
+    extensions: Optional[MetaExtensionsModel]
 
-class ProvideDataModel(MessageDataModel):
-
+class DataModel(MessageDataModel):
     node: Optional[str] #TODO: Maybe not optional
     template: Optional[str]
-    params: Optional[ProvideParams]
+    params: Optional[ReserveParams]
 
 
 class ReserveMessage(MessageModel):
-    data: ProvideDataModel
-    meta: ProvideMetaModel
+    data: DataModel
+    meta: MetaModel

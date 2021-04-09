@@ -1,4 +1,4 @@
-from ...messages.types import ASSIGN, CANCEL_ASSIGN
+from ...messages.types import ASSIGN
 from ...messages.base import MessageDataModel, MessageMetaExtensionsModel, MessageMetaModel, MessageModel
 from typing import Optional
 

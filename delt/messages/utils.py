@@ -1,38 +1,55 @@
-from .exception import ExceptionMessage
 from .host import DeActivatePodMessage, ActivatePodMessage
-from .postman.assign import AssignMessage, AssignReturnMessage, AssignProgressMessage, AssignCriticalMessage, AssignYieldsMessage, BouncedAssignMessage, BouncedCancelAssignMessage
+from .postman.assign import *
 from .base import MessageModel
 from .types import *
-from .postman.provide import ProvideDoneMessage, ProvideCriticalMessage, ProvideMessage, ProvideProgressMessage, BouncedProvideMessage, BouncedCancelProvideMessage
+from .postman.provide import *
+from .postman.unprovide import *
 from .postman.reserve import *
+from .postman.unreserve import *
+from .postman.unassign import *
+from .exception import ExceptionMessage
 import json
 
 
 registry = {
     PROVIDE_DONE:  ProvideDoneMessage,
     BOUNCED_PROVIDE: BouncedProvideMessage,
-    BOUNCED_CANCEL_PROVIDE: BouncedCancelProvideMessage,
     PROVIDE_CRITICAL: ProvideCriticalMessage,
     PROVIDE_PROGRESS: ProvideProgressMessage,
     PROVIDE: ProvideMessage,
 
+    UNPROVIDE_DONE:  UnprovideDoneMessage,
+    BOUNCED_UNPROVIDE: BouncedUnprovideMessage,
+    UNPROVIDE_CRITICAL: UnprovideCriticalMessage,
+    UNPROVIDE_PROGRESS: UnprovideProgressMessage,
+    UNPROVIDE: UnprovideMessage,
 
     RESERVE: ReserveMessage,
-    UNRESERVE: UnReserveMessage,
     BOUNCED_RESERVE: BouncedReserveMessage,
-    BOUNCED_CANCEL_RESERVE: BouncedCancelReserveMessage,
     RESERVE_CRITICAL: ReserveCriticalMessage,
     RESERVE_PROGRESS: ReserveProgressMessage,
     RESERVE_DONE: ReserveDoneMessage,
 
+    UNRESERVE: UnreserveMessage,
+    BOUNCED_UNRESERVE: BouncedUnreserveMessage,
+    UNRESERVE_CRITICAL: UnreserveCriticalMessage,
+    UNRESERVE_PROGRESS: UnreserveProgressMessage,
+    UNRESERVE_DONE: UnreserveDoneMessage,
 
     ASSIGN: AssignMessage,
+    BOUNCED_ASSIGN: BouncedAssignMessage,
+    BOUNCED_FORWARDED_ASSIGN: BouncedForwardedAssignMessage,
     ASSIGN_CRITICAL: AssignCriticalMessage,
     ASSIGN_PROGRES: AssignProgressMessage,
     ASSIGN_RETURN: AssignReturnMessage,
+    ASSIGN_DONE: AssignDoneMessage,
     ASSIGN_YIELD: AssignYieldsMessage,
-    BOUNCED_ASSIGN: BouncedAssignMessage,
-    BOUNCED_CANCEL_ASSIGN: BouncedCancelAssignMessage,
+
+    UNASSIGN: UnassignMessage,
+    BOUNCED_UNASSIGN: BouncedUnassignMessage,
+    UNASSIGN_CRITICAL: UnassignCriticalMessage,
+    UNASSIGN_PROGRES: UnassignProgressMessage,
+    UNASSIGN_DONE: UnassignDoneMessage,
 
     ACTIVATE_POD: ActivatePodMessage,
     DEACTIVATE_POD: DeActivatePodMessage,

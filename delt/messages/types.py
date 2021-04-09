@@ -7,21 +7,15 @@ PROVISION = "provision"
 ASSIGNATION_REQUEST = "assignation_request"
 PROVISION_REQUEST = "provision_request"
 
-
 ACTIVATE_POD = "activate_pod"
 DEACTIVATE_POD ="deactivate_pod"
 
 
 # ASIGN PATH
 ASSIGN = "assign"
-CANCEL_ASSIGN = "cancel_assign"
-
-
-# Arkitekt
 BOUNCED_ASSIGN = "bounced_assign"
-BOUNCED_CANCEL_ASSIGN = "bounced_cancel_assign"
+BOUNCED_FORWARDED_ASSIGN = "bounced_forwarded_assign"
 
-# Pod 
 ASSIGN_DONE = "assign_done"
 ASSIGN_PROGRES ="assign_progress"
 ASSIGN_CRITICAL = "assign_fail"
@@ -29,37 +23,49 @@ ASSIGN_YIELD =  "assign_yield"
 ASSIGN_RETURN = "assign_return"
 ASSIGN_RETRY = "assign_retry"
 
-# Reserve Path
+# UNASSIGN PATH
+UNASSIGN = "unassign"
+BOUNCED_UNASSIGN = "bounced_unassign"
+
+UNASSIGN_DONE = "unassign_done"
+UNASSIGN_PROGRES ="unassign_progress"
+UNASSIGN_CRITICAL = "unassign_fail"
+
+# Reserve
 RESERVE = "reserve"
-CANCEL_RESERVE = "cancel_reserve"
-
-# Arkitekt
 BOUNCED_RESERVE = "bounced_reserve"
-BOUNCED_CANCEL_RESERVE = "bounced_cancel_reserve"
 
-# Provider
 RESERVE_DONE = "reserve_done"
 RESERVE_PROGRESS = "reserve_progress"
 RESERVE_FAIL = "reserve_fail"
 RESERVE_CRITICAL = "reserve_critical"
 
 
+#Unreserve
 UNRESERVE = "unreserve"
+BOUNCED_UNRESERVE = "bounced_unreserve"
 
-# Provide Path
+UNRESERVE_DONE = "unreserve_done"
+UNRESERVE_PROGRESS = "unreserve_progress"
+UNRESERVE_FAIL = "unreserve_fail"
+UNRESERVE_CRITICAL = "unreserve_critical"
+
+
+# Provide
 PROVIDE = "provide"
-CANCEL_PROVIDE = "cancel_provide"
-
-# Arkitekt
 BOUNCED_PROVIDE = "bounced_provide"
-BOUNCED_CANCEL_PROVIDE = "bounced_cancel_provide"
 
-# Provider
 PROVIDE_DONE = "provide_done"
 PROVIDE_PROGRESS = "provide_progress"
 PROVIDE_FAIL = "provide_fail"
 PROVIDE_CRITICAL = "provide_critical"
 
-
-
+# Unprovide
 UNPROVIDE = "unprovide"
+BOUNCED_UNPROVIDE = "bounced_unprovide"
+
+UNPROVIDE_DONE = "unprovide_done"
+UNPROVIDE_PROGRESS = "unprovide_progress"
+UNPROVIDE_FAIL = "unprovide_fail"
+UNPROVIDE_CRITICAL = "unprovide_critical"
+

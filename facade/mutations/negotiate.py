@@ -18,14 +18,13 @@ class Negotiate(BalderMutation):
 
     class Arguments:
         client_type = graphene.Argument(InputEnum.from_choices(ClientType),description="The type of Client")
-        name = graphene.String(description="The Apps name")
 
     class Meta:
         type = Transcript
 
     
     @bounced(only_jwt=True)
-    def mutate(root, info, client_type = ClientType.HOST, name=None):
+    def mutate(root, info, client_type = ClientType.HOST):
 
         extensions = {}
         for service in Service.objects.filter(types__contains=ServiceType.NEGOTIATE.value).all():

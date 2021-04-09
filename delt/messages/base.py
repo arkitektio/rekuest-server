@@ -1,14 +1,10 @@
 import json
-import aiormq
 from pydantic import BaseModel
 from typing import Any, Callable, Optional, Type, TypeVar
 
 from pydantic.types import Json
 from pydantic import Field
 import uuid
-import logging
-
-logger = logging.getLogger(__name__)
 
 class MessageMetaExtensionsModel(BaseModel):
     """ Extensions to the AMQP Message protocol
@@ -18,7 +14,7 @@ class MessageMetaExtensionsModel(BaseModel):
 
 class MessageMetaModel(BaseModel):
     type: str
-    reference: str = Field(default_factory=lambda: str(uuid.uuid4))
+    reference: str = Field(default_factory=lambda x: str(uuid.uuid4))
     extensions: Optional[MessageMetaExtensionsModel] = { }
 
 
@@ -45,15 +41,13 @@ class MessageModel(BaseModel):
     def from_channels(cls: Type[T], message: str) -> T:
         return cls(**json.loads(message))
 
-
     @classmethod
     def unwrapped_message(cls: Type[T], function) -> Callable[[Any], T]:
 
-        async def unwrapped(self, message: aiormq.types.DeliveredMessage, *args, **kwargs):
+        async def unwrapped(self, message, *args, **kwargs):
             print(message)
             input = cls.from_message(message)
             return await function(self, input, message, *args, **kwargs)
 
         return unwrapped
-
     

@@ -1,4 +1,6 @@
 # chat/consumers.py
+from delt.messages.postman.unprovide.unprovide_critical import UnprovideCriticalMessage
+from delt.messages.postman.unprovide.unprovide_progress import UnprovideProgressMessage
 from delt.messages.postman.provide import ProvideDoneMessage, ProvideCriticalMessage, ProvideProgressMessage
 from herre.bouncer.utils import bounced_ws
 from ..models import AppProvider, Provision
@@ -37,6 +39,9 @@ class ProviderConsumer(BaseConsumer): #TODO: Seperate that bitch
         ProvideDoneMessage: lambda cls: cls.on_provide_done,
         ProvideProgressMessage: lambda cls: cls.on_provide_progress,
         ProvideCriticalMessage: lambda cls: cls.on_provide_critical,
+
+        UnprovideProgressMessage: lambda cls: cls.on_unprovide_progress,
+        UnprovideCriticalMessage: lambda cls: cls.on_unprovide_critical,
     }
 
     @bounced_ws(only_jwt=True)
@@ -55,8 +60,10 @@ class ProviderConsumer(BaseConsumer): #TODO: Seperate that bitch
         self.channel = await self.connection.channel()
         # Declaring queue
         self.on_provide_queue = await self.channel.queue_declare(f"provision_in_{self.provider.unique}", auto_delete=True)
+        self.on_unprovide_queue = await self.channel.queue_declare(f"unprovision_in_{self.provider.unique}", auto_delete=True)
         # Start listening the queue with name 'hello'
         await self.channel.basic_consume(self.on_provide_queue.queue, self.on_provide)
+        await self.channel.basic_consume(self.on_unprovide_queue.queue, self.on_provide)
 
 
     async def on_provide(self, message: aiormq.types.DeliveredMessage):
@@ -76,6 +83,8 @@ class ProviderConsumer(BaseConsumer): #TODO: Seperate that bitch
         except:
             logger.error("Something weird happened in disconnection!")
 
+    async def on_unprovide_done(self, unprovide_done: ProvideDoneMessage):
+        await self.forward(unprovide_done, unprovide_done.meta.extensions.callback)
         
     async def on_provide_done(self, provide_done: ProvideDoneMessage):
         await self.forward(provide_done, provide_done.meta.extensions.callback)
@@ -83,9 +92,14 @@ class ProviderConsumer(BaseConsumer): #TODO: Seperate that bitch
     async def on_provide_critical(self, provide_error: ProvideCriticalMessage):
         await self.forward(provide_error, provide_error.meta.extensions.callback)
 
+    async def on_unprovide_critical(self, provide_error: UnprovideCriticalMessage):
+        await self.forward(provide_error, provide_error.meta.extensions.callback)
+
     async def on_provide_progress(self, provide_error: ProvideProgressMessage):
         await self.forward(provide_error, provide_error.meta.extensions.progress)
 
+    async def on_unprovide_progress(self, message: UnprovideProgressMessage):
+        await self.forward(message, message.meta.extensions.progress)
 
 
         

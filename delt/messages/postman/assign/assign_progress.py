@@ -1,3 +1,4 @@
+from ..progress import ProgressDataModel
 from enum import Enum
 from pydantic.main import BaseModel
 from ....messages.types import  ASSIGN_PROGRES, PROVIDE, PROVIDE_DONE
@@ -15,15 +16,6 @@ class MetaModel(MessageMetaModel):
     extensions: Optional[MetaExtensionsModel]
 
 
-class ProgressLevel(str, Enum):
-    INFO = "INFO"
-    DEBUG = "DEBUG"
-
-
-class DataModel(MessageDataModel):
-    level: ProgressLevel
-    message: str
-
 class AssignProgressMessage(MessageModel):
-    data: DataModel
+    data: ProgressDataModel
     meta: MetaModel

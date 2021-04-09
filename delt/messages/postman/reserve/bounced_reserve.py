@@ -1,13 +1,8 @@
+from .params import ReserveParams
 from ....messages.generics import Token
-from pydantic.main import BaseModel
 from ....messages.types import  BOUNCED_RESERVE
 from ....messages.base import MessageDataModel, MessageMetaExtensionsModel, MessageMetaModel, MessageModel
 from typing import List, Optional
-
-
-class ProvideParams(BaseModel):
-    providers: Optional[List[str]]
-
 
 class MetaExtensionsModel(MessageMetaExtensionsModel):
     # Set by postman consumer
@@ -22,7 +17,7 @@ class MetaModel(MessageMetaModel):
 class DataModel(MessageDataModel):
     node: Optional[str] #TODO: Maybe not optional
     template: Optional[str]
-    params: Optional[ProvideParams]
+    params: Optional[ReserveParams]
 
 
 class BouncedReserveMessage(MessageModel):

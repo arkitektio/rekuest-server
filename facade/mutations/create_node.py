@@ -21,7 +21,7 @@ class CreateNode(BalderMutation):
         returns = graphene.List(ReturnPortInput, description="The Returns")
         type = graphene.Argument(InputEnum.from_choices(NodeType),description="The variety", default_value=NodeType.FUNCTION.value)
         interface = graphene.String(description="The Interface", required=True)
-        package = graphene.String(description="The Package", required=True)
+        package = graphene.String(description="The Package", required=False)
 
 
 
@@ -39,8 +39,7 @@ class CreateNode(BalderMutation):
         
         repository , _ = AppRepository.objects.update_or_create(client_id=info.context.bounced.client_id, user=info.context.user, defaults= {"name": app_name})
         
-        print(type)
-        node, created = Node.objects.update_or_create(package=package, interface=interface, repository=repository, defaults={
+        node, created = Node.objects.update_or_create(package=repository.name, interface=interface, repository=repository, defaults={
             "description": description,
             "args": args,
             "kwargs": kwargs,
@@ -48,5 +47,7 @@ class CreateNode(BalderMutation):
             "name": name,
             "type": type
         })
+
+        print(node)
    
         return node
