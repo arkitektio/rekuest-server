@@ -23,7 +23,7 @@ def find_pod_or_template_for_provide(provide: BouncedProvideMessage) -> Tuple[Po
         if template.is_active:
             pod = template.pods.first()
             # Check if assignable to pod
-            logger.warn("Template is already active and provisioned, returning first Pod (Matching params)")
+            logger.warn("Template is already active and ss, returning first Pod (Matching params)")
 
             logger.error("Not implemented yet... creating new Pod")
 
