@@ -11,13 +11,27 @@ import logging
 import aiormq
 from asgiref.sync import sync_to_async
 from .base import BaseHare
-
+from arkitekt.console import console
 logger = logging.getLogger(__name__)
 
 
 @sync_to_async
-def find_topic_for_reservation(reserve: BouncedReserveMessage) -> str:
+def create_reservation_from_bounced_reserve(reserve: BouncedReserveMessage):
+    reservation, created = Reservation.objects.update_or_create(reference=reserve.meta.reference, **{
+        "node_id": reserve.data.node,
+        "template_id": reserve.data.template,
+        "params": reserve.data.params.dict(),
+        "creator_id": reserve.meta.token.user,
+        "callback": reserve.meta.extensions.callback,
+        "progress": reserve.meta.extensions.progress
+    })
+    return reservation
 
+
+
+
+@sync_to_async
+def find_topic_for_reservation(reserve: BouncedReserveMessage, reservation: Reservation) -> str:
     params = reserve.data.params
     node = reserve.data.node
     template = reserve.data.template
@@ -35,16 +49,22 @@ def find_topic_for_reservation(reserve: BouncedReserveMessage) -> str:
         pod = template.pods.filter(status=PodStatus.ACTIVE).first()
 
         if pod:
-            pod.reservations.add(Reservation.objects.get(reference=reserve.meta.reference))
+            pod.reservations.add(reservation)
             return pod.channel
 
         else:
             return None
 
 
+@sync_to_async
+def find_topic_for_unreservation(unreserve: BouncedUnreserveMessage) -> str:
+    reservation = Reservation.objects.get(reference=unreserve.data.reservation)
+    return reservation.pod.channel
+
+
 
 @sync_to_async
-def create_bouncedprovide_from_bouncedreserve_and_template(bounced_reserve: BouncedReserveMessage, template: Template) -> str:
+def create_bouncedprovide_from_bouncedreserve_and_template(bounced_reserve: BouncedReserveMessage, template: Template, reservation: Reservation) -> str:
 
     provision = Provision.objects.create(
         reference= bounced_reserve.meta.reference, # We use the same reference that the user wants
@@ -55,10 +75,8 @@ def create_bouncedprovide_from_bouncedreserve_and_template(bounced_reserve: Boun
         progress = None,
 
         creator_id = bounced_reserve.meta.token.user,
-        reservation = Reservation.objects.get(reference=bounced_reserve.meta.reference) #Even though we share the same reference??
+        reservation = reservation #Even though we share the same reference??
     )
-
-    print(provision.reference)
 
     provide_message = BouncedProvideMessage(data= {
                     "template": template.id,
@@ -100,10 +118,39 @@ def cancel_reservation(bounced_unreserve: BouncedUnreserveMessage) -> Union[Tupl
                     }), pod.template.provider
 
     return None, None
+ 
+
+@sync_to_async
+def get_unprovision_to_cause(unreserve_done: UnreserveDoneMessage):
+    ''' Cancels the reservation on a Pod and returns an UnprovideMessage if we are to unprovide the Pod '''
+
+
+    reservation = Reservation.objects.get(reference = unreserve_done.data.reservation)
+
+    pod = reservation.pod
+    # Lets check if we are the last reservation for the pod?
+    print(pod.reservations.all())
+    if pod.reservations.count() == 1:
+        # Only if the reservation that created this pod dies are we allowed to unprovide
+        if pod.provision.reservation.id == reservation.id:
+            params = ProvideParams(**pod.provision.params)
+            if params.auto_unprovide:
+                return BouncedUnprovideMessage(
+                    data={
+                        "provision": str(pod.provision.reference)
+                    },
+                    meta= {
+                        "reference": unreserve_done.meta.reference,
+                        "extensions": {}, # This is a system call, we do not need any callback. The disappearing pod is enough!
+                        "token": {"scopes": [] , "roles": [], "user": 1 },
+                    }), pod.template.provider
+
+    return None, None
+
 
 
 @sync_to_async
-def find_providable_template_for_reservation(reserve: BouncedReserveMessage) -> str:
+def find_providable_template_for_reservation(reserve: BouncedReserveMessage, reservation: Reservation) -> str:
 
     assert reserve.data.params.auto_provide == True, "There is no active Pod for this Node and you didn't provide autoprovide"
     assert "can_provide" in reserve.meta.token.scopes, "Your App does not have the proper permissions set to autoprovide (add [bold]can_provide[/] to your scopes"
@@ -149,6 +196,7 @@ class ReserverRabbit(BaseHare):
         self.bounced_reserve_in = await self.channel.queue_declare("bounced_reserve_in")
         self.bounced_unreserve_in = await self.channel.queue_declare("bounced_unreserve_in")
         self.bounced_cancel_provide_in = await self.channel.queue_declare("bounced_cancel_provide_in")
+        self.unreserve_done_in = await self.channel.queue_declare("unreserve_done_in")
 
 
         # We will get Results here
@@ -157,29 +205,37 @@ class ReserverRabbit(BaseHare):
         # Start listening the queue with name 'hello'
         await self.channel.basic_consume(self.bounced_reserve_in.queue, self.on_bounced_reserve_in)
         await self.channel.basic_consume(self.bounced_unreserve_in.queue, self.on_bounced_unreserve_in)
+        await self.channel.basic_consume(self.unreserve_done_in.queue, self.on_unreserve_done_in)
 
 
 
     @BouncedReserveMessage.unwrapped_message
     async def on_bounced_reserve_in(self, bounced_reserve: BouncedReserveMessage, message: aiormq.types.DeliveredMessage):
         logger.info(f"Received Bounced Reserve {str(message.body.decode())}")
+        reservation = await create_reservation_from_bounced_reserve(bounced_reserve)
 
         try:
-            topic = await find_topic_for_reservation(bounced_reserve)
+            topic = await find_topic_for_reservation(bounced_reserve, reservation)
             if topic: 
                 logger.warn(f"Reservation done: channel {topic}")
                 # We are routing it to the Template channel (pods will pick up and then reply to)
-                reserve_done =  ReserveDoneMessage(data={"topic": topic}, meta={"reference": bounced_reserve.meta.reference})
-                await self.forward(reserve_done, bounced_reserve.meta.extensions.callback)
+                #reserve_done =  ReserveDoneMessage(data={"topic": topic}, meta={"reference": bounced_reserve.meta.reference})
+
+                #TODO: Make this deciscion only if the on_reserve hook is overwritten
+                reserve_progress =  ReserveProgressMessage(data={"level": ProgressLevel.INFO, "message": f"Using Topic {str(topic)}"}, meta={"reference": bounced_reserve.meta.reference})
+                logger.info(reserve_progress)
+
+                await self.forward(reserve_progress, bounced_reserve.meta.extensions.progress)
+                await self.forward(bounced_reserve, topic)
 
             else:
                 logger.info(f"Seeing if autoprovide works for {bounced_reserve.meta.token}")
 
-                template = await find_providable_template_for_reservation(bounced_reserve)
+                template = await find_providable_template_for_reservation(bounced_reserve, reservation)
 
-                bounced_provide = await create_bouncedprovide_from_bouncedreserve_and_template(bounced_reserve, template)
+                bounced_provide = await create_bouncedprovide_from_bouncedreserve_and_template(bounced_reserve, template, reservation)
                 logger.info(bounced_provide)
-                provide_progress =  ProvideProgressMessage(data={"level": ProgressLevel.INFO, "message": f"Providing Template {str(template.id)} on {template.provider}"}, meta={"reference": bounced_reserve.meta.reference})
+                provide_progress =  ReserveProgressMessage(data={"level": ProgressLevel.INFO, "message": f"Providing Template {str(template.id)} on {template.provider}"}, meta={"reference": bounced_reserve.meta.reference})
                 logger.info(provide_progress)
 
                 await self.forward(provide_progress, bounced_reserve.meta.extensions.progress)
@@ -190,6 +246,7 @@ class ReserverRabbit(BaseHare):
             logger.error(e)
             exception = ExceptionMessage.fromException(e, bounced_reserve.meta.reference)
             await self.forward(exception, bounced_reserve.meta.extensions.callback)
+            console.print_exception()
 
         # This should then expand this to an assignation message that can be delivered to the Providers
         await message.channel.basic_ack(message.delivery.delivery_tag)
@@ -200,25 +257,35 @@ class ReserverRabbit(BaseHare):
         logger.info(f"Received Bounced Unreserve {str(message.body.decode())}")
 
         try:
-            #TODO: We are finding the pods that have been reserved under this, if the initial provision stated an unprovide and there is no other reservation we cause an unprovide
-            bounced_unprovide, provider = await cancel_reservation(bounced_unreserve)
-
-            if bounced_unprovide is not None:
-                logger.warn(f"Calling an Unprovide before we unreserve")
-                await self.forward(bounced_unprovide, f"unprovision_in_{provider.unique}")
-            else:
-                logger.info(f"No need for an unprovide")
-                unreserve_done =  UnreserveDoneMessage(data={"reservation": bounced_unreserve.data.reservation}, meta={"reference": bounced_unreserve.meta.reference})
-                await self.forward(unreserve_done, bounced_unreserve.meta.extensions.callback)
-
-
-               
+            topic = await find_topic_for_unreservation(bounced_unreserve)
+            await self.forward(bounced_unreserve, str(topic))
+                           
         except Exception as e:
             logger.error(e)
             exception = ExceptionMessage.fromException(e, bounced_unreserve.meta.reference)
             await self.forward(exception, bounced_unreserve.meta.extensions.callback)
 
         # This should then expand this to an assignation message that can be delivered to the Providers
+        await message.channel.basic_ack(message.delivery.delivery_tag)
+
+    @UnreserveDoneMessage.unwrapped_message
+    async def on_unreserve_done_in(self, unreserve_done: UnreserveDoneMessage, message: aiormq.types.DeliveredMessage):
+        logger.info(f"Received Bounced Unreserve {str(message.body.decode())}")
+
+        try:
+            await self.forward(unreserve_done, unreserve_done.meta.extensions.callback)
+            
+
+            unprovision, provider = await get_unprovision_to_cause(unreserve_done)
+
+            logger.info(f'Finally we can unprovide what we provided before')
+            if unprovision is not None:
+                await self.forward(unprovision, f"unprovision_in_{provider.unique}")
+
+
+        except Exception as e:
+            logger.error(e)
+
         await message.channel.basic_ack(message.delivery.delivery_tag)
 
 

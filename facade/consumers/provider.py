@@ -1,4 +1,5 @@
 # chat/consumers.py
+from delt.messages.postman.unprovide.unprovide_done import UnprovideDoneMessage
 from delt.messages.postman.unprovide.unprovide_critical import UnprovideCriticalMessage
 from delt.messages.postman.unprovide.unprovide_progress import UnprovideProgressMessage
 from delt.messages.postman.provide import ProvideDoneMessage, ProvideCriticalMessage, ProvideProgressMessage
@@ -32,6 +33,15 @@ def deactivateProvider(provider: AppProvider):
     provider.active = False
     provider.save()
     return provider
+  
+
+def initial_cleanup():
+    for provider in AppProvider.objects.all():
+        provider.active = False
+        provider.save()
+
+initial_cleanup()
+
 
 
 class ProviderConsumer(BaseConsumer): #TODO: Seperate that bitch
@@ -61,6 +71,8 @@ class ProviderConsumer(BaseConsumer): #TODO: Seperate that bitch
         # Declaring queue
         self.on_provide_queue = await self.channel.queue_declare(f"provision_in_{self.provider.unique}", auto_delete=True)
         self.on_unprovide_queue = await self.channel.queue_declare(f"unprovision_in_{self.provider.unique}", auto_delete=True)
+
+        logger.warning("")
         # Start listening the queue with name 'hello'
         await self.channel.basic_consume(self.on_provide_queue.queue, self.on_provide)
         await self.channel.basic_consume(self.on_unprovide_queue.queue, self.on_provide)
@@ -83,11 +95,17 @@ class ProviderConsumer(BaseConsumer): #TODO: Seperate that bitch
         except:
             logger.error("Something weird happened in disconnection!")
 
-    async def on_unprovide_done(self, unprovide_done: ProvideDoneMessage):
-        await self.forward(unprovide_done, unprovide_done.meta.extensions.callback)
+    async def on_unprovide_done(self, unprovide_done: UnprovideDoneMessage):
+        if unprovide_done.meta.extensions.callback is not None:
+            await self.forward(unprovide_done, unprovide_done.meta.extensions.callback)
+        else:
+            logger.warn("Was system Call (for example unprovide)")
         
     async def on_provide_done(self, provide_done: ProvideDoneMessage):
-        await self.forward(provide_done, provide_done.meta.extensions.callback)
+        if provide_done.meta.extensions.callback is not None:
+            await self.forward(provide_done, provide_done.meta.extensions.callback)
+        else:
+            logger.warn("Was system Call (for example unprovide)")
 
     async def on_provide_critical(self, provide_error: ProvideCriticalMessage):
         await self.forward(provide_error, provide_error.meta.extensions.callback)
@@ -99,7 +117,10 @@ class ProviderConsumer(BaseConsumer): #TODO: Seperate that bitch
         await self.forward(provide_error, provide_error.meta.extensions.progress)
 
     async def on_unprovide_progress(self, message: UnprovideProgressMessage):
-        await self.forward(message, message.meta.extensions.progress)
+        if message.meta.extensions.progress is not None:
+            await self.forward(message, message.meta.extensions.progress)
+        else:
+            logger.warn("Was system Call (for example unprovide)")
 
 
         

@@ -45,7 +45,6 @@ class MessageModel(BaseModel):
     def unwrapped_message(cls: Type[T], function) -> Callable[[Any], T]:
 
         async def unwrapped(self, message, *args, **kwargs):
-            print(message)
             input = cls.from_message(message)
             return await function(self, input, message, *args, **kwargs)
 

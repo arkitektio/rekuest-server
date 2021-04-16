@@ -1,5 +1,8 @@
 # chat/consumers.py
 import asyncio
+
+from aiormq.types import CallbackCoro
+from delt.messages.types import BOUNCED_FORWARDED_ASSIGN, BOUNCED_FORWARDED_RESERVE, RESERVE_DONE, UNRESERVE_DONE
 import json
 from delt.messages import *
 from herre.bouncer.utils import bounced_ws
@@ -10,7 +13,7 @@ from .base import BaseConsumer
 import logging
 import aiormq
 from delt.messages.utils import expandFromRabbitMessage
-
+from arkitekt.console import console
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +78,19 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
         AssignProgressMessage: lambda cls: cls.on_assign_progress,
         AssignCriticalMessage: lambda cls: cls.on_assign_critical,
         AssignReturnMessage: lambda cls: cls.on_assign_return,
+        AssignDoneMessage: lambda cls: cls.on_assign_done,
+
+
+        BouncedForwardedReserveMessage: lambda cls: cls.on_bounced_forwarded_reserve,
+        BouncedUnreserveMessage: lambda cls: cls.on_bounced_unreserve,
+        ReserveCriticalMessage: lambda cls: cls.on_reserve_critical,
+        UnreserveCriticalMessage: lambda cls: cls.on_unreserve_critical,
+        
+
+
+
+
+
         UnassignCriticalMessage: lambda cls: cls.on_unassign_critical,
         UnassignDoneMessage: lambda cls: cls.on_unassign_done,
         UnassignProgressMessage: lambda cls: cls.on_unassign_progress,
@@ -89,6 +105,8 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
         self.hosted_pods = {}
         self.channel_name = await self.connect_to_rabbit()
 
+        self.provision_topic_map = {}
+
     async def connect_to_rabbit(self):
         # Perform connection
         self.connection = await aiormq.connect(f"amqp://guest:guest@mister/")
@@ -99,12 +117,19 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
         nana = expandFromRabbitMessage(message)
         
         if isinstance(nana, BouncedAssignMessage):
-            forwarded_message = BouncedForwardedAssignMessage(data={**nana.data.dict(), "provision": provision_reference}, meta={**nana.meta.dict(), "type": "bounced_forwarded_assign"})
+            forwarded_message = BouncedForwardedAssignMessage(data={**nana.data.dict(), "provision": provision_reference}, meta={**nana.meta.dict(), "type": BOUNCED_FORWARDED_ASSIGN})
             await self.send_message(forwarded_message) # No need to go through pydantic???
             
         elif isinstance(nana, BouncedUnassignMessage):
             await self.send_message(nana) 
 
+        elif isinstance(nana, BouncedReserveMessage):
+            forwarded_message = BouncedForwardedReserveMessage(data={**nana.data.dict(), "provision": provision_reference}, meta={**nana.meta.dict(), "type": BOUNCED_FORWARDED_RESERVE})
+            await self.send_message(forwarded_message) 
+
+        elif isinstance(nana, BouncedUnreserveMessage):
+            await self.send_message(nana)
+        
         else:
             logger.error("This message is not what we expeceted here")
             
@@ -123,64 +148,25 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
 
 
     async def on_bounced_unprovide(self, message: BouncedUnprovideMessage):
-
         pod = await deltePodFromProvision(message.data.provision)
 
         assert pod.provision is not None, "This should never happen"
 
-        await self.forward(UnprovideDoneMessage(
-                data= {
-                    "provision": pod.provision.reference
-                },
-                meta= {
-                    "reference": message.meta.reference,
-                    "extensions": {
-                        "callback": None,
-                        "progress": None
-                    }
-        }), message.meta.extensions.callback)
 
-        await self.forward(UnreserveDoneMessage(
-                data= {
-                    "reservation": pod.provision.reservation.reference
-                },
-                meta= {
-                    "reference": message.meta.reference,
-                    "extensions": {
-                        "callback": None,
-                        "progress": None
-                    }
-        }), message.meta.extensions.callback)
-
-        for reservation in pod.reservations.all():
-            logger.info("Telling Reserving Clients that we went bye bye")
-            await self.forward(UnreserveDoneMessage(
-                data= {
-                    "reservation": reservation.reference
-                },
-                meta= {
-                    "reference": reservation.reference,
-                    "extensions": {
-                        "callback": reservation.callback,
-                        "progress": reservation.progress
-                    }
-                }), reservation.callback)
-
-        
-        if pod.provision.callback is not None:
-            logger.info("Telling Our Providing Client that we went bye bye ")
+        if message.meta.extensions.callback is not None:
             await self.forward(UnprovideDoneMessage(
-                data= {
-                    "provision": pod.provision.reference
-                },
-                meta= {
-                    "reference": pod.provision.reference,
-                    "extensions": {
-                        "callback": pod.provision.callback,
-                        "progress": pod.provision.progress
-                    }
-                }), pod.provision.callback)
-
+                    data= {
+                        "provision": pod.provision.reference
+                    },
+                    meta= {
+                        "reference": message.meta.reference,
+                        "extensions": {
+                            "callback": message.meta.extensions.callback,
+                            "progress": message.meta.extensions.progress
+                        }
+            }), message.meta.extensions.callback)
+        else:
+            logger.warn("Was system call")
 
         del self.provision_queues[message.data.provision]
 
@@ -191,8 +177,8 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
 
         pod = await getOrCreatePodFromProvision(provision_reference)
 
-        assign_queue = await self.channel.queue_declare(str(pod.channel))
-        cancel_me_queue = await self.channel.queue_declare("cancel_me_"+provision_reference)
+        assign_queue = await self.channel.queue_declare(str(pod.channel), auto_delete=True)
+        cancel_me_queue = await self.channel.queue_declare("cancel_me_"+provision_reference, auto_delete=True)
 
 
         # Each pod through podman listens to the same pod
@@ -204,45 +190,39 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
 
         self.provision_queues[message.meta.reference] = (assign_queue, cancel_me_queue)
         self.hosted_pods[pod.id] = pod.id
+        self.provision_topic_map[provision_reference] = pod.channel
 
         assert pod.provision is not None, "This should never happen"
 
         for reservation in pod.reservations.all():
-            logger.info(f"Sending ReserveDone {reservation.reference}")
-            await self.forward(ReserveDoneMessage(
-                data= {
-                    "topic": pod.channel
+            console.log(f"[dark-red] Pod was already reserved with {reservation.reference}")
+            
+            bounced_forwarded = BouncedForwardedReserveMessage(
+                data = {
+                    "node": reservation.node_id,
+                    "template": reservation.template_id,
+                    "params": reservation.params,
+                    "provision": provision_reference,
                 },
-                meta= {
+                meta = {
                     "reference": reservation.reference,
                     "extensions": {
                         "callback": reservation.callback,
                         "progress": reservation.progress
-                    }
-                }), reservation.callback)
+                    },
+                    "token": message.meta.token
+                }
+            )
+            await self.send_message(bounced_forwarded)
+            
 
-        if pod.provision.callback is not None:
-            logger.info(f"Sending ProvideDone {pod.provision.reference}")
 
-            provide_done = ProvideDoneMessage(
-                data= {
-                    "pod": pod.id
-                },
-                meta= {
-                    "reference": pod.provision.reference,
-                    "extensions": {
-                        "callback": pod.provision.callback,
-                        "progress": pod.provision.progress
-                    }
-                })
 
-            await self.send_message(provide_done)
-            await self.forward(provide_done, pod.provision.callback)
 
 
     async def destroy_pod(self, pod_id, message="Pod Just Failed"):
         ''' This Method gets called if we lost a pod due to failure '''
-        pod = await deactivatePod(pod_id)
+        pod: Pod = await deactivatePod(pod_id)
 
         assert pod.provision is not None, "This should never happen"
 
@@ -288,8 +268,46 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
     async def on_assign_return(self, assign_return: AssignReturnMessage):
         await self.forward(assign_return, assign_return.meta.extensions.callback)
 
+    async def on_assign_done(self, assign_done: AssignDoneMessage):
+        await self.forward(assign_done, assign_done.meta.extensions.callback)
+
     async def on_assign_progress(self, assign_return: AssignProgressMessage):
         await self.forward(assign_return, assign_return.meta.extensions.progress)
+
+    async def on_bounced_forwarded_reserve(self, forwarded_reserve: BouncedForwardedReserveMessage):
+        console.log(f"[magenta] Received Reserve Sucessfully on the Client {forwarded_reserve}")
+
+        topic = self.provision_topic_map[forwarded_reserve.data.provision]
+        reserve_done = ReserveDoneMessage(data={"topic": topic}, meta={**forwarded_reserve.meta.dict(), "type": RESERVE_DONE})
+        console.log(f"[magenta] {reserve_done}")
+
+        await self.forward(reserve_done, reserve_done.meta.extensions.callback)
+
+
+    async def unprovide_if_needed(unreserve: BouncedUnreserveMessage):
+
+        unreserve.data.reservation
+
+
+
+    async def on_bounced_unreserve(self, unreserve: BouncedUnreserveMessage):
+        console.log(f"[magenta] Received Unreserve Sucessfully on the Client {unreserve}")
+
+        unreserve_done = UnreserveDoneMessage(data={"reservation": unreserve.data.reservation}, meta={**unreserve.meta.dict(), "type": UNRESERVE_DONE})
+        console.log(f"[magenta] {unreserve_done}")
+
+
+        await self.forward(unreserve_done, "unreserve_done_in")
+
+
+    async def on_reserve_critical(self, reserve_critical: ReserveCriticalMessage):
+        await self.forward(reserve_critical, reserve_critical.meta.extensions.callback)
+
+    async def on_unreserve_done(self, unreserve_done: UnreserveDoneMessage):
+        await self.forward(unreserve_done, unreserve_done.meta.extensions.callback)
+
+    async def on_unreserve_critical(self, unreserve_critical: UnreserveDoneMessage):
+        await self.forward(unreserve_critical, unreserve_critical.meta.extensions.callback)
 
     async def on_unassign_done(self, assign_return: UnassignDoneMessage):
         print("oisdnoisndofinsdo9finh")

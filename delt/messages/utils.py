@@ -26,6 +26,7 @@ registry = {
 
     RESERVE: ReserveMessage,
     BOUNCED_RESERVE: BouncedReserveMessage,
+    BOUNCED_FORWARDED_RESERVE: BouncedForwardedReserveMessage,
     RESERVE_CRITICAL: ReserveCriticalMessage,
     RESERVE_PROGRESS: ReserveProgressMessage,
     RESERVE_DONE: ReserveDoneMessage,

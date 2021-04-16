@@ -34,6 +34,7 @@ UNASSIGN_CRITICAL = "unassign_fail"
 # Reserve
 RESERVE = "reserve"
 BOUNCED_RESERVE = "bounced_reserve"
+BOUNCED_FORWARDED_RESERVE = "bounced_forwarded_reserve"
 
 RESERVE_DONE = "reserve_done"
 RESERVE_PROGRESS = "reserve_progress"

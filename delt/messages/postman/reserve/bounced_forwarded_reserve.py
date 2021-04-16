@@ -1,10 +1,9 @@
 from ....messages.generics import Token
 from pydantic.main import BaseModel
-from ....messages.types import BOUNCED_FORWARDED_ASSIGN
+from .params import ReserveParams
+from ....messages.types import  BOUNCED_FORWARDED_RESERVE
 from ....messages.base import MessageDataModel, MessageMetaExtensionsModel, MessageMetaModel, MessageModel
 from typing import List, Optional
-
-
 
 class MetaExtensionsModel(MessageMetaExtensionsModel):
     # Set by postman consumer
@@ -12,16 +11,16 @@ class MetaExtensionsModel(MessageMetaExtensionsModel):
     callback: Optional[str]
 
 class MetaModel(MessageMetaModel):
-    type: str = BOUNCED_FORWARDED_ASSIGN
+    type: str = BOUNCED_FORWARDED_RESERVE
     extensions: Optional[MetaExtensionsModel]
     token: Token
 
 class DataModel(MessageDataModel):
-    reservation: str
-    provision: str # The reservation reference we are going to assign to
-    args: dict
-    kwargs: Optional[dict]
+    node: Optional[str] #TODO: Maybe not optional
+    template: Optional[str]
+    params: Optional[ReserveParams]
+    provision: str
 
-class BouncedForwardedAssignMessage(MessageModel):
+class BouncedForwardedReserveMessage(MessageModel):
     data: DataModel
     meta: MetaModel

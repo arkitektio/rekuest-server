@@ -33,3 +33,11 @@ class IntWidget(graphene.ObjectType):
 
     class Meta:
         interfaces = (Widget,)
+
+
+@register_type
+class StringWidget(graphene.ObjectType):
+    pass
+
+    class Meta:
+        interfaces = (Widget,)

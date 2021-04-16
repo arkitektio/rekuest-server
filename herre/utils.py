@@ -42,7 +42,6 @@ def token_from_authorization(authorization):
 
 
 def check_token_from_request(request):
-    
 
     if request.META.get("HTTP_AUTHORIZATION", "").startswith("Bearer"):
             if not hasattr(request, "user") or request.user.is_anonymous:
