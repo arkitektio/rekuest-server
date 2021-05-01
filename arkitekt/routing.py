@@ -1,5 +1,6 @@
+from facade.workers.gateway import GatewayConsumer
 from channels.auth import AuthMiddlewareStack
-from channels.routing import ProtocolTypeRouter, URLRouter
+from channels.routing import ChannelNameRouter, ProtocolTypeRouter, URLRouter
 from django.conf.urls import url
 from facade.consumers import PostmanConsumer, ProviderConsumer, HostConsumer
 from django.core.asgi import get_asgi_application
@@ -32,4 +33,8 @@ application = ProtocolTypeRouter({
         url(r'host\/$', HostConsumer.as_asgi()),
         url(r'postman\/$', PostmanConsumer.as_asgi())
     ])),
+    'channel': ChannelNameRouter({
+        "gateway": GatewayConsumer.as_asgi()
+    })
+
 })

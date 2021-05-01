@@ -1,4 +1,5 @@
 from .assign import AssignMessage
+from .assign_cancelled import AssignCancelledMessage
 from .assign_critical import AssignCriticalMessage
 from .assign_progress import AssignProgressMessage
 from .assign_return import AssignReturnMessage

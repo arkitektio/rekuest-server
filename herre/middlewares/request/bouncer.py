@@ -1,6 +1,7 @@
 import asyncio
+from asgiref.sync import sync_to_async
 from django.utils.decorators import sync_and_async_middleware
-from herre.bouncer.bounced import Bounced
+from herre.bouncer.bounced import Bounced, get_session_app
 
 
 
@@ -14,7 +15,8 @@ def BouncedMiddleware(get_response):
             if hasattr(request, "auth"):
                 request.bounced = Bounced.from_auth(request.auth)
             elif hasattr(request, "session"):
-                request.bounced = Bounced.from_session_and_user(request.session, request.user)
+                app = await sync_to_async(get_session_app)()
+                request.bounced = Bounced.from_session_app_and_user(app, request.user)
             else:
                 request.bounced = None
             response = await get_response(request)
@@ -26,7 +28,8 @@ def BouncedMiddleware(get_response):
             if hasattr(request, "auth"):
                 request.bounced = Bounced(request.auth)
             elif hasattr(request, "session"):
-                request.bounced = Bounced.from_session_and_user(request.session, request.user)
+                app = get_session_app()
+                request.bounced = Bounced.from_session_app_and_user(app, request.user)
             else:
                 request.bounced = None
             response = get_response(request)

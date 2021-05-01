@@ -1,3 +1,4 @@
+from facade.enums import DataPointType
 import graphene
 from graphene.types.generic import GenericScalar
 from facade.types import DataModel, DataPoint
@@ -6,6 +7,10 @@ from facade.types import DataModel, DataPoint
 
 class ProviderProtocol(graphene.Enum):
     WEBSOCKET = "websocket"
+
+
+class PointSettings(graphene.ObjectType):
+    type = graphene.String(description="The Type of the Datapoitn")
 
 
 class ProviderSettings(graphene.ObjectType):
@@ -34,9 +39,9 @@ class PostmanSettings(graphene.ObjectType):
 
 class Transcript(graphene.ObjectType):
     extensions = GenericScalar(description="Space for extensions")
+    point = graphene.Field(PointSettings)
     postman = graphene.Field(PostmanSettings)
     host = graphene.Field(HostSettings)
     provider = graphene.Field(ProviderSettings)
-    models = graphene.List(DataModel)
     timestamp = graphene.DateTime()
     models = graphene.List(DataModel, description="Registered Models in this instance")

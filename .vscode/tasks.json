@@ -20,19 +20,19 @@
             "command": "python manage.py graphql_schema --out schema.graphql"
         },
         {
-            "label": "Assigner",
+            "label": "Gateway",
             "type": "shell",
-            "command": "python manage.py runassigner"
-        },
-        {
-            "label": "Provider",
-            "type": "shell",
-            "command": "python manage.py runprovider"
+            "command": "python manage.py runworker gateway"
         },
         {
             "label": "Reserver",
             "type": "shell",
             "command": "python manage.py runreserver"
+        },
+        {
+            "label": "Persister",
+            "type": "shell",
+            "command": "python manage.py runpersister"
         },
     ]
 }

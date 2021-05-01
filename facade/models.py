@@ -1,9 +1,10 @@
+from herre.models import HerreApp
 from django.db.models import constraints
 from herre.token import JwtToken
 from mars.names import generate_random_name
 from facade.fields import ArgsField, InPortsField, InputsField, KwargsField, OutPortsField, OutputsField, ParamsField, PodChannel, ReturnField
 from django.db.models.fields import NullBooleanField
-from facade.enums import AssignationStatus, DataPointType, NodeType, PodMode, PodStatus, PodStrategy, ProvisionStatus, RepositoryType
+from facade.enums import AssignationLogLevel, AssignationStatus, DataPointType, HookType, NodeType, PodMode, PodStatus, PodStrategy, ProvisionStatus, RepositoryType, ReservationLogLevel, ReservationStatus
 from django.db import models
 from django.contrib.auth import get_user_model
 import uuid
@@ -13,50 +14,25 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-
-class Service(models.Model):
-    version = models.CharField(max_length=100, help_text="The version of the bergen API this endpoint uses")
-    inward = models.CharField(max_length=100, help_text="Inward facing hostname (for Docker powered access)")
-    outward = models.CharField(max_length=100, help_text="Outward facing hostname for external clients")
-    types = models.JSONField(help_text="The extensions to the protocol it provides")
-    name = models.CharField(max_length=100, unique=True)
-    port = models.IntegerField(help_text="Listening port")
-    
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["inward","port"], name="Unique Service")
-        ]
-
-
-    def negotiate(self, token: JwtToken):
-        try:
-            result = requests.post(f"http://{self.inward}:{self.port}/.well-known/arkitekt_negotiate", headers={"AUTHORIZATION": f"Bearer {token.token}"})
-            return result.json()
-        except Exception as e:
-            logger.error(e)
-            return None
-
-    def __str__(self):
-        return f"{self.name} for {self.inward}:{self.port}"
-
-
-
 class DataPoint(models.Model):
     """A Datapoint constitues Arkitekts Representation of a Host of Data.
 
     Datapoints host Datamodels, that in turn are accessible as Models for Node inputs and node outputs
 
     """
+    app = models.ForeignKey(HerreApp, on_delete=models.CASCADE, help_text="The Associated App")
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, help_text="The provide might be limited to a instance like ImageJ belonging to a specific person. Is nullable for backend users", null=True)
     version = models.CharField(max_length=100, help_text="The version of the bergen API this endpoint uses")
     inward = models.CharField(max_length=100, help_text="Inward facing hostname (for Docker powered access)")
     outward = models.CharField(max_length=100, help_text="Outward facing hostname for external clients")
     port = models.IntegerField(help_text="Listening port")
     type = models.CharField(max_length=100, choices=DataPointType.choices, default=DataPointType.GRAPHQL, help_text="The type of datapoint")
     installed_at = models.DateTimeField(auto_created=True, auto_now_add=True)
+    needs_negotiation = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["inward","port"], name="unique datapoint")
+            models.UniqueConstraint(fields=["app","user"], name="No multiple AppPoints for same App and User allowed")
         ]
 
     def __str__(self):
@@ -80,7 +56,8 @@ class DataModel(models.Model):
         return f"{self.identifier} at {self.point}"
 
 
-class BaseRepository(models.Model):
+
+class Repository(models.Model):
     """ A Repository is the housing conatinaer for a Node, Multiple Nodes belong to one repository.
 
     Repositories can be replicas of online sources (think pypi repository), but also containers for
@@ -89,52 +66,39 @@ class BaseRepository(models.Model):
     name = models.CharField(max_length=1000, help_text="The name of this Repository")
     installed_at = models.DateTimeField(auto_created=True, auto_now_add=True)
     unique = models.CharField(max_length=1000, default=uuid.uuid4, help_text="A world-unique identifier")
+    app = models.ForeignKey(HerreApp, on_delete=models.CASCADE, help_text="The Associated App")
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, help_text="The provide might be limited to a instance like ImageJ belonging to a specific person. Is nullable for backend users", null=True)
+    
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["app","user"], name="No multiple Repositories for same App and User allowed")
+        ]
 
+    def __str__(self):
+        return f"{self.name}"
 
-
-class BaseProvider(models.Model):
+class Provider(models.Model):
     """ A provider is the intermediate step from a template to a pod, it takes an associated template
     and transfers it to a pod, given the current restrictions of the setup"""
     name = models.CharField(max_length=2000, help_text="This providers Name", default="Nana")    
     installed_at = models.DateTimeField(auto_created=True, auto_now_add=True)
     unique = models.CharField(max_length=1000, default=uuid.uuid4, help_text="The Channel we are listening to")
     active = models.BooleanField(default=False, help_text="Is this Provider active right now?")
-
-    def __str__(self) -> str:
-        return f"{self.name} "
-
-
-class AppRepository(BaseRepository):
-    client_id = models.CharField(max_length=6000, help_text="External Clients are authorized via the App ID")
+    app = models.ForeignKey(HerreApp, on_delete=models.CASCADE, help_text="The Associated App")
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, help_text="The provide might be limited to a instance like ImageJ belonging to a specific person. Is nullable for backend users", null=True)
     
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["client_id","user"], name="No multiple Repositories for same App and User allowed")
-        ]
-
-    def __str__(self):
-        return f"{self.name}"
-
-class AppProvider(BaseProvider):
-    client_id = models.CharField(max_length=6000, help_text="External Clients are authorized via the App ID")
-    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, help_text="The provide might be limited to a instance like ImageJ belonging to a specific person. Is nullable for backend users", null=True)
-    
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["client_id","user"], name="No multiple Providers for same App and User allowed")
+            models.UniqueConstraint(fields=["app","user"], name="No multiple Providers for same App and User allowed")
         ]
 
     def __str__(self):
         return f"{self.name}"
 
 
-class ServiceProvider(BaseProvider):
-    service = models.OneToOneField(Service, on_delete=models.CASCADE, help_text="The Associated Service for this Provider")
+class BaseHooker(models.Model):
+    name = models.CharField(max_length=200, help_text="This hookers name", default="Nana")
 
-
-    def __str__(self):
-        return f"{self.name} for {self.service}"
 
 
 class Node(models.Model):
@@ -142,7 +106,7 @@ class Node(models.Model):
 
     See online Documentation"""
     type = models.CharField(max_length=1000, choices=NodeType.choices, default=NodeType.FUNCTION, help_text="Function, generator? Check async Programming Textbook")
-    repository = models.ForeignKey(AppRepository, on_delete=models.CASCADE, null=True, blank=True, related_name="nodes")
+    repository = models.ForeignKey(Repository, on_delete=models.CASCADE, null=True, blank=True, related_name="nodes")
     channel = models.CharField(max_length=1000, default=uuid.uuid4, help_text="The unique channel where we can reach pods of this node [depending on Stragey]", unique=True)
 
 
@@ -170,8 +134,8 @@ class Node(models.Model):
 class Template(models.Model):
     """ A Template is a conceptual implementation of A Node. It represents its implementation as well as its performance"""
 
-    node = models.ForeignKey(Node, on_delete=models.CASCADE, help_text="The node this template is implementatig")
-    provider = models.ForeignKey(BaseProvider, on_delete=models.CASCADE, help_text="The associated provider for this Template")
+    node = models.ForeignKey(Node, on_delete=models.CASCADE, help_text="The node this template is implementatig", related_name="templates")
+    provider = models.ForeignKey(Provider, on_delete=models.CASCADE, help_text="The associated provider for this Template")
     name = models.CharField(max_length=1000, default=generate_random_name, help_text="A name for this Template")
 
     policy = models.JSONField(max_length=2000, default=dict, help_text="The attached policy for this template")
@@ -186,7 +150,7 @@ class Template(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["node","params"], name="A template has unique params for every node")
+            models.UniqueConstraint(fields=["node","params","provider"], name="A template has unique params for every node")
         ]
 
     def __str__(self):
@@ -206,7 +170,7 @@ class Provision(models.Model):
     params = models.JSONField(null=True, blank=True, help_text="Params for the Policy (including Provider etc..)") 
 
     #Status Field
-    status = models.CharField(max_length=300, choices=ProvisionStatus.choices, default=ProvisionStatus.PENDING, help_text="Current lifecycle of Provision")
+    status = models.CharField(max_length=300, choices=ProvisionStatus.choices, default=ProvisionStatus.PENDING.value, help_text="Current lifecycle of Provision")
     statusmessage = models.CharField(max_length=1000, help_text="Clear Text status of the Provision as for now", blank=True)
 
     #Callback
@@ -262,7 +226,7 @@ class Reservation(models.Model):
     #1 Inputs to the the Provision (it can be either already a template to provision or just a node)
     node = models.ForeignKey(Node, on_delete=models.CASCADE, help_text="The node this reservation connects", related_name="reservations", null=True, blank=True)
     template = models.ForeignKey(Template, on_delete=models.CASCADE, help_text="The template this reservation connects", related_name="reservations", null=True, blank=True)
-    pod = models.ForeignKey(Pod, on_delete=models.CASCADE, help_text="The pod this reservation connects", related_name="reservations", null=True, blank=True)
+    pod = models.ForeignKey(Pod, on_delete=models.SET_NULL, help_text="The pod this reservation connects", related_name="reservations", null=True, blank=True)
 
     # Selection criteria for finding a right Channel
     params = models.JSONField(null=True, blank=True, help_text="Params for the Policy (including Provider etc..)") 
@@ -271,7 +235,7 @@ class Reservation(models.Model):
     channel = models.CharField(max_length=6000)
     
     #Status Field
-    status = models.CharField(max_length=300, choices=ProvisionStatus.choices, default=ProvisionStatus.PENDING, help_text="Current lifecycle of Provision")
+    status = models.CharField(max_length=300, choices=ReservationStatus.choices, default=ReservationStatus.PENDING.value, help_text="Current lifecycle of Provision")
     statusmessage = models.CharField(max_length=1000, help_text="Clear Text status of the Provision as for now", blank=True)
 
     #Callback
@@ -290,6 +254,10 @@ class Reservation(models.Model):
         return f"Reservation for Node: {self.node.interface if self.node else ''} | Template: {self.template if self.template else ''} to {self.pod} Referenced {self.reference}"
 
 
+class ReservationLog(models.Model):
+    reservation = models.ForeignKey(Reservation, help_text="The reservation this log item belongs to", related_name="log", on_delete=models.CASCADE)
+    message = models.CharField(max_length=2000, null=True, blank=True)
+    level = models.CharField(choices=ReservationLogLevel.choices, default=ReservationLogLevel.INFO.value, max_length=200)
 
 
 class Assignation(models.Model):
@@ -308,7 +276,7 @@ class Assignation(models.Model):
     # 2. Outputs of the Assignation
     outputs = OutputsField(help_text="The Outputs", blank=True, null=True)
 
-    status = models.CharField(max_length=300, choices=AssignationStatus.choices, default=AssignationStatus.PENDING, help_text="Current lifecycle of Assignation")
+    status = models.CharField(max_length=300, choices=AssignationStatus.choices, default=AssignationStatus.PENDING.value, help_text="Current lifecycle of Assignation")
     statusmessage = models.CharField(max_length=1000, help_text="Clear Text status of the Assignation as for now", blank=True)
     
     # Callbacks are only to be set if there is a need to transvere through Django (e.g assignation through CHannels)
@@ -324,3 +292,9 @@ class Assignation(models.Model):
     creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, max_length=1000, help_text="The creator is this assignation", null=True, blank=True)
     parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, help_text="The Assignations parent", related_name="children")
    
+
+
+class AssignationLog(models.Model):
+    reservation = models.ForeignKey(Assignation, help_text="The reservation this log item belongs to", related_name="log", on_delete=models.CASCADE)
+    message = models.CharField(max_length=2000, null=True, blank=True)
+    level = models.CharField(choices=AssignationLogLevel.choices, default=AssignationLogLevel.INFO.value, max_length=200)

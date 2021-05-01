@@ -1,6 +1,6 @@
 from facade.structures.ports.input import ArgPortInput, KwargPortInput, ReturnPortInput
 from facade import types
-from facade.models import AppRepository, Node
+from facade.models import Repository, Node
 from balder.types import BalderMutation
 from balder.enum import InputEnum
 from facade.enums import NodeType
@@ -30,14 +30,8 @@ class CreateNode(BalderMutation):
 
     
     @bounced(anonymous=True)
-    def mutate(root, info, package=None, interface=None, description="Not description", args=[], kwargs=[], returns=[], type=None, name="name"):
-        if info.context.bounced.user is not None:
-            app_name = info.context.bounced.app_name + " by " + info.context.bounced.user.username
-        else:
-            app_name = info.context.bounced.app_name
-        
-        
-        repository , _ = AppRepository.objects.update_or_create(client_id=info.context.bounced.client_id, user=info.context.user, defaults= {"name": app_name})
+    def mutate(root, info, package=None, interface=None, description="Not description", args=[], kwargs=[], returns=[], type=None, name="name"):       
+        repository , _ = Repository.objects.update_or_create(app=info.context.bounced.app, user=info.context.bounced.user, defaults= {"name": info.context.bounced.app.name})
         
         node, created = Node.objects.update_or_create(package=repository.name, interface=interface, repository=repository, defaults={
             "description": description,

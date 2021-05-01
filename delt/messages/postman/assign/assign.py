@@ -14,7 +14,7 @@ class MetaModel(MessageMetaModel):
 
 class DataModel(MessageDataModel):
     reservation: str # The reservation reference we are going to assign to
-    args: dict
+    args: Optional[list]
     kwargs: Optional[dict]
 
 class AssignMessage(MessageModel):

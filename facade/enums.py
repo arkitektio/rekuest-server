@@ -8,6 +8,26 @@ class DataPointType(TextChoices):
     REST = "rest", "Rest (Access through the GraphQL Interface or Ward)"
 
 
+class HookType(TextChoices):
+    NEGOTIATE = "negotiate", "Negotiate Hook (syncronous Api call)"
+
+
+class LogLevel(TextChoices):
+    INFO = "INFO", "INFO Level"
+    DEBUG = "DEBUG", "DEBUG Level"    
+    ERROR = "ERROR", "ERROR Level"    
+
+class ReservationLogLevel(TextChoices):
+    INFO = "INFO", "INFO Level"    
+    DEBUG = "DEBUG", "DEBUG Level"    
+    ERROR = "ERROR", "ERROR Level"    
+
+class AssignationLogLevel(TextChoices):
+    INFO = "INFO", "INFO Level"    
+    DEBUG = "DEBUG", "DEBUG Level"    
+    ERROR = "ERROR", "ERROR Level"    
+
+
 class RepositoryType(TextChoices):
     """ Repository Types expresses what sort of Repository we are dealing with, e.g is this a local, mirror??"""
     APP = "app", "Repository that is hosted by an App"
@@ -25,6 +45,7 @@ class ClientType(TextChoices):
     HOST = "Host", "Hosting Client"
     CLIENT = "Client", "Client client"
     PROVIDER = "Provider", "Providing client" 
+    POINT = "Point", "Hosts Datamodels"
 
 
 
@@ -68,6 +89,26 @@ class AssignationStatus(TextChoices):
     # Successfull Termination
     YIELD = "YIELD", "Assignment yielded a value (only for Generators)"
     DONE = "DONE", "Assignment has finished"
+
+
+class ReservationStatus(TextChoices):
+    PENDING = "PENDING", "Pending" # Assignation has been requested
+    PROVIDING = "PROVIDING", "Providing"
+    # Arnheim acknowledgments
+    DENIED = "DENIED", "Denied (Provision was rejected)"
+    ENDED = "ENDED", "Reservation has finished and is no longer active"
+    
+    # Progress reports
+    PROGRESS = "PROGRESS", "Progress (Provision has current Progress)"
+
+    # Unsuccessfull Termination
+    ERROR = "ERROR", "Error (Retrieable)"
+    CRITICAL = "CRITICAL", "Critical Error (No Retries available)"
+    CANCEL = "CANCEL", "Provision is beeing cancelled"
+    CANCELLED = "CANCELLED", "Provision has been cancelled."
+
+    # Successfull Termination
+    DONE = "DONE", "Reservation is active and assignable"
 
 
 

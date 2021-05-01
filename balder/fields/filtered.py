@@ -25,8 +25,8 @@ class BalderFiltered(Field):
         """
         _fields = _type._meta.filter_fields
         _model = _type._meta.model
-        standard_resolver = lambda root, info, *args, **kwargs: _model._default_manager.get_queryset()
 
+        standard_resolver = lambda root, info, *args, **kwargs: _model._default_manager.get_queryset()
         self._relatedfield = related_field
         self._queryset_resolver = queryset_resolver or standard_resolver
         self.of_type = _type

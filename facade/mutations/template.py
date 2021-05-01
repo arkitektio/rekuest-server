@@ -1,4 +1,4 @@
-from facade.models import AppProvider, ServiceProvider, Template, Service
+from facade.models import Provider, Template
 from facade import types
 from balder.types import BalderMutation
 import graphene
@@ -12,18 +12,12 @@ class CreateTemplate(BalderMutation):
     class Arguments:
         node = graphene.ID(required=True, description="The Node you offer to give an implementation for")
         params  = GenericScalar(required=False, description="Some additional Params for your offering")
+        policy  = GenericScalar(required=False, description="Some additional Params for your offering")
 
 
     @bounced(only_jwt=True, required_scopes=["provider"])
-    def mutate(root, info, node=None, name=None, params=None):
-        if info.context.bounced.user is not None:
-            app_name = info.context.bounced.app_name + " by " + info.context.bounced.user.username
-        else:
-            app_name = info.context.bounced.app_name
-
-        provider, created = AppProvider.objects.update_or_create(client_id=info.context.bounced.client_id, user=info.context.bounced.user , defaults = {
-            "name": app_name
-        })
+    def mutate(root, info, node=None, name=None, params=None, policy = None):
+        provider = Provider.objects.get(app=info.context.bounced.app, user=info.context.bounced.user)
 
         try:
             template = Template.objects.get(node=node, params=params)

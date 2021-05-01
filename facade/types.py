@@ -1,9 +1,27 @@
+from django.contrib.auth import get_user_model
+from facade.filters import TemplateFilter
+from balder.fields.filtered import BalderFiltered
+from django.utils.translation import templatize
 from facade.structures.ports.returns.types import ReturnPort
 from facade.structures.ports.kwargs.types import KwargPort
 from facade.structures.ports.args.types import ArgPort
 from facade import models
+from herre.models import HerreApp as HerreAppModel
 from balder.types import BalderObject
 import graphene
+
+
+class HerreApp(BalderObject):
+
+    class Meta:
+        model = HerreAppModel
+
+
+class HerreUser(BalderObject):
+
+    class Meta:
+        model = get_user_model()
+
 
 class DataPoint(BalderObject):
 
@@ -15,13 +33,6 @@ class DataModel(BalderObject):
 
     class Meta:
         model = models.DataModel
-
-
-class Service(BalderObject):
-
-    class Meta:
-        model = models.Service
-
 
 class Scan(graphene.ObjectType):
     ok = graphene.Boolean()
@@ -35,26 +46,24 @@ class DataQuery(graphene.ObjectType):
 class Repository(BalderObject):
 
     class Meta:
-        model = models.BaseRepository
+        model = models.Repository
 
-class AppRepository(BalderObject):
-
+        
+class Template(BalderObject):
+    
     class Meta:
-        model = models.AppRepository
-
+        model = models.Template
 
 class Node(BalderObject):
     args = graphene.List(ArgPort)
     kwargs = graphene.List(KwargPort)
     returns = graphene.List(ReturnPort)
+    templates = BalderFiltered(Template, filterset_class=TemplateFilter, related_field="templates")
 
     class Meta:
         model = models.Node
 
-class Template(BalderObject):
-    
-    class Meta:
-        model = models.Template
+
 
 class Reservation(BalderObject):
     
@@ -62,16 +71,29 @@ class Reservation(BalderObject):
         model = models.Reservation
 
 
+class ReservationLog(BalderObject):
+
+    class Meta:
+        model = models.ReservationLog
+        
+
+class Assignation(BalderObject):
+    
+    class Meta:
+        model = models.Assignation
+
+
+class AssignationLog(BalderObject):
+    
+    class Meta:
+        model = models.AssignationLog
+
+
 class Provider(BalderObject):
     
     class Meta:
-        model = models.BaseProvider
+        model = models.Provider
 
-
-class AppProvider(BalderObject):
-    
-    class Meta:
-        model = models.AppProvider
 
 class Pod(BalderObject):
     

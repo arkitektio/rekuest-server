@@ -11,7 +11,7 @@ import aiormq
 import logging
 from herre.token import JwtToken
 import json
-
+from arkitekt.console import console
 logger = logging.getLogger(__name__)
 
 
@@ -98,11 +98,9 @@ def create_bounced_unreserve_from_unreserve(unreserve: UnreserveMessage, bounce:
 
 
 @sync_to_async
-def delete_reservation_from_unreserve(unreserve: UnreserveMessage, bounce: Bounced) -> BouncedReserveMessage:
-
-    reservation = Reservation.objects.get(reference=unreserve.data.reservation)
-    reservation.delete()
-    return True
+def get_topic_for_bounced_assign(bounced_assign: BouncedAssignMessage) -> str:
+    reservation = Reservation.objects.get(reference=bounced_assign.data.reservation)
+    return reservation.pod.channel
 
 
 class PostmanConsumer(BaseConsumer):
@@ -175,16 +173,26 @@ class PostmanConsumer(BaseConsumer):
     async def bounced_assign(self, bounced_assign: BouncedAssignMessage):
         bounced_assign.meta.extensions.callback = self.callback_name
         bounced_assign.meta.extensions.progress = self.progress_name
+
+        if bounced_assign.data.reservation not in self.reservations_topic_map:
+            logger.info(f"Lets get the assign for that reservation {bounced_assign.data.reservation}")
+            self.reservations_topic_map[bounced_assign.data.reservation] = await get_topic_for_bounced_assign(bounced_assign)
+
+
         topic = self.reservations_topic_map[bounced_assign.data.reservation]
         logger.info(f"Automatically forwarding it to reservation topic {topic}")
+
 
         # We acknowled that this assignation is now linked to the topic (for indefintely)
         self.assignations_topic_map[bounced_assign.meta.reference] = topic
         await self.forward(bounced_assign, topic)
 
+        
+
 
     async def on_assign(self, assign: AssignMessage):
         bounced_assign: AssignMessage = await create_bounced_assign_from_assign(assign,  self.scope["auth"], self.callback_name, self.progress_name)
+        console.print(f"[red]{bounced_assign}")
         await self.bounced_assign(bounced_assign)
 
 

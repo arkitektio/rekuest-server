@@ -67,6 +67,13 @@ class BalderSubscription(metaclass=BalderSubscriptionMeta):
         for group in groups:
             cls.subscription.broadcast(payload=payload, group=group)
 
+    @classmethod
+    async def broadcast_async(cls, payload: Union[dict, str, Model, BaseModel], groups: List[str]):
+        if cls._meta.serializer is not None:
+            payload = cls._meta.serializer.pack(payload)
+        for group in groups:
+            await cls.subscription.broadcast(payload=payload, group=group)
+
 
 
     @classmethod

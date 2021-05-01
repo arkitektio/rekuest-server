@@ -3,6 +3,14 @@ schema {
   mutation: Mutation
 }
 
+type AppModel {
+  id: ID!
+  point: DataPoint!
+  extenders: GenericScalar
+  identifier: String!
+  datamodelPtr: DataModel!
+}
+
 type AppProvider {
   id: ID!
   installedAt: DateTime!
@@ -45,6 +53,7 @@ enum ClientTypeInput {
   HOST
   CLIENT
   PROVIDER
+  POINT
 }
 
 type DataModel {
@@ -52,6 +61,7 @@ type DataModel {
   point: DataPoint!
   extenders: GenericScalar
   identifier: String!
+  appmodel: AppModel
 }
 
 type DataPoint {
@@ -66,6 +76,11 @@ type DataPoint {
 }
 
 enum DataPointType {
+  GRAPHQL
+  REST
+}
+
+enum DataPointTypeInput {
   GRAPHQL
   REST
 }
@@ -165,11 +180,12 @@ type ModelReturnPort implements ReturnPort {
 
 type Mutation {
   scan(force: Boolean, host: String!, port: Int): Service
-  createNode(args: [ArgPortInput], description: String, interface: String!, kwargs: [KwargPortInput], name: String!, package: String!, returns: [ReturnPortInput], type: NodeTypeInput = function): Node
+  createNode(args: [ArgPortInput], description: String, interface: String!, kwargs: [KwargPortInput], name: String!, package: String, returns: [ReturnPortInput], type: NodeTypeInput = function): Node
   createPod(template: ID): Pod
-  negotiate(clientType: ClientTypeInput, name: String): Transcript
+  negotiate(clientType: ClientTypeInput, inward: String, outward: String, pointType: DataPointTypeInput = graphql, port: Int, version: String): Transcript
   accept(provision: String!, template: ID!): Pod
   offer(node: ID!, params: GenericScalar, policy: GenericScalar): Template
+  host(extenders: [String], identifier: String!): AppModel
   createTemplate(node: ID!, params: GenericScalar): Template
 }
 
@@ -186,7 +202,7 @@ type Node {
   args: [ArgPort]
   kwargs: [KwargPort]
   returns: [ReturnPort]
-  templateSet: [Template!]!
+  templates(node: ID, package: String, interface: String, active: Boolean): [Template]
   reservations: [Reservation!]!
 }
 
@@ -239,6 +255,10 @@ enum PodStrategy {
   NODE
 }
 
+type PointSettings {
+  type: String
+}
+
 enum PostmanProtocol {
   WEBSOCKET
   KAFKA
@@ -277,7 +297,7 @@ type Query {
   pod(id: ID): Pod
   pods(status: PodStatusInput, provider: String): [Pod]
   template(id: ID): Template
-  templates(package: String, interface: String, active: Boolean): [Template]
+  templates(node: ID, package: String, interface: String, active: Boolean): [Template]
   provider(id: ID): Provider
   providers(active: Boolean): [Provider]
   model(id: ID!): DataModel
@@ -381,6 +401,11 @@ type StringReturnPort implements ReturnPort {
   description: String
 }
 
+type StringWidget implements Widget {
+  type: String
+  dependencies: [String]
+}
+
 type Template {
   id: ID!
   node: Node!
@@ -398,6 +423,7 @@ type Template {
 
 type Transcript {
   extensions: GenericScalar
+  point: PointSettings
   postman: PostmanSettings
   host: HostSettings
   provider: ProviderSettings

@@ -1,5 +1,6 @@
 # chat/consumers.py
 import asyncio
+from facade.utils import end_assignation, log_to_assignation, set_assignation_status, set_reservation_status
 
 from aiormq.types import CallbackCoro
 from delt.messages.types import BOUNCED_FORWARDED_ASSIGN, BOUNCED_FORWARDED_RESERVE, RESERVE_DONE, UNRESERVE_DONE
@@ -7,7 +8,7 @@ import json
 from delt.messages import *
 from herre.bouncer.utils import bounced_ws
 from ..models import Pod, Provision
-from ..enums import PodStatus
+from ..enums import AssignationStatus, PodStatus, ReservationStatus
 from asgiref.sync import sync_to_async
 from .base import BaseConsumer
 import logging
@@ -79,18 +80,13 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
         AssignCriticalMessage: lambda cls: cls.on_assign_critical,
         AssignReturnMessage: lambda cls: cls.on_assign_return,
         AssignDoneMessage: lambda cls: cls.on_assign_done,
-
+        AssignCancelledMessage: lambda cls: cls.on_assign_cancelled,
 
         BouncedForwardedReserveMessage: lambda cls: cls.on_bounced_forwarded_reserve,
         BouncedUnreserveMessage: lambda cls: cls.on_bounced_unreserve,
         ReserveCriticalMessage: lambda cls: cls.on_reserve_critical,
         UnreserveCriticalMessage: lambda cls: cls.on_unreserve_critical,
-        
-
-
-
-
-
+    
         UnassignCriticalMessage: lambda cls: cls.on_unassign_critical,
         UnassignDoneMessage: lambda cls: cls.on_unassign_done,
         UnassignProgressMessage: lambda cls: cls.on_unassign_progress,
@@ -99,7 +95,7 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
     @bounced_ws(only_jwt=True)
     async def connect(self):
         await self.accept()
-        logger.warning(f'Connecting Host {self.scope["bounced"].app_name}') 
+        logger.warning(f'Connecting Host {self.scope["bounced"].app.name}') 
 
         self.provision_queues = {}
         self.hosted_pods = {}
@@ -140,18 +136,27 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
         try:
             logger.warning(f"Disconnecting Host with close_code {close_code}") 
             #TODO: Depending on close code send message to all running Assignations
+
+
+
             # We are assuming that every shutdown was ungently and check if we need to deactivate the pods
             await asyncio.gather(*[self.destroy_pod(id) for id, queue in self.hosted_pods.items()])
+
+
+
+
+
+
             await self.connection.close()
         except Exception as e:
             logger.error(f"Something weird happened in disconnection! {e}")
+
 
 
     async def on_bounced_unprovide(self, message: BouncedUnprovideMessage):
         pod = await deltePodFromProvision(message.data.provision)
 
         assert pod.provision is not None, "This should never happen"
-
 
         if message.meta.extensions.callback is not None:
             await self.forward(UnprovideDoneMessage(
@@ -178,17 +183,14 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
         pod = await getOrCreatePodFromProvision(provision_reference)
 
         assign_queue = await self.channel.queue_declare(str(pod.channel), auto_delete=True)
-        cancel_me_queue = await self.channel.queue_declare("cancel_me_"+provision_reference, auto_delete=True)
 
 
         # Each pod through podman listens to the same pod
-        logger.warn(f"Listening to Topic {assign_queue.queue} and Awaiting Cancellation on {cancel_me_queue.queue}")
+        logger.warn(f"Listening to Topic {assign_queue.queue}")
 
         await self.channel.basic_consume(assign_queue.queue, lambda x: self.on_assign_related(provision_reference, x))
-        await self.channel.basic_consume(cancel_me_queue.queue, lambda x: self.on_cancel_pod(provision_reference, x))
 
-
-        self.provision_queues[message.meta.reference] = (assign_queue, cancel_me_queue)
+        self.provision_queues[message.meta.reference] = assign_queue
         self.hosted_pods[pod.id] = pod.id
         self.provision_topic_map[provision_reference] = pod.channel
 
@@ -217,9 +219,6 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
             
 
 
-
-
-
     async def destroy_pod(self, pod_id, message="Pod Just Failed"):
         ''' This Method gets called if we lost a pod due to failure '''
         pod: Pod = await deactivatePod(pod_id)
@@ -228,6 +227,8 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
 
         for reservation in pod.reservations.all():
             logger.info("Telling Reserving Clients that we went bye bye")
+
+            await set_reservation_status(reservation.reference, ReservationStatus.CRITICAL)
             await self.forward(ReserveCriticalMessage(
                 data= {
                     "message": message
@@ -243,6 +244,7 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
         
         if pod.provision.callback is not None:
             logger.info("Telling Our Providing Client that we went bye bye")
+
             await self.forward(ProvideCriticalMessage(
                 data= {
                     "message": pod.id
@@ -265,19 +267,45 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
     async def on_assign_yields(self, assign_yield: AssignYieldsMessage):
         await self.forward(assign_yield, assign_yield.meta.extensions.callback)
 
+    async def on_assign_cancelled(self, assign_cancelled: AssignCancelledMessage):
+        try:
+            await end_assignation(assign_cancelled.meta.reference, cancelled=True)
+        except Exception as e:
+            logger.error(str(e))
+
+        await self.forward(assign_cancelled, assign_cancelled.meta.extensions.callback)
+
     async def on_assign_return(self, assign_return: AssignReturnMessage):
+        try:
+            await end_assignation(assign_return.meta.reference)
+        except Exception as e:
+            logger.error(str(e))
+
         await self.forward(assign_return, assign_return.meta.extensions.callback)
 
     async def on_assign_done(self, assign_done: AssignDoneMessage):
+        try:
+            await end_assignation(assign_done.meta.reference)
+        except Exception as e:
+            logger.error(str(e))
+
+
         await self.forward(assign_done, assign_done.meta.extensions.callback)
 
     async def on_assign_progress(self, assign_return: AssignProgressMessage):
+        logger.info("Received Progress")
+        try:
+            await log_to_assignation(assign_return.meta.reference, assign_return.data.message, level=assign_return.data.level)
+        except Exception as e:
+            logger.error(str(e))
         await self.forward(assign_return, assign_return.meta.extensions.progress)
 
     async def on_bounced_forwarded_reserve(self, forwarded_reserve: BouncedForwardedReserveMessage):
         console.log(f"[magenta] Received Reserve Sucessfully on the Client {forwarded_reserve}")
 
         topic = self.provision_topic_map[forwarded_reserve.data.provision]
+
+        await set_reservation_status(forwarded_reserve.meta.reference, ReservationStatus.DONE.value)
         reserve_done = ReserveDoneMessage(data={"topic": topic}, meta={**forwarded_reserve.meta.dict(), "type": RESERVE_DONE})
         console.log(f"[magenta] {reserve_done}")
 
@@ -292,7 +320,6 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
 
     async def on_bounced_unreserve(self, unreserve: BouncedUnreserveMessage):
         console.log(f"[magenta] Received Unreserve Sucessfully on the Client {unreserve}")
-
         unreserve_done = UnreserveDoneMessage(data={"reservation": unreserve.data.reservation}, meta={**unreserve.meta.dict(), "type": UNRESERVE_DONE})
         console.log(f"[magenta] {unreserve_done}")
 

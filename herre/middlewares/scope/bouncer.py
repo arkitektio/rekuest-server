@@ -4,7 +4,8 @@ import logging
 from django.conf import settings
 from django.core.exceptions import  PermissionDenied
 from django.contrib.auth import get_user_model
-from herre.bouncer.bounced import Bounced
+from herre.bouncer.bounced import Bounced, get_session_app
+from asgiref.sync import sync_to_async
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,8 @@ class BouncerChannelMiddleware:
         if "auth" in scope:
             scope["bounced"]= Bounced.from_auth(scope["auth"])
         elif "session" in scope:
-            scope["bounced"] = Bounced.from_session_and_user(scope["session"], scope["user"])
+            app = await sync_to_async(get_session_app)()
+            scope["bounced"] = Bounced.from_session_app_and_user(app, scope["user"])
         else:
             scope["bounced"] = None
         return await self.app(scope, receive, send)

@@ -11,6 +11,7 @@ class MessageMetaExtensionsModel(BaseModel):
 
     We wrap this in its own message to allow more"""
     progress: Optional[str]
+    persist: Optional[bool]
 
 class MessageMetaModel(BaseModel):
     type: str

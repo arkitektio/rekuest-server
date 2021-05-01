@@ -17,6 +17,7 @@ BOUNCED_ASSIGN = "bounced_assign"
 BOUNCED_FORWARDED_ASSIGN = "bounced_forwarded_assign"
 
 ASSIGN_DONE = "assign_done"
+ASSIGN_CANCELLED = "assign_cancelled"
 ASSIGN_PROGRES ="assign_progress"
 ASSIGN_CRITICAL = "assign_fail"
 ASSIGN_YIELD =  "assign_yield"

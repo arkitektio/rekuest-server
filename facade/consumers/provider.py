@@ -4,7 +4,7 @@ from delt.messages.postman.unprovide.unprovide_critical import UnprovideCritical
 from delt.messages.postman.unprovide.unprovide_progress import UnprovideProgressMessage
 from delt.messages.postman.provide import ProvideDoneMessage, ProvideCriticalMessage, ProvideProgressMessage
 from herre.bouncer.utils import bounced_ws
-from ..models import AppProvider, Provision
+from ..models import Provider, Provision
 from asgiref.sync import sync_to_async
 from .base import BaseConsumer
 import logging
@@ -14,8 +14,15 @@ import aiormq
 logger = logging.getLogger(__name__)
 
 @sync_to_async
-def activateProviderForClientID(client_id, user):
-    provider = AppProvider.objects.get(client_id=client_id, user=user)
+def activateProviderForClientID(app, user):
+    if user is None or user.is_anonymous:
+        provider = Provider.objects.get(app=app, user=None)
+        provider.active = True
+        provider.save()
+
+        return provider
+
+    provider = Provider.objects.get(app=app, user=user)
     provider.active = True
     provider.save()
 
@@ -23,7 +30,7 @@ def activateProviderForClientID(client_id, user):
 
 
 @sync_to_async
-def deactivateProvider(provider: AppProvider):
+def deactivateProvider(provider: Provider):
     provisions = Provision.objects.filter(template__provider_id=provider.id)
     for provision in provisions:
         print(provision)
@@ -36,7 +43,7 @@ def deactivateProvider(provider: AppProvider):
   
 
 def initial_cleanup():
-    for provider in AppProvider.objects.all():
+    for provider in Provider.objects.all():
         provider.active = False
         provider.save()
 
@@ -58,7 +65,7 @@ class ProviderConsumer(BaseConsumer): #TODO: Seperate that bitch
     async def connect(self):
         await self.accept()
         #TODO: Check if in provider mode
-        self.provider = await activateProviderForClientID(self.scope["bounced"].client_id, self.scope["bounced"].user)
+        self.provider = await activateProviderForClientID(self.scope["bounced"].app, self.scope["bounced"].user)
         logger.warning(f"Connecting {self.provider.name}") 
         logger.info("This provide is now active and will be able to provide Pods")
 
@@ -72,7 +79,7 @@ class ProviderConsumer(BaseConsumer): #TODO: Seperate that bitch
         self.on_provide_queue = await self.channel.queue_declare(f"provision_in_{self.provider.unique}", auto_delete=True)
         self.on_unprovide_queue = await self.channel.queue_declare(f"unprovision_in_{self.provider.unique}", auto_delete=True)
 
-        logger.warning("")
+        logger.warning("ddd")
         # Start listening the queue with name 'hello'
         await self.channel.basic_consume(self.on_provide_queue.queue, self.on_provide)
         await self.channel.basic_consume(self.on_unprovide_queue.queue, self.on_provide)

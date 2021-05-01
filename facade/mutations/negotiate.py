@@ -1,11 +1,9 @@
 from balder.types.mutation.base import BalderMutation
-from delt.service.types import ServiceType
-from herre.utils import decode_token
-from facade.structures.transcript import HostProtocol, HostSettings, PostmanProtocol, PostmanSettings, ProviderProtocol, ProviderSettings, Transcript
+from facade.structures.transcript import HostProtocol, HostSettings, PointSettings, PostmanProtocol, PostmanSettings, ProviderProtocol, ProviderSettings, Transcript
 from facade import types
-from facade.models import AppProvider, DataModel, Service
+from facade.models import Provider, DataModel, DataPoint
 from balder.enum import InputEnum
-from facade.enums import ClientType, NodeType
+from facade.enums import ClientType, DataPointType, NodeType
 from herre import bounced
 import graphene
 import logging
@@ -18,20 +16,23 @@ class Negotiate(BalderMutation):
 
     class Arguments:
         client_type = graphene.Argument(InputEnum.from_choices(ClientType),description="The type of Client")
+        inward = graphene.String(required=False, description="Only applicable if you are a Point Provider. The adress how data requests may reach you")
+        outward = graphene.String(required=False, description="Only applicable if you are a Point Provider. The adress how data requests may reach you")
+        port = graphene.Int(required=False, description="The Port we can use to reach you")
+        version = graphene.String(required=False, description="Point type")
+        needs_negotiation = graphene.Boolean(required=False, default_value=False, description="If your app requires negotiation on connection!")
+        point_type = graphene.Argument(InputEnum.from_choices(DataPointType), description="The points type", default_value=DataPointType.GRAPHQL.value)
 
     class Meta:
         type = Transcript
 
     
     @bounced(only_jwt=True)
-    def mutate(root, info, client_type = ClientType.HOST):
-
-        extensions = {}
-        for service in Service.objects.filter(types__contains=ServiceType.NEGOTIATE.value).all():
-            extensions[service.name] = service.negotiate(info.context.auth)
+    def mutate(root, info, client_type = ClientType.HOST, inward=None, outward=None, port=None, version="0.1.0", point_type= None, needs_negotiation=False):
+        if "provider" in info.context.bounced.scopes: provider, _ = Provider.objects.update_or_create(app=info.context.bounced.app, user=info.context.bounced.user, defaults= {"name": info.context.bounced.app.name })
+        
 
         transcript_dict = {
-            "extensions": extensions,
             "models": DataModel.objects.all(),
             "postman": PostmanSettings(
                     type = PostmanProtocol.WEBSOCKET,
@@ -48,15 +49,29 @@ class Negotiate(BalderMutation):
             )
         }
 
+        if client_type in [ClientType.POINT.value]:
+            assert inward is not None, "Please provide an inward if you are registering as a Datapoint"
+            assert port is not None, "Please provide a port if you are registering as a Datapoint"
+            assert outward is not None, "Please provide an outward adress"
+
+            provider , _ = DataPoint.objects.update_or_create(app=info.context.bounced.app,
+             user=info.context.bounced.user,
+             defaults= 
+             {
+             "inward": inward,
+             "outward": outward,
+             "port": port,
+             "type": point_type,
+             "needs_negotiation": needs_negotiation
+             }
+             
+            )
+            #TODO: Check if this client can register as item
+            transcript_dict["point"] = PointSettings(
+                type = point_type
+            )
 
         if client_type == ClientType.PROVIDER.value:
-            if info.context.bounced.user is not None:
-                app_name = info.context.bounced.app_name + " by " + info.context.bounced.user.username
-            else:
-                app_name = info.context.bounced.app_name
-
-            provider , _ = AppProvider.objects.update_or_create(client_id=info.context.bounced.client_id, user=info.context.user, defaults= {"name": app_name })
-            #TODO: Check if this client can register as item
             transcript_dict["provider"] = ProviderSettings(
                 type = ProviderProtocol.WEBSOCKET,
                 kwargs = {
