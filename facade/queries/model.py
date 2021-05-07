@@ -8,11 +8,13 @@ from herre import bounced
 class ModelDetailQuery(BalderQuery):
 
     class Arguments:
-        id = graphene.ID(description="The query node", required=True)
+        id = graphene.ID(description="The query node", required=False)
+        identifier = graphene.String(description="The Identifier of this Model", required=False)
 
     @bounced(anonymous=True)
-    def resolve(root, info, id=None):
-        return DataModel.objects.get(id=id)
+    def resolve(root, info, id=None, identifier=None):
+        if id: return DataModel.objects.get(id=id)
+        if identifier: return DataModel.objects.get(identifier=identifier)
 
     class Meta:
         type = types.DataModel

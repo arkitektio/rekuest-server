@@ -100,7 +100,11 @@ def create_bounced_unreserve_from_unreserve(unreserve: UnreserveMessage, bounce:
 @sync_to_async
 def get_topic_for_bounced_assign(bounced_assign: BouncedAssignMessage) -> str:
     reservation = Reservation.objects.get(reference=bounced_assign.data.reservation)
-    return reservation.pod.channel
+
+    if reservation.pod:
+        return reservation.pod.channel
+    else:
+        raise Exception("No active pod for the specified Reservation. Rereserve!")
 
 
 class PostmanConsumer(BaseConsumer):

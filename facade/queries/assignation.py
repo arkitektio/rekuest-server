@@ -1,4 +1,4 @@
-from facade.enums import AssignationStatus
+from facade.enums import AssignationStatus, AssignationStatusInput
 from facade.filters import NodeFilter
 from typing_extensions import Annotated
 from balder.types import BalderQuery
@@ -23,9 +23,20 @@ class AssignationDetailQuery(BalderQuery):
 
 class MyAssignations(BalderQuery):
 
+    class Arguments:
+        exclude = graphene.List(AssignationStatusInput, description="The excluded values", required=False)
+        filter = graphene.List(AssignationStatusInput, description="The included values", required=False)
+
+
     @bounced(anonymous=False)
-    def resolve(root, info, **kwargs):
-        return Assignation.objects.filter(creator=info.context.user).exclude(status=AssignationStatus.DONE.value).exclude(status=AssignationStatus.CANCELLED.value).all()
+    def resolve(root, info, exclude=[], filter=None):
+        qs = Assignation.objects.filter(creator=info.context.user)
+        if filter:
+            qs = qs.filter(status__in=filter)
+        for value in exclude:
+            qs = qs.exclude(status=value)
+
+        return qs.all()
 
     class Meta:
         type = types.Assignation

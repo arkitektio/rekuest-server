@@ -106,12 +106,18 @@ INSTALLED_APPS = [
     'django_filters',
     'taggit',
     'channels',
+    'health_check',
+    'health_check.db', 
     'herre',
     'guardian',
     'graphene_django',
     "rest_framework",
 ] + EXTENSIONS
 
+HEALTH_CHECK = {
+    'DISK_USAGE_MAX': 90,  # percent
+    'MEMORY_MIN': 100,    # in MB
+}
 
 
 MIDDLEWARE = [

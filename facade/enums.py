@@ -1,3 +1,4 @@
+from balder.enum import InputEnum
 from typing import Text
 from django.db.models import TextChoices
 
@@ -89,6 +90,10 @@ class AssignationStatus(TextChoices):
     # Successfull Termination
     YIELD = "YIELD", "Assignment yielded a value (only for Generators)"
     DONE = "DONE", "Assignment has finished"
+
+
+
+AssignationStatusInput = InputEnum.from_choices(AssignationStatus)
 
 
 class ReservationStatus(TextChoices):

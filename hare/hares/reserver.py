@@ -3,7 +3,7 @@ from facade.consumers.postman import get_topic_for_bounced_assign
 from facade.utils import create_assignation_from_bounced_assign, create_reservation_from_bounced_reserve, end_assignation, end_reservation, log_to_assignation, log_to_reservation, set_assignation_status, set_reservation_status, update_reservation
 from delt.messages.postman.provide.params import ProvideParams
 from delt.messages.postman.progress import ProgressLevel
-from facade.enums import AssignationStatus, PodStatus, ProvisionStatus, ReservationStatus
+from facade.enums import AssignationStatus, LogLevel, PodStatus, ProvisionStatus, ReservationStatus
 from aiormq import channel
 from delt.messages.exception import ExceptionMessage
 from delt.messages import *
@@ -357,6 +357,7 @@ class ReserverRabbit(BaseHare):
         except Exception as e:
             logger.error(e)
             exception = ExceptionMessage.fromException(e, bounced_assign.meta.reference)
+            await log_to_assignation(bounced_assign.meta.reference, str(e), level=LogLevel.ERROR)
             await set_assignation_status(bounced_assign.meta.reference, AssignationStatus.CRITICAL.value)
             await self.forward(exception, bounced_assign.meta.extensions.callback)
             console.print_exception()

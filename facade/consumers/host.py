@@ -8,7 +8,7 @@ import json
 from delt.messages import *
 from herre.bouncer.utils import bounced_ws
 from ..models import Pod, Provision
-from ..enums import AssignationStatus, PodStatus, ReservationStatus
+from ..enums import AssignationStatus, LogLevel, PodStatus, ReservationStatus
 from asgiref.sync import sync_to_async
 from .base import BaseConsumer
 import logging
@@ -262,6 +262,11 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
 
 
     async def on_assign_critical(self, assign_critical: AssignCriticalMessage):
+        try:
+            await log_to_assignation(assign_critical.meta.reference, assign_critical.data.type + " : " + assign_critical.data.message, level=LogLevel.ERROR)
+            await set_assignation_status(assign_critical.meta.reference, AssignationStatus.CRITICAL.value)
+        except Exception as e:
+            logger.error(str(e))
         await self.forward(assign_critical, assign_critical.meta.extensions.callback)
 
     async def on_assign_yields(self, assign_yield: AssignYieldsMessage):
@@ -344,7 +349,11 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
         await self.forward(assign_return, assign_return.meta.extensions.progress)
     
     async def on_unassign_critical(self, assign_return: UnassignCriticalMessage):
-        print("oisdnoisndofinsdfsdfsegserhgsefgsefsefo9finh")
+        try:
+            await log_to_assignation(assign_return.meta.reference, assign_return.data.message, level=LogLevel.ERROR)
+            await end_assignation(assign_return.meta.reference)
+        except Exception as e:
+            logger.error(str(e))
         await self.forward(assign_return, assign_return.meta.extensions.callback)
 
 

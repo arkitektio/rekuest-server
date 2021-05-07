@@ -23,9 +23,9 @@ class DataPoint(models.Model):
     app = models.ForeignKey(HerreApp, on_delete=models.CASCADE, help_text="The Associated App")
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, help_text="The provide might be limited to a instance like ImageJ belonging to a specific person. Is nullable for backend users", null=True)
     version = models.CharField(max_length=100, help_text="The version of the bergen API this endpoint uses")
-    inward = models.CharField(max_length=100, help_text="Inward facing hostname (for Docker powered access)")
-    outward = models.CharField(max_length=100, help_text="Outward facing hostname for external clients")
-    port = models.IntegerField(help_text="Listening port")
+    inward = models.CharField(max_length=100, help_text="Inward facing hostname (for Docker powered access)", null=True)
+    outward = models.CharField(max_length=100, help_text="Outward facing hostname for external clients", null=True)
+    port = models.IntegerField(help_text="Listening port", null=True)
     type = models.CharField(max_length=100, choices=DataPointType.choices, default=DataPointType.GRAPHQL, help_text="The type of datapoint")
     installed_at = models.DateTimeField(auto_created=True, auto_now_add=True)
     needs_negotiation = models.BooleanField(default=False)
@@ -36,7 +36,7 @@ class DataPoint(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.inward} [{self.type}]"
+        return f"{self.app} {f'for {self.user}' if self.user else ''}"
 
 
 class DataModel(models.Model):
@@ -55,6 +55,18 @@ class DataModel(models.Model):
     def __str__(self):
         return f"{self.identifier} at {self.point}"
 
+
+class Accessor(models.Model):
+    model = models.OneToOneField(
+        DataModel,
+        on_delete=models.CASCADE,
+    )
+    get = models.TextField(max_length=2000, help_text="A get accessor for this model", null=True, blank=True)
+    search = models.TextField(max_length=2000, help_text="A selectable options query with a search Parameter", null=True, blank=True)
+    create = models.TextField(max_length=2000, help_text="A create Parameter for this model", null=True, blank=True)
+
+    def __str__(self):
+        return f"Acessor for {self.model}"
 
 
 class Repository(models.Model):

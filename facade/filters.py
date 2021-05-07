@@ -10,6 +10,10 @@ class PodFilter(django_filters.FilterSet):
     status = EnumFilter(choices=PodStatus.choices)
 
 class ProviderFilter(django_filters.FilterSet):
+    app = django_filters.CharFilter(method="app_filter")
+
+    def app_filter(self, queryset, name, value):
+        return queryset.filter(app__client_id=value)
 
     class Meta:
         model = Provider

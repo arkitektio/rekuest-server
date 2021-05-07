@@ -64,6 +64,11 @@ class Node(BalderObject):
         model = models.Node
 
 
+class Accessor(BalderObject):
+
+    class Meta:
+        model = models.Accessor
+
 
 class Reservation(BalderObject):
     

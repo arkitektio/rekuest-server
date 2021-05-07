@@ -20,7 +20,7 @@ class CreateTemplate(BalderMutation):
         provider = Provider.objects.get(app=info.context.bounced.app, user=info.context.bounced.user)
 
         try:
-            template = Template.objects.get(node=node, params=params)
+            template = Template.objects.get(node=node, params=params, provider=provider)
         except:
             template = Template.objects.create(
                 node_id=node,
@@ -29,7 +29,6 @@ class CreateTemplate(BalderMutation):
             )
 
         # We check ids because AppProvider is not Provider subclass
-        assert template.provider.id == provider.id, "Template cannot be offered because it already existed on another Provider, considering Implementing it differently or copy that implementation!"
         return template
         
 

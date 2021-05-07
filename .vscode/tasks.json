@@ -29,10 +29,5 @@
             "type": "shell",
             "command": "python manage.py runreserver"
         },
-        {
-            "label": "Persister",
-            "type": "shell",
-            "command": "python manage.py runpersister"
-        },
     ]
 }

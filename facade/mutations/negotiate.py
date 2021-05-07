@@ -37,9 +37,7 @@ class Negotiate(BalderMutation):
             "postman": PostmanSettings(
                     type = PostmanProtocol.WEBSOCKET,
                     kwargs= {
-                        "host": "p-tnagerl-lab1",
                         "protocol": "ws",
-                        "port": 8090,
                         "auth": {
                             "type": "token",
                             "token": info.context.auth.token
@@ -50,10 +48,6 @@ class Negotiate(BalderMutation):
         }
 
         if client_type in [ClientType.POINT.value]:
-            assert inward is not None, "Please provide an inward if you are registering as a Datapoint"
-            assert port is not None, "Please provide a port if you are registering as a Datapoint"
-            assert outward is not None, "Please provide an outward adress"
-
             provider , _ = DataPoint.objects.update_or_create(app=info.context.bounced.app,
              user=info.context.bounced.user,
              defaults= 
@@ -75,9 +69,7 @@ class Negotiate(BalderMutation):
             transcript_dict["provider"] = ProviderSettings(
                 type = ProviderProtocol.WEBSOCKET,
                 kwargs = {
-                        "host": "p-tnagerl-lab1",
                         "protocol": "ws",
-                        "port": 8090,
                         "provider": provider.id,
                         "auth": {
                             "type": "token",
@@ -90,9 +82,7 @@ class Negotiate(BalderMutation):
             transcript_dict["host"] = HostSettings(
                 type = HostProtocol.WEBSOCKET,
                 kwargs = {
-                        "host": "p-tnagerl-lab1",
                         "protocol": "ws",
-                        "port": 8090,
                         "auth": {
                             "type": "token",
                             "token": info.context.auth.token

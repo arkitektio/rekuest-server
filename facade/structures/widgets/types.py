@@ -3,7 +3,8 @@ import graphene
 
 get_widget_types = lambda: {
             "QueryWidget": QueryWidget,
-            "IntWidget": IntWidget
+            "IntWidget": IntWidget,
+            "StringWidget": StringWidget
 }
 
 @register_type
