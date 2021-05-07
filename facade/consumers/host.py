@@ -2,7 +2,6 @@
 import asyncio
 from facade.utils import end_assignation, log_to_assignation, set_assignation_status, set_reservation_status
 
-from aiormq.types import CallbackCoro
 from delt.messages.types import BOUNCED_FORWARDED_ASSIGN, BOUNCED_FORWARDED_RESERVE, RESERVE_DONE, UNRESERVE_DONE
 import json
 from delt.messages import *
@@ -109,7 +108,7 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
         self.channel = await self.connection.channel()
 
         
-    async def on_assign_related(self, provision_reference, message: aiormq.types.DeliveredMessage):
+    async def on_assign_related(self, provision_reference, message: aiormq.abc.DeliveredMessage):
         nana = expandFromRabbitMessage(message)
         
         if isinstance(nana, BouncedAssignMessage):

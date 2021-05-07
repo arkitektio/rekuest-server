@@ -85,7 +85,7 @@ class ProviderConsumer(BaseConsumer): #TODO: Seperate that bitch
         await self.channel.basic_consume(self.on_unprovide_queue.queue, self.on_provide)
 
 
-    async def on_provide(self, message: aiormq.types.DeliveredMessage):
+    async def on_provide(self, message: aiormq.abc.DeliveredMessage):
         #TODO: Maybe do some serialized first here
         logger.error(message.body.decode())
         await self.send(text_data=message.body.decode()) 

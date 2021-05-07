@@ -64,7 +64,7 @@ class AssignationRabbit(BaseHare):
         await self.channel.basic_consume(self.bounced_cancel_assign_in.queue, self.on_bounced_cancel_assign_in)
 
     @BouncedCancelAssignMessage.unwrapped_message
-    async def on_bounced_cancel_assign_in(self, cancel_assign: BouncedCancelAssignMessage, message: aiormq.types.DeliveredMessage):
+    async def on_bounced_cancel_assign_in(self, cancel_assign: BouncedCancelAssignMessage, message: aiormq.abc.DeliveredMessage):
         logger.warn(f"Received Assignation Cancellation  {str(message.body.decode())}")
 
         assert cancel_assign.data.pod is not None, "This assignation was never assigned. It will be hard to cancel it... RACE CONDITIAON MOTHERFUCKER"
@@ -77,7 +77,7 @@ class AssignationRabbit(BaseHare):
         await message.channel.basic_ack(message.delivery.delivery_tag)
 
     @BouncedAssignMessage.unwrapped_message
-    async def on_bounced_assign_in(self, assign: BouncedAssignMessage, message: aiormq.types.DeliveredMessage):
+    async def on_bounced_assign_in(self, assign: BouncedAssignMessage, message: aiormq.abc.DeliveredMessage):
         logger.info(f"Received Assignation {str(message.body.decode())}")
 
 

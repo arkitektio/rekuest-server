@@ -77,13 +77,13 @@ class ProvisionRabbit(BaseHare):
         await self.channel.basic_consume(self.bounced_cancel_provide_in.queue, self.on_bounced_cancel_provide_in)
 
     @BouncedCancelProvideMessage.unwrapped_message
-    async def on_bounced_cancel_provide_in(self, cancel_provide: BouncedCancelProvideMessage, message: aiormq.types.DeliveredMessage):
+    async def on_bounced_cancel_provide_in(self, cancel_provide: BouncedCancelProvideMessage, message: aiormq.abc.DeliveredMessage):
         logger.warn(f"Received Provision Cancellation  {str(message.body.decode())}")
         # Thi should then expand this to an assignation message that can be delivered to the Providers
         await message.channel.basic_ack(message.delivery.delivery_tag)
 
     @BouncedProvideMessage.unwrapped_message
-    async def on_bounced_provide_in(self, bounced_provide: BouncedProvideMessage, message: aiormq.types.DeliveredMessage):
+    async def on_bounced_provide_in(self, bounced_provide: BouncedProvideMessage, message: aiormq.abc.DeliveredMessage):
         logger.info(f"Received Bounced Provide {str(message.body.decode())}")
 
         try:

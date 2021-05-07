@@ -227,7 +227,7 @@ class ReserverRabbit(BaseHare):
 
 
     @BouncedReserveMessage.unwrapped_message
-    async def on_bounced_reserve_in(self, bounced_reserve: BouncedReserveMessage, message: aiormq.types.DeliveredMessage):
+    async def on_bounced_reserve_in(self, bounced_reserve: BouncedReserveMessage, message: aiormq.abc.DeliveredMessage):
         logger.info(f"Received Bounced Reserve {str(message.body.decode())} {bounced_reserve}")
         reservation = await create_reservation_from_bounced_reserve(bounced_reserve)
 
@@ -268,7 +268,7 @@ class ReserverRabbit(BaseHare):
 
 
     @BouncedUnreserveMessage.unwrapped_message
-    async def on_bounced_unreserve_in(self, bounced_unreserve: BouncedUnreserveMessage, message: aiormq.types.DeliveredMessage):
+    async def on_bounced_unreserve_in(self, bounced_unreserve: BouncedUnreserveMessage, message: aiormq.abc.DeliveredMessage):
         logger.info(f"Received Bounced Unreserve {str(message.body.decode())}")
 
         reference = bounced_unreserve.meta.reference
@@ -312,7 +312,7 @@ class ReserverRabbit(BaseHare):
         await message.channel.basic_ack(message.delivery.delivery_tag)
 
     @UnreserveDoneMessage.unwrapped_message
-    async def on_unreserve_done_in(self, unreserve_done: UnreserveDoneMessage, message: aiormq.types.DeliveredMessage):
+    async def on_unreserve_done_in(self, unreserve_done: UnreserveDoneMessage, message: aiormq.abc.DeliveredMessage):
         logger.info(f"Received Bounced Unreserve Done {str(message.body.decode())}")
 
         reservation = unreserve_done.data.reservation
@@ -345,7 +345,7 @@ class ReserverRabbit(BaseHare):
         await message.channel.basic_ack(message.delivery.delivery_tag)
 
     @BouncedAssignMessage.unwrapped_message
-    async def on_bounced_assign_in(self, bounced_assign: BouncedAssignMessage, message: aiormq.types.DeliveredMessage):
+    async def on_bounced_assign_in(self, bounced_assign: BouncedAssignMessage, message: aiormq.abc.DeliveredMessage):
         logger.info(f"Received Bounced Assign {str(message.body.decode())}")
         assignation = await create_assignation_from_bounced_assign(bounced_assign)
 
@@ -367,7 +367,7 @@ class ReserverRabbit(BaseHare):
 
 
     @BouncedUnassignMessage.unwrapped_message
-    async def on_bounced_unassign_in(self, bounced_unassign: BouncedUnassignMessage, message: aiormq.types.DeliveredMessage):
+    async def on_bounced_unassign_in(self, bounced_unassign: BouncedUnassignMessage, message: aiormq.abc.DeliveredMessage):
         logger.info(f"Received Bounced Unassign {str(message.body.decode())}")
 
         reference = bounced_unassign.meta.reference
