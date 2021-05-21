@@ -21,10 +21,21 @@ class HostProtocol(graphene.Enum):
     WEBSOCKET = "websocket"
 
 
+
+class WardTypes(graphene.Enum):
+    GRAPHQL = "graphql"
+    REST = "rest"
+
 class HostSettings(graphene.ObjectType):
     type = HostProtocol(description="The communication protocol")
     kwargs = GenericScalar(description="kwargs for the provider")
 
+class WardSettings(graphene.ObjectType):
+    type = WardTypes(description="The communication protocol")
+    needsNegotiation = graphene.Boolean()
+    host = graphene.String()
+    port = graphene.Int()
+    distinct = graphene.String()
 
 class PostmanProtocol(graphene.Enum):
     WEBSOCKET = "websocket"
@@ -38,6 +49,7 @@ class PostmanSettings(graphene.ObjectType):
 
 
 class Transcript(graphene.ObjectType):
+    wards =  graphene.List(WardSettings, description="Connection parameters for the wards")
     extensions = GenericScalar(description="Space for extensions")
     point = graphene.Field(PointSettings)
     postman = graphene.Field(PostmanSettings)

@@ -1,7 +1,7 @@
 from django.db.models.aggregates import Count
 from facade.enums import NodeType, PodStatus
 import django_filters
-from .models import Node, Pod, Provider, Template
+from .models import Node,Provider, Template
 from balder.fields.enum import EnumFilter
 from django.db.models import Q
 

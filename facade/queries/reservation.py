@@ -34,7 +34,7 @@ class MyReservations(BalderQuery):
 
     @bounced(anonymous=False)
     def resolve(root, info, **kwargs):
-        return Reservation.objects.filter(creator=info.context.user).exclude(status=ReservationStatus.ENDED.value).all()
+        return Reservation.objects.filter(creator=info.context.user).exclude(status__in=[ReservationStatus.ENDED.value,ReservationStatus.CANCELLED.value]).all()
 
 
     class Meta:

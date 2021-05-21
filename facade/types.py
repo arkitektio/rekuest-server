@@ -24,12 +24,17 @@ class HerreUser(BalderObject):
 
 
 class DataPoint(BalderObject):
+    distinct = graphene.String()
+
+    def resolve_distinct(root, info, *args, **kwargs):
+        return root.app.name
 
     class Meta:
         model = models.DataPoint
 
 
 class DataModel(BalderObject):
+
 
     class Meta:
         model = models.DataModel
@@ -75,6 +80,10 @@ class Reservation(BalderObject):
     class Meta:
         model = models.Reservation
 
+class Provision(BalderObject):
+    
+    class Meta:
+        model = models.Provision
 
 class ReservationLog(BalderObject):
 
@@ -93,14 +102,13 @@ class AssignationLog(BalderObject):
     class Meta:
         model = models.AssignationLog
 
+class ProvisionLog(BalderObject):
+    
+    class Meta:
+        model = models.ProvisionLog
+
 
 class Provider(BalderObject):
     
     class Meta:
         model = models.Provider
-
-
-class Pod(BalderObject):
-    
-    class Meta:
-        model = models.Pod

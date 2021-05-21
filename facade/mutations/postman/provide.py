@@ -1,9 +1,9 @@
-from facade.subscriptions.reservation import MyReservationsEvent
+from facade.subscriptions.provision import MyProvisionsEvent
 from facade.workers.gateway import GatewayConsumer
 import uuid
-from delt.messages.postman.reserve.bounced_reserve import BouncedReserveMessage
+from delt.messages import BouncedProvideMessage
 from facade import types
-from facade.models import  Reservation
+from facade.models import  Provision, Reservation
 from balder.types import BalderMutation
 from graphene.types.generic import GenericScalar
 from herre import bounced
@@ -13,7 +13,7 @@ import logging
 logger = logging.getLogger(__name__)#
 
 
-class ReserveMutation(BalderMutation):
+class ProvideMutation(BalderMutation):
     """Scan allows you to add Datapoints to your Arnheim Schema, this is only available to Admin users"""
 
     class Arguments:
@@ -24,8 +24,8 @@ class ReserveMutation(BalderMutation):
 
 
     class Meta:
-        type = types.Reservation
-        operation = "reserve"
+        type = types.Provision
+        operation = "provide"
 
     
     @bounced(only_jwt=True)
@@ -33,7 +33,7 @@ class ReserveMutation(BalderMutation):
         reference = reference or str(uuid.uuid4())
         bounce = info.context.bounced
 
-        res = Reservation.objects.create(**{
+        pro = Provision.objects.create(**{
             "node_id": node,
             "template_id": template,
             "params": params,
@@ -51,10 +51,10 @@ class ReserveMutation(BalderMutation):
         })
 
 
-        MyReservationsEvent.broadcast({"action": "created", "data": res.id}, [f"reservations_user_{bounce.user.id}"])
+        MyProvisionsEvent.broadcast({"action": "created", "data": pro.id}, [f"provisions_user_{bounce.user.id}"])
 
 
-        bounced = BouncedReserveMessage(data= {
+        bounced = BouncedProvideMessage(data= {
             "node": node,
             "template": template,
             "params": params
@@ -74,6 +74,6 @@ class ReserveMutation(BalderMutation):
 
         GatewayConsumer.send(bounced)
 
-        return res
+        return pro
             
 

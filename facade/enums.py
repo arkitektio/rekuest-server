@@ -1,3 +1,4 @@
+from logging import WARN
 from balder.enum import InputEnum
 from typing import Text
 from django.db.models import TextChoices
@@ -14,19 +15,11 @@ class HookType(TextChoices):
 
 
 class LogLevel(TextChoices):
+    CRITICAL = "CRITICAL", "CRITICAL Level"
     INFO = "INFO", "INFO Level"
     DEBUG = "DEBUG", "DEBUG Level"    
-    ERROR = "ERROR", "ERROR Level"    
-
-class ReservationLogLevel(TextChoices):
-    INFO = "INFO", "INFO Level"    
-    DEBUG = "DEBUG", "DEBUG Level"    
-    ERROR = "ERROR", "ERROR Level"    
-
-class AssignationLogLevel(TextChoices):
-    INFO = "INFO", "INFO Level"    
-    DEBUG = "DEBUG", "DEBUG Level"    
-    ERROR = "ERROR", "ERROR Level"    
+    ERROR = "ERROR", "ERROR Level"   
+    WARN = "WARN", "WARN Level"   
 
 
 class RepositoryType(TextChoices):
@@ -35,11 +28,10 @@ class RepositoryType(TextChoices):
     MIRROR = "mirror", "Repository mirrors online Repository"
 
 
-class PodStrategy(TextChoices):
-    """ How this pod listens to events """
-    EXCLUSIVE = "exclusive", "Pod listens only to event that are happening through provisions"
-    TEMPLATE = "template", "Pod listens too template events"
-    NODE = "node", "Pod listens too Node assignation events"
+class AccessStrategy(TextChoices):
+    """How this Topic is accessible """
+    EXCLUSIVE = "EXCLUSIVE", "This Topic is Only Accessible linkable for its creating User"
+    EVERYONE = "EVERYONE", "Everyone can link to this Topic"
 
 
 class ClientType(TextChoices):
@@ -49,18 +41,15 @@ class ClientType(TextChoices):
     POINT = "Point", "Hosts Datamodels"
 
 
-
 class NodeType(TextChoices):
     GENERATOR = "generator", "Generator"
     FUNCTION = "function", "Function"
 
 
-
-class PodMode(TextChoices):
-    PRODUCTION = "producton", "Production (runs in)"
-    DEBUG = "debug", "Debug (Pod is currently debugging)"
-    TEST = "test", "Pod is currently being tested"
-
+class TopicMode(TextChoices):
+    PRODUCTION = "PRODUCTION", "Production (Topic is in production mode)"
+    DEBUG = "DEBUG", "Debug (Topic is in debug Mode)"
+    TEST = "TEST", "Test (is currently being tested)"
 
 
 class PodStatus(TextChoices):
@@ -69,6 +58,12 @@ class PodStatus(TextChoices):
     PENDING = "PENDING", "Pending"
     ACTIVE = "ACTIVE", "Active"
 
+class TopicStatus(TextChoices):
+    DOWN = "DOWN", "Down (Subscribers to this Topic are offline)"
+    DISCONNECTED = "LOST", "Lost (Subscribers to this Topic have lost their connection)"
+    RECONNECTING = "RECONNECTING", "Reconnecting (We are trying to Reconnect to this Topic)"
+    CRITICAL = "CRITICAL", "Criticial (This Topic has errored and needs to be inspected)"
+    ACTIVE = "ACTIVE", "Active (This topic has subscribers and is available being Routed To"
 
 
 class AssignationStatus(TextChoices):
@@ -97,40 +92,49 @@ AssignationStatusInput = InputEnum.from_choices(AssignationStatus)
 
 
 class ReservationStatus(TextChoices):
-    PENDING = "PENDING", "Pending" # Assignation has been requested
-    PROVIDING = "PROVIDING", "Providing"
-    # Arnheim acknowledgments
-    DENIED = "DENIED", "Denied (Provision was rejected)"
-    ENDED = "ENDED", "Reservation has finished and is no longer active"
-    
-    # Progress reports
-    PROGRESS = "PROGRESS", "Progress (Provision has current Progress)"
 
-    # Unsuccessfull Termination
-    ERROR = "ERROR", "Error (Retrieable)"
-    CRITICAL = "CRITICAL", "Critical Error (No Retries available)"
-    CANCEL = "CANCEL", "Provision is beeing cancelled"
-    CANCELLED = "CANCELLED", "Provision has been cancelled."
+    #Start State
+    ROUTING = "ROUTING", "Routing (Reservation has been requested but no Topic found yet)"
 
-    # Successfull Termination
-    DONE = "DONE", "Reservation is active and assignable"
+    # Life States
+    PROVIDING = "PROVIDING", "Providing (Reservation required the provision of a new worker)"
+    WAITING = "WAITING", "Waiting (We are waiting for any assignable Topic to come online)" #TODO: I s this actually a Double State
 
 
+    REROUTING = "REROUTING", "Rerouting (State of Topics this reservation connects to have changed and require Retouring)"
+    CANCELING = "CANCELING", "Cancelling (Reervation is currently being cancelled)"
+    ACTIVE = "ACTIVE", "Active (Reservation is active and accepts assignments"
+
+    # End States
+    ERROR = "ERROR", "Error (Reservation was not able to be performed (See StatusMessage)"
+    ENDED = "ENDED", "Ended (Reservation was ended by the the Platform and is no longer active)"
+    CANCELLED = "CANCELLED", "Cancelled (Reservation was cancelled by user and is no longer active)"
+    CRITICAL = "CRITICAL", "Critical (Reservation failed with an Critical Error)"
+
+
+ReservationStatusInput = InputEnum.from_choices(ReservationStatus)
 
 class ProvisionStatus(TextChoices):
-    PENDING = "PENDING", "Pending" # Assignation has been requested
 
-    # Arnheim acknowledgments
-    DENIED = "DENIED", "Denied (Provision was rejected)"
+    # Start State
+    PENDING = "PENDING", "Pending (Request has been created and waits for its initial creation)"
+    PROVIDING = "PROVIDING", "Providing (Request has been send to its Provider and waits for Result"
     
-    # Progress reports
-    PROGRESS = "PROGRESS", "Progress (Provision has current Progress)"
+    # Life States
+    ACTIVE = "ACTIVE", "Active (Provision is currently active)"
+    CANCELING = "CANCELING", "Cancelling (Provisions is currently being cancelled)"
+    DISCONNECTED = "LOST", "Lost (Subscribers to this Topic have lost their connection)"
+    RECONNECTING = "RECONNECTING", "Reconnecting (We are trying to Reconnect to this Topic)"
+    
+    # End States
+    DENIED = "DENIED", "Denied (Provision was rejected for this User)"
 
-    # Unsuccessfull Termination
-    ERROR = "ERROR", "Error (Retrieable)"
-    CRITICAL = "CRITICAL", "Critical Error (No Retries available)"
-    CANCEL = "CANCEL", "Provision is beeing cancelled"
-    CANCELLED = "CANCELLED", "Provision has been cancelled."
+    # End States
+    ERROR = "ERROR", "Error (Reservation was not able to be performed (See StatusMessage)"
+    CRITICAL = "CRITICAL", "Critical (Provision resulted in an critical system error)"
+    ENDED = "ENDED", "Ended (Provision was cancelled by the Platform and will no longer create Topics)"
+    CANCELLED = "CANCELLED", "Cancelled (Provision was cancelled by the User and will no longer create Topics)"
 
-    # Successfull Termination
-    DONE = "DONE", "Provision has finished (pod is available and will connect)"
+    
+
+ProvisionStatusInput = InputEnum.from_choices(ProvisionStatus)

@@ -1,7 +1,5 @@
-from ..progress import ProgressDataModel
-from enum import Enum
 from pydantic.main import BaseModel
-from ....messages.types import  ASSIGN_PROGRES, PROVIDE, PROVIDE_DONE
+from ....messages.types import  PROVIDE, PROVIDE_DONE, UNPROVIDE_ERROR
 from ....messages.base import MessageDataModel, MessageMetaExtensionsModel, MessageMetaModel, MessageModel
 from typing import List, Optional
 
@@ -12,10 +10,12 @@ class MetaExtensionsModel(MessageMetaExtensionsModel):
     callback: Optional[str]
 
 class MetaModel(MessageMetaModel):
-    type: str = ASSIGN_PROGRES
+    type: str = UNPROVIDE_ERROR
     extensions: Optional[MetaExtensionsModel]
 
+class DataModel(MessageDataModel):
+    provision: str #TODO: Maybe not optional
 
-class AssignProgressMessage(MessageModel):
-    data: ProgressDataModel
+class UnprovideErrorMessage(MessageModel):
+    data: DataModel
     meta: MetaModel

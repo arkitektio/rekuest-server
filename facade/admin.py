@@ -3,7 +3,6 @@ from .models import *
 # Register your models here.
 
 admin.site.register(Node)
-admin.site.register(Pod)
 admin.site.register(Provider)
 admin.site.register(Repository)
 admin.site.register(Template)

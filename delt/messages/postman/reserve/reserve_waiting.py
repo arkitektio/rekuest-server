@@ -1,6 +1,5 @@
-from ..progress import ProgressDataModel
 from pydantic.main import BaseModel
-from ....messages.types import  ASSIGN_PROGRES, PROVIDE, PROVIDE_DONE, UNASSIGN_PROGRES
+from ....messages.types import  RESERVE_WAITING
 from ....messages.base import MessageDataModel, MessageMetaExtensionsModel, MessageMetaModel, MessageModel
 from typing import List, Optional
 
@@ -11,10 +10,13 @@ class MetaExtensionsModel(MessageMetaExtensionsModel):
     callback: Optional[str]
 
 class MetaModel(MessageMetaModel):
-    type: str = UNASSIGN_PROGRES
+    type: str = RESERVE_WAITING
     extensions: Optional[MetaExtensionsModel]
 
+class DataModel(MessageDataModel):
+    topic: Optional[str] #TODO: Maybe not optional
+    message: Optional[str]
 
-class UnassignProgressMessage(MessageModel):
-    data: ProgressDataModel
+class ReserveWaitingMessage(MessageModel):
+    data: DataModel
     meta: MetaModel

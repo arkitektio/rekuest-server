@@ -1,8 +1,8 @@
+from facade.enums import ReservationStatus
 from graphene.types.scalars import String
 from herre.bouncer.utils import bounced
 from balder.types import BalderSubscription
-from facade.types import Assignation, ReservationLog
-from facade import models
+from facade import models, types
 import graphene
 
 
@@ -47,5 +47,46 @@ class ReservationEventSubscription(BalderSubscription):
     class Meta:
         type = ReservationEvent
         operation = "reservationEvent"
+
+
+class ReservationsEvent(graphene.ObjectType):
+    ended =  graphene.ID()
+    update =  graphene.Field(types.Reservation)
+    create = graphene.Field(types.Reservation)
+
+
+
+class MyReservationsEvent(BalderSubscription):
+
+
+    class Arguments:
+        level = graphene.String(description="The log level for alterations")
+
+    @bounced(only_jwt=True)
+    def subscribe(root, info, *args, **kwargs):
+        print(f"reservations_user_{info.context.user.id}")
+        return [f"reservations_user_{info.context.user.id}"]
+
+
+    def publish(payload, info, *args, **kwargs):
+        payload = payload["payload"]
+        action = payload["action"]
+        data = payload["data"]
+
+        print(payload)
+
+        if action == "created":
+            return {"create": models.Reservation.objects.get(id=data)}
+        if action in [ReservationStatus.CANCELLED, ReservationStatus.ENDED]:
+            return {"ended": data}
+        else:
+            return {"update": models.Reservation.objects.get(id=data)}
+
+
+
+    class Meta:
+        type = ReservationsEvent
+        operation = "myReservationsEvent"
+
 
 

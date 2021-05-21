@@ -1,13 +1,14 @@
 # chat/consumers.py
 import asyncio
-from facade.utils import end_assignation, log_to_assignation, set_assignation_status, set_reservation_status
+from typing import List, Tuple
+from facade.utils import log_to_assignation, log_to_provision, log_to_reservation, set_assignation_status, set_provision_status, set_reservation_status
 
 from delt.messages.types import BOUNCED_FORWARDED_ASSIGN, BOUNCED_FORWARDED_RESERVE, RESERVE_DONE, UNRESERVE_DONE
 import json
 from delt.messages import *
 from herre.bouncer.utils import bounced_ws
-from ..models import Pod, Provision
-from ..enums import AssignationStatus, LogLevel, PodStatus, ReservationStatus
+from ..models import Reservation, Provision
+from ..enums import AssignationStatus, LogLevel, PodStatus, ProvisionStatus, ReservationStatus
 from asgiref.sync import sync_to_async
 from .base import BaseConsumer
 import logging
@@ -18,77 +19,180 @@ from arkitekt.console import console
 logger = logging.getLogger(__name__)
 
 
-@sync_to_async
-def getOrCreatePodFromProvision(provision):
+def activateProvision(provision_reference) -> Tuple[str, List[str],List[Tuple[str, MessageModel]]]:
+    """ Activatets the provision and sets the created topic
+    to active as well as creating signal for every connecting Reservation that this Topic
+    is now active. (This Reservations should have been previously waiting)
 
-    provision = Provision.objects.get(reference=provision)
-    
-    #TODO: Check if we are able to susbcribe to the same Topic throught the Provision
-    # Provision holds the information how many pods are okay to have
+    Args:
+        reference ([type]): [description]
+    """
+    provision = Provision.objects.get(reference=provision_reference)
+    set_provision_status(provision.reference, ProvisionStatus.ACTIVE)
 
-    pod = Pod.objects.create(**{
-                "template": provision.template,
-                "status": PodStatus.ACTIVE,
-                "provision": provision
+
+    messages = []
+    channels = []
+    for res in provision.reservations.all():
+        console.log(f"[green] Listening to {res}")
+        log_to_reservation(res.reference, f"Listening now to {provision.unique}", level=LogLevel.INFO)
+        set_reservation_status(res.reference, ReservationStatus.ACTIVE)
+        
+        message = ReserveActiveMessage(data={
+            "provision": provision.id
+            },
+            meta={
+                "reference": res.reference,
             }
         )
 
-    reservation = provision.reservation
-    pod.reservations.add(reservation)
-    pod.save()
+        messages.append((res.callback, message))
+        channels.append(f"assignments_in_{res.channel}")
 
-    pod = Pod.objects.select_related("provision").prefetch_related("reservations").get(id=pod.id)
-    return pod
-
-@sync_to_async
-def deltePodFromProvision(provision):
-
-    pod = Pod.objects.select_related("provision__reservation").prefetch_related("reservations").get(provision__reference=provision)
-    pod.delete()
-
-    return pod
+    return f"reservations_in_{provision.unique}", channels, messages
 
 
+def cancelProvision(provision_reference) -> Tuple[List[str],List[Tuple[str, MessageModel]]]:
+    """ Activatets the provision and sets the created topic
+    to active as well as creating signal for every connecting Reservation that this Topic
+    is now active. (This Reservations should have been previously waiting)
+
+    Args:
+        reference ([type]): [description]
+    """
+    provision = Provision.objects.get(reference=provision_reference)
+    set_provision_status(provision.reference, ProvisionStatus.CANCELLED)
+
+    messages = []
+    for res in provision.reservations.all():
+        console.log(f"[yellow] Disconnecting Reservation {res}")
+        log_to_reservation(res.reference, f"Provision cancelled shutdown {provision.unique}", level=LogLevel.WARN)
+        set_reservation_status(res.reference, ReservationStatus.REROUTING)
+        
+        message = ReserveCriticalMessage(data={
+            "message": f"Provision cancelled shutdown {provision.unique}"
+            },
+            meta={
+                "reference": res.reference,
+            }
+        )
+        messages.append((res.callback, message))
+        provision.reservations.remove(res)
+
+    return messages
+
+def killProvision(provision_reference) -> Tuple[List[str],List[Tuple[str, MessageModel]]]:
+    """ Activatets the provision and sets the created topic
+    to active as well as creating signal for every connecting Reservation that this Topic
+    is now active. (This Reservations should have been previously waiting)
+
+    Args:
+        reference ([type]): [description]
+    """
+    provision = Provision.objects.get(reference=provision_reference)
+    set_provision_status(provision.reference, ProvisionStatus.DISCONNECTED)
+
+    messages = []
+    for res in provision.reservations.all():
+        console.log(f"[yellow] Disconnecting Reservation {res}")
+        log_to_reservation(res.reference, f"Lost Connection to {provision.unique}", level=LogLevel.WARN)
+        set_reservation_status(res.reference, ReservationStatus.ERROR)
+        
+        message = ReserveCriticalMessage(data={
+            "message": f"Lost Connection to {provision.unique}"
+            },
+            meta={
+                "reference": res.reference,
+            }
+        )
+        messages.append((res.callback, message))
+        # provision.reservations.remove(res) TODO: Unlink only if we can link anew
+
+    
+
+    return messages
 
 
-@sync_to_async
-def deactivatePod(podid):
-    pod = Pod.objects.select_related("provision").prefetch_related("reservations").get(id=podid)
-    pod.delete()
-    return pod
+def addReservationToProvision(provision_reference, reservation_reference) -> Tuple[str,str, MessageModel]:
+    """ Activatets the provision and sets the created topic
+    to active as well as creating signal for every connecting Reservation that this Topic
+    is now active. (This Reservations should have been previously waiting)
+
+    Args:
+        reference ([type]): [description]
+    """
+    provision = Provision.objects.get(reference=provision_reference)
+    reservation = Reservation.objects.get(reference=reservation_reference)
+
+    assert provision.status == ProvisionStatus.ACTIVE, "Very weird error"
+
+    provision.reservations.add(reservation)
+    provision.save()
+
+    console.log(f"[green] Listening to {reservation}")
+    log_to_reservation(reservation.reference, f"Listening now to {provision.unique}", level=LogLevel.INFO)
+    set_reservation_status(reservation.reference, ReservationStatus.ACTIVE)
+        
+    message = ReserveActiveMessage(data={
+        "provision": provision.id
+        },
+        meta={
+            "reference": reservation.reference,
+        }
+    )
+
+    return f"assignments_in_{reservation.channel}", reservation.callback, message
 
 
-def initial_cleanup():
-    for pod in Pod.objects.all():
-        pod.delete()
+def deleteReservationFromProvision(provision_reference, reservation_reference) -> Tuple[str,str, MessageModel]:
+    """ Activatets the provision and sets the created topic
+    to active as well as creating signal for every connecting Reservation that this Topic
+    is now active. (This Reservations should have been previously waiting)
 
-initial_cleanup()
+    Args:
+        reference ([type]): [description]
+    """
+    provision = Provision.objects.get(reference=provision_reference)
+    reservation = Reservation.objects.get(reference=reservation_reference)
+    assert provision.status == ProvisionStatus.ACTIVE, "Very weird error"
+
+    provision.reservations.remove(reservation)
+    provision.save()
+
+    console.log(f"[yellow] Removing {reservation}")
+    log_to_reservation(reservation.reference, f"Stopped Listening to {provision.unique}", level=LogLevel.INFO)
+
+    # If all topic links for this reservation are set we can just say bye bye
+    if reservation.provisions.count() == 0:
+        set_reservation_status(reservation.reference, ReservationStatus.CANCELLED)
+        return True
+
+    return False
 
 
-NO_PODS_CODE = 2
-NOT_AUTHENTICATED_CODE = 3
+
 
 
 class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
     mapper = {
-        BouncedProvideMessage: lambda cls: cls.on_bounced_provide,
-        BouncedUnprovideMessage: lambda cls: cls.on_bounced_unprovide,
-        UnprovideMessage: lambda cls: cls.on_unprovide_done,
+
         AssignYieldsMessage: lambda cls: cls.on_assign_yields,
-        AssignProgressMessage: lambda cls: cls.on_assign_progress,
+        AssignLogMessage: lambda cls: cls.on_assign_log,
         AssignCriticalMessage: lambda cls: cls.on_assign_critical,
         AssignReturnMessage: lambda cls: cls.on_assign_return,
         AssignDoneMessage: lambda cls: cls.on_assign_done,
         AssignCancelledMessage: lambda cls: cls.on_assign_cancelled,
 
-        BouncedForwardedReserveMessage: lambda cls: cls.on_bounced_forwarded_reserve,
-        BouncedUnreserveMessage: lambda cls: cls.on_bounced_unreserve,
-        ReserveCriticalMessage: lambda cls: cls.on_reserve_critical,
-        UnreserveCriticalMessage: lambda cls: cls.on_unreserve_critical,
-    
-        UnassignCriticalMessage: lambda cls: cls.on_unassign_critical,
-        UnassignDoneMessage: lambda cls: cls.on_unassign_done,
-        UnassignProgressMessage: lambda cls: cls.on_unassign_progress,
+
+        UnassignCriticalMessage: lambda cls: cls.dummy_test,
+        UnassignDoneMessage: lambda cls: cls.dummy_test,
+        UnassignLogMessage: lambda cls: cls.dummy_test,
+
+        ProvideDoneMessage: lambda cls: cls.on_provide_done,
+
+        UnprovideDoneMessage: lambda cls: cls.on_unprovide_done,
+        UnprovideLogMessage: lambda cls: cls.on_unprovide_log,
+        UnprovideCriticalMessage: lambda cls: cls.on_unprovide_critical,
     }
 
     @bounced_ws(only_jwt=True)
@@ -97,10 +201,14 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
         logger.warning(f'Connecting Host {self.scope["bounced"].app.name}') 
 
         self.provision_queues = {}
-        self.hosted_pods = {}
+        self.hosted_topics = {}
         self.channel_name = await self.connect_to_rabbit()
 
-        self.provision_topic_map = {}
+        self.provision_link_map = {}
+
+    async def dummy_test(self, message):
+        print(message)
+
 
     async def connect_to_rabbit(self):
         # Perform connection
@@ -109,6 +217,7 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
 
         
     async def on_assign_related(self, provision_reference, message: aiormq.abc.DeliveredMessage):
+        logger.error("Received somethign here")
         nana = expandFromRabbitMessage(message)
         
         if isinstance(nana, BouncedAssignMessage):
@@ -117,13 +226,6 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
             
         elif isinstance(nana, BouncedUnassignMessage):
             await self.send_message(nana) 
-
-        elif isinstance(nana, BouncedReserveMessage):
-            forwarded_message = BouncedForwardedReserveMessage(data={**nana.data.dict(), "provision": provision_reference}, meta={**nana.meta.dict(), "type": BOUNCED_FORWARDED_RESERVE})
-            await self.send_message(forwarded_message) 
-
-        elif isinstance(nana, BouncedUnreserveMessage):
-            await self.send_message(nana)
         
         else:
             logger.error("This message is not what we expeceted here")
@@ -131,20 +233,40 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
         await message.channel.basic_ack(message.delivery.delivery_tag)
 
 
+    async def on_reservation_related(self, provision_reference, aiomessage: aiormq.abc.DeliveredMessage):
+        message = expandFromRabbitMessage(aiomessage)
+        
+        if isinstance(message, BouncedReserveMessage):
+            reservation_reference = message.meta.reference
+            channel, message_callback, res_active_message = await sync_to_async(addReservationToProvision)(provision_reference, reservation_reference)
+            # Set up connectiongs
+            assert provision_reference in self.provision_link_map, "Topic is not provided"
+            assign_queue = await self.channel.queue_declare(channel)
+            await self.channel.basic_consume(assign_queue.queue, lambda x: self.on_assign_related(provision_reference, x))
+            self.provision_link_map[provision_reference].append(assign_queue)
+            await self.forward(res_active_message, message_callback)
+
+        elif isinstance(message, BouncedUnreserveMessage):
+             reservation_reference = message.data.reservation
+             all_done = await sync_to_async(deleteReservationFromProvision)(provision_reference, reservation_reference)
+             if all_done:
+                done_message = UnreserveDoneMessage(data=message.data, meta={"reference": message.meta.reference})
+                if message.meta.extensions.callback: await self.forward(done_message, message.meta.extensions.callback)
+        
+        else:
+            logger.exception(Exception("This message is not what we expeceted here"))
+            
+        await aiomessage.channel.basic_ack(aiomessage.delivery.delivery_tag)
+
+
     async def disconnect(self, close_code):
         try:
             logger.warning(f"Disconnecting Host with close_code {close_code}") 
             #TODO: Depending on close code send message to all running Assignations
-
-
-
             # We are assuming that every shutdown was ungently and check if we need to deactivate the pods
-            await asyncio.gather(*[self.destroy_pod(id) for id, queue in self.hosted_pods.items()])
+            await asyncio.gather(*[sync_to_async(killProvision)(prov) for prov, queues in self.provision_link_map.items()])
 
-
-
-
-
+            #await asyncio.gather(*[self.destroy_pod(id) for id, queue in self.hosted_topics.items()])
 
             await self.connection.close()
         except Exception as e:
@@ -152,205 +274,91 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
 
 
 
-    async def on_bounced_unprovide(self, message: BouncedUnprovideMessage):
-        pod = await deltePodFromProvision(message.data.provision)
-
-        assert pod.provision is not None, "This should never happen"
-
-        if message.meta.extensions.callback is not None:
-            await self.forward(UnprovideDoneMessage(
-                    data= {
-                        "provision": pod.provision.reference
-                    },
-                    meta= {
-                        "reference": message.meta.reference,
-                        "extensions": {
-                            "callback": message.meta.extensions.callback,
-                            "progress": message.meta.extensions.progress
-                        }
-            }), message.meta.extensions.callback)
-        else:
-            logger.warn("Was system call")
-
-        del self.provision_queues[message.data.provision]
-
-    async def on_bounced_provide(self, message: BouncedProvideMessage):
-        logger.warn(f"Activating Provision {message.meta.reference}")
-
-        provision_reference = message.meta.reference
-
-        pod = await getOrCreatePodFromProvision(provision_reference)
-
-        assign_queue = await self.channel.queue_declare(str(pod.channel), auto_delete=True)
-
-
-        # Each pod through podman listens to the same pod
-        logger.warn(f"Listening to Topic {assign_queue.queue}")
-
-        await self.channel.basic_consume(assign_queue.queue, lambda x: self.on_assign_related(provision_reference, x))
-
-        self.provision_queues[message.meta.reference] = assign_queue
-        self.hosted_pods[pod.id] = pod.id
-        self.provision_topic_map[provision_reference] = pod.channel
-
-        assert pod.provision is not None, "This should never happen"
-
-        for reservation in pod.reservations.all():
-            console.log(f"[dark-red] Pod was already reserved with {reservation.reference}")
-            
-            bounced_forwarded = BouncedForwardedReserveMessage(
-                data = {
-                    "node": reservation.node_id,
-                    "template": reservation.template_id,
-                    "params": reservation.params,
-                    "provision": provision_reference,
-                },
-                meta = {
-                    "reference": reservation.reference,
-                    "extensions": {
-                        "callback": reservation.callback,
-                        "progress": reservation.progress
-                    },
-                    "token": message.meta.token
-                }
-            )
-            await self.send_message(bounced_forwarded)
-            
-
-
-    async def destroy_pod(self, pod_id, message="Pod Just Failed"):
-        ''' This Method gets called if we lost a pod due to failure '''
-        pod: Pod = await deactivatePod(pod_id)
-
-        assert pod.provision is not None, "This should never happen"
-
-        for reservation in pod.reservations.all():
-            logger.info("Telling Reserving Clients that we went bye bye")
-
-            await set_reservation_status(reservation.reference, ReservationStatus.CRITICAL)
-            await self.forward(ReserveCriticalMessage(
-                data= {
-                    "message": message
-                },
-                meta= {
-                    "reference": reservation.reference,
-                    "extensions": {
-                        "callback": reservation.callback,
-                        "progress": reservation.progress
-                    }
-                }), reservation.callback)
-
-        
-        if pod.provision.callback is not None:
-            logger.info("Telling Our Providing Client that we went bye bye")
-
-            await self.forward(ProvideCriticalMessage(
-                data= {
-                    "message": pod.id
-                },
-                meta= {
-                    "reference": pod.provision.reference,
-                    "extensions": {
-                        "callback": pod.provision.callback,
-                        "progress": pod.provision.progress
-                    }
-                }), pod.provision.callback)
-
-
-        del self.provision_queues[pod.provision.reference]
-
-
     async def on_assign_critical(self, assign_critical: AssignCriticalMessage):
-        try:
-            await log_to_assignation(assign_critical.meta.reference, assign_critical.data.type + " : " + assign_critical.data.message, level=LogLevel.ERROR)
-            await set_assignation_status(assign_critical.meta.reference, AssignationStatus.CRITICAL.value)
-        except Exception as e:
-            logger.error(str(e))
-        await self.forward(assign_critical, assign_critical.meta.extensions.callback)
+        await sync_to_async(log_to_assignation)(assign_critical.meta.reference, assign_critical.data.type + " : " + assign_critical.data.message, level=LogLevel.CRITICAL)
+        await sync_to_async(set_assignation_status)(assign_critical.meta.reference, AssignationStatus.CRITICAL)
 
     async def on_assign_yields(self, assign_yield: AssignYieldsMessage):
+        await sync_to_async(log_to_assignation)(assign_yield.meta.reference, f"Yielded {assign_yield.data.returns}", level=LogLevel.INFO)
         await self.forward(assign_yield, assign_yield.meta.extensions.callback)
 
     async def on_assign_cancelled(self, assign_cancelled: AssignCancelledMessage):
-        try:
-            await end_assignation(assign_cancelled.meta.reference, cancelled=True)
-        except Exception as e:
-            logger.error(str(e))
-
+        await sync_to_async(log_to_assignation)(assign_cancelled.meta.reference, f"Cancelled on Consumer Side", level=LogLevel.CRITICAL)
         await self.forward(assign_cancelled, assign_cancelled.meta.extensions.callback)
 
     async def on_assign_return(self, assign_return: AssignReturnMessage):
-        try:
-            await end_assignation(assign_return.meta.reference)
-        except Exception as e:
-            logger.error(str(e))
-
+        await sync_to_async(log_to_assignation)(assign_return.meta.reference, f"Returned {assign_return.data.returns}", level=LogLevel.INFO)
+        await sync_to_async(set_assignation_status)(assign_return.meta.reference, AssignationStatus.DONE)
         await self.forward(assign_return, assign_return.meta.extensions.callback)
 
     async def on_assign_done(self, assign_done: AssignDoneMessage):
-        try:
-            await end_assignation(assign_done.meta.reference)
-        except Exception as e:
-            logger.error(str(e))
-
-
+        await sync_to_async(log_to_assignation)(assign_done.meta.reference, f"Assignation Done", level=LogLevel.INFO)
+        await sync_to_async(set_assignation_status)(assign_done.meta.reference, AssignationStatus.DONE)
         await self.forward(assign_done, assign_done.meta.extensions.callback)
 
-    async def on_assign_progress(self, assign_return: AssignProgressMessage):
-        logger.info("Received Progress")
-        try:
-            await log_to_assignation(assign_return.meta.reference, assign_return.data.message, level=assign_return.data.level)
-        except Exception as e:
-            logger.error(str(e))
-        await self.forward(assign_return, assign_return.meta.extensions.progress)
+    async def on_assign_log(self, assign_log: AssignLogMessage):
+        await sync_to_async(log_to_assignation)(assign_log.meta.reference, assign_log.data.message, level=assign_log.data.level)
+        await self.forward(assign_log, assign_log.meta.extensions.progress)
 
-    async def on_bounced_forwarded_reserve(self, forwarded_reserve: BouncedForwardedReserveMessage):
-        console.log(f"[magenta] Received Reserve Sucessfully on the Client {forwarded_reserve}")
+    async def on_provide_done(self, provide_done: ProvideDoneMessage):
+        logger.error("Done here")
+        reference = provide_done.meta.reference
+        self.provision_link_map[reference] = []
 
-        topic = self.provision_topic_map[forwarded_reserve.data.provision]
+        reservation_topic, new_channels, new_messages = await sync_to_async(activateProvision)(reference)
 
-        await set_reservation_status(forwarded_reserve.meta.reference, ReservationStatus.DONE.value)
-        reserve_done = ReserveDoneMessage(data={"topic": topic}, meta={**forwarded_reserve.meta.dict(), "type": RESERVE_DONE})
-        console.log(f"[magenta] {reserve_done}")
+        reservation_queue = await self.channel.queue_declare(reservation_topic)
+        await self.channel.basic_consume(reservation_queue.queue, lambda x: self.on_reservation_related(reference, x))
 
-        await self.forward(reserve_done, reserve_done.meta.extensions.callback)
+        for channel in new_channels:
+            assign_queue = await self.channel.queue_declare(channel)
+            await self.channel.basic_consume(assign_queue.queue, lambda x: self.on_assign_related(reference, x))
+            self.provision_link_map[reference].append(assign_queue)
+
+        if provide_done.meta.extensions.callback : await self.forward(provide_done, provide_done.meta.extensions.callback)
+
+        for channel, message in new_messages:
+            # Iterating over the Reservations
+            if channel: await self.forward(message, channel)
+
+        logger.info(f"Providing Done {provide_done}") 
+
+    async def on_unprovide_done(self, unprovide_done: UnprovideDoneMessage):
+        reference = unprovide_done.data.provision
+        self.provision_link_map[reference] = []
+
+        messages = await sync_to_async(cancelProvision)(reference)
+
+        del self.provision_link_map[reference]
+
+        for channel, message in messages:
+            if channel: await self.forward(message, channel)
+
+        if unprovide_done.meta.extensions.callback : await self.forward(unprovide_done, unprovide_done.meta.extensions.callback)
+        logger.info(f"Unproviding Done {unprovide_done}")  
 
 
-    async def unprovide_if_needed(unreserve: BouncedUnreserveMessage):
+    async def on_unprovide_log(self, unprovide_log: UnprovideLogMessage):
+        reference = unprovide_log.data.provision
+        await sync_to_async(log_to_provision)(reference, unprovide_log.data.message, unprovide_log.data.level)
 
-        unreserve.data.reservation
+    async def on_unprovide_critical(self, unprovide_critical: UnprovideCriticalMessage):
+        reference = unprovide_critical.data.provision
+        await sync_to_async(log_to_provision)(reference, unprovide_critical.data.message, level=LogLevel.CRITICAL)
 
-
-
-    async def on_bounced_unreserve(self, unreserve: BouncedUnreserveMessage):
-        console.log(f"[magenta] Received Unreserve Sucessfully on the Client {unreserve}")
-        unreserve_done = UnreserveDoneMessage(data={"reservation": unreserve.data.reservation}, meta={**unreserve.meta.dict(), "type": UNRESERVE_DONE})
-        console.log(f"[magenta] {unreserve_done}")
-
-
-        await self.forward(unreserve_done, "unreserve_done_in")
-
-
-    async def on_reserve_critical(self, reserve_critical: ReserveCriticalMessage):
-        await self.forward(reserve_critical, reserve_critical.meta.extensions.callback)
-
-    async def on_unreserve_done(self, unreserve_done: UnreserveDoneMessage):
-        await self.forward(unreserve_done, unreserve_done.meta.extensions.callback)
-
-    async def on_unreserve_critical(self, unreserve_critical: UnreserveDoneMessage):
-        await self.forward(unreserve_critical, unreserve_critical.meta.extensions.callback)
+    async def on_provide_critical(self, provide_critical: ProvideCriticalMessage):
+        console.log(f"Providing Done {provide_critical}", style="blink")  
 
     async def on_unassign_done(self, assign_return: UnassignDoneMessage):
         print("oisdnoisndofinsdo9finh")
         await self.forward(assign_return, assign_return.meta.extensions.callback)
 
-    async def on_unassign_progress(self, assign_return: UnassignProgressMessage):
+    async def on_unassign_progress(self, assign_return: UnassignLogMessage):
         await self.forward(assign_return, assign_return.meta.extensions.progress)
     
     async def on_unassign_critical(self, assign_return: UnassignCriticalMessage):
         try:
             await log_to_assignation(assign_return.meta.reference, assign_return.data.message, level=LogLevel.ERROR)
-            await end_assignation(assign_return.meta.reference)
         except Exception as e:
             logger.error(str(e))
         await self.forward(assign_return, assign_return.meta.extensions.callback)

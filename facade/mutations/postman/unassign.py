@@ -45,7 +45,8 @@ class UnassignMutation(BalderMutation):
             "token": {
                 "roles": bounce.roles,
                 "scopes": bounce.scopes,
-                "user": bounce.user.id if bounce.user else None
+                "user": bounce.user.id if bounce.user else None,
+                "app": bounce.app.id if bounce.app else None
             }
         })
 

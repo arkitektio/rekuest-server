@@ -14,7 +14,10 @@ class MetaModel(MessageMetaModel):
     type: str = UNPROVIDE_CRITICAL
     extensions: Optional[MetaExtensionsModel]
 
+class UnprovideExceptionModel(ExceptionDataModel):
+    provision: str
+
 
 class UnprovideCriticalMessage(MessageModel):
-    data: ExceptionDataModel
+    data: UnprovideExceptionModel
     meta: MetaModel

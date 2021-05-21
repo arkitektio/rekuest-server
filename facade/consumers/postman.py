@@ -23,7 +23,8 @@ async def create_bounced_assign_from_assign(assign: AssignMessage, bounce: Bounc
         "token": {
             "roles": bounce.roles,
             "scopes": bounce.scopes,
-            "user": bounce.user.id if bounce.user else None
+            "user": bounce.user.id if bounce.user else None,
+            "app": bounce.app.id if bounce.app else None
         },
         "extensions": {
             "callback": callback,
@@ -101,8 +102,8 @@ def create_bounced_unreserve_from_unreserve(unreserve: UnreserveMessage, bounce:
 def get_topic_for_bounced_assign(bounced_assign: BouncedAssignMessage) -> str:
     reservation = Reservation.objects.get(reference=bounced_assign.data.reservation)
 
-    if reservation.pod:
-        return reservation.pod.channel
+    if reservation.topic:
+        return reservation.topic.channel
     else:
         raise Exception("No active pod for the specified Reservation. Rereserve!")
 
@@ -174,37 +175,11 @@ class PostmanConsumer(BaseConsumer):
         await self.send(text_data=message.body.decode()) # No need to go through pydantic???
         await message.channel.basic_ack(message.delivery.delivery_tag)
    
-    async def bounced_assign(self, bounced_assign: BouncedAssignMessage):
-        bounced_assign.meta.extensions.callback = self.callback_name
-        bounced_assign.meta.extensions.progress = self.progress_name
-
-        if bounced_assign.data.reservation not in self.reservations_topic_map:
-            logger.info(f"Lets get the assign for that reservation {bounced_assign.data.reservation}")
-            self.reservations_topic_map[bounced_assign.data.reservation] = await get_topic_for_bounced_assign(bounced_assign)
+    
 
 
-        topic = self.reservations_topic_map[bounced_assign.data.reservation]
-        logger.info(f"Automatically forwarding it to reservation topic {topic}")
 
-
-        # We acknowled that this assignation is now linked to the topic (for indefintely)
-        self.assignations_topic_map[bounced_assign.meta.reference] = topic
-        await self.forward(bounced_assign, topic)
-
-        
-
-
-    async def on_assign(self, assign: AssignMessage):
-        bounced_assign: AssignMessage = await create_bounced_assign_from_assign(assign,  self.scope["auth"], self.callback_name, self.progress_name)
-        console.print(f"[red]{bounced_assign}")
-        await self.bounced_assign(bounced_assign)
-
-
-    async def on_bounced_assign(self, bounced_assign: BouncedAssignMessage):
-        #TODO: Check permissions
-        await self.bounced_assign(bounced_assign)
-
-
+    # Reserve Part
     async def bounced_reserve(self, bounced_reserve: BouncedReserveMessage):
         bounced_reserve.meta.extensions.callback = self.callback_name
         bounced_reserve.meta.extensions.progress = self.progress_name
@@ -219,21 +194,47 @@ class PostmanConsumer(BaseConsumer):
         await self.bounced_reserve(bounced_reserve)
 
 
-
+    # Bounced Unreserve
     async def bounced_unreserve(self, bounced_unreserve: BouncedUnreserveMessage):
         bounced_unreserve.meta.extensions.callback = self.callback_name
         bounced_unreserve.meta.extensions.progress = self.progress_name
         await self.forward(bounced_unreserve, "bounced_unreserve_in")
 
-
     async def on_bounced_unreserve(self, bounced_unreserve: BouncedUnreserveMessage):
         await self.bounced_unreserve(bounced_unreserve)
-
 
     async def on_unreserve(self, unreserve: UnreserveMessage):
         bounced_unreserve: BouncedUnreserveMessage = await create_bounced_unreserve_from_unreserve(unreserve, self.scope["auth"], self.callback_name, self.progress_name)
         await self.bounced_unreserve(bounced_unreserve)
 
+
+    # Assign
+    async def bounced_assign(self, bounced_assign: BouncedAssignMessage):
+        bounced_assign.meta.extensions.callback = self.callback_name
+        bounced_assign.meta.extensions.progress = self.progress_name
+
+        if bounced_assign.data.reservation not in self.reservations_topic_map:
+            logger.info(f"Lets get the assign for that reservation {bounced_assign.data.reservation}")
+            self.reservations_topic_map[bounced_assign.data.reservation] = await get_topic_for_bounced_assign(bounced_assign)
+
+
+        topic = self.reservations_topic_map[bounced_assign.data.reservation]
+        logger.info(f"Automatically forwarding it to reservation topic {topic}")
+
+        # We acknowled that this assignation is now linked to the topic (for indefintely)
+        self.assignations_topic_map[bounced_assign.meta.reference] = topic
+        await self.forward(bounced_assign, topic)
+
+    
+
+    async def on_assign(self, assign: AssignMessage):
+        bounced_assign: AssignMessage = await create_bounced_assign_from_assign(assign,  self.scope["auth"], self.callback_name, self.progress_name)
+        console.print(f"[red]{bounced_assign}")
+        await self.bounced_assign(bounced_assign)
+
+
+    async def on_bounced_assign(self, bounced_assign: BouncedAssignMessage):
+        await self.bounced_assign(bounced_assign)
 
 
     async def bounced_unassign(self, bounced_unassign: BouncedUnassignMessage):
@@ -244,6 +245,7 @@ class PostmanConsumer(BaseConsumer):
         await self.forward(bounced_unassign, topic)
 
 
+
     async def on_unassign(self, unassign: UnassignMessage):
         bounced_unassign: BouncedUnassignMessage = await create_bounced_unassign_from_unassign(unassign,  self.scope["auth"], self.callback_name, self.progress_name)
         await self.bounced_unassign(bounced_unassign)
@@ -251,6 +253,10 @@ class PostmanConsumer(BaseConsumer):
 
     async def on_bounced_unassign(self, bounced_unassign: BouncedUnassignMessage):
         await self.bounced_unassign(bounced_unassign)
+
+
+
+
 
 
     async def disconnect(self, close_code):

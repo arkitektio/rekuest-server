@@ -1,18 +1,20 @@
+from delt.messages.generics import Token
+from delt.messages.postman.provide.bounced_provide import BouncedProvideMessage
 from herre.models import HerreApp
-from django.db.models import constraints
-from herre.token import JwtToken
 from mars.names import generate_random_name
-from facade.fields import ArgsField, InPortsField, InputsField, KwargsField, OutPortsField, OutputsField, ParamsField, PodChannel, ReturnField
-from django.db.models.fields import NullBooleanField
-from facade.enums import AssignationLogLevel, AssignationStatus, DataPointType, HookType, NodeType, PodMode, PodStatus, PodStrategy, ProvisionStatus, RepositoryType, ReservationLogLevel, ReservationStatus
+from facade.fields import ArgsField, KwargsField, OutputsField, ParamsField, PodChannel, ReturnField
+from facade.enums import AccessStrategy, LogLevel, AssignationStatus, DataPointType, LogLevel, NodeType,  ProvisionStatus,  ReservationStatus, TopicStatus
 from django.db import models
 from django.contrib.auth import get_user_model
 import uuid
-import requests
 import logging
 
 logger = logging.getLogger(__name__)
 
+
+
+def create_token(user, scopes=[]):
+    return Token(**{"roles": user.roles, "scopes": scopes, "user": user.id})
 
 class DataPoint(models.Model):
     """A Datapoint constitues Arkitekts Representation of a Host of Data.
@@ -21,11 +23,11 @@ class DataPoint(models.Model):
 
     """
     app = models.ForeignKey(HerreApp, on_delete=models.CASCADE, help_text="The Associated App")
-    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, help_text="The provide might be limited to a instance like ImageJ belonging to a specific person. Is nullable for backend users", null=True)
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, blank=True, help_text="The provide might be limited to a instance like ImageJ belonging to a specific person. Is nullable for backend users", null=True)
     version = models.CharField(max_length=100, help_text="The version of the bergen API this endpoint uses")
-    inward = models.CharField(max_length=100, help_text="Inward facing hostname (for Docker powered access)", null=True)
-    outward = models.CharField(max_length=100, help_text="Outward facing hostname for external clients", null=True)
-    port = models.IntegerField(help_text="Listening port", null=True)
+    inward = models.CharField(max_length=100, help_text="Inward facing hostname (for Docker powered access)", null=True, blank=True)
+    outward = models.CharField(max_length=100, help_text="Outward facing hostname for external clients", null=True, blank=True)
+    port = models.IntegerField(help_text="Listening port", null=True, blank=True)
     type = models.CharField(max_length=100, choices=DataPointType.choices, default=DataPointType.GRAPHQL, help_text="The type of datapoint")
     installed_at = models.DateTimeField(auto_created=True, auto_now_add=True)
     needs_negotiation = models.BooleanField(default=False)
@@ -34,6 +36,9 @@ class DataPoint(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["app","user"], name="No multiple AppPoints for same App and User allowed")
         ]
+
+    def create_ward(self, internal=True):
+        return {"distinct": self.app.name, "host": self.inward if internal else self.outward, "port": self.port, "needsNegotiation": self.needs_negotiation, "type": self.type}
 
     def __str__(self):
         return f"{self.app} {f'for {self.user}' if self.user else ''}"
@@ -108,11 +113,6 @@ class Provider(models.Model):
         return f"{self.name}"
 
 
-class BaseHooker(models.Model):
-    name = models.CharField(max_length=200, help_text="This hookers name", default="Nana")
-
-
-
 class Node(models.Model):
     """ Nodes are abstraction of RPC Tasks. They provide a common API to deal with creating tasks.
 
@@ -172,14 +172,41 @@ class Template(models.Model):
     def is_active(self):
         return len(self.pods.all()) > 0
 
-class Provision(models.Model):
 
-    reservation = models.ForeignKey("Reservation", on_delete=models.CASCADE, null=True, blank=True, help_text="The Reservation that created this Provision", related_name="provisions")
-    #1 Inputs to the the Provision (it can be either already a template to provision or just a node)
-    template = models.ForeignKey(Template, on_delete=models.CASCADE, help_text="The node this provision connects", related_name="provisions", null=True, blank=True)
+class ProvisionLog(models.Model):
+    provision = models.ForeignKey("Provision", help_text="The provision this log item belongs to", related_name="log", on_delete=models.CASCADE)
+    message = models.CharField(max_length=2000, null=True, blank=True)
+    level = models.CharField(choices=LogLevel.choices, default=LogLevel.INFO.value, max_length=200)
+
+
+class Provision(models.Model):
+    """ Topic (STATEFUL MODEL)
     
-    # Selection criteria for finding a right Pod
+    Topic represents the current state of active Topics that are caused by provisions, they store the reservations (links)
+    and are indexed by provision, a consumer connects through its provision to Arkitekt and sets the Topic to active, every
+    reservation that is connected gets signalled that this Topic is now active. On disconnect every reservation can design
+    according to its policy if it wants to wait for reconnect (if connection was Lost), raise an error, or choose another Topic.
+    
+    """
+
+    unique = models.UUIDField(max_length=1000, unique=True, default=uuid.uuid4, help_text="A Unique identifier for this Topic")
+
+    # Identifiers
+    reference = models.CharField(max_length=1000, unique=True, default=uuid.uuid4, help_text="The Unique identifier of this Provision")
+    
+    reservation = models.ForeignKey("Reservation", on_delete=models.CASCADE, null=True, blank=True, help_text="Reservation that created this provision (if we were auto created)", related_name="created_provisions")
+    provision = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, help_text="Provision that created this provision (if we were auto created)", related_name="created_provisions")
+    
+    # Input
+    template = models.ForeignKey(Template, on_delete=models.CASCADE, help_text="The Template for this Provision", related_name="provisions", null=True, blank=True)
+    
+    # Platform specific Details (non relational Data)
     params = models.JSONField(null=True, blank=True, help_text="Params for the Policy (including Provider etc..)") 
+    extensions = models.JSONField(null=True, blank=True, help_text="The Platform extensions")
+    context = models.JSONField(null=True, blank=True, help_text="The Platform context")
+
+    #
+    access = models.CharField(max_length=100, default=AccessStrategy.EVERYONE, choices=AccessStrategy.choices, help_text="Access Strategy for this Provision")
 
     #Status Field
     status = models.CharField(max_length=300, choices=ProvisionStatus.choices, default=ProvisionStatus.PENDING.value, help_text="Current lifecycle of Provision")
@@ -188,66 +215,70 @@ class Provision(models.Model):
     #Callback
     callback =  models.CharField(max_length=1000, help_text="Callback", blank=True , null=True)
     progress =  models.CharField(max_length=1000, help_text="Provider", blank=True , null=True)
+
     # Meta fields
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, help_text="The Provisions parent", related_name="children")
+    
     creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, max_length=1000, help_text="This provision creator", null=True, blank=True)
-    reference = models.CharField(max_length=1000, unique=True, default=uuid.uuid4, help_text="The Unique identifier of this Assignation")
-
-
+    app = models.ForeignKey(HerreApp, on_delete=models.CASCADE, max_length=1000, help_text="This provision creator", null=True, blank=True)
+    
 
     def __str__(self):
         return f"Provision for Template: {self.template if self.template else ''} Referenced {self.reference} || Reserved {self.reservation if self.reservation else 'without Reservation'}"
 
 
+    def to_message(self) -> BouncedProvideMessage:
+        return BouncedProvideMessage(data= {
+            "template": self.template.id,
+            "params": self.params
+        }, meta= {
+            "reference": self.reference,
+            "extensions": self.extensions,
+            "token": create_token(self.creator, scopes=[])
+        })
 
 
 
-class Pod(models.Model):
-    """ The last step in any provision, pods are running implementations of templates (think workers)"""
-    provision = models.ForeignKey("Provision", on_delete=models.CASCADE, help_text="The provision that created this pod", related_name="created_pods", null=True)
-    template = models.ForeignKey(Template, on_delete=models.CASCADE, help_text="The template that created this pod", related_name="pods")
-    status = models.CharField(max_length=300, choices=PodStatus.choices, default=PodStatus.PENDING, help_text="Which lifecycle moment is this pod in")
-    mode = models.CharField(max_length=100, choices=PodMode.choices, default=PodMode.PRODUCTION, help_text="The mode this pod is running in")
-    strategy = models.CharField(max_length=100, default=PodStrategy.NODE, choices=PodStrategy.choices, help_text="The stragey of this pod")
-    name = models.CharField(max_length=300, default=generate_random_name, help_text="A unique name for this pod")
-    unique = models.UUIDField(max_length=1000, unique=True, default=uuid.uuid4, help_text="A Unique identifier for this Pod")
-    channel = PodChannel(max_length=5000, help_text="The exclusive channel where the Pod listens to [depending on Stragey]", default=uuid.uuid4, unique=True)
-    statusmessage = models.CharField(max_length=300, blank=True, help_text="This pods Status")
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["template","name"], name="A pod needs to uniquely identify with a name for a template")
-        ]
-
-    def __str__(self):
-        return f"{self.template} - {self.status}"
-
-
-class Commission(models.Model):
-
-    pod = models.ForeignKey(Pod, on_delete=models.CASCADE, help_text="Which pod are we commisssioning?", related_name="commisions")
-    reference = models.UUIDField(max_length=1000, unique=True, default=uuid.uuid4, help_text="A Unique identifier for this Commision")
-    
+class ReservationLog(models.Model):
+    reservation = models.ForeignKey("Reservation", help_text="The reservation this log item belongs to", related_name="log", on_delete=models.CASCADE)
+    message = models.CharField(max_length=2000, null=True, blank=True)
+    level = models.CharField(choices=LogLevel.choices, default=LogLevel.INFO.value, max_length=200)
 
 
 
 class Reservation(models.Model):
+    """Reservation (CONTRACT MODEL)
 
-    #1 Inputs to the the Provision (it can be either already a template to provision or just a node)
+    Reflects RabbitMQ Channel
+
+    Reservations are constant logs of active connections to Arkitekt and are logging the state of the connection to the workers. They are user facing
+    and are created by the user, they hold a log of all transactions that have been done since its inception, as well as as of the inputs that it was
+    created by (Node and Template as desired inputs) and the currently active Topics it connects to. It also specifies the routing policy (it case a
+    connection to a worker/app gets lost). A Reservation creates also a (rabbitmq) Channel that every connected Topic listens to and the specific user assigns to.
+    According to its Routing Policy, if a Topic dies another Topic can eithers take over and get the Items stored in this  (rabbitmq) Channel or a specific user  event
+    happens with this Assignations.
+
+    """
+
+    # Channel is the RabbitMQ channel that every user assigns to and that every topic listens to 
+    channel = models.CharField(max_length=2000, unique=True, default=uuid.uuid4, help_text="The channel of this Reservation")
+
+
+    #1 Inputs to the the Reservation (it can be either already a template to provision or just a node)
     node = models.ForeignKey(Node, on_delete=models.CASCADE, help_text="The node this reservation connects", related_name="reservations", null=True, blank=True)
     template = models.ForeignKey(Template, on_delete=models.CASCADE, help_text="The template this reservation connects", related_name="reservations", null=True, blank=True)
-    pod = models.ForeignKey(Pod, on_delete=models.SET_NULL, help_text="The pod this reservation connects", related_name="reservations", null=True, blank=True)
 
-    # Selection criteria for finding a right Channel
-    params = models.JSONField(null=True, blank=True, help_text="Params for the Policy (including Provider etc..)") 
-
-    # 2. The result (provider is stored already in pod, no need to)
-    channel = models.CharField(max_length=6000)
+    # The connections
+    provisions = models.ManyToManyField(Provision, help_text="The Provisions this reservation connects", related_name="reservations", null=True, blank=True)
     
+    # Platform specific Details (non relational Data)
+    params = models.JSONField(default={},help_text="Params for the Policy (including Provider etc..)") 
+    extensions = models.JSONField(default={}, help_text="The Platform extensions")
+    context = models.JSONField(default={},help_text="The Platform context")
+
     #Status Field
-    status = models.CharField(max_length=300, choices=ReservationStatus.choices, default=ReservationStatus.PENDING.value, help_text="Current lifecycle of Provision")
+    status = models.CharField(max_length=300, choices=ReservationStatus.choices, default=ReservationStatus.ACTIVE, help_text="Current lifecycle of Reservation")
     statusmessage = models.CharField(max_length=1000, help_text="Clear Text status of the Provision as for now", blank=True)
 
     #Callback
@@ -257,37 +288,31 @@ class Reservation(models.Model):
     # Meta fields
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    app = models.ForeignKey(HerreApp, on_delete=models.CASCADE, max_length=1000, help_text="This Reservations app", null=True, blank=True)
     parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, help_text="The Provisions parent", related_name="children")
-    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, max_length=1000, help_text="This provision creator", null=True, blank=True)
+    creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, max_length=1000, help_text="This Reservations creator", null=True, blank=True)
     reference = models.CharField(max_length=1000, unique=True, default=uuid.uuid4, help_text="The Unique identifier of this Assignation")
 
 
+    def log(self, message, level=LogLevel.DEBUG):
+        return ReservationLog.objects.create(message=message, reservation=self, level=level)
+
     def __str__(self):
-        return f"Reservation for Node: {self.node.interface if self.node else ''} | Template: {self.template if self.template else ''} to {self.pod} Referenced {self.reference}"
+        return f"Reservation for Node: {self.node.interface if self.node else ''} | Template: {self.template if self.template else ''} Referenced {self.reference}"
 
 
-class ReservationLog(models.Model):
-    reservation = models.ForeignKey(Reservation, help_text="The reservation this log item belongs to", related_name="log", on_delete=models.CASCADE)
-    message = models.CharField(max_length=2000, null=True, blank=True)
-    level = models.CharField(choices=ReservationLogLevel.choices, default=ReservationLogLevel.INFO.value, max_length=200)
 
 
 class Assignation(models.Model):
     """ A constant log of a tasks transition through finding a Node, Template and finally Pod , also a store for its results"""
-    node = models.ForeignKey(Node, on_delete=models.CASCADE, help_text="The Node this assignation is having", blank=True, null=True)
-    template = models.ForeignKey(Template, on_delete=models.CASCADE, help_text="The Template this assignation is using", blank=True, null=True)
-    pod = models.ForeignKey(Pod, on_delete=models.CASCADE, help_text="The pod this assignation connects to", related_name="assignations", blank=True, null=True)
     reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE, help_text="Which reservation are we assigning to", related_name="assignations", blank=True, null=True)
+    extensions = models.JSONField(default={}, help_text="The Platform extensions")
+    context = models.JSONField(default={},help_text="The Platform context")
 
-    # 1. Input to the Assignation
+    # 1. The State of Everything
     args = models.JSONField(blank=True, null=True, help_text="The Args")
     kwargs = models.JSONField(blank=True, null=True, help_text="The Kwargs")
-
     returns = models.JSONField(blank=True, null=True, help_text="The Returns")
-
-    # 2. Outputs of the Assignation
-    outputs = OutputsField(help_text="The Outputs", blank=True, null=True)
-
     status = models.CharField(max_length=300, choices=AssignationStatus.choices, default=AssignationStatus.PENDING.value, help_text="Current lifecycle of Assignation")
     statusmessage = models.CharField(max_length=1000, help_text="Clear Text status of the Assignation as for now", blank=True)
     
@@ -302,6 +327,7 @@ class Assignation(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     reference = models.CharField(max_length=1000, unique=True, default=uuid.uuid4, help_text="The Unique identifier of this Assignation")
     creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, max_length=1000, help_text="The creator is this assignation", null=True, blank=True)
+    app = models.ForeignKey(HerreApp, on_delete=models.CASCADE, max_length=1000, help_text="The app is this assignation", null=True, blank=True)
     parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, help_text="The Assignations parent", related_name="children")
    
 
@@ -309,4 +335,5 @@ class Assignation(models.Model):
 class AssignationLog(models.Model):
     reservation = models.ForeignKey(Assignation, help_text="The reservation this log item belongs to", related_name="log", on_delete=models.CASCADE)
     message = models.CharField(max_length=2000, null=True, blank=True)
-    level = models.CharField(choices=AssignationLogLevel.choices, default=AssignationLogLevel.INFO.value, max_length=200)
+    level = models.CharField(choices=LogLevel.choices, default=LogLevel.INFO.value, max_length=200)
+

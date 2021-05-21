@@ -18,6 +18,7 @@ class Negotiate(BalderMutation):
         client_type = graphene.Argument(InputEnum.from_choices(ClientType),description="The type of Client")
         inward = graphene.String(required=False, description="Only applicable if you are a Point Provider. The adress how data requests may reach you")
         outward = graphene.String(required=False, description="Only applicable if you are a Point Provider. The adress how data requests may reach you")
+        internal = graphene.Boolean(required=False, description="Are you requiring internal access to resources?")
         port = graphene.Int(required=False, description="The Port we can use to reach you")
         version = graphene.String(required=False, description="Point type")
         needs_negotiation = graphene.Boolean(required=False, default_value=False, description="If your app requires negotiation on connection!")
@@ -28,9 +29,8 @@ class Negotiate(BalderMutation):
 
     
     @bounced(only_jwt=True)
-    def mutate(root, info, client_type = ClientType.HOST, inward=None, outward=None, port=None, version="0.1.0", point_type= None, needs_negotiation=False):
+    def mutate(root, info, client_type = ClientType.HOST, inward=None, outward=None, port=None, version="0.1.0", point_type= None, needs_negotiation=False, internal=False):
         if "provider" in info.context.bounced.scopes: provider, _ = Provider.objects.update_or_create(app=info.context.bounced.app, user=info.context.bounced.user, defaults= {"name": info.context.bounced.app.name })
-        
 
         transcript_dict = {
             "models": DataModel.objects.all(),
@@ -46,6 +46,9 @@ class Negotiate(BalderMutation):
                     }
             )
         }
+        
+        transcript_dict["wards"] = [point.create_ward(internal = internal) for point in DataPoint.objects.all()]
+
 
         if client_type in [ClientType.POINT.value]:
             provider , _ = DataPoint.objects.update_or_create(app=info.context.bounced.app,

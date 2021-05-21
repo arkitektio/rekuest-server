@@ -1,3 +1,4 @@
+from facade.subscriptions.assignation import MyAssignationsEvent
 from facade.models import Assignation, Reservation
 from facade import types
 from facade.workers.gateway import GatewayConsumer
@@ -40,11 +41,20 @@ class AssignMutation(BalderMutation):
             "reservation": Reservation.objects.get(reference=reservation),
             "args": args,
             "kwargs": kwargs,
+            "context": {
+                "roles": bounce.roles,
+                "scopes": bounce.scopes,
+                "user": bounce.user.id if bounce.user else None,
+                "app": bounce.app.id if bounce.app else None
+            },
             "reference": reference,
             "creator": bounce.user,
+            "app": bounce.app,
             "callback": "not-set",
             "progress": "not-set"
         })
+
+        MyAssignationsEvent.broadcast({"action": "created", "data": ass.id}, [f"assignations_user_{bounce.user.id}"])
         
         bounced = BouncedAssignMessage(data= {
             "reservation": reservation,
@@ -59,11 +69,10 @@ class AssignMutation(BalderMutation):
             "token": {
                 "roles": bounce.roles,
                 "scopes": bounce.scopes,
-                "user": bounce.user.id if bounce.user else None
+                "user": bounce.user.id if bounce.user else None,
+                "app": bounce.app.id if bounce.app else None
             }
         })
-
-        print(bounced)
 
         GatewayConsumer.send(bounced)
 
