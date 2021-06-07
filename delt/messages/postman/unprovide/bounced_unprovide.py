@@ -1,4 +1,4 @@
-from ....messages.generics import Token
+from ....messages.generics import Context
 from pydantic.main import BaseModel
 from ....messages.types import  BOUNCED_UNPROVIDE
 from ....messages.base import MessageDataModel, MessageMetaExtensionsModel, MessageMetaModel, MessageModel
@@ -14,7 +14,7 @@ class MetaExtensionsModel(MessageMetaExtensionsModel):
 class MetaModel(MessageMetaModel):
     type: str = BOUNCED_UNPROVIDE
     extensions: Optional[MetaExtensionsModel]
-    token: Token
+    context: Context
 
 class DataModel(MessageDataModel):
     provision: str

@@ -1,3 +1,4 @@
+from facade.consumers.postman import create_context_from_bounced
 from facade.workers.gateway import GatewayConsumer
 import uuid
 from delt.messages import BouncedUnassignMessage
@@ -41,13 +42,9 @@ class UnassignMutation(BalderMutation):
             "extensions": {
                 "callback": "not-set",
                 "progress": "not-set",
+                "persist": True,
             },
-            "token": {
-                "roles": bounce.roles,
-                "scopes": bounce.scopes,
-                "user": bounce.user.id if bounce.user else None,
-                "app": bounce.app.id if bounce.app else None
-            }
+            "context": create_context_from_bounced(bounce)
         })
 
         GatewayConsumer.send(bounced)

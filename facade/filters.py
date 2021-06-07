@@ -1,5 +1,5 @@
 from django.db.models.aggregates import Count
-from facade.enums import NodeType, PodStatus
+from facade.enums import NodeType, PodStatus, ProvisionStatus
 import django_filters
 from .models import Node,Provider, Template
 from balder.fields.enum import EnumFilter
@@ -37,6 +37,14 @@ class NodeFilter(django_filters.FilterSet):
             filter_args[f"args__{index}__identifier"] = arg
 
         return queryset.filter(**filter_args)
+
+
+class ProvisionFilter(django_filters.FilterSet):
+    active = django_filters.BooleanFilter(method="active_filter", label="Get active Provisions")
+
+    def active_filter(self, queryset, name, value):
+        return queryset.filter(status__in=[ProvisionStatus.ACTIVE])
+
 
 
 class TemplateFilter(django_filters.FilterSet):

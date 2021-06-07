@@ -1,8 +1,9 @@
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 
-class Token(BaseModel):
+class Context(BaseModel):
     roles: List[str]
     scopes: List[str]
-    user: int
+    user: Optional[str]
+    app: Optional[str]
 

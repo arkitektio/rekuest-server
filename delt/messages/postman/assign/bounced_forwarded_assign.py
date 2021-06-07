@@ -1,4 +1,4 @@
-from ....messages.generics import Token
+from ....messages.generics import Context
 from pydantic.main import BaseModel
 from ....messages.types import BOUNCED_FORWARDED_ASSIGN
 from ....messages.base import MessageDataModel, MessageMetaExtensionsModel, MessageMetaModel, MessageModel
@@ -14,7 +14,7 @@ class MetaExtensionsModel(MessageMetaExtensionsModel):
 class MetaModel(MessageMetaModel):
     type: str = BOUNCED_FORWARDED_ASSIGN
     extensions: Optional[MetaExtensionsModel]
-    token: Token
+    context: Context
 
 class DataModel(MessageDataModel):
     reservation: str

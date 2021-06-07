@@ -29,12 +29,12 @@ class MyAssignations(BalderQuery):
 
 
     @bounced(anonymous=False)
-    def resolve(root, info, exclude=[], filter=None):
+    def resolve(root, info, exclude=None, filter=None):
         qs = Assignation.objects.filter(creator=info.context.user)
         if filter:
             qs = qs.filter(status__in=filter)
-        for value in exclude:
-            qs = qs.exclude(status=value)
+        if exclude:
+            qs = qs.exclude(status__in=exclude)
 
         return qs.all()
 

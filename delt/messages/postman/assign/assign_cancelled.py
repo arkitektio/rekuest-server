@@ -14,8 +14,9 @@ class MetaModel(MessageMetaModel):
     extensions: Optional[MetaExtensionsModel]
 
 class DataModel(MessageDataModel):
-    ok: Optional[bool]#TODO: Maybe not optional
+    canceller: Optional[str] # A reference to the cancelling agent
 
+    
 class AssignCancelledMessage(MessageModel):
     data: DataModel
     meta: MetaModel

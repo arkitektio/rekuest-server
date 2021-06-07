@@ -30,7 +30,7 @@ application = ProtocolTypeRouter({
         url('graphql/', MyGraphqlWsConsumer.as_asgi()),
         url('graphql', MyGraphqlWsConsumer.as_asgi()),
         url(r'provider\/$', ProviderConsumer.as_asgi()),
-        url(r'host\/$', HostConsumer.as_asgi()),
+        url(r'entertainer\/$', HostConsumer.as_asgi()),
         url(r'postman\/$', PostmanConsumer.as_asgi())
     ])),
     'channel': ChannelNameRouter({

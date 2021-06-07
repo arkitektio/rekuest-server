@@ -80,6 +80,7 @@ class AssignationStatus(TextChoices):
     ERROR = "ERROR", "Error (Retrieable)"
     CRITICAL = "CRITICAL", "Critical Error (No Retries available)"
     CANCEL = "CANCEL", "Assinment is beeing cancelled"
+    CANCELING = "CANCELING", "Cancelling (Assingment is currently being cancelled)"
     CANCELLED = "CANCELLED", "Assignment has been cancelled."
 
     # Successfull Termination
@@ -122,6 +123,7 @@ class ProvisionStatus(TextChoices):
     
     # Life States
     ACTIVE = "ACTIVE", "Active (Provision is currently active)"
+    INACTIVE = "INACTIVE", "Inactive (Provision is currently not active)"
     CANCELING = "CANCELING", "Cancelling (Provisions is currently being cancelled)"
     DISCONNECTED = "LOST", "Lost (Subscribers to this Topic have lost their connection)"
     RECONNECTING = "RECONNECTING", "Reconnecting (We are trying to Reconnect to this Topic)"

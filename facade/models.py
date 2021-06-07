@@ -1,4 +1,4 @@
-from delt.messages.generics import Token
+from delt.messages.generics import Context
 from delt.messages.postman.provide.bounced_provide import BouncedProvideMessage
 from herre.models import HerreApp
 from mars.names import generate_random_name
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_token(user, scopes=[]):
-    return Token(**{"roles": user.roles, "scopes": scopes, "user": user.id})
+    return Context(**{"roles": user.roles, "scopes": scopes, "user": user.email})
 
 class DataPoint(models.Model):
     """A Datapoint constitues Arkitekts Representation of a Host of Data.
@@ -139,7 +139,7 @@ class Node(models.Model):
         ]
 
     def __str__(self):
-        return f"Node: {self.name} - {self.package}/{self.interface}"
+        return f"{self.name} - {self.package}/{self.interface}"
 
 
 
@@ -147,7 +147,7 @@ class Template(models.Model):
     """ A Template is a conceptual implementation of A Node. It represents its implementation as well as its performance"""
 
     node = models.ForeignKey(Node, on_delete=models.CASCADE, help_text="The node this template is implementatig", related_name="templates")
-    provider = models.ForeignKey(Provider, on_delete=models.CASCADE, help_text="The associated provider for this Template")
+    provider = models.ForeignKey(Provider, on_delete=models.CASCADE, help_text="The associated provider for this Template", related_name="templates")
     name = models.CharField(max_length=1000, default=generate_random_name, help_text="A name for this Template")
 
     policy = models.JSONField(max_length=2000, default=dict, help_text="The attached policy for this template")
@@ -175,7 +175,7 @@ class Template(models.Model):
 
 class ProvisionLog(models.Model):
     provision = models.ForeignKey("Provision", help_text="The provision this log item belongs to", related_name="log", on_delete=models.CASCADE)
-    message = models.CharField(max_length=2000, null=True, blank=True)
+    message = models.CharField(max_length=20000, null=True, blank=True)
     level = models.CharField(choices=LogLevel.choices, default=LogLevel.INFO.value, max_length=200)
 
 
@@ -235,7 +235,7 @@ class Provision(models.Model):
         }, meta= {
             "reference": self.reference,
             "extensions": self.extensions,
-            "token": create_token(self.creator, scopes=[])
+            "context": self.context
         })
 
 
@@ -267,6 +267,7 @@ class Reservation(models.Model):
 
     #1 Inputs to the the Reservation (it can be either already a template to provision or just a node)
     node = models.ForeignKey(Node, on_delete=models.CASCADE, help_text="The node this reservation connects", related_name="reservations", null=True, blank=True)
+    title = models.CharField(max_length=200, help_text="A Short Hand Way to identify this reservation for you", null=True, blank=True)
     template = models.ForeignKey(Template, on_delete=models.CASCADE, help_text="The template this reservation connects", related_name="reservations", null=True, blank=True)
 
     # The connections
@@ -292,15 +293,14 @@ class Reservation(models.Model):
     parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, help_text="The Provisions parent", related_name="children")
     creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, max_length=1000, help_text="This Reservations creator", null=True, blank=True)
     reference = models.CharField(max_length=1000, unique=True, default=uuid.uuid4, help_text="The Unique identifier of this Assignation")
+    causing_provision = models.ForeignKey("Provision", on_delete=models.CASCADE, null=True, blank=True, help_text="Was this Reservation caused by a Provision", related_name="caused_reservations")
 
 
     def log(self, message, level=LogLevel.DEBUG):
         return ReservationLog.objects.create(message=message, reservation=self, level=level)
 
     def __str__(self):
-        return f"Reservation for Node: {self.node.interface if self.node else ''} | Template: {self.template if self.template else ''} Referenced {self.reference}"
-
-
+        return f"Res for Node {self.node}" if self.node else f"Res for Template {self.template}"
 
 
 class Assignation(models.Model):
@@ -329,6 +329,10 @@ class Assignation(models.Model):
     creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, max_length=1000, help_text="The creator is this assignation", null=True, blank=True)
     app = models.ForeignKey(HerreApp, on_delete=models.CASCADE, max_length=1000, help_text="The app is this assignation", null=True, blank=True)
     parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, help_text="The Assignations parent", related_name="children")
+
+
+    def __str__(self):
+        return f'{self.status} for {self.reservation}'
    
 
 

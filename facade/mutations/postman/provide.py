@@ -1,3 +1,4 @@
+from facade.consumers.postman import create_context_from_bounced
 from facade.subscriptions.provision import MyProvisionsEvent
 from facade.workers.gateway import GatewayConsumer
 import uuid
@@ -37,12 +38,7 @@ class ProvideMutation(BalderMutation):
             "node_id": node,
             "template_id": template,
             "params": params,
-            "context": {
-                "roles": bounce.roles,
-                "scopes": bounce.scopes,
-                "user": bounce.user.id if bounce.user else None,
-                "app": bounce.app.id if bounce.app else None
-            },
+            "context": create_context_from_bounced(bounce),
             "reference": reference,
             "creator": bounce.user,
             "app": bounce.app,
@@ -64,12 +60,7 @@ class ProvideMutation(BalderMutation):
                 "callback": "not-set",
                 "progress": "not-set",
             },
-            "token": {
-                "roles": bounce.roles,
-                "scopes": bounce.scopes,
-                "user": bounce.user.id if bounce.user else None,
-                "app": bounce.app.id if bounce.app else None
-            }
+            "context": create_context_from_bounced(bounce)
         })
 
         GatewayConsumer.send(bounced)

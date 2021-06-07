@@ -1,3 +1,4 @@
+from facade.consumers.postman import create_context_from_bounced
 from facade.subscriptions.assignation import MyAssignationsEvent
 from facade.models import Assignation, Reservation
 from facade import types
@@ -41,12 +42,7 @@ class AssignMutation(BalderMutation):
             "reservation": Reservation.objects.get(reference=reservation),
             "args": args,
             "kwargs": kwargs,
-            "context": {
-                "roles": bounce.roles,
-                "scopes": bounce.scopes,
-                "user": bounce.user.id if bounce.user else None,
-                "app": bounce.app.id if bounce.app else None
-            },
+            "context": create_context_from_bounced(bounce),
             "reference": reference,
             "creator": bounce.user,
             "app": bounce.app,
@@ -65,13 +61,9 @@ class AssignMutation(BalderMutation):
             "extensions": {
                 "callback": "not-set",
                 "progress": "not-set",
+                "persist": True,
             },
-            "token": {
-                "roles": bounce.roles,
-                "scopes": bounce.scopes,
-                "user": bounce.user.id if bounce.user else None,
-                "app": bounce.app.id if bounce.app else None
-            }
+            "context": create_context_from_bounced(bounce)
         })
 
         GatewayConsumer.send(bounced)

@@ -36,14 +36,7 @@ class Negotiate(BalderMutation):
             "models": DataModel.objects.all(),
             "postman": PostmanSettings(
                     type = PostmanProtocol.WEBSOCKET,
-                    kwargs= {
-                        "protocol": "ws",
-                        "auth": {
-                            "type": "token",
-                            "token": info.context.auth.token
-                        }
-
-                    }
+                    kwargs= {}
             )
         }
         
@@ -71,26 +64,13 @@ class Negotiate(BalderMutation):
         if client_type == ClientType.PROVIDER.value:
             transcript_dict["provider"] = ProviderSettings(
                 type = ProviderProtocol.WEBSOCKET,
-                kwargs = {
-                        "protocol": "ws",
-                        "provider": provider.id,
-                        "auth": {
-                            "type": "token",
-                            "token": info.context.auth.token
-                        }
-                }
+                kwargs = {}
             )
 
         if client_type == ClientType.HOST.value or client_type == ClientType.PROVIDER.value:
             transcript_dict["host"] = HostSettings(
                 type = HostProtocol.WEBSOCKET,
-                kwargs = {
-                        "protocol": "ws",
-                        "auth": {
-                            "type": "token",
-                            "token": info.context.auth.token
-                        }
-                }
+                kwargs = {}
             )
 
         print(transcript_dict)

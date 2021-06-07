@@ -17,6 +17,7 @@ class MetaModel(MessageMetaModel):
 class DataModel(MessageDataModel):
     node: Optional[str] #TODO: Maybe not optional
     template: Optional[str]
+    provision: Optional[str]
     params: Optional[ReserveParams]
 
 

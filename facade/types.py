@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from facade.filters import TemplateFilter
+from facade.filters import TemplateFilter, ProvisionFilter
 from balder.fields.filtered import BalderFiltered
 from django.utils.translation import templatize
 from facade.structures.ports.returns.types import ReturnPort
@@ -9,6 +9,21 @@ from facade import models
 from herre.models import HerreApp as HerreAppModel
 from balder.types import BalderObject
 import graphene
+
+
+class ReserveParamsInput(graphene.InputObjectType):
+    auto_provide = graphene.Boolean(description="Do you want to autoprovide", required=False)
+    auto_unprovide = graphene.Boolean(description="Do you want to auto_unprovide", required=False)
+    providers = graphene.List(graphene.Int, description="Apps that you can reserve on", required=False)
+    templates = graphene.List(graphene.Int, description="Apps that you can reserve on", required=False)
+
+class ReserveParams(graphene.ObjectType):
+    auto_provide = graphene.Boolean(description="Autoproviding")
+    auto_unprovide = graphene.Boolean(description="Autounproviding")
+
+class ProvideParams(graphene.ObjectType):
+    auto_unprovide = graphene.Boolean(description="Do you want to auto_unprovide")
+
 
 
 class HerreApp(BalderObject):
@@ -48,13 +63,25 @@ class DataQuery(graphene.ObjectType):
     models = graphene.List(DataModel, description="The queried models on the Datapoint")
 
 
+class Provider(BalderObject):
+    
+    class Meta:
+        model = models.Provider
+
 class Repository(BalderObject):
 
     class Meta:
         model = models.Repository
 
+class Provision(BalderObject):
+    params = graphene.Field(ProvideParams)
+    
+    class Meta:
+        model = models.Provision
+
         
 class Template(BalderObject):
+    provisions = BalderFiltered(Provision, filterset_class=ProvisionFilter, related_field="provisions")
     
     class Meta:
         model = models.Template
@@ -76,14 +103,11 @@ class Accessor(BalderObject):
 
 
 class Reservation(BalderObject):
+    params = graphene.Field(ReserveParams)
     
     class Meta:
         model = models.Reservation
 
-class Provision(BalderObject):
-    
-    class Meta:
-        model = models.Provision
 
 class ReservationLog(BalderObject):
 
@@ -108,7 +132,3 @@ class ProvisionLog(BalderObject):
         model = models.ProvisionLog
 
 
-class Provider(BalderObject):
-    
-    class Meta:
-        model = models.Provider

@@ -1,15 +1,15 @@
 
+from re import M
 from facade.subscriptions.provision import MyProvisionsEvent, ProvisionEventSubscription
-from delt.messages.generics import Token
+from delt.messages.generics import Context
 from delt.messages.postman.reserve.params import ReserveParams
-from facade.consumers.postman import get_topic_for_bounced_assign
-from facade.utils import create_assignation_from_bounced_assign, log_to_assignation, log_to_provision, log_to_reservation, set_assignation_status, set_provision_status, set_reservation_status
+from facade.utils import log_to_assignation, log_to_provision, log_to_reservation, set_assignation_status, set_provision_status, set_reservation_status, transition_reservation
 from delt.messages.postman.provide.params import ProvideParams
 from facade.enums import AssignationStatus, LogLevel, PodStatus, ProvisionStatus, ReservationStatus, TopicStatus
 from aiormq import channel
 from delt.messages.exception import ExceptionMessage
 from delt.messages import *
-from typing import Tuple, Union
+from typing import List, Tuple, Union
 from facade.models import Assignation, Provision, Reservation, Template
 import logging
 import aiormq
@@ -39,7 +39,7 @@ class TemplateNotProvided(ReserveError):
 
 
 
-def find_topic_for_bounced_reserve(bounced_reserve: BouncedReserveMessage) -> Tuple[str, MessageModel]:
+def prepare_messages_for_reservation(bounced_reserve: BouncedReserveMessage) -> List[Tuple[str, MessageModel]]:
     """Finds a topic for a Reservation
 
     Searches the database for active Topics that the user can reserve (the policy is informed by the template or specified for each topic individually for overarching policys (e.g. User A cannot
@@ -57,39 +57,106 @@ def find_topic_for_bounced_reserve(bounced_reserve: BouncedReserveMessage) -> Tu
     reservation = Reservation.objects.get(reference=reference)
 
     params = ReserveParams(**reservation.params)
-    context = Token(**reservation.context)
+    context = Context(**reservation.context)
     node = reservation.node
     template = reservation.template
 
 
+    messages = []
+
     if node and not template:
         # The Node path is more generic, we are just filteing by the node and the params
-        qs = Template.objects.select_related("provider").filter(node=node)
 
-        if params.providers:
-            qs.filter(provider__pk__in=params.providers)
+        qs = Template.objects.select_related("provider")
+
+        if not params.templates:
+            
+            qs = qs.filter(node=node)
+
+            if params.providers:
+                qs.filter(provider__pk__in=params.providers)
+
+        else:
+            qs = qs.filter(pk__in=params.templates)
 
         # Manage filtering by params {such and such} and by permissions to assign to some of the pods
         template =  qs.first()
-        
-    if template is None: raise NoTemplateFoundError(f"Did not find an Template for this Node {node} with params {params}")
+
+
+      
+    if template is None: raise NoTemplateFoundError(f"Did not find a providable Template for this Node {node} with params {params}. No App implementing this Node with this Params was active.")
 
     # Filter based on Assignment Policy and also on activity if deamnded
     provision = template.provisions.exclude(status__in=[ProvisionStatus.ENDED, ProvisionStatus.CANCELLED]).first()
 
     # Here we check if we can assign to the Topic
-    if provision is None: raise TemplateNotProvided("Template was not provided!")
+    if provision is None:
+        # PROVIDE PATH
+        messages.append(log_to_reservation(reservation.reference, "We couldn't find an active Template. Trying to Autprovide", level=LogLevel.INFO, callback=callback))
+        if "can_provide" not in context.scopes: raise DeniedError("Your App does not have the proper permissions set to autoprovide 'can_provide' to your scopes")
+        if params.auto_provide != True: raise ReserveError("You didn't specify auto_provide in the provide params and this configuration is not yet provided!")
+
+        reservation.node = template.node
+        reservation.save()
+
+        # Why not make topic and Provision the same?
+        # IDea: Provision is an idefinete log and an action, topic is the actual state 
+        provision = Provision.objects.create(
+            reservation = reservation,
+            status= ProvisionStatus.PROVIDING,
+            reference= reservation.reference, # We use the same reference that the user wants
+            context= reservation.context, # We use the same reference that the user wants
+            template= template,
+            params = reservation.params,
+            extensions = reservation.extensions,
+            app = reservation.app,
+            creator = reservation.creator,
+        )
+
+        # We add the creating topic to the reservation
+        provision.reservations.add(reservation)
+        provision.save()
+
+        # Signal Broadcasting to Channel Layer for Persistens
+        MyProvisionsEvent.broadcast({"action": "created", "data": provision.id}, [f"provisions_user_{provision.creator.id}"])
+        ProvisionEventSubscription.broadcast({"action": "updated", "data": reservation.id}, [f"provision_{reservation.reference}"])
+
+        if template.provider.active:
+            messages.append(log_to_reservation(reservation.reference, "Provider is active we are sending it to the Provider", level=LogLevel.INFO, callback=callback))
+            set_reservation_status(reservation.reference, ReservationStatus.PROVIDING)
+
+            provide_message = BouncedProvideMessage(data= {
+                        "template": provision.template.id,
+                        "params": provision.params,
+                    },
+                    meta= {
+                        "reference": provision.reference,
+                        "extensions": provision.extensions,
+                        "context": provision.context
+            })
+        
+            messages.append((f"provision_in_{provision.template.provider.unique}", provide_message))
+
+        else:
+            log_message = f"App {template.provider.name} is currently unactive. We will get notified once it gets connected"
+
+            messages.append(log_to_reservation(reservation.reference, log_message, level=LogLevel.INFO, callback=callback))
+            messages += transition_reservation(reservation.reference, ReservationStatus.WAITING)
+
+
+        return messages
+
 
 
     if provision.status == ProvisionStatus.ACTIVE:
         # We can just forward this to the provider
         log_message = "App is active and we can assign to the Provision. Forwarding to App"
-        log_to_reservation(reservation.reference, log_message, level=LogLevel.INFO)
-        return f"reservations_in_{provision.unique}", bounced_reserve
+        messages.append(log_to_reservation(reservation.reference, log_message, level=LogLevel.INFO, callback=callback))
+        messages.append((f"reservations_in_{provision.unique}", bounced_reserve))
         
     else:
         log_message = "Attention the App is inactive, please start the App. We are waiting for that! (Message stored in Database)"
-        log_to_reservation(reservation.reference, log_message, level=LogLevel.WARN)
+        messages.append(log_to_reservation(reservation.reference, log_message, level=LogLevel.WARN, callback=callback))
         set_reservation_status(reservation.reference, ReservationStatus.WAITING)
         message = ReserveWaitingMessage(data={
             "provision": provision.id,
@@ -97,95 +164,9 @@ def find_topic_for_bounced_reserve(bounced_reserve: BouncedReserveMessage) -> Tu
         }, meta={
             "reference": reference
         })
-        return callback, message
+        messages.append((callback, message))
 
-
-
-def provide_topic_for_reservation(bounced_reserve: BouncedReserveMessage) -> Tuple[str, MessageModel]:
-
-
-    reference = bounced_reserve.meta.reference
-    callback = bounced_reserve.meta.extensions.callback
-
-    reservation = Reservation.objects.get(reference=reference)
-
-    context = Token(**reservation.context) #TODO: Inadaptly name
-    params = ReserveParams(**reservation.params)
-
-    
-    if "can_provide" not in context.scopes: raise DeniedError("Your App does not have the proper permissions set to autoprovide 'can_provide' to your scopes")
-
-    node = reservation.node
-    template = reservation.template
-
-    if node and not template:
-        qs = Template.objects.select_related("provider").filter(node=node)
-
-        if params.providers:
-            qs.filter(provider__pk__in=params.providers)
-        
-        # TODO: Check if this is okay
-
-        # Manage filtering by params {such and such} and by permissions to assign to some of the pods
-
-        template =  qs.first()
-        
-        
-    if template is None: NoTemplateFoundError(f"Did not find a providable Template for this Node {node} with params {params}. No App implementing this Node with this Params was active.")
-
-    reservation.node = template.node
-    reservation.save()
-
-    # Why not make topic and Provision the same?
-    # IDea: Provision is an idefinete log and an action, topic is the actual state 
-    provision = Provision.objects.create(
-        reservation = reservation,
-        status= ProvisionStatus.PROVIDING,
-        reference= reservation.reference, # We use the same reference that the user wants
-        context= reservation.context, # We use the same reference that the user wants
-        template= template,
-        params = reservation.params,
-        extensions = reservation.extensions,
-        app = reservation.app,
-        creator = reservation.creator,
-    )
-
-    # We add the creating topic to the reservation
-    provision.reservations.add(reservation)
-    provision.save()
-
-    # Signal Broadcasting to Channel Layer for Persistens
-    MyProvisionsEvent.broadcast({"action": "created", "data": provision.id}, [f"provisions_user_{context.user}"])
-    ProvisionEventSubscription.broadcast({"action": "updated", "data": reservation.id}, [f"provision_{reservation.reference}"])
-
-    if template.provider.active:
-        log_to_reservation(reservation.reference, "Provider is active we are sending it to the Provider", level=LogLevel.INFO)
-        set_reservation_status(reservation.reference, ReservationStatus.PROVIDING)
-
-        provide_message = BouncedProvideMessage(data= {
-                    "template": provision.template.id,
-                    "params": provision.params,
-                },
-                meta= {
-                    "reference": provision.reference,
-                    "extensions": provision.extensions,
-                    "token": provision.context
-        })
-    
-        return f"provision_in_{provision.template.provider.unique}", provide_message
-
-    else:
-        log_message = f"App {template.provider.name} is currently unactive. We will get notified once it gets connected"
-        log_to_reservation(reservation.reference, log_message, level=LogLevel.INFO)
-        set_reservation_status(reservation.reference, ReservationStatus.WAITING)
-        message = ReserveWaitingMessage(data={
-            "prosvision": provision.id,
-            "message": log_message
-        }, meta={
-            "reference": reference
-        })
-        return callback, message
-         
+    return messages
 
 
 def prepare_messages_for_unreservation(bounced_unreserve: BouncedUnreserveMessage):
@@ -198,20 +179,69 @@ def prepare_messages_for_unreservation(bounced_unreserve: BouncedUnreserveMessag
         e: [description]
 
     """
-    context = bounced_unreserve.meta.token
+    context = bounced_unreserve.meta.context
+    callback = bounced_unreserve.meta.extensions.callback
     res = Reservation.objects.get(reference=bounced_unreserve.data.reservation)
-    if context.user != res.creator_id and "admin" not in context.roles: raise DeniedError("Only the user that created the Reservation or an admin can unreserve his pods") 
+    if context.user != res.creator.email and "admin" not in context.roles: raise DeniedError("Only the user that created the Reservation or an admin can unreserve his pods") 
     set_reservation_status(res.reference, ReservationStatus.CANCELING)
 
     messages= []
+    requires_unreservation = False
+
     for provision in res.provisions.all():
         if provision.status == ProvisionStatus.ACTIVE:
             log_to_reservation(res.reference, f"Sending Unreservation to Topic {provision.unique}")
             channel = f"reservations_in_{provision.unique}"
             messages.append((channel, bounced_unreserve))
+            requires_unreservation = True
         else:
             log_to_reservation(res.reference, f"Topic {provision.unique} is not currently active. Unreserving")
             provision.reservations.remove(res)
+
+    if not requires_unreservation:
+        log_to_reservation(res.reference, f"No active Topics need cancellation. We can shutdown", level=LogLevel.INFO)
+        set_reservation_status(res.reference, ReservationStatus.CANCELLED)
+        unreserve_done = UnreserveDoneMessage(data={
+            "reservation": bounced_unreserve.data.reservation
+        },
+        meta = {
+            "reference": bounced_unreserve.meta.reference,
+        }
+        )
+
+        messages.append((callback, unreserve_done))
+
+    return messages
+
+
+def prepare_messages_for_unassignment(bounced_unassign: BouncedUnassignMessage):
+    """Checks if the Topic is still active
+
+    Args:
+        bounced_unreserve (BouncedUnreserveMessage): [description]
+
+    Raises:
+        e: [description]
+
+    """
+    context = bounced_unassign.meta.context
+
+    callback = bounced_unassign.meta.extensions.callback
+    ass = Assignation.objects.get(reference=bounced_unassign.data.assignation)
+    if context.user != ass.creator.email and "admin" not in context.roles: raise DeniedError("Only the user that created the Assignment or an admin can unassign") 
+    log_to_assignation(ass.reference, "Currently is being cancelled", level=LogLevel.INFO)
+    messages= []
+
+    if ass.reservation.status in [ReservationStatus.ENDED, ReservationStatus.CANCELLED]:
+        set_assignation_status(ass.reference, AssignationStatus.CANCELLED)
+        log_to_assignation(ass.reference, f"Was automatically cancelled because Reservation was in State {ass.reservation.status}", level=LogLevel.INFO)
+        messages.append((callback,UnassignDoneMessage(data={"assignation": ass.reference}, meta={"reference": bounced_unassign.meta.reference})))
+
+    else:
+        set_assignation_status(ass.reference, AssignationStatus.CANCELING)
+        log_to_assignation(ass.reference, "Currently is being cancelled by sending to reservation", level=LogLevel.INFO)
+        channel = f"assignments_in_{ass.reservation.channel}"
+        messages.append((channel, bounced_unassign))
 
     return messages
 
@@ -227,10 +257,11 @@ def prepare_messages_for_assignment(bounced_assign: BouncedAssignMessage):
 
     """
     reservation = bounced_assign.data.reservation
+    callback = bounced_assign.meta.extensions.callback
     reference = bounced_assign.meta.reference
-    context = bounced_assign.meta.token
+    context = bounced_assign.meta.context
     res = Reservation.objects.get(reference=reservation)
-    if context.user != res.creator_id and "admin" not in context.roles: raise DeniedError("Only the user that created the Reservation or an admin can assign to it") 
+    if context.user != res.creator.email and "admin" not in context.roles: raise DeniedError("Only the user that created the Reservation or an admin can assign to it") 
     
     messages= []
     if res.status == ReservationStatus.ACTIVE:
@@ -239,10 +270,16 @@ def prepare_messages_for_assignment(bounced_assign: BouncedAssignMessage):
 
     else:
         set_assignation_status(reference, AssignationStatus.DENIED)
+        assign_critical = AssignCriticalMessage(data={
+            "type": "DeniedError",
+            "message": "Assignment was denied"
+        },meta={
+            "reference": bounced_assign.meta.reference
+        })
+
+        messages.append((callback, assign_critical))
 
     return messages
-
-
 
 
 
@@ -259,20 +296,20 @@ def prepare_messages_for_unprovision(bounced_unprovide: BouncedUnprovideMessage)
     """
     provision_reference = bounced_unprovide.data.provision
     reference = bounced_unprovide.meta.reference
-    context = bounced_unprovide.meta.token
+    context = bounced_unprovide.meta.context
     prov = Provision.objects.get(reference=provision_reference)
-    if context.user != prov.creator_id and "admin" not in context.roles: raise DeniedError("Only the user that created the Reservation or an admin can unreserve his pods") 
+    if context.user != prov.creator.email and "admin" not in context.roles: raise DeniedError("Only the user that created the Reservation or an admin can unreserve his pods") 
     
     messages= []
     if prov.status == ProvisionStatus.ACTIVE:
         set_provision_status(prov.reference, ProvisionStatus.CANCELING)
-        forwarded_message = BouncedUnprovideMessage(data={"provision": provision_reference}, meta={"reference": reference, "token": context})
+        forwarded_message = BouncedUnprovideMessage(data={"provision": provision_reference}, meta={"reference": reference, "context": context})
         messages.append((f"provision_in_{prov.template.provider.unique}", forwarded_message))
 
     else:
         set_provision_status(prov.reference, ProvisionStatus.CANCELLED)
         if bounced_unprovide.meta.extensions.callback:
-            unprovide_done_message = UnprovideDoneMessage(data={"provision": provision_reference}, meta={"reference": reference, "token": context})
+            unprovide_done_message = UnprovideDoneMessage(data={"provision": provision_reference}, meta={"reference": reference, "context": context})
             messages.append((bounced_unprovide.meta.extensions.callback, unprovide_done_message))
 
     return messages
@@ -303,7 +340,6 @@ class ReserverRabbit(BaseHare):
         await self.channel.basic_consume(self.bounced_reserve_in.queue, self.on_bounced_reserve_in)
         await self.channel.basic_consume(self.bounced_unreserve_in.queue, self.on_bounced_unreserve_in)
         await self.channel.basic_consume(self.bounced_unprovide_in.queue, self.on_bounced_unprovide_in)
-        await self.channel.basic_consume(self.unreserve_done_in.queue, self.on_unreserve_done_in)
         await self.channel.basic_consume(self.bounced_assign_in.queue, self.on_bounced_assign_in)
         await self.channel.basic_consume(self.bounced_unassign_in.queue, self.on_bounced_unassign_in)
 
@@ -329,7 +365,7 @@ class ReserverRabbit(BaseHare):
 
 
     async def log_to_assignation(self, reference, message, level = LogLevel.INFO):
-        await log_to_assignation(reference, message, level=level)
+        await sync_to_async(log_to_assignation)(reference, message, level=level)
 
 
     async def set_reservation_status(self, reference, status):
@@ -355,7 +391,7 @@ class ReserverRabbit(BaseHare):
 
             reference = bounced_reserve.meta.reference
             params = bounced_reserve.data.params
-            context = bounced_reserve.meta.token
+            context = bounced_reserve.meta.context
             logCallback = bounced_reserve.meta.extensions.progress
             
             
@@ -366,15 +402,9 @@ class ReserverRabbit(BaseHare):
 
             try:
 
-                try:
-                    channel, message = await sync_to_async(find_topic_for_bounced_reserve)(bounced_reserve)
-                    await self.forward(message, channel)
-
-                except TemplateNotProvided as e:
-                    if params.auto_provide != True: raise e
-                    
-                    channel, message = await sync_to_async(provide_topic_for_reservation)(bounced_reserve)
-                    await self.forward(message, channel)
+                messages = await sync_to_async(prepare_messages_for_reservation)(bounced_reserve)
+                for channel, message in messages: 
+                    if channel: await self.forward(message, channel)
 
 
             except ProtocolException as e:
@@ -403,35 +433,21 @@ class ReserverRabbit(BaseHare):
     async def on_bounced_unreserve_in(self, bounced_unreserve: BouncedUnreserveMessage, aiomessage: aiormq.abc.DeliveredMessage):
         try:
 
-            logger.info(f"Received Bounced Reserve {str(aiomessage.body.decode())} {bounced_reserve}")
+            logger.info(f"Received Bounced Unreserve {str(aiomessage.body.decode())} {bounced_reserve}")
 
             reference = bounced_unreserve.meta.reference
             callback = bounced_unreserve.meta.extensions.callback
             reservation = bounced_unreserve.data.reservation
-            context = bounced_unreserve.meta.token
+            context = bounced_unreserve.meta.context
 
             await self.log_to_reservation(reservation, f"Unreserve Request received", level=LogLevel.INFO)
 
             try:
                 messages = await sync_to_async(prepare_messages_for_unreservation)(bounced_unreserve)
+                for channel, message in messages: 
+                    print(channel, message)
+                    if channel: await self.forward(message, channel)
 
-                if len(messages) > 0:
-                    for channel, message in messages: 
-                        await self.forward(message, channel)
-
-                else:
-                    await sync_to_async(log_to_reservation)(reservation, f"No active Topics need cancellation. We can shutdown", level=LogLevel.INFO)
-                    await sync_to_async(set_reservation_status)(reservation, ReservationStatus.CANCELLED)
-                    
-                    unreserve_done = UnreserveDoneMessage(data={
-                        "reservation": bounced_unreserve.data.reservation
-                    },
-                    meta = {
-                        "reference": bounced_unreserve.meta.reference,
-                        "extensions": bounced_unreserve.meta.extensions,
-                    }
-                    )
-                    await self.forward(unreserve_done, callback)
             
             except ProtocolException as e:
                 logger.exception(e)
@@ -463,7 +479,7 @@ class ReserverRabbit(BaseHare):
             reference = bounced_unreserve.meta.reference
             callback = bounced_unreserve.meta.extensions.callback
             provision = bounced_unreserve.data.provision
-            context = bounced_unreserve.meta.token
+            context = bounced_unreserve.meta.context
 
             await self.log_to_provision(provision, f"Unprovide Request received", level=LogLevel.INFO)
 
@@ -495,39 +511,6 @@ class ReserverRabbit(BaseHare):
             if callback: await self.forward(exception, callback)
 
 
-    @UnreserveDoneMessage.unwrapped_message
-    async def on_unreserve_done_in(self, unreserve_done: UnreserveDoneMessage, message: aiormq.abc.DeliveredMessage):
-        logger.info(f"Received Bounced Unreserve Done {str(message.body.decode())}")
-
-        reservation = unreserve_done.data.reservation
-        reference = unreserve_done.meta.reference
-        callback = unreserve_done.meta.extensions.callback
-    
-        await self.log_to_reservation(reservation, f"Unreservation was acknowledged by Pod!", level=LogLevel.INFO)
-
-        try:
-            await self.forward(unreserve_done, callback)
-            
-            unprovision, provider = await get_unprovision_to_cause(unreserve_done)
-
-            logger.info(f'Finally we can unprovide what we provided before')
-            if unprovision is not None:
-                await self.log_to_reservation(reservation, f"We can cause an Unprovision for this pod.. Causing Unprovide (not waiting for it)", level=LogLevel.INFO)
-                await self.forward(unprovision, f"unprovision_in_{provider.unique}") #TODO: Should we do this before deleting the reservation?
-            
-            
-            await end_reservation(unreserve_done.data.reservation)
-            await self.log_to_reservation(reservation, f"Sucessfully Unprovided this", level=LogLevel.INFO)
-
-        except Exception as e:
-            logger.error(e)
-            exception = ExceptionMessage.fromException(e, reference)
-            await self.log_to_reservation(reservation, f"Protocol Error on Unreservation.. Done Processment", level=LogLevel.ERROR)
-            await self.forward(exception, callback)
-
-
-        await message.channel.basic_ack(message.delivery.delivery_tag)
-
     @BouncedAssignMessage.unwrapped_message
     async def on_bounced_assign_in(self, bounced_assign: BouncedAssignMessage, aiomessage: aiormq.abc.DeliveredMessage):
         logger.info(f"Received Bounced Assign {str(aiomessage.body.decode())}")
@@ -554,39 +537,21 @@ class ReserverRabbit(BaseHare):
 
 
     @BouncedUnassignMessage.unwrapped_message
-    async def on_bounced_unassign_in(self, bounced_unassign: BouncedUnassignMessage, message: aiormq.abc.DeliveredMessage):
-        logger.info(f"Received Bounced Unassign {str(message.body.decode())}")
+    async def on_bounced_unassign_in(self, bounced_unassign: BouncedUnassignMessage, aiomessage: aiormq.abc.DeliveredMessage):
+        logger.info(f"Received Bounced Unassign {str(aiomessage.body.decode())}")
 
         reference = bounced_unassign.meta.reference
         assignation = bounced_unassign.data.assignation
         callback =  bounced_unassign.meta.extensions.callback
 
-        await self.log_to_assignation(assignation, f"Unreserve Request received", level=LogLevel.INFO)
+        await self.log_to_assignation(assignation, f"Unassignment Request received", level=LogLevel.INFO)
 
         try:
-            topic = await find_topic_for_unassignation(bounced_unassign)
+            messages = await sync_to_async(prepare_messages_for_unassignment)(bounced_unassign)
 
-            if topic: 
-                # We first need to unprovide this Reservation
-                await self.log_to_assignation(assignation, f"Sending unassignation to Pod", level=LogLevel.INFO)
-                await self.forward(bounced_unassign, str(topic))
-            else:
-                
-                await end_assignation(assignation)
-
-                unreserve_done = UnassignDoneMessage(data={
-                    "assignation": bounced_unassign.data.assignation
-                },
-                meta = {
-                    "reference": bounced_unassign.meta.reference,
-                    "extensions": bounced_unassign.meta.extensions,
-                }
-                )
-
-                await self.log_to_assignation(assignation, f"Unassignation could not be delived to pod because pod is no longer active.. Probably it disconnected", level=LogLevel.ERROR)
-                await self.forward(unreserve_done, callback)
-
-
+            for channel, message in messages: 
+                logger.info(f"Sending {message} to {channel}")
+                await self.forward(message, channel)
                            
         except Exception as e:
             logger.error(e)
@@ -595,7 +560,7 @@ class ReserverRabbit(BaseHare):
             await self.forward(exception, callback)
 
         # This should then expand this to an assignation message that can be delivered to the Providers
-        await message.channel.basic_ack(message.delivery.delivery_tag)
+        await aiomessage.channel.basic_ack(aiomessage.delivery.delivery_tag)
 
 
 

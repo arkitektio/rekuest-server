@@ -1,7 +1,8 @@
 # chat/consumers.py
 import asyncio
+from delt.messages.postman.provide.provide import ProvideMetaExtensionsModel
 from typing import List, Tuple
-from facade.utils import log_to_assignation, log_to_provision, log_to_reservation, set_assignation_status, set_provision_status, set_reservation_status
+from facade.utils import log_to_assignation, log_to_provision, log_to_reservation, set_assignation_status, set_provision_status, set_reservation_status, transition_provision, transition_reservation
 
 from delt.messages.types import BOUNCED_FORWARDED_ASSIGN, BOUNCED_FORWARDED_RESERVE, RESERVE_DONE, UNRESERVE_DONE
 import json
@@ -35,18 +36,8 @@ def activateProvision(provision_reference) -> Tuple[str, List[str],List[Tuple[st
     channels = []
     for res in provision.reservations.all():
         console.log(f"[green] Listening to {res}")
-        log_to_reservation(res.reference, f"Listening now to {provision.unique}", level=LogLevel.INFO)
-        set_reservation_status(res.reference, ReservationStatus.ACTIVE)
-        
-        message = ReserveActiveMessage(data={
-            "provision": provision.id
-            },
-            meta={
-                "reference": res.reference,
-            }
-        )
-
-        messages.append((res.callback, message))
+        messages.append(log_to_reservation(res.reference, f"Listening now to {provision.unique}", level=LogLevel.INFO))
+        messages += transition_reservation(res.reference, ReservationStatus.ACTIVE)
         channels.append(f"assignments_in_{res.channel}")
 
     return f"reservations_in_{provision.unique}", channels, messages
@@ -66,17 +57,8 @@ def cancelProvision(provision_reference) -> Tuple[List[str],List[Tuple[str, Mess
     messages = []
     for res in provision.reservations.all():
         console.log(f"[yellow] Disconnecting Reservation {res}")
-        log_to_reservation(res.reference, f"Provision cancelled shutdown {provision.unique}", level=LogLevel.WARN)
-        set_reservation_status(res.reference, ReservationStatus.REROUTING)
-        
-        message = ReserveCriticalMessage(data={
-            "message": f"Provision cancelled shutdown {provision.unique}"
-            },
-            meta={
-                "reference": res.reference,
-            }
-        )
-        messages.append((res.callback, message))
+        messages.append(log_to_reservation(res.reference, f"Provision cancelled shutdown {provision.unique}", level=LogLevel.WARN))
+        messages += transition_reservation(res.reference, ReservationStatus.REROUTING)
         provision.reservations.remove(res)
 
     return messages
@@ -95,20 +77,10 @@ def killProvision(provision_reference) -> Tuple[List[str],List[Tuple[str, Messag
     messages = []
     for res in provision.reservations.all():
         console.log(f"[yellow] Disconnecting Reservation {res}")
-        log_to_reservation(res.reference, f"Lost Connection to {provision.unique}", level=LogLevel.WARN)
-        set_reservation_status(res.reference, ReservationStatus.ERROR)
+        messages.append(log_to_reservation(res.reference, f"Lost Connection to {provision.unique}", level=LogLevel.WARN))
+        messages += transition_reservation(res.reference, ReservationStatus.ERROR)
         
-        message = ReserveCriticalMessage(data={
-            "message": f"Lost Connection to {provision.unique}"
-            },
-            meta={
-                "reference": res.reference,
-            }
-        )
-        messages.append((res.callback, message))
         # provision.reservations.remove(res) TODO: Unlink only if we can link anew
-
-    
 
     return messages
 
@@ -128,20 +100,12 @@ def addReservationToProvision(provision_reference, reservation_reference) -> Tup
 
     provision.reservations.add(reservation)
     provision.save()
-
+    messages = []
     console.log(f"[green] Listening to {reservation}")
-    log_to_reservation(reservation.reference, f"Listening now to {provision.unique}", level=LogLevel.INFO)
-    set_reservation_status(reservation.reference, ReservationStatus.ACTIVE)
+    messages.append(log_to_reservation(reservation.reference, f"Listening now to {provision.unique}", level=LogLevel.INFO))
+    messages += transition_reservation(reservation.reference, ReservationStatus.ACTIVE)
         
-    message = ReserveActiveMessage(data={
-        "provision": provision.id
-        },
-        meta={
-            "reference": reservation.reference,
-        }
-    )
-
-    return f"assignments_in_{reservation.channel}", reservation.callback, message
+    return f"assignments_in_{reservation.channel}", messages
 
 
 def deleteReservationFromProvision(provision_reference, reservation_reference) -> Tuple[str,str, MessageModel]:
@@ -159,15 +123,20 @@ def deleteReservationFromProvision(provision_reference, reservation_reference) -
     provision.reservations.remove(reservation)
     provision.save()
 
+    messages = []
+
     console.log(f"[yellow] Removing {reservation}")
-    log_to_reservation(reservation.reference, f"Stopped Listening to {provision.unique}", level=LogLevel.INFO)
+    messages.append(log_to_reservation(reservation.reference, f"Stopped Listening to {provision.unique}", level=LogLevel.INFO))
 
     # If all topic links for this reservation are set we can just say bye bye
     if reservation.provisions.count() == 0:
-        set_reservation_status(reservation.reference, ReservationStatus.CANCELLED)
-        return True
+        messages += transition_reservation(reservation.reference, ReservationStatus.CANCELLED)
+        
+    # TODO: Find a way to automatically cancel a Provision if that provisions should be killed, maybe by sending again an unprovide_request here?
+    #if provision.reservations.count() == 0:
+    #    messages += transition_provision(provision.reference, ProvisionStatus.ENDED)
 
-    return False
+    return messages
 
 
 
@@ -184,11 +153,14 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
         AssignCancelledMessage: lambda cls: cls.on_assign_cancelled,
 
 
-        UnassignCriticalMessage: lambda cls: cls.dummy_test,
-        UnassignDoneMessage: lambda cls: cls.dummy_test,
-        UnassignLogMessage: lambda cls: cls.dummy_test,
+        UnassignCriticalMessage: lambda cls: cls.on_unassign_critical,
+        UnassignDoneMessage: lambda cls: cls.on_unassign_done,
+        UnassignLogMessage: lambda cls: cls.on_unassign_log,
 
         ProvideDoneMessage: lambda cls: cls.on_provide_done,
+        ProvideCriticalMessage: lambda cls: cls.on_provide_critical,
+        ProvideLogMessage: lambda cls: cls.on_provide_log,
+        ProvideTransitionMessage: lambda cls: cls.on_provide_transition,
 
         UnprovideDoneMessage: lambda cls: cls.on_unprovide_done,
         UnprovideLogMessage: lambda cls: cls.on_unprovide_log,
@@ -238,20 +210,23 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
         
         if isinstance(message, BouncedReserveMessage):
             reservation_reference = message.meta.reference
-            channel, message_callback, res_active_message = await sync_to_async(addReservationToProvision)(provision_reference, reservation_reference)
+            channel, messages = await sync_to_async(addReservationToProvision)(provision_reference, reservation_reference)
             # Set up connectiongs
             assert provision_reference in self.provision_link_map, "Topic is not provided"
             assign_queue = await self.channel.queue_declare(channel)
+
             await self.channel.basic_consume(assign_queue.queue, lambda x: self.on_assign_related(provision_reference, x))
             self.provision_link_map[provision_reference].append(assign_queue)
-            await self.forward(res_active_message, message_callback)
+            
+            for channel, message in messages:
+                await self.forward(message, channel)
 
         elif isinstance(message, BouncedUnreserveMessage):
              reservation_reference = message.data.reservation
-             all_done = await sync_to_async(deleteReservationFromProvision)(provision_reference, reservation_reference)
-             if all_done:
-                done_message = UnreserveDoneMessage(data=message.data, meta={"reference": message.meta.reference})
-                if message.meta.extensions.callback: await self.forward(done_message, message.meta.extensions.callback)
+             messages = await sync_to_async(deleteReservationFromProvision)(provision_reference, reservation_reference)
+
+             for channel, message in messages:
+                await self.forward(message, channel)
         
         else:
             logger.exception(Exception("This message is not what we expeceted here"))
@@ -275,30 +250,59 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
 
 
     async def on_assign_critical(self, assign_critical: AssignCriticalMessage):
-        await sync_to_async(log_to_assignation)(assign_critical.meta.reference, assign_critical.data.type + " : " + assign_critical.data.message, level=LogLevel.CRITICAL)
-        await sync_to_async(set_assignation_status)(assign_critical.meta.reference, AssignationStatus.CRITICAL)
+        if assign_critical.meta.extensions.persist:
+            await sync_to_async(log_to_assignation)(assign_critical.meta.reference, assign_critical.data.type + " : " + assign_critical.data.message, level=LogLevel.CRITICAL)
+            await sync_to_async(set_assignation_status)(assign_critical.meta.reference, AssignationStatus.CRITICAL)
+        await self.forward(assign_critical, assign_critical.meta.extensions.callback)
+
 
     async def on_assign_yields(self, assign_yield: AssignYieldsMessage):
-        await sync_to_async(log_to_assignation)(assign_yield.meta.reference, f"Yielded {assign_yield.data.returns}", level=LogLevel.INFO)
+        if assign_yield.meta.extensions.persist:
+            await sync_to_async(log_to_assignation)(assign_yield.meta.reference, f"Yielded {assign_yield.data.returns}", level=LogLevel.INFO)
         await self.forward(assign_yield, assign_yield.meta.extensions.callback)
 
     async def on_assign_cancelled(self, assign_cancelled: AssignCancelledMessage):
-        await sync_to_async(log_to_assignation)(assign_cancelled.meta.reference, f"Cancelled on Consumer Side", level=LogLevel.CRITICAL)
+        if assign_cancelled.meta.extensions.persist:
+            await sync_to_async(log_to_assignation)(assign_cancelled.meta.reference, f"Cancelled on Consumer Side", level=LogLevel.CRITICAL)
         await self.forward(assign_cancelled, assign_cancelled.meta.extensions.callback)
 
     async def on_assign_return(self, assign_return: AssignReturnMessage):
-        await sync_to_async(log_to_assignation)(assign_return.meta.reference, f"Returned {assign_return.data.returns}", level=LogLevel.INFO)
-        await sync_to_async(set_assignation_status)(assign_return.meta.reference, AssignationStatus.DONE)
+        if assign_return.meta.extensions.persist:
+            await sync_to_async(log_to_assignation)(assign_return.meta.reference, f"Returned {assign_return.data.returns}", level=LogLevel.INFO)
+            await sync_to_async(set_assignation_status)(assign_return.meta.reference, AssignationStatus.DONE)
         await self.forward(assign_return, assign_return.meta.extensions.callback)
 
     async def on_assign_done(self, assign_done: AssignDoneMessage):
-        await sync_to_async(log_to_assignation)(assign_done.meta.reference, f"Assignation Done", level=LogLevel.INFO)
-        await sync_to_async(set_assignation_status)(assign_done.meta.reference, AssignationStatus.DONE)
+        if assign_done.meta.extensions.persist:
+            await sync_to_async(log_to_assignation)(assign_done.meta.reference, f"Assignation Done", level=LogLevel.INFO)
+            await sync_to_async(set_assignation_status)(assign_done.meta.reference, AssignationStatus.DONE)
         await self.forward(assign_done, assign_done.meta.extensions.callback)
 
     async def on_assign_log(self, assign_log: AssignLogMessage):
-        await sync_to_async(log_to_assignation)(assign_log.meta.reference, assign_log.data.message, level=assign_log.data.level)
+        if assign_log.meta.extensions.persist:
+            await sync_to_async(log_to_assignation)(assign_log.meta.reference, assign_log.data.message, level=assign_log.data.level)
         await self.forward(assign_log, assign_log.meta.extensions.progress)
+
+    async def on_provide_log(self, provide_log: ProvideLogMessage):
+        logger.error(provide_log)
+        await sync_to_async(log_to_provision)(provide_log.meta.reference, provide_log.data.message, level=provide_log.data.level)
+        await self.forward(provide_log, provide_log.meta.extensions.progress)
+
+
+    async def on_provide_transition(self, provide_transition: ProvideTransitionMessage):
+        await sync_to_async(log_to_provision)(provide_transition.meta.reference, f"Transition to {provide_transition.data.state}", level=LogLevel.CRITICAL)
+        messages = await sync_to_async(transition_provision)(provide_transition.meta.reference, provide_transition.data.state)
+        for channel, message in messages:
+            console.log(f"Sending {message} to {channel}")
+            await self.forward(message, channel)
+        
+        await self.forward(provide_transition, provide_transition.meta.extensions.callback)
+
+    async def on_provide_critical(self, provide_critical: ProvideCriticalMessage):
+        logger.error(provide_critical)
+        await sync_to_async(log_to_provision)(provide_critical.meta.reference, provide_critical.data.message, level=LogLevel.CRITICAL)
+        await sync_to_async(set_provision_status)(provide_critical.meta.reference, ProvisionStatus.CRITICAL)
+        await self.forward(provide_critical, provide_critical.meta.extensions.callback)
 
     async def on_provide_done(self, provide_done: ProvideDoneMessage):
         logger.error("Done here")
@@ -334,7 +338,7 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
         for channel, message in messages:
             if channel: await self.forward(message, channel)
 
-        if unprovide_done.meta.extensions.callback : await self.forward(unprovide_done, unprovide_done.meta.extensions.callback)
+        if unprovide_done.meta.extensions: await self.forward(unprovide_done, unprovide_done.meta.extensions.callback)
         logger.info(f"Unproviding Done {unprovide_done}")  
 
 
@@ -350,7 +354,10 @@ class HostConsumer(BaseConsumer): #TODO: Seperate that bitch
         console.log(f"Providing Done {provide_critical}", style="blink")  
 
     async def on_unassign_done(self, assign_return: UnassignDoneMessage):
-        print("oisdnoisndofinsdo9finh")
+        logger.error(assign_return)
+        if assign_return.meta.extensions.persist:
+            await sync_to_async(log_to_assignation)(assign_return.data.assignation, "Unassignment Done", level=LogLevel.INFO)
+            await sync_to_async(set_assignation_status)(assign_return.data.assignation, AssignationStatus.CANCELLED)
         await self.forward(assign_return, assign_return.meta.extensions.callback)
 
     async def on_unassign_progress(self, assign_return: UnassignLogMessage):

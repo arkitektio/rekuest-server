@@ -1,6 +1,7 @@
 FROM python:3.8
 LABEL maintainer="jhnnsrs@gmail.com"
 
+
 # Install Minimal Dependencies for Django
 ADD requirements.txt /tmp
 WORKDIR /tmp
@@ -11,7 +12,6 @@ RUN mkdir /workspace
 ADD . /workspace
 WORKDIR /workspace
 
-CMD python manage.py
-
+CMD bash run.sh
 
 

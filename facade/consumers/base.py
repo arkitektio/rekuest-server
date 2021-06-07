@@ -33,12 +33,17 @@ class BaseConsumer(AsyncWebsocketConsumer):
             routing_key ([type]): The Routing Key (Topic or somethign)
         """
 
-        await self.channel.basic_publish(
-                message.to_message(), routing_key=routing_key,
-                properties=aiormq.spec.Basic.Properties(
-                    correlation_id=message.meta.reference
-        )
-        )
+        if routing_key:
+
+            await self.channel.basic_publish(
+                    message.to_message(), routing_key=routing_key,
+                    properties=aiormq.spec.Basic.Properties(
+                        correlation_id=message.meta.reference
+            )
+            )
+        
+        else:
+            logger.error(f"NO ROUTING KEY SPECIFIED {message}")
 
 
     async def receive(self, text_data):

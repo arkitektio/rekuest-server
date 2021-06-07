@@ -1,8 +1,10 @@
+from facade.consumers.postman import create_context_from_bounced
 from facade.subscriptions.reservation import MyReservationsEvent
 from facade.workers.gateway import GatewayConsumer
 import uuid
 from delt.messages.postman.reserve.bounced_reserve import BouncedReserveMessage
 from facade import types
+from facade.enums import ReservationStatus
 from facade.models import  Reservation
 from balder.types import BalderMutation
 from graphene.types.generic import GenericScalar
@@ -20,7 +22,8 @@ class ReserveMutation(BalderMutation):
         node = graphene.ID(description="The Base URL for the Datapoint you want to add", required=False)
         template = graphene.ID(description="The Base URL for the Datapoint you want to add", required=False)
         reference = graphene.String(description="The Base URL for the Datapoint you want to add", required=False)
-        params = GenericScalar(description="Additional Params")
+        title = graphene.String(description="A cleartext shorthand title", required=False)
+        params = graphene.Argument(types.ReserveParamsInput, description="Additional Params", required=False)
 
 
     class Meta:
@@ -29,7 +32,7 @@ class ReserveMutation(BalderMutation):
 
     
     @bounced(only_jwt=True)
-    def mutate(root, info, node=None, template = None, params={}, reference=None):
+    def mutate(root, info, node=None, template = None, params={}, title=None, reference=None):
         reference = reference or str(uuid.uuid4())
         bounce = info.context.bounced
 
@@ -37,12 +40,9 @@ class ReserveMutation(BalderMutation):
             "node_id": node,
             "template_id": template,
             "params": params,
-            "context": {
-                "roles": bounce.roles,
-                "scopes": bounce.scopes,
-                "user": bounce.user.id if bounce.user else None,
-                "app": bounce.app.id if bounce.app else None
-            },
+            "status": ReservationStatus.ROUTING,
+            "title": title,
+            "context": create_context_from_bounced(bounce),
             "reference": reference,
             "creator": bounce.user,
             "app": bounce.app,
@@ -64,12 +64,7 @@ class ReserveMutation(BalderMutation):
                 "callback": "not-set",
                 "progress": "not-set",
             },
-            "token": {
-                "roles": bounce.roles,
-                "scopes": bounce.scopes,
-                "user": bounce.user.id if bounce.user else None,
-                "app": bounce.app.id if bounce.app else None
-            }
+            "context": create_context_from_bounced(bounce)
         })
 
         GatewayConsumer.send(bounced)

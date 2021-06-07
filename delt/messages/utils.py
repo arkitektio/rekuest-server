@@ -1,4 +1,3 @@
-from .host import DeActivatePodMessage, ActivatePodMessage
 from .postman.assign import *
 from .base import MessageModel
 from .types import *
@@ -16,6 +15,7 @@ registry = {
     BOUNCED_PROVIDE: BouncedProvideMessage,
     PROVIDE_CRITICAL: ProvideCriticalMessage,
     PROVIDE_LOG: ProvideLogMessage,
+    PROVIDE_TRANSITION: ProvideTransitionMessage,
     PROVIDE: ProvideMessage,
 
     UNPROVIDE_DONE:  UnprovideDoneMessage,
@@ -33,6 +33,7 @@ registry = {
     RESERVE_DONE: ReserveDoneMessage,
     RESERVE_ACTIVE: ReserveActiveMessage,
     RESERVE_WAITING: ReserveWaitingMessage,
+    RESERVE_TRANSITION: ReserveTransitionMessage,
 
     UNRESERVE: UnreserveMessage,
     BOUNCED_UNRESERVE: BouncedUnreserveMessage,
@@ -55,10 +56,6 @@ registry = {
     UNASSIGN_CRITICAL: UnassignCriticalMessage,
     UNASSIGN_LOG: UnassignLogMessage,
     UNASSIGN_DONE: UnassignDoneMessage,
-
-    ACTIVATE_POD: ActivatePodMessage,
-    DEACTIVATE_POD: DeActivatePodMessage,
-
     EXCEPTION: ExceptionMessage
 }
 

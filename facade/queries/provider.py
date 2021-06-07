@@ -1,3 +1,4 @@
+from mars.names import generate_random_name
 from facade.filters import PodFilter, ProviderFilter
 from typing_extensions import Annotated
 from balder.types import BalderQuery
@@ -22,7 +23,7 @@ class ProviderDetailQuery(BalderQuery):
         operation = "provider"
 
 
-
+generate_random_name
 class Providers(BalderQuery):
 
     class Meta:

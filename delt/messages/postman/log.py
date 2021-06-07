@@ -10,6 +10,7 @@ class LogLevel(str, Enum):
     ERROR = "ERROR"
     CRITICAL = "CRITICAL"
     WARNING = "WARNING"
+    WARN = "WARN"
 
 
 class LogDataModel(MessageDataModel):

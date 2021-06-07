@@ -1,4 +1,4 @@
-from ....messages.generics import Token
+from ....messages.generics import Context
 from pydantic.main import BaseModel
 from .params import ReserveParams
 from ....messages.types import  BOUNCED_FORWARDED_RESERVE
@@ -13,7 +13,7 @@ class MetaExtensionsModel(MessageMetaExtensionsModel):
 class MetaModel(MessageMetaModel):
     type: str = BOUNCED_FORWARDED_RESERVE
     extensions: Optional[MetaExtensionsModel]
-    token: Token
+    context: Context
 
 class DataModel(MessageDataModel):
     node: Optional[str] #TODO: Maybe not optional

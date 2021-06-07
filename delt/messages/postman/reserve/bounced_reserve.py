@@ -1,5 +1,5 @@
 from .params import ReserveParams
-from ....messages.generics import Token
+from ....messages.generics import Context
 from ....messages.types import  BOUNCED_RESERVE
 from ....messages.base import MessageDataModel, MessageMetaExtensionsModel, MessageMetaModel, MessageModel
 from typing import List, Optional
@@ -12,11 +12,12 @@ class MetaExtensionsModel(MessageMetaExtensionsModel):
 class MetaModel(MessageMetaModel):
     type: str = BOUNCED_RESERVE
     extensions: Optional[MetaExtensionsModel]
-    token: Token
+    context: Context
 
 class DataModel(MessageDataModel):
     node: Optional[str] #TODO: Maybe not optional
     template: Optional[str]
+    provision: Optional[str]
     params: Optional[ReserveParams]
 
 
