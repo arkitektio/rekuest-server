@@ -3,18 +3,16 @@ channels>=2.4.0
 channels_redis
 django-registration-redux
 django-extensions
-
-
 django-oauth-toolkit
 django-cors-headers
 django-filter
 django-taggit
+django-probes
 djangorestframework
 drf-access-policy
 psycopg2
 
-pytest-django
-pytest-asyncio
+
 django-channels-graphql-ws
 django-guardian
 django-avatar
@@ -24,9 +22,6 @@ unflatten
 graphql-core<3,>=2.1.0
 Markdown
 
-# For port provision
-docker
-
 # Testing and Linting
 ptvsd
 pytest-django 
@@ -34,13 +29,24 @@ pytest-asyncio
 pylint
 pylint-django
 
+
 pydantic
 colorlog
 namegenerator
 
 
+# For Health Check Reasons
+django-health-check
+kombu
+redis
+
 pika
+# Async Layer
 aiormq
 pyjwt
-django-health-check
 rich
+
+
+#Deployment
+omegaconf
+gunicorn

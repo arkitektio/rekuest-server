@@ -3,17 +3,19 @@ version: "3.4"
 services:
   arkitekt:
     build: .
-    command: python manage.py runserver 0.0.0.0:8090
+    command: bash run.sh
     ports:
       - 8090:8090
-    volumes:
-      - .:/worskpace:cached
-    env_file:
-      - elements.env
+    depends_on: 
+      - redis
+      - mister
+      - baberl
   baberl:
     image: postgres:12.6-alpine
-    env_file:
-      - elements.env
+    environment: 
+      POSTGRES_DB: hello_baberl
+      POSTGRES_PASSWORD: hello_baberl
+      POSTGRES_USER: hello_baberl
   mister:
     image: jhnnsrs/mister:fancy
     hostname: localhost

@@ -11,10 +11,9 @@ https://docs.djangoproject.com/en/3.1/ref/settings/
 """
 import os
 from pathlib import Path
-from delt.initialize import initialize
+from omegaconf import OmegaConf
 
-
-initialize()
+conf = OmegaConf.load('config.yaml')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -24,76 +23,24 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = '9=9u7c35!*p_h674kv*t^8ntefnf*#)z_h%6$#b(oe=_mwysw+'
+SECRET_KEY = conf.security.secret_key
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = ["*"]
-
-
-ELEMENTS_HOST = "p-tnagerl-lab1"
-ELEMENTS_INWARD = "arkitekt" # Set this to the host you are on
-ELEMENTS_PORT = 8090 # Set this to the host you are on
-
-# Uncomment and re run
-OAUTH2_PROVIDER_APPLICATION_MODEL='oauth2_provider.Application'
-
-
-# S3 Settings
-S3_PUBLIC_DOMAIN = f"{ELEMENTS_HOST}:9000" #TODO: FIx
-AWS_ACCESS_KEY_ID = "weak_access_key"
-AWS_SECRET_ACCESS_KEY = "weak_secret_key"
-AWS_S3_ENDPOINT_URL  = f"http://minio:9000"
-AWS_STORAGE_BUCKET_NAME = "test"
-AWS_S3_URL_PROTOCOL = "http:"
-AWS_S3_FILE_OVERWRITE = False
-AWS_DEFAULT_ACL = None
-AWS_S3_USE_SSL = True
-AWS_S3_SECURE_URLS = False # Should resort to True if using in Production behind TLS
-
-
-# Application definition
-
-DELT = {
-    "INWARD": "elements",
-    "OUTWARD": ELEMENTS_HOST,
-    "PORT": ELEMENTS_PORT,
-    "TYPE": "graphql"
-}
-
-
-
+DEBUG = conf.server.debug
+ALLOWED_HOSTS = conf.server.hosts
+CORS_ORIGIN_ALLOW_ALL = True
 
 HERRE = {
-    "PUBLIC_KEY": """
------BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvIrkAA1Tr8pLRR08xXEs
-zuyi/+QGRQ3J7o5j7B+HJLv2MWppd+fgoPQYc9nOkZcA9Jizsvm0bqcXe/8zdxaU
-z7bA+nq3hxLolO4q4SXRxNuBIcNrfLizFrWku5csO9ZfS4EXQGOGAWsVE1WbSRBC
-gAcOR8eq8gB0ai4UByB/xGlwobz1bkuXd3jGVN2oeCo7gbij/JaMrOSkh9wX/WqZ
-lbrEWEFfgURENACn45Hm4ojjLepw/b2j7ZrHMQxvY1THi6lZ6bp9NdfkzyE6JhZb
-SVOzd/dHy+gLBx2UuvmovVEhhxzwRJYtPdqlOWuUOjO24AlpPv7j+BSY7eGSzYU5
-oQIDAQAB
------END PUBLIC KEY-----""",
-    "KEY_TYPE": "RS256",
-    "ISSUER": "arnheim"
+    "PUBLIC_KEY": conf.herre.public_key,
+    "KEY_TYPE": conf.herre.key_type,
+    "ISSUER": conf.herre.issuer
 }
 
-GRUNNLAG = {
-    "GROUPS": None
-
-}
-
-
-
-EXTENSIONS = [
-    'balder',
-    'facade',
-    "hare"
-]
-
-
+SUPERUSERS = [{
+    "USERNAME": su.username,
+    "EMAIL": su.email,
+    "PASSWORD": su.password
+} for su in conf.security.admins]
 
 
 INSTALLED_APPS = [
@@ -104,15 +51,22 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django_filters',
+    'corsheaders',
     'taggit',
     'channels',
     'health_check',
-    'health_check.db', 
+    'health_check.db',  
+    'health_check.contrib.rabbitmq',          # requires RabbitMQ broker
+    'health_check.contrib.redis', 
     'herre',
+    'django_probes',
     'guardian',
     'graphene_django',
     "rest_framework",
-] + EXTENSIONS
+    'balder',
+    'facade',
+    "hare"
+] 
 
 HEALTH_CHECK = {
     'DISK_USAGE_MAX': 90,  # percent
@@ -121,7 +75,6 @@ HEALTH_CHECK = {
 
 
 MIDDLEWARE = [
-
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -135,7 +88,6 @@ MIDDLEWARE = [
 ]
 
 
-CORS_ORIGIN_ALLOW_ALL = True
 ROOT_URLCONF = 'arkitekt.urls'
 
 
@@ -166,20 +118,27 @@ ASGI_APPLICATION = 'arkitekt.routing.application'
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("POSTGRES_DB"),
-        "USER": os.environ.get("POSTGRES_USER"),
-        "PASSWORD":os.environ.get("POSTGRES_PASSWORD"),
-        "HOST": os.environ.get("POSTGRES_SERVICE_HOST"),
-        "PORT": os.environ.get("POSTGRES_SERVICE_PORT"),
+        "NAME": conf.postgres.db_name,
+        "USER": conf.postgres.user,
+        "PASSWORD": conf.postgres.password,
+        "HOST": conf.postgres.host,
+        "PORT": conf.postgres.port,
     }
 }
+
+
+REDIS_URL = f'redis://{conf.redis.host}:{conf.redis.port}'
+BROKER_URL = f'amqp://{conf.rabbit.username}:{conf.rabbit.password}@{conf.rabbit.host}:{conf.rabbit.port}/{conf.rabbit.vhost}'
+
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CHANNEL_LAYERS = {
     "default": {
         # This example app uses the Redis channel layer implementation channels_redis
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [("redis",6379)],
+            "hosts": [(conf.redis.host,conf.redis.port)],
         },
     },
 }
@@ -231,6 +190,8 @@ STATIC_URL = '/static/'
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "static"),
 ]
+
+STATIC_ROOT = "/var/www/static"
 
 
 LOGGING = {

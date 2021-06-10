@@ -274,9 +274,9 @@ class Reservation(models.Model):
     provisions = models.ManyToManyField(Provision, help_text="The Provisions this reservation connects", related_name="reservations", null=True, blank=True)
     
     # Platform specific Details (non relational Data)
-    params = models.JSONField(default={},help_text="Params for the Policy (including Provider etc..)") 
-    extensions = models.JSONField(default={}, help_text="The Platform extensions")
-    context = models.JSONField(default={},help_text="The Platform context")
+    params = models.JSONField(default=dict,help_text="Params for the Policy (including Provider etc..)") 
+    extensions = models.JSONField(default=dict, help_text="The Platform extensions")
+    context = models.JSONField(default=dict,help_text="The Platform context")
 
     #Status Field
     status = models.CharField(max_length=300, choices=ReservationStatus.choices, default=ReservationStatus.ACTIVE, help_text="Current lifecycle of Reservation")
@@ -306,8 +306,8 @@ class Reservation(models.Model):
 class Assignation(models.Model):
     """ A constant log of a tasks transition through finding a Node, Template and finally Pod , also a store for its results"""
     reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE, help_text="Which reservation are we assigning to", related_name="assignations", blank=True, null=True)
-    extensions = models.JSONField(default={}, help_text="The Platform extensions")
-    context = models.JSONField(default={},help_text="The Platform context")
+    extensions = models.JSONField(default=dict, help_text="The Platform extensions")
+    context = models.JSONField(default=dict,help_text="The Platform context")
 
     # 1. The State of Everything
     args = models.JSONField(blank=True, null=True, help_text="The Args")
