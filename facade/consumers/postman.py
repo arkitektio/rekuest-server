@@ -54,7 +54,7 @@ def create_reservation_from_bouncedreserve(bounced_reserve: BouncedReserveMessag
     res = Reservation.objects.create(**{
             "node_id": bounced_reserve.data.node,
             "template_id": bounced_reserve.data.template,
-            "params": bounced_reserve.data.params.dict(),
+            "params": bounced_reserve.data.params.dict() if bounced_reserve.data.params else {},
             "context": context.dict(),
             "reference": bounced_reserve.meta.reference,
             "causing_provision": Provision.objects.get(reference=bounced_reserve.data.provision) if bounced_reserve.data.provision else None,

@@ -44,6 +44,7 @@ class BalderRegistry:
         mutation = type("Mutation", (MutationBase, ), {**self.mutations, "__doc__": "The root Mutation"}) if self.mutations != {} else None
         subscription = type("Subscription", (SubscriptionBase, ), {**self.subscriptions, "__doc__": "The root Subscriptions"}) if self.subscriptions != {} else None
 
+        print(self.types)
 
         return graphene.Schema(
             query = query,

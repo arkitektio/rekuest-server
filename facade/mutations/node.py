@@ -1,6 +1,6 @@
 from facade.structures.ports.input import ArgPortInput, KwargPortInput, ReturnPortInput
 from facade import types
-from facade.models import Repository, Node
+from facade.models import AppRepository, Repository, Node
 from balder.types import BalderMutation
 from balder.enum import InputEnum
 from facade.enums import NodeType
@@ -24,14 +24,13 @@ class CreateNode(BalderMutation):
         package = graphene.String(description="The Package", required=False)
 
 
-
     class Meta:
         type = types.Node
 
     
     @bounced(anonymous=True)
     def mutate(root, info, package=None, interface=None, description="Not description", args=[], kwargs=[], returns=[], type=None, name="name"):       
-        repository , _ = Repository.objects.update_or_create(app=info.context.bounced.app, user=info.context.bounced.user, defaults= {"name": info.context.bounced.app.name})
+        repository , _ = AppRepository.objects.update_or_create(app=info.context.bounced.app, user=info.context.bounced.user, defaults= {"name": info.context.bounced.app.name})
         
         node, created = Node.objects.update_or_create(package=repository.name, interface=interface, repository=repository, defaults={
             "description": description,

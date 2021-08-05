@@ -157,14 +157,7 @@ def prepare_messages_for_reservation(bounced_reserve: BouncedReserveMessage) -> 
     else:
         log_message = "Attention the App is inactive, please start the App. We are waiting for that! (Message stored in Database)"
         messages.append(log_to_reservation(reservation.reference, log_message, level=LogLevel.WARN, callback=callback))
-        set_reservation_status(reservation.reference, ReservationStatus.WAITING)
-        message = ReserveWaitingMessage(data={
-            "provision": provision.id,
-            "message": log_message
-        }, meta={
-            "reference": reference
-        })
-        messages.append((callback, message))
+        messages += transition_reservation(reservation.reference, ReservationStatus.WAITING)
 
     return messages
 

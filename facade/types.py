@@ -1,5 +1,7 @@
+from facade.enums import RepositoryType
 from django.contrib.auth import get_user_model
-from facade.filters import TemplateFilter, ProvisionFilter
+from graphene_django.types import DjangoObjectType
+from facade.filters import NodesFilter, TemplateFilter, ProvisionFilter
 from balder.fields.filtered import BalderFiltered
 from django.utils.translation import templatize
 from facade.structures.ports.returns.types import ReturnPort
@@ -9,7 +11,7 @@ from facade import models
 from herre.models import HerreApp as HerreAppModel
 from balder.types import BalderObject
 import graphene
-
+from balder.registry import register_type
 
 class ReserveParamsInput(graphene.InputObjectType):
     auto_provide = graphene.Boolean(description="Do you want to autoprovide", required=False)
@@ -48,6 +50,7 @@ class DataPoint(BalderObject):
         model = models.DataPoint
 
 
+
 class DataModel(BalderObject):
 
 
@@ -68,10 +71,10 @@ class Provider(BalderObject):
     class Meta:
         model = models.Provider
 
-class Repository(BalderObject):
 
-    class Meta:
-        model = models.Repository
+
+
+
 
 class Provision(BalderObject):
     params = graphene.Field(ProvideParams)
@@ -94,6 +97,46 @@ class Node(BalderObject):
 
     class Meta:
         model = models.Node
+
+@register_type
+class Repository(graphene.Interface):
+    "NNanananna"
+    id = graphene.ID(description="Id of the Repository")
+    nodes = BalderFiltered(Node, filterset_class=NodesFilter, related_field="nodes")
+    name = graphene.String(description="The Name of the Repository")
+
+    @classmethod
+    def resolve_name(cls, instance, info):
+        return instance.name
+
+    @classmethod
+    def resolve_type(cls, instance, info):
+        typemap = {
+            "AppRepository": lambda: AppRepository,
+            "MirrorRepository": lambda: MirrorRepository
+        }
+        _type = instance.__class__.__name__
+        return typemap.get(_type)()
+
+
+
+
+@register_type
+class AppRepository(BalderObject):
+
+    class Meta:
+        model = models.AppRepository
+        interfaces = (Repository,)
+
+
+@register_type
+class MirrorRepository(BalderObject):
+
+    class Meta:
+        model = models.MirrorRepository
+        interfaces = (Repository,)
+
+
 
 
 class Accessor(BalderObject):

@@ -12,6 +12,17 @@ type Accessor {
   create: String
 }
 
+type AppRepository implements Repository {
+  id: ID
+  installedAt: DateTime!
+  type: RepositoryType!
+  name: String
+  unique: String!
+  app: HerreApp
+  user: HerreUser
+  nodes(active: Boolean): [Node]
+}
+
 interface ArgPort {
   key: String
   type: String
@@ -32,14 +43,12 @@ input ArgPortInput {
 
 type Assignation {
   id: ID!
-  node: Node
-  template: Template
-  topic: Topic
   reservation: Reservation
+  extensions: GenericScalar
+  context: GenericScalar
   args: GenericScalar
   kwargs: GenericScalar
   returns: GenericScalar
-  outputs: GenericScalar
   status: AssignationStatus!
   statusmessage: String!
   callback: String
@@ -71,9 +80,11 @@ type AssignationLogEvent {
 }
 
 enum AssignationLogLevel {
+  CRITICAL
   INFO
   DEBUG
   ERROR
+  WARN
 }
 
 enum AssignationStatus {
@@ -84,6 +95,7 @@ enum AssignationStatus {
   ERROR
   CRITICAL
   CANCEL
+  CANCELING
   CANCELLED
   YIELD
   DONE
@@ -97,6 +109,7 @@ enum AssignationStatusInput {
   ERROR
   CRITICAL
   CANCEL
+  CANCELING
   CANCELLED
   YIELD
   DONE
@@ -113,6 +126,11 @@ enum ClientTypeInput {
   CLIENT
   PROVIDER
   POINT
+}
+
+type CreateMirrorReturn {
+  created: Boolean
+  repo: MirrorRepository
 }
 
 type DataModel {
@@ -150,6 +168,14 @@ enum DataPointTypeInput {
 
 scalar DateTime
 
+type DeleteMirrorReturn {
+  id: String
+}
+
+type DeleteNodeReturn {
+  id: String
+}
+
 scalar GenericScalar
 
 type HerreApp {
@@ -158,7 +184,7 @@ type HerreApp {
   name: String!
   grantType: HerreAppGrantType!
   datapointSet: [DataPoint!]!
-  repositorySet: [Repository!]!
+  apprepositorySet: [AppRepository!]!
   providerSet: [Provider!]!
   provisionSet: [Provision!]!
   reservationSet: [Reservation!]!
@@ -187,7 +213,7 @@ type HerreUser {
   dateJoined: DateTime!
   roles: GenericScalar
   datapointSet: [DataPoint!]!
-  repositorySet: [Repository!]!
+  apprepositorySet: [AppRepository!]!
   providerSet: [Provider!]!
   templateSet: [Template!]!
   provisionSet: [Provision!]!
@@ -256,6 +282,17 @@ input KwargPortInput {
   widget: WidgetInput
 }
 
+type MirrorRepository implements Repository {
+  id: ID
+  installedAt: DateTime!
+  type: RepositoryType!
+  name: String
+  unique: String!
+  url: String
+  updatedAt: DateTime!
+  nodes(active: Boolean): [Node]
+}
+
 type ModelArgPort implements ArgPort {
   key: String
   type: String
@@ -286,19 +323,24 @@ type ModelReturnPort implements ReturnPort {
 
 type Mutation {
   createNode(args: [ArgPortInput], description: String, interface: String!, kwargs: [KwargPortInput], name: String!, package: String, returns: [ReturnPortInput], type: NodeTypeInput = function): Node
+  deleteNode(id: ID!): DeleteNodeReturn
   negotiate(clientType: ClientTypeInput, internal: Boolean, inward: String, needsNegotiation: Boolean = false, outward: String, pointType: DataPointTypeInput = graphql, port: Int, version: String): Transcript
   host(extenders: [String], identifier: String!): DataModel
   createTemplate(node: ID!, params: GenericScalar, policy: GenericScalar): Template
-  reserve(node: ID, params: GenericScalar, reference: String, template: ID): Reservation
+  reserve(node: ID, params: ReserveParamsInput, reference: String, template: ID, title: String): Reservation
   unreserve(reference: String, reservation: String): Unreserve
   assign(args: [GenericScalar]!, kwargs: GenericScalar, reservation: String!): Assignation
   unassign(assignation: String, reference: String): Unassign
+  provide(node: ID, params: GenericScalar, reference: String, template: ID): Provision
+  unprovide(provision: String, reference: String): Unprovide
+  createMirror(name: String!, url: String!): CreateMirrorReturn
+  deleteMirror(id: ID!): DeleteMirrorReturn
+  updateMirror(id: ID!): UpdateMirrorReturn
 }
 
 type Node {
   id: ID!
   type: NodeType!
-  repository: Repository
   channel: String!
   name: String!
   package: String!
@@ -310,7 +352,6 @@ type Node {
   returns: [ReturnPort]
   templates(node: ID, package: String, interface: String, provided: Boolean, providable: Boolean): [Template]
   reservations: [Reservation!]!
-  assignationSet: [Assignation!]!
 }
 
 enum NodeType {
@@ -321,13 +362,6 @@ enum NodeType {
 enum NodeTypeInput {
   GENERATOR
   FUNCTION
-}
-
-enum PodStatusInput {
-  DOWN
-  ERROR
-  PENDING
-  ACTIVE
 }
 
 type PointSettings {
@@ -345,6 +379,10 @@ type PostmanSettings {
   kwargs: GenericScalar
 }
 
+type ProvideParams {
+  autoUnprovide: Boolean
+}
+
 type Provider {
   id: ID!
   installedAt: DateTime!
@@ -353,7 +391,13 @@ type Provider {
   active: Boolean!
   app: HerreApp!
   user: HerreUser
-  templateSet: [Template!]!
+  templates: [Template!]!
+}
+
+type ProviderEvent {
+  started: Provider
+  ended: ID
+  updated: Provider
 }
 
 enum ProviderProtocol {
@@ -367,13 +411,15 @@ type ProviderSettings {
 
 type Provision {
   id: ID!
+  unique: UUID!
   reference: String!
-  parent: Provision
   reservation: Reservation
+  provision: Provision
   template: Template
-  params: GenericScalar
+  params: ProvideParams
   extensions: GenericScalar
   context: GenericScalar
+  access: ProvisionAccess!
   status: ProvisionStatus!
   statusmessage: String!
   callback: String
@@ -382,17 +428,60 @@ type Provision {
   updatedAt: DateTime!
   creator: HerreUser
   app: HerreApp
-  children: [Provision!]!
-  topic: Topic
+  log: [ProvisionLog!]!
+  createdProvisions: [Provision!]!
+  reservations: [Reservation!]!
+  causedReservations: [Reservation!]!
+}
+
+enum ProvisionAccess {
+  EXCLUSIVE
+  EVERYONE
+}
+
+type ProvisionEvent {
+  log: ProvisionLogEvent
+}
+
+type ProvisionLog {
+  id: ID!
+  provision: Provision!
+  message: String
+  level: ProvisionLogLevel!
+}
+
+type ProvisionLogEvent {
+  message: String
+  level: String
+}
+
+enum ProvisionLogLevel {
+  CRITICAL
+  INFO
+  DEBUG
+  ERROR
+  WARN
 }
 
 enum ProvisionStatus {
   PENDING
   PROVIDING
+  ACTIVE
+  INACTIVE
+  CANCELING
+  LOST
+  RECONNECTING
   DENIED
+  ERROR
   CRITICAL
   ENDED
   CANCELLED
+}
+
+type ProvisionsEvent {
+  ended: ID
+  update: Provision
+  create: Provision
 }
 
 type Query {
@@ -404,9 +493,6 @@ type Query {
   templates(node: ID, package: String, interface: String, provided: Boolean, providable: Boolean): [Template]
   provider(id: ID): Provider
   providers(active: Boolean, app: String): [Provider]
-  topic(id: ID): Topic
-  topics(status: PodStatusInput, provider: String): [Topic]
-  myTopics: [Topic]
   model(id: ID, identifier: String): DataModel
   models: [DataModel]
   reservation(reference: ID!): Reservation
@@ -416,6 +502,11 @@ type Query {
   myAssignations(exclude: [AssignationStatusInput], filter: [AssignationStatusInput]): [Assignation]
   accesor(model: ID!): Accessor
   accessor: [Accessor]
+  provision(reference: ID!): Provision
+  provisions: [Provision]
+  myProvisions: [Provision]
+  repository(id: ID): Repository
+  repositories: [Repository]
 }
 
 type QueryWidget implements Widget {
@@ -424,23 +515,25 @@ type QueryWidget implements Widget {
   query: String
 }
 
-type Repository {
-  id: ID!
-  installedAt: DateTime!
-  name: String!
-  unique: String!
-  app: HerreApp!
-  user: HerreUser
-  nodes: [Node!]!
+interface Repository {
+  id: ID
+  nodes(active: Boolean): [Node]
+  name: String
+}
+
+enum RepositoryType {
+  APP
+  MIRROR
 }
 
 type Reservation {
   id: ID!
   channel: String!
   node: Node
+  title: String
   template: Template
-  topic: [Topic!]!
-  params: GenericScalar
+  provisions: [Provision!]!
+  params: ReserveParams
   extensions: GenericScalar
   context: GenericScalar
   status: ReservationStatus!
@@ -453,8 +546,9 @@ type Reservation {
   parent: Reservation
   creator: HerreUser
   reference: String!
+  causingProvision: Provision
   log: [ReservationLog!]!
-  provisions: [Provision!]!
+  createdProvisions: [Provision!]!
   children: [Reservation!]!
   assignations: [Assignation!]!
 }
@@ -476,9 +570,11 @@ type ReservationLogEvent {
 }
 
 enum ReservationLogLevel {
+  CRITICAL
   INFO
   DEBUG
   ERROR
+  WARN
 }
 
 enum ReservationStatus {
@@ -498,6 +594,18 @@ type ReservationsEvent {
   ended: ID
   update: Reservation
   create: Reservation
+}
+
+type ReserveParams {
+  autoProvide: Boolean
+  autoUnprovide: Boolean
+}
+
+input ReserveParamsInput {
+  autoProvide: Boolean
+  autoUnprovide: Boolean
+  providers: [Int]
+  templates: [Int]
 }
 
 interface ReturnPort {
@@ -548,10 +656,13 @@ type StringWidget implements Widget {
 }
 
 type Subscription {
-  myReservationsEvent(level: String): ReservationsEvent
   assignationEvent(level: String, reference: ID!): AssignationEvent
   myAssignationsEvent(level: String): AssignationsEvent
   reservationEvent(level: String, reference: ID!): ReservationEvent
+  myReservationsEvent(level: String): ReservationsEvent
+  provisionEvent(level: String, reference: ID!): ProvisionEvent
+  myProvisionsEvent(level: String): ProvisionsEvent
+  providersEvent(level: String): ProviderEvent
 }
 
 type Template {
@@ -566,36 +677,8 @@ type Template {
   version: String!
   createdAt: DateTime!
   updatedAt: DateTime!
-  provisions: [Provision!]!
-  topics: [Topic!]!
+  provisions(active: Boolean): [Provision]
   reservations: [Reservation!]!
-  assignationSet: [Assignation!]!
-}
-
-type Topic {
-  id: ID!
-  unique: UUID!
-  provision: Provision
-  template: Template!
-  access: TopicAccess!
-  name: String!
-  status: TopicStatus!
-  statusmessage: String!
-  reservations: [Reservation!]!
-  assignations: [Assignation!]!
-}
-
-enum TopicAccess {
-  EXCLUSIVE
-  EVERYONE
-}
-
-enum TopicStatus {
-  DOWN
-  LOST
-  RECONNECTING
-  CRITICAL
-  ACTIVE
 }
 
 type Transcript {
@@ -615,8 +698,16 @@ type Unassign {
   reference: String
 }
 
+type Unprovide {
+  reference: String
+}
+
 type Unreserve {
   reference: String
+}
+
+type UpdateMirrorReturn {
+  id: String
 }
 
 type WardSettings {

@@ -3,11 +3,12 @@ from delt.messages.postman.provide.bounced_provide import BouncedProvideMessage
 from herre.models import HerreApp
 from mars.names import generate_random_name
 from facade.fields import ArgsField, KwargsField, OutputsField, ParamsField, PodChannel, ReturnField
-from facade.enums import AccessStrategy, LogLevel, AssignationStatus, DataPointType, LogLevel, NodeType,  ProvisionStatus,  ReservationStatus, TopicStatus
+from facade.enums import AccessStrategy, LogLevel, AssignationStatus, DataPointType, LogLevel, NodeType,  ProvisionStatus,  ReservationStatus, TopicStatus, RepositoryType
 from django.db import models
 from django.contrib.auth import get_user_model
 import uuid
 import logging
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -80,19 +81,54 @@ class Repository(models.Model):
     Repositories can be replicas of online sources (think pypi repository), but also containers for
     local user generated nodes (think nodes that were generated through the flow provider)
     """
+    type = models.CharField(choices=RepositoryType.choices, default=RepositoryType.APP, max_length=4000)
     name = models.CharField(max_length=1000, help_text="The name of this Repository")
     installed_at = models.DateTimeField(auto_created=True, auto_now_add=True)
     unique = models.CharField(max_length=1000, default=uuid.uuid4, help_text="A world-unique identifier")
-    app = models.ForeignKey(HerreApp, on_delete=models.CASCADE, help_text="The Associated App")
-    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, help_text="The provide might be limited to a instance like ImageJ belonging to a specific person. Is nullable for backend users", null=True)
     
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["app","user"], name="No multiple Repositories for same App and User allowed")
-        ]
-
     def __str__(self):
         return f"{self.name}"
+
+
+
+
+class MirrorRepository(Repository):
+    url = models.URLField(null=True, blank=True, unique=True, default="None")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def scan(self, force=False):
+        result = requests.post(self.url, data={
+            "query": """
+                query Nodes{
+                    __Nodes {
+                        name
+                    }
+                    
+                    __Models {
+                        name
+                    }
+
+                }
+            """
+            }
+        )
+        print(result)
+
+    
+    def __str__(self):
+        return f"{self.name} at {self.url}"
+
+
+
+
+class AppRepository(Repository):
+    app = models.ForeignKey(HerreApp, on_delete=models.CASCADE, null=True, help_text="The Associated App")
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, help_text="The provide might be limited to a instance like ImageJ belonging to a specific person. Is nullable for backend users", null=True)
+    
+
+
+
+
 
 class Provider(models.Model):
     """ A provider is the intermediate step from a template to a pod, it takes an associated template

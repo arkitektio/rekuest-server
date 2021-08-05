@@ -46,6 +46,12 @@ class ProvisionFilter(django_filters.FilterSet):
         return queryset.filter(status__in=[ProvisionStatus.ACTIVE])
 
 
+class NodesFilter(django_filters.FilterSet):
+    active = django_filters.BooleanFilter(method="active_filter", label="Get active Provisions")
+
+    def active_filter(self, queryset, name, value):
+        return queryset.filter(status__in=[ProvisionStatus.ACTIVE])
+
 
 class TemplateFilter(django_filters.FilterSet):
     package = django_filters.CharFilter(field_name="node__package", lookup_expr="icontains")

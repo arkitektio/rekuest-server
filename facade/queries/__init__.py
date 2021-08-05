@@ -6,3 +6,4 @@ from .reservation import *
 from .assignation import *
 from .accesor import *
 from .provision import *
+from .repo import *

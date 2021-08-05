@@ -5,7 +5,9 @@ import graphene
 get_port_types = lambda: {
             "IntArgPort": IntArgPort,
             "StringArgPort": StringArgPort,
-            "ModelArgPort": ModelArgPort
+            "ModelArgPort": ModelArgPort,
+            "StructureArgPort": StructureArgPort,
+            "ListArgPort": ListArgPort,
 }
 
 @register_type
@@ -20,7 +22,7 @@ class ArgPort(graphene.Interface):
     @classmethod
     def resolve_type(cls, instance, info):
         typemap = get_port_types()
-        _type = instance.get("type")
+        _type = instance.get("type", instance.get("typename"))
         return typemap.get(_type, ArgPort)
 
 @register_type
@@ -41,6 +43,22 @@ class StringArgPort(graphene.ObjectType):
         interfaces = (ArgPort,)
 
 
+@register_type
+class StructureArgPort(graphene.ObjectType):
+    """Model Port"""
+    identifier = graphene.String(description="The identifier of this Model")
+
+    class Meta:
+        interfaces = (ArgPort,)
+
+
+@register_type
+class ListArgPort(graphene.ObjectType):
+    """Model Port"""
+    child = graphene.Field(lambda: ArgPort, description="The child")
+
+    class Meta:
+        interfaces = (ArgPort,)
 
 
 

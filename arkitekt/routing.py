@@ -1,3 +1,4 @@
+from facade.consumers.all import AllConsumer
 from facade.workers.gateway import GatewayConsumer
 from channels.auth import AuthMiddlewareStack
 from channels.routing import ChannelNameRouter, ProtocolTypeRouter, URLRouter
@@ -31,7 +32,8 @@ application = ProtocolTypeRouter({
         url('graphql', MyGraphqlWsConsumer.as_asgi()),
         url(r'provider\/$', ProviderConsumer.as_asgi()),
         url(r'entertainer\/$', HostConsumer.as_asgi()),
-        url(r'postman\/$', PostmanConsumer.as_asgi())
+        url(r'postman\/$', PostmanConsumer.as_asgi()),
+        url(r'all\/$', AllConsumer.as_asgi())
     ])),
     'channel': ChannelNameRouter({
         "gateway": GatewayConsumer.as_asgi()

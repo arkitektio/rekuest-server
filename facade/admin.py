@@ -5,6 +5,8 @@ from .models import *
 admin.site.register(Node)
 admin.site.register(Provider)
 admin.site.register(Repository)
+admin.site.register(AppRepository)
+admin.site.register(MirrorRepository)
 admin.site.register(Template)
 admin.site.register(Assignation)
 admin.site.register(Reservation)
