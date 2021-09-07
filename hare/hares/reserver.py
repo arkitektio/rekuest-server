@@ -3,7 +3,7 @@ from re import M
 from facade.subscriptions.provision import MyProvisionsEvent, ProvisionEventSubscription
 from delt.messages.generics import Context
 from delt.messages.postman.reserve.params import ReserveParams
-from facade.utils import log_to_assignation, log_to_provision, log_to_reservation, set_assignation_status, set_provision_status, set_reservation_status, transition_reservation
+from facade.utils import log_to_assignation, log_to_provision, log_to_reservation, set_assignation_status, transition_reservation, transition_reservation_by_reference
 from delt.messages.postman.provide.params import ProvideParams
 from facade.enums import AssignationStatus, LogLevel, PodStatus, ProvisionStatus, ReservationStatus, TopicStatus
 from aiormq import channel
@@ -99,8 +99,6 @@ def prepare_messages_for_reservation(bounced_reserve: BouncedReserveMessage) -> 
         reservation.node = template.node
         reservation.save()
 
-        # Why not make topic and Provision the same?
-        # IDea: Provision is an idefinete log and an action, topic is the actual state 
         provision = Provision.objects.create(
             reservation = reservation,
             status= ProvisionStatus.PROVIDING,
@@ -111,6 +109,7 @@ def prepare_messages_for_reservation(bounced_reserve: BouncedReserveMessage) -> 
             extensions = reservation.extensions,
             app = reservation.app,
             creator = reservation.creator,
+            callback = reservation.callback,
         )
 
         # We add the creating topic to the reservation
@@ -118,12 +117,12 @@ def prepare_messages_for_reservation(bounced_reserve: BouncedReserveMessage) -> 
         provision.save()
 
         # Signal Broadcasting to Channel Layer for Persistens
-        MyProvisionsEvent.broadcast({"action": "created", "data": provision.id}, [f"provisions_user_{provision.creator.id}"])
+        if provision.creator: MyProvisionsEvent.broadcast({"action": "created", "data": provision.id}, [f"provisions_user_{provision.creator.id}"])
         ProvisionEventSubscription.broadcast({"action": "updated", "data": reservation.id}, [f"provision_{reservation.reference}"])
 
         if template.provider.active:
             messages.append(log_to_reservation(reservation.reference, "Provider is active we are sending it to the Provider", level=LogLevel.INFO, callback=callback))
-            set_reservation_status(reservation.reference, ReservationStatus.PROVIDING)
+            messages += transition_reservation(reservation, ReservationStatus.PROVIDING)
 
             provide_message = BouncedProvideMessage(data= {
                         "template": provision.template.id,
@@ -141,7 +140,7 @@ def prepare_messages_for_reservation(bounced_reserve: BouncedReserveMessage) -> 
             log_message = f"App {template.provider.name} is currently unactive. We will get notified once it gets connected"
 
             messages.append(log_to_reservation(reservation.reference, log_message, level=LogLevel.INFO, callback=callback))
-            messages += transition_reservation(reservation.reference, ReservationStatus.WAITING)
+            messages += transition_reservation(reservation, ReservationStatus.WAITING)
 
 
         return messages
@@ -157,7 +156,7 @@ def prepare_messages_for_reservation(bounced_reserve: BouncedReserveMessage) -> 
     else:
         log_message = "Attention the App is inactive, please start the App. We are waiting for that! (Message stored in Database)"
         messages.append(log_to_reservation(reservation.reference, log_message, level=LogLevel.WARN, callback=callback))
-        messages += transition_reservation(reservation.reference, ReservationStatus.WAITING)
+        messages += transition_reservation(reservation, ReservationStatus.WAITING)
 
     return messages
 
@@ -176,17 +175,19 @@ def prepare_messages_for_unreservation(bounced_unreserve: BouncedUnreserveMessag
     callback = bounced_unreserve.meta.extensions.callback
     res = Reservation.objects.get(reference=bounced_unreserve.data.reservation)
     if context.user != res.creator.email and "admin" not in context.roles: raise DeniedError("Only the user that created the Reservation or an admin can unreserve his pods") 
-    set_reservation_status(res.reference, ReservationStatus.CANCELING)
-
+    
     messages= []
     requires_unreservation = False
+
+    
 
     for provision in res.provisions.all():
         if provision.status == ProvisionStatus.ACTIVE:
             log_to_reservation(res.reference, f"Sending Unreservation to Topic {provision.unique}")
             channel = f"reservations_in_{provision.unique}"
             messages.append((channel, bounced_unreserve))
-            requires_unreservation = True
+
+            messages += transition_reservation(res, ReservationStatus.CANCELING)
         else:
             log_to_reservation(res.reference, f"Topic {provision.unique} is not currently active. Unreserving")
             provision.reservations.remove(res)
@@ -394,31 +395,24 @@ class ReserverRabbit(BaseHare):
             await self.log_to_reservation(reference, f"Reserver Received Event", level=LogLevel.INFO, logCallback=logCallback)
 
             try:
-
                 messages = await sync_to_async(prepare_messages_for_reservation)(bounced_reserve)
-                for channel, message in messages: 
-                    if channel: await self.forward(message, channel)
-
 
             except ProtocolException as e:
                 logger.exception(e)
-                exception = ExceptionMessage.fromException(e, reference)
-                await self.set_reservation_status(reference, ReservationStatus.ERROR)
-                await self.log_to_reservation(reference, f"{str(e)}", level=LogLevel.ERROR, logCallback=logCallback )
-                await self.forward(exception, callback)
+                messages = await sync_to_async(transition_reservation_by_reference)(reference, ReservationStatus.ERROR, f"Error: {str(e)}")
 
 
-            
-            # This should then expand this to an assignation message that can be delivered to the Providers
-            await aiomessage.channel.basic_ack(aiomessage.delivery.delivery_tag)
-    
                
         except Exception as e:
             logger.exception(e)
-            exception = ExceptionMessage.fromException(e, reference)
-            await self.set_reservation_status(reference, ReservationStatus.CRITICAL)
-            await self.log_to_reservation(reference, f"Protocol Exception {str(e)}", level=LogLevel.ERROR, logCallback=logCallback )
-            await self.forward(exception, callback)
+            messages = await sync_to_async(transition_reservation_by_reference)(reference, ReservationStatus.CRITICAL, f"Error: {str(e)}")
+
+
+        for channel, message in messages: 
+            if channel: await self.forward(message, channel)
+
+        # This should then expand this to an assignation message that can be delivered to the Providers
+        await aiomessage.channel.basic_ack(aiomessage.delivery.delivery_tag)
 
 
 

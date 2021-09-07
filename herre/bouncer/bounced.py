@@ -59,7 +59,7 @@ class Bounced:
        
         if self._app.grant_type == HerreGrantType.CLIENT_CREDENTIALS.value:
             if not required_scopes.issubset(self.scopeset):
-                raise BounceException("App has not the required Scopes")
+                raise BounceException(f"App has not the required Scopes. Required {required_scopes}")
 
         if self._app.grant_type == HerreGrantType.IMPLICIT.value:
             if not anonymous and self.user.is_anonymous:

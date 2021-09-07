@@ -6,6 +6,7 @@ from .postman.unprovide import *
 from .postman.reserve import *
 from .postman.unreserve import *
 from .postman.unassign import *
+from .app import *
 from .exception import ExceptionMessage
 import json
 
@@ -17,6 +18,9 @@ registry = {
     PROVIDE_LOG: ProvideLogMessage,
     PROVIDE_TRANSITION: ProvideTransitionMessage,
     PROVIDE: ProvideMessage,
+
+    AGENT_CONNECT: AgentConnectMessage,
+    AGENT_DISCONNECT: AgentDisconnectMessage,
 
     UNPROVIDE_DONE:  UnprovideDoneMessage,
     BOUNCED_UNPROVIDE: BouncedUnprovideMessage,

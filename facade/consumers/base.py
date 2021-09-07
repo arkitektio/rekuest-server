@@ -51,6 +51,7 @@ class BaseConsumer(AsyncWebsocketConsumer):
             json_dict = json.loads(text_data)
             try:
                 message = expandToMessage(json_dict)
+                print(message)
                 function = self.mapper[message.__class__](self)
                 await function(message)
 
@@ -61,6 +62,4 @@ class BaseConsumer(AsyncWebsocketConsumer):
 
         except Exception as e:
             logger.error(e)
-            self.catch(text_data)
-            raise e
 

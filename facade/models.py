@@ -275,6 +275,14 @@ class Provision(models.Model):
         })
 
 
+    def transition(self):
+        raise Exception("Not Implemented Yet")
+
+
+
+
+
+
 
 class ReservationLog(models.Model):
     reservation = models.ForeignKey("Reservation", help_text="The reservation this log item belongs to", related_name="log", on_delete=models.CASCADE)

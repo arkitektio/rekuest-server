@@ -1,3 +1,4 @@
+from delt.messages.postman.reserve.reserve_transition import ReserveState
 from django.contrib.auth import get_user_model
 from facade.subscriptions.assignation import MyAssignationsEvent
 from facade.subscriptions.reservation import MyReservationsEvent
@@ -58,7 +59,7 @@ def create_reservation_from_bouncedreserve(bounced_reserve: BouncedReserveMessag
             "context": context.dict(),
             "reference": bounced_reserve.meta.reference,
             "causing_provision": Provision.objects.get(reference=bounced_reserve.data.provision) if bounced_reserve.data.provision else None,
-            "creator": HerreUser.objects.get(email=context.user),
+            "creator": HerreUser.objects.get(email=context.user) if context.user else None,
             "app": HerreApp.objects.get(client_id=context.app),
             "callback": extensions.callback,
             "progress": extensions.progress
@@ -172,10 +173,11 @@ class PostmanConsumer(BaseConsumer):
     async def on_message_in(self, message):
         expanded_message = expandFromRabbitMessage(message)
 
-        if isinstance(expanded_message, ReserveActiveMessage):
-            channel = await sync_to_async(get_channel_for_reservation)(expanded_message.meta.reference)
-            self.reservations_channel_map[expanded_message.meta.reference] = channel
-            logger.info(f"Saving the Topic {channel} for the new Reservation")
+        if isinstance(expanded_message, ReserveTransitionMessage):
+            if expanded_message.data.state == ReserveState.ACTIVE:
+                channel = await sync_to_async(get_channel_for_reservation)(expanded_message.meta.reference)
+                self.reservations_channel_map[expanded_message.meta.reference] = channel
+                logger.info(f"Saving the Topic {channel} for the new Reservation")
 
         if isinstance(expanded_message, UnreserveDoneMessage):
             self.reservations_channel_map.pop(expanded_message.data.reservation)

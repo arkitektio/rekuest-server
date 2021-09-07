@@ -1,3 +1,4 @@
+from facade.consumers.agent import AgentConsumer
 from facade.consumers.all import AllConsumer
 from facade.workers.gateway import GatewayConsumer
 from channels.auth import AuthMiddlewareStack
@@ -33,6 +34,7 @@ application = ProtocolTypeRouter({
         url(r'provider\/$', ProviderConsumer.as_asgi()),
         url(r'entertainer\/$', HostConsumer.as_asgi()),
         url(r'postman\/$', PostmanConsumer.as_asgi()),
+        url(r'agent\/$', AgentConsumer.as_asgi()),
         url(r'all\/$', AllConsumer.as_asgi())
     ])),
     'channel': ChannelNameRouter({

@@ -6,3 +6,4 @@ from .postman.assign import *
 from .postman.unassign import *
 from .exception import *
 from .base import *
+from .app import *

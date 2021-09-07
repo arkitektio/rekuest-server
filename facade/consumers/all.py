@@ -1,24 +1,57 @@
 
 
 from asgiref.sync import sync_to_async
-from facade.consumers.postman import create_bounced_reserve_from_reserve, create_reservation_from_bouncedreserve
+from facade.consumers.postman import create_assignation_from_bouncedassign, create_bounced_assign_from_assign, create_bounced_reserve_from_reserve, create_reservation_from_bouncedreserve, get_channel_for_reservation
 from delt.messages.postman.reserve.bounced_reserve import BouncedReserveMessage
 import aiormq
 from delt.messages.exception import ExceptionMessage
 from delt.messages.base import MessageModel
-from delt.messages import ReserveMessage
+from delt.messages import ReserveMessage, AgentConnectMessage, BouncedAssignMessage, AssignMessage
 from channels.generic.websocket import AsyncWebsocketConsumer
 from delt.messages.utils import expandFromRabbitMessage, expandToMessage, MessageError
 import json
 import logging
 from herre.bouncer.utils import bounced_ws
 import asyncio
+from ..models import Provider, Provision
+from facade.subscriptions.provider import ProvidersEvent
+from facade.enums import ProvisionStatus
+from arkitekt.console import console
 
 logger = logging.getLogger(__name__)
+
+def activate_provider_and_get_active_provisions(app, user):
+
+    if user is None or user.is_anonymous:
+        provider = Provider.objects.get(app=app, user=None)
+    else:
+        provider = Provider.objects.get(app=app, user=user)
+
+    provider.active = True
+    provider.save()
+
+    if provider.user: 
+        ProvidersEvent.broadcast({"action": "started", "data": str(provider.id)}, [f"providers_user_{provider.user.id}"])
+    else: 
+        ProvidersEvent.broadcast({"action": "started", "data": provider.id}, [f"all_providers"])
+    
+    provisions = Provision.objects.filter(template__provider=provider).exclude(status__in=[ProvisionStatus.ENDED, ProvisionStatus.CANCELLED]).all()
+
+    requests = []
+    for prov in provisions:
+        requests.append(prov.to_message())
+
+    print(requests)
+    return provider, requests
+
+
 
 class AllConsumer(AsyncWebsocketConsumer):
     mapper = {
         ReserveMessage: lambda cls: cls.on_reserve,
+        AgentConnectMessage: lambda cls: cls.on_agent_connect,
+        AssignMessage: lambda cls: cls.on_assign,
+        BouncedAssignMessage: lambda cls: cls.on_bounced_assign,
     }
 
     def __init__(self, *args, **kwargs):
@@ -61,6 +94,54 @@ class AllConsumer(AsyncWebsocketConsumer):
         logger.info("Nanana")
         bounced_reserve: BouncedReserveMessage = await create_bounced_reserve_from_reserve(reserve, self.scope["auth"], self.callback_name, self.progress_name)
         await self.bounced_reserve(bounced_reserve)
+
+
+    async def on_agent_connect(self, connect: AgentConnectMessage):
+        logger.info(f"Agent Connected {connect}")
+        #TODO: Check igf cann connect as provider
+        self.provider, self.start_provisions = await sync_to_async(activate_provider_and_get_active_provisions)(self.scope["bounced"].app, self.scope["bounced"].user)
+
+        for prov in self.start_provisions:
+            await self.send_message(prov)
+
+
+    async def bounced_assign(self, bounced_assign: BouncedAssignMessage):
+        bounced_assign.meta.extensions.callback = self.callback_name
+        bounced_assign.meta.extensions.progress = self.progress_name
+        if bounced_assign.meta.extensions.persist:
+            await sync_to_async(create_assignation_from_bouncedassign)(bounced_assign)
+
+
+        reservation = bounced_assign.data.reservation
+        
+        if reservation not in self.reservations_channel_map:
+            if reservation not in self.external_reservation_channel_map:
+                logger.info(f"Lets get the assign for that reservation {reservation}")
+                self.external_reservation_channel_map[reservation] = await sync_to_async(get_channel_for_reservation)(reservation)
+                channel = self.external_reservation_channel_map[reservation]
+            else:
+                channel = self.external_reservation_channel_map[reservation]
+        else:       
+            channel = self.reservations_channel_map[reservation]
+
+        logger.info(f"Automatically forwarding it to reservation topic {channel}")
+
+        # We acknowled that this assignation is now linked to the topic (for indefintely)
+        self.assignations_channel_map[bounced_assign.meta.reference] = channel
+        await self.forward(bounced_assign, channel)
+
+    async def on_assign(self, assign: AssignMessage):
+        bounced_assign: AssignMessage = await create_bounced_assign_from_assign(assign,  self.scope["auth"], self.callback_name, self.progress_name)
+        console.print(f"[red]{bounced_assign}")
+        await self.bounced_assign(bounced_assign)
+
+
+    async def on_bounced_assign(self, bounced_assign: BouncedAssignMessage):
+        await self.bounced_assign(bounced_assign)
+
+
+
+
 
     async def on_message_in(self, message):
         expanded_message = expandFromRabbitMessage(message)

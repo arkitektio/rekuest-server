@@ -11,6 +11,7 @@ class ArgPortInput(graphene.InputObjectType):
     identifier= graphene.String(description="The corresponding Model")
     widget = graphene.Field(WidgetInput, description="Which Widget to use to render Port in User Interfaces")
     child = graphene.Field(lambda: ArgPortInput, description="The Child of this")
+    transpile= graphene.String(description="The corresponding Model")
 
 
 class KwargPortInput(graphene.InputObjectType):
@@ -23,6 +24,7 @@ class KwargPortInput(graphene.InputObjectType):
     identifier= graphene.String(description="The corresponding Model")
     widget = graphene.Field(WidgetInput, description="Which Widget to use to render Port in User Interfaces")
     child = graphene.Field(lambda: KwargPortInput, description="The Child of this")
+    transpile= graphene.String(description="The corresponding Model")
 
 class ReturnPortInput(graphene.InputObjectType):
     key =  graphene.String(description="The Key", required=False)
@@ -32,3 +34,4 @@ class ReturnPortInput(graphene.InputObjectType):
     label = graphene.String(description="The Label of this Outport")
     identifier= graphene.String(description="The corresponding Model")
     child = graphene.Field(lambda: ReturnPortInput, description="The Child of this")
+    transpile= graphene.String(description="The corresponding Model")

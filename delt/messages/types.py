@@ -2,6 +2,13 @@
 EXCEPTION = "exception"
 ALLOWANCE = "allowance"
 
+
+#Base Type
+AGENT_CONNECT = "agent_connect"
+AGENT_DISCONNECT = "agent_disconnect"
+
+
+
 ASSIGNATION = "assignation"
 PROVISION = "provision"
 ASSIGNATION_REQUEST = "assignation_request"
@@ -26,6 +33,7 @@ ASSIGN_RETRY = "assign_retry"
 # UNASSIGN PATH
 UNASSIGN = "unassign"
 BOUNCED_UNASSIGN = "bounced_unassign"
+BOUNCED_FORWARDED_UNASSIGN = "bounced_forwarded_unassign"
 
 UNASSIGN_DONE = "unassign_done"
 UNASSIGN_LOG ="unassign_log"

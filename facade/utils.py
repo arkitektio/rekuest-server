@@ -1,3 +1,4 @@
+from delt.messages.postman.provide.provide_transition import ProvideState
 from delt.messages.postman.reserve.reserve_transition import ReserveState
 from delt.messages.postman.provide.provide_log import ProvideLogMessage
 from delt.messages.postman.reserve.reserve_log import ReserveLogMessage
@@ -55,8 +56,12 @@ def log_to_provision(reference: str, message: str, level=LogLevel.INFO, persist=
 
 
 
-def transition_reservation(reference: str, state: ReservationStatus) -> List[Tuple[str, MessageModel]]:
-    reservation = Reservation.objects.get(reference=reference)
+def transition_reservation_by_reference(reference: str, state: ReservationStatus, message: str = "Caused by a Transition"):
+    provision = Reservation.objects.get(reference=reference)
+    return transition_reservation(provision, state, message)
+    
+
+def transition_reservation(reservation: Reservation, state: ReservationStatus, message: str = "Caused by a Transition") -> List[Tuple[str, MessageModel]]:
     reservation.status = state
     reservation.save()
 
@@ -64,56 +69,55 @@ def transition_reservation(reference: str, state: ReservationStatus) -> List[Tup
     if reservation.callback:
         messages.append((reservation.callback,  ReserveTransitionMessage(data= {
             "state": state,
-            "message": "Caused by a Transition"
+            "message": message
         },meta = {
             "reference": reservation.reference,
         }
         )))
 
-    MyReservationsEvent.broadcast({"action": state.value, "data": reservation.id}, [f"reservations_user_{reservation.creator.id}"])
+    if reservation:creator: MyReservationsEvent.broadcast({"action": state.value, "data": reservation.id}, [f"reservations_user_{reservation.creator.id}"])
     
     return messages
 
 
 
-def transition_provision(reference: str, status: ProvisionStatus, persist=True) -> List[Tuple[str, MessageModel]]:
+def transition_provision_by_reference(reference: str, state: ProvideState, message: str = "Transition"):
     provision = Provision.objects.get(reference=reference)
-    provision.status = status
+    return transition_provision(provision, state, message)
+
+
+
+def transition_provision(reference: str, state: ProvideState, message: str = "Transition") -> List[Tuple[str, MessageModel]]:
+    provision = Provision.objects.get(reference=reference)
+    provision.status = state
     provision.save()
 
     messages = []
+    if provision.callback:
+        messages.append((provision.callback,  ReserveTransitionMessage(data= {
+            "state": state,
+            "message": message
+        },meta = {
+            "reference": provision.reference,
+        }
+        )))
 
-    if status == ProvisionStatus.INACTIVE:
+    if state == ProvisionStatus.INACTIVE:
         for res in provision.reservations.all():
             if res.provisions.count() == 1:
-                messages += transition_reservation(res.reference, ReservationStatus.ERROR)
+                messages += transition_reservation(res, ReservationStatus.ERROR)
 
 
-    if status == ProvisionStatus.ACTIVE:
+    if state == ProvisionStatus.ACTIVE:
         for res in provision.reservations.all():
             if res.status != ReservationStatus.ACTIVE:
-                messages += transition_reservation(res.reference, ReservationStatus.ACTIVE)
+                messages += transition_reservation(res, ReservationStatus.ACTIVE)
 
 
-    MyProvisionsEvent.broadcast({"action": status.value, "data": provision.id}, [f"provisions_user_{provision.creator.id}"])
+    if provision.creator: MyProvisionsEvent.broadcast({"action": state.value, "data": provision.id}, [f"provisions_user_{provision.creator.id}"])
     return messages
 
 
-
-def set_provision_status(reference: str, status: ProvisionStatus, persist=True):
-    provision = Provision.objects.get(reference=reference)
-    provision.status = status
-    provision.save()
-
-    MyProvisionsEvent.broadcast({"action": status.value, "data": provision.id}, [f"provisions_user_{provision.creator.id}"])
-
-
-def set_reservation_status(reference: str, status: ReservationStatus, persist=True):
-    reservation = Reservation.objects.get(reference=reference)
-    reservation.status = status
-    reservation.save()
-
-    MyReservationsEvent.broadcast({"action": status.value, "data": reservation.id}, [f"reservations_user_{reservation.creator.id}"])
 
 
 def create_assignation_from_bounced_assign(assign: BouncedAssignMessage):
@@ -133,12 +137,14 @@ def create_assignation_from_bounced_assign(assign: BouncedAssignMessage):
 
     return assignation
 
+
+
 def set_assignation_status(reference: str, status: AssignationStatus):
     assignation = Assignation.objects.get(reference=reference)
     assignation.status = status
     assignation.save()
 
-    MyAssignationsEvent.broadcast({"action": status.value, "data": assignation.id}, [f"assignations_user_{assignation.creator.id}"])
+    if assignation.creator: MyAssignationsEvent.broadcast({"action": status.value, "data": assignation.id}, [f"assignations_user_{assignation.creator.id}"])
 
 
 

@@ -15,7 +15,7 @@ class MessageMetaExtensionsModel(BaseModel):
 
 class MessageMetaModel(BaseModel):
     type: str
-    reference: str = Field(default_factory=lambda x: str(uuid.uuid4))
+    reference: str = Field(default_factory=lambda: str(uuid.uuid4()))
     extensions: Optional[MessageMetaExtensionsModel] = { }
 
 
