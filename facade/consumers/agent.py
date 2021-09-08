@@ -1,12 +1,25 @@
 
 
+from delt.messages.postman.assign.assign_cancelled import AssignCancelledMessage
+from delt.messages.postman.assign.assign_done import AssignDoneMessage
+from delt.messages.postman.assign.assign_return import AssignReturnMessage
+from delt.messages.postman.assign.assign_critical import AssignCriticalMessage
+from delt.messages.postman.assign.assign_log import AssignLogMessage
+from delt.messages.postman.assign.assign_yield import AssignYieldsMessage
+from hare.transitions.base import TransitionException
+from django.core.checks import messages
+from delt.messages.postman.reserve.reserve_transition import ReserveState
+from delt.messages.postman.unprovide.unprovide_critical import UnprovideCriticalMessage
+from delt.messages.postman.unprovide.unprovide_log import UnprovideLogMessage
+from typing import List, Tuple
 from delt.messages.postman.provide.provide_log import ProvideLogMessage
 from delt.messages.types import BOUNCED_FORWARDED_ASSIGN, BOUNCED_FORWARDED_UNASSIGN
 from delt.messages.postman.unassign.bounced_unassign import BouncedUnassignMessage
 from delt.messages.postman.assign.bounced_forwarded_assign import BouncedForwardedAssignMessage
 from delt.messages.postman.unassign.bounced_forwarded_unassign import BouncedForwardedUnassignMessage
 from delt.messages.postman.assign.bounced_assign import BouncedAssignMessage
-from delt.messages.postman.provide.provide_transition import ProvideState
+from delt.messages.postman.provide.provide_transition import ProvideState, ProvideTransistionData
+from delt.messages import BouncedUnreserveMessage
 from facade.utils import log_to_provision, transition_provision
 from facade.consumers.base import BaseConsumer
 from asgiref.sync import sync_to_async
@@ -15,19 +28,56 @@ from delt.messages.postman.reserve.bounced_reserve import BouncedReserveMessage
 import aiormq
 from delt.messages.exception import ExceptionMessage
 from delt.messages.base import MessageModel
-from delt.messages import ProvideTransitionMessage, ProvideCriticalMessage
+from delt.messages import ProvideTransitionMessage, ProvideCriticalMessage, ReserveTransitionMessage
 from channels.generic.websocket import AsyncWebsocketConsumer
 from delt.messages.utils import expandFromRabbitMessage, expandToMessage, MessageError
 import json
 import logging
 from herre.bouncer.utils import bounced_ws
 import asyncio
-from ..models import Provider, Provision
+from ..models import Provider, Provision, Reservation
 from facade.subscriptions.provider import ProvidersEvent
-from facade.enums import ProvisionStatus
+from facade.subscriptions.reservation import MyReservationsEvent
+from facade.subscriptions.provision import MyProvisionsEvent
+from facade.enums import ProvisionStatus, ReservationStatus
 from arkitekt.console import console
+from hare.transitions.reservation import activate_reservation, disconnect_reservation, critical_reservation, cancel_reservation
+from hare.transitions.provision import activate_provision, disconnect_provision, critical_provision
 
 logger = logging.getLogger(__name__)
+
+
+def activate_and_add_reservation_to_provision(res: Reservation, prov: Provision):
+    prov.reservations.add(res)
+    prov.save() 
+    return activate_reservation(res)
+
+def cancel_and_delete_reservation_from_provision(res: Reservation, prov: Provision):
+    prov.reservations.delete(res)
+    prov.save() 
+    return cancel_reservation(res)
+
+
+
+def activate_and_add_reservation_to_provision_by_reference(res_reference: str, prov_reference:str):
+    res = Reservation.objects.get(reference=res_reference)
+    prov = Provision.objects.get(reference=prov_reference)
+    return activate_and_add_reservation_to_provision(res, prov)
+
+def cancel_and_delete_reservation_from_provision_by_reference(res_reference: str, prov_reference:str):
+    res = Reservation.objects.get(reference=res_reference)
+    prov = Provision.objects.get(reference=prov_reference)
+    return cancel_and_delete_reservation_from_provision(res, prov)
+
+
+def activate_provision_by_reference(reference):
+    provision = Provision.objects.get(reference=reference)
+    return activate_provision(provision)
+
+
+def critical_provision_by_reference(reference):
+    provision = Provision.objects.get(reference=reference)
+    return critical_provision(provision)
 
 
 
@@ -52,45 +102,19 @@ def activate_provider_and_get_active_provisions(app, user):
     for prov in provisions:
         requests.append(prov.to_message())
 
-    print(requests)
     return provider, requests
 
 
-def activate_provision_by_reference(reference: str):
-    provision = Provision.objects.get(reference=reference)
-    return active_provision(provision)
 
-def transi(provision) -> Tuple[str, List[str],List[Tuple[str, MessageModel]]]:
-    """ Activatets the provision and sets the created topic
-    to active as well as creating signal for every connecting Reservation that this Topic
-    is now active. (This Reservations should have been previously waiting)
-
-    Args:
-        reference ([type]): [description]
-    """
-
-
-    messages = []
-    channels = []
-    for res in provision.reservations.all():
-        console.log(f"[green] Listening to {res}")
-        messages.append(log_to_reservation(res.reference, f"Listening now to {provision.unique}", level=LogLevel.INFO))
-        messages += transition_reservation(res.reference, ReservationStatus.ACTIVE)
-        channels.append(f"assignments_in_{res.channel}")
-
-    return f"reservations_in_{provision.unique}", channels, messages
-
-
-
-def deactivate_provider_and_disconnect_active_provisions(provider):
+def deactivate_provider_and_disconnect_active_provisions(provider, reconnect_provision = False):
     provider.active = False
     provider.save()
 
-    provisions = Provision.objects.filter(template__provider_id=provider.id).exclude(status__in=[ProvisionStatus.ENDED, ProvisionStatus.CANCELLED]).all()
+    provisions = Provision.objects.filter(template__provider=provider).exclude(status__in=[ProvisionStatus.ENDED, ProvisionStatus.CANCELLED]).all()
 
     messages = []
     for provision in provisions:
-        messages += transition_provision(provision, ProvideState.DISCONNECTED, "Disconnected trying to reconnect")
+        messages += disconnect_provision(provision, message="Disconnected trying to reconnect", reconnect=reconnect_provision)
 
     if provider.user: 
         ProvidersEvent.broadcast({"action": "ended", "data": provider.id}, [f"providers_user_{provider.user.id}"])
@@ -104,7 +128,16 @@ def deactivate_provider_and_disconnect_active_provisions(provider):
 class AgentConsumer(BaseConsumer): #TODO: Seperate that bitch
     mapper = {
         ProvideTransitionMessage: lambda cls: cls.on_provide_transition,
-        ProvideLogMessage: lambda cls: cls.on_provide_log
+        ProvideLogMessage: lambda cls: cls.on_provide_log,
+
+
+
+        AssignYieldsMessage: lambda cls: cls.on_assign_yields,
+        AssignLogMessage: lambda cls: cls.on_assign_log,
+        AssignCriticalMessage: lambda cls: cls.on_assign_critical,
+        AssignReturnMessage: lambda cls: cls.on_assign_return,
+        AssignDoneMessage: lambda cls: cls.on_assign_done,
+        AssignCancelledMessage: lambda cls: cls.on_assign_cancelled,
 
     }
 
@@ -135,9 +168,10 @@ class AgentConsumer(BaseConsumer): #TODO: Seperate that bitch
 
             for channel, message in messages:
                 await self.forward(message, channel)
+
             await self.connection.close()
         except Exception as e:
-            logger.error("Something weird happened in disconnection! {e}")
+            logger.error(f"Something weird happened in disconnection! {e}")
 
 
 
@@ -166,29 +200,34 @@ class AgentConsumer(BaseConsumer): #TODO: Seperate that bitch
 
     async def on_reservation_related(self, provision_reference, aiomessage: aiormq.abc.DeliveredMessage):
         message = expandFromRabbitMessage(aiomessage)
+        print("RECEIVED", aiomessage)
         
-        if isinstance(message, BouncedReserveMessage):
-            reservation_reference = message.meta.reference
-            channel, messages = await sync_to_async(addReservationToProvision)(provision_reference, reservation_reference)
-            # Set up connectiongs
-            assert provision_reference in self.provision_link_map, "Topic is not provided"
-            assign_queue = await self.channel.queue_declare(channel)
+        try:
+            if isinstance(message, BouncedReserveMessage):
+                reservation_reference = message.meta.reference
+                messages, assignment_topic = await sync_to_async(activate_and_add_reservation_to_provision_by_reference)(reservation_reference, provision_reference)
+                # Set up connectiongs
+                assert provision_reference in self.provision_link_map, "Provision is not provided"
+                assign_queue = await self.channel.queue_declare(assignment_topic)
 
-            await self.channel.basic_consume(assign_queue.queue, lambda x: self.on_assign_related(provision_reference, x))
-            self.provision_link_map[provision_reference].append(assign_queue)
+                await self.channel.basic_consume(assign_queue.queue, lambda x: self.on_assign_related(provision_reference, x))
+                self.provision_link_map[provision_reference].append(assign_queue)
+                
+                for channel, message in messages:
+                    await self.forward(message, channel)
+
+            elif isinstance(message, BouncedUnreserveMessage):
+                reservation_reference = message.data.reservation
+                messages = await sync_to_async(cancel_and_delete_reservation_from_provision)(provision_reference, reservation_reference)
+
+                for channel, message in messages:
+                    await self.forward(message, channel)
             
-            for channel, message in messages:
-                await self.forward(message, channel)
+            else:
+                raise Exception("This message is not what we expeceted here")
 
-        elif isinstance(message, BouncedUnreserveMessage):
-             reservation_reference = message.data.reservation
-             messages = await sync_to_async(deleteReservationFromProvision)(provision_reference, reservation_reference)
-
-             for channel, message in messages:
-                await self.forward(message, channel)
-        
-        else:
-            logger.exception(Exception("This message is not what we expeceted here"))
+        except Exception as e:
+            logger.exception(e)
             
         await aiomessage.channel.basic_ack(aiomessage.delivery.delivery_tag)
 
@@ -212,44 +251,57 @@ class AgentConsumer(BaseConsumer): #TODO: Seperate that bitch
 
     async def on_provide_transition(self, provide_transition: ProvideTransitionMessage):
 
+        provision_reference = provide_transition.meta.reference
+        new_state = provide_transition.data.state
         messages = []
+        try:
+            if new_state == ProvideState.ACTIVE:
 
-        if provide_transition.data.state == ProvideState.ACTIVE:
-            self.provision_link_map[provide_transition.meta.reference] = []
+                messages, reservation_topic, assignment_topics = await sync_to_async(activate_provision_by_reference)(provision_reference)
 
-            reservation_topic, new_channels, new_messages = await sync_to_async(activateProvision)(reference)
+                logger.info(f"Listening to {reservation_topic}")
+                reservation_queue = await self.channel.queue_declare(reservation_topic)
+                await self.channel.basic_consume(reservation_queue.queue, lambda x: self.on_reservation_related(provision_reference, x))
 
-            reservation_queue = await self.channel.queue_declare(reservation_topic)
-            await self.channel.basic_consume(reservation_queue.queue, lambda x: self.on_reservation_related(reference, x))
+                for channel in assignment_topics:
+                    assign_queue = await self.channel.queue_declare(channel)
+                    await self.channel.basic_consume(assign_queue.queue, lambda x: self.on_assign_related(provision_reference, x))
+                    self.provision_link_map.setdefault(provision_reference, []).append(assign_queue)
 
-            for channel in new_channels:
-                assign_queue = await self.channel.queue_declare(channel)
-                await self.channel.basic_consume(assign_queue.queue, lambda x: self.on_assign_related(reference, x))
-                self.provision_link_map[reference].append(assign_queue)
+            elif new_state == ProvideState.CRITICAL:
+                messages = await sync_to_async(critical_provision_by_reference)(provision_reference)
 
-            if provide_done.meta.extensions.callback : await self.forward(provide_done, provide_done.meta.extensions.callback)
-
-            
-
-
-
-        for channel, message in new_messages:
-                # Iterating over the Reservations
-                if channel: await self.forward(message, channel)
+            else: 
+                raise NotImplementedError(f"No idea how to transition prov to {new_state}")
 
 
+            for channel, message in messages:
+                await self.forward(message, channel)
+
+        except TransitionException as e:
+            logger.error(e)
+
+        except Exception as e:
+            logger.exception(e)
 
 
     async def on_provide_log(self, message: ProvideLogMessage):
-        await sync_to_async(log_to_provision)(message.meta.reference, message.data.message, level=message.data.level)
-        if message.meta.extensions.progress is not None:
-            await self.forward(message, message.meta.extensions.progress)
+        pass
 
-    async def on_unprovide_log(self, message: UnprovideLogMessage):
-        await sync_to_async(log_to_provision)(message.data.provision, message.data.message, level=message.data.level)
-        
-    async def on_unprovide_critical(self, message: UnprovideCriticalMessage):
-        await sync_to_async(log_to_provision)(message.data.provision, message.data.message, level=LogLevel.CRITICAL)
+    async def on_assign_yields(self, assign_yield: AssignYieldsMessage):
+        await self.forward(assign_yield, assign_yield.meta.extensions.callback)
+
+    async def on_assign_cancelled(self, assign_cancelled: AssignCancelledMessage):
+        await self.forward(assign_cancelled, assign_cancelled.meta.extensions.callback)
+
+    async def on_assign_return(self, assign_return: AssignReturnMessage):
+        await self.forward(assign_return, assign_return.meta.extensions.callback)
+
+    async def on_assign_done(self, assign_done: AssignDoneMessage):
+        await self.forward(assign_done, assign_done.meta.extensions.callback)
+
+    async def on_assign_log(self, assign_log: AssignLogMessage):
+        await self.forward(assign_log, assign_log.meta.extensions.progress)
         
 
 

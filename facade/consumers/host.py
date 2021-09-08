@@ -100,6 +100,7 @@ def addReservationToProvision(provision_reference, reservation_reference) -> Tup
 
     provision.reservations.add(reservation)
     provision.save()
+    
     messages = []
     console.log(f"[green] Listening to {reservation}")
     messages.append(log_to_reservation(reservation.reference, f"Listening now to {provision.unique}", level=LogLevel.INFO))

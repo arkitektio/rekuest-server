@@ -20,7 +20,6 @@ def decode_token(token):
 
     payload_enc += '=' * (-len(payload_enc) % 4)  # add padding
     payload = json.loads(base64.b64decode(payload_enc).decode("utf-8"))
-    print(payload)
     algorithms = [active_settings.key_type]
     public_key = active_settings.public_key
     if not public_key:

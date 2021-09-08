@@ -42,7 +42,6 @@ def update_or_create_herre(decoded):
 
 @sync_to_async
 def set_request_async(request, decoded, token):
-    print(decoded)
     user, app = update_or_create_herre(decoded)
     request.auth = JwtToken(decoded, user, app, token)
     request.user = user

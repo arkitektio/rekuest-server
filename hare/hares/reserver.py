@@ -92,7 +92,7 @@ def prepare_messages_for_reservation(bounced_reserve: BouncedReserveMessage) -> 
     # Here we check if we can assign to the Topic
     if provision is None:
         # PROVIDE PATH
-        messages.append(log_to_reservation(reservation.reference, "We couldn't find an active Template. Trying to Autprovide", level=LogLevel.INFO, callback=callback))
+        messages.append(log_to_reservation(reservation.reference, "We couldn't find an active Provision. Trying to Autoprovide", level=LogLevel.INFO, callback=callback))
         if "can_provide" not in context.scopes: raise DeniedError("Your App does not have the proper permissions set to autoprovide 'can_provide' to your scopes")
         if params.auto_provide != True: raise ReserveError("You didn't specify auto_provide in the provide params and this configuration is not yet provided!")
 
@@ -121,8 +121,6 @@ def prepare_messages_for_reservation(bounced_reserve: BouncedReserveMessage) -> 
         ProvisionEventSubscription.broadcast({"action": "updated", "data": reservation.id}, [f"provision_{reservation.reference}"])
 
         if template.provider.active:
-            messages.append(log_to_reservation(reservation.reference, "Provider is active we are sending it to the Provider", level=LogLevel.INFO, callback=callback))
-            messages += transition_reservation(reservation, ReservationStatus.PROVIDING)
 
             provide_message = BouncedProvideMessage(data= {
                         "template": provision.template.id,
@@ -157,6 +155,8 @@ def prepare_messages_for_reservation(bounced_reserve: BouncedReserveMessage) -> 
         log_message = "Attention the App is inactive, please start the App. We are waiting for that! (Message stored in Database)"
         messages.append(log_to_reservation(reservation.reference, log_message, level=LogLevel.WARN, callback=callback))
         messages += transition_reservation(reservation, ReservationStatus.WAITING)
+
+    print(messages)
 
     return messages
 

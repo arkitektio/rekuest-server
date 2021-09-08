@@ -41,4 +41,6 @@
         "titleBar.activeBackground": "#433967",
         "titleBar.activeForeground": "#FAFAFC"
     },
+    "djangointellisense.projectRoot": "/workspace",
+    "djangointellisense.settingsModule": "arkitekt.settings"
 }

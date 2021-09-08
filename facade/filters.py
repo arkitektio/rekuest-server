@@ -61,7 +61,6 @@ class TemplateFilter(django_filters.FilterSet):
     node = django_filters.ModelChoiceFilter(queryset=Node.objects,field_name= "node")
 
     def provided_filter(self, queryset, name, value):
-        print(queryset.all())
         return queryset.filter(pods__status=PodStatus.ACTIVE)
 
     def providable_filter(self, queryset, name, value):

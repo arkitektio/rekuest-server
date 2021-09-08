@@ -30,7 +30,6 @@ class Bounced:
         self.scopeset = set(self._scopes)
         self.is_jwt = is_jwt
         self.token = token
-        logger.info(f"Bounced Context of Type {self._app.grant_type} created")
 
     @property
     def user(self):

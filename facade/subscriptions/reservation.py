@@ -33,7 +33,6 @@ class ReservationEventSubscription(BalderSubscription):
         action = payload["action"]
         data = payload["data"]
 
-        print(payload)
 
         if action == "log":
             return {"log": data}

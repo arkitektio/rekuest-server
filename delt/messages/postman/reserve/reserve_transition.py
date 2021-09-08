@@ -24,6 +24,7 @@ class ReserveState(str, Enum):
     # Life States
     PROVIDING = "PROVIDING"
     WAITING = "WAITING"
+    DISCONNECT = "DISCONNECT"
 
 
     REROUTING = "REROUTING"

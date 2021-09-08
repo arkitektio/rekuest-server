@@ -4,7 +4,6 @@ from facade.workers.gateway import GatewayConsumer
 from channels.auth import AuthMiddlewareStack
 from channels.routing import ChannelNameRouter, ProtocolTypeRouter, URLRouter
 from django.conf.urls import url
-from facade.consumers import PostmanConsumer, ProviderConsumer, HostConsumer
 from django.core.asgi import get_asgi_application
 from balder.consumers import MyGraphqlWsConsumer
 from herre.middlewares.scope.bouncer import BouncerChannelMiddleware
@@ -31,9 +30,6 @@ application = ProtocolTypeRouter({
     'websocket': MiddleWareStack(URLRouter([
         url('graphql/', MyGraphqlWsConsumer.as_asgi()),
         url('graphql', MyGraphqlWsConsumer.as_asgi()),
-        url(r'provider\/$', ProviderConsumer.as_asgi()),
-        url(r'entertainer\/$', HostConsumer.as_asgi()),
-        url(r'postman\/$', PostmanConsumer.as_asgi()),
         url(r'agent\/$', AgentConsumer.as_asgi()),
         url(r'all\/$', AllConsumer.as_asgi())
     ])),

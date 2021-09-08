@@ -102,7 +102,8 @@ class ReservationStatus(TextChoices):
     WAITING = "WAITING", "Waiting (We are waiting for any assignable Topic to come online)" #TODO: I s this actually a Double State
 
 
-    REROUTING = "REROUTING", "Rerouting (State of Topics this reservation connects to have changed and require Retouring)"
+    REROUTING = "REROUTING", "Rerouting (State of provisions this reservation connects to have changed and require Retouring)"
+    DISCONNECTED = "DISCONNECTED", "Disconnect (State of provisions this reservation connects to have changed and require Retouring)"
     CANCELING = "CANCELING", "Cancelling (Reervation is currently being cancelled)"
     ACTIVE = "ACTIVE", "Active (Reservation is active and accepts assignments"
 

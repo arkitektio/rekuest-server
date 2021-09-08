@@ -1,6 +1,8 @@
 from django.db.models import Model
 from pydantic import BaseModel
 from django.core import serializers
+
+
 class PayloadSerializer:
 
     @classmethod
@@ -28,7 +30,6 @@ class PayloadSerializer:
 
     @classmethod
     def unpack(cls, packed, basemodel=None):
-        print(packed)
         type = packed["type"]
         payload = packed["payload"]
         if type == "model": 
