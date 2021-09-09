@@ -1,4 +1,5 @@
 
+from hare.transitions.reservation import cancel_reservation
 from re import M
 from facade.subscriptions.provision import MyProvisionsEvent, ProvisionEventSubscription
 from delt.messages.generics import Context
@@ -172,38 +173,23 @@ def prepare_messages_for_unreservation(bounced_unreserve: BouncedUnreserveMessag
 
     """
     context = bounced_unreserve.meta.context
-    callback = bounced_unreserve.meta.extensions.callback
     res = Reservation.objects.get(reference=bounced_unreserve.data.reservation)
-    if context.user != res.creator.email and "admin" not in context.roles: raise DeniedError("Only the user that created the Reservation or an admin can unreserve his pods") 
+    if context.user and context.user != res.creator.email and "admin" not in context.roles: raise DeniedError("Only the user that created the Reservation or an admin can unreserve his pods") 
     
     messages= []
     requires_unreservation = False
 
-    
-
     for provision in res.provisions.all():
         if provision.status == ProvisionStatus.ACTIVE:
-            log_to_reservation(res.reference, f"Sending Unreservation to Topic {provision.unique}")
             channel = f"reservations_in_{provision.unique}"
-            messages.append((channel, bounced_unreserve))
-
-            messages += transition_reservation(res, ReservationStatus.CANCELING)
+            messages.append((channel, bounced_unreserve)) # just forwarding it to the provisino
+            requires_unreservation = True
         else:
             log_to_reservation(res.reference, f"Topic {provision.unique} is not currently active. Unreserving")
             provision.reservations.remove(res)
 
     if not requires_unreservation:
-        log_to_reservation(res.reference, f"No active Topics need cancellation. We can shutdown", level=LogLevel.INFO)
-        set_reservation_status(res.reference, ReservationStatus.CANCELLED)
-        unreserve_done = UnreserveDoneMessage(data={
-            "reservation": bounced_unreserve.data.reservation
-        },
-        meta = {
-            "reference": bounced_unreserve.meta.reference,
-        }
-        )
-
-        messages.append((callback, unreserve_done))
+        messages += cancel_reservation(res, f"No active Topics need cancellation. We can shutdown", reconnect=False)
 
     return messages
 
@@ -339,15 +325,6 @@ class ReserverRabbit(BaseHare):
 
 
 
-    async def log_to_reservation(self, reference, message, level = LogLevel.INFO, logCallback=None):
-        if logCallback is not None:
-            reserve_progress =  ReserveLogMessage(data={"level": level, "message": message}, meta={"reference": reference})
-            logger.info(reserve_progress)
-
-            await self.forward(reserve_progress, logCallback)
-
-        await sync_to_async(log_to_reservation)(reference, message, level=level)
-
     async def log_to_provision(self, reference, message, level = LogLevel.INFO, logCallback=None):
         if logCallback is not None:
             reserve_progress =  ProvideLogMessage(data={"level": level, "message": message}, meta={"reference": reference})
@@ -392,8 +369,6 @@ class ReserverRabbit(BaseHare):
             # Callback
             callback = bounced_reserve.meta.extensions.callback
 
-            await self.log_to_reservation(reference, f"Reserver Received Event", level=LogLevel.INFO, logCallback=logCallback)
-
             try:
                 messages = await sync_to_async(prepare_messages_for_reservation)(bounced_reserve)
 
@@ -427,10 +402,10 @@ class ReserverRabbit(BaseHare):
             reservation = bounced_unreserve.data.reservation
             context = bounced_unreserve.meta.context
 
-            await self.log_to_reservation(reservation, f"Unreserve Request received", level=LogLevel.INFO)
 
             try:
                 messages = await sync_to_async(prepare_messages_for_unreservation)(bounced_unreserve)
+
                 for channel, message in messages: 
                     print(channel, message)
                     if channel: await self.forward(message, channel)
@@ -438,11 +413,6 @@ class ReserverRabbit(BaseHare):
             
             except ProtocolException as e:
                 logger.exception(e)
-                exception = ExceptionMessage.fromException(e, reference)
-                await self.set_reservation_status(reference, ReservationStatus.ERROR)
-                await self.log_to_reservation(reference, f"Unreservation Error: {str(e)}", level=LogLevel.ERROR)
-                await self.forward(exception, callback)
-
 
             # This should then expand this to an assignation message that can be delivered to the Providers
             await aiomessage.channel.basic_ack(aiomessage.delivery.delivery_tag)
@@ -450,10 +420,9 @@ class ReserverRabbit(BaseHare):
                          
         except Exception as e:
             logger.exception(e)
-            exception = ExceptionMessage.fromException(e, reference)
-            await self.set_reservation_status(reference, ReservationStatus.CRITICAL)
-            await self.log_to_reservation(reservation, f"Protocol Error on Unreservation", level=LogLevel.ERROR)
-            await self.forward(exception, callback)
+
+        await aiomessage.channel.basic_ack(aiomessage.delivery.delivery_tag)
+
 
 
 

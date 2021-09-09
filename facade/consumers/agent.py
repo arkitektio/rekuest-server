@@ -53,7 +53,7 @@ def activate_and_add_reservation_to_provision(res: Reservation, prov: Provision)
     return activate_reservation(res)
 
 def cancel_and_delete_reservation_from_provision(res: Reservation, prov: Provision):
-    prov.reservations.delete(res)
+    prov.reservations.remove(res)
     prov.save() 
     return cancel_reservation(res)
 
@@ -218,7 +218,7 @@ class AgentConsumer(BaseConsumer): #TODO: Seperate that bitch
 
             elif isinstance(message, BouncedUnreserveMessage):
                 reservation_reference = message.data.reservation
-                messages = await sync_to_async(cancel_and_delete_reservation_from_provision)(provision_reference, reservation_reference)
+                messages = await sync_to_async(cancel_and_delete_reservation_from_provision_by_reference)(reservation_reference, provision_reference)
 
                 for channel, message in messages:
                     await self.forward(message, channel)

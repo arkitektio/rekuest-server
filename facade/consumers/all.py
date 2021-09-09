@@ -1,7 +1,9 @@
 
 
+from delt.messages.postman.unreserve.bounced_unreserve import BouncedUnreserveMessage
+from delt.messages.postman.unreserve.unreserve import UnreserveMessage
 from asgiref.sync import sync_to_async
-from facade.consumers.postman import create_assignation_from_bouncedassign, create_bounced_assign_from_assign, create_bounced_reserve_from_reserve, create_reservation_from_bouncedreserve, get_channel_for_reservation
+from facade.consumers.postman import create_assignation_from_bouncedassign, create_bounced_assign_from_assign, create_bounced_reserve_from_reserve, create_bounced_unreserve_from_unreserve, create_reservation_from_bouncedreserve, get_channel_for_reservation
 from delt.messages.postman.reserve.bounced_reserve import BouncedReserveMessage
 import aiormq
 from delt.messages.exception import ExceptionMessage
@@ -48,10 +50,11 @@ def activate_provider_and_get_active_provisions(app, user):
 
 class AllConsumer(AsyncWebsocketConsumer):
     mapper = {
-        ReserveMessage: lambda cls: cls.on_reserve,
-        AgentConnectMessage: lambda cls: cls.on_agent_connect,
         AssignMessage: lambda cls: cls.on_assign,
         BouncedAssignMessage: lambda cls: cls.on_bounced_assign,
+
+        ReserveMessage: lambda cls: cls.on_reserve,
+        UnreserveMessage: lambda cls: cls.on_unreserve,
     }
 
     def __init__(self, *args, **kwargs):
@@ -95,14 +98,18 @@ class AllConsumer(AsyncWebsocketConsumer):
         bounced_reserve: BouncedReserveMessage = await create_bounced_reserve_from_reserve(reserve, self.scope["auth"], self.callback_name, self.progress_name)
         await self.bounced_reserve(bounced_reserve)
 
+    # Bounced Unreserve
+    async def bounced_unreserve(self, bounced_unreserve: BouncedUnreserveMessage):
+        bounced_unreserve.meta.extensions.callback = self.callback_name
+        bounced_unreserve.meta.extensions.progress = self.progress_name
+        await self.forward(bounced_unreserve, "bounced_unreserve_in")
 
-    async def on_agent_connect(self, connect: AgentConnectMessage):
-        logger.info(f"Agent Connected {connect}")
-        #TODO: Check igf cann connect as provider
-        self.provider, self.start_provisions = await sync_to_async(activate_provider_and_get_active_provisions)(self.scope["bounced"].app, self.scope["bounced"].user)
+    async def on_bounced_unreserve(self, bounced_unreserve: BouncedUnreserveMessage):
+        await self.bounced_unreserve(bounced_unreserve)
 
-        for prov in self.start_provisions:
-            await self.send_message(prov)
+    async def on_unreserve(self, unreserve: UnreserveMessage):
+        bounced_unreserve: BouncedUnreserveMessage = await create_bounced_unreserve_from_unreserve(unreserve, self.scope["auth"], self.callback_name, self.progress_name)
+        await self.bounced_unreserve(bounced_unreserve)
 
 
     async def bounced_assign(self, bounced_assign: BouncedAssignMessage):
@@ -138,9 +145,6 @@ class AllConsumer(AsyncWebsocketConsumer):
 
     async def on_bounced_assign(self, bounced_assign: BouncedAssignMessage):
         await self.bounced_assign(bounced_assign)
-
-
-
 
 
     async def on_message_in(self, message):
