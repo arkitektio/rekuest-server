@@ -5,7 +5,6 @@ import graphene
 get_port_types = lambda: {
             "IntArgPort": IntArgPort,
             "StringArgPort": StringArgPort,
-            "ModelArgPort": ModelArgPort,
             "StructureArgPort": StructureArgPort,
             "ListArgPort": ListArgPort,
 }
@@ -46,7 +45,7 @@ class StringArgPort(graphene.ObjectType):
 @register_type
 class StructureArgPort(graphene.ObjectType):
     """Model Port"""
-    identifier = graphene.String(description="The identifier of this Model")
+    identifier = graphene.String(description="The identifier of this Structure")
 
     class Meta:
         interfaces = (ArgPort,)
@@ -60,14 +59,5 @@ class ListArgPort(graphene.ObjectType):
     class Meta:
         interfaces = (ArgPort,)
 
-
-
-@register_type
-class ModelArgPort(graphene.ObjectType):
-    """Model Port"""
-    identifier = graphene.String(description="The identifier of this Model")
-
-    class Meta:
-        interfaces = (ArgPort,)
 
     

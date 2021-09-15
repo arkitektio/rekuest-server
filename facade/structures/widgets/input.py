@@ -2,7 +2,7 @@ import graphene
 from graphene.types.generic import GenericScalar
 
 class WidgetInput(graphene.InputObjectType):
-    type = graphene.String(description="type", required=True)
+    typename = graphene.String(description="type", required=True)
     query = graphene.String(description="Do we have a possible")
     dependencies = graphene.List(graphene.String, description="The dependencies of this port")
     max = graphene.String(description="Max value for int widget")

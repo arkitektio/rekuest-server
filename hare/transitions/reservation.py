@@ -38,7 +38,7 @@ def activate_reservation(res: Reservation, message: str = None):
         }
         )))
 
-        if res.creator: MyReservationsEvent.broadcast({"action": ReserveState.ACTIVE.value, "data": res.id}, [f"reservations_user_{res.creator.id}"])
+    if res.creator: MyReservationsEvent.broadcast({"action": ReserveState.ACTIVE.value, "data": res.id}, [f"reservations_user_{res.creator.id}"])
 
     assignment_topic = f"assignments_in_{res.channel}"
 
@@ -78,9 +78,12 @@ def disconnect_reservation(res: Reservation, message: str = None, reconnect=Fals
             logger.error("Reconnection not implemented yet")
             #TODO: Implement a Reconnecting algorithm that tries to find another assignable node (through reserver)
 
-        if res.creator: MyReservationsEvent.broadcast({"action": ReserveState.DISCONNECT.value, "data": res.id}, [f"reservations_user_{res.creator.id}"])
+    if res.creator: MyReservationsEvent.broadcast({"action": ReserveState.DISCONNECT.value, "data": res.id}, [f"reservations_user_{res.creator.id}"])
 
     return messages
+
+def crititcal_reservation_by_reference(reference,*args, **kwargs):
+    return critical_reservation(Reservation.objects.get(reference=reference),*args, **kwargs)
 
 def critical_reservation(res: Reservation, message: str = None, reconnect=False):
     """Criticals a reservation
@@ -115,7 +118,7 @@ def critical_reservation(res: Reservation, message: str = None, reconnect=False)
             logger.error("Reconnection not implemented yet")
             #TODO: Implement a Reconnecting algorithm that tries to find another assignable node (through reserver)
 
-        if res.creator: MyReservationsEvent.broadcast({"action": ReserveState.CRITICAL.value, "data": res.id}, [f"reservations_user_{res.creator.id}"])
+    if res.creator: MyReservationsEvent.broadcast({"action": ReserveState.CRITICAL.value, "data": res.id}, [f"reservations_user_{res.creator.id}"])
 
     return messages
 
@@ -153,6 +156,82 @@ def cancel_reservation(res: Reservation, message: str = None, reconnect=False):
             logger.error("Reconnection not implemented yet")
             #TODO: Implement a Reconnecting algorithm that tries to find another assignable node (through reserver)
 
-        if res.creator: MyReservationsEvent.broadcast({"action": ReserveState.CANCELLED.value, "data": res.id}, [f"reservations_user_{res.creator.id}"])
+    if res.creator: MyReservationsEvent.broadcast({"action": ReserveState.CANCELLED.value, "data": res.id}, [f"reservations_user_{res.creator.id}"])
 
     return messages
+
+def canceling_reservation(res: Reservation, message: str = None, reconnect=False):
+    """Cancels a reservation
+
+    Right now no reconnection attempt will be possible
+
+    Args:
+        res (Reservation): [description]
+
+    Raises:
+        TransitionException: [description]
+        TransitionException: [description]
+    """
+
+    if res.status in [ReserveState.CANCELLED, ReserveState.ENDED]:
+        raise TransitionException(f"Reservation {res} was already ended or cancelled. Operation omitted. Create a new Provision if you want to cancel it.")
+
+    res.status = ReserveState.CANCELING
+    res.save()
+    messages = []
+
+    if res.callback:
+        messages.append((res.callback,  ReserveTransitionMessage(data= {
+            "state": ReserveState.CANCELING,
+            "message": message
+        },meta = {
+            "reference": res.reference,
+        }
+        )))
+
+        if reconnect:
+            logger.error("Reconnection not implemented yet")
+
+    if res.creator: MyReservationsEvent.broadcast({"action": ReserveState.CANCELING.value, "data": res.id}, [f"reservations_user_{res.creator.id}"])
+
+    return messages
+
+
+def pause_reservation(res: Reservation, message: str = None, reconnect=False):
+    """Cancels a reservation
+
+    Right now no reconnection attempt will be possible
+
+    Args:
+        res (Reservation): [description]
+
+    Raises:
+        TransitionException: [description]
+        TransitionException: [description]
+    """
+
+    if res.status in [ReserveState.CANCELLED, ReserveState.ENDED]:
+        raise TransitionException(f"Reservation {res} was already ended or cancelled. Operation omitted. Create a new Provision if you want to pause it.")
+
+    res.status = ReserveState.WAITING
+    res.save()
+    messages = []
+
+    if res.callback:
+        logger.info("Sending Transition Message")
+        messages.append((res.callback,  ReserveTransitionMessage(data= {
+            "state": ReserveState.WAITING,
+            "message": message
+        },meta = {
+            "reference": res.reference,
+        }
+        )))
+
+        if reconnect:
+            logger.error("Reconnection not implemented yet")
+            #TODO: Implement a Reconnecting algorithm that tries to find another assignable node (through reserver)
+
+    if res.creator: MyReservationsEvent.broadcast({"action": ReserveState.WAITING.value, "data": res.id}, [f"reservations_user_{res.creator.id}"])
+
+    return messages
+

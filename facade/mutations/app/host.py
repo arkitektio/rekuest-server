@@ -1,5 +1,5 @@
 from facade import models
-from facade.models import DataModel, DataPoint, Template
+from facade.models import Structure, DataPoint, Template
 from facade import types
 from balder.types import BalderMutation
 import graphene
@@ -20,9 +20,9 @@ class Host(BalderMutation):
         point = DataPoint.objects.get(app=info.context.bounced.app, user=info.context.bounced.user)
 
         try:
-            model = DataModel.objects.get(point=point, identifier=identifier)
+            model = Structure.objects.get(point=point, identifier=identifier)
         except:
-            model = DataModel.objects.create(
+            model = Structure.objects.create(
                 identifier=identifier,
                 extenders=extenders,
                 point=point
@@ -35,4 +35,4 @@ class Host(BalderMutation):
 
 
     class Meta:
-        type = types.DataModel
+        type = types.Structure

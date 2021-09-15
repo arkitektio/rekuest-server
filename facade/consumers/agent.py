@@ -1,5 +1,6 @@
 
 
+from hare.transitions.assignation import cancel_assignation_by_reference, done_assignation_by_reference, return_assignation_by_reference, yield_assignation_by_reference
 from delt.messages.postman.assign.assign_cancelled import AssignCancelledMessage
 from delt.messages.postman.assign.assign_done import AssignDoneMessage
 from delt.messages.postman.assign.assign_return import AssignReturnMessage
@@ -42,7 +43,7 @@ from facade.subscriptions.provision import MyProvisionsEvent
 from facade.enums import ProvisionStatus, ReservationStatus
 from arkitekt.console import console
 from hare.transitions.reservation import activate_reservation, disconnect_reservation, critical_reservation, cancel_reservation
-from hare.transitions.provision import activate_provision, disconnect_provision, critical_provision
+from hare.transitions.provision import activate_provision, cancel_provision, cancelling_provision, disconnect_provision, critical_provision, providing_provision
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,17 @@ def critical_provision_by_reference(reference):
     provision = Provision.objects.get(reference=reference)
     return critical_provision(provision)
 
+def cancel_provision_by_reference(reference):
+    provision = Provision.objects.get(reference=reference)
+    return cancel_provision(provision)
 
+def cancelling_provision_by_reference(reference):
+    provision = Provision.objects.get(reference=reference)
+    return cancelling_provision(provision)
+
+def providing_provision_by_reference(reference):
+    provision = Provision.objects.get(reference=reference)
+    return providing_provision(provision)
 
 def activate_provider_and_get_active_provisions(app, user):
 
@@ -151,6 +162,8 @@ class AgentConsumer(BaseConsumer): #TODO: Seperate that bitch
         logger.info("This provide is now active and will be able to provide Pods")
 
         self.provision_link_map = {} # A link with all the queue indexed by provision
+        self.assignments_tag_map = {}
+        self.assignments_channel_map = {}
 
         await self.connect_to_rabbit()
 
@@ -234,6 +247,7 @@ class AgentConsumer(BaseConsumer): #TODO: Seperate that bitch
 
     async def on_assign_related(self, provision_reference, message: aiormq.abc.DeliveredMessage):
         nana = expandFromRabbitMessage(message)
+        logger.info(message.delivery.delivery_tag)
         
         if isinstance(nana, BouncedAssignMessage):
             forwarded_message = BouncedForwardedAssignMessage(data={**nana.data.dict(), "provision": provision_reference}, meta={**nana.meta.dict(), "type": BOUNCED_FORWARDED_ASSIGN})
@@ -241,7 +255,7 @@ class AgentConsumer(BaseConsumer): #TODO: Seperate that bitch
             
         elif isinstance(nana, BouncedUnassignMessage):
             forwarded_message = BouncedForwardedUnassignMessage(data={**nana.data.dict(), "provision": provision_reference}, meta={**nana.meta.dict(), "type": BOUNCED_FORWARDED_UNASSIGN})
-            await self.send_message(nana) 
+            await self.send_message(forwarded_message) 
         
         else:
             logger.error("This message is not what we expeceted here")
@@ -271,6 +285,15 @@ class AgentConsumer(BaseConsumer): #TODO: Seperate that bitch
             elif new_state == ProvideState.CRITICAL:
                 messages = await sync_to_async(critical_provision_by_reference)(provision_reference)
 
+            elif new_state == ProvideState.CANCELLED:
+                messages = await sync_to_async(cancel_provision_by_reference)(provision_reference)
+
+            elif new_state == ProvideState.CANCELING:
+                messages = await sync_to_async(cancelling_provision_by_reference)(provision_reference)
+
+            elif new_state == ProvideState.PROVIDING:
+                messages = await sync_to_async(providing_provision_by_reference)(provision_reference)
+            
             else: 
                 raise NotImplementedError(f"No idea how to transition prov to {new_state}")
 
@@ -289,15 +312,19 @@ class AgentConsumer(BaseConsumer): #TODO: Seperate that bitch
         pass
 
     async def on_assign_yields(self, assign_yield: AssignYieldsMessage):
+        if assign_yield.meta.extensions.persist == True: await sync_to_async(yield_assignation_by_reference)(assign_yield.meta.reference, assign_yield.data.returns)
         await self.forward(assign_yield, assign_yield.meta.extensions.callback)
 
     async def on_assign_cancelled(self, assign_cancelled: AssignCancelledMessage):
+        if assign_cancelled.meta.extensions.persist == True: await sync_to_async(cancel_assignation_by_reference)(assign_cancelled.meta.reference)
         await self.forward(assign_cancelled, assign_cancelled.meta.extensions.callback)
 
     async def on_assign_return(self, assign_return: AssignReturnMessage):
+        if assign_return.meta.extensions.persist == True: await sync_to_async(return_assignation_by_reference)(assign_return.meta.reference, assign_return.data.returns)
         await self.forward(assign_return, assign_return.meta.extensions.callback)
 
     async def on_assign_done(self, assign_done: AssignDoneMessage):
+        if assign_done.meta.extensions.persist == True: await sync_to_async(done_assignation_by_reference)(assign_done.meta.reference)
         await self.forward(assign_done, assign_done.meta.extensions.callback)
 
     async def on_assign_log(self, assign_log: AssignLogMessage):

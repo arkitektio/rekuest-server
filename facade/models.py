@@ -38,19 +38,16 @@ class DataPoint(models.Model):
             models.UniqueConstraint(fields=["app","user"], name="No multiple AppPoints for same App and User allowed")
         ]
 
-    def create_ward(self, internal=True):
-        return {"distinct": self.app.name, "host": self.inward if internal else self.outward, "port": self.port, "needsNegotiation": self.needs_negotiation, "type": self.type}
-
     def __str__(self):
         return f"{self.app} {f'for {self.user}' if self.user else ''}"
 
 
-class DataModel(models.Model):
+class Structure(models.Model):
     """A Datamodel is a uniquely identifiable model for a Datapoint
 
     """
     point = models.ForeignKey(DataPoint, on_delete=models.CASCADE, related_name="models")
-    extenders = models.JSONField(help_text="Registered Extenders on this Model")
+    extenders = models.JSONField(help_text="Registered Extenders on this Model", null=True)
     identifier = models.CharField(max_length=1000, help_text="A unique identifier for this model on the Datapoint")
 
     class Meta:
@@ -60,19 +57,6 @@ class DataModel(models.Model):
 
     def __str__(self):
         return f"{self.identifier} at {self.point}"
-
-
-class Accessor(models.Model):
-    model = models.OneToOneField(
-        DataModel,
-        on_delete=models.CASCADE,
-    )
-    get = models.TextField(max_length=2000, help_text="A get accessor for this model", null=True, blank=True)
-    search = models.TextField(max_length=2000, help_text="A selectable options query with a search Parameter", null=True, blank=True)
-    create = models.TextField(max_length=2000, help_text="A create Parameter for this model", null=True, blank=True)
-
-    def __str__(self):
-        return f"Acessor for {self.model}"
 
 
 class Repository(models.Model):
@@ -261,7 +245,7 @@ class Provision(models.Model):
     
 
     def __str__(self):
-        return f"Provision for Template: {self.template if self.template else ''} Referenced {self.reference} || Reserved {self.reservation if self.reservation else 'without Reservation'}"
+        return f"Provision for Template: {self.template if self.template else ''}: {self.status}"
 
 
     def to_message(self) -> BouncedProvideMessage:
@@ -344,7 +328,7 @@ class Reservation(models.Model):
         return ReservationLog.objects.create(message=message, reservation=self, level=level)
 
     def __str__(self):
-        return f"Res for Node {self.node}" if self.node else f"Res for Template {self.template}"
+        return f"Reservation for Node: {self.node}: {self.status}"
 
 
 class Assignation(models.Model):

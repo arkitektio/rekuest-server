@@ -1,11 +1,11 @@
 from balder.types import BalderQuery
 from facade import types
-from facade.models import DataModel, Node
+from facade.models import Structure, Node
 import graphene
 from herre import bounced
 
 
-class ModelDetailQuery(BalderQuery):
+class StructureDetailQuery(BalderQuery):
 
     class Arguments:
         id = graphene.ID(description="The query node", required=False)
@@ -13,17 +13,17 @@ class ModelDetailQuery(BalderQuery):
 
     @bounced(anonymous=True)
     def resolve(root, info, id=None, identifier=None):
-        if id: return DataModel.objects.get(id=id)
-        if identifier: return DataModel.objects.get(identifier=identifier)
+        if id: return Structure.objects.get(id=id)
+        if identifier: return Structure.objects.get(identifier=identifier)
 
     class Meta:
-        type = types.DataModel
-        operation = "model"
+        type = types.Structure
+        operation = "structure"
 
 
 
-class Models(BalderQuery):
+class Structures(BalderQuery):
 
     class Meta:
-        type = types.DataModel
+        type = types.Structure
         list = True

@@ -4,7 +4,6 @@ from balder.registry import register_type
 
 get_port_types = lambda: {
             "IntReturnPort": IntReturnPort,
-            "ModelReturnPort": ModelReturnPort,
             "StringReturnPort": StringReturnPort,
             "StructureReturnPort": StructureReturnPort,
             "ListReturnPort": ListReturnPort
@@ -46,19 +45,12 @@ class StructureReturnPort(graphene.ObjectType):
     class Meta:
         interfaces = (ReturnPort,)
 
-@register_type
-class ModelReturnPort(graphene.ObjectType):
-    """Model Port"""
-    identifier = graphene.String(description="The identifier of this Model")
-
-    class Meta:
-        interfaces = (ReturnPort,)
 
 
 @register_type
 class ListReturnPort(graphene.ObjectType):
     """Model Port"""
-    identifier = graphene.String(description="The identifier of this Model")
+    child = graphene.Field(lambda: ReturnPort, description="The child")
 
     class Meta:
         interfaces = (ReturnPort,)

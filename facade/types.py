@@ -51,11 +51,11 @@ class DataPoint(BalderObject):
 
 
 
-class DataModel(BalderObject):
+class Structure(BalderObject):
 
 
     class Meta:
-        model = models.DataModel
+        model = models.Structure
 
 class Scan(graphene.ObjectType):
     ok = graphene.Boolean()
@@ -63,7 +63,7 @@ class Scan(graphene.ObjectType):
 
 class DataQuery(graphene.ObjectType):
     point = graphene.Field(DataPoint, description="The queried Datapoint")
-    models = graphene.List(DataModel, description="The queried models on the Datapoint")
+    structures = graphene.List(Structure, description="The queried models on the Datapoint")
 
 
 class Provider(BalderObject):
@@ -136,13 +136,6 @@ class MirrorRepository(BalderObject):
         model = models.MirrorRepository
         interfaces = (Repository,)
 
-
-
-
-class Accessor(BalderObject):
-
-    class Meta:
-        model = models.Accessor
 
 
 class Reservation(BalderObject):

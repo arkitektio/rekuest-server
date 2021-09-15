@@ -1,3 +1,4 @@
+from facade.enums import ReservationStatusInput
 from facade.filters import NodeFilter
 from typing_extensions import Annotated
 from balder.types import BalderQuery
@@ -32,12 +33,21 @@ class Reservations(BalderQuery):
 
 class MyReservations(BalderQuery):
 
-    @bounced(anonymous=False)
-    def resolve(root, info, **kwargs):
-        return Reservation.objects.filter(creator=info.context.user).exclude(status__in=[ReservationStatus.ENDED.value,ReservationStatus.CANCELLED.value]).all()
+    class Arguments:
+        exclude = graphene.List(ReservationStatusInput, description="The excluded values", required=False)
+        filter = graphene.List(ReservationStatusInput, description="The included values", required=False)
 
+
+    @bounced(anonymous=False)
+    def resolve(root, info, exclude=None, filter=None):
+        qs = Reservation.objects.filter(creator=info.context.user)
+        if filter:
+            qs = qs.filter(status__in=filter)
+        if exclude:
+            qs = qs.exclude(status__in=exclude)
+
+        return qs.all()
 
     class Meta:
         type = types.Reservation
-        personal = "creator"
         list = True

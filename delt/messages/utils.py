@@ -57,6 +57,7 @@ registry = {
 
     UNASSIGN: UnassignMessage,
     BOUNCED_UNASSIGN: BouncedUnassignMessage,
+    BOUNCED_FORWARDED_UNASSIGN: BouncedForwardedUnassignMessage,
     UNASSIGN_CRITICAL: UnassignCriticalMessage,
     UNASSIGN_LOG: UnassignLogMessage,
     UNASSIGN_DONE: UnassignDoneMessage,

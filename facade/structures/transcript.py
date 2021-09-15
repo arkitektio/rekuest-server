@@ -1,7 +1,8 @@
+from graphene.types import structures
 from facade.enums import DataPointType
 import graphene
 from graphene.types.generic import GenericScalar
-from facade.types import DataModel, DataPoint
+from facade.types import Structure, DataPoint
 
 
 
@@ -56,4 +57,4 @@ class Transcript(graphene.ObjectType):
     host = graphene.Field(HostSettings)
     provider = graphene.Field(ProviderSettings)
     timestamp = graphene.DateTime()
-    models = graphene.List(DataModel, description="Registered Models in this instance")
+    structures = graphene.List(Structure, description="Registered Models in this instance")

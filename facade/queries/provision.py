@@ -1,4 +1,4 @@
-from facade.enums import ProvisionStatus
+from facade.enums import ProvisionStatus, ProvisionStatusInput
 from facade.filters import NodeFilter
 from typing_extensions import Annotated
 from balder.types import BalderQuery
@@ -33,10 +33,19 @@ class Provisions(BalderQuery):
 
 class MyProvisions(BalderQuery):
 
-    @bounced(anonymous=False)
-    def resolve(root, info, **kwargs):
-        return Provision.objects.filter(creator=info.context.user).exclude(status__in=[ProvisionStatus.ENDED.value,ProvisionStatus.CANCELLED.value]).all()
+    class Arguments:
+        exclude = graphene.List(ProvisionStatusInput, description="The excluded values", required=False)
+        filter = graphene.List(ProvisionStatusInput, description="The included values", required=False)
 
+    @bounced(anonymous=False)
+    def resolve(root, info, exclude=None, filter=None):
+        qs = Provision.objects.filter(creator=info.context.user)
+        if filter:
+            qs = qs.filter(status__in=filter)
+        if exclude:
+            qs = qs.exclude(status__in=exclude)
+
+        return qs.all()
 
     class Meta:
         type = types.Provision

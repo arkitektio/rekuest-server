@@ -20,6 +20,7 @@ class MetaModel(MessageMetaModel):
 class ReserveState(str, Enum):
     # Start State
     #Start State
+    STARTING = "STARTING"
     ROUTING = "ROUTING"
     # Life States
     PROVIDING = "PROVIDING"

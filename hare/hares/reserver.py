@@ -1,5 +1,7 @@
 
-from hare.transitions.reservation import cancel_reservation
+from hare.transitions.provision import cancel_provision
+from delt.messages.postman.provide.provide_transition import ProvideState
+from hare.transitions.reservation import cancel_reservation, critical_reservation, crititcal_reservation_by_reference, pause_reservation
 from re import M
 from facade.subscriptions.provision import MyProvisionsEvent, ProvisionEventSubscription
 from delt.messages.generics import Context
@@ -53,6 +55,7 @@ def prepare_messages_for_reservation(bounced_reserve: BouncedReserveMessage) -> 
     """
 
     reference = bounced_reserve.meta.reference
+    print(reference)
     callback = bounced_reserve.meta.extensions.callback
 
     reservation = Reservation.objects.get(reference=reference)
@@ -93,7 +96,6 @@ def prepare_messages_for_reservation(bounced_reserve: BouncedReserveMessage) -> 
     # Here we check if we can assign to the Topic
     if provision is None:
         # PROVIDE PATH
-        messages.append(log_to_reservation(reservation.reference, "We couldn't find an active Provision. Trying to Autoprovide", level=LogLevel.INFO, callback=callback))
         if "can_provide" not in context.scopes: raise DeniedError("Your App does not have the proper permissions set to autoprovide 'can_provide' to your scopes")
         if params.auto_provide != True: raise ReserveError("You didn't specify auto_provide in the provide params and this configuration is not yet provided!")
 
@@ -102,7 +104,7 @@ def prepare_messages_for_reservation(bounced_reserve: BouncedReserveMessage) -> 
 
         provision = Provision.objects.create(
             reservation = reservation,
-            status= ProvisionStatus.PROVIDING,
+            status= ProvisionStatus.PENDING,
             reference= reservation.reference, # We use the same reference that the user wants
             context= reservation.context, # We use the same reference that the user wants
             template= template,
@@ -136,26 +138,24 @@ def prepare_messages_for_reservation(bounced_reserve: BouncedReserveMessage) -> 
             messages.append((f"provision_in_{provision.template.provider.unique}", provide_message))
 
         else:
-            log_message = f"App {template.provider.name} is currently unactive. We will get notified once it gets connected"
-
-            messages.append(log_to_reservation(reservation.reference, log_message, level=LogLevel.INFO, callback=callback))
-            messages += transition_reservation(reservation, ReservationStatus.WAITING)
+            messages += pause_reservation(reservation, "Waiting for the Agent to come online! So we can provision!")
 
 
         return messages
 
 
 
-    if provision.status == ProvisionStatus.ACTIVE:
+    if provision.status == ProvideState.ACTIVE:
         # We can just forward this to the provider
-        log_message = "App is active and we can assign to the Provision. Forwarding to App"
-        messages.append(log_to_reservation(reservation.reference, log_message, level=LogLevel.INFO, callback=callback))
-        messages.append((f"reservations_in_{provision.unique}", bounced_reserve))
+        #lets just forward
+        logger.info("Provision is already active. We are forwarding the request")
+        messages += [(f"reservations_in_{provision.unique}", bounced_reserve)]
         
     else:
-        log_message = "Attention the App is inactive, please start the App. We are waiting for that! (Message stored in Database)"
-        messages.append(log_to_reservation(reservation.reference, log_message, level=LogLevel.WARN, callback=callback))
-        messages += transition_reservation(reservation, ReservationStatus.WAITING)
+        logger.info("Provision is not active. We are NOT forwarding the request")
+        provision.reservations.add(reservation)
+        provision.save()
+        messages += pause_reservation(reservation, "Waiting for the Provision to come online! So we can reserve again")
 
     print(messages)
 
@@ -278,19 +278,15 @@ def prepare_messages_for_unprovision(bounced_unprovide: BouncedUnprovideMessage)
     reference = bounced_unprovide.meta.reference
     context = bounced_unprovide.meta.context
     prov = Provision.objects.get(reference=provision_reference)
+
     if context.user != prov.creator.email and "admin" not in context.roles: raise DeniedError("Only the user that created the Reservation or an admin can unreserve his pods") 
     
     messages= []
     if prov.status == ProvisionStatus.ACTIVE:
-        set_provision_status(prov.reference, ProvisionStatus.CANCELING)
-        forwarded_message = BouncedUnprovideMessage(data={"provision": provision_reference}, meta={"reference": reference, "context": context})
-        messages.append((f"provision_in_{prov.template.provider.unique}", forwarded_message))
+        messages.append((f"provision_in_{prov.template.provider.unique}", bounced_unprovide))
 
     else:
-        set_provision_status(prov.reference, ProvisionStatus.CANCELLED)
-        if bounced_unprovide.meta.extensions.callback:
-            unprovide_done_message = UnprovideDoneMessage(data={"provision": provision_reference}, meta={"reference": reference, "context": context})
-            messages.append((bounced_unprovide.meta.extensions.callback, unprovide_done_message))
+        messages += cancel_provision(prov, "Cancelled on a system level because provision was already not active (provider will not receive it as an initial status")
 
     return messages
 
@@ -339,11 +335,6 @@ class ReserverRabbit(BaseHare):
         await sync_to_async(log_to_assignation)(reference, message, level=level)
 
 
-    async def set_reservation_status(self, reference, status):
-        await sync_to_async(set_reservation_status)(reference, status)
-        logger.info(reference)
-
-
     @BouncedReserveMessage.unwrapped_message
     async def on_bounced_reserve_in(self, bounced_reserve: BouncedReserveMessage, aiomessage: aiormq.abc.DeliveredMessage):
         """Bounced Reserve In
@@ -361,31 +352,25 @@ class ReserverRabbit(BaseHare):
             logger.info(f"Received Bounced Reserve {str(aiomessage.body.decode())} {bounced_reserve}")
 
             reference = bounced_reserve.meta.reference
-            params = bounced_reserve.data.params
-            context = bounced_reserve.meta.context
-            logCallback = bounced_reserve.meta.extensions.progress
-            
-            
-            # Callback
-            callback = bounced_reserve.meta.extensions.callback
 
             try:
                 messages = await sync_to_async(prepare_messages_for_reservation)(bounced_reserve)
 
+                for channel, message in messages: 
+                    if channel: await self.forward(message, channel)
+
             except ProtocolException as e:
                 logger.exception(e)
-                messages = await sync_to_async(transition_reservation_by_reference)(reference, ReservationStatus.ERROR, f"Error: {str(e)}")
+                messages = await sync_to_async(crititcal_reservation_by_reference)(reference, f"Error: {str(e)}")
 
 
-               
         except Exception as e:
             logger.exception(e)
-            messages = await sync_to_async(transition_reservation_by_reference)(reference, ReservationStatus.CRITICAL, f"Error: {str(e)}")
+            messages = await sync_to_async(crititcal_reservation_by_reference)(reference, f"Error: {str(e)}")
 
 
         for channel, message in messages: 
             if channel: await self.forward(message, channel)
-
         # This should then expand this to an assignation message that can be delivered to the Providers
         await aiomessage.channel.basic_ack(aiomessage.delivery.delivery_tag)
 
@@ -397,25 +382,17 @@ class ReserverRabbit(BaseHare):
 
             logger.info(f"Received Bounced Unreserve {str(aiomessage.body.decode())} {bounced_reserve}")
 
-            reference = bounced_unreserve.meta.reference
-            callback = bounced_unreserve.meta.extensions.callback
-            reservation = bounced_unreserve.data.reservation
-            context = bounced_unreserve.meta.context
 
 
             try:
                 messages = await sync_to_async(prepare_messages_for_unreservation)(bounced_unreserve)
 
                 for channel, message in messages: 
-                    print(channel, message)
                     if channel: await self.forward(message, channel)
 
             
             except ProtocolException as e:
                 logger.exception(e)
-
-            # This should then expand this to an assignation message that can be delivered to the Providers
-            await aiomessage.channel.basic_ack(aiomessage.delivery.delivery_tag)
 
                          
         except Exception as e:
@@ -434,10 +411,7 @@ class ReserverRabbit(BaseHare):
 
             reference = bounced_unreserve.meta.reference
             callback = bounced_unreserve.meta.extensions.callback
-            provision = bounced_unreserve.data.provision
-            context = bounced_unreserve.meta.context
 
-            await self.log_to_provision(provision, f"Unprovide Request received", level=LogLevel.INFO)
 
             try:
                 messages = await sync_to_async(prepare_messages_for_unprovision)(bounced_unreserve)
@@ -450,21 +424,16 @@ class ReserverRabbit(BaseHare):
             except ProtocolException as e:
                 logger.exception(e)
                 exception = ExceptionMessage.fromException(e, reference)
-                await sync_to_async(set_provision_status)(reference, ProvisionStatus.ERROR)
                 await sync_to_async(log_to_provision)(reference, f"Unreservation Error: {str(e)}", level=LogLevel.ERROR)
                 if callback: await self.forward(exception, callback)
 
-
-            # This should then expand this to an assignation message that can be delivered to the Providers
-            await aiomessage.channel.basic_ack(aiomessage.delivery.delivery_tag)
-
-                         
+                        
         except Exception as e:
             logger.exception(e)
             exception = ExceptionMessage.fromException(e, reference)
-            await sync_to_async(set_provision_status)(reference, ReservationStatus.CRITICAL)
-            await sync_to_async(log_to_provision)(f"Protocol Error on Unreservation", level=LogLevel.ERROR)
-            if callback: await self.forward(exception, callback)
+
+        await aiomessage.channel.basic_ack(aiomessage.delivery.delivery_tag)
+
 
 
     @BouncedAssignMessage.unwrapped_message

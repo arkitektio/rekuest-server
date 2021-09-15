@@ -1,7 +1,7 @@
 from balder.types.mutation.base import BalderMutation
 from facade.structures.transcript import HostProtocol, HostSettings, PointSettings, PostmanProtocol, PostmanSettings, ProviderProtocol, ProviderSettings, Transcript
 from facade import types
-from facade.models import Provider, DataModel, DataPoint
+from facade.models import Provider, Structure, DataPoint
 from balder.enum import InputEnum
 from facade.enums import ClientType, DataPointType, NodeType
 from herre import bounced
@@ -33,15 +33,13 @@ class Negotiate(BalderMutation):
         if "provider" in info.context.bounced.scopes: provider, _ = Provider.objects.update_or_create(app=info.context.bounced.app, user=info.context.bounced.user, defaults= {"name": info.context.bounced.app.name })
 
         transcript_dict = {
-            "models": DataModel.objects.all(),
+            "structures": Structure.objects.all(),
             "postman": PostmanSettings(
                     type = PostmanProtocol.WEBSOCKET,
                     kwargs= {}
             )
         }
         
-        transcript_dict["wards"] = [point.create_ward(internal = internal) for point in DataPoint.objects.all()]
-
 
         if client_type in [ClientType.POINT.value]:
             provider , _ = DataPoint.objects.update_or_create(app=info.context.bounced.app,

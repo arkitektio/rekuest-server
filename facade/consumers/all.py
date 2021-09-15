@@ -86,9 +86,11 @@ class AllConsumer(AsyncWebsocketConsumer):
     async def bounced_reserve(self, bounced_reserve: BouncedReserveMessage):
         bounced_reserve.meta.extensions.callback = self.callback_name
         bounced_reserve.meta.extensions.progress = self.progress_name
-
-        await sync_to_async(create_reservation_from_bouncedreserve)(bounced_reserve)
-        await self.forward(bounced_reserve, "bounced_reserve_in")
+        try:
+            await sync_to_async(create_reservation_from_bouncedreserve)(bounced_reserve)
+            await self.forward(bounced_reserve, "bounced_reserve_in")
+        except Exception as e:
+            logger.exception(e)
 
     async def on_bounced_reserve(self, bounced_reserve: BouncedReserveMessage):
         await self.bounced_reserve(bounced_reserve)

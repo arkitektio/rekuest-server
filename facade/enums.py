@@ -68,7 +68,7 @@ class TopicStatus(TextChoices):
 
 class AssignationStatus(TextChoices):
     PENDING = "PENDING", "Pending" # Assignation has been requested
-
+    RETURNED = "RETURNED", "Assignation Returned (Only for Functions)"
     # Arnheim acknowledgments
     DENIED = "DENIED", "Denied (Assingment was rejected)"
     ASSIGNED = "ASSIGNED", "Was able to assign to a pod"
@@ -104,6 +104,7 @@ class ReservationStatus(TextChoices):
 
     REROUTING = "REROUTING", "Rerouting (State of provisions this reservation connects to have changed and require Retouring)"
     DISCONNECTED = "DISCONNECTED", "Disconnect (State of provisions this reservation connects to have changed and require Retouring)"
+    DISCONNECT = "DISCONNECT", "Disconnect (State of provisions this reservation connects to have changed and require Retouring)"
     CANCELING = "CANCELING", "Cancelling (Reervation is currently being cancelled)"
     ACTIVE = "ACTIVE", "Active (Reservation is active and accepts assignments"
 

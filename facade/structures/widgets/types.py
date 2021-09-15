@@ -4,7 +4,9 @@ import graphene
 get_widget_types = lambda: {
             "QueryWidget": QueryWidget,
             "IntWidget": IntWidget,
-            "StringWidget": StringWidget
+            "StringWidget": StringWidget,
+            "SearchWidget": SearchWidget,
+            "SliderWidget": SliderWidget,
 }
 
 @register_type
@@ -15,7 +17,7 @@ class Widget(graphene.Interface):
     @classmethod
     def resolve_type(cls, instance, info):
         typemap = get_widget_types()
-        _type = instance.get("type")
+        _type = instance.get("type", instance.get("typename"))
         return typemap.get(_type, Widget)
 
 
@@ -26,11 +28,26 @@ class QueryWidget(graphene.ObjectType):
     class Meta:
         interfaces = (Widget,)
 
+@register_type
+class SearchWidget(graphene.ObjectType):
+    query = graphene.String(description="A Complex description")
+
+    class Meta:
+        interfaces = (Widget,)
+
 
     
 @register_type
 class IntWidget(graphene.ObjectType):
     query = graphene.String(description="A Complex description")
+
+    class Meta:
+        interfaces = (Widget,)
+
+@register_type
+class SliderWidget(graphene.ObjectType):
+    min = graphene.Int(description="A Complex description")
+    max = graphene.Int(description="A Complex description")
 
     class Meta:
         interfaces = (Widget,)

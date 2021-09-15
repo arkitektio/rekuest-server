@@ -1,7 +1,8 @@
-from hare.transitions.reservation import activate_reservation, critical_reservation, disconnect_reservation
+from hare.transitions.reservation import activate_reservation, cancel_reservation, canceling_reservation, critical_reservation, disconnect_reservation
 from facade.models import Provision
 from delt.messages.postman.provide.provide_transition import ProvideState, ProvideTransistionData, ProvideTransitionMessage
 from hare.transitions.base import TransitionException
+from facade.subscriptions.provision import MyProvisionsEvent, ProvisionEvent
 import logging
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,8 @@ def activate_provision(prov: Provision, message: str = None):
         }
         )))
 
+    if prov.creator: MyProvisionsEvent.broadcast({"action": ProvideState.ACTIVE.value, "data": prov.id}, [f"provisions_user_{prov.creator.id}"])
+
     return messages, reservation_topic, assignment_topics
 
 
@@ -99,6 +102,139 @@ def disconnect_provision(prov: Provision, message: str = None, reconnect = False
         }
         )))
 
+    
+    if prov.creator: MyProvisionsEvent.broadcast({"action": ProvideState.DISCONNECTED.value, "data": prov.id}, [f"provisions_user_{prov.creator.id}"])
+
+    return messages
+
+def providing_provision(prov: Provision, message: str = None, reconnect = False):
+    """Disconnect Provision
+
+    Takes an active provision and disconnects it 
+    and returns additional messages that need to
+    be send
+
+    Args:
+        prov (Provision): [description]
+
+    Raises:
+        TransitionException: [description]
+        TransitionException: [description]
+    """
+
+    if prov.status in [ProvideState.CANCELLED, ProvideState.ENDED]:
+        raise TransitionException(f"Provision {prov} was already ended or cancelled. Operation omitted. Create a new Provision if you want to restart.")
+
+
+    prov.status = ProvideState.PROVIDING
+    prov.save()
+
+    messages = []
+
+    if prov.callback:
+        messages.append((prov.callback,  ProvideTransitionMessage(data= {
+            "state": ProvideState.PROVIDING,
+            "message": message
+        },meta = {
+            "reference": prov.reference,
+        }
+        )))
+
+    
+    if prov.creator: MyProvisionsEvent.broadcast({"action": ProvideState.PROVIDING.value, "data": prov.id}, [f"provisions_user_{prov.creator.id}"])
+
+    return messages
+
+def cancel_provision(prov: Provision, message: str = None, reconnect = False):
+    """Disconnect Provision
+
+    Takes an active provision and disconnects it 
+    and returns additional messages that need to
+    be send
+
+    Args:
+        prov (Provision): [description]
+
+    Raises:
+        TransitionException: [description]
+        TransitionException: [description]
+    """
+
+    if prov.status in [ProvideState.CANCELLED, ProvideState.ENDED]:
+        raise TransitionException(f"Provision {prov} was already ended or cancelled. Operation omitted. Create a new Provision if you want to restart.")
+
+
+    prov.status = ProvideState.CANCELLED
+    prov.save()
+
+    messages = []
+
+    for res in prov.reservations.all():
+        try:
+            logger.info(f"Disconnecting {res}")
+            res_messages = cancel_reservation(res, message = f"Cancelled through cancellation of provision {prov}", reconnect=reconnect)
+            messages += res_messages
+        except TransitionException as e:
+            pass
+
+    if prov.callback:
+        messages.append((prov.callback,  ProvideTransitionMessage(data= {
+            "state": ProvideState.DISCONNECTED,
+            "message": message
+        },meta = {
+            "reference": prov.reference,
+        }
+        )))
+    
+
+    if prov.creator: MyProvisionsEvent.broadcast({"action": ProvideState.CANCELLED.value, "data": prov.id}, [f"provisions_user_{prov.creator.id}"])
+
+    return messages
+
+def cancelling_provision(prov: Provision, message: str = None, reconnect = False):
+    """Disconnect Provision
+
+    Takes an active provision and disconnects it 
+    and returns additional messages that need to
+    be send
+
+    Args:
+        prov (Provision): [description]
+
+    Raises:
+        TransitionException: [description]
+        TransitionException: [description]
+    """
+
+    if prov.status in [ProvideState.CANCELLED, ProvideState.ENDED]:
+        raise TransitionException(f"Provision {prov} was already ended or cancelled. Operation omitted. Create a new Provision if you want to restart.")
+
+
+    prov.status = ProvideState.CANCELING
+    prov.save()
+
+    messages = []
+
+    for res in prov.reservations.all():
+        try:
+            logger.info(f"Disconnecting {res}")
+            res_messages = canceling_reservation(res, message = f"Cancelling through cancellation of provision {prov}", reconnect=reconnect)
+            messages += res_messages
+        except TransitionException as e:
+            pass
+
+    if prov.callback:
+        messages.append((prov.callback,  ProvideTransitionMessage(data= {
+            "state": ProvideState.CANCELING,
+            "message": message
+        },meta = {
+            "reference": prov.reference,
+        }
+        )))
+    
+
+    if prov.creator: MyProvisionsEvent.broadcast({"action": ProvideState.CANCELING.value, "data": prov.id}, [f"provisions_user_{prov.creator.id}"])
+
     return messages
 
 
@@ -141,5 +277,8 @@ def critical_provision(prov: Provision, message: str = None, reconnect = False):
             "reference": prov.reference,
         }
         )))
+
+
+    if prov.creator: MyProvisionsEvent.broadcast({"action": ProvideState.CRITICAL.value, "data": prov.id}, [f"provisions_user_{prov.creator.id}"])
 
     return messages

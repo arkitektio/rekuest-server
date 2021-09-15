@@ -1,3 +1,4 @@
+from facade.enums import ReservationStatus
 from delt.messages.postman.reserve.reserve_transition import ReserveState
 from django.contrib.auth import get_user_model
 from facade.subscriptions.assignation import MyAssignationsEvent
@@ -50,7 +51,6 @@ def create_assignation_from_bouncedassign(bounced_assign: BouncedAssignMessage):
 def create_reservation_from_bouncedreserve(bounced_reserve: BouncedReserveMessage):
     context = bounced_reserve.meta.context
     extensions = bounced_reserve.meta.extensions
-    logger.error(f"NOINAOINWAOINWAOINWAOIWNAOIN {bounced_reserve.data.provision}")
 
     res = Reservation.objects.create(**{
             "node_id": bounced_reserve.data.node,
@@ -62,8 +62,11 @@ def create_reservation_from_bouncedreserve(bounced_reserve: BouncedReserveMessag
             "creator": HerreUser.objects.get(email=context.user) if context.user else None,
             "app": HerreApp.objects.get(client_id=context.app),
             "callback": extensions.callback,
-            "progress": extensions.progress
+            "progress": extensions.progress,
+            "status": ReservationStatus.ROUTING
         })
+
+    logger.info(f"Created Reservation {res}")
 
     MyReservationsEvent.broadcast({"action": "created", "data": res.id}, [f"reservations_user_{context.user}"])
 
