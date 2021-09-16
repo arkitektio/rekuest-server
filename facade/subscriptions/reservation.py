@@ -1,6 +1,6 @@
 from facade.enums import ReservationStatus
 from graphene.types.scalars import String
-from herre.bouncer.utils import bounced
+from lok import bounced
 from balder.types import BalderSubscription
 from facade import models, types
 import graphene

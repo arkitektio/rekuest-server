@@ -1,6 +1,6 @@
 from delt.messages.generics import Context
 from delt.messages.postman.provide.bounced_provide import BouncedProvideMessage
-from herre.models import HerreApp
+from lok.models import LokApp
 from mars.names import generate_random_name
 from facade.fields import ArgsField, KwargsField, OutputsField, ParamsField, PodChannel, ReturnField
 from facade.enums import AccessStrategy, LogLevel, AssignationStatus, DataPointType, LogLevel, NodeType,  ProvisionStatus,  ReservationStatus, TopicStatus, RepositoryType
@@ -23,7 +23,7 @@ class DataPoint(models.Model):
     Datapoints host Datamodels, that in turn are accessible as Models for Node inputs and node outputs
 
     """
-    app = models.ForeignKey(HerreApp, on_delete=models.CASCADE, help_text="The Associated App")
+    app = models.ForeignKey(LokApp, on_delete=models.CASCADE, help_text="The Associated App")
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, blank=True, help_text="The provide might be limited to a instance like ImageJ belonging to a specific person. Is nullable for backend users", null=True)
     version = models.CharField(max_length=100, help_text="The version of the bergen API this endpoint uses")
     inward = models.CharField(max_length=100, help_text="Inward facing hostname (for Docker powered access)", null=True, blank=True)
@@ -106,7 +106,7 @@ class MirrorRepository(Repository):
 
 
 class AppRepository(Repository):
-    app = models.ForeignKey(HerreApp, on_delete=models.CASCADE, null=True, help_text="The Associated App")
+    app = models.ForeignKey(LokApp, on_delete=models.CASCADE, null=True, help_text="The Associated App")
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, help_text="The provide might be limited to a instance like ImageJ belonging to a specific person. Is nullable for backend users", null=True)
     
 
@@ -121,7 +121,7 @@ class Provider(models.Model):
     installed_at = models.DateTimeField(auto_created=True, auto_now_add=True)
     unique = models.CharField(max_length=1000, default=uuid.uuid4, help_text="The Channel we are listening to")
     active = models.BooleanField(default=False, help_text="Is this Provider active right now?")
-    app = models.ForeignKey(HerreApp, on_delete=models.CASCADE, help_text="The Associated App")
+    app = models.ForeignKey(LokApp, on_delete=models.CASCADE, help_text="The Associated App")
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, help_text="The provide might be limited to a instance like ImageJ belonging to a specific person. Is nullable for backend users", null=True)
     
     class Meta:
@@ -241,7 +241,7 @@ class Provision(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, max_length=1000, help_text="This provision creator", null=True, blank=True)
-    app = models.ForeignKey(HerreApp, on_delete=models.CASCADE, max_length=1000, help_text="This provision creator", null=True, blank=True)
+    app = models.ForeignKey(LokApp, on_delete=models.CASCADE, max_length=1000, help_text="This provision creator", null=True, blank=True)
     
 
     def __str__(self):
@@ -317,7 +317,7 @@ class Reservation(models.Model):
     # Meta fields
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    app = models.ForeignKey(HerreApp, on_delete=models.CASCADE, max_length=1000, help_text="This Reservations app", null=True, blank=True)
+    app = models.ForeignKey(LokApp, on_delete=models.CASCADE, max_length=1000, help_text="This Reservations app", null=True, blank=True)
     parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, help_text="The Provisions parent", related_name="children")
     creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, max_length=1000, help_text="This Reservations creator", null=True, blank=True)
     reference = models.CharField(max_length=1000, unique=True, default=uuid.uuid4, help_text="The Unique identifier of this Assignation")
@@ -355,7 +355,7 @@ class Assignation(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     reference = models.CharField(max_length=1000, unique=True, default=uuid.uuid4, help_text="The Unique identifier of this Assignation")
     creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, max_length=1000, help_text="The creator is this assignation", null=True, blank=True)
-    app = models.ForeignKey(HerreApp, on_delete=models.CASCADE, max_length=1000, help_text="The app is this assignation", null=True, blank=True)
+    app = models.ForeignKey(LokApp, on_delete=models.CASCADE, max_length=1000, help_text="The app is this assignation", null=True, blank=True)
     parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, help_text="The Assignations parent", related_name="children")
 
 

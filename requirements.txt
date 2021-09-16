@@ -21,6 +21,7 @@ graphene-django
 unflatten
 graphql-core<3,>=2.1.0
 Markdown
+lok>=0.1.5
 
 # Testing and Linting
 ptvsd

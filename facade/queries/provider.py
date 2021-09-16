@@ -6,7 +6,7 @@ from facade import types
 from facade.enums import PodStatus
 from facade.models import Provider
 import graphene
-from herre import bounced
+from lok import bounced
 from balder.enum import InputEnum
 
 class ProviderDetailQuery(BalderQuery):

@@ -4,7 +4,7 @@ from facade import types
 from facade.models import Provider, Structure, DataPoint
 from balder.enum import InputEnum
 from facade.enums import ClientType, DataPointType, NodeType
-from herre import bounced
+from lok import bounced
 import graphene
 import logging
 import namegenerator

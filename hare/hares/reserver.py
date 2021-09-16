@@ -18,7 +18,8 @@ import logging
 import aiormq
 from asgiref.sync import sync_to_async
 from .base import BaseHare
-from arkitekt.console import console
+
+
 logger = logging.getLogger(__name__)
 
 class ProtocolException(Exception):

@@ -8,7 +8,7 @@ from facade.structures.ports.returns.types import ReturnPort
 from facade.structures.ports.kwargs.types import KwargPort
 from facade.structures.ports.args.types import ArgPort
 from facade import models
-from herre.models import HerreApp as HerreAppModel
+from lok.models import LokApp as HerreAppModel
 from balder.types import BalderObject
 import graphene
 from balder.registry import register_type
@@ -28,13 +28,13 @@ class ProvideParams(graphene.ObjectType):
 
 
 
-class HerreApp(BalderObject):
+class LokApp(BalderObject):
 
     class Meta:
         model = HerreAppModel
 
 
-class HerreUser(BalderObject):
+class LokUser(BalderObject):
 
     class Meta:
         model = get_user_model()

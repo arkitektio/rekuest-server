@@ -5,7 +5,7 @@ from balder.types import BalderQuery
 from facade import types
 from facade.models import Node, Reservation, ReservationStatus
 import graphene
-from herre import bounced
+from lok import bounced
 
 
 class ReservationDetailQuery(BalderQuery):

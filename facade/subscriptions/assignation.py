@@ -1,6 +1,6 @@
 from facade.enums import AssignationStatus
 from graphene.types.scalars import String
-from herre.bouncer.utils import bounced
+from lok import bounced
 from balder.types import BalderSubscription
 from facade.types import Assignation
 from facade import models

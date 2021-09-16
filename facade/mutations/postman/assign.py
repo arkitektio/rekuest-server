@@ -1,4 +1,4 @@
-from facade.consumers.postman import create_context_from_bounced
+from facade.helpers import create_context_from_bounced
 from facade.subscriptions.assignation import MyAssignationsEvent
 from facade.models import Assignation, Reservation
 from facade import types
@@ -7,7 +7,7 @@ import uuid
 from delt.messages import BouncedAssignMessage
 from balder.types import BalderMutation
 from graphene.types.generic import GenericScalar
-from herre import bounced
+from lok import bounced
 import graphene
 import logging
 

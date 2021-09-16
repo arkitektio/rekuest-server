@@ -24,7 +24,7 @@ from delt.messages import BouncedUnreserveMessage
 from facade.utils import log_to_provision, transition_provision
 from facade.consumers.base import BaseConsumer
 from asgiref.sync import sync_to_async
-from facade.consumers.postman import create_assignation_from_bouncedassign, create_bounced_assign_from_assign, create_bounced_reserve_from_reserve, create_reservation_from_bouncedreserve, get_channel_for_reservation
+from facade.helpers import create_assignation_from_bouncedassign, create_bounced_assign_from_assign, create_bounced_reserve_from_reserve, create_reservation_from_bouncedreserve, get_channel_for_reservation
 from delt.messages.postman.reserve.bounced_reserve import BouncedReserveMessage
 import aiormq
 from delt.messages.exception import ExceptionMessage
@@ -34,7 +34,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from delt.messages.utils import expandFromRabbitMessage, expandToMessage, MessageError
 import json
 import logging
-from herre.bouncer.utils import bounced_ws
+from lok.bouncer.utils import bounced_ws
 import asyncio
 from ..models import Provider, Provision, Reservation
 from facade.subscriptions.provider import ProvidersEvent

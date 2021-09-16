@@ -58,7 +58,7 @@ INSTALLED_APPS = [
     'health_check.db',  
     'health_check.contrib.rabbitmq',          # requires RabbitMQ broker
     'health_check.contrib.redis', 
-    'herre',
+    'lok',
     'django_probes',
     'guardian',
     'graphene_django',
@@ -81,8 +81,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'herre.middlewares.request.jwt.JWTTokenMiddleWare',
-    'herre.middlewares.request.bouncer.BouncedMiddleware', # needs to be after JWT and session 
+    'lok.middlewares.request.jwt.JWTTokenMiddleWare',
+    'lok.middlewares.request.bouncer.BouncedMiddleware', # needs to be after JWT and session 
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -143,7 +143,7 @@ CHANNEL_LAYERS = {
     },
 }
 
-AUTH_USER_MODEL = 'herre.HerreUser'
+AUTH_USER_MODEL = 'lok.LokUser'
 
 AUTHENTICATION_BACKENDS = ('django.contrib.auth.backends.ModelBackend', 'guardian.backends.ObjectPermissionBackend')
 

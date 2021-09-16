@@ -4,7 +4,7 @@ from facade.models import AppRepository, Structure, DataPoint, Repository, Node
 from balder.types import BalderMutation
 from balder.enum import InputEnum
 from facade.enums import NodeType
-from herre import bounced
+from lok import bounced
 import graphene
 import logging
 

@@ -2,7 +2,7 @@ from facade.models import Provider, Template
 from facade import types
 from balder.types import BalderMutation
 import graphene
-from herre import bounced
+from lok import bounced
 from graphene.types.generic import GenericScalar
 import socket
 

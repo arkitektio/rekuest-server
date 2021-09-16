@@ -1,4 +1,4 @@
-from facade.consumers.postman import create_context_from_bounced
+from facade.helpers import create_context_from_bounced
 from facade.subscriptions import provision
 from facade.workers.gateway import GatewayConsumer
 import uuid
@@ -6,7 +6,7 @@ from delt.messages import BouncedUnprovideMessage
 from facade import types
 from balder.types import BalderMutation
 from graphene.types.generic import GenericScalar
-from herre import bounced
+from lok import bounced
 import graphene
 import logging
 

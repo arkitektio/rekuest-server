@@ -5,7 +5,7 @@ from facade import types
 from facade.enums import PodStatus
 from facade.models import Template
 import graphene
-from herre import bounced
+from lok import bounced
 from balder.enum import InputEnum
 
 class TemplateDetailQuery(BalderQuery):

@@ -1,4 +1,4 @@
-from facade.consumers.postman import create_context_from_bounced
+from facade.helpers import create_context_from_bounced
 from facade.subscriptions.reservation import MyReservationsEvent
 from facade.workers.gateway import GatewayConsumer
 import uuid
@@ -8,7 +8,7 @@ from facade.enums import ReservationStatus
 from facade.models import  Reservation
 from balder.types import BalderMutation
 from graphene.types.generic import GenericScalar
-from herre import bounced
+from lok import bounced
 import graphene
 import logging
 

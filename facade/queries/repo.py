@@ -2,7 +2,7 @@ from balder.types import BalderQuery
 from facade import types
 from facade.models import AppRepository, MirrorRepository, Repository, Node
 import graphene
-from herre import bounced
+from lok import bounced
 from itertools import chain
 
 class RepoDetailQuery(BalderQuery):
