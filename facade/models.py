@@ -194,6 +194,7 @@ class Template(models.Model):
 
 
 class ProvisionLog(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
     provision = models.ForeignKey("Provision", help_text="The provision this log item belongs to", related_name="log", on_delete=models.CASCADE)
     message = models.CharField(max_length=20000, null=True, blank=True)
     level = models.CharField(choices=LogLevel.choices, default=LogLevel.INFO.value, max_length=200)
@@ -269,6 +270,7 @@ class Provision(models.Model):
 
 
 class ReservationLog(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
     reservation = models.ForeignKey("Reservation", help_text="The reservation this log item belongs to", related_name="log", on_delete=models.CASCADE)
     message = models.CharField(max_length=2000, null=True, blank=True)
     level = models.CharField(choices=LogLevel.choices, default=LogLevel.INFO.value, max_length=200)
@@ -365,7 +367,8 @@ class Assignation(models.Model):
 
 
 class AssignationLog(models.Model):
-    reservation = models.ForeignKey(Assignation, help_text="The reservation this log item belongs to", related_name="log", on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    assignation = models.ForeignKey(Assignation, help_text="The reservation this log item belongs to", related_name="log", on_delete=models.CASCADE)
     message = models.CharField(max_length=2000, null=True, blank=True)
     level = models.CharField(choices=LogLevel.choices, default=LogLevel.INFO.value, max_length=200)
 

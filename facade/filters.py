@@ -1,13 +1,14 @@
 from django.db.models.aggregates import Count
-from facade.enums import NodeType, PodStatus, ProvisionStatus
+from django_filters.filters import OrderingFilter, TimeRangeFilter
+from facade.enums import LogLevelInput, NodeType, NodeTypeInput, PodStatus, ProvisionStatus, ProvisionStatusInput
 import django_filters
+from balder.filters import EnumFilter
 from .models import Node,Provider, Template
-from balder.fields.enum import EnumFilter
 from django.db.models import Q
 
 class PodFilter(django_filters.FilterSet):
     provider = django_filters.ModelChoiceFilter(queryset=Provider.objects.all(),field_name= "template__provider")
-    status = EnumFilter(choices=PodStatus.choices)
+    status = EnumFilter(choices=PodStatus.choices, field_name="status")
 
 class ProviderFilter(django_filters.FilterSet):
     app = django_filters.CharFilter(method="app_filter")
@@ -22,7 +23,7 @@ class ProviderFilter(django_filters.FilterSet):
 class NodeFilter(django_filters.FilterSet):
     name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
     search = django_filters.CharFilter(method="search_filter",label="Search")
-    type = EnumFilter(choices=NodeType.choices)
+    type = EnumFilter(type=NodeTypeInput, field_name="type")
     arg_types = django_filters.BaseInFilter(method="arg_types_filter", label="Args")
 
     def search_filter(self, queryset, name, value):
@@ -44,6 +45,12 @@ class ProvisionFilter(django_filters.FilterSet):
 
     def active_filter(self, queryset, name, value):
         return queryset.filter(status__in=[ProvisionStatus.ACTIVE])
+
+class ProvisionLogFilter(django_filters.FilterSet):
+    level = EnumFilter(type=LogLevelInput,field_name="level")
+    created_at = TimeRangeFilter()
+    o = OrderingFilter(fields={"created_at": "time"})
+
 
 
 class NodesFilter(django_filters.FilterSet):

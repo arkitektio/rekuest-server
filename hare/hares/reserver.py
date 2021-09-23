@@ -175,7 +175,7 @@ def prepare_messages_for_unreservation(bounced_unreserve: BouncedUnreserveMessag
     """
     context = bounced_unreserve.meta.context
     res = Reservation.objects.get(reference=bounced_unreserve.data.reservation)
-    if context.user and context.user != res.creator.email and "admin" not in context.roles: raise DeniedError("Only the user that created the Reservation or an admin can unreserve his pods") 
+    if context.user and res.creator and context.user != res.creator.email and "admin" not in context.roles: raise DeniedError("Only the user that created the Reservation or an admin can unreserve his pods") 
     
     messages= []
     requires_unreservation = False
@@ -210,17 +210,14 @@ def prepare_messages_for_unassignment(bounced_unassign: BouncedUnassignMessage):
     callback = bounced_unassign.meta.extensions.callback
     ass = Assignation.objects.get(reference=bounced_unassign.data.assignation)
     if context.user != ass.creator.email and "admin" not in context.roles: raise DeniedError("Only the user that created the Assignment or an admin can unassign") 
-    log_to_assignation(ass.reference, "Currently is being cancelled", level=LogLevel.INFO)
     messages= []
 
     if ass.reservation.status in [ReservationStatus.ENDED, ReservationStatus.CANCELLED]:
         set_assignation_status(ass.reference, AssignationStatus.CANCELLED)
-        log_to_assignation(ass.reference, f"Was automatically cancelled because Reservation was in State {ass.reservation.status}", level=LogLevel.INFO)
         messages.append((callback,UnassignDoneMessage(data={"assignation": ass.reference}, meta={"reference": bounced_unassign.meta.reference})))
 
     else:
         set_assignation_status(ass.reference, AssignationStatus.CANCELING)
-        log_to_assignation(ass.reference, "Currently is being cancelled by sending to reservation", level=LogLevel.INFO)
         channel = f"assignments_in_{ass.reservation.channel}"
         messages.append((channel, bounced_unassign))
 
@@ -470,7 +467,6 @@ class ReserverRabbit(BaseHare):
         assignation = bounced_unassign.data.assignation
         callback =  bounced_unassign.meta.extensions.callback
 
-        await self.log_to_assignation(assignation, f"Unassignment Request received", level=LogLevel.INFO)
 
         try:
             messages = await sync_to_async(prepare_messages_for_unassignment)(bounced_unassign)
@@ -482,7 +478,6 @@ class ReserverRabbit(BaseHare):
         except Exception as e:
             logger.error(e)
             exception = ExceptionMessage.fromException(e, reference)
-            await self.log_to_assignation(assignation, f"Protocol Error on Unassignation {str(e)}", level=LogLevel.ERROR)
             await self.forward(exception, callback)
 
         # This should then expand this to an assignation message that can be delivered to the Providers

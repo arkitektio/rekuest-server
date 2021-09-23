@@ -3,7 +3,7 @@ from facade import types
 from facade.models import AppRepository, Structure, DataPoint, Repository, Node
 from balder.types import BalderMutation
 from balder.enum import InputEnum
-from facade.enums import NodeType
+from facade.enums import NodeType, NodeTypeInput
 from lok import bounced
 import graphene
 import logging
@@ -19,7 +19,7 @@ class CreateNode(BalderMutation):
         args = graphene.List(ArgPortInput, description="The Args")
         kwargs = graphene.List(KwargPortInput, description="The Kwargs")
         returns = graphene.List(ReturnPortInput, description="The Returns")
-        type = graphene.Argument(InputEnum.from_choices(NodeType),description="The variety", default_value=NodeType.FUNCTION.value)
+        type = graphene.Argument(NodeTypeInput,description="The variety", default_value=NodeType.FUNCTION.value)
         interface = graphene.String(description="The Interface", required=True)
         package = graphene.String(description="The Package", required=False)
 

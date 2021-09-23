@@ -1,14 +1,15 @@
 
 
+from delt.messages.postman.unassign.bounced_unassign import BouncedUnassignMessage
 from delt.messages.postman.unreserve.bounced_unreserve import BouncedUnreserveMessage
 from delt.messages.postman.unreserve.unreserve import UnreserveMessage
 from asgiref.sync import sync_to_async
-from facade.helpers import create_assignation_from_bouncedassign, create_bounced_assign_from_assign, create_bounced_reserve_from_reserve, create_bounced_unreserve_from_unreserve, create_reservation_from_bouncedreserve, get_channel_for_reservation
+from facade.helpers import create_assignation_from_bouncedassign, create_bounced_assign_from_assign, create_bounced_reserve_from_reserve, create_bounced_unassign_from_unassign, create_bounced_unreserve_from_unreserve, create_reservation_from_bouncedreserve, get_channel_for_reservation
 from delt.messages.postman.reserve.bounced_reserve import BouncedReserveMessage
 import aiormq
 from delt.messages.exception import ExceptionMessage
 from delt.messages.base import MessageModel
-from delt.messages import ReserveMessage, AgentConnectMessage, BouncedAssignMessage, AssignMessage
+from delt.messages import ReserveMessage, AgentConnectMessage, BouncedAssignMessage, AssignMessage, UnassignMessage
 from channels.generic.websocket import AsyncWebsocketConsumer
 from delt.messages.utils import expandFromRabbitMessage, expandToMessage, MessageError
 import json
@@ -53,8 +54,16 @@ class AllConsumer(AsyncWebsocketConsumer):
         AssignMessage: lambda cls: cls.on_assign,
         BouncedAssignMessage: lambda cls: cls.on_bounced_assign,
 
+        UnassignMessage: lambda cls: cls.on_unassign,
+        BouncedUnassignMessage: lambda cls: cls.on_bounced_unassign,
+        
+
+
         ReserveMessage: lambda cls: cls.on_reserve,
         UnreserveMessage: lambda cls: cls.on_unreserve,
+
+        BouncedReserveMessage: lambda cls: cls.on_bounced_reserve,
+        BouncedUnreserveMessage: lambda cls: cls.on_bounced_unreserve
     }
 
     def __init__(self, *args, **kwargs):
@@ -144,9 +153,26 @@ class AllConsumer(AsyncWebsocketConsumer):
         console.print(f"[red]{bounced_assign}")
         await self.bounced_assign(bounced_assign)
 
-
     async def on_bounced_assign(self, bounced_assign: BouncedAssignMessage):
         await self.bounced_assign(bounced_assign)
+
+
+    async def bounced_unassign(self, bounced_unassign: BouncedUnassignMessage):
+        bounced_unassign.meta.extensions.callback = self.callback_name
+        bounced_unassign.meta.extensions.progress = self.progress_name
+        topic = self.assignations_channel_map[bounced_unassign.data.assignation]
+        logger.warning(f"Automatically forwarding Unassignment to reservation topic {topic}")
+        await self.forward(bounced_unassign, topic)
+
+
+    async def on_unassign(self, unassign: UnassignMessage):
+        bounced_unassign: BouncedUnassignMessage = await create_bounced_unassign_from_unassign(unassign,  self.scope["auth"], self.callback_name, self.progress_name)
+        await self.bounced_unassign(bounced_unassign)
+
+
+    async def on_bounced_unassign(self, bounced_unassign: BouncedUnassignMessage):
+        await self.bounced_unassign(bounced_unassign)
+
 
 
     async def on_message_in(self, message):

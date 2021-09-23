@@ -1,11 +1,16 @@
+from delt.messages.postman.log import LogLevel
 from hare.transitions.reservation import activate_reservation, cancel_reservation, canceling_reservation, critical_reservation, disconnect_reservation
-from facade.models import Provision
+from facade.models import Provision, ProvisionLog
 from delt.messages.postman.provide.provide_transition import ProvideState, ProvideTransistionData, ProvideTransitionMessage
 from hare.transitions.base import TransitionException
-from facade.subscriptions.provision import MyProvisionsEvent, ProvisionEvent
+from facade.subscriptions.provision import MyProvisionsEvent, ProvisionEvent, ProvisionEventSubscription
 import logging
 
 logger = logging.getLogger(__name__)
+
+def log_to_provision_by_reference(reference, *args, **kwargs):
+    prov = Provision.objects.get(reference=reference)
+    return log_to_provision(prov, *args, **kwargs)
 
 def activate_provision(prov: Provision, message: str = None):
     """Activate Provision
@@ -282,3 +287,12 @@ def critical_provision(prov: Provision, message: str = None, reconnect = False):
     if prov.creator: MyProvisionsEvent.broadcast({"action": ProvideState.CRITICAL.value, "data": prov.id}, [f"provisions_user_{prov.creator.id}"])
 
     return messages
+
+def log_to_provision(prov: Provision, message: str = "Critical", level=LogLevel.INFO):
+    prov_log = ProvisionLog.objects.create(**{
+        "provision": prov,
+        "message": message,
+        "level": level
+    })
+
+    ProvisionEventSubscription.broadcast({"action": "log", "data": {"message": message, "level": level}}, [f"provision_{prov.reference}"])

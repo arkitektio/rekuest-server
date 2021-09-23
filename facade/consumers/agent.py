@@ -1,6 +1,6 @@
 
 
-from hare.transitions.assignation import cancel_assignation_by_reference, done_assignation_by_reference, return_assignation_by_reference, yield_assignation_by_reference
+from hare.transitions.assignation import cancel_assignation_by_reference, critical_assignation_by_reference, done_assignation_by_reference, log_to_assignation_by_reference, return_assignation_by_reference, yield_assignation_by_reference
 from delt.messages.postman.assign.assign_cancelled import AssignCancelledMessage
 from delt.messages.postman.assign.assign_done import AssignDoneMessage
 from delt.messages.postman.assign.assign_return import AssignReturnMessage
@@ -43,7 +43,7 @@ from facade.subscriptions.provision import MyProvisionsEvent
 from facade.enums import ProvisionStatus, ReservationStatus
 from arkitekt.console import console
 from hare.transitions.reservation import activate_reservation, disconnect_reservation, critical_reservation, cancel_reservation
-from hare.transitions.provision import activate_provision, cancel_provision, cancelling_provision, disconnect_provision, critical_provision, providing_provision
+from hare.transitions.provision import activate_provision, cancel_provision, cancelling_provision, disconnect_provision, critical_provision, log_to_provision_by_reference, providing_provision
 
 logger = logging.getLogger(__name__)
 
@@ -308,12 +308,20 @@ class AgentConsumer(BaseConsumer): #TODO: Seperate that bitch
             logger.exception(e)
 
 
-    async def on_provide_log(self, message: ProvideLogMessage):
-        pass
+    async def on_provide_log(self, provide_log: ProvideLogMessage):
+        # TODO: End true statement here
+        if provide_log.meta.extensions.persist == True or True: await sync_to_async(log_to_provision_by_reference)(provide_log.meta.reference, provide_log.data.message, provide_log.data.level)
+        await self.forward(provide_log, provide_log.meta.extensions.progress)
+
 
     async def on_assign_yields(self, assign_yield: AssignYieldsMessage):
         if assign_yield.meta.extensions.persist == True: await sync_to_async(yield_assignation_by_reference)(assign_yield.meta.reference, assign_yield.data.returns)
         await self.forward(assign_yield, assign_yield.meta.extensions.callback)
+
+    async def on_assign_critical(self, assign_critical: AssignCriticalMessage):
+        if assign_critical.meta.extensions.persist == True: await sync_to_async(critical_assignation_by_reference)(assign_critical.meta.reference, message=assign_critical.data.message)
+        await self.forward(assign_critical, assign_critical.meta.extensions.callback)
+
 
     async def on_assign_cancelled(self, assign_cancelled: AssignCancelledMessage):
         if assign_cancelled.meta.extensions.persist == True: await sync_to_async(cancel_assignation_by_reference)(assign_cancelled.meta.reference)
@@ -328,6 +336,7 @@ class AgentConsumer(BaseConsumer): #TODO: Seperate that bitch
         await self.forward(assign_done, assign_done.meta.extensions.callback)
 
     async def on_assign_log(self, assign_log: AssignLogMessage):
+        if assign_log.meta.extensions.persist == True: await sync_to_async(log_to_assignation_by_reference)(assign_log.meta.reference, assign_log.data.message, assign_log.data.level)
         await self.forward(assign_log, assign_log.meta.extensions.progress)
         
 

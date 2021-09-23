@@ -1,7 +1,7 @@
 from facade.enums import RepositoryType
 from django.contrib.auth import get_user_model
 from graphene_django.types import DjangoObjectType
-from facade.filters import NodesFilter, TemplateFilter, ProvisionFilter
+from facade.filters import NodesFilter, ProvisionLogFilter, TemplateFilter, ProvisionFilter
 from balder.fields.filtered import BalderFiltered
 from django.utils.translation import templatize
 from facade.structures.ports.returns.types import ReturnPort
@@ -71,6 +71,27 @@ class Provider(BalderObject):
     class Meta:
         model = models.Provider
 
+class ReservationLog(BalderObject):
+
+    class Meta:
+        model = models.ReservationLog
+        
+
+class Assignation(BalderObject):
+    
+    class Meta:
+        model = models.Assignation
+
+
+class AssignationLog(BalderObject):
+    
+    class Meta:
+        model = models.AssignationLog
+
+class ProvisionLog(BalderObject):
+    
+    class Meta:
+        model = models.ProvisionLog
 
 
 
@@ -78,6 +99,7 @@ class Provider(BalderObject):
 
 class Provision(BalderObject):
     params = graphene.Field(ProvideParams)
+    log = BalderFiltered(ProvisionLog, filterset_class=ProvisionLogFilter, related_field="log")
     
     class Meta:
         model = models.Provision
@@ -145,26 +167,5 @@ class Reservation(BalderObject):
         model = models.Reservation
 
 
-class ReservationLog(BalderObject):
-
-    class Meta:
-        model = models.ReservationLog
-        
-
-class Assignation(BalderObject):
-    
-    class Meta:
-        model = models.Assignation
-
-
-class AssignationLog(BalderObject):
-    
-    class Meta:
-        model = models.AssignationLog
-
-class ProvisionLog(BalderObject):
-    
-    class Meta:
-        model = models.ProvisionLog
 
 

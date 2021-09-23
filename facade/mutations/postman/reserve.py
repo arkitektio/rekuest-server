@@ -24,6 +24,7 @@ class ReserveMutation(BalderMutation):
         reference = graphene.String(description="The Base URL for the Datapoint you want to add", required=False)
         title = graphene.String(description="A cleartext shorthand title", required=False)
         params = graphene.Argument(types.ReserveParamsInput, description="Additional Params", required=False)
+        persist = graphene.Boolean(default_value=True, description="Additional Params", required=False)
 
 
     class Meta:
@@ -32,7 +33,7 @@ class ReserveMutation(BalderMutation):
 
     
     @bounced(only_jwt=True)
-    def mutate(root, info, node=None, template = None, params={}, title=None, reference=None):
+    def mutate(root, info, node=None, template = None, params={}, title=None, reference=None, persist=True):
         reference = reference or str(uuid.uuid4())
         bounce = info.context.bounced
 
@@ -43,6 +44,9 @@ class ReserveMutation(BalderMutation):
             "status": ReservationStatus.ROUTING,
             "title": title,
             "context": create_context_from_bounced(bounce),
+            "extensions": {
+                "persist": persist
+            },
             "reference": reference,
             "creator": bounce.user,
             "app": bounce.app,

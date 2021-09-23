@@ -1,6 +1,6 @@
-from facade.enums import AssignationStatus
+from facade.enums import AssignationStatus, LogLevel
 from typing import List
-from facade.models import Assignation
+from facade.models import Assignation, AssignationLog
 from hare.transitions.base import TransitionException
 from facade.subscriptions.assignation import MyAssignationsEvent, AssignationEventSubscription
 # Big Difference here is that we need not to keep any state (insted of reservation so
@@ -18,9 +18,17 @@ def cancel_assignation_by_reference(reference, *args, **kwargs):
     ass = Assignation.objects.get(reference=reference)
     return cancel_assignation(ass, *args, **kwargs)
 
+def critical_assignation_by_reference(reference, *args, **kwargs):
+    ass = Assignation.objects.get(reference=reference)
+    return critical_assignation(ass, *args, **kwargs)
+
 def return_assignation_by_reference(reference, *args, **kwargs):
     ass = Assignation.objects.get(reference=reference)
     return return_assignation(ass, *args, **kwargs)
+
+def log_to_assignation_by_reference(reference, *args, **kwargs):
+    ass = Assignation.objects.get(reference=reference)
+    return log_to_assignation(ass, *args, **kwargs)
 
 
 def yield_assignation(ass: Assignation, returns: List, message: str = "Yielded"):
@@ -33,8 +41,7 @@ def yield_assignation(ass: Assignation, returns: List, message: str = "Yielded")
 
     # Signal Broadcasting
     if ass.creator: MyAssignationsEvent.broadcast({"action": AssignationStatus.YIELD.value, "data": str(ass.id)}, [f"assignations_user_{ass.creator.id}"])
-    AssignationEventSubscription.broadcast({"action": "update", "data": str(ass.id)}, [f"assignation_{ass.reference}"])
-
+   
 def done_assignation(ass: Assignation, message: str = "Yielded"):
     if ass.status in [AssignationStatus.CANCELLED, AssignationStatus.DONE]:
         raise TransitionException(f"Assignation {ass} was already ended or cancelled. Operation omitted. Create a new Assignation if you want to yield to it.")
@@ -45,7 +52,7 @@ def done_assignation(ass: Assignation, message: str = "Yielded"):
 
     # Signal Broadcasting
     if ass.creator: MyAssignationsEvent.broadcast({"action": AssignationStatus.DONE.value, "data": str(ass.id)}, [f"assignations_user_{ass.creator.id}"])
-    AssignationEventSubscription.broadcast({"action": "update", "data": str(ass.id)}, [f"assignation_{ass.reference}"])
+   
 
 def cancel_assignation(ass: Assignation, message: str = "Yielded"):
     if ass.status in [AssignationStatus.CANCELLED, AssignationStatus.DONE]:
@@ -57,7 +64,7 @@ def cancel_assignation(ass: Assignation, message: str = "Yielded"):
 
     # Signal Broadcasting
     if ass.creator: MyAssignationsEvent.broadcast({"action": AssignationStatus.CANCELLED.value, "data": str(ass.id)}, [f"assignations_user_{ass.creator.id}"])
-    AssignationEventSubscription.broadcast({"action": "update", "data": str(ass.id)}, [f"assignation_{ass.reference}"])
+   
 
 def return_assignation(ass: Assignation, returns: List, message: str = "Yielded"):
     if ass.status in [AssignationStatus.CANCELLED, AssignationStatus.DONE]:
@@ -69,4 +76,23 @@ def return_assignation(ass: Assignation, returns: List, message: str = "Yielded"
 
     # Signal Broadcasting
     if ass.creator: MyAssignationsEvent.broadcast({"action": AssignationStatus.RETURNED.value, "data": str(ass.id)}, [f"assignations_user_{ass.creator.id}"])
-    AssignationEventSubscription.broadcast({"action": "update", "data": str(ass.id)}, [f"assignation_{ass.reference}"])
+    
+
+def critical_assignation(ass: Assignation, message: str = "Critical"):
+    if ass.status in [AssignationStatus.CANCELLED, AssignationStatus.CRITICAL]:
+        raise TransitionException(f"Assignation {ass} was already ended or criticalled. Operation omitted. Create a new Assignation if you want to yield to it.")
+    
+    ass.status = AssignationStatus.CRITICAL
+    ass.save()
+
+    # Signal Broadcasting
+    if ass.creator: MyAssignationsEvent.broadcast({"action": AssignationStatus.CRITICAL.value, "data": str(ass.id)}, [f"assignations_user_{ass.creator.id}"])
+    
+def log_to_assignation(ass: Assignation, message: str = "Critical", level=LogLevel.INFO):
+    assignation_log = AssignationLog.objects.create(**{
+        "assignation": ass,
+        "message": message,
+        "level": level
+    })
+
+    AssignationEventSubscription.broadcast({"action": "log", "data": {"message": message, "level": level}}, [f"assignation_{ass.reference}"])

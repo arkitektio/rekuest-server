@@ -38,13 +38,10 @@ class ProvisionEventSubscription(BalderSubscription):
         action = payload["action"]
         data = payload["data"]
 
-        print(payload)
+        print("Publish dubplish", payload)
 
         if action == "log":
             return {"log": data}
-
-        if action == "update":
-            return {"log": models.Provision.objects.get(id=data)}
 
         print("error in payload")
 

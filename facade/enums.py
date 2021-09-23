@@ -21,6 +21,8 @@ class LogLevel(TextChoices):
     ERROR = "ERROR", "ERROR Level"   
     WARN = "WARN", "WARN Level"   
 
+LogLevelInput = InputEnum.from_choices(LogLevel)
+
 
 class RepositoryType(TextChoices):
     """ Repository Types expresses what sort of Repository we are dealing with, e.g is this a local, mirror??"""
@@ -90,6 +92,7 @@ class AssignationStatus(TextChoices):
 
 
 AssignationStatusInput = InputEnum.from_choices(AssignationStatus)
+NodeTypeInput = InputEnum.from_choices(NodeType)
 
 
 class ReservationStatus(TextChoices):

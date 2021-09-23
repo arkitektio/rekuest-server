@@ -81,8 +81,6 @@ class MyAssignationsEvent(BalderSubscription):
 
         if action == "created":
             return {"create": models.Assignation.objects.get(id=data)}
-        if action in [AssignationStatus.CANCELLED, AssignationStatus.DONE, AssignationStatus.RETURNED]:
-            return {"ended": data}
         else:
             return {"update": models.Assignation.objects.get(id=data)}
 
