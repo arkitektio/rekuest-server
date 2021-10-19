@@ -1,13 +1,17 @@
 from facade.structures.widgets.types import Widget
 from balder.registry import register_type
 import graphene
+from graphene.types.generic import GenericScalar
 
 get_port_types = lambda: {
             "IntArgPort": IntArgPort,
             "StringArgPort": StringArgPort,
             "StructureArgPort": StructureArgPort,
             "ListArgPort": ListArgPort,
+            "BoolArgPort": BoolArgPort,
+            "EnumArgPort": EnumArgPort,
 }
+
 
 @register_type
 class ArgPort(graphene.Interface):
@@ -27,10 +31,25 @@ class ArgPort(graphene.Interface):
 @register_type
 class IntArgPort(graphene.ObjectType):
     """Integer Port"""
-    default = graphene.Int(description="Default value")
 
     class Meta:
         interfaces = (ArgPort,)
+
+@register_type
+class BoolArgPort(graphene.ObjectType):
+    """Integer Port"""
+
+    class Meta:
+        interfaces = (ArgPort,)
+
+@register_type
+class EnumArgPort(graphene.ObjectType):
+    """Integer Port"""
+    options = GenericScalar(description="A dict of options")
+
+    class Meta:
+        interfaces = (ArgPort,)
+
 
 
 @register_type

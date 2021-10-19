@@ -17,7 +17,7 @@ conf = OmegaConf.load('config.yaml')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
+print(BASE_DIR)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
@@ -30,7 +30,7 @@ DEBUG = conf.server.debug
 ALLOWED_HOSTS = conf.server.hosts
 CORS_ORIGIN_ALLOW_ALL = True
 
-HERRE = {
+LOK = {
     "PUBLIC_KEY": conf.herre.public_key,
     "KEY_TYPE": conf.herre.key_type,
     "ISSUER": conf.herre.issuer
@@ -110,7 +110,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'arkitekt.wsgi.application'
-ASGI_APPLICATION = 'arkitekt.routing.application'
+ASGI_APPLICATION = 'arkitekt.asgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/3.1/ref/settings/#databases
@@ -186,13 +186,14 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/3.1/howto/static-files/
 
-STATIC_URL = '/static/'
+STATIC_URL = 'static/'
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "static"),
 ]
 
-STATIC_ROOT = "/var/www/static"
+STATIC_ROOT = '/var/www/static/'
 
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 LOGGING = {
     'version': 1,
@@ -233,3 +234,6 @@ LOGGING = {
         },
     },
 }
+
+MEDIA_URL = "media/"
+MEDIA_ROOT = "/media"

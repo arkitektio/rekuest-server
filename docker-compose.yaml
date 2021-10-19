@@ -4,12 +4,21 @@ services:
   arkitekt:
     build: .
     command: bash run.sh
+    volumes:
+      # Update this to wherever you want VS Code to mount the folder of your project
+      - .:/workspace
     ports:
       - 8090:8090
     depends_on: 
       - redis
       - mister
       - baberl
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.middlewares.arkitektheaders.headers.customrequestheaders.Daphne-Root-Path=/arkitekt"
+      - "traefik.http.routers.arkitekt.rule=PathPrefix(`/arkitekt`)"
+      - "traefik.http.routers.arkitekt.middlewares=arkitektheaders"
+      - "traefik.http.routers.arkitekt.entrypoints=web"
   baberl:
     image: postgres:12.6-alpine
     environment: 
@@ -27,6 +36,19 @@ services:
     image: redis:latest
     ports:
       - 6379:6379
+  traefikn:
+    image: "traefik:v2.5"
+    command:
+      #- "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
 
 
 

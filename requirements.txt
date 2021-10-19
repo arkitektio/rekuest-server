@@ -1,5 +1,6 @@
 Django>=3.1
 channels>=2.4.0
+asgiref==3.3.4 #https://github.com/django/asgiref/issues/278
 channels_redis
 django-registration-redux
 django-extensions
@@ -14,14 +15,21 @@ psycopg2
 
 
 django-channels-graphql-ws
+
 django-guardian
 django-avatar
 python-slugify
 graphene-django
 unflatten
+inflection
 graphql-core<3,>=2.1.0
 Markdown
-lok>=0.1.5
+
+# JWT
+lok>=0.1.12
+
+# GraphQL abstaction
+balder[subscription]>=0.1.7
 
 # Testing and Linting
 ptvsd
@@ -34,6 +42,7 @@ pylint-django
 pydantic
 colorlog
 namegenerator
+whitenoise
 
 
 # For Health Check Reasons

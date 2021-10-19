@@ -7,6 +7,7 @@ get_widget_types = lambda: {
             "StringWidget": StringWidget,
             "SearchWidget": SearchWidget,
             "SliderWidget": SliderWidget,
+            "BoolWidget": BoolWidget
 }
 
 @register_type
@@ -35,6 +36,11 @@ class SearchWidget(graphene.ObjectType):
     class Meta:
         interfaces = (Widget,)
 
+@register_type
+class BoolWidget(graphene.ObjectType):
+
+    class Meta:
+        interfaces = (Widget,)
 
     
 @register_type
@@ -55,7 +61,7 @@ class SliderWidget(graphene.ObjectType):
 
 @register_type
 class StringWidget(graphene.ObjectType):
-    pass
+    placeholder = graphene.String(description="A placeholder to display")
 
     class Meta:
         interfaces = (Widget,)

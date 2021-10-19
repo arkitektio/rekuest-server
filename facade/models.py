@@ -1,6 +1,7 @@
 from delt.messages.generics import Context
 from delt.messages.postman.provide.bounced_provide import BouncedProvideMessage
 from lok.models import LokApp
+from facade.managers import NodeManager
 from mars.names import generate_random_name
 from facade.fields import ArgsField, KwargsField, OutputsField, ParamsField, PodChannel, ReturnField
 from facade.enums import AccessStrategy, LogLevel, AssignationStatus, DataPointType, LogLevel, NodeType,  ProvisionStatus,  ReservationStatus, TopicStatus, RepositoryType
@@ -107,12 +108,7 @@ class MirrorRepository(Repository):
 
 class AppRepository(Repository):
     app = models.ForeignKey(LokApp, on_delete=models.CASCADE, null=True, help_text="The Associated App")
-    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, help_text="The provide might be limited to a instance like ImageJ belonging to a specific person. Is nullable for backend users", null=True)
-    
-
-
-
-
+   
 
 class Provider(models.Model):
     """ A provider is the intermediate step from a template to a pod, it takes an associated template
@@ -152,10 +148,12 @@ class Node(models.Model):
     args = ArgsField(default=list, help_text="Inputs for this Node")
     kwargs = KwargsField(default=list, help_text="Inputs for this Node")
     returns = ReturnField(default=list, help_text="Outputs for this Node")
+
+    objects = NodeManager()
     
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["repository","package","interface"], name="package, interface, repository cannot be the same")
+            models.UniqueConstraint(fields=["repository","interface"], name="package, interface, repository cannot be the same")
         ]
 
     def __str__(self):

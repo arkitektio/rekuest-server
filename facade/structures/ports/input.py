@@ -12,6 +12,7 @@ class ArgPortInput(graphene.InputObjectType):
     widget = graphene.Field(WidgetInput, description="Which Widget to use to render Port in User Interfaces")
     child = graphene.Field(lambda: ArgPortInput, description="The Child of this")
     transpile= graphene.String(description="The corresponding Model")
+    options = GenericScalar(description="Options for an Enum")
 
 
 class KwargPortInput(graphene.InputObjectType):
@@ -25,6 +26,7 @@ class KwargPortInput(graphene.InputObjectType):
     widget = graphene.Field(WidgetInput, description="Which Widget to use to render Port in User Interfaces")
     child = graphene.Field(lambda: KwargPortInput, description="The Child of this")
     transpile= graphene.String(description="The corresponding Model")
+    options = GenericScalar(description="Options for an Enum")
 
 class ReturnPortInput(graphene.InputObjectType):
     key =  graphene.String(description="The Key", required=False)

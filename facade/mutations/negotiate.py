@@ -30,7 +30,7 @@ class Negotiate(BalderMutation):
     
     @bounced(only_jwt=True)
     def mutate(root, info, client_type = ClientType.HOST, inward=None, outward=None, port=None, version="0.1.0", point_type= None, needs_negotiation=False, internal=False):
-        if "provider" in info.context.bounced.scopes: provider, _ = Provider.objects.update_or_create(app=info.context.bounced.app, user=info.context.bounced.user, defaults= {"name": info.context.bounced.app.name })
+        provider, _ = Provider.objects.update_or_create(app=info.context.bounced.app, user=info.context.bounced.user, defaults= {"name": info.context.bounced.app.name })
 
         transcript_dict = {
             "structures": Structure.objects.all(),

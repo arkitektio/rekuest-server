@@ -19,7 +19,8 @@ from django.shortcuts import render
 from graphene_django.views import GraphQLView
 from django.views.decorators.csrf import csrf_exempt
 from django.conf.urls import include, url
-
+from django.conf.urls.static import static
+from django.conf import settings
 
 
 
@@ -31,6 +32,10 @@ def index(request):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', index, name='index'),
-    url(r'^graphql$', csrf_exempt(GraphQLView.as_view(graphiql=True))),
-    url(r'^ht/', include('health_check.urls')),
-]
+    path('accounts/',include('django.contrib.auth.urls')),
+    path(r'graphql', csrf_exempt(GraphQLView.as_view(graphiql=True)), name="graphql"),
+    path(r'ht/', include('health_check.urls')),
+]+ static("static", document_root=settings.STATIC_ROOT) + static("media", document_root=settings.MEDIA_ROOT)
+
+from django.urls import get_resolver
+print(get_resolver().reverse_dict.keys())

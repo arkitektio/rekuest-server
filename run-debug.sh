@@ -13,7 +13,7 @@ python manage.py collectstatic --noinput
 
 # Start the first process
 echo "=> Starting Server in Background"
-daphne -b 0.0.0.0 -p 8090 arkitekt.asgi:application &
+python manage.py runserver 0.0.0.0:8090 &
 status=$?
 if [ $status -ne 0 ]; then
   echo "Failed to start Server: $status"

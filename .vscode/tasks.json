@@ -25,6 +25,11 @@
             "command": "python manage.py runworker gateway"
         },
         {
+            "label": "Build",
+            "type": "shell",
+            "command": "docker build -t jhnnsrs/arkitekt:prod ."
+        },
+        {
             "label": "Reserver",
             "type": "shell",
             "command": "python manage.py runreserver"
