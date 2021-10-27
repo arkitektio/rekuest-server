@@ -104,6 +104,7 @@ def prepare_messages_for_reservation(bounced_reserve: BouncedReserveMessage) -> 
         reservation.save()
 
         provision = Provision.objects.create(
+            title = reservation.title,
             reservation = reservation,
             status= ProvisionStatus.PENDING,
             reference= reservation.reference, # We use the same reference that the user wants

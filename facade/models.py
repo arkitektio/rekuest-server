@@ -167,6 +167,7 @@ class Template(models.Model):
     node = models.ForeignKey(Node, on_delete=models.CASCADE, help_text="The node this template is implementatig", related_name="templates")
     provider = models.ForeignKey(Provider, on_delete=models.CASCADE, help_text="The associated provider for this Template", related_name="templates")
     name = models.CharField(max_length=1000, default=generate_random_name, help_text="A name for this Template")
+    extensions = models.JSONField(max_length=2000, default=list, help_text="The attached extensions for this Template")
 
     policy = models.JSONField(max_length=2000, default=dict, help_text="The attached policy for this template")
 
@@ -174,7 +175,7 @@ class Template(models.Model):
     channel = models.CharField(max_length=1000, default=uuid.uuid4, help_text="The unique channel where we can reach pods of this template [depending on Stragey]", unique=True)
 
     creator = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, help_text="Who created this template on this instance")
-    version = models.CharField(max_length=400, help_text="A short descriptor for the kind of version") #Subject to change
+    version = models.CharField(max_length=400, help_text="A short descriptor for the kind of version", null=True, blank=True) #Subject to change
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -215,7 +216,7 @@ class Provision(models.Model):
     
     reservation = models.ForeignKey("Reservation", on_delete=models.CASCADE, null=True, blank=True, help_text="Reservation that created this provision (if we were auto created)", related_name="created_provisions")
     provision = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, help_text="Provision that created this provision (if we were auto created)", related_name="created_provisions")
-    
+    title = models.CharField(max_length=200, help_text="A Short Hand Way to identify this reservation for you", null=True, blank=True)
     # Input
     template = models.ForeignKey(Template, on_delete=models.CASCADE, help_text="The Template for this Provision", related_name="provisions", null=True, blank=True)
     
@@ -339,6 +340,7 @@ class Assignation(models.Model):
 
     # 1. The State of Everything
     args = models.JSONField(blank=True, null=True, help_text="The Args")
+    provision = models.ForeignKey(Provision, on_delete=models.CASCADE, help_text="Which Provision did we end up being assigned to", related_name="assignations", blank=True, null=True)
     kwargs = models.JSONField(blank=True, null=True, help_text="The Kwargs")
     returns = models.JSONField(blank=True, null=True, help_text="The Returns")
     status = models.CharField(max_length=300, choices=AssignationStatus.choices, default=AssignationStatus.PENDING.value, help_text="Current lifecycle of Assignation")

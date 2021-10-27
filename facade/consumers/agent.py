@@ -1,6 +1,6 @@
 
 
-from hare.transitions.assignation import cancel_assignation_by_reference, critical_assignation_by_reference, done_assignation_by_reference, log_to_assignation_by_reference, return_assignation_by_reference, yield_assignation_by_reference
+from hare.transitions.assignation import cancel_assignation_by_reference, critical_assignation_by_reference, done_assignation_by_reference, log_to_assignation_by_reference, receive_assignation_by_reference, return_assignation_by_reference, yield_assignation_by_reference
 from delt.messages.postman.assign.assign_cancelled import AssignCancelledMessage
 from delt.messages.postman.assign.assign_done import AssignDoneMessage
 from delt.messages.postman.assign.assign_return import AssignReturnMessage
@@ -20,7 +20,7 @@ from delt.messages.postman.assign.bounced_forwarded_assign import BouncedForward
 from delt.messages.postman.unassign.bounced_forwarded_unassign import BouncedForwardedUnassignMessage
 from delt.messages.postman.assign.bounced_assign import BouncedAssignMessage
 from delt.messages.postman.provide.provide_transition import ProvideState, ProvideTransistionData
-from delt.messages import BouncedUnreserveMessage
+from delt.messages import BouncedUnreserveMessage, AssignReceivedMessage
 from facade.utils import log_to_provision, transition_provision
 from facade.consumers.base import BaseConsumer
 from asgiref.sync import sync_to_async
@@ -141,8 +141,6 @@ class AgentConsumer(BaseConsumer): #TODO: Seperate that bitch
         ProvideTransitionMessage: lambda cls: cls.on_provide_transition,
         ProvideLogMessage: lambda cls: cls.on_provide_log,
 
-
-
         AssignYieldsMessage: lambda cls: cls.on_assign_yields,
         AssignLogMessage: lambda cls: cls.on_assign_log,
         AssignCriticalMessage: lambda cls: cls.on_assign_critical,
@@ -251,6 +249,9 @@ class AgentConsumer(BaseConsumer): #TODO: Seperate that bitch
         
         if isinstance(nana, BouncedAssignMessage):
             forwarded_message = BouncedForwardedAssignMessage(data={**nana.data.dict(), "provision": provision_reference}, meta={**nana.meta.dict(), "type": BOUNCED_FORWARDED_ASSIGN})
+            assign_received = AssignReceivedMessage(data={"provision": provision_reference}, meta=nana.meta.dict(exclude={"type"}))
+            if nana.meta.extensions.persist == True: await sync_to_async(receive_assignation_by_reference)(nana.meta.reference, provision_reference)
+            await self.forward(assign_received, nana.meta.extensions.callback)
             await self.send_message(forwarded_message) # No need to go through pydantic???
             
         elif isinstance(nana, BouncedUnassignMessage):

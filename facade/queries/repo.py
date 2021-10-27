@@ -12,7 +12,7 @@ class RepoDetailQuery(BalderQuery):
 
     @bounced(anonymous=True)
     def resolve(root, info, id=None, identifier=None):
-        if id: return Repository.objects.get(id=id)
+        if id: return AppRepository.objects.get(id=id)
 
     class Meta:
         type = types.Repository

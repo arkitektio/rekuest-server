@@ -1,7 +1,10 @@
+from typing import Type
+from graphene.types.base import BaseOptions
+from graphene.types.interface import InterfaceOptions
 from facade.enums import RepositoryType
 from django.contrib.auth import get_user_model
 from graphene_django.types import DjangoObjectType
-from facade.filters import NodesFilter, ProvisionLogFilter, TemplateFilter, ProvisionFilter
+from facade.filters import AssignationFilter, AssignationLogFilter, NodesFilter, ProvisionLogFilter, TemplateFilter, ProvisionFilter
 from balder.fields.filtered import BalderFiltered
 from django.utils.translation import templatize
 from facade.structures.ports.returns.types import ReturnPort
@@ -75,18 +78,21 @@ class ReservationLog(BalderObject):
 
     class Meta:
         model = models.ReservationLog
-        
-
-class Assignation(BalderObject):
-    
-    class Meta:
-        model = models.Assignation
 
 
 class AssignationLog(BalderObject):
     
     class Meta:
-        model = models.AssignationLog
+        model = models.AssignationLog     
+
+class Assignation(BalderObject):
+    log = BalderFiltered(AssignationLog, filterset_class=AssignationLogFilter, related_field="log")
+    
+    class Meta:
+        model = models.Assignation
+
+
+
 
 class ProvisionLog(BalderObject):
     
@@ -100,45 +106,108 @@ class ProvisionLog(BalderObject):
 class Provision(BalderObject):
     params = graphene.Field(ProvideParams)
     log = BalderFiltered(ProvisionLog, filterset_class=ProvisionLogFilter, related_field="log")
+    assignations = BalderFiltered(Assignation, filterset_class=AssignationFilter, related_field="assignations")
     
     class Meta:
         model = models.Provision
 
         
 class Template(BalderObject):
+    extensions = graphene.List(graphene.String, description="The extentions of this template")
     provisions = BalderFiltered(Provision, filterset_class=ProvisionFilter, related_field="provisions")
     
     class Meta:
         model = models.Template
+
+class BalderInheritedModelOptions(InterfaceOptions):
+    child_models = {}
+
+
+
+class BalderInheritedModel(graphene.Interface):
+
+    @classmethod
+    def __init_subclass_with_meta__(cls, _meta=None ,child_models = None, **options):
+        if not _meta:
+            _meta = BalderInheritedModelOptions(cls)
+        if child_models:
+            _meta.child_models = child_models
+
+        super(BalderInheritedModel, cls).__init_subclass_with_meta__(_meta=_meta, **options)
+
+    @classmethod
+    def resolve_inherited(cls, instance, info):
+        print(cls, instance, cls._meta.child_models)
+        for key, value in cls._meta.child_models.items():
+             attr_name = key.__name__.lower()
+             if hasattr(instance, attr_name): return getattr(instance, attr_name)
+
+    
+    @classmethod
+    def resolve_type(cls, instance, info):
+        for key, value in cls._meta.child_models.items():
+             if isinstance(instance, key): return value()
+
+
+
+class BalderInheritedField(graphene.Field):
+
+    def __init__(self, _type: Type[BalderInheritedModel], resolver=None, related_field=None, **kwargs):
+        resolver = lambda root, info: self.type.resolve_inherited(getattr(root, related_field), info)
+        super().__init__(_type, resolver=resolver, **kwargs)
+
+
 
 class Node(BalderObject):
     args = graphene.List(ArgPort)
     kwargs = graphene.List(KwargPort)
     returns = graphene.List(ReturnPort)
     templates = BalderFiltered(Template, filterset_class=TemplateFilter, related_field="templates")
+    repository = BalderInheritedField(lambda: Repository, related_field="repository")
+
+
 
     class Meta:
         model = models.Node
 
+
+
+
+
+
 @register_type
-class Repository(graphene.Interface):
+class Repository(BalderInheritedModel):
+
+    id = graphene.ID(description="Id of the Repository")
+    nodes = BalderFiltered(Node, filterset_class=NodesFilter, related_field="nodes")
+    name = graphene.String(description="The Name of the Repository")
+
+
+    class Meta:
+        child_models = {
+            models.AppRepository : lambda: AppRepository,
+            models.MirrorRepository : lambda: MirrorRepository
+        }
+
+
+
+
+
+@register_type
+class Repositoryssss(graphene.Interface):
     "NNanananna"
     id = graphene.ID(description="Id of the Repository")
     nodes = BalderFiltered(Node, filterset_class=NodesFilter, related_field="nodes")
     name = graphene.String(description="The Name of the Repository")
 
     @classmethod
-    def resolve_name(cls, instance, info):
+    def resolve_object(cls, instance, info):
         return instance.name
 
     @classmethod
     def resolve_type(cls, instance, info):
-        typemap = {
-            "AppRepository": lambda: AppRepository,
-            "MirrorRepository": lambda: MirrorRepository
-        }
-        _type = instance.__class__.__name__
-        return typemap.get(_type)()
+        if isinstance(instance, models.AppRepository): return AppRepository
+        if isinstance(instance, models.MirrorRepository): return MirrorRepository
 
 
 

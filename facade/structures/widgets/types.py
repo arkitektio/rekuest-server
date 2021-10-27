@@ -7,6 +7,7 @@ get_widget_types = lambda: {
             "StringWidget": StringWidget,
             "SearchWidget": SearchWidget,
             "SliderWidget": SliderWidget,
+            "LinkWidget": LinkWidget,
             "BoolWidget": BoolWidget
 }
 
@@ -25,6 +26,14 @@ class Widget(graphene.Interface):
 @register_type
 class QueryWidget(graphene.ObjectType):
     query = graphene.String(description="A Complex description")
+
+    class Meta:
+        interfaces = (Widget,)
+
+
+@register_type
+class LinkWidget(graphene.ObjectType):
+    linkbuilder = graphene.String(description="A Complex description")
 
     class Meta:
         interfaces = (Widget,)

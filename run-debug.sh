@@ -8,6 +8,10 @@ python manage.py migrate
 echo "=> Ensuring Superusers..."
 python manage.py ensureadmin
 
+
+echo "=> Ensuring Clean..."
+python manage.py cleanup
+
 echo "=> Collecting Static.."
 python manage.py collectstatic --noinput
 
@@ -46,7 +50,7 @@ fi
 # Otherwise it loops forever, waking up every 60 seconds
 
 while sleep 10; do
-  ps aux |grep "daphne" |grep -q -v grep
+  ps aux |grep "runserver" |grep -q -v grep
   PROCESS_1_STATUS=$?
   ps aux |grep "runworker gateway" |grep -q -v grep
   PROCESS_2_STATUS=$?

@@ -1,8 +1,8 @@
-
-from facade.subscriptions.reservation import MyReservationsEvent
+from facade.subscriptions.reservation import MyReservationsEvent, ReservationEventSubscription
 from delt.messages.postman.reserve.reserve_transition import ReserveState, ReserveTransitionMessage
 from hare.transitions.base import TransitionException
-from facade.models import Reservation
+from facade.models import Reservation, ReservationLog
+from facade.enums import LogLevel
 
 import logging
 
@@ -235,3 +235,12 @@ def pause_reservation(res: Reservation, message: str = None, reconnect=False):
 
     return messages
 
+
+def log_to_reservation(res: Reservation, message: str = "Critical", level=LogLevel.INFO):
+    prov_log = ReservationLog.objects.create(**{
+        "reservation": res,
+        "message": message,
+        "level": level
+    })
+
+    ReservationEventSubscription.broadcast({"action": "log", "data": {"message": message, "level": level}}, [f"reservation_{res.reference}"])

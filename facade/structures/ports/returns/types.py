@@ -1,7 +1,7 @@
 import graphene
 from balder.registry import register_type
 from graphene.types.generic import GenericScalar
-
+from facade.structures.widgets.types import Widget
 
 get_port_types = lambda: {
             "IntReturnPort": IntReturnPort,
@@ -18,6 +18,7 @@ class ReturnPort(graphene.Interface):
     key = graphene.String()
     label = graphene.String()
     description = graphene.String(required=False)
+    widget = graphene.Field(Widget,description="Description of the Widget")
 
     @classmethod
     def resolve_type(cls, instance, info):

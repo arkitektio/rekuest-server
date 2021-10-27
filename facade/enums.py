@@ -19,7 +19,11 @@ class LogLevel(TextChoices):
     INFO = "INFO", "INFO Level"
     DEBUG = "DEBUG", "DEBUG Level"    
     ERROR = "ERROR", "ERROR Level"   
-    WARN = "WARN", "WARN Level"   
+    WARN = "WARN", "WARN Level"
+    YIELD = "YIELD", "YIELD Level"   
+    CANCEL = "CANCEL", "Cancel Level"   
+    RETURN = "RETURN", "YIELD Level"   
+    DONE = "DONE", "Done Level"   
 
 LogLevelInput = InputEnum.from_choices(LogLevel)
 
@@ -77,6 +81,7 @@ class AssignationStatus(TextChoices):
     
     # Progress reports
     PROGRESS = "PROGRESS", "Progress (Assignment has current Progress)"
+    RECEIVED = "RECEIVED", "Received (Assignment was received by an agent)"
 
     # Unsuccessfull Termination
     ERROR = "ERROR", "Error (Retrieable)"
