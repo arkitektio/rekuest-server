@@ -71,26 +71,26 @@ def cancel_and_delete_reservation_from_provision_by_reference(res_reference: str
     return cancel_and_delete_reservation_from_provision(res, prov)
 
 
-def activate_provision_by_reference(reference):
-    provision = Provision.objects.get(reference=reference)
-    return activate_provision(provision)
+def activate_provision_by_reference(provide_transition: ProvideTransitionMessage):
+    provision = Provision.objects.get(reference=provide_transition.meta.reference)
+    return activate_provision(provision, provide_transition)
 
 
-def critical_provision_by_reference(reference):
-    provision = Provision.objects.get(reference=reference)
-    return critical_provision(provision)
+def critical_provision_by_reference(provide_transition: ProvideTransitionMessage):
+    provision = Provision.objects.get(reference=provide_transition.meta.reference)
+    return critical_provision(provision, provide_transition)
 
-def cancel_provision_by_reference(reference):
-    provision = Provision.objects.get(reference=reference)
-    return cancel_provision(provision)
+def cancel_provision_by_reference(provide_transition: ProvideTransitionMessage):
+    provision = Provision.objects.get(reference=provide_transition.meta.reference)
+    return cancel_provision(provision, provide_transition)
 
-def cancelling_provision_by_reference(reference):
-    provision = Provision.objects.get(reference=reference)
-    return cancelling_provision(provision)
+def cancelling_provision_by_reference(provide_transition: ProvideTransitionMessage):
+    provision = Provision.objects.get(reference=provide_transition.meta.reference)
+    return cancelling_provision(provision, provide_transition)
 
-def providing_provision_by_reference(reference):
-    provision = Provision.objects.get(reference=reference)
-    return providing_provision(provision)
+def providing_provision_by_reference(provide_transition: ProvideTransitionMessage):
+    provision = Provision.objects.get(reference=provide_transition.meta.reference)
+    return providing_provision(provision, provide_transition)
 
 def activate_provider_and_get_active_provisions(app, user):
 
@@ -117,7 +117,7 @@ def activate_provider_and_get_active_provisions(app, user):
 
 
 
-def deactivate_provider_and_disconnect_active_provisions(provider, reconnect_provision = False):
+def deactivate_provider_and_disconnect_active_provisions(provider):
     provider.active = False
     provider.save()
 
@@ -125,7 +125,7 @@ def deactivate_provider_and_disconnect_active_provisions(provider, reconnect_pro
 
     messages = []
     for provision in provisions:
-        messages += disconnect_provision(provision, message="Disconnected trying to reconnect", reconnect=reconnect_provision)
+        messages += disconnect_provision(provision, message="Disconnected trying to reconnect")
 
     if provider.user: 
         ProvidersEvent.broadcast({"action": "ended", "data": provider.id}, [f"providers_user_{provider.user.id}"])
@@ -272,7 +272,7 @@ class AgentConsumer(BaseConsumer): #TODO: Seperate that bitch
         try:
             if new_state == ProvideState.ACTIVE:
 
-                messages, reservation_topic, assignment_topics = await sync_to_async(activate_provision_by_reference)(provision_reference)
+                messages, reservation_topic, assignment_topics = await sync_to_async(activate_provision_by_reference)(provide_transition)
 
                 logger.info(f"Listening to {reservation_topic}")
                 reservation_queue = await self.channel.queue_declare(reservation_topic)
@@ -284,16 +284,16 @@ class AgentConsumer(BaseConsumer): #TODO: Seperate that bitch
                     self.provision_link_map.setdefault(provision_reference, []).append(assign_queue)
 
             elif new_state == ProvideState.CRITICAL:
-                messages = await sync_to_async(critical_provision_by_reference)(provision_reference)
+                messages = await sync_to_async(critical_provision_by_reference)(provide_transition)
 
             elif new_state == ProvideState.CANCELLED:
-                messages = await sync_to_async(cancel_provision_by_reference)(provision_reference)
+                messages = await sync_to_async(cancel_provision_by_reference)(provide_transition)
 
             elif new_state == ProvideState.CANCELING:
-                messages = await sync_to_async(cancelling_provision_by_reference)(provision_reference)
+                messages = await sync_to_async(cancelling_provision_by_reference)(provide_transition)
 
             elif new_state == ProvideState.PROVIDING:
-                messages = await sync_to_async(providing_provision_by_reference)(provision_reference)
+                messages = await sync_to_async(providing_provision_by_reference)(provide_transition)
             
             else: 
                 raise NotImplementedError(f"No idea how to transition prov to {new_state}")

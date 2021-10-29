@@ -14,6 +14,11 @@ class HookType(TextChoices):
     NEGOTIATE = "negotiate", "Negotiate Hook (syncronous Api call)"
 
 
+class ModeType(TextChoices):
+    DEBUG = "DEBUG", "Debug Mode (Node might be constantly evolving)"
+    PRODUCTION = "PRODUCTION", "Production Mode (Node might be constantly evolving)"
+
+
 class LogLevel(TextChoices):
     CRITICAL = "CRITICAL", "CRITICAL Level"
     INFO = "INFO", "INFO Level"
@@ -23,7 +28,8 @@ class LogLevel(TextChoices):
     YIELD = "YIELD", "YIELD Level"   
     CANCEL = "CANCEL", "Cancel Level"   
     RETURN = "RETURN", "YIELD Level"   
-    DONE = "DONE", "Done Level"   
+    DONE = "DONE", "Done Level" 
+    EVENT = "EVENT", "Event Level (only handled by plugins)"  
 
 LogLevelInput = InputEnum.from_choices(LogLevel)
 

@@ -4,7 +4,7 @@ from graphene.types.interface import InterfaceOptions
 from facade.enums import RepositoryType
 from django.contrib.auth import get_user_model
 from graphene_django.types import DjangoObjectType
-from facade.filters import AssignationFilter, AssignationLogFilter, NodesFilter, ProvisionLogFilter, TemplateFilter, ProvisionFilter
+from facade.filters import AssignationFilter, AssignationLogFilter, NodesFilter, ProvisionLogFilter, ReservationLogFilter, TemplateFilter, ProvisionFilter
 from balder.fields.filtered import BalderFiltered
 from django.utils.translation import templatize
 from facade.structures.ports.returns.types import ReturnPort
@@ -192,26 +192,6 @@ class Repository(BalderInheritedModel):
 
 
 
-
-@register_type
-class Repositoryssss(graphene.Interface):
-    "NNanananna"
-    id = graphene.ID(description="Id of the Repository")
-    nodes = BalderFiltered(Node, filterset_class=NodesFilter, related_field="nodes")
-    name = graphene.String(description="The Name of the Repository")
-
-    @classmethod
-    def resolve_object(cls, instance, info):
-        return instance.name
-
-    @classmethod
-    def resolve_type(cls, instance, info):
-        if isinstance(instance, models.AppRepository): return AppRepository
-        if isinstance(instance, models.MirrorRepository): return MirrorRepository
-
-
-
-
 @register_type
 class AppRepository(BalderObject):
 
@@ -231,6 +211,7 @@ class MirrorRepository(BalderObject):
 
 class Reservation(BalderObject):
     params = graphene.Field(ReserveParams)
+    log = BalderFiltered(ReservationLog, filterset_class=ReservationLogFilter, related_field="log")
     
     class Meta:
         model = models.Reservation

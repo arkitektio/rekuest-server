@@ -4,7 +4,7 @@ from lok.models import LokApp
 from facade.managers import NodeManager
 from mars.names import generate_random_name
 from facade.fields import ArgsField, KwargsField, OutputsField, ParamsField, PodChannel, ReturnField
-from facade.enums import AccessStrategy, LogLevel, AssignationStatus, DataPointType, LogLevel, NodeType,  ProvisionStatus,  ReservationStatus, TopicStatus, RepositoryType
+from facade.enums import AccessStrategy, LogLevel, AssignationStatus, DataPointType, LogLevel, ModeType, NodeType,  ProvisionStatus,  ReservationStatus, TopicStatus, RepositoryType
 from django.db import models
 from django.contrib.auth import get_user_model
 import uuid
@@ -210,6 +210,10 @@ class Provision(models.Model):
     """
 
     unique = models.UUIDField(max_length=1000, unique=True, default=uuid.uuid4, help_text="A Unique identifier for this Topic")
+
+
+    # Deploymode
+    mode = models.CharField(max_length=100, default=ModeType.PRODUCTION, choices=ModeType.choices, help_text="The Deployment Mode for this Provisions")
 
     # Identifiers
     reference = models.CharField(max_length=1000, unique=True, default=uuid.uuid4, help_text="The Unique identifier of this Provision")

@@ -1,3 +1,5 @@
+import json
+from delt.events.base import Event
 from facade.subscriptions.reservation import MyReservationsEvent, ReservationEventSubscription
 from delt.messages.postman.reserve.reserve_transition import ReserveState, ReserveTransitionMessage
 from hare.transitions.base import TransitionException
@@ -114,9 +116,6 @@ def critical_reservation(res: Reservation, message: str = None, reconnect=False)
         }
         )))
 
-        if reconnect:
-            logger.error("Reconnection not implemented yet")
-            #TODO: Implement a Reconnecting algorithm that tries to find another assignable node (through reserver)
 
     if res.creator: MyReservationsEvent.broadcast({"action": ReserveState.CRITICAL.value, "data": res.id}, [f"reservations_user_{res.creator.id}"])
 
@@ -234,6 +233,20 @@ def pause_reservation(res: Reservation, message: str = None, reconnect=False):
     if res.creator: MyReservationsEvent.broadcast({"action": ReserveState.WAITING.value, "data": res.id}, [f"reservations_user_{res.creator.id}"])
 
     return messages
+
+
+def log_event_to_reservation(res: Reservation, event: Event):
+    event_s = json.dumps(event.dict())
+
+    prov_log = ReservationLog.objects.create(**{
+        "reservation": res,
+        "message": event_s,
+        "level": LogLevel.EVENT
+    })
+
+    ReservationEventSubscription.broadcast({"action": "log", "data": {"message": event_s, "level": LogLevel.EVENT}}, [f"reservation_{res.reference}"])
+
+
 
 
 def log_to_reservation(res: Reservation, message: str = "Critical", level=LogLevel.INFO):

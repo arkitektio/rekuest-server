@@ -58,6 +58,12 @@ class AssignationLogFilter(django_filters.FilterSet):
     o = OrderingFilter(fields={"created_at": "time"})
 
 
+class ReservationLogFilter(django_filters.FilterSet):
+    level = EnumFilter(type=LogLevelInput,field_name="level")
+    created_at = TimeRangeFilter()
+    o = OrderingFilter(fields={"created_at": "time"})
+
+
 class NodesFilter(django_filters.FilterSet):
     active = django_filters.BooleanFilter(method="active_filter", label="Get active Provisions")
 
