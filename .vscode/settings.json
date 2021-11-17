@@ -6,12 +6,12 @@
         "**/__pycache__": true,
     },
     "python.pythonPath": "/usr/local/bin/python",
-    "python.linting.pylintEnabled": false,
+    "python.linting.pylintEnabled": true,
     "python.linting.pylintArgs": [
         "--enable=W0614",
         "--load-plugins",
         "pylint_django",
-        "--django-settings-module=elements.settings"
+        "--django-settings-module=arkitekt.settings"
     ],
     "window.title": "${dirty}Arkitekt${separator} ${activeEditorShort}${separator}${rootName}${separator}$",
     "python.languageServer": "Pylance",
@@ -42,5 +42,6 @@
         "titleBar.activeForeground": "#FAFAFC"
     },
     "djangointellisense.projectRoot": "/workspace",
-    "djangointellisense.settingsModule": "arkitekt.settings"
+    "djangointellisense.settingsModule": "arkitekt.settings",
+    "python.linting.enabled": false
 }

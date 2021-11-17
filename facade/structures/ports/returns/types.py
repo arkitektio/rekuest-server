@@ -4,13 +4,14 @@ from graphene.types.generic import GenericScalar
 from facade.structures.widgets.types import Widget
 
 get_port_types = lambda: {
-            "IntReturnPort": IntReturnPort,
-            "StringReturnPort": StringReturnPort,
-            "StructureReturnPort": StructureReturnPort,
-            "ListReturnPort": ListReturnPort,
-            "BoolReturnPort": BoolReturnPort,
-            "EnumReturnPort": EnumReturnPort
+    "IntReturnPort": IntReturnPort,
+    "StringReturnPort": StringReturnPort,
+    "StructureReturnPort": StructureReturnPort,
+    "ListReturnPort": ListReturnPort,
+    "BoolReturnPort": BoolReturnPort,
+    "EnumReturnPort": EnumReturnPort,
 }
+
 
 @register_type
 class ReturnPort(graphene.Interface):
@@ -18,7 +19,7 @@ class ReturnPort(graphene.Interface):
     key = graphene.String()
     label = graphene.String()
     description = graphene.String(required=False)
-    widget = graphene.Field(Widget,description="Description of the Widget")
+    widget = graphene.Field(Widget, description="Description of the Widget")
 
     @classmethod
     def resolve_type(cls, instance, info):
@@ -26,31 +27,37 @@ class ReturnPort(graphene.Interface):
         _type = instance.get("type", instance.get("typename"))
         return typemap.get(_type, ReturnPort)
 
+
 @register_type
 class IntReturnPort(graphene.ObjectType):
     """Int Port"""
+
     class Meta:
         interfaces = (ReturnPort,)
+
 
 @register_type
 class BoolReturnPort(graphene.ObjectType):
     """Int Port"""
+
     class Meta:
         interfaces = (ReturnPort,)
+
 
 @register_type
 class EnumReturnPort(graphene.ObjectType):
     """Integer Port"""
+
     options = GenericScalar(description="A dict of options")
 
     class Meta:
         interfaces = (ReturnPort,)
 
 
-
 @register_type
 class StringReturnPort(graphene.ObjectType):
     """String Port"""
+
     class Meta:
         interfaces = (ReturnPort,)
 
@@ -58,20 +65,19 @@ class StringReturnPort(graphene.ObjectType):
 @register_type
 class StructureReturnPort(graphene.ObjectType):
     """Model Port"""
+
     identifier = graphene.String(description="The identifier of this Model")
+    bound = graphene.String(description="Where is this Model Boudn")
 
     class Meta:
         interfaces = (ReturnPort,)
-
 
 
 @register_type
 class ListReturnPort(graphene.ObjectType):
     """Model Port"""
+
     child = graphene.Field(lambda: ReturnPort, description="The child")
 
     class Meta:
         interfaces = (ReturnPort,)
-
-
-    

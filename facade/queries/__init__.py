@@ -1,6 +1,6 @@
 from .node import *
 from .template import *
-from .provider import *
+from .agent import *
 from .structure import *
 from .reservation import *
 from .assignation import *

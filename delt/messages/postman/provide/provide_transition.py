@@ -24,6 +24,7 @@ class MetaModel(MessageMetaModel):
 
 class ProvideState(str, Enum):
     # Start State
+    BOUND = "BOUND"
     PENDING = "PENDING"
     PROVIDING = "PROVIDING"
 
@@ -61,7 +62,6 @@ class ProvideTransitionMessage(MessageModel):
 
     @classmethod
     def from_critical(cls, reference, exception, extensions={}):
-        print(reference)
         return cls(
             data={"message": str(exception), "state": ProvideState.CRITICAL},
             meta={"extensions": extensions, "reference": reference},

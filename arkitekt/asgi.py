@@ -11,12 +11,12 @@ import os
 import django
 
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'arkitekt.settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "arkitekt.settings")
 django.setup(set_prefix=False)
 
 from django.core.asgi import get_asgi_application
 from facade.consumers.agent import AgentConsumer
-from facade.consumers.all import AllConsumer
+from facade.consumers.postman import PostmanConsumer
 from facade.workers.gateway import GatewayConsumer
 from channels.auth import AuthMiddlewareStack
 from channels.routing import ChannelNameRouter, ProtocolTypeRouter, URLRouter
@@ -28,8 +28,6 @@ from lok.middlewares.scope.jwt import JWTChannelMiddleware
 from django.views.static import serve
 
 
-
-
 # The channel routing defines what connections get handled by what consumers,
 # selecting on either the connection type (ProtocolTypeRouter) or properties
 # of the connection's scope (like URLRouter, which looks at scope["path"])
@@ -39,35 +37,34 @@ def MiddleWareStack(inner):
 
 
 class ScriptWrapper:
-
     def __init__(self, inner) -> None:
         self.inner = inner
-
 
     async def __call__(self, scope, receive, send):
         print(scope)
         return await self.inner(scope, receive, send)
 
 
-
-application = ScriptWrapper(ProtocolTypeRouter({
-
-    # Channels will do this for you automatically. It's included here as an example.
-    "http": get_asgi_application(),
-
-    # Route all WebSocket requests to our custom chat handler.
-    # We actually don't need the URLRouter here, but we've put it in for
-    # illustration. Also note the inclusion of the AuthMiddlewareStack to
-    # add users and sessions - see http://channels.readthedocs.io/en/latest/topics/authentication.html
-    'websocket': MiddleWareStack(URLRouter([
-        url('graphql/', MyGraphqlWsConsumer.as_asgi()),
-        url('graphql', MyGraphqlWsConsumer.as_asgi()),
-        url(r'agent\/$', AgentConsumer.as_asgi()),
-        url(r'all\/$', AllConsumer.as_asgi())
-    ])),
-    'channel': ChannelNameRouter({
-        "gateway": GatewayConsumer.as_asgi()
-    })
-
-}))
-
+application = ScriptWrapper(
+    ProtocolTypeRouter(
+        {
+            # Channels will do this for you automatically. It's included here as an example.
+            "http": get_asgi_application(),
+            # Route all WebSocket requests to our custom chat handler.
+            # We actually don't need the URLRouter here, but we've put it in for
+            # illustration. Also note the inclusion of the AuthMiddlewareStack to
+            # add users and sessions - see http://channels.readthedocs.io/en/latest/topics/authentication.html
+            "websocket": MiddleWareStack(
+                URLRouter(
+                    [
+                        url("graphql/", MyGraphqlWsConsumer.as_asgi()),
+                        url("graphql", MyGraphqlWsConsumer.as_asgi()),
+                        url(r"agent\/$", AgentConsumer.as_asgi()),
+                        url(r"postman\/$", PostmanConsumer.as_asgi()),
+                    ]
+                )
+            ),
+            "channel": ChannelNameRouter({"gateway": GatewayConsumer.as_asgi()}),
+        }
+    )
+)

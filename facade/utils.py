@@ -12,7 +12,7 @@ from facade.enums import AssignationStatus, LogLevel, ProvisionStatus
 from delt.messages.postman.assign.bounced_assign import BouncedAssignMessage
 from delt.messages.postman.reserve.bounced_reserve import BouncedReserveMessage
 from asgiref.sync import sync_to_async
-from .models import Assignation, AssignationLog, Provider, Provision, ProvisionLog, Reservation, ReservationLog, ReservationStatus
+from .models import Assignation, AssignationLog, Agent, Provision, ProvisionLog, Reservation, ReservationLog, ReservationStatus
 import logging
 
 logger = logging.getLogger(__name__)

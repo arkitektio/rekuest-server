@@ -1,5 +1,5 @@
 from facade.consumers.agent import AgentConsumer
-from facade.consumers.all import AllConsumer
+from facade.consumers.postman import PostmanConsumer
 from facade.workers.gateway import GatewayConsumer
 from channels.auth import AuthMiddlewareStack
 from channels.routing import ChannelNameRouter, ProtocolTypeRouter, URLRouter
@@ -17,24 +17,24 @@ def MiddleWareStack(inner):
     return AuthMiddlewareStack(JWTChannelMiddleware(BouncerChannelMiddleware(inner)))
 
 
-
-application = ProtocolTypeRouter({
-
-    # Channels will do this for you automatically. It's included here as an example.
-    "http": get_asgi_application(),
-
-    # Route all WebSocket requests to our custom chat handler.
-    # We actually don't need the URLRouter here, but we've put it in for
-    # illustration. Also note the inclusion of the AuthMiddlewareStack to
-    # add users and sessions - see http://channels.readthedocs.io/en/latest/topics/authentication.html
-    'websocket': MiddleWareStack(URLRouter([
-        url('graphql/', MyGraphqlWsConsumer.as_asgi()),
-        url('graphql', MyGraphqlWsConsumer.as_asgi()),
-        url(r'agent\/$', AgentConsumer.as_asgi()),
-        url(r'all\/$', AllConsumer.as_asgi())
-    ])),
-    'channel': ChannelNameRouter({
-        "gateway": GatewayConsumer.as_asgi()
-    })
-
-})
+application = ProtocolTypeRouter(
+    {
+        # Channels will do this for you automatically. It's included here as an example.
+        "http": get_asgi_application(),
+        # Route all WebSocket requests to our custom chat handler.
+        # We actually don't need the URLRouter here, but we've put it in for
+        # illustration. Also note the inclusion of the AuthMiddlewareStack to
+        # add users and sessions - see http://channels.readthedocs.io/en/latest/topics/authentication.html
+        "websocket": MiddleWareStack(
+            URLRouter(
+                [
+                    url("graphql/", MyGraphqlWsConsumer.as_asgi()),
+                    url("graphql", MyGraphqlWsConsumer.as_asgi()),
+                    url(r"agent\/$", AgentConsumer.as_asgi()),
+                    url(r"postman\/$", PostmanConsumer.as_asgi()),
+                ]
+            )
+        ),
+        "channel": ChannelNameRouter({"gateway": GatewayConsumer.as_asgi()}),
+    }
+)

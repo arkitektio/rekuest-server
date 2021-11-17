@@ -11,63 +11,63 @@ from lok import bounced
 import graphene
 import logging
 
-logger = logging.getLogger(__name__)#
+logger = logging.getLogger(__name__)  #
 
 
 class Assign(graphene.ObjectType):
     reference = graphene.String()
 
 
-
 class AssignMutation(BalderMutation):
-    """Scan allows you to add Datapoints to your Arnheim Schema, this is only available to Admin users"""
-
     class Arguments:
-        reservation = graphene.String(description="The Base URL for the Datapoint you want to add", required=True)
-        args = graphene.List(GenericScalar, description="The Base URL for the Datapoint you want to add", required=True)
+        reservation = graphene.String(required=True)
+        args = graphene.List(
+            GenericScalar,
+            required=True,
+        )
         kwargs = GenericScalar(description="Additional Params")
-
 
     class Meta:
         type = types.Assignation
         operation = "assign"
 
-    
     @bounced(only_jwt=True)
-    def mutate(root, info, reservation=None, args = None, kwargs={}, reference=None):
+    def mutate(root, info, reservation=None, args=None, kwargs={}, reference=None):
         reference = reference or str(uuid.uuid4())
         bounce = info.context.bounced
 
-        ass = Assignation.objects.create(**{
-            "reservation": Reservation.objects.get(reference=reservation),
-            "args": args,
-            "kwargs": kwargs,
-            "context": create_context_from_bounced(bounce),
-            "reference": reference,
-            "creator": bounce.user,
-            "app": bounce.app,
-            "callback": "not-set",
-            "progress": "not-set"
-        })
-
-        MyAssignationsEvent.broadcast({"action": "created", "data": ass.id}, [f"assignations_user_{bounce.user.id}"])
-        
-        bounced = BouncedAssignMessage(data= {
-            "reservation": reservation,
-            "args": args,
-            "kwargs": kwargs
-        }, meta= {
-            "reference": reference,
-            "extensions": {
+        ass = Assignation.objects.create(
+            **{
+                "reservation": Reservation.objects.get(reference=reservation),
+                "args": args,
+                "kwargs": kwargs,
+                "context": create_context_from_bounced(bounce),
+                "reference": reference,
+                "creator": bounce.user,
+                "app": bounce.app,
                 "callback": "not-set",
                 "progress": "not-set",
-                "persist": True,
+            }
+        )
+
+        MyAssignationsEvent.broadcast(
+            {"action": "created", "data": ass.id},
+            [f"assignations_user_{bounce.user.id}"],
+        )
+
+        bounced = BouncedAssignMessage(
+            data={"reservation": reservation, "args": args, "kwargs": kwargs},
+            meta={
+                "reference": reference,
+                "extensions": {
+                    "callback": "not-set",
+                    "progress": "not-set",
+                    "persist": True,
+                },
+                "context": create_context_from_bounced(bounce),
             },
-            "context": create_context_from_bounced(bounce)
-        })
+        )
 
         GatewayConsumer.send(bounced)
 
         return ass
-            
-

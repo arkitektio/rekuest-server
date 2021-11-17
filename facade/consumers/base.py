@@ -1,5 +1,3 @@
-
-
 import aiormq
 from delt.messages.exception import ExceptionMessage
 from delt.messages.base import MessageModel
@@ -10,12 +8,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class BaseConsumer(AsyncWebsocketConsumer):
     mapper = None
 
     def __init__(self, *args, **kwargs):
-        self.channel = None # The connection layer will be async set by the provider
-        assert self.mapper is not None; "Cannot instatiate this Consumer without a Mapper"
+        self.channel = None  # The connection layer will be async set by the agent
+        assert self.mapper is not None
+        "Cannot instatiate this Consumer without a Mapper"
         super().__init__(*args, **kwargs)
 
     async def catch(self, text_data, exception=None):
@@ -23,7 +23,6 @@ class BaseConsumer(AsyncWebsocketConsumer):
 
     async def send_message(self, message: MessageModel):
         await self.send(text_data=message.to_channels())
-
 
     async def forward(self, message: MessageModel, routing_key):
         """Forwards the message to our provessing layer
@@ -36,15 +35,15 @@ class BaseConsumer(AsyncWebsocketConsumer):
         if routing_key:
 
             await self.channel.basic_publish(
-                    message.to_message(), routing_key=routing_key,
-                    properties=aiormq.spec.Basic.Properties(
-                        correlation_id=message.meta.reference
+                message.to_message(),
+                routing_key=routing_key,
+                properties=aiormq.spec.Basic.Properties(
+                    correlation_id=message.meta.reference
+                ),
             )
-            )
-        
+
         else:
             logger.error(f"NO ROUTING KEY SPECIFIED {message}")
-
 
     async def receive(self, text_data):
         try:
@@ -57,9 +56,10 @@ class BaseConsumer(AsyncWebsocketConsumer):
 
             except MessageError as e:
                 logger.error(f"{self.__class__.__name__} e")
-                await self.send_message(ExceptionMessage.fromException(e, json_dict["meta"]["reference"]))
+                await self.send_message(
+                    ExceptionMessage.fromException(e, json_dict["meta"]["reference"])
+                )
                 raise e
 
         except Exception as e:
             logger.error(e)
-

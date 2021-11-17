@@ -1,9 +1,9 @@
 postgres:
-  host: baberl
+  host: daten
   port: 5432
-  user: hello_baberl
-  password: hello_baberl
-  db_name: hello_baberl
+  user: hello_django
+  password: hello_django
+  db_name: arkitektdb
 
 redis:
   host: redis
@@ -24,10 +24,9 @@ server:
 security:
   admins:
     - username: demo
-      password: demodemo 
+      password: demodemo
       email: demo@demo.com
   secret_key: 9=9u7c35!*p_h674kv*t^8ntefnf*#)z_h%6$#b(oe=_mwysw+
-
 
 herre:
   public_key: |
@@ -42,6 +41,3 @@ herre:
     -----END PUBLIC KEY-----
   key_type: RS256
   issuer: herre
-
-
-

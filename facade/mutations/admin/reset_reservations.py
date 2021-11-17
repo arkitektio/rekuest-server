@@ -1,13 +1,9 @@
 from balder.types.mutation.base import BalderMutation
-from facade.structures.transcript import HostProtocol, HostSettings, PointSettings, PostmanProtocol, PostmanSettings, ProviderProtocol, ProviderSettings, Transcript
-from facade import types
-from facade.models import Provider, Provision, Reservation, Structure, DataPoint
-from balder.enum import InputEnum
-from facade.enums import ClientType, DataPointType, NodeType, ProvisionStatusInput
 from lok import bounced
 import graphene
-import logging
-import namegenerator
+
+from facade.enums import ReservationStatusInput
+from facade.models import Reservation
 
 
 class ResetReservationsReturn(graphene.ObjectType):
@@ -18,15 +14,16 @@ class ResetReservations(BalderMutation):
     """Create Repostiory"""
 
     class Arguments:
-        exclude = graphene.List(ProvisionStatusInput, description="The status you want to get rid of")
+        exclude = graphene.List(
+            ReservationStatusInput, description="The status you want to get rid of"
+        )
         pass
 
     class Meta:
-        type = ResetReservationsReturn 
+        type = ResetReservationsReturn
 
-    
-    @bounced(anonymous=True) 
-    def mutate(root, info, exclude=[],  name=None):
+    @bounced(anonymous=True)
+    def mutate(root, info, exclude=[], name=None):
 
         for reservation in Reservation.objects.all():
             reservation.delete()

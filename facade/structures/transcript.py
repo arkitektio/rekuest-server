@@ -1,35 +1,20 @@
-from graphene.types import structures
-from facade.enums import DataPointType
 import graphene
 from graphene.types.generic import GenericScalar
-from facade.types import Structure, DataPoint
-
-
-
-class ProviderProtocol(graphene.Enum):
-    WEBSOCKET = "websocket"
+from facade.types import Structure
 
 
 class PointSettings(graphene.ObjectType):
     type = graphene.String(description="The Type of the Datapoitn")
 
 
-class ProviderSettings(graphene.ObjectType):
-    type = ProviderProtocol(description="The communication protocol")
-    kwargs = GenericScalar(description="kwargs for the provider")
-
 class HostProtocol(graphene.Enum):
     WEBSOCKET = "websocket"
-
 
 
 class WardTypes(graphene.Enum):
     GRAPHQL = "graphql"
     REST = "rest"
 
-class HostSettings(graphene.ObjectType):
-    type = HostProtocol(description="The communication protocol")
-    kwargs = GenericScalar(description="kwargs for the provider")
 
 class WardSettings(graphene.ObjectType):
     type = WardTypes(description="The communication protocol")
@@ -37,6 +22,7 @@ class WardSettings(graphene.ObjectType):
     host = graphene.String()
     port = graphene.Int()
     distinct = graphene.String()
+
 
 class PostmanProtocol(graphene.Enum):
     WEBSOCKET = "websocket"
@@ -50,11 +36,13 @@ class PostmanSettings(graphene.ObjectType):
 
 
 class Transcript(graphene.ObjectType):
-    wards =  graphene.List(WardSettings, description="Connection parameters for the wards")
+    wards = graphene.List(
+        WardSettings, description="Connection parameters for the wards"
+    )
     extensions = GenericScalar(description="Space for extensions")
     point = graphene.Field(PointSettings)
     postman = graphene.Field(PostmanSettings)
-    host = graphene.Field(HostSettings)
-    provider = graphene.Field(ProviderSettings)
     timestamp = graphene.DateTime()
-    structures = graphene.List(Structure, description="Registered Models in this instance")
+    structures = graphene.List(
+        Structure, description="Registered Models in this instance"
+    )

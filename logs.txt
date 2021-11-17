@@ -1,6 +1,0 @@
-Watching for file changes with StatReloader
-/workspace/arkitekt/settings.py changed, reloading.
-Watching for file changes with StatReloader
-/workspace/arkitekt/settings.py changed, reloading.
-Watching for file changes with StatReloader
-/workspace/facade/models.py changed, reloading.
