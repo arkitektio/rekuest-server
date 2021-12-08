@@ -211,6 +211,7 @@ class Node(BalderObject):
     args = graphene.List(ArgPort)
     kwargs = graphene.List(KwargPort)
     returns = graphene.List(ReturnPort)
+    interfaces = graphene.List(graphene.String)
     templates = BalderFiltered(
         Template, filterset_class=TemplateFilter, related_field="templates"
     )

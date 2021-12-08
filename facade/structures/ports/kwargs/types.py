@@ -54,7 +54,7 @@ class BoolKwargPort(graphene.ObjectType):
 class EnumKwargPort(graphene.ObjectType):
     """Integer Port"""
 
-    defaultEnum = GenericScalar(description="The Default Value")
+    defaultOption = GenericScalar(description="The Default Value")
     options = GenericScalar(description="A dict of options")
 
     class Meta:

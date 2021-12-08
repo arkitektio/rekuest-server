@@ -95,7 +95,9 @@ class Structure(models.Model):
         help_text="A unique identifier for this Model accross the Platform",
         unique=True,
     )
-    bound = models.CharField(max_length=1000,choices=BoundType.choices, default=BoundType.GLOBAL)
+    bound = models.CharField(
+        max_length=1000, choices=BoundType.choices, default=BoundType.GLOBAL
+    )
 
     def __str__(self):
         return f"{self.identifier} at {self.repository}"
@@ -189,6 +191,7 @@ class Node(models.Model):
         blank=True,
         related_name="nodes",
     )
+    interfaces = models.JSONField(default=[], help_text="Intercae that we ahdere to")
 
     name = models.CharField(
         max_length=1000, help_text="The cleartext name of this Node"
@@ -700,3 +703,6 @@ class AssignationLog(models.Model):
     level = models.CharField(
         choices=LogLevel.choices, default=LogLevel.INFO.value, max_length=200
     )
+
+
+from . import signals

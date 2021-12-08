@@ -23,6 +23,10 @@ class CreateNode(BalderMutation):
         args = graphene.List(ArgPortInput, description="The Args")
         kwargs = graphene.List(KwargPortInput, description="The Kwargs")
         returns = graphene.List(ReturnPortInput, description="The Returns")
+        interfaces = graphene.List(
+            graphene.String,
+            description="The Interfaces this node provides [eg. bridge, filter]",
+        )  # todo infer interfaces from args kwargs
         type = graphene.Argument(
             NodeTypeInput,
             description="The variety",
@@ -44,6 +48,7 @@ class CreateNode(BalderMutation):
         args=[],
         kwargs=[],
         returns=[],
+        interfaces=[],
         type=None,
         name="name",
     ):
@@ -81,6 +86,7 @@ class CreateNode(BalderMutation):
                 "name": name,
                 "type": type,
             },
+            interfaces=interfaces,
         )
 
         return node

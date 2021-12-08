@@ -34,6 +34,7 @@ class KwargPortInput(graphene.InputObjectType):
     label = graphene.String(description="The Label of this inport")
 
     defaultDict = GenericScalar(description="Does this field have a specific value")
+    defaultOption = GenericScalar(description="Does this field have a specific value")
     defaultInt = graphene.Int(description="Does this field have a specific value")
     defaultBool = graphene.Boolean(description="Does this field have a specific value")
     defaultFloat = graphene.Float(description="Does this field have a specific value")

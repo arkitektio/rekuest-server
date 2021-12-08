@@ -7,21 +7,20 @@ import graphene
 from lok import bounced
 
 
-
-
-
 class NodeDetailQuery(BalderQuery):
-
     class Arguments:
         q = graphene.String(description="The identifier string")
         id = graphene.ID(description="The query node")
         package = graphene.String(description="The package of this node")
         interface = graphene.String(description="The interface of this node")
-        template = graphene.ID(description="Get node for a template (overrides the others)")
+        template = graphene.ID(
+            description="Get node for a template (overrides the others)"
+        )
 
     @bounced(anonymous=True)
     def resolve(root, info, template=None, **kwargs):
-        if template: return Template.objects.get(id=template).node
+        if template:
+            return Template.objects.get(id=template).node
         return Node.objects.get(**kwargs)
 
     class Meta:
@@ -29,9 +28,7 @@ class NodeDetailQuery(BalderQuery):
         operation = "node"
 
 
-
 class Nodes(BalderQuery):
-
     class Meta:
         type = types.Node
         list = True
