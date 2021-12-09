@@ -136,6 +136,7 @@ def disconnect_provision(prov: Provision, message: ProvideTransitionMessage):
         )
 
     prov.status = ProvideState.DISCONNECTED
+    prov.statusmessage = message.data.message
     prov.save()
 
     messages = []
@@ -195,6 +196,7 @@ def providing_provision(prov: Provision, message: ProvideTransitionMessage):
         )
 
     prov.status = ProvideState.PROVIDING
+    prov.statusmessage = message.data.message
     prov.save()
 
     messages = []
@@ -232,6 +234,7 @@ def cancel_provision(prov: Provision, message: ProvideTransitionMessage):
         )
 
     prov.status = ProvideState.CANCELLED
+    prov.statusmessage = message.data.message
     prov.save()
 
     messages = []
@@ -283,6 +286,7 @@ def cancelling_provision(prov: Provision, message: ProvideTransitionMessage):
         )
 
     prov.status = ProvideState.CANCELING
+    prov.statusmessage = message.data.message
     prov.save()
 
     messages = []
@@ -344,6 +348,7 @@ def critical_provision(prov: Provision, message: ProvideTransitionMessage):
         )
 
     prov.status = ProvideState.CRITICAL
+    prov.statusmessage = message.data.message
     prov.save()
 
     messages = []
