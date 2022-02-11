@@ -10,6 +10,8 @@ https://docs.djangoproject.com/en/3.1/howto/deployment/asgi/
 import os
 import django
 
+from facade.consumers.watchman import WatchmanConsumer
+
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "arkitekt.settings")
 django.setup(set_prefix=False)
@@ -36,35 +38,25 @@ def MiddleWareStack(inner):
     return AuthMiddlewareStack(JWTChannelMiddleware(BouncerChannelMiddleware(inner)))
 
 
-class ScriptWrapper:
-    def __init__(self, inner) -> None:
-        self.inner = inner
-
-    async def __call__(self, scope, receive, send):
-        print(scope)
-        return await self.inner(scope, receive, send)
-
-
-application = ScriptWrapper(
-    ProtocolTypeRouter(
-        {
-            # Channels will do this for you automatically. It's included here as an example.
-            "http": get_asgi_application(),
-            # Route all WebSocket requests to our custom chat handler.
-            # We actually don't need the URLRouter here, but we've put it in for
-            # illustration. Also note the inclusion of the AuthMiddlewareStack to
-            # add users and sessions - see http://channels.readthedocs.io/en/latest/topics/authentication.html
-            "websocket": MiddleWareStack(
-                URLRouter(
-                    [
-                        url("graphql/", MyGraphqlWsConsumer.as_asgi()),
-                        url("graphql", MyGraphqlWsConsumer.as_asgi()),
-                        url(r"agent\/$", AgentConsumer.as_asgi()),
-                        url(r"postman\/$", PostmanConsumer.as_asgi()),
-                    ]
-                )
-            ),
-            "channel": ChannelNameRouter({"gateway": GatewayConsumer.as_asgi()}),
-        }
-    )
+application = ProtocolTypeRouter(
+    {
+        # Channels will do this for you automatically. It's included here as an example.
+        "http": get_asgi_application(),
+        # Route all WebSocket requests to our custom chat handler.
+        # We actually don't need the URLRouter here, but we've put it in for
+        # illustration. Also note the inclusion of the AuthMiddlewareStack to
+        # add users and sessions - see http://channels.readthedocs.io/en/latest/topics/authentication.html
+        "websocket": MiddleWareStack(
+            URLRouter(
+                [
+                    url("graphql/", MyGraphqlWsConsumer.as_asgi()),
+                    url("graphql", MyGraphqlWsConsumer.as_asgi()),
+                    url(r"agent\/$", AgentConsumer.as_asgi()),
+                    url(r"postman\/$", PostmanConsumer.as_asgi()),
+                    url(r"watchman\/$", WatchmanConsumer.as_asgi()),
+                ]
+            )
+        ),
+        "channel": ChannelNameRouter({"gateway": GatewayConsumer.as_asgi()}),
+    }
 )

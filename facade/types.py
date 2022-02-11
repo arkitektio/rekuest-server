@@ -1,4 +1,5 @@
 from typing import Type
+from facade.scalars import Any
 from graphene.types.base import BaseOptions
 from graphene.types.interface import InterfaceOptions
 from pydantic.fields import Required
@@ -24,6 +25,7 @@ from lok.models import LokApp as HerreAppModel
 from balder.types import BalderObject
 import graphene
 from balder.registry import register_type
+from graphene.types.generic import GenericScalar
 
 
 class BalderInheritedModelOptions(InterfaceOptions):
@@ -163,6 +165,7 @@ class Assignation(BalderObject):
     log = BalderFiltered(
         AssignationLog, filterset_class=AssignationLogFilter, related_field="log"
     )
+    args = graphene.List(Any)
 
     class Meta:
         model = models.Assignation

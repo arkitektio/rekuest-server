@@ -23,6 +23,7 @@ from facade.enums import (
     ProvisionStatus,
     ReservationStatus,
     RepositoryType,
+    WaiterStatus,
 )
 from django.db import models
 from django.contrib.auth import get_user_model
@@ -173,10 +174,50 @@ class Agent(models.Model):
         return f"{self.name}"
 
 
+class Waiter(models.Model):
+
+    name = models.CharField(
+        max_length=2000, help_text="This waiters Name", default="Nana"
+    )
+    identifier = models.CharField(default="main", max_length=1000)
+    installed_at = models.DateTimeField(auto_created=True, auto_now_add=True)
+    unique = models.CharField(
+        max_length=1000, default=uuid.uuid4, help_text="The Channel we are listening to"
+    )
+    status = models.CharField(
+        max_length=1000,
+        choices=WaiterStatus.choices,
+        default=WaiterStatus.VANILLA,
+        help_text="The Status of this Waiter",
+    )
+    registry = models.ForeignKey(
+        Registry,
+        on_delete=models.CASCADE,
+        help_text="The provide might be limited to a instance like ImageJ belonging to a specific person. Is nullable for backend users",
+        null=True,
+        related_name="waiters",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["registry", "identifier"],
+                name="No multiple Waiters for same App and User allowed on same identifier",
+            )
+        ]
+
+    def __str__(self):
+        return f"Waiter {self.name} - {self.unique}"
+
+
 class Node(models.Model):
     """Nodes are abstraction of RPC Tasks. They provide a common API to deal with creating tasks.
 
     See online Documentation"""
+
+    pure = models.BooleanField(
+        default=False, help_text="Is this function pure. e.g can we cache the result?"
+    )
 
     type = models.CharField(
         max_length=1000,
@@ -551,6 +592,15 @@ class Reservation(models.Model):
     # Meta fields
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    waiter = models.ForeignKey(
+        Waiter,
+        on_delete=models.CASCADE,
+        max_length=1000,
+        help_text="This Reservations app",
+        null=True,
+        blank=True,
+        related_name="reservations",
+    )
     app = models.ForeignKey(
         LokApp,
         on_delete=models.CASCADE,
@@ -590,13 +640,21 @@ class Reservation(models.Model):
         related_name="caused_reservations",
     )
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["params", "node", "template", "app", "creator"],
+                name="Equal Reservation on this App by this User is already in place",
+            )
+        ]
+
     def log(self, message, level=LogLevel.DEBUG):
         return ReservationLog.objects.create(
             message=message, reservation=self, level=level
         )
 
     def __str__(self):
-        return f"Reservation for Node: {self.node}: {self.status}"
+        return f"Reservation {self.id} for Node: {self.node}: {self.status}"
 
 
 class Assignation(models.Model):
@@ -622,6 +680,15 @@ class Assignation(models.Model):
         related_name="assignations",
         blank=True,
         null=True,
+    )
+    waiter = models.ForeignKey(
+        Waiter,
+        on_delete=models.CASCADE,
+        max_length=1000,
+        help_text="This Assignation app",
+        null=True,
+        blank=True,
+        related_name="assignations",
     )
     kwargs = models.JSONField(blank=True, null=True, help_text="The Kwargs")
     returns = models.JSONField(blank=True, null=True, help_text="The Returns")

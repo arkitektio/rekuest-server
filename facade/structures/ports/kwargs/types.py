@@ -17,7 +17,6 @@ get_port_types = lambda: {
 @register_type
 class KwargPort(graphene.Interface):
     key = graphene.String()
-    type = graphene.String()
     label = graphene.String()
     description = graphene.String(required=False)
     required = graphene.Boolean()
@@ -26,7 +25,7 @@ class KwargPort(graphene.Interface):
     @classmethod
     def resolve_type(cls, instance, info):
         typemap = get_port_types()
-        _type = instance.get("type", instance.get("typename"))
+        _type = instance.get("typename")
         return typemap.get(_type, KwargPort)
 
 

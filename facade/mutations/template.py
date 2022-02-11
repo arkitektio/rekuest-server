@@ -35,7 +35,7 @@ class CreateTemplate(BalderMutation):
         extensions=[],
         version="main",
     ):
-        registry = Registry.objects.get(
+        registry, _ = Registry.objects.get_or_create(
             app=info.context.bounced.app, user=info.context.bounced.user
         )
 
@@ -46,6 +46,7 @@ class CreateTemplate(BalderMutation):
             template.extensions = extensions
             template.params = params
             template.save()
+
         except:
             template = Template.objects.create(
                 node_id=node,

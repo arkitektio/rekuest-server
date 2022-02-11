@@ -8,6 +8,7 @@ get_port_types = lambda: {
     "StringReturnPort": StringReturnPort,
     "StructureReturnPort": StructureReturnPort,
     "ListReturnPort": ListReturnPort,
+    "DictReturnPort": DictReturnPort,
     "BoolReturnPort": BoolReturnPort,
     "EnumReturnPort": EnumReturnPort,
 }
@@ -15,7 +16,6 @@ get_port_types = lambda: {
 
 @register_type
 class ReturnPort(graphene.Interface):
-    type = graphene.String()
     key = graphene.String()
     label = graphene.String()
     description = graphene.String(required=False)
@@ -24,7 +24,7 @@ class ReturnPort(graphene.Interface):
     @classmethod
     def resolve_type(cls, instance, info):
         typemap = get_port_types()
-        _type = instance.get("type", instance.get("typename"))
+        _type = instance.get("typename")
         return typemap.get(_type, ReturnPort)
 
 
@@ -75,6 +75,16 @@ class StructureReturnPort(graphene.ObjectType):
 
 @register_type
 class ListReturnPort(graphene.ObjectType):
+    """Model Port"""
+
+    child = graphene.Field(lambda: ReturnPort, description="The child")
+
+    class Meta:
+        interfaces = (ReturnPort,)
+
+
+@register_type
+class DictReturnPort(graphene.ObjectType):
     """Model Port"""
 
     child = graphene.Field(lambda: ReturnPort, description="The child")

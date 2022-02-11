@@ -92,6 +92,92 @@ class CreateNode(BalderMutation):
         return node
 
 
+class DefinitionInput(graphene.InputObjectType):
+    """A definition for a node"""
+
+    description = graphene.String(
+        description="A description for the Node", required=False
+    )
+    name = graphene.String(description="The name of this template", required=True)
+    args = graphene.List(ArgPortInput, description="The Args")
+    kwargs = graphene.List(KwargPortInput, description="The Kwargs")
+    returns = graphene.List(ReturnPortInput, description="The Returns")
+    interfaces = graphene.List(
+        graphene.String,
+        description="The Interfaces this node provides [eg. bridge, filter]",
+    )  # todo infer interfaces from args kwargs
+    type = graphene.Argument(
+        NodeTypeInput,
+        description="The variety",
+        default_value=NodeType.FUNCTION.value,
+    )
+    interface = graphene.String(description="The Interface", required=True)
+    package = graphene.String(description="The Package", required=False)
+
+
+class DefineNode(BalderMutation):
+    """Defines a node according to is definition"""
+
+    class Arguments:
+        definition = graphene.Argument(DefinitionInput, required=True)
+
+    @bounced(anonymous=True)
+    def mutate(root, info, definition: DefinitionInput):
+
+        args = definition.args or []
+        kwargs = definition.kwargs or []
+        returns = definition.returns or []
+        interface = definition.interface
+        package = definition.package
+        description = definition.description
+        name = definition.name
+        interfaces = definition.interfaces
+        type = definition.type
+
+        repository, _ = AppRepository.objects.update_or_create(
+            app=info.context.bounced.app,
+            defaults={"name": inflection.underscore(info.context.bounced.app.name)},
+        )
+
+        arg_identifiers = [arg.identifier for arg in args if arg.identifier]
+        kwarg_identifiers = [kwarg.identifier for kwarg in kwargs if kwarg.identifier]
+        return_identifiers = [
+            returnitem.identifier for returnitem in returns if returnitem.identifier
+        ]
+
+        all_identifiers = set(arg_identifiers + kwarg_identifiers + return_identifiers)
+        for identifier in all_identifiers:
+            try:
+                model = Structure.objects.get(identifier=identifier)
+            except Structure.DoesNotExist:
+                # assert "can_create_identifier" in info.context.bounced.scopes, "You cannot create a new DataModel if you dont have the 'can_create_identifier' scopes"
+                new_structure = Structure.objects.create(
+                    repository=repository, identifier=identifier
+                )
+                logger.info(f"Created {new_structure}")
+
+        node, created = Node.objects.update_or_create(
+            package=repository.name,
+            interface=interface,
+            repository=repository,
+            defaults={
+                "description": description,
+                "args": args,
+                "kwargs": kwargs,
+                "returns": returns,
+                "name": name,
+                "type": type,
+            },
+            interfaces=interfaces,
+        )
+
+        return node
+
+    class Meta:
+        type = types.Node
+        operation = "define"
+
+
 class DeleteNodeReturn(graphene.ObjectType):
     id = graphene.String()
 

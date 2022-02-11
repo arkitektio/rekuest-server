@@ -57,6 +57,7 @@ class BoundType(TextChoices):
     APP = "APP", "Bound to one Application (User independent)"
     GLOBAL = "GLOBAL", "Unbound and usable for every application"
 
+
 class TopicMode(TextChoices):
     PRODUCTION = "PRODUCTION", "Production (Topic is in production mode)"
     DEBUG = "DEBUG", "Debug (Topic is in debug Mode)"
@@ -115,6 +116,7 @@ AssignationStatusInput = InputEnum.from_choices(AssignationStatus)
 NodeTypeInput = InputEnum.from_choices(NodeType)
 BoundTypeInput = InputEnum.from_choices(BoundType)
 
+
 class ReservationStatus(TextChoices):
 
     # Start State
@@ -165,6 +167,12 @@ class ReservationStatus(TextChoices):
 
 
 class AgentStatus(TextChoices):
+    ACTIVE = "ACTIVE", "Active"
+    DISCONNECTED = "DISCONNECTED", "Disconnected"
+    VANILLA = "VANILLA", "Complete Vanilla Scenario after a forced restart of"
+
+
+class WaiterStatus(TextChoices):
     ACTIVE = "ACTIVE", "Active"
     DISCONNECTED = "DISCONNECTED", "Disconnected"
     VANILLA = "VANILLA", "Complete Vanilla Scenario after a forced restart of"

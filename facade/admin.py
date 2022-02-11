@@ -11,9 +11,13 @@ admin.site.register(AppRepository)
 admin.site.register(MirrorRepository)
 
 
+class ReservationAdmin(admin.ModelAdmin):
+    readonly_fields = ("params", "context")
+
+
 admin.site.register(Node)
 admin.site.register(Template)
 admin.site.register(Assignation)
-admin.site.register(Reservation)
+admin.site.register(Reservation, ReservationAdmin)
 admin.site.register(Provision)
 admin.site.register(Structure)

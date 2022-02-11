@@ -1,5 +1,8 @@
+from facade.enums import ReservationStatus
 from facade.helpers import create_context_from_bounced
-
+from facade.models import Reservation
+from facade.subscriptions.waiter import WaiterSubscription
+from facade import models, types
 from facade.workers.gateway import GatewayConsumer
 import uuid
 from delt.messages import BouncedUnreserveMessage
@@ -13,32 +16,29 @@ import logging
 logger = logging.getLogger(__name__)  #
 
 
-class Unreserve(graphene.ObjectType):
-    reference = graphene.String()
-
-
 class UnreserveMutation(BalderMutation):
     class Arguments:
-        reservation = graphene.String(
-            description="The reference of the Reservation you want to ruin"
-        )
-        reference = graphene.String(
+        id = graphene.ID(
             description="The reference of the Reservation you want to ruin",
-            required=False,
+            required=True,
         )
 
     class Meta:
-        type = Unreserve
+        type = types.Reservation
         operation = "unreserve"
 
     @bounced(only_jwt=True)
-    def mutate(root, info, reservation=None):
+    def mutate(root, info, id=None):
         reference = str(uuid.uuid4())
         bounce = info.context.bounced
 
+        res = Reservation.objects.get(id=id)
+        res.status = ReservationStatus.CANCELING
+        res.save()
+
         bounced = BouncedUnreserveMessage(
             data={
-                "reservation": reservation,
+                "reservation": id,
             },
             meta={
                 "reference": reference,
@@ -52,4 +52,4 @@ class UnreserveMutation(BalderMutation):
 
         GatewayConsumer.send(bounced)
 
-        return reference
+        return res

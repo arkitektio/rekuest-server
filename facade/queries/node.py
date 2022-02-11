@@ -6,10 +6,17 @@ from facade.models import Node, Template
 import graphene
 from lok import bounced
 
+from facade.scalars import QString
+
 
 class NodeDetailQuery(BalderQuery):
+    """Asss
+
+    Is A query for all of these specials in the world
+    """
+
     class Arguments:
-        q = graphene.String(description="The identifier string")
+        q = graphene.Argument(QString, description="The identifier string")
         id = graphene.ID(description="The query node")
         package = graphene.String(description="The package of this node")
         interface = graphene.String(description="The interface of this node")

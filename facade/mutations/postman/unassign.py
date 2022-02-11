@@ -13,13 +13,9 @@ import logging
 logger = logging.getLogger(__name__)  #
 
 
-class Unassign(graphene.ObjectType):
-    reference = graphene.String()
-
-
 class UnassignMutation(BalderMutation):
     class Arguments:
-        assignation = graphene.String(
+        assignation = graphene.ID(
             description="The reference of the Assignation you want to ruin"
         )
         reference = graphene.String(
@@ -28,7 +24,7 @@ class UnassignMutation(BalderMutation):
         )
 
     class Meta:
-        type = Unassign
+        type = types.Assignation
         operation = "unassign"
 
     @bounced(only_jwt=True)
@@ -56,4 +52,4 @@ class UnassignMutation(BalderMutation):
 
         GatewayConsumer.send(bounced)
 
-        return reference
+        return assignation
