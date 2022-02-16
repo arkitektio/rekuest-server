@@ -12,7 +12,8 @@ admin.site.register(MirrorRepository)
 
 
 class ReservationAdmin(admin.ModelAdmin):
-    readonly_fields = ("params", "context")
+    # readonly_fields = ("params", "context")
+    pass
 
 
 admin.site.register(Node)

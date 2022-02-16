@@ -9,24 +9,24 @@ def samp_post_save(sender, instance=None, created=None, **kwargs):
     from facade.subscriptions import NodesEvent, NodeDetailEvent
 
     NodesEvent.broadcast(
-        {"action": "created", "data": instance.id}
+        {"action": "created", "data": instance}
         if created
-        else {"action": "updated", "data": instance.id},
+        else {"action": "updated", "data": instance},
         ["all_nodes"],
     )
 
     NodeDetailEvent.broadcast(
-        {"action": "updated", "data": instance.id}, [f"node_{instance.id}"]
+        {"action": "updated", "data": instance}, [f"node_{instance.id}"]
     )
 
 
 @receiver(post_save, sender=Reservation)
 def res_post_save(sender, instance=None, created=None, **kwargs):
-    from facade.subscriptions import WaiterSubscription
+    from facade.subscriptions import ReservationsSubscription
 
     if instance.waiter:
         print("Doin thig here")
-        WaiterSubscription.broadcast(
+        ReservationsSubscription.broadcast(
             {"action": "create" if created else "update", "data": instance},
             [f"waiter_{instance.waiter.unique}"],
         )
@@ -37,7 +37,7 @@ def ass_post_save(sender, instance=None, created=None, **kwargs):
     from facade.subscriptions import TodosSubscription
 
     if instance.waiter:
-        print("Doin thig here")
+        print("Todos lets go")
         TodosSubscription.broadcast(
             {"action": "create" if created else "update", "data": instance},
             [f"todos_{instance.waiter.unique}"],

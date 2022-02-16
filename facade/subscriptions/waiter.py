@@ -7,45 +7,37 @@ import graphene
 
 
 class WaiterEvent(graphene.ObjectType):
-    update = graphene.Field(types.Reservation)
-    delete = graphene.Field(graphene.ID)
-    create = graphene.Field(types.Reservation)
+    created = graphene.Field(types.Waiter)
+    deleted = graphene.ID()
+    updated = graphene.Field(types.Waiter)
 
 
 class WaiterSubscription(BalderSubscription):
+    WAITER_FOR_USERID = lambda id: f"waiter_user_{id}"
+
+
     class Arguments:
-        identifier = graphene.ID(
-            description="The reference of this waiter", required=True
-        )
+        level = graphene.String(description="The log level for alterations")
 
     @bounced(only_jwt=True)
-    def subscribe(root, info, *args, identifier=None):
-        registry, _ = models.Registry.objects.get_or_create(
-            user=info.context.bounced.user, app=info.context.bounced.app
-        )
-        waiter, _ = models.Waiter.objects.get_or_create(
-            registry=registry, identifier=identifier
-        )
-        print(f"Connected Waiter for {waiter}")
-        return [f"waiter_{waiter.unique}"]
+    def subscribe(root, info, *args, **kwargs):
+        print(f"waiter_user_{info.context.user.id}")
+        return [WaiterSubscription.WAITER_FOR_USERID(info.context.user.id), "all_waiters"]
 
     def publish(payload, info, *args, **kwargs):
         payload = payload["payload"]
         action = payload["action"]
         data = payload["data"]
-        print("received Payload", payload)
 
-        if action == "delete":
-            return {"delete": data}
-
-        if action == "update":
-            return {"update": data}
-
-        if action == "create":
-            return {"create": data}
-
-        print("error in payload")
+        if action == "created":
+            return {"created": data}
+        if action == "updated":
+            return {"updated": data}
+        if action == "deleted":
+            return {"deleted": data}
 
     class Meta:
         type = WaiterEvent
         operation = "waiter"
+
+

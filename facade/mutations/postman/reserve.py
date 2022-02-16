@@ -61,15 +61,10 @@ class ReserveMutation(BalderMutation):
         creator = info.context.bounced.user
         app = info.context.bounced.app
 
-        print(app_group)
         registry, _ = Registry.objects.get_or_create(user=creator, app=app)
         waiter, _ = Waiter.objects.get_or_create(
             registry=registry, identifier=app_group
         )
-        print(waiter)
-
-        for callback in callbacks:
-            print(callback)
 
         assert (
             node or template
@@ -92,12 +87,6 @@ class ReserveMutation(BalderMutation):
                 "params": params,
             },
         )
-
-        if creator:
-            MyReservationsEvent.broadcast(
-                {"action": "created" if created else "update", "data": res.id},
-                [f"reservations_user_{creator.id}"],
-            )
 
         """  #bounced = BouncedReserveMessage(
         #    data={"node": node, "template": template, "params": params},

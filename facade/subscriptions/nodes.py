@@ -25,11 +25,10 @@ class NodesEvent(BalderSubscription):
         payload = payload["payload"]
         action = payload["action"]
         data = payload["data"]
-
         if action == "created":
-            return {"created": models.Node.objects.get(id=data)}
+            return {"created": data}
         if action == "updated":
-            return {"updated": models.Node.objects.get(id=data)}
+            return {"updated": data}
         if action == "deleted":
             return {"deleted": data}
 
@@ -46,15 +45,17 @@ class NodeDetailEvent(BalderSubscription):
 
     @bounced(only_jwt=True)
     def subscribe(root, info, id):
+        print("NODE IS BEEING WATCHED BIIIITCH")
         return [f"node_{id}"]
 
     def publish(payload, info, *args, **kwargs):
         payload = payload["payload"]
         action = payload["action"]
         data = payload["data"]
+        print("Updated")
 
         if action == "updated":
-            return models.Node.objects.get(id=data)
+            return data
 
     class Meta:
         type = types.Node

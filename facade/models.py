@@ -2,7 +2,6 @@ from delt.messages.generics import Context
 from delt.messages.postman.provide.bounced_provide import BouncedProvideMessage
 from lok.models import LokApp
 from facade.managers import NodeManager
-from mars.names import generate_random_name
 from facade.fields import (
     ArgsField,
     KwargsField,
@@ -69,7 +68,7 @@ class Registry(models.Model):
     )
     name = models.CharField(
         max_length=2000,
-        default=generate_random_name,
+        default="Unnamed",
         help_text="A name for this registzry",
     )
 
@@ -209,6 +208,10 @@ class Waiter(models.Model):
     def __str__(self):
         return f"Waiter {self.name} - {self.unique}"
 
+    @property
+    def queue(self):
+        return f"waiter_{self.unique}"
+
 
 class Node(models.Model):
     """Nodes are abstraction of RPC Tasks. They provide a common API to deal with creating tasks.
@@ -282,7 +285,7 @@ class Template(models.Model):
     )
     name = models.CharField(
         max_length=1000,
-        default=generate_random_name,
+        default="Unnamed",
         help_text="A name for this Template",
     )
     extensions = models.JSONField(

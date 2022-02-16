@@ -1,4 +1,3 @@
-from mars.names import generate_random_name
 from facade.filters import AgentFilter
 from balder.types import BalderQuery
 from facade import types

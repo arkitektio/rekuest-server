@@ -151,6 +151,11 @@ class Agent(BalderObject):
         model = models.Agent
 
 
+class Waiter(BalderObject):
+    class Meta:
+        model = models.Waiter
+
+
 class ReservationLog(BalderObject):
     class Meta:
         model = models.ReservationLog

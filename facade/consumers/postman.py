@@ -1,5 +1,4 @@
 from typing import Dict
-from facade.event import MessageEvent
 from delt.messages.postman.unassign.bounced_unassign import BouncedUnassignMessage
 from delt.messages.postman.unreserve.bounced_unreserve import BouncedUnreserveMessage
 from delt.messages.postman.unreserve.unreserve import UnreserveMessage
@@ -34,6 +33,7 @@ from ..models import Agent, ProvisionLog
 from facade.enums import ProvisionStatus
 from arkitekt.console import console
 import uuid
+from facade.event import MessageEvent
 
 logger = logging.getLogger(__name__)
 

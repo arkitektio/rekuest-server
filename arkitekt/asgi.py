@@ -29,6 +29,7 @@ from lok.middlewares.scope.bouncer import BouncerChannelMiddleware
 from lok.middlewares.scope.jwt import JWTChannelMiddleware
 from django.views.static import serve
 
+from hare.consumers.postman import HarePostmanConsumer
 
 # The channel routing defines what connections get handled by what consumers,
 # selecting on either the connection type (ProtocolTypeRouter) or properties
@@ -54,6 +55,7 @@ application = ProtocolTypeRouter(
                     url(r"agent\/$", AgentConsumer.as_asgi()),
                     url(r"postman\/$", PostmanConsumer.as_asgi()),
                     url(r"watchman\/$", WatchmanConsumer.as_asgi()),
+                    url(r"watchi\/$", HarePostmanConsumer.as_asgi()),
                 ]
             )
         ),

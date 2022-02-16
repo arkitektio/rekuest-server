@@ -60,7 +60,6 @@ class AssignationsEvent(graphene.ObjectType):
     create = graphene.Field(Assignation)
 
 
-
 class MyAssignationsEvent(BalderSubscription):
 
 

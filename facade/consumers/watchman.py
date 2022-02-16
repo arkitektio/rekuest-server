@@ -1,5 +1,5 @@
 from typing import Dict
-from facade.event import MessageEvent
+from facade.consumers.agent import AlreadyActiveAgent
 from delt.messages.postman.unassign.bounced_unassign import BouncedUnassignMessage
 from delt.messages.postman.unreserve.bounced_unreserve import BouncedUnreserveMessage
 from delt.messages.postman.unreserve.unreserve import UnreserveMessage
@@ -30,12 +30,20 @@ import json
 import logging
 from lok.bouncer.utils import bounced_ws
 import asyncio
-from ..models import Agent, ProvisionLog
-from facade.enums import ProvisionStatus
+from facade.protocol import ReserveList
+from facade.queries.reservation import Reservations
+
+from facade.subscriptions.waiter import WaiterSubscription
+from ..models import Agent, ProvisionLog, Registry, Reservation, Waiter
+from facade.enums import ProvisionStatus, ReservationStatus, WaiterStatus
 from arkitekt.console import console
 import uuid
 
 logger = logging.getLogger(__name__)
+
+
+class AlreadyActiveWaiter(Exception):
+    pass
 
 
 def events_for_postman_disconnect(reservationsMap: Dict[str, BouncedReserveMessage]):
@@ -52,6 +60,34 @@ def events_for_postman_disconnect(reservationsMap: Dict[str, BouncedReserveMessa
         events.append(MessageEvent("bounced_unreserve_in", unreserve))
 
     return events
+
+
+def activate_waiter_and_get_reservelist(app, user, identifier="main"):
+
+    if user is None or user.is_anonymous:
+        registry, _ = Registry.objects.get_or_create(user=None, app=app)
+    else:
+        registry, _ = Registry.objects.get_or_create(user=user, app=app)
+
+    waiter, _ = Waiter.objects.get_or_create(registry=registry, identifier=identifier)
+
+    if waiter.registry.user:
+        WaiterSubscription.broadcast(
+            {"action": "updated", "data": str(waiter.id)},
+            [WaiterSubscription.WAITER_FOR_USERID(waiter.registry.user.id)],
+        )
+    else:
+        pass
+
+    reservations = (
+        Reservations.objects.filter(waiter=waiter)
+        .exclude(status__in=[ReservationStatus.ENDED, ReservationStatus.CANCELLED])
+        .all()
+    )
+
+    res_list = ReserveList(reservations=[res.id for res in reservations])
+
+    return waiter, res_list
 
 
 class WatchmanConsumer(AsyncWebsocketConsumer):
@@ -74,10 +110,15 @@ class WatchmanConsumer(AsyncWebsocketConsumer):
 
     @bounced_ws(only_jwt=True)
     async def connect(self):
-        
+
         logger.error(f"Connecting Postman {self.scope['user']}")
         await self.accept()
         self.callback_name, self.progress_name = await self.connect_to_rabbit()
+
+        self.waiter, reserve_list, assign_list = await sync_to_async(
+            activate_waiter_and_get_reservelist
+        )
+
         self.user = self.scope["user"]
 
         self.bouncedReservationMap = {}

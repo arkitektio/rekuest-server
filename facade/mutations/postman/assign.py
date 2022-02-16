@@ -1,3 +1,4 @@
+from facade.enums import ReservationStatus
 from facade.helpers import create_context_from_bounced
 from facade.subscriptions.assignation import MyAssignationsEvent
 from facade.models import Assignation, Reservation
@@ -27,6 +28,13 @@ class AssignMutation(BalderMutation):
         )
         kwargs = GenericScalar(description="Additional Params")
         reference = graphene.String(description="A reference")
+        cached = graphene.Boolean(
+            description="Should we allow cached results (only applicable if node was registered as pure)"
+        )
+        log = graphene.Boolean(
+            description="Should we log intermediate resulst? (if also persist is true these will be persisted to the log system)"
+        )
+        mother = graphene.ID(description="If this task inherits from another task")
 
     class Meta:
         type = types.Assignation
@@ -40,6 +48,7 @@ class AssignMutation(BalderMutation):
         args=[],
         kwargs={},
         reference=None,
+        cached=True,
     ):
         reference = reference or str(uuid.uuid4())
 
@@ -47,29 +56,21 @@ class AssignMutation(BalderMutation):
         app = info.context.bounced.app
 
         res = Reservation.objects.get(id=reservation)
+        if res.status != ReservationStatus.ACTIVE:
+            raise Exception("Cannot assign. Reservation is currently inactive!")
 
         ass = models.Assignation.objects.create(
             **{
                 "reservation": res,
                 "args": args,
                 "kwargs": kwargs,
-                "context": create_context_from_bounced(info.context.bounced),
                 "reference": reference,
                 "waiter": res.waiter,
                 "creator": creator,
                 "app": app,
-                "callback": "not-set",
-                "progress": "not-set",
             }
         )
 
-        if creator:
-            MyAssignationsEvent.broadcast(
-                {"action": "created", "data": ass.id},
-                [f"assignations_user_{creator.id}"],
-            )
-
-        """ 
         bounced = BouncedAssignMessage(
             data={"reservation": reservation, "args": args, "kwargs": kwargs},
             meta={
@@ -81,8 +82,7 @@ class AssignMutation(BalderMutation):
                 },
                 "context": create_context_from_bounced(bounce),
             },
-        ) 
-        """
+        )
 
         # GatewayConsumer.send(bounced)
 
