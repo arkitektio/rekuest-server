@@ -1,4 +1,5 @@
 from facade.subscriptions.assignation import MyAssignationsEvent
+from hare.carrots import RouteHareMessage
 from hare.scheduler.base import MessageEvent
 from hare.transitions.provision import cancel_provision
 from delt.messages.postman.provide.provide_transition import ProvideState
@@ -176,41 +177,19 @@ class ReserverRabbit(BaseHare):
         self.channel = await self.connection.channel()
 
         # This queue gets called from the HTTP backend (so GraphQL Postman request) with an already created Assignation
-        self.bounced_reserve_in = await self.channel.queue_declare("bounced_reserve_in")
-        self.bounced_unreserve_in = await self.channel.queue_declare(
-            "bounced_unreserve_in"
-        )
-        self.bounced_unprovide_in = await self.channel.queue_declare(
-            "bounced_unprovide_in"
-        )
-        self.unreserve_done_in = await self.channel.queue_declare("unreserve_done_in")
-
-        self.bounced_assign_in = await self.channel.queue_declare("bounced_assign_in")
-        self.bounced_unassign_in = await self.channel.queue_declare(
-            "bounced_unassign_in"
-        )
-
+        self.route = await self.channel.queue_declare("route")
+        self.unroute = await self.channel.queue_declare("unroute")
+        
         # Start listening the queue with name 'hello'
         await self.channel.basic_consume(
-            self.bounced_reserve_in.queue, self.on_bounced_reserve_in
+            self.route.queue, self.on_bounced_reserve_in
         )
         await self.channel.basic_consume(
-            self.bounced_unreserve_in.queue, self.on_bounced_unreserve_in
-        )
-        await self.channel.basic_consume(
-            self.bounced_unprovide_in.queue, self.on_bounced_unprovide_in
-        )
-        await self.channel.basic_consume(
-            self.bounced_assign_in.queue, self.on_bounced_assign_in
-        )
-        await self.channel.basic_consume(
-            self.bounced_unassign_in.queue, self.on_bounced_unassign_in
+            self.unroute.queue, self.on_bounced_unreserve_in
         )
 
-    @BouncedReserveMessage.unwrapped_message
     async def on_bounced_reserve_in(
         self,
-        bounced_reserve: BouncedReserveMessage,
         aiomessage: aiormq.abc.DeliveredMessage,
     ):
         """Bounced Reserve In
@@ -223,28 +202,14 @@ class ReserverRabbit(BaseHare):
             message (aiormq.abc.DeliveredMessage): [description]
 
         """
-        try:
+        m = RouteHareMessage.from_message(aiomessage)
 
-            logger.info(
-                f"Received Bounced Reserve {str(aiomessage.body.decode())} {bounced_reserve}"
-            )
+        events = await sync_to_async(scheduler.on_route)(m)
 
-            events = await sync_to_async(scheduler.on_reserve)(bounced_reserve)
-
-            for event in events:
-                logger.info(f"EVENT {event}")
-                if event.channel:
-                    await self.forward(event.message, event.channel)
-
-        except Exception as e:
-            logger.exception(e)
-            reference = bounced_reserve.meta.reference
-            messages = await sync_to_async(crititcal_reservation_by_reference)(
-                reference, f"Error: {str(e)}"
-            )
-            for channel, message in messages:
-                if channel:
-                    await self.forward(message, channel)
+        for event in events:
+            logger.info(f"EVENT {event}")
+            if event.channel:
+                await self.forward(event.message, event.channel)
 
         # This should then expand this to an assignation message that can be delivered to the Providers
         await aiomessage.channel.basic_ack(aiomessage.delivery.delivery_tag)

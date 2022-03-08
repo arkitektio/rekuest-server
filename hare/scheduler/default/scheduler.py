@@ -15,6 +15,7 @@ from delt.messages.postman.unreserve.bounced_unreserve import BouncedUnreserveMe
 from delt.types import ProvideParams, ReserveParams
 from facade.enums import ProvisionStatus, ReservationStatus
 from facade.models import Reservation
+from hare.carrots import RouteHareMessage, UnrouteHareMessage
 from hare.scheduler.base import BaseScheduler, MessageEvent, SchedulerError
 import logging
 
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 class DefaultScheduler(BaseScheduler):
+
     def _reserve_reservation(self, reservation: Reservation):
 
         params = ReserveParams(**reservation.params)
@@ -50,6 +52,7 @@ class DefaultScheduler(BaseScheduler):
         logger.info("Trying to provide some")
 
         provide_es_qs = build_provision_escalation_qs(reservation, params)
+        
         mapped_provisions, events = escalate_through_provision_qs(
             provide_es_qs,
             reservation,
@@ -64,15 +67,15 @@ class DefaultScheduler(BaseScheduler):
 
         return all_events
 
-    def on_reserve(self, reserve: BouncedReserveMessage) -> List[MessageEvent]:
+    def on_route(self, route: RouteHareMessage) -> List[MessageEvent]:
 
-        reservation = Reservation.objects.get(reference=reserve.meta.reference)
+        reservation = Reservation.objects.get(reference=route.reservation)
         return self._reserve_reservation(reservation)
 
-    def on_unreserve(self, unreserve: BouncedUnreserveMessage) -> List[MessageEvent]:
+    def on_unroute(self, unroute: UnrouteHareMessage) -> List[MessageEvent]:
         events = []
 
-        reservation = Reservation.objects.get(reference=unreserve.data.reservation)
+        reservation = Reservation.objects.get(reference=unroute.reservation)
         params = ReserveParams(**reservation.params)
 
         needs_action = (

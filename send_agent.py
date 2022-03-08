@@ -29,7 +29,7 @@ def get_queue():
     from facade.models import Reservation
     from facade.enums import ReservationStatus
 
-    res = Reservation.objects.get(id=21)
+    res = Reservation.objects.get(id=14)
     res.status = ReservationStatus.ACTIVE
     res.save()
     queue = res.waiter.queue
@@ -42,7 +42,7 @@ async def main():
     queue = await get_queue()
     await channel.basic_publish(
         HareReserveTransitionBody(
-            reservation="21", status=ReservationStatus.ACTIVE, provisions=["3"]
+            reservation="14", status=ReservationStatus.CANCELING, provisions=["3"]
         )
         .json()
         .encode(),

@@ -8,7 +8,7 @@ class HookType(TextChoices):
     NEGOTIATE = "negotiate", "Negotiate Hook (syncronous Api call)"
 
 
-class ModeType(TextChoices):
+class ProvisionMode(TextChoices):
     DEBUG = "DEBUG", "Debug Mode (Node might be constantly evolving)"
     PRODUCTION = "PRODUCTION", "Production Mode (Node might be constantly evolving)"
 

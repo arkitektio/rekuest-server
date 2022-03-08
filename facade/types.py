@@ -127,6 +127,10 @@ class LokUser(BalderObject):
 
 
 class Registry(BalderObject):
+    name = graphene.String(
+        deprecation_reason="Will be replaced in the future",
+    )
+
     class Meta:
         model = models.Registry
 
@@ -234,7 +238,10 @@ class Repository(BalderInheritedModel):
 
     id = graphene.ID(description="Id of the Repository")
     nodes = BalderFiltered(Node, filterset_class=NodesFilter, related_field="nodes")
-    name = graphene.String(description="The Name of the Repository")
+    name = graphene.String(
+        description="The Name of the Repository",
+        deprecation_reason="Will be replaced in the future",
+    )
 
     class Meta:
         child_models = {

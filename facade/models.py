@@ -1,7 +1,6 @@
-from delt.messages.generics import Context
 from delt.messages.postman.provide.bounced_provide import BouncedProvideMessage
 from lok.models import LokApp
-from facade.managers import NodeManager
+from facade.managers import NodeManager, ReservationManager
 from facade.fields import (
     ArgsField,
     KwargsField,
@@ -17,7 +16,7 @@ from facade.enums import (
     LogLevel,
     AssignationStatus,
     LogLevel,
-    ModeType,
+    ProvisionMode,
     NodeType,
     ProvisionStatus,
     ReservationStatus,
@@ -33,8 +32,6 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-def create_token(user, scopes=[]):
-    return Context(**{"roles": user.roles, "scopes": scopes, "user": user.email})
 
 
 class Repository(models.Model):
@@ -79,6 +76,9 @@ class Registry(models.Model):
                 name="No multiple Registry for same App and User allowed",
             )
         ]
+
+    def __str__(self) -> str:
+        return f"{self.app} used by {self.user}"
 
 
 class Structure(models.Model):
@@ -170,7 +170,11 @@ class Agent(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.name}"
+        return f"{self.registry} on {self.identifier}"
+
+    @property
+    def queue(self):
+        return f"agent_{self.unique}"
 
 
 class Waiter(models.Model):
@@ -361,8 +365,8 @@ class Provision(models.Model):
     # Deploymode
     mode = models.CharField(
         max_length=100,
-        default=ModeType.PRODUCTION,
-        choices=ModeType.choices,
+        default=ProvisionMode.PRODUCTION,
+        choices=ProvisionMode.choices,
         help_text="The Deployment Mode for this Provisions",
     )
 
@@ -575,7 +579,7 @@ class Reservation(models.Model):
     status = models.CharField(
         max_length=300,
         choices=ReservationStatus.choices,
-        default=ReservationStatus.ACTIVE,
+        default=ReservationStatus.ROUTING,
         help_text="Current lifecycle of Reservation",
     )
     statusmessage = models.CharField(
@@ -643,11 +647,13 @@ class Reservation(models.Model):
         related_name="caused_reservations",
     )
 
+    objects = ReservationManager()
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["params", "node", "template", "app", "creator"],
-                name="Equal Reservation on this App by this User is already in place",
+                fields=["params", "node", "waiter"],
+                name="Equal Reservation on this App by this Waiter is already in place",
             )
         ]
 
@@ -658,6 +664,10 @@ class Reservation(models.Model):
 
     def __str__(self):
         return f"Reservation {self.id} for Node: {self.node}: {self.status}"
+
+    @property
+    def queue(self):
+        return f"reservation_{self.channel}"
 
 
 class Assignation(models.Model):

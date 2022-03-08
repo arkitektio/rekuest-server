@@ -1,25 +1,35 @@
 from readline import replace_history_item
+from pydantic import BaseModel
 import ujson
 import aiormq
 from channels.generic.websocket import AsyncWebsocketConsumer
 from lok.bouncer.utils import bounced_ws
 import logging
 from asgiref.sync import sync_to_async
-from facade.models import Waiter, Registry
-from hare.consumers.connection import rmq
+from facade.models import Agent, Assignation, Waiter, Registry
+from hare.consumers.agent_message import (
+    AgentMessageTypes,
+    AssignationsList,
+    ProvisionChangedMessage,
+    ProvisionList,
+)
+from hare.connection import rmq
 from urllib.parse import parse_qs
-from hare.consumers.helpers import (
-    assign,
-    list_reservations,
-    reserve,
-    unassign,
-    unreserve,
+from hare.consumers.agent_helpers import (
+    change_provision,
+    list_assignations,
+    list_provisions,
 )
 from hare.consumers.messages import (
+    AssignList,
     AssignPub,
+    AssignSubUpdate,
+    JSONMessage,
+    RPCMessageTypes,
     ReserveList,
     ReservePub,
     ReserveSubUpdate,
+    SubMessageTypes,
     UnassignPub,
     UnreservePub,
 )
@@ -29,15 +39,15 @@ from arkitekt.console import console
 logger = logging.getLogger(__name__)
 
 
-class PostmanConsumer(AsyncWebsocketConsumer):
-    waiter: Waiter
+class AgentConsumer(AsyncWebsocketConsumer):
+    agent: Agent
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.waiter = None
+        self.agent = None
 
     @sync_to_async
-    def set_waiter(self):
+    def set_agent(self):
         self.app, self.user = self.scope["bounced"].app, self.scope["bounced"].user
         instance_id = parse_qs(self.scope["query_string"])[b"instance_id"][0].decode(
             "utf8"
@@ -49,13 +59,13 @@ class PostmanConsumer(AsyncWebsocketConsumer):
         else:
             registry, _ = Registry.objects.get_or_create(user=self.user, app=self.app)
 
-        self.waiter, _ = Waiter.objects.get_or_create(
+        self.agent, _ = Agent.objects.get_or_create(
             registry=registry, identifier=instance_id
         )
 
     @bounced_ws(only_jwt=True)
     async def connect(self):
-        await self.set_waiter()
+        await self.set_agent()
         self.queue_length = 10
         self.incoming_queue = asyncio.Queue(maxsize=self.queue_length)
         self.incoming_task = asyncio.create_task(self.consumer())
@@ -72,37 +82,41 @@ class PostmanConsumer(AsyncWebsocketConsumer):
                 text_data = await self.incoming_queue.get()
                 json_dict = ujson.loads(text_data)
                 type = json_dict["type"]
-                if type == "RESERVE":
-                    await self.on_reserve(ReservePub(**json_dict))
-                if type == "RESERVE_LIST":
-                    await self.on_list_reservations(ReserveList(**json_dict))
-                if type == "UNRESERVE":
-                    await self.on_unreserve(UnreservePub(**json_dict))
-                if type == "ASSIGN":
-                    await self.on_assign(AssignPub(**json_dict))
-                if type == "UNASSIGN":
-                    await self.on_unassign(UnassignPub(**json_dict))
+                if type == AgentMessageTypes.LIST_PROVISIONS:
+                    await self.on_list_provisions(ProvisionList(**json_dict))
+                if type == AgentMessageTypes.LIST_ASSIGNATIONS:
+                    await self.on_list_assignations(AssignationsList(**json_dict))
+
+                if type == AgentMessageTypes.PROVIDE_CHANGED:
+                    await self.on_provision_changed(
+                        ProvisionChangedMessage(**json_dict)
+                    )
 
         except Exception as e:
             print(e)
 
-    async def on_reserve(self, message):
+    async def reply(self, m: JSONMessage):  #
+        await self.send(text_data=m.json())
+
+    async def on_list_provisions(self, message):
         raise NotImplementedError("Error on this")
 
-    async def on_assign(self, message):
-        raise NotImplementedError("Error on this")
-
-    async def on_unassign(self, message):
-        raise NotImplementedError("Error on this")
-
-    async def on_unreserve(self, message):
-        raise NotImplementedError("Error on this")
-
-    async def on_list_reservations(self, message):
+    async def on_list_assignations(self, message):
         raise NotImplementedError("Error on this")
 
 
-class HarePostmanConsumer(PostmanConsumer):
+class HareAgentConsumer(AgentConsumer):
+    """Hare Postman
+
+    Hare is the default Resolver for the Message Layer using rabbitmq
+    it inherits the default
+
+
+
+    Args:
+        PostmanConsumer (_type_): _description_
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -111,59 +125,46 @@ class HarePostmanConsumer(PostmanConsumer):
         self.channel = await rmq.open_channel()
 
         self.callback_queue = await self.channel.queue_declare(
-            f"waiter_{self.waiter.unique}", auto_delete=True
+            self.agent.queue, auto_delete=True
         )
 
-        print(f"Listening on 'waiter_{self.waiter.unique}'")
+        print(f"Liustenting Agent on '{self.agent.queue}'")
         # Start listening the queue with name 'hello'
         await self.channel.basic_consume(
             self.callback_queue.queue, self.on_rmq_message_in
         )
 
+    async def forward(self, f: JSONMessage):
+        pass
+
     async def on_rmq_message_in(self, rmq_message: aiormq.abc.DeliveredMessage):
         try:
             json_dict = ujson.loads(rmq_message.body)
             type = json_dict["type"]
-            if type == "RESERVE_UPDATE":
-                m = ReserveSubUpdate(**json_dict)
-                await self.send(text_data=m.json())
+            print(json_dict)
 
         except Exception as e:
             console.print_exception()
 
         self.channel.basic_ack(rmq_message.delivery.delivery_tag)
 
-    async def on_reserve(self, message: ReservePub):
+    async def on_list_provisions(self, message: ProvisionList):
 
-        replies, forwards = await reserve(message, waiter=self.waiter)
+        replies, forwards = await list_provisions(message, agent=self.agent)
 
-        for e in replies:
-            await self.send(text_data=e.json())
+        for r in replies:
+            await self.reply(r)
 
-    async def on_unreserve(self, message: UnreservePub):
+    async def on_list_assignations(self, message: AssignationsList):
 
-        replies, forwards = await unreserve(message, waiter=self.waiter)
+        replies, forwards = await list_assignations(message, agent=self.agent)
 
-        for e in replies:
-            await self.send(text_data=e.json())
+        for r in replies:
+            await self.reply(r)
 
-    async def on_assign(self, message: AssignPub):
+    async def on_provision_changed(self, message: ProvisionChangedMessage):
 
-        replies, forwards = await assign(message, waiter=self.waiter)
+        replies, forwards = await change_provision(message, agent=self.agent)
 
-        for e in replies:
-            await self.send(text_data=e.json())
-
-    async def on_unassign(self, message: UnassignPub):
-
-        replies, forwards = await unassign(message, waiter=self.waiter)
-
-        for e in replies:
-            await self.send(text_data=e.json())
-
-    async def on_list_reservations(self, message: ReserveList):
-
-        replies, forwards = await list_reservations(message, waiter=self.waiter)
-
-        for e in replies:
-            await self.send(text_data=e.json())
+        for r in replies:
+            await self.reply(r)

@@ -1,7 +1,7 @@
 from django.db.models.signals import post_save
 from django.dispatch.dispatcher import receiver
-
-from facade.models import Assignation, Node, Reservation
+from facade.models import Assignation, Node, Provision, Reservation
+from kombu import Queue
 
 
 @receiver(post_save, sender=Node)
@@ -33,7 +33,7 @@ def res_post_save(sender, instance=None, created=None, **kwargs):
 
 
 @receiver(post_save, sender=Assignation)
-def ass_post_save(sender, instance=None, created=None, **kwargs):
+def ass_post_save(sender, instance: Assignation = None, created=None, **kwargs):
     from facade.subscriptions import TodosSubscription
 
     if instance.waiter:
@@ -41,4 +41,14 @@ def ass_post_save(sender, instance=None, created=None, **kwargs):
         TodosSubscription.broadcast(
             {"action": "create" if created else "update", "data": instance},
             [f"todos_{instance.waiter.unique}"],
+        )
+
+@receiver(post_save, sender=Provision)
+def prov_post_save(sender, instance: Provision = None, created=None, **kwargs):
+    from facade.subscriptions import MyProvisionsEvent
+
+    if instance.creator:
+        MyProvisionsEvent.broadcast(
+            {"action": "created", "data": instance},
+            [f"provisions_user_{instance.creator.id}"],
         )

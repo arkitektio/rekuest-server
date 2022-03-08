@@ -33,11 +33,13 @@ enum AgentStatusInput {
   VANILLA
 }
 
+scalar Any
+
 type AppRepository implements Repository {
   id: ID
   installedAt: DateTime!
   type: RepositoryType!
-  name: String
+  name: String @deprecated(reason: "Will be replaced in the future")
   unique: String!
   app: LokApp
   nodes(active: Boolean): [Node]
@@ -70,8 +72,9 @@ type Assignation {
   reservation: Reservation
   extensions: GenericScalar
   context: GenericScalar
-  args: GenericScalar
+  args: [Any]
   provision: Provision
+  waiter: Waiter
   kwargs: GenericScalar
   returns: GenericScalar
   status: AssignationStatus!
@@ -429,7 +432,7 @@ type MirrorRepository implements Repository {
   id: ID
   installedAt: DateTime!
   type: RepositoryType!
-  name: String
+  name: String @deprecated(reason: "Will be replaced in the future")
   unique: String!
   url: String
   updatedAt: DateTime!
@@ -445,9 +448,9 @@ type Mutation {
   resetRepository: ResetRepositoryReturn
   createTemplate(extensions: [String], node: ID!, params: GenericScalar, policy: GenericScalar, version: String): Template
   reserve(appGroup: ID = "main", callbacks: [Callback], creator: ID, node: ID, params: ReserveParamsInput, persist: Boolean = true, reference: String, template: ID, title: String): Reservation
-  unreserve(reference: String, reservation: String): Unreserve
-  assign(args: [GenericScalar]!, callback: String, kwargs: GenericScalar, reservation: String!): Assignation
-  unassign(assignation: String, reference: String): Unassign
+  unreserve(id: ID!): Reservation
+  assign(args: [GenericScalar]!, cached: Boolean, kwargs: GenericScalar, log: Boolean, mother: ID, reference: String, reservation: ID!): Assignation
+  unassign(assignation: ID, reference: String): Assignation
   provide(node: ID, params: GenericScalar, reference: String, template: ID): Provision
   unprovide(provision: String, reference: String): Unprovide
   ack(assignation: String!): Assignation
@@ -463,6 +466,7 @@ type Mutation {
 
 type Node {
   id: ID!
+  pure: Boolean!
   type: NodeType!
   repository: Repository
   interfaces: [String]
@@ -639,6 +643,7 @@ type Query {
   waitlist(exclude: [ReservationStatusInput], filter: [ReservationStatusInput], appGroup: ID = "main"): [Reservation]
   assignation(reference: ID!): Assignation
   myAssignations(exclude: [AssignationStatusInput], filter: [AssignationStatusInput]): [Assignation]
+  todolist(exclude: [AssignationStatusInput], filter: [AssignationStatusInput], appGroup: ID = "main"): [Assignation]
   provision(reference: ID!): Provision
   provisions: [Provision]
   myProvisions(exclude: [ProvisionStatusInput], filter: [ProvisionStatusInput]): [Provision]
@@ -659,13 +664,14 @@ type Registry {
   unique: String!
   name: String!
   agents: [Agent!]!
+  waiters: [Waiter!]!
   templates: [Template!]!
 }
 
 interface Repository {
   id: ID
   nodes(active: Boolean): [Node]
-  name: String
+  name: String @deprecated(reason: "Will be replaced in the future")
 }
 
 enum RepositoryType {
@@ -689,6 +695,7 @@ type Reservation {
   progress: String
   createdAt: DateTime!
   updatedAt: DateTime!
+  waiter: Waiter
   app: LokApp
   parent: Reservation
   creator: LokUser
@@ -761,8 +768,8 @@ enum ReservationStatusInput {
 }
 
 type ReservationsEvent {
-  ended: ID
   update: Reservation
+  delete: ID
   create: Reservation
 }
 
@@ -923,12 +930,14 @@ type Subscription {
   myAssignationsEvent(level: String): AssignationsEvent
   reservationEvent(level: String, reference: ID!): ReservationEvent
   myReservationsEvent(level: String): ReservationsEvent
+  reservations(identifier: ID!): ReservationsEvent
   provisionEvent(level: String, reference: ID!): ProvisionEvent
   myProvisionsEvent(level: String): ProvisionsEvent
   agentsEvent(level: String): AgentEvent
   nodesEvent(level: String): NodeEvent
   nodeEvent(id: ID!): Node
-  waiter(identifier: ID!): WaiterEvent
+  waiter(level: String): WaiterEvent
+  todos(identifier: ID!): TodoEvent
 }
 
 type Template {
@@ -951,6 +960,12 @@ type TemplateParams {
   maximumInstances: Int
 }
 
+type TodoEvent {
+  update: Assignation
+  delete: ID
+  create: Assignation
+}
+
 type Transcript {
   wards: [WardSettings]
   extensions: GenericScalar
@@ -962,15 +977,7 @@ type Transcript {
 
 scalar UUID
 
-type Unassign {
-  reference: String
-}
-
 type Unprovide {
-  reference: String
-}
-
-type Unreserve {
   reference: String
 }
 
@@ -978,10 +985,28 @@ type UpdateMirrorReturn {
   id: String
 }
 
+type Waiter {
+  id: ID!
+  installedAt: DateTime!
+  name: String!
+  identifier: String!
+  unique: String!
+  status: WaiterStatus!
+  registry: Registry
+  reservations: [Reservation!]!
+  assignations: [Assignation!]!
+}
+
 type WaiterEvent {
-  update: Reservation
-  delete: ID
-  create: Reservation
+  created: Waiter
+  deleted: ID
+  updated: Waiter
+}
+
+enum WaiterStatus {
+  ACTIVE
+  DISCONNECTED
+  VANILLA
 }
 
 type WardSettings {

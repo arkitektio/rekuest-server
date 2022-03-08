@@ -124,6 +124,10 @@ def prepare_events_for_provision_map(
     if mapped_prov.status == ProvisionStatus.ACTIVE:
         # If the Agent is active we can just forward it to him else we are waiting for the
         # connect by just saving it in the database
+        
+
+
+
         bounced_reserve = BouncedReserveMessage(
             data={
                 "node": reservation.node.id if reservation.node else None,
@@ -350,13 +354,9 @@ def escalate_through_provision_qs(
                         creator=reservation.creator,
                         callback=None,
                     )
-                    if prov.creator:
-                        MyProvisionsEvent.broadcast(
-                            {"action": "created", "data": prov.id},
-                            [f"provisions_user_{prov.creator.id}"],
-                        )
 
                     prov.reservations.add(reservation)  # We always add the provision
+
                     logger.info(
                         f"Mapping newly created Provision {prov} to {reservation}"
                     )
