@@ -104,6 +104,7 @@ class HareAgentConsumer(AgentConsumer):
                 self.res_queues[res] = await self.channel.queue_declare(
                         queue, auto_delete=True
                     )
+                print(self.res_queues[res].queue)
 
                 await self.channel.basic_consume(
                     self.res_queues[res].queue, lambda aio: self.on_assignment_in(message.provision, aio)

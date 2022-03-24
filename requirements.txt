@@ -12,7 +12,7 @@ django-probes
 djangorestframework
 drf-access-policy
 psycopg2
-
+ujson
 
 django-channels-graphql-ws
 

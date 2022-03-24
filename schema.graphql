@@ -662,7 +662,7 @@ type Registry {
   app: LokApp
   user: LokUser
   unique: String!
-  name: String!
+  name: String @deprecated(reason: "Will be replaced in the future")
   agents: [Agent!]!
   waiters: [Waiter!]!
   templates: [Template!]!
