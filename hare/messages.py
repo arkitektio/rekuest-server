@@ -35,7 +35,7 @@ class ProvideTactic(str, Enum):
     FILTER_OWN = "FILTER_OWN"
     FILTER_ACTIVE = "FILTER_ACTIVE"
     FILTER_AGENTS = "FILTER_AGENTS"
-    FILTER_TEMPLATES ="FILTER_TEMPLATES"
+    FILTER_TEMPLATES = "FILTER_TEMPLATES"
     BALANCE = "BALANCE"
 
 
@@ -59,6 +59,7 @@ class ReserveParams(BaseModel):
         ProvideTactic.FILTER_AGENTS,
     ]
 
+
 class Assignation(UpdatableModel):
     assignation: str
     provision: Optional[str]
@@ -71,8 +72,10 @@ class Assignation(UpdatableModel):
     status: Optional[AssignationStatus]
     message: Optional[str]
 
+
 class Unassignation(UpdatableModel):
     assignation: str
+    provision: Optional[str]
 
 
 class Provision(UpdatableModel):
@@ -83,6 +86,7 @@ class Provision(UpdatableModel):
 
 class Unprovision(UpdatableModel):
     provision: str
+    message: Optional[str]
 
 
 class Reservation(UpdatableModel):
@@ -90,6 +94,7 @@ class Reservation(UpdatableModel):
     template: Optional[str]
     node: Optional[str]
     status: Optional[ReservationStatus] = None
+    message: Optional[str] = ""
 
 
 class Unreservation(BaseModel):

@@ -5,6 +5,9 @@ import aiormq
 import ujson
 from .helpers import *
 from arkitekt.console import console
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class HarePostmanConsumer(PostmanConsumer):
@@ -26,9 +29,14 @@ class HarePostmanConsumer(PostmanConsumer):
         await super().connect()
         self.channel = await rmq.open_channel()
 
-        await self.channel.exchange_declare(exchange=self.waiter.queue, exchange_type="fanout")
+        await self.channel.exchange_declare(
+            exchange=self.waiter.queue, exchange_type="fanout"
+        )
+
         self.callback_queue = await self.channel.queue_declare(exclusive=True)
-        await self.channel.queue_bind(exchange=self.waiter.queue, queue=self.callback_queue.queue)
+        await self.channel.queue_bind(
+            exchange=self.waiter.queue, queue=self.callback_queue.queue
+        )
 
         # Start listening the queue with name 'hello'
         await self.channel.basic_consume(
@@ -38,12 +46,11 @@ class HarePostmanConsumer(PostmanConsumer):
         print(f"Listening on '{ self.waiter.queue}'")
 
     async def forward(self, f: HareMessage):
-        print(f"Forwading {f}")
+        logger.info(f"POSTMAN FORWARDING: {f}")
         await self.channel.basic_publish(
-            f.to_message(), routing_key=f.queue, # Lets take the first best one    
+            f.to_message(),
+            routing_key=f.queue,  # Lets take the first best one
         )
-
-
 
     async def on_rmq_message_in(self, rmq_message: aiormq.abc.DeliveredMessage):
         try:
@@ -81,6 +88,7 @@ class HarePostmanConsumer(PostmanConsumer):
 
     async def on_unreserve(self, message: UnreservePub):
 
+        logger.info("Called again???????")
         replies, forwards = await unreserve(message, waiter=self.waiter)
 
         for r in replies:
@@ -100,6 +108,7 @@ class HarePostmanConsumer(PostmanConsumer):
             await self.forward(f)
 
     async def on_unassign(self, message: UnassignPub):
+        print("Received unassign")
 
         replies, forwards = await unassign(message, waiter=self.waiter)
 

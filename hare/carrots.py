@@ -7,8 +7,11 @@ from datetime import datetime
 import uuid
 from enum import Enum
 from pydantic import BaseModel
+from facade.enums import ReservationStatus, AssignationStatus, ProvisionStatus
+
 
 T = TypeVar("T", bound=BaseModel)
+
 
 class HareMessageTypes(str, Enum):
     ROUTE = "ROUTE"
@@ -16,6 +19,11 @@ class HareMessageTypes(str, Enum):
 
     CONNECT = "CONNECT"
     UNCONNECT = "UNCONNECT"
+
+    PROVIDE = "PROVIDE"
+    RESERVE = "RESERVE"
+
+    UNRESERVE = "UNRESERVE"
 
     ASSIGN = "ASSIGN"
     UNASSIGN = "UNASSIGN"
@@ -41,9 +49,24 @@ class RouteHareMessage(HareMessage):
     type: Literal[HareMessageTypes.ROUTE] = HareMessageTypes.ROUTE
     reservation: str
 
+
 class RouteHareMessage(HareMessage):
     queue = "route"
     type: Literal[HareMessageTypes.ROUTE] = HareMessageTypes.ROUTE
+    reservation: str
+
+
+class ProvideHareMessage(HareMessage):
+    type: Literal[HareMessageTypes.PROVIDE] = HareMessageTypes.PROVIDE
+    provision: str
+    reservation: str  # The reservation that initially caused this provision
+    template: Optional[str]
+    status: Optional[ProvisionStatus]
+
+
+class ReserveHareMessage(HareMessage):
+    type: Literal[HareMessageTypes.RESERVE] = HareMessageTypes.RESERVE
+    provision: str
     reservation: str
 
 
@@ -65,7 +88,6 @@ class ConnectHareMessage(HareMessage):
     provision: str
 
 
-
 class AssignHareMessage(HareMessage):
     type: Literal[HareMessageTypes.ASSIGN] = HareMessageTypes.ASSIGN
     assignation: str
@@ -77,7 +99,14 @@ class AssignHareMessage(HareMessage):
 
 class UnassignHareMessage(HareMessage):
     type: Literal[HareMessageTypes.UNASSIGN] = HareMessageTypes.UNASSIGN
+    assignation: str
+    provision: str
+
+
+class UnreserveHareMessage(HareMessage):
+    type: Literal[HareMessageTypes.UNRESERVE] = HareMessageTypes.UNRESERVE
     reservation: str
+    provision: str
 
 
 class ReservationChangedMessage(HareMessage, Reservation):

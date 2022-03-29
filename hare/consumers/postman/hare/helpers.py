@@ -6,6 +6,7 @@ from hare.consumers.postman.protocols.postman_json import *
 from hare.carrots import *
 from arkitekt.console import console
 
+
 @sync_to_async
 def reserve(m: ReservePub, waiter: models.Waiter, **kwargs):
     reply = []
@@ -13,30 +14,43 @@ def reserve(m: ReservePub, waiter: models.Waiter, **kwargs):
 
     try:
         try:
-            res = models.Reservation.objects.get(node_id=m.node, params=m.params.dict(), waiter=waiter)
+            res = models.Reservation.objects.get(
+                node_id=m.node, params=m.params.dict(), waiter=waiter
+            )
+            message = "Wait for your reservation to come alive"
 
-            reply = [ReservePubReply(
-                id=m.id,
-                reservation=res.id,
-                status=res.status,
-                template=res.template.id  if res.template else None       
-                )]
+            if (
+                res.status == ReservationStatus.CANCELLED
+                or res.status == ReservationStatus.CANCELING
+            ):
+                message = "This reservation was cancelled and we need to reschedule it."
 
+                res, forward = models.Reservation.objects.reschedule(id=res.id)
+
+            reply = [
+                ReservePubReply(
+                    id=m.id,
+                    reservation=res.id,
+                    status=res.status,
+                    message=message,
+                    template=res.template.id if res.template else None,
+                )
+            ]
 
         except models.Reservation.DoesNotExist:
 
             res, forward = models.Reservation.objects.schedule(
-                node = m.node,
-                params = m.params,
-                waiter = waiter,
-                title = m.title
+                node=m.node, params=m.params, waiter=waiter, title=m.title
             )
 
-            reply = [ReservePubReply(id=m.id,
-                reservation=res.id,
-                status=res.status,
-                template=res.template.id if res.template else None )]
-            forward = [RouteHareMessage(reservation=res.id)]
+            reply = [
+                ReservePubReply(
+                    id=m.id,
+                    reservation=res.id,
+                    status=res.status,
+                    template=res.template.id if res.template else None,
+                )
+            ]
 
     except Exception as e:
         console.print_exception()
@@ -133,6 +147,16 @@ def unassign(m: UnassignPub, waiter: models.Waiter, **kwargs):
         ass.status = AssignationStatus.CANCELING
         ass.save()
 
+        assert ass.provision, "Assignation was never send to a provision"
+
+        forward += [
+            UnassignHareMessage(
+                queue=ass.reservation.queue,
+                assignation=ass.id,
+                provision=ass.provision.id,
+            )
+        ]
+
         reply += [UnassignPubReply(id=m.id, assignation=ass.id, status=ass.status)]
 
     except Exception as e:
@@ -153,10 +177,22 @@ def unreserve(m: UnreservePub, waiter: models.Waiter, **kwargs):
             ReservationStatus.CANCELLED,
         ], "Reservation was already unreserved before"
 
-        res.status = ReservationStatus.CANCELING
+        res.status = ReservationStatus.CANCELLED
+
+        for provision in res.provisions.all():
+            forward += [
+                UnreserveHareMessage(
+                    queue=provision.bound.queue,
+                    reservation=res.id,
+                    provision=provision.id,
+                )
+            ]
+
+        res.provisions.clear()
+        print(res.provisions)
         res.save()
 
-        reply += [UnreservePubReply(id=m.id, reservation=res.id, status=res.status)]
+        reply += [UnreservePubReply(id=m.id, reservation=res.id)]
 
     except Exception as e:
         reply += [UnreservePubDenied(id=m.id, error=str(e))]
