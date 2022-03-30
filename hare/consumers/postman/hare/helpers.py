@@ -1,10 +1,12 @@
 from facade.enums import AssignationStatus, ReservationStatus
 from facade import models
-from typing import Any, Dict, Optional
-from asgiref.sync import async_to_sync, sync_to_async
+from asgiref.sync import sync_to_async
 from hare.consumers.postman.protocols.postman_json import *
 from hare.carrots import *
-from arkitekt.console import console
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 @sync_to_async
@@ -22,6 +24,7 @@ def reserve(m: ReservePub, waiter: models.Waiter, **kwargs):
             if (
                 res.status == ReservationStatus.CANCELLED
                 or res.status == ReservationStatus.CANCELING
+                or res.status == ReservationStatus.REROUTING
             ):
                 message = "This reservation was cancelled and we need to reschedule it."
 
@@ -53,7 +56,7 @@ def reserve(m: ReservePub, waiter: models.Waiter, **kwargs):
             ]
 
     except Exception as e:
-        console.print_exception()
+        logger.error("Reservation Denied", exc_info=True)
         reply += [ReservePubDenied(id=m.id, error=str(e))]
 
     return reply, forward
@@ -75,6 +78,7 @@ def list_reservations(m: ReserveList, waiter: models.Waiter, **kwargs):
 
         reply += [ReserveListReply(id=m.id, reservations=reservations)]
     except Exception as e:
+        logger.error("list reserve failure", exc_info=True)
         reply += [ReserveListDenied(id=m.id, error=str(e))]
 
     return reply, forward
@@ -96,6 +100,7 @@ def list_assignations(m: AssignList, waiter: models.Waiter, **kwargs):
 
         reply += [AssingListReply(id=m.id, assignations=assignations)]
     except Exception as e:
+        logger.error("list assign failure", exc_info=True)
         reply += [AssignListDenied(id=m.id, error=str(e))]
 
     return reply, forward
@@ -131,6 +136,8 @@ def assign(m: AssignPub, waiter: models.Waiter, **kwargs):
             )
         ]
     except Exception as e:
+
+        logger.error("assign failure", exc_info=True)
         reply += [AssignPubDenied(id=m.id, error=str(e))]
 
     return reply, forward
@@ -160,6 +167,8 @@ def unassign(m: UnassignPub, waiter: models.Waiter, **kwargs):
         reply += [UnassignPubReply(id=m.id, assignation=ass.id, status=ass.status)]
 
     except Exception as e:
+
+        logger.error("unassign failure", exc_info=True)
         reply += [UnassignPubDenied(id=m.id, error=str(e))]
 
     return reply, forward
@@ -182,19 +191,20 @@ def unreserve(m: UnreservePub, waiter: models.Waiter, **kwargs):
         for provision in res.provisions.all():
             forward += [
                 UnreserveHareMessage(
-                    queue=provision.bound.queue,
+                    queue=provision.agent.queue,
                     reservation=res.id,
                     provision=provision.id,
                 )
             ]
 
         res.provisions.clear()
-        print(res.provisions)
         res.save()
 
         reply += [UnreservePubReply(id=m.id, reservation=res.id)]
 
     except Exception as e:
+
+        logger.error("unreserve failure", exc_info=True)
         reply += [UnreservePubDenied(id=m.id, error=str(e))]
 
     return reply, forward

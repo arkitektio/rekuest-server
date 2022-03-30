@@ -1,18 +1,14 @@
-from delt.messages.postman.provide.bounced_provide import BouncedProvideMessage
 from lok.models import LokApp
 from facade.managers import NodeManager, ReservationManager
 from facade.fields import (
     ArgsField,
     KwargsField,
-    OutputsField,
     ParamsField,
-    PodChannel,
     ReturnField,
 )
 from facade.enums import (
     AccessStrategy,
     AgentStatus,
-    BoundType,
     LogLevel,
     AssignationStatus,
     LogLevel,
@@ -30,8 +26,6 @@ import logging
 import requests
 
 logger = logging.getLogger(__name__)
-
-
 
 
 class Repository(models.Model):
@@ -94,9 +88,6 @@ class Structure(models.Model):
         max_length=1000,
         help_text="A unique identifier for this Model accross the Platform",
         unique=True,
-    )
-    bound = models.CharField(
-        max_length=1000, choices=BoundType.choices, default=BoundType.GLOBAL
     )
 
     def __str__(self):
@@ -387,13 +378,13 @@ class Provision(models.Model):
         related_name="created_provisions",
     )
 
-    bound = models.ForeignKey(
+    agent = models.ForeignKey(
         Agent,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         help_text="Is this Provision bound to a certain Agent?",
-        related_name="bound_provisions",
+        related_name="provisions",
     )
 
     provision = models.ForeignKey(
@@ -452,15 +443,6 @@ class Provision(models.Model):
         help_text="Clear Text status of the Provision as for now",
         blank=True,
     )
-
-    # Callback
-    callback = models.CharField(
-        max_length=1000, help_text="Callback", blank=True, null=True
-    )
-    progress = models.CharField(
-        max_length=1000, help_text="Provider", blank=True, null=True
-    )
-
     # Meta fields of the creator of this
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -484,19 +466,6 @@ class Provision(models.Model):
 
     def __str__(self):
         return f"Provision for Template: {self.template if self.template else ''}: {self.status}"
-
-    def to_message(self) -> BouncedProvideMessage:
-        return BouncedProvideMessage(
-            data={"template": self.template.id, "params": self.params},
-            meta={
-                "reference": self.reference,
-                "extensions": self.extensions,
-                "context": self.context,
-            },
-        )
-
-    def transition(self):
-        raise Exception("Not Implemented Yet")
 
 
 class ReservationLog(models.Model):
@@ -616,14 +585,6 @@ class Reservation(models.Model):
         null=True,
         blank=True,
     )
-    parent = models.ForeignKey(
-        "self",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        help_text="The Provisions parent",
-        related_name="children",
-    )
     creator = models.ForeignKey(
         get_user_model(),
         on_delete=models.CASCADE,
@@ -638,12 +599,12 @@ class Reservation(models.Model):
         default=uuid.uuid4,
         help_text="The Unique identifier of this Assignation",
     )
-    causing_provision = models.ForeignKey(
+    parent = models.ForeignKey(
         "Provision",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
-        help_text="Was this Reservation caused by a Provision",
+        help_text="Was this Reservation caused by a Provision?",
         related_name="caused_reservations",
     )
 
@@ -656,11 +617,6 @@ class Reservation(models.Model):
                 name="Equal Reservation on this App by this Waiter is already in place",
             )
         ]
-
-    def log(self, message, level=LogLevel.DEBUG):
-        return ReservationLog.objects.create(
-            message=message, reservation=self, level=level
-        )
 
     def __str__(self):
         return f"Reservation {self.id} for Node: {self.node}: {self.status}"
@@ -681,7 +637,6 @@ class Assignation(models.Model):
         blank=True,
         null=True,
     )
-    extensions = models.JSONField(default=dict, help_text="The Platform extensions")
     context = models.JSONField(default=dict, help_text="The Platform context")
 
     # 1. The State of Everything
@@ -714,22 +669,6 @@ class Assignation(models.Model):
     statusmessage = models.CharField(
         max_length=1000,
         help_text="Clear Text status of the Assignation as for now",
-        blank=True,
-    )
-
-    # Callbacks are only to be set if there is a need to transvere through Django (e.g assignation through CHannels)
-    # Callbacks (once the Task, has yielded, finished, errored or has been cancelled)
-    # Progress (for progress reports if desired...)
-    callback = models.CharField(
-        max_length=1000,
-        help_text="The Callback queue once the Assignation has finished",
-        null=True,
-        blank=True,
-    )
-    progress = models.CharField(
-        max_length=1000,
-        help_text="The Progress queue once the Assignation has finished",
-        null=True,
         blank=True,
     )
 
@@ -783,6 +722,3 @@ class AssignationLog(models.Model):
     level = models.CharField(
         choices=LogLevel.choices, default=LogLevel.INFO.value, max_length=200
     )
-
-
-from . import signals

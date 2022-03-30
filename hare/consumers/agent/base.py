@@ -7,7 +7,6 @@ from facade.models import Agent, Registry
 from hare.consumers.agent.protocols.agent_json import *
 from urllib.parse import parse_qs
 import asyncio
-from arkitekt.console import console
 
 logger = logging.getLogger(__name__)
 

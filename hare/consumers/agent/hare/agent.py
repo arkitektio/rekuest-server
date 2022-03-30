@@ -1,4 +1,3 @@
-import json
 import aiormq
 from hare.carrots import (
     HareMessage,
@@ -14,7 +13,9 @@ import ujson
 from arkitekt.console import console
 from hare.consumers.agent.base import AgentConsumer
 from .helpers import *
+import logging
 
+logger = logging.getLogger(__name__)
 
 class HareAgentConsumer(AgentConsumer):
     """Hare Postman
@@ -39,14 +40,13 @@ class HareAgentConsumer(AgentConsumer):
             self.agent.queue, auto_delete=True
         )
 
-        print(f"Liustenting Agent on '{self.agent.queue}'")
+        logger.info(f"Liustenting Agent on '{self.agent.queue}'")
         # Start listening the queue with name 'hello'
         await self.channel.basic_consume(
             self.callback_queue.queue, self.on_rmq_message_in
         )
 
     async def forward(self, f: HareMessage):
-        print(f"Publishing this to {f.queue}")
         await self.channel.basic_publish(
             f.to_message(),
             exchange=f.queue,  # Lets take the first best one
@@ -66,7 +66,7 @@ class HareAgentConsumer(AgentConsumer):
             if type == HareMessageTypes.PROVIDE:
                 await self.on_provide(ProvideHareMessage(**json_dict))
 
-        except Exception as e:
+        except Exception:
             console.print_exception()
 
         self.channel.basic_ack(rmq_message.delivery.delivery_tag)
@@ -99,9 +99,12 @@ class HareAgentConsumer(AgentConsumer):
                 m = UnassignHareMessage(**json_dict)
                 replies = [UnassignSubMessage(**json_dict)]
 
-        except Exception as e:
-            console.print_exception()
-        print(f"Received Assignment for {provid} {rmq_message}")
+        except Exception:
+            logger.error("Error on on_assignment_in", exc_info=True)
+        
+        
+        
+        logger.debug(f"Received Assignment for {provid} {rmq_message}")
 
         for r in replies:
             await self.reply(r)
@@ -117,13 +120,11 @@ class HareAgentConsumer(AgentConsumer):
             )
 
             for res, queue in queues:
-                print(f"Lisenting for queue of Reservation {res}")
+                logger.debug(f"Lisenting for queue of Reservation {res}")
                 self.res_queues[res] = await self.channel.queue_declare(
                     queue,
                     auto_delete=True,
                 )
-                print(self.res_queues[res].queue)
-
                 self.res_consumers[res] = await self.channel.basic_consume(
                     self.res_queues[res].queue,
                     lambda aio: self.on_assignment_in(message.provision, aio),
@@ -156,11 +157,10 @@ class HareAgentConsumer(AgentConsumer):
         )
 
         for res, queue in reservation_queues:
-            print(f"Lisenting for queue of Reservation {res}")
+            logger.info(f"Lisenting for queue of Reservation {res}")
             self.res_queues[res] = await self.channel.queue_declare(
                 queue, auto_delete=True
             )
-            print(self.res_queues[res].queue)
 
             await self.channel.basic_consume(
                 self.res_queues[res].queue,
@@ -176,7 +176,6 @@ class HareAgentConsumer(AgentConsumer):
 
     async def on_unreserve(self, message: UnreserveHareMessage):
 
-        print("Received Unreserve", message)
 
         replies, forwards, delete_queue_id = await loose_reservation(
             message, agent=self.agent
@@ -184,7 +183,7 @@ class HareAgentConsumer(AgentConsumer):
 
         for id in delete_queue_id:
             await self.channel.basic_cancel(f"{id}-{message.provision}")
-            print(f"Deleteing for queue {id} of Reservation {message.provision}")
+            logger.debug(f"Deleting consumer for queue {id} of Reservation {message.provision}")
 
         for r in forwards:
             await self.forward(r)

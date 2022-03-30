@@ -12,13 +12,11 @@ admin.site.register(MirrorRepository)
 
 
 class ReservationAdmin(admin.ModelAdmin):
-    readonly_fields = ("params", "context", "extensions")
-    pass
+    readonly_fields = ("params", "context")
 
 
 class AssignationAdmin(admin.ModelAdmin):
-    readonly_fields = ("context", "extensions")
-    pass
+    readonly_fields = ("context",)
 
 
 admin.site.register(Node)

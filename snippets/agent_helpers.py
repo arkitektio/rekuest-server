@@ -121,9 +121,7 @@ def change_provision(m: ProvisionChangedMessage, agent: Agent):
 
         if provision.status == ProvisionStatus.CRITICAL:
             print("We are now Dead??")
-            for res in provision.reservations.filter(
-                status=ReservationStatus.ACTIVE
-            ):
+            for res in provision.reservations.filter(status=ReservationStatus.ACTIVE):
                 print("Found one?")
                 res_params = ReserveParams(**res.params)
                 viable_provisions_amount = min(
@@ -144,7 +142,6 @@ def change_provision(m: ProvisionChangedMessage, agent: Agent):
                             status=res.status,
                         )
                     ]
-        
 
     except Exception as e:
         logger.exception(e)

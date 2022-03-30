@@ -1,6 +1,5 @@
 # JSON RPC Messages
-from typing import Any, List, Literal, Optional
-from delt.types import ReserveParams
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 from datetime import datetime
@@ -11,7 +10,7 @@ from facade.enums import (
     ProvisionStatus,
 )
 from enum import Enum
-from hare.messages import Assignation, Unassignation, Provision, Unprovision, ReserveParams
+from hare.messages import Assignation, Provision, Unassignation, Unprovision
 
 
 class AgentMessageTypes(str, Enum):
@@ -44,7 +43,6 @@ class JSONMessage(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     type: str
     meta: JSONMeta = Field(default_factory=JSONMeta)
-    pass
 
 
 class AssignationsList(JSONMessage):

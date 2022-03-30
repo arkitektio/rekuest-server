@@ -1,12 +1,11 @@
 from django.db.models.signals import post_save
 from django.dispatch.dispatcher import receiver
 from facade.models import Assignation, Node, Provision, Reservation
-from kombu import Queue
 
 
 @receiver(post_save, sender=Node)
 def samp_post_save(sender, instance=None, created=None, **kwargs):
-    from facade.subscriptions import NodesEvent, NodeDetailEvent
+    from facade.graphql.subscriptions import NodesEvent, NodeDetailEvent
 
     NodesEvent.broadcast(
         {"action": "created", "data": instance}
@@ -22,7 +21,7 @@ def samp_post_save(sender, instance=None, created=None, **kwargs):
 
 @receiver(post_save, sender=Reservation)
 def res_post_save(sender, instance=None, created=None, **kwargs):
-    from facade.subscriptions import ReservationsSubscription
+    from facade.graphql.subscriptions import ReservationsSubscription
 
     if instance.waiter:
         print("Doin thig here")
@@ -34,7 +33,7 @@ def res_post_save(sender, instance=None, created=None, **kwargs):
 
 @receiver(post_save, sender=Assignation)
 def ass_post_save(sender, instance: Assignation = None, created=None, **kwargs):
-    from facade.subscriptions import TodosSubscription
+    from facade.graphql.subscriptions import TodosSubscription
 
     if instance.waiter:
         print("Todos lets go")
@@ -43,9 +42,10 @@ def ass_post_save(sender, instance: Assignation = None, created=None, **kwargs):
             [f"todos_{instance.waiter.unique}"],
         )
 
+
 @receiver(post_save, sender=Provision)
 def prov_post_save(sender, instance: Provision = None, created=None, **kwargs):
-    from facade.subscriptions import MyProvisionsEvent
+    from facade.graphql.subscriptions import MyProvisionsEvent
 
     if instance.creator:
         MyProvisionsEvent.broadcast(

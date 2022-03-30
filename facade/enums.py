@@ -1,11 +1,5 @@
-from logging import WARN
 from balder.enum import InputEnum
-from typing import Text
 from django.db.models import TextChoices
-
-
-class HookType(TextChoices):
-    NEGOTIATE = "negotiate", "Negotiate Hook (syncronous Api call)"
 
 
 class ProvisionMode(TextChoices):
@@ -26,7 +20,6 @@ class LogLevel(TextChoices):
     EVENT = "EVENT", "Event Level (only handled by plugins)"
 
 
-LogLevelInput = InputEnum.from_choices(LogLevel)
 
 
 class RepositoryType(TextChoices):
@@ -51,41 +44,10 @@ class NodeType(TextChoices):
     FUNCTION = "function", "Function"
 
 
-class BoundType(TextChoices):
-    AGENT = "AGENT", "Bound to one Agent (Instance Dependented)"
-    REGISTRY = "REGISTRY", "Registry (User Dependent)"
-    APP = "APP", "Bound to one Application (User independent)"
-    GLOBAL = "GLOBAL", "Unbound and usable for every application"
-
-
 class TopicMode(TextChoices):
     PRODUCTION = "PRODUCTION", "Production (Topic is in production mode)"
     DEBUG = "DEBUG", "Debug (Topic is in debug Mode)"
     TEST = "TEST", "Test (is currently being tested)"
-
-
-class PodStatus(TextChoices):
-    DOWN = "DOWN", "Down"
-    ERROR = "ERROR", "Error"
-    PENDING = "PENDING", "Pending"
-    ACTIVE = "ACTIVE", "Active"
-
-
-class TopicStatus(TextChoices):
-    DOWN = "DOWN", "Down (Subscribers to this Topic are offline)"
-    DISCONNECTED = "LOST", "Lost (Subscribers to this Topic have lost their connection)"
-    RECONNECTING = (
-        "RECONNECTING",
-        "Reconnecting (We are trying to Reconnect to this Topic)",
-    )
-    CRITICAL = (
-        "CRITICAL",
-        "Criticial (This Topic has errored and needs to be inspected)",
-    )
-    ACTIVE = (
-        "ACTIVE",
-        "Active (This topic has subscribers and is available being Routed To",
-    )
 
 
 class AssignationStatus(TextChoices):
@@ -112,9 +74,6 @@ class AssignationStatus(TextChoices):
     DONE = "DONE", "Assignment has finished"
 
 
-AssignationStatusInput = InputEnum.from_choices(AssignationStatus)
-NodeTypeInput = InputEnum.from_choices(NodeType)
-BoundTypeInput = InputEnum.from_choices(BoundType)
 
 
 class ReservationStatus(TextChoices):
@@ -178,8 +137,6 @@ class WaiterStatus(TextChoices):
     VANILLA = "VANILLA", "Complete Vanilla Scenario after a forced restart of"
 
 
-ReservationStatusInput = InputEnum.from_choices(ReservationStatus)
-AgentStatusInput = InputEnum.from_choices(AgentStatus)
 
 
 class ProvisionStatus(TextChoices):
@@ -226,5 +183,3 @@ class ProvisionStatus(TextChoices):
         "Cancelled (Provision was cancelled by the User and will no longer create Topics)",
     )
 
-
-ProvisionStatusInput = InputEnum.from_choices(ProvisionStatus)

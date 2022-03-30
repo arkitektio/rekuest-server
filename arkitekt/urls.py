@@ -23,19 +23,21 @@ from django.conf.urls.static import static
 from django.conf import settings
 
 
-
 def index(request):
-        # Render that in the index template
+    # Render that in the index template
     return render(request, "index-oslo.html")
 
 
-urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('', index, name='index'),
-    path('accounts/',include('django.contrib.auth.urls')),
-    path(r'graphql', csrf_exempt(GraphQLView.as_view(graphiql=True)), name="graphql"),
-    path(r'ht/', include('health_check.urls')),
-]+ static("static", document_root=settings.STATIC_ROOT) + static("media", document_root=settings.MEDIA_ROOT)
-
-from django.urls import get_resolver
-print(get_resolver().reverse_dict.keys())
+urlpatterns = (
+    [
+        path("admin/", admin.site.urls),
+        path("", index, name="index"),
+        path("accounts/", include("django.contrib.auth.urls")),
+        path(
+            r"graphql", csrf_exempt(GraphQLView.as_view(graphiql=True)), name="graphql"
+        ),
+        path(r"ht/", include("health_check.urls")),
+    ]
+    + static("static", document_root=settings.STATIC_ROOT)
+    + static("media", document_root=settings.MEDIA_ROOT)
+)

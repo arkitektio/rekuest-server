@@ -43,10 +43,10 @@ class HarePostmanConsumer(PostmanConsumer):
             self.callback_queue.queue, self.on_rmq_message_in
         )
 
-        print(f"Listening on '{ self.waiter.queue}'")
+        logger.debug(f"Listening on '{ self.waiter.queue}'")
 
     async def forward(self, f: HareMessage):
-        logger.info(f"POSTMAN FORWARDING: {f}")
+        logger.debug(f"POSTMAN FORWARDING: {f}")
         await self.channel.basic_publish(
             f.to_message(),
             routing_key=f.queue,  # Lets take the first best one
@@ -71,7 +71,7 @@ class HarePostmanConsumer(PostmanConsumer):
                 m = AssignSubUpdate(**json_dict)
                 await self.reply(m)
 
-        except Exception as e:
+        except Exception:
             console.print_exception()
 
         self.channel.basic_ack(rmq_message.delivery.delivery_tag)
@@ -88,7 +88,6 @@ class HarePostmanConsumer(PostmanConsumer):
 
     async def on_unreserve(self, message: UnreservePub):
 
-        logger.info("Called again???????")
         replies, forwards = await unreserve(message, waiter=self.waiter)
 
         for r in replies:
@@ -108,7 +107,6 @@ class HarePostmanConsumer(PostmanConsumer):
             await self.forward(f)
 
     async def on_unassign(self, message: UnassignPub):
-        print("Received unassign")
 
         replies, forwards = await unassign(message, waiter=self.waiter)
 

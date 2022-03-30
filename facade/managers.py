@@ -38,7 +38,7 @@ class ScheduleException(Exception):
 
 class ReservationManager(Manager):
     def reschedule(self, id: str) -> Tuple[Any, List[HareMessage]]:
-        from .models import Provision, Template, Agent, Node
+        from .models import Agent, Provision, Template
 
         res = super().get(id=id)
 
@@ -73,7 +73,7 @@ class ReservationManager(Manager):
             # All provisions queues will receive a reserve request (even if they are not created?)
 
             t = ReserveHareMessage(
-                queue=prov.bound.queue, reservation=res.id, provision=prov.id
+                queue=prov.agent.queue, reservation=res.id, provision=prov.id
             )
 
             provisions.append(prov)
@@ -88,13 +88,13 @@ class ReservationManager(Manager):
                 ScheduleException("No Agent found")
 
             prov = Provision.objects.create(
-                template=template, bound=agent, reservation=res
+                template=template, agent=agent, reservation=res
             )
             prov.reservations.add(res)
             prov.save()
 
             t = ProvideHareMessage(
-                queue=prov.bound.queue,
+                queue=prov.agent.queue,
                 provision=prov.id,
                 template=template.id,
                 status=prov.status,
@@ -156,7 +156,7 @@ class ReservationManager(Manager):
             # All provisions queues will receive a reserve request (even if they are not created?)
 
             t = ReserveHareMessage(
-                queue=prov.bound.queue, reservation=res.id, provision=prov.id
+                queue=prov.agent.queue, reservation=res.id, provision=prov.id
             )
 
             provisions.append(prov)
@@ -168,12 +168,12 @@ class ReservationManager(Manager):
             if not agent:
                 ScheduleException("No Agent found")
 
-            prov = Provision.objects.create(template=t, bound=agent, reservation=res)
+            prov = Provision.objects.create(template=t, agent=agent, reservation=res)
             prov.reservations.add(res)
             prov.save()
 
             t = ProvideHareMessage(
-                queue=prov.bound.queue,
+                queue=prov.agent.queue,
                 provision=prov.id,
                 template=t.id,
                 status=prov.status,

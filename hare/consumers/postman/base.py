@@ -32,9 +32,6 @@ class PostmanConsumer(AsyncWebsocketConsumer):
             registry=registry, identifier=instance_id
         )
 
-
-
-
     @bounced_ws(only_jwt=True)
     async def connect(self):
         await self.set_waiter()

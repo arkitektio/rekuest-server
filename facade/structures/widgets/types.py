@@ -2,19 +2,23 @@ from balder.registry import register_type
 import graphene
 
 get_widget_types = lambda: {
-            "QueryWidget": QueryWidget,
-            "IntWidget": IntWidget,
-            "StringWidget": StringWidget,
-            "SearchWidget": SearchWidget,
-            "SliderWidget": SliderWidget,
-            "LinkWidget": LinkWidget,
-            "BoolWidget": BoolWidget
+    "QueryWidget": QueryWidget,
+    "IntWidget": IntWidget,
+    "StringWidget": StringWidget,
+    "SearchWidget": SearchWidget,
+    "SliderWidget": SliderWidget,
+    "LinkWidget": LinkWidget,
+    "BoolWidget": BoolWidget,
 }
+
 
 @register_type
 class Widget(graphene.Interface):
     type = graphene.String()
-    dependencies = graphene.List(graphene.String, description="The set-keys this widget depends on, check *query parameters*")
+    dependencies = graphene.List(
+        graphene.String,
+        description="The set-keys this widget depends on, check *query parameters*",
+    )
 
     @classmethod
     def resolve_type(cls, instance, info):
@@ -38,6 +42,7 @@ class LinkWidget(graphene.ObjectType):
     class Meta:
         interfaces = (Widget,)
 
+
 @register_type
 class SearchWidget(graphene.ObjectType):
     query = graphene.String(description="A Complex description")
@@ -45,19 +50,20 @@ class SearchWidget(graphene.ObjectType):
     class Meta:
         interfaces = (Widget,)
 
+
 @register_type
 class BoolWidget(graphene.ObjectType):
-
     class Meta:
         interfaces = (Widget,)
 
-    
+
 @register_type
 class IntWidget(graphene.ObjectType):
     query = graphene.String(description="A Complex description")
 
     class Meta:
         interfaces = (Widget,)
+
 
 @register_type
 class SliderWidget(graphene.ObjectType):

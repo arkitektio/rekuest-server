@@ -1,13 +1,10 @@
 # JSON RPC Messages
 import json
 from typing import Any, Dict, List, Literal, Optional, Type, TypeVar
-from uuid import UUID
 from hare.messages import Reservation, Assignation
-from datetime import datetime
-import uuid
 from enum import Enum
 from pydantic import BaseModel
-from facade.enums import ReservationStatus, AssignationStatus, ProvisionStatus
+from facade.enums import ProvisionStatus
 
 
 T = TypeVar("T", bound=BaseModel)
@@ -34,7 +31,6 @@ class HareMessageTypes(str, Enum):
 
 class HareMessage(BaseModel):
     queue: str
-    pass
 
     def to_message(self) -> bytes:
         return json.dumps(self.dict()).encode()
@@ -111,9 +107,7 @@ class UnreserveHareMessage(HareMessage):
 
 class ReservationChangedMessage(HareMessage, Reservation):
     type: Literal[HareMessageTypes.RESERVE_CHANGED] = HareMessageTypes.RESERVE_CHANGED
-    pass
 
 
 class AssignationChangedHareMessage(HareMessage, Assignation):
     type: Literal[HareMessageTypes.ASSIGN_CHANGED] = HareMessageTypes.ASSIGN_CHANGED
-    pass

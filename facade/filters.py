@@ -1,18 +1,11 @@
-from django.db.models.aggregates import Count
 from django_filters.filters import OrderingFilter, TimeRangeFilter
-from facade.enums import (
-    AgentStatusInput,
-    AssignationStatusInput,
-    LogLevelInput,
-    NodeType,
-    NodeTypeInput,
-    PodStatus,
-    ProvisionStatus,
-    ProvisionStatusInput,
-)
+
 import django_filters
 from balder.filters import EnumFilter, MultiEnumFilter
-from .models import Node, Agent, Repository, Template
+from facade.enums import ProvisionStatus
+
+from facade.structures.inputs import AgentStatusInput, AssignationStatusInput, LogLevelInput, NodeTypeInput, ProvisionStatusInput
+from .models import Node, Repository, Template
 from django.db.models import Q
 
 # class PodFilter(django_filters.FilterSet):
@@ -79,12 +72,10 @@ class ReservationLogFilter(django_filters.FilterSet):
 
 
 class NodesFilter(django_filters.FilterSet):
-    active = django_filters.BooleanFilter(
-        method="active_filter", label="Get active Provisions"
+    package = django_filters.CharFilter(
+        field_name="package", lookup_expr="icontains"
     )
 
-    def active_filter(self, queryset, name, value):
-        return queryset.filter(status__in=[ProvisionStatus.ACTIVE])
 
 
 class TemplateFilter(django_filters.FilterSet):
@@ -94,19 +85,13 @@ class TemplateFilter(django_filters.FilterSet):
     interface = django_filters.CharFilter(
         field_name="node__interface", lookup_expr="icontains"
     )
-    provided = django_filters.BooleanFilter(
-        method="provided_filter", label="Get active pods?"
-    )
     providable = django_filters.BooleanFilter(
         method="providable_filter", label="Get active pods?"
     )
     node = django_filters.ModelChoiceFilter(queryset=Node.objects, field_name="node")
 
-    def provided_filter(self, queryset, name, value):
-        return queryset.filter(pods__status=PodStatus.ACTIVE)
-
     def providable_filter(self, queryset, name, value):
-        return queryset.filter(provider__active=True)
+        return queryset.filter(agent__active=True)
 
     class Meta:
         model = Template
