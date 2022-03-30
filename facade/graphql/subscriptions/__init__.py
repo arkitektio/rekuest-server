@@ -4,6 +4,7 @@ from .todos import TodosSubscription
 from .provision import MyProvisionsEvent, ProvisionEventSubscription
 from .waiter import WaiterSubscription
 from .reservation import ReservationsSubscription
+from .nodes import NodeEvent
 
 
-__all__ = ["AgentEvent", "AgentsEvent", "Assignation", "AssignationEvent", "ReservationsSubscription", "MyAssignationsEvent", "TodosSubscription", "MyProvisionsEvent", "ProvisionEventSubscription", "WaiterSubscription"]
+__all__ = ["AgentEvent", "AgentsEvent", "Assignation", "AssignationEvent", "ReservationsSubscription", "MyAssignationsEvent", "TodosSubscription", "MyProvisionsEvent", "ProvisionEventSubscription", "WaiterSubscription","NodeEvent"]
