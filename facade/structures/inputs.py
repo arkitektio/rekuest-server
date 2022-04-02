@@ -1,5 +1,12 @@
 import graphene
-from facade.enums import AgentStatus, AssignationStatus, LogLevel, NodeType, ProvisionStatus, ReservationStatus
+from facade.enums import (
+    AgentStatus,
+    AssignationStatus,
+    LogLevel,
+    NodeType,
+    ProvisionStatus,
+    ReservationStatus,
+)
 from balder.enum import InputEnum
 from facade.structures.ports.input import ArgPortInput, KwargPortInput, ReturnPortInput
 
@@ -12,6 +19,7 @@ ProvisionStatusInput = InputEnum.from_choices(ProvisionStatus)
 AssignationStatusInput = InputEnum.from_choices(AssignationStatus)
 
 LogLevelInput = InputEnum.from_choices(LogLevel)
+
 
 class DefinitionInput(graphene.InputObjectType):
     """A definition for a node"""
@@ -31,6 +39,7 @@ class DefinitionInput(graphene.InputObjectType):
         NodeTypeInput,
         description="The variety",
         default_value=NodeType.FUNCTION.value,
+        required=True,
     )
     interface = graphene.String(description="The Interface", required=True)
     package = graphene.String(description="The Package", required=False)

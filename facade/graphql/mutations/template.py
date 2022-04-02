@@ -43,13 +43,13 @@ class CreateTemplate(BalderMutation):
                 node=node, version=version, registry=registry
             )
             template.extensions = extensions
-            template.params = params
+            template.params = params or {}
             template.save()
 
         except:
             template = Template.objects.create(
                 node_id=node,
-                params=params,
+                params=params or {},
                 registry=registry,
                 extensions=extensions,
                 version=version,

@@ -107,9 +107,9 @@ class DefineNode(BalderMutation):
         returns = definition.returns or []
         interface = definition.interface
         definition.package
-        description = definition.description
+        description = definition.description or "No Description"
         name = definition.name
-        interfaces = definition.interfaces
+        interfaces = definition.interfaces or []
         type = definition.type
 
         repository, _ = AppRepository.objects.update_or_create(

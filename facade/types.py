@@ -20,6 +20,7 @@ from lok.models import LokApp as HerreAppModel
 from balder.types import BalderObject
 import graphene
 from balder.registry import register_type
+from graphene.types.generic import GenericScalar
 
 
 class BalderInheritedModelOptions(InterfaceOptions):
@@ -207,7 +208,7 @@ class Template(BalderObject):
     provisions = BalderFiltered(
         Provision, filterset_class=ProvisionFilter, related_field="provisions"
     )
-    params = graphene.Field(TemplateParams)
+    params = graphene.Field(GenericScalar)
 
     class Meta:
         model = models.Template
