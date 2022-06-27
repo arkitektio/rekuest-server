@@ -1,5 +1,10 @@
 from facade.structures.params import ReserveParams
-from facade.enums import AssignationStatus, ProvisionStatus, ReservationStatus
+from facade.enums import (
+    AgentStatus,
+    AssignationStatus,
+    ProvisionStatus,
+    ReservationStatus,
+)
 from facade import models
 from asgiref.sync import sync_to_async
 from hare.carrots import (
@@ -190,7 +195,7 @@ def change_provision(m: ProvisionChangedMessage, agent: models.Agent):
                     ]
 
     except Exception:
-        logger.error("change provision error",exc_info=True)
+        logger.error("change provision error", exc_info=True)
 
     return reply, forward
 
@@ -298,7 +303,7 @@ def activate_provision(m: ProvisionChangedMessage, agent: models.Agent):
             reservation_queues += [(res.id, res.queue)]
 
     except Exception:
-        logger.error("active provision failure",exc_info=True)
+        logger.error("active provision failure", exc_info=True)
 
     return reply, forward, reservation_queues
 
@@ -333,4 +338,23 @@ def disconnect_agent(agent: models.Agent, close_code: int):
                     )
                 ]
 
+    agent.status = AgentStatus.DISCONNECTED
+    agent.save()
+
     return forward
+
+
+@sync_to_async
+def log_to_provision(message: ProvisionLogMessage, agent: models.Agent):
+
+    models.ProvisionLog.objects.create(
+        provision_id=message.provision, message=message.message, level=message.level
+    )
+
+
+@sync_to_async
+def log_to_assignation(message: AssignationLogMessage, agent: models.Agent):
+
+    models.AssignationLog.objects.create(
+        assignation_id=message.assignation, message=message.message, level=message.level
+    )

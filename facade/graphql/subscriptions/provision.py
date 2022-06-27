@@ -30,10 +30,7 @@ class ProvisionEventSubscription(BalderSubscription):
     @bounced(only_jwt=True)
     def subscribe(root, info, *args, reference=None, level=None):
         provision = models.Provision.objects.get(reference=reference)
-        assert (
-            provision.creator == info.context.bounced.user
-        ), "You cannot listen to a reservation that you have not created"
-        return [f"provision_{provision.reference}"]
+        return [f"provision_{provision.id}"]
 
     def publish(payload, info, *args, **kwargs):
         payload = payload["payload"]
@@ -53,32 +50,39 @@ class ProvisionEventSubscription(BalderSubscription):
 
 
 class ProvisionsEvent(graphene.ObjectType):
-    ended = graphene.ID()
+    delete = graphene.ID()
     update = graphene.Field(types.Provision)
     create = graphene.Field(types.Provision)
 
 
 class MyProvisionsEvent(BalderSubscription):
     class Arguments:
+        identifier = graphene.ID(
+            description="The reference of this waiter", required=True
+        )
         level = graphene.String(description="The log level for alterations")
 
     @bounced(only_jwt=True)
-    def subscribe(root, info, *args, **kwargs):
-        print(f"provisions_user_{info.context.user.id}")
-        return [f"provisions_user_{info.context.user.id}"]
+    def subscribe(root, info, identifier, **kwargs):
+        registry, _ = models.Registry.objects.get_or_create(
+            user=info.context.bounced.user, app=info.context.bounced.app
+        )
+        waiter, _ = models.Waiter.objects.get_or_create(
+            registry=registry, identifier=identifier
+        )
+        print(f"Connected Provisions Waiter for {waiter}")
+        return [f"provisions_waiter_{waiter.unique}"]
 
     def publish(payload, info, *args, **kwargs):
         payload = payload["payload"]
         action = payload["action"]
         data = payload["data"]
 
-        if action == "created":
-            return {"create": models.Provision.objects.get(id=data)}
-        if action in [ProvisionStatus.CANCELLED, ProvisionStatus.ENDED]:
-            return {"ended": data}
+        if action == "create":
+            return {"create": data}
         else:
-            return {"update": models.Provision.objects.get(id=data)}
+            return {"update": data}
 
     class Meta:
         type = ProvisionsEvent
-        operation = "myProvisionsEvent"
+        operation = "provisions"

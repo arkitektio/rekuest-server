@@ -4,16 +4,16 @@ from facade.models import Reservation
 import graphene
 from lok import bounced
 
-from facade.structures.inputs import ReservationStatusInput
+from facade.inputs import ReservationStatusInput
 
 
 class ReservationDetailQuery(BalderQuery):
     class Arguments:
-        reference = graphene.ID(description="The query reservation", required=True)
+        id = graphene.ID(description="The query reservation", required=True)
 
     @bounced(anonymous=True)
-    def resolve(root, info, reference=None):
-        return Reservation.objects.get(reference=reference)
+    def resolve(root, info, id=None):
+        return Reservation.objects.get(id=id)
 
     class Meta:
         type = types.Reservation
@@ -37,7 +37,7 @@ class MyReservations(BalderQuery):
 
     @bounced(anonymous=False)
     def resolve(root, info, exclude=None, filter=None):
-        qs = Reservation.objects.filter(creator=info.context.user)
+        qs = Reservation.objects.filter(waiter__registry__user=info.context.user)
         if filter:
             qs = qs.filter(status__in=filter)
         if exclude:
@@ -48,6 +48,7 @@ class MyReservations(BalderQuery):
     class Meta:
         type = types.Reservation
         list = True
+        paginate = True
 
 
 class WaitListQuery(BalderQuery):

@@ -20,18 +20,13 @@ class AssignationEvent(graphene.ObjectType):
 
 class AssignationEventSubscription(BalderSubscription):
     class Arguments:
-        reference = graphene.ID(
-            description="The reference of the assignation", required=True
-        )
+        id = graphene.ID(description="The reference of the assignation", required=True)
         level = graphene.String(description="The log level for alterations")
 
     @bounced(only_jwt=True)
-    def subscribe(root, info, *args, reference=None, level=None):
-        ass = models.Assignation.objects.get(reference=reference)
-        assert (
-            ass.creator == info.context.bounced.user
-        ), "You cannot listen to a assignation that you have not created"
-        return [f"assignation_{ass.reference}"]
+    def subscribe(root, info, id, level=None):
+        ass = models.Assignation.objects.get(id=id)
+        return [f"assignation_{ass.id}"]
 
     def publish(payload, info, *args, **kwargs):
         payload = payload["payload"]
@@ -72,10 +67,10 @@ class MyAssignationsEvent(BalderSubscription):
 
         logger.error(payload)
 
-        if action == "created":
-            return {"create": models.Assignation.objects.get(id=data)}
+        if action == "create":
+            return {"create": data}
         else:
-            return {"update": models.Assignation.objects.get(id=data)}
+            return {"update": data}
 
     class Meta:
         type = AssignationsEvent

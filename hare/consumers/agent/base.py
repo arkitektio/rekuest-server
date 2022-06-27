@@ -4,6 +4,7 @@ from lok.bouncer.utils import bounced_ws
 import logging
 from asgiref.sync import sync_to_async
 from facade.models import Agent, Registry
+from facade.enums import AgentStatus
 from hare.consumers.agent.protocols.agent_json import *
 from urllib.parse import parse_qs
 import asyncio
@@ -35,11 +36,14 @@ class AgentConsumer(AsyncWebsocketConsumer):
             registry=registry, identifier=instance_id
         )
 
+        self.agent.status = AgentStatus.ACTIVE
+        self.agent.save()
+
     @bounced_ws(only_jwt=True)
     async def connect(self):
         await self.set_agent()
-        self.queue_length = 10
-        self.incoming_queue = asyncio.Queue(maxsize=400)
+        self.queue_length = 5000
+        self.incoming_queue = asyncio.Queue(maxsize=self.queue_length)
         self.incoming_task = asyncio.create_task(self.consumer())
         return await super().connect()
 
@@ -68,6 +72,12 @@ class AgentConsumer(AsyncWebsocketConsumer):
                         AssignationChangedMessage(**json_dict)
                     )
 
+                if type == AgentMessageTypes.ASSIGN_LOG:
+                    await self.on_assignation_log(AssignationLogMessage(**json_dict))
+
+                if type == AgentMessageTypes.PROVIDE_LOG:
+                    await self.on_provision_log(ProvisionLogMessage(**json_dict))
+
                 self.incoming_queue.task_done()
 
         except Exception as e:
@@ -79,5 +89,14 @@ class AgentConsumer(AsyncWebsocketConsumer):
     async def on_list_provisions(self, message):
         raise NotImplementedError("Error on this")
 
-    async def on_list_assignations(self, message):
+    async def on_provision_changed(self, message):
+        raise NotImplementedError("Error on this")
+
+    async def on_assignation_changed(self, message):
+        raise NotImplementedError("Error on this")
+
+    async def on_assignation_log(self, message):
+        raise NotImplementedError("Error on this")
+
+    async def on_provision_log(self, message):
         raise NotImplementedError("Error on this")

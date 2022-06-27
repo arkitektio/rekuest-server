@@ -1,3 +1,4 @@
+import logging
 from lok import bounced
 from balder.types import BalderSubscription
 from facade import models, types
@@ -23,12 +24,13 @@ class AgentsEvent(BalderSubscription):
         payload = payload["payload"]
         action = payload["action"]
         data = payload["data"]
+        logging.error(f"{action} {data}")
 
-        if action == "created":
-            return {"created": models.Agent.objects.get(id=data)}
-        if action == "updated":
-            return {"updated": models.Agent.objects.get(id=data)}
-        if action == "deleted":
+        if action == "create":
+            return {"created": data}
+        if action == "update":
+            return {"updated": data}
+        if action == "delete":
             return {"deleted": data}
 
     class Meta:

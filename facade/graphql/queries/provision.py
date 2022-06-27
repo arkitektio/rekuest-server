@@ -4,16 +4,16 @@ from facade.models import Provision
 import graphene
 from lok import bounced
 
-from facade.structures.inputs import ProvisionStatusInput
+from facade.inputs import ProvisionStatusInput
 
 
 class ProvisionDetailQuery(BalderQuery):
     class Arguments:
-        reference = graphene.ID(description="The query provisions", required=True)
+        id = graphene.ID(description="The query provisions", required=True)
 
     @bounced(anonymous=True)
-    def resolve(root, info, reference=None):
-        return Provision.objects.get(reference=reference)
+    def resolve(root, info, id=None):
+        return Provision.objects.get(id=id)
 
     class Meta:
         type = types.Provision
@@ -37,7 +37,7 @@ class MyProvisions(BalderQuery):
 
     @bounced(anonymous=False)
     def resolve(root, info, exclude=None, filter=None):
-        qs = Provision.objects.filter(creator=info.context.user)
+        qs = Provision.objects.filter(agent__registry__user=info.context.user)
         if filter:
             qs = qs.filter(status__in=filter)
         if exclude:
@@ -48,3 +48,4 @@ class MyProvisions(BalderQuery):
     class Meta:
         type = types.Provision
         list = True
+        paginate = True

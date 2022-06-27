@@ -22,7 +22,6 @@ class ResetAgents(BalderMutation):
     def mutate(root, info, url=None, name=None):
 
         for agent in Agent.objects.all():
-            agent.status = AgentStatus.VANILLA
-            agent.save()
+            agent.delete()
 
         return {"ok": True}

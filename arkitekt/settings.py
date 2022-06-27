@@ -23,7 +23,7 @@ print(BASE_DIR)
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = conf.security.secret_key
+SECRET_KEY = conf.server.secret_key
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = conf.server.debug
@@ -31,14 +31,17 @@ ALLOWED_HOSTS = conf.server.hosts
 CORS_ORIGIN_ALLOW_ALL = True
 
 LOK = {
-    "PUBLIC_KEY": conf.herre.public_key,
-    "KEY_TYPE": conf.herre.key_type,
-    "ISSUER": conf.herre.issuer,
+    "PUBLIC_KEY": conf.lok.public_key,
+    "KEY_TYPE": conf.lok.key_type,
+    "ISSUER": conf.lok.issuer,
 }
 
 SUPERUSERS = [
-    {"USERNAME": su.username, "EMAIL": su.email, "PASSWORD": su.password}
-    for su in conf.security.admins
+    {
+        "USERNAME": conf.server.admin.username,
+        "EMAIL": conf.server.admin.email,
+        "PASSWORD": conf.server.admin.password,
+    }
 ]
 
 
@@ -127,7 +130,7 @@ DATABASES = {
 
 
 REDIS_URL = f"redis://{conf.redis.host}:{conf.redis.port}"
-BROKER_URL = f"amqp://{conf.rabbit.username}:{conf.rabbit.password}@{conf.rabbit.host}:{conf.rabbit.port}/{conf.rabbit.vhost}"
+BROKER_URL = f"amqp://{conf.rabbit.username}:{conf.rabbit.password}@{conf.rabbit.host}:{conf.rabbit.port}/{conf.rabbit.v_host}"
 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

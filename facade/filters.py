@@ -4,7 +4,7 @@ import django_filters
 from balder.filters import EnumFilter, MultiEnumFilter
 from facade.enums import ProvisionStatus
 
-from facade.structures.inputs import AgentStatusInput, AssignationStatusInput, LogLevelInput, NodeTypeInput, ProvisionStatusInput
+from facade.inputs import AgentStatusInput, AssignationStatusInput, LogLevelInput, NodeTypeInput, ProvisionStatusInput
 from .models import Node, Repository, Template
 from django.db.models import Q
 

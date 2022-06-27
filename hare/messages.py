@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Any, Dict, List, Optional, TypeVar
 from pydantic import BaseModel
-from facade.enums import ReservationStatus, AssignationStatus, ProvisionStatus
+from facade.enums import LogLevel, ReservationStatus, AssignationStatus, ProvisionStatus
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -99,3 +99,15 @@ class Reservation(UpdatableModel):
 
 class Unreservation(BaseModel):
     reservation: str
+
+
+class AssignationLog(BaseModel):
+    assignation: str
+    level: LogLevel
+    message: Optional[str]
+
+
+class ProvisionLog(BaseModel):
+    provision: str
+    level: LogLevel
+    message: Optional[str]

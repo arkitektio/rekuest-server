@@ -17,6 +17,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class HareAgentConsumer(AgentConsumer):
     """Hare Postman
 
@@ -49,7 +50,7 @@ class HareAgentConsumer(AgentConsumer):
     async def forward(self, f: HareMessage):
         await self.channel.basic_publish(
             f.to_message(),
-            exchange=f.queue,  # Lets take the first best one
+            routing_key=f.queue,  # Lets take the first best one
         )
 
     async def on_rmq_message_in(self, rmq_message: aiormq.abc.DeliveredMessage):
@@ -101,9 +102,7 @@ class HareAgentConsumer(AgentConsumer):
 
         except Exception:
             logger.error("Error on on_assignment_in", exc_info=True)
-        
-        
-        
+
         logger.debug(f"Received Assignment for {provid} {rmq_message}")
 
         for r in replies:
@@ -176,14 +175,15 @@ class HareAgentConsumer(AgentConsumer):
 
     async def on_unreserve(self, message: UnreserveHareMessage):
 
-
         replies, forwards, delete_queue_id = await loose_reservation(
             message, agent=self.agent
         )
 
         for id in delete_queue_id:
             await self.channel.basic_cancel(f"{id}-{message.provision}")
-            logger.debug(f"Deleting consumer for queue {id} of Reservation {message.provision}")
+            logger.debug(
+                f"Deleting consumer for queue {id} of Reservation {message.provision}"
+            )
 
         for r in forwards:
             await self.forward(r)
@@ -218,3 +218,9 @@ class HareAgentConsumer(AgentConsumer):
             await self.channel.close()
         except Exception as e:
             logger.error(f"Something weird happened in disconnection! {e}")
+
+    async def on_provision_log(self, message):
+        await log_to_provision(message, agent=self.agent)
+
+    async def on_assignation_log(self, message):
+        await log_to_assignation(message, agent=self.agent)

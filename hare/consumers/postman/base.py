@@ -35,7 +35,7 @@ class PostmanConsumer(AsyncWebsocketConsumer):
     @bounced_ws(only_jwt=True)
     async def connect(self):
         await self.set_waiter()
-        self.queue_length = 10
+        self.queue_length = 5000
         self.incoming_queue = asyncio.Queue(maxsize=self.queue_length)
         self.incoming_task = asyncio.create_task(self.consumer())
         return await super().connect()

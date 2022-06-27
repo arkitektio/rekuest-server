@@ -166,14 +166,14 @@ class ReservationManager(Manager):
 
             agent = Agent.objects.filter(registry=t.registry).first()
             if not agent:
-                ScheduleException("No Agent found")
+                raise ScheduleException("No Agent found")
 
             prov = Provision.objects.create(template=t, agent=agent, reservation=res)
             prov.reservations.add(res)
             prov.save()
 
             t = ProvideHareMessage(
-                queue=prov.agent.queue,
+                queue=agent.queue,
                 provision=prov.id,
                 template=t.id,
                 status=prov.status,

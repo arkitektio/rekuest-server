@@ -1,5 +1,5 @@
-from facade.enums import ReservationStatus
-from facade.models import Reservation
+from facade.enums import AssignationStatus, ReservationStatus
+from facade.models import Registry, Reservation, Waiter
 from facade import types, models
 import uuid
 from balder.types import BalderMutation
@@ -7,6 +7,8 @@ from graphene.types.generic import GenericScalar
 from lok import bounced
 import graphene
 import logging
+from hare.carrots import *
+from hare.connection import rmq
 
 logger = logging.getLogger(__name__)  #
 
@@ -51,7 +53,12 @@ class AssignMutation(BalderMutation):
         creator = info.context.bounced.user
         app = info.context.bounced.app
 
-        res = Reservation.objects.get(id=reservation)
+        registry, _ = Registry.objects.get_or_create(user=creator, app=app)
+
+        creator = info.context.bounced.user
+        app = info.context.bounced.app
+
+        res = models.Reservation.objects.get(id=reservation)
         if res.status != ReservationStatus.ACTIVE:
             raise Exception("Cannot assign. Reservation is currently inactive!")
 
@@ -60,14 +67,26 @@ class AssignMutation(BalderMutation):
                 "reservation": res,
                 "args": args,
                 "kwargs": kwargs,
-                "reference": reference,
-                "waiter": res.waiter,
                 "creator": creator,
-                "app": app,
+                "status": AssignationStatus.ASSIGNED,
             }
         )
 
-        
+        forward = [
+            AssignHareMessage(
+                queue=ass.reservation.queue,
+                reservation=ass.reservation.id,
+                assignation=ass.id,
+                args=ass.args,
+                kwargs=ass.kwargs,
+            )
+        ]
+
+        logger.error(forward[0].dict())
+
+        for forward_res in forward:
+            rmq.publish(forward_res.queue, forward_res.to_message())
+
         # GatewayConsumer.send(bounced)
 
         return ass

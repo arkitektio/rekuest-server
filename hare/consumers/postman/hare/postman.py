@@ -104,6 +104,7 @@ class HarePostmanConsumer(PostmanConsumer):
             await self.reply(r)
 
         for f in forwards:
+            print(f)
             await self.forward(f)
 
     async def on_unassign(self, message: UnassignPub):

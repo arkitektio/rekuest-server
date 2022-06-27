@@ -1,20 +1,19 @@
-
 from balder.types import BalderQuery
 from facade import types
 from facade.models import Assignation
 import graphene
 from lok import bounced
 from facade import models
-from facade.structures.inputs import AssignationStatusInput
+from facade.inputs import AssignationStatusInput
 
 
 class AssignationDetailQuery(BalderQuery):
     class Arguments:
-        reference = graphene.ID(description="The query assignation", required=True)
+        id = graphene.ID(description="The query assignation", required=True)
 
     @bounced(anonymous=True)
-    def resolve(root, info, reference=None):
-        return Assignation.objects.get(reference=reference)
+    def resolve(root, info, id=None):
+        return Assignation.objects.get(id=id)
 
     class Meta:
         type = types.Assignation
@@ -29,20 +28,24 @@ class MyAssignations(BalderQuery):
         filter = graphene.List(
             AssignationStatusInput, description="The included values", required=False
         )
+        limit = graphene.Int(description="The excluded values", required=False)
 
     @bounced(anonymous=False)
-    def resolve(root, info, exclude=None, filter=None):
+    def resolve(root, info, exclude=None, filter=None, limit=None):
         qs = Assignation.objects.filter(creator=info.context.user)
         if filter:
             qs = qs.filter(status__in=filter)
         if exclude:
             qs = qs.exclude(status__in=exclude)
+        if limit:
+            qs = qs[:limit]
 
-        return qs.all()
+        return qs
 
     class Meta:
         type = types.Assignation
         list = True
+        paginate = True
 
 
 class TodosQuery(BalderQuery):

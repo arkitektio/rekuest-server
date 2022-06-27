@@ -3,7 +3,7 @@ from balder.types.mutation.base import BalderMutation
 from lok import bounced
 import graphene
 
-from facade.structures.inputs import ProvisionStatusInput
+from facade.inputs import ProvisionStatusInput
 from facade.models import Provision
 
 

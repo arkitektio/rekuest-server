@@ -12,9 +12,7 @@ from facade.filters import (
     ProvisionFilter,
 )
 from balder.fields.filtered import BalderFiltered
-from facade.structures.ports.returns.types import ReturnPort
-from facade.structures.ports.kwargs.types import KwargPort
-from facade.structures.ports.args.types import ArgPort
+from facade.structures.widgets.types import Widget
 from facade import models
 from lok.models import LokApp as HerreAppModel
 from balder.types import BalderObject
@@ -109,6 +107,65 @@ class ReserveParams(graphene.ObjectType):
     minimalInstances = graphene.Int(
         description="The minimal amount of Instances", required=False
     )
+
+
+class PortType(graphene.Enum):
+    INT = "INT"
+    STRING = "STRING"
+    STRUCTURE = "STRUCTURE"
+    LIST = "LIST"
+    BOOL = "BOOL"
+    ENUM = "ENUM"
+    DICT = "DICT"
+
+
+class ChildPort(graphene.ObjectType):
+    type = PortType(description="the type of input", required=False)
+    description = graphene.String(
+        description="A description for this Port", required=False
+    )
+    identifier = graphene.String(description="The corresponding Model")
+    child = graphene.Field(lambda: ChildPort, description="The child", required=False)
+
+
+class ArgPort(graphene.ObjectType):
+    key = graphene.String(required=True)
+    label = graphene.String()
+    type = PortType(description="the type of input", required=False)
+    description = graphene.String(
+        description="A description for this Port", required=False
+    )
+    identifier = graphene.String(description="The corresponding Model")
+    nullable = graphene.Boolean()
+    child = graphene.Field(lambda: ChildPort, description="The child", required=False)
+    widget = graphene.Field(Widget, description="Description of the Widget")
+
+
+class KwargPort(graphene.ObjectType):
+    key = graphene.String(required=True)
+    type = PortType(description="the type of input", required=False)
+    description = graphene.String(
+        description="A description for this Port", required=False
+    )
+    label = graphene.String()
+    identifier = graphene.String(description="The corresponding Model")
+    nullable = graphene.Boolean()
+    default = Any()
+    child = graphene.Field(lambda: ChildPort, description="The child", required=False)
+    widget = graphene.Field(Widget, description="Description of the Widget")
+
+
+class ReturnPort(graphene.ObjectType):
+    key = graphene.String(required=True)
+    type = PortType(description="the type of input", required=False)
+    label = graphene.String()
+    description = graphene.String(
+        description="A description for this Port", required=False
+    )
+    identifier = graphene.String(description="The corresponding Model")
+    nullable = graphene.Boolean()
+    child = graphene.Field(lambda: ChildPort, description="The child", required=False)
+    widget = graphene.Field(Widget, description="Description of the Widget")
 
 
 class LokApp(BalderObject):

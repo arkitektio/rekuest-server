@@ -201,7 +201,7 @@ class Waiter(models.Model):
         ]
 
     def __str__(self):
-        return f"Waiter {self.name} - {self.unique}"
+        return f"Waiter {self.registry} on {self.identifier}"
 
     @property
     def queue(self):
@@ -254,8 +254,8 @@ class Node(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["repository", "interface"],
-                name="repository, interface, cannot be the same",
+                fields=["package", "interface"],
+                name="package, interface, cannot be the same",
             )
         ]
 
@@ -722,3 +722,6 @@ class AssignationLog(models.Model):
     level = models.CharField(
         choices=LogLevel.choices, default=LogLevel.INFO.value, max_length=200
     )
+
+
+import facade.signals

@@ -96,7 +96,7 @@ class ReservationsSubscription(BalderSubscription):
             registry=registry, identifier=identifier
         )
         print(f"Connected Waiter for {waiter}")
-        return [f"waiter_{waiter.unique}"]
+        return [f"reservations_waiter_{waiter.unique}"]
 
     def publish(payload, info, *args, **kwargs):
         payload = payload["payload"]

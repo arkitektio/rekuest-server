@@ -2,7 +2,7 @@ from balder.types.mutation.base import BalderMutation
 from lok import bounced
 import graphene
 
-from facade.structures.inputs import ReservationStatusInput
+from facade.inputs import ReservationStatusInput
 from facade.models import Reservation
 
 
