@@ -1,5 +1,6 @@
 from balder.registry import register_type
 import graphene
+from graphene.types.generic import GenericScalar
 
 get_widget_types = lambda: {
     "QueryWidget": QueryWidget,
@@ -9,6 +10,7 @@ get_widget_types = lambda: {
     "SliderWidget": SliderWidget,
     "LinkWidget": LinkWidget,
     "BoolWidget": BoolWidget,
+    "ChoiceWidget": ChoiceWidget,
 }
 
 
@@ -53,6 +55,19 @@ class SearchWidget(graphene.ObjectType):
 
 @register_type
 class BoolWidget(graphene.ObjectType):
+    class Meta:
+        interfaces = (Widget,)
+
+
+class Choice(graphene.ObjectType):
+    value = GenericScalar(required=True)
+    label = graphene.String(required=True)
+
+
+@register_type
+class ChoiceWidget(graphene.ObjectType):
+    choices = graphene.List(Choice, description="A list of choices")
+
     class Meta:
         interfaces = (Widget,)
 

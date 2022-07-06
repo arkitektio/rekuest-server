@@ -44,6 +44,11 @@ class WidgetInput(graphene.InputObjectType):
     placeholder = graphene.String(description="Placeholder for any widget")
 
 
+class ReturnWidgetInput(graphene.InputObjectType):
+    typename = graphene.String(description="type", required=True)
+    query = graphene.String(description="Do we have a possible")
+
+
 class ChildPortInput(graphene.InputObjectType):
     identifier = graphene.String(description="The identifier")
     name = graphene.String(description="The name of this port")
@@ -82,7 +87,7 @@ class ReturnPortInput(graphene.InputObjectType):
     type = PortTypeInput(description="The type of this argument", required=True)
     description = graphene.String(description="The description of this argument")
     child = graphene.Field(ChildPortInput, description="The child of this argument")
-    widget = graphene.Field(WidgetInput, description="The child of this argument")
+    widget = graphene.Field(ReturnWidgetInput, description="The child of this argument")
 
 
 class DefinitionInput(graphene.InputObjectType):

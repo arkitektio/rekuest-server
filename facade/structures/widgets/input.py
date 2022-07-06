@@ -1,4 +1,10 @@
 import graphene
+from graphene.types.generic import GenericScalar
+
+
+class ChoiceInput(graphene.InputObjectType):
+    value = GenericScalar(required=True)
+    label = graphene.String(required=True)
 
 
 class WidgetInput(graphene.InputObjectType):
@@ -10,3 +16,4 @@ class WidgetInput(graphene.InputObjectType):
     max = graphene.Int(description="Max value for int widget")
     min = graphene.Int(description="Max value for int widget")
     placeholder = graphene.String(description="Placeholder for any widget")
+    choices = graphene.List(ChoiceInput, description="A list of choices")

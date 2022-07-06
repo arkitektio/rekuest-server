@@ -13,6 +13,7 @@ from facade.filters import (
 )
 from balder.fields.filtered import BalderFiltered
 from facade.structures.widgets.types import Widget
+from facade.structures.widgets.returns import ReturnWidget
 from facade import models
 from lok.models import LokApp as HerreAppModel
 from balder.types import BalderObject
@@ -165,7 +166,7 @@ class ReturnPort(graphene.ObjectType):
     identifier = graphene.String(description="The corresponding Model")
     nullable = graphene.Boolean()
     child = graphene.Field(lambda: ChildPort, description="The child", required=False)
-    widget = graphene.Field(Widget, description="Description of the Widget")
+    widget = graphene.Field(ReturnWidget, description="A return widget")
 
 
 class LokApp(BalderObject):
