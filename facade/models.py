@@ -464,8 +464,17 @@ class Provision(models.Model):
         blank=True,
     )
 
+    class Meta:
+        permissions = [("can_link_to", "Can link a reservation to a provision")]
+
     def __str__(self):
         return f"Provision for Template: {self.template if self.template else ''}: {self.status}"
+
+    def get_reservation_queues(self):
+        """
+        Get all reservation queues attached to this provision
+        """
+        return [res.queue for res in self.reservations.all()]
 
 
 class ReservationLog(models.Model):
@@ -617,6 +626,7 @@ class Reservation(models.Model):
                 name="Equal Reservation on this App by this Waiter is already in place",
             )
         ]
+        permissions = [("can_assign", "Can assign to this reservation")]
 
     def __str__(self):
         return f"Reservation {self.id} for Node: {self.node}: {self.status}"

@@ -19,6 +19,7 @@ from .admin import (
     ResetProvisions,
     ResetReservations,
 )
+from .perms import ChangePermissions
 
 __all__ = [
     "DefineNode",
@@ -41,4 +42,5 @@ __all__ = [
     "ResetNodes",
     "ResetProvisions",
     "ResetReservations",
+    "ChangePermissions",
 ]

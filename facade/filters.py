@@ -4,7 +4,13 @@ import django_filters
 from balder.filters import EnumFilter, MultiEnumFilter
 from facade.enums import ProvisionStatus
 
-from facade.inputs import AgentStatusInput, AssignationStatusInput, LogLevelInput, NodeTypeInput, ProvisionStatusInput
+from facade.inputs import (
+    AgentStatusInput,
+    AssignationStatusInput,
+    LogLevelInput,
+    NodeTypeInput,
+    ProvisionStatusInput,
+)
 from .models import Node, Repository, Template
 from django.db.models import Q
 
@@ -72,10 +78,7 @@ class ReservationLogFilter(django_filters.FilterSet):
 
 
 class NodesFilter(django_filters.FilterSet):
-    package = django_filters.CharFilter(
-        field_name="package", lookup_expr="icontains"
-    )
-
+    package = django_filters.CharFilter(field_name="package", lookup_expr="icontains")
 
 
 class TemplateFilter(django_filters.FilterSet):

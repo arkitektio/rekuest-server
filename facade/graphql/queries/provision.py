@@ -1,9 +1,9 @@
 from balder.types import BalderQuery
 from facade import types
-from facade.models import Provision
+from facade.models import Provision, Reservation
 import graphene
 from lok import bounced
-
+from guardian.shortcuts import get_objects_for_user
 from facade.inputs import ProvisionStatusInput
 
 
@@ -24,6 +24,26 @@ class Provisions(BalderQuery):
     class Meta:
         type = types.Provision
         list = True
+
+
+class LinkableProvisions(BalderQuery):
+    class Arguments:
+        id = graphene.ID(description="The query provisions", required=True)
+
+    @bounced(anonymous=True)
+    def resolve(root, info, id=None):
+        x = Reservation.objects.get(id=id)
+        prov_queryset = get_objects_for_user(
+            info.context.user,
+            "facade.can_link_to",
+        )
+
+        return prov_queryset.filter(template__in=x.node.templates.all())
+
+    class Meta:
+        type = types.Provision
+        list = True
+        operation = "linkableProvisions"
 
 
 class MyProvisions(BalderQuery):

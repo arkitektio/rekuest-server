@@ -10,9 +10,15 @@ admin.site.register(Agent)
 admin.site.register(AppRepository)
 admin.site.register(MirrorRepository)
 
+from guardian.admin import GuardedModelAdmin
 
-class ReservationAdmin(admin.ModelAdmin):
+
+class ReservationAdmin(GuardedModelAdmin):
     readonly_fields = ("params", "context")
+
+
+class ProvisionsAdmin(GuardedModelAdmin):
+    pass
 
 
 class AssignationAdmin(admin.ModelAdmin):
@@ -25,6 +31,6 @@ admin.site.register(Assignation, AssignationAdmin)
 admin.site.register(Reservation, ReservationAdmin)
 admin.site.register(AssignationLog)
 admin.site.register(ProvisionLog)
-admin.site.register(Provision)
+admin.site.register(Provision, ProvisionsAdmin)
 admin.site.register(Structure)
 admin.site.register(Waiter)

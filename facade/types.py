@@ -21,6 +21,11 @@ import graphene
 from balder.registry import register_type
 from graphene.types.generic import GenericScalar
 
+from django.contrib.auth.models import (
+    Permission as PermissionModel,
+    Group as GroupModel,
+)
+
 
 class BalderInheritedModelOptions(InterfaceOptions):
     child_models = {}
@@ -59,7 +64,7 @@ class BalderInheritedField(graphene.Field):
         _type: Type[BalderInheritedModel],
         resolver=None,
         related_field=None,
-        **kwargs
+        **kwargs,
     ):
         resolver = lambda root, info: self.type.resolve_inherited(
             getattr(root, related_field), info
@@ -325,3 +330,31 @@ class Reservation(BalderObject):
 
     class Meta:
         model = models.Reservation
+
+
+class Permission(BalderObject):
+    unique = graphene.String(description="Unique ID for this permission", required=True)
+
+    def resolve_unique(root, info):
+        return f"{root.content_type.app_label}.{root.codename}"
+
+    class Meta:
+        model = PermissionModel
+
+
+class Group(BalderObject):
+    class Meta:
+        model = GroupModel
+
+
+class User(BalderObject):
+    color = graphene.String(description="The associated color for this user")
+
+    def resolve_color(root, info):
+        if hasattr(root, "meta"):
+            return root.meta.color
+        return "#FF0000"
+
+    class Meta:
+        model = get_user_model()
+        description = get_user_model().__doc__

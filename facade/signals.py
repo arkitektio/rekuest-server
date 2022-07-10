@@ -65,14 +65,36 @@ def ass_post_save(sender, instance: Assignation = None, created=None, **kwargs):
 
 
 @receiver(post_save, sender=Provision)
-def prov_post_save(sender, instance: Provision = None, created=None, **kwargs):
+def res_post_save(sender, instance: Provision = None, created=None, **kwargs):
     from facade.graphql.subscriptions import MyProvisionsEvent
+    from facade.enums import ProvisionStatus
+
+    if instance.status == ProvisionStatus.ACTIVE:
+        logging.info(
+            f"Provision {instance}: is now active. Broadcasting this state to all reservations..."
+        )
+        # Check if any reservation is using this provision and see if it needs to be set to active
+
+    if instance.status == ProvisionStatus.CANCELLED:
+        logging.info(
+            f"Provision {instance}: is now cancelled. Broadcasting this state to all reservations..."
+        )
+
+    if instance.status == ProvisionStatus.CANCELING:
+        logging.info(
+            f"Provision {instance}: was requested to be cancelled. Sending this to the agent.."
+        )
 
     if instance.reservation:
         MyProvisionsEvent.broadcast(
             {"action": "create" if created else "update", "data": instance},
             [f"provisions_waiter_{instance.reservation.waiter.unique}"],
         )
+
+
+@receiver(post_save, sender=Reservation)
+def res_post_save(sender, instance: Reservation = None, created=None, **kwargs):
+    from facade.graphql.subscriptions import MyProvisionsEvent
 
 
 @receiver(post_save, sender=Agent)
