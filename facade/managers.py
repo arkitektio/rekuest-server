@@ -77,7 +77,7 @@ class ReservationManager(Manager):
                 queue=prov.agent.queue, reservation=res.id, provision=prov.id
             )
 
-            provisions.append(prov)
+            provisions.reservations.add(prov)
             forwards.append(t)
 
         # filter unnecessary messages
