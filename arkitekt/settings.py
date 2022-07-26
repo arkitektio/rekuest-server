@@ -76,6 +76,9 @@ HEALTH_CHECK = {
 }
 
 
+IMITATE_GROUPS = ["team:sibarita"]
+
+
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",

@@ -72,7 +72,7 @@ class ChangePermissions(BalderMutation):
             for perm in ass["permissions"]:
                 assign_perm(
                     perm,
-                    get_user_model().objects.get(email=ass["user"]),
+                    get_user_model().objects.get(id=ass["user"]),
                     instance,
                 )
 

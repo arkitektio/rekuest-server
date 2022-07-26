@@ -9,6 +9,7 @@ from hare.carrots import (
     UnreserveHareMessage,
 )
 from hare.consumers.postman.protocols.postman_json import ReserveParams
+from guardian.shortcuts import get_objects_for_user
 
 qt = re.compile(r"@(?P<package>[^\/]*)\/(?P<interface>[^\/]*)")
 
@@ -120,6 +121,7 @@ class ReservationManager(Manager):
         template: Optional[str] = None,
         title: Optional[str] = None,
         waiter=None,
+        provision: Optional[str] = None,
     ) -> Tuple[Any, List[HareMessage]]:
         """_summary_
 
@@ -141,18 +143,28 @@ class ReservationManager(Manager):
             []
         )  # messages with bind information that need to be send to the agent
 
-        t = Template.objects.filter(node_id=node).first()
+        templates = get_objects_for_user(waiter.registry.user, "facade.providable")
+        t = templates.filter(node_id=node).first()
         if not t:
             node = Node.objects.get(id=node)
-            raise ScheduleException(f"Could not find templates for node {node}")
+            raise ScheduleException(
+                f"Could not find providable templates for node {node}"
+            )
 
         res = super().create(
-            node_id=node, template_id=template, waiter=waiter, params=params.dict()
+            node_id=node,
+            template_id=template,
+            waiter=waiter,
+            params=params.dict(),
+            provision=provision,
         )
 
         provisions = []
 
-        for prov in Provision.objects.filter(template=t).all():
+        linkable_provisions = get_objects_for_user(
+            waiter.registry.user, "facade.can_link_to"
+        )
+        for prov in linkable_provisions.filter(template=t).all():
             # All provisions queues will receive a reserve request (even if they are not created?)
 
             t = ReserveHareMessage(

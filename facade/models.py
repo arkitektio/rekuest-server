@@ -311,6 +311,7 @@ class Template(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        permissions = [("providable", "Can provide this template")]
         constraints = [
             models.UniqueConstraint(
                 fields=["node", "version", "registry"],
@@ -608,7 +609,7 @@ class Reservation(models.Model):
         default=uuid.uuid4,
         help_text="The Unique identifier of this Assignation",
     )
-    parent = models.ForeignKey(
+    provision = models.ForeignKey(
         "Provision",
         on_delete=models.CASCADE,
         null=True,

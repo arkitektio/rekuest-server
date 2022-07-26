@@ -3,31 +3,31 @@ from balder.types import BalderMutation
 from lok import bounced
 import graphene
 import logging
+from facade import models, types
+from facade.enums import ProvisionStatus
 
 logger = logging.getLogger(__name__)  #
 
 
 class Unprovide(graphene.ObjectType):
-    reference = graphene.String()
+    reference = graphene.ID()
 
 
 class UnprovideMutation(BalderMutation):
     class Arguments:
-        provision = graphene.String(
+        provision = graphene.ID(
             description="The reference of the Provision you want to ruin"
-        )
-        reference = graphene.String(
-            description="The reference of this cancellation",
-            required=False,
         )
 
     class Meta:
-        type = Unprovide
+        type = types.Provision
         operation = "unprovide"
 
     @bounced(only_jwt=True)
     def mutate(root, info, provision=None):
-        reference = str(uuid.uuid4())
-        bounce = info.context.bounced
 
-        return reference
+        provision = models.Provision.objects.get(id=provision)
+        provision.status == ProvisionStatus.CANCELING
+        provision.save()
+
+        return provision

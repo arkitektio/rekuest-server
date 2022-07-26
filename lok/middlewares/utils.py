@@ -1,11 +1,11 @@
 from ..models import LokUser, LokApp
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import  PermissionDenied
 from django.contrib.auth import get_user_model
 from django.http.response import HttpResponseBadRequest
 from asgiref.sync import async_to_sync, sync_to_async
 from ..token import JwtToken
 from django.core.exceptions import ObjectDoesNotExist
-from django.contrib.auth.models import Group
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,30 +18,15 @@ def update_or_create_herre(decoded):
         try:
             user = get_user_model().objects.get(email=decoded["email"])
             if hasattr(user, "roles"):
-                if user.roles != decoded["roles"]:
-                    user.roles = decoded["roles"]
-                    user.save()
-                    groups = [
-                        Group.objects.get_or_create(name=role)
-                        for role in decoded["roles"]
-                    ]
-                    user.groups.set([g[0] for g in groups])
-                    user.save()
-
-        except ObjectDoesNotExist:
-            user = get_user_model()(
-                email=decoded["email"], username=decoded["preferred_username"]
-            )
-            user.set_unusable_password()
+                user.roles = decoded["roles"]
             user.save()
+        except ObjectDoesNotExist:
+            user = get_user_model()(email=decoded["email"], username=f"Lok {decoded['email']}")
             if hasattr(user, "roles"):
                 user.roles = decoded["roles"]
-                groups = [
-                    Group.objects.get_or_create(name=role) for role in decoded["roles"]
-                ]
-                user.groups.set([g[0] for g in groups])
-                user.save()
-            logger.warning("Created new ffff")
+            user.set_unusable_password()
+            user.save()
+            logger.warning("Created new user")
     else:
         user = None
 
@@ -49,11 +34,7 @@ def update_or_create_herre(decoded):
         try:
             app = LokApp.objects.get(client_id=decoded["client_id"])
         except ObjectDoesNotExist:
-            app = LokApp(
-                client_id=decoded["client_id"],
-                name=decoded["client_app"],
-                grant_type=decoded["type"],
-            )
+            app = LokApp(client_id=decoded["client_id"], name=decoded["client_app"], grant_type=decoded["type"])
             app.save()
             logger.warning("Created new app")
     else:
@@ -68,7 +49,6 @@ def set_request_async(request, decoded, token):
     request.auth = JwtToken(decoded, user, app, token)
     request.user = user
     return request
-
 
 def set_request_sync(request, decoded, token):
     user, app = update_or_create_herre(decoded)

@@ -8,6 +8,7 @@ from .template import TemplateDetailQuery, Template, Templates
 from .structure import Structure, StructureDetailQuery, Structures
 from .provision import Provision, MyProvisions, Provisions, ProvisionDetailQuery
 from .perms import PermissionsFor
+from .user import Users, Me
 
 __all__ = [
     "AgentDetailQuery",
@@ -33,4 +34,7 @@ __all__ = [
     "Provisions",
     "ProvisionDetailQuery",
     "PermissionsFor",
+    "Users",
+    "Me",
+    "User",
 ]

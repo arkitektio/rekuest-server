@@ -17,7 +17,9 @@ def reserve(m: ReservePub, waiter: models.Waiter, **kwargs):
     try:
         try:
             res = models.Reservation.objects.get(
-                node_id=m.node, params=m.params.dict(), waiter=waiter
+                node_id=m.node,
+                params=m.params.dict(),
+                waiter=waiter,
             )
             message = "Wait for your reservation to come alive"
 
@@ -43,7 +45,13 @@ def reserve(m: ReservePub, waiter: models.Waiter, **kwargs):
         except models.Reservation.DoesNotExist:
 
             res, forward = models.Reservation.objects.schedule(
-                node=m.node, params=m.params, waiter=waiter, title=m.title
+                node=m.node,
+                params=m.params,
+                waiter=waiter,
+                title=m.title,
+                provision=models.Provision.objects.get(id=m.provision)
+                if m.provision
+                else None,
             )
 
             reply = [

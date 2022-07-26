@@ -6,6 +6,8 @@ from .slate import SlateMutation
 from .unassign import UnassignMutation
 from .unprovide import UnprovideMutation
 from .unreserve import UnreserveMutation
+from .link import LinkMutation
+from .unlink import UnlinkMutation
 
 
 __all__ = [
@@ -17,4 +19,6 @@ __all__ = [
     "UnassignMutation",
     "UnprovideMutation",
     "UnreserveMutation",
+    "LinkMutation",
+    "UnlinkMutation",
 ]

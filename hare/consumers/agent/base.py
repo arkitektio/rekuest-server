@@ -22,8 +22,10 @@ class AgentConsumer(AsyncWebsocketConsumer):
     @sync_to_async
     def set_agent(self):
         self.app, self.user = self.scope["bounced"].app, self.scope["bounced"].user
-        instance_id = parse_qs(self.scope["query_string"])[b"instance_id"][0].decode(
-            "utf8"
+        instance_id = (
+            parse_qs(self.scope["query_string"])
+            .get(b"instance_id", [b"default"])[0]
+            .decode("utf8")
         )
         print(instance_id)
 

@@ -70,7 +70,7 @@ class ArgPortInput(graphene.InputObjectType):
 class KwargPortInput(graphene.InputObjectType):
     identifier = graphene.String(description="The identifier")
     key = graphene.String(description="The key of the arg", required=True)
-    default = Any(description="The key of the arg", required=True)
+    default = Any(description="The key of the arg", required=False)
     label = graphene.String(description="The name of this argument")
     name = graphene.String(description="The name of this argument")
     type = PortTypeInput(description="The type of this argument", required=True)

@@ -9,6 +9,7 @@ import graphene
 import logging
 from hare.messages import ReserveParams
 from hare.connection import rmq
+from django.contrib.auth import get_user_model
 
 logger = logging.getLogger(__name__)  #
 
@@ -28,7 +29,7 @@ class ReserveMutation(BalderMutation):
         app_group = graphene.ID(
             description="A unique identifier", required=False, default_value="default"
         )
-        creator = graphene.ID(required=False)
+        imitate = graphene.String(required=False)
 
     class Meta:
         type = types.Reservation
@@ -44,13 +45,19 @@ class ReserveMutation(BalderMutation):
         title=None,
         reference=None,
         persist=True,
-        creator=None,
+        imitate=None,
         app_group=None,
     ):
         reference = reference or str(uuid.uuid4())
         params = ReserveParams(**params)
 
-        creator = info.context.bounced.user
+        if imitate:
+            imitate = get_user_model().objects.get(id=imitate)
+            assert info.context.user.has_perm(
+                "imitate", imitate
+            ), "You don't have permission to imitate this user"
+
+        creator = info.context.bounced.user if not imitate else imitate
         app = info.context.bounced.app
 
         registry, _ = Registry.objects.get_or_create(user=creator, app=app)

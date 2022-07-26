@@ -80,6 +80,7 @@ class ReserveListDenied(JSONMessage):
 
 class ReservePub(JSONMessage):
     type: Literal[PostmanMessageTypes.RESERVE] = PostmanMessageTypes.RESERVE
+    provision: Optional[str]
     params: Optional[ReserveParams]  # TODO: Enforce typing here
     node: Optional[str]
     template: Optional[str]

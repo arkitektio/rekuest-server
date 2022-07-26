@@ -7,8 +7,14 @@ from facade.models import (
     Node,
     Provision,
     Reservation,
+    Template,
 )
 import logging
+from guardian.shortcuts import assign_perm
+from django.contrib.auth import get_user_model
+from hare.k import send_to_arkitekt
+
+logger = logging.getLogger(__name__)
 
 
 @receiver(post_save, sender=Node)
@@ -40,6 +46,13 @@ def res_post_save(sender, instance=None, created=None, **kwargs):
         )
 
 
+@receiver(post_save, sender=Template)
+def template_post_save(sender, instance=None, created=None, **kwargs):
+
+    if created:
+        assign_perm("providable", instance.registry.user, instance)
+
+
 @receiver(post_save, sender=AssignationLog)
 def ass_log_post_save(sender, instance=None, created=None, **kwargs):
     from facade.graphql.subscriptions import AssignationEventSubscription
@@ -65,9 +78,14 @@ def ass_post_save(sender, instance: Assignation = None, created=None, **kwargs):
 
 
 @receiver(post_save, sender=Provision)
-def res_post_save(sender, instance: Provision = None, created=None, **kwargs):
+def prov_post_save(sender, instance: Provision = None, created=None, **kwargs):
     from facade.graphql.subscriptions import MyProvisionsEvent
     from facade.enums import ProvisionStatus
+
+    send_to_arkitekt("hallo", "hallo")
+
+    if created:
+        assign_perm("can_link_to", instance.reservation.waiter.registry.user, instance)
 
     if instance.status == ProvisionStatus.ACTIVE:
         logging.info(
@@ -95,6 +113,22 @@ def res_post_save(sender, instance: Provision = None, created=None, **kwargs):
 @receiver(post_save, sender=Reservation)
 def res_post_save(sender, instance: Reservation = None, created=None, **kwargs):
     from facade.graphql.subscriptions import MyProvisionsEvent
+
+
+@receiver(post_save, sender=get_user_model())
+def user_saved(sender, instance: Reservation = None, created=None, **kwargs):
+    from django.conf import settings
+    from django.contrib.auth.models import Group
+
+    logger.info(f"User {instance} was saved")
+
+    if created:
+        for group_name in settings.IMITATE_GROUPS:
+            g, _ = Group.objects.get_or_create(name=group_name)
+            assign_perm(
+                "lok.imitate",
+                g,
+            )
 
 
 @receiver(post_save, sender=Agent)

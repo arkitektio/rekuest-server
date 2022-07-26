@@ -78,7 +78,7 @@ class MyReservationsEvent(BalderSubscription):
 
     class Meta:
         type = ReservationsEvent
-        operation = "myReservationsEvent"
+        operation = "myreservations"
 
 
 class ReservationsSubscription(BalderSubscription):

@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.contrib.auth import get_user_model
 from .models import *
 
 # Register your models here.
@@ -25,8 +26,12 @@ class AssignationAdmin(admin.ModelAdmin):
     readonly_fields = ("context",)
 
 
+class TemplateAdmin(GuardedModelAdmin):
+    pass
+
+
 admin.site.register(Node)
-admin.site.register(Template)
+admin.site.register(Template, TemplateAdmin)
 admin.site.register(Assignation, AssignationAdmin)
 admin.site.register(Reservation, ReservationAdmin)
 admin.site.register(AssignationLog)

@@ -19,6 +19,19 @@ from django.db.models import Q
 #    status = EnumFilter(choices=PodStatus.choices, field_name="status")
 
 
+class UserFilter(django_filters.FilterSet):
+    username = django_filters.CharFilter(
+        field_name="username",
+        lookup_expr="icontains",
+        label="Search for substring of name",
+    )
+    email = django_filters.CharFilter(
+        field_name="email",
+        lookup_expr="icontains",
+        label="Search for substring of name",
+    )
+
+
 class AgentFilter(django_filters.FilterSet):
     app = django_filters.CharFilter(method="app_filter")
     status = MultiEnumFilter(type=AgentStatusInput, field_name="status")
