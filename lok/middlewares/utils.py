@@ -1,5 +1,5 @@
 from ..models import LokUser, LokApp
-from django.core.exceptions import  PermissionDenied
+from django.core.exceptions import PermissionDenied
 from django.contrib.auth import get_user_model
 from django.http.response import HttpResponseBadRequest
 from asgiref.sync import async_to_sync, sync_to_async
@@ -21,7 +21,9 @@ def update_or_create_herre(decoded):
                 user.roles = decoded["roles"]
             user.save()
         except ObjectDoesNotExist:
-            user = get_user_model()(email=decoded["email"], username=f"Lok {decoded['email']}")
+            user = get_user_model()(
+                email=decoded["email"], username=f"Lok {decoded['email']}"
+            )
             if hasattr(user, "roles"):
                 user.roles = decoded["roles"]
             user.set_unusable_password()
@@ -34,7 +36,11 @@ def update_or_create_herre(decoded):
         try:
             app = LokApp.objects.get(client_id=decoded["client_id"])
         except ObjectDoesNotExist:
-            app = LokApp(client_id=decoded["client_id"], name=decoded["client_app"], grant_type=decoded["type"])
+            app = LokApp(
+                client_id=decoded["client_id"],
+                name=decoded["client_app"],
+                grant_type=decoded["type"],
+            )
             app.save()
             logger.warning("Created new app")
     else:
@@ -48,12 +54,15 @@ def set_request_async(request, decoded, token):
     user, app = update_or_create_herre(decoded)
     request.auth = JwtToken(decoded, user, app, token)
     request.user = user
+    request.app = app
     return request
+
 
 def set_request_sync(request, decoded, token):
     user, app = update_or_create_herre(decoded)
     request.auth = JwtToken(decoded, user, app, token)
     request.user = user
+    request.app = app
     return request
 
 
@@ -62,4 +71,5 @@ def set_scope_async(scope, decoded, token):
     user, app = update_or_create_herre(decoded)
     scope["auth"] = JwtToken(decoded, user, app, token)
     scope["user"] = user
+    scope["app"] = app
     return scope

@@ -260,7 +260,7 @@ class Node(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.name} - {self.repository.name}/{self.interface}"
+        return f"{self.name}/{self.interface}"
 
 
 class Template(models.Model):

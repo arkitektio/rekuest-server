@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/3.1/howto/deployment/asgi/
 
 import os
 import django
+from django.urls import re_path
 
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "arkitekt.settings")
@@ -44,10 +45,10 @@ application = ProtocolTypeRouter(
         "websocket": MiddleWareStack(
             URLRouter(
                 [
-                    url("graphql/", MyGraphqlWsConsumer.as_asgi()),
-                    url("graphql", MyGraphqlWsConsumer.as_asgi()),
-                    url(r"watchi\/$", HarePostmanConsumer.as_asgi()),
-                    url(r"agi\/$", HareAgentConsumer.as_asgi()),
+                    re_path("graphql/", MyGraphqlWsConsumer.as_asgi()),
+                    re_path("graphql", MyGraphqlWsConsumer.as_asgi()),
+                    re_path(r"watchi\/$", HarePostmanConsumer.as_asgi()),
+                    re_path(r"agi\/$", HareAgentConsumer.as_asgi()),
                 ]
             )
         ),

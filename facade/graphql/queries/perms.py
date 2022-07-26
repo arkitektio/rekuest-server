@@ -1,5 +1,5 @@
 from balder.types.query import BalderQuery
-from facade.graphql.utils import AvailableModelsEnum, ct_types
+from facade.graphql.utils import AvailableModelsEnum, guarded_models
 import graphene
 from django.contrib.auth.models import Group, Permission
 from facade import types
@@ -29,7 +29,7 @@ class PermissionsFor(BalderQuery):
 
     def resolve(self, info, model, name=None):
 
-        ct = ct_types[model]
+        ct = guarded_models[model]
 
         f = Permission.objects.filter(content_type=ct)
         if name:

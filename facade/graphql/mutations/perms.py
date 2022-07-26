@@ -5,7 +5,7 @@ from lok import bounced
 from balder.types import BalderMutation
 import graphene
 from enum import Enum
-from facade.graphql.utils import AvailableModelsEnum, ct_types
+from facade.graphql.utils import AvailableModelsEnum, guarded_models
 from guardian.shortcuts import (
     assign_perm,
     get_users_with_perms,
@@ -50,7 +50,7 @@ class ChangePermissions(BalderMutation):
     @bounced(anonymous=False)
     def mutate(root, info, type, object, userAssignments=[], groupAssignments=[]):
 
-        model_class = ct_types[type].model_class()
+        model_class = guarded_models[type]
         instance = model_class.objects.get(id=object)
 
         users = get_users_with_perms(

@@ -18,7 +18,7 @@ def reserve(m: ReservePub, waiter: models.Waiter, **kwargs):
         try:
             res = models.Reservation.objects.get(
                 node_id=m.node,
-                params=m.params.dict(),
+                params=m.params.dict() if m.params else {},
                 waiter=waiter,
             )
             message = "Wait for your reservation to come alive"
