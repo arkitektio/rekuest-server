@@ -23,8 +23,6 @@ class RepoDetailQuery(BalderQuery):
 class Repositories(BalderQuery):
     @bounced(anonymous=True)
     def resolve(root, info):
-        print(MirrorRepository.objects.all())
-
         return chain(AppRepository.objects.all(), MirrorRepository.objects.all())
 
     class Meta:

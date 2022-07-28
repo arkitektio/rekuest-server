@@ -7,6 +7,7 @@ from facade import models
 
 
 @pytest.mark.django_db
+@pytest.mark.skip(reason="Not implemented")
 async def test_postman_connect(mock_jwt_authentication, reservable_node):
     assert reservable_node, "reservable_node should exist"
 

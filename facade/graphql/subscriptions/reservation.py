@@ -46,8 +46,6 @@ class ReservationEventSubscription(BalderSubscription):
         if action == "update":
             return {"log": models.Reservation.objects.get(id=data)}
 
-        print("error in payload")
-
     class Meta:
         type = ReservationEvent
         operation = "reservationEvent"
@@ -59,15 +57,12 @@ class MyReservationsEvent(BalderSubscription):
 
     @bounced(only_jwt=True)
     def subscribe(root, info, *args, **kwargs):
-        print(f"reservations_user_{info.context.user.id}")
         return [f"reservations_user_{info.context.user.id}"]
 
     def publish(payload, info, *args, **kwargs):
         payload = payload["payload"]
         action = payload["action"]
         data = payload["data"]
-
-        print(payload)
 
         if action == "created":
             return {"create": models.Reservation.objects.get(id=data)}
@@ -95,14 +90,12 @@ class ReservationsSubscription(BalderSubscription):
         waiter, _ = models.Waiter.objects.get_or_create(
             registry=registry, identifier=identifier
         )
-        print(f"Connected Waiter for {waiter}")
         return [f"reservations_waiter_{waiter.unique}"]
 
     def publish(payload, info, *args, **kwargs):
         payload = payload["payload"]
         action = payload["action"]
         data = payload["data"]
-        print("received Payload", payload)
 
         if action == "delete":
             return {"delete": data}
@@ -112,8 +105,6 @@ class ReservationsSubscription(BalderSubscription):
 
         if action == "create":
             return {"create": data}
-
-        print("error in payload")
 
     class Meta:
         type = ReservationsEvent

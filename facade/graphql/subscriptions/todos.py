@@ -24,14 +24,12 @@ class TodosSubscription(BalderSubscription):
         waiter, _ = models.Waiter.objects.get_or_create(
             registry=registry, identifier=identifier
         )
-        print(f"Connected Waiter for {waiter}")
         return [f"todos_{waiter.unique}"]
 
     def publish(payload, info, *args, **kwargs):
         payload = payload["payload"]
         action = payload["action"]
         data = payload["data"]
-        print("received Payload", payload)
 
         if action == "delete":
             return {"delete": data}
@@ -41,8 +39,6 @@ class TodosSubscription(BalderSubscription):
 
         if action == "create":
             return {"create": data}
-
-        print("error in payload")
 
     class Meta:
         type = TodoEvent

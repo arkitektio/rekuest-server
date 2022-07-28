@@ -37,12 +37,8 @@ class ProvisionEventSubscription(BalderSubscription):
         action = payload["action"]
         data = payload["data"]
 
-        print("Publish dubplish", payload)
-
         if action == "log":
             return {"log": data}
-
-        print("error in payload")
 
     class Meta:
         type = ProvisionEvent
@@ -70,7 +66,6 @@ class MyProvisionsEvent(BalderSubscription):
         waiter, _ = models.Waiter.objects.get_or_create(
             registry=registry, identifier=identifier
         )
-        print(f"Connected Provisions Waiter for {waiter}")
         return [f"provisions_waiter_{waiter.unique}"]
 
     def publish(payload, info, *args, **kwargs):

@@ -30,7 +30,6 @@ def list_provisions(m: ProvisionList, agent: models.Agent, **kwargs):
         provisions = models.Provision.objects.filter(agent=agent).exclude(
             status__in=[
                 ProvisionStatus.CANCELLED,
-                ProvisionStatus.CANCELING,
             ]
         )
 
@@ -291,7 +290,6 @@ def activate_provision(m: ProvisionChangedMessage, agent: models.Agent):
             ):
                 res.status = ReservationStatus.ACTIVE
                 res.save()
-                print("Nanananan")
                 forward += [
                     ReservationChangedMessage(
                         queue=res.waiter.queue,

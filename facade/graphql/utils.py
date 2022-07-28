@@ -17,7 +17,6 @@ for app in apps.get_app_configs():
             f"{app.label}_{model.__name__}".replace(" ", "_").upper()
         ] = model
 
-print(guarded_models)
 
 AvailableModelsEnum = type(
     "AvailableModels",

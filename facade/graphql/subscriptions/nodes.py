@@ -16,7 +16,6 @@ class NodesEvent(BalderSubscription):
 
     @bounced(only_jwt=True)
     def subscribe(root, info, *args, **kwargs):
-        print(f"nodes_user_{info.context.user.id}")
         return [f"nodes_user_{info.context.user.id}", "all_nodes"]
 
     def publish(payload, info, *args, **kwargs):
@@ -43,14 +42,12 @@ class NodeDetailEvent(BalderSubscription):
 
     @bounced(only_jwt=True)
     def subscribe(root, info, id):
-        print("NODE IS BEEING WATCHED BIIIITCH")
         return [f"node_{id}"]
 
     def publish(payload, info, *args, **kwargs):
         payload = payload["payload"]
         action = payload["action"]
         data = payload["data"]
-        print("Updated")
 
         if action == "updated":
             return data

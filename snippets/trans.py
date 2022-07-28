@@ -241,7 +241,6 @@ def agent_add_reservation_to_provision(
     events = []
 
     res_params = ReserveParams(**res.params)
-    print(res_params)
 
     viable_provisions_amount = min(
         res_params.minimalInstances, res_params.desiredInstances

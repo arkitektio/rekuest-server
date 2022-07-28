@@ -122,12 +122,8 @@ ASGI_APPLICATION = "arkitekt.asgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": conf.postgres.db_name,
-        "USER": conf.postgres.user,
-        "PASSWORD": conf.postgres.password,
-        "HOST": conf.postgres.host,
-        "PORT": conf.postgres.port,
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": "mydatabase",
     }
 }
 

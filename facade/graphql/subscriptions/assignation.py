@@ -39,8 +39,6 @@ class AssignationEventSubscription(BalderSubscription):
         if action == "update":
             return {"update": models.Assignation.objects.get(id=data)}
 
-        print("error in payload")
-
     class Meta:
         type = AssignationEvent
         operation = "assignationEvent"

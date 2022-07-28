@@ -18,7 +18,6 @@ class WaiterSubscription(BalderSubscription):
 
     @bounced(only_jwt=True)
     def subscribe(root, info, *args, **kwargs):
-        print(f"waiter_user_{info.context.user.id}")
         return [
             WaiterSubscription.WAITER_FOR_USERID(info.context.user.id),
             "all_waiters",

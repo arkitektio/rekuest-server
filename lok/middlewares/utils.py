@@ -18,8 +18,9 @@ def update_or_create_herre(decoded):
         try:
             user = get_user_model().objects.get(email=decoded["email"])
             if hasattr(user, "roles"):
-                user.roles = decoded["roles"]
-            user.save()
+                if user.roles != decoded["roles"]:
+                    user.roles = decoded["roles"]
+                    user.save()
         except ObjectDoesNotExist:
             user = get_user_model()(
                 email=decoded["email"], username=f"Lok {decoded['email']}"

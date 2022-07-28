@@ -53,6 +53,13 @@ def template_post_save(sender, instance=None, created=None, **kwargs):
         assign_perm("providable", instance.registry.user, instance)
 
 
+@receiver(post_save, sender=Agent)
+def template_post_save(sender, instance=None, created=None, **kwargs):
+
+    if created:
+        assign_perm("can_provide_on", instance.registry.user, instance)
+
+
 @receiver(post_save, sender=AssignationLog)
 def ass_log_post_save(sender, instance=None, created=None, **kwargs):
     from facade.graphql.subscriptions import AssignationEventSubscription

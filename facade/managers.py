@@ -1,3 +1,4 @@
+from multiprocessing.managers import BaseManager
 import re
 from typing import Any, List, Optional, Tuple
 from django.db.models.manager import Manager
@@ -38,82 +39,6 @@ class ScheduleException(Exception):
 
 
 class ReservationManager(Manager):
-    def reschedule(self, id: str) -> Tuple[Any, List[HareMessage]]:
-        from .models import Agent, Provision, Template
-
-        res = super().get(id=id)
-
-        params = ReserveParams(
-            **res.params
-        )  # TODO: Get default from settings or policy?
-
-        forwards = (
-            []
-        )  # messages with bind information that need to be send to the agent
-
-        template = Template.objects.filter(node=res.node).first()
-        if not template:
-            raise ScheduleException(f"Could not find templates for node {res.node}")
-
-        for prov in res.provisions.all():
-            # All provisions queues will receive a reserve request (even if they are not created?)
-            t = UnreserveHareMessage(
-                queue=prov.bound.queue, reservation=res.id, provision=prov.id
-            )
-            forwards.append(t)
-
-        res.provisions.clear()
-
-        provisions = []
-
-        for prov in (
-            Provision.objects.filter(template=template)
-            .exclude(status__in=[ProvisionStatus.CANCELLED, ProvisionStatus.CRITICAL])
-            .all()
-        ):
-            # All provisions queues will receive a reserve request (even if they are not created?)
-
-            t = ReserveHareMessage(
-                queue=prov.agent.queue, reservation=res.id, provision=prov.id
-            )
-
-            provisions.reservations.add(prov)
-            forwards.append(t)
-
-        # filter unnecessary messages
-
-        while len(provisions) < (params.minimalInstances or 1):
-
-            agent = Agent.objects.filter(registry=template.registry).first()
-            if not agent:
-                ScheduleException("No Agent found")
-
-            prov = Provision.objects.create(
-                template=template, agent=agent, reservation=res
-            )
-            prov.reservations.add(res)
-            prov.save()
-
-            t = ProvideHareMessage(
-                queue=prov.agent.queue,
-                provision=prov.id,
-                template=template.id,
-                status=prov.status,
-                reservation=res.id,
-            )
-
-            forwards.append(t)
-            provisions.append(prov)
-
-        res.provisions.add(*provisions)
-        res.status = ReservationStatus.REROUTING
-
-        res.save()
-
-        print(res.status)
-
-        return res, forwards
-
     def schedule(
         self,
         params: Optional[ReserveParams] = None,
@@ -135,69 +60,93 @@ class ReservationManager(Manager):
         """
         from .models import Provision, Template, Agent, Node
 
-        params: ReserveParams = (
-            params or ReserveParams()
-        )  # TODO: Get default from settings or policy?
+        params: ReserveParams = params or ReserveParams()
 
-        forwards = (
-            []
-        )  # messages with bind information that need to be send to the agent
+        forwards = []
+        # messages with bind information that need to be send to the agent
 
-        templates = get_objects_for_user(waiter.registry.user, "facade.providable")
-        t = templates.filter(node_id=node).first()
-        if not t:
-            node = Node.objects.get(id=node)
-            raise ScheduleException(
-                f"Could not find providable templates for node {node}"
+        try:
+            res = super().get(node_id=node, params=params.dict(), waiter=waiter)
+
+        except self.model.DoesNotExist:
+
+            res = super().create(
+                node_id=node,
+                template_id=template,
+                waiter=waiter,
+                params=params.dict(),
+                provision=provision,
+                title=title,
             )
 
-        res = super().create(
-            node_id=node,
-            template_id=template,
-            waiter=waiter,
-            params=params.dict(),
-            provision=provision,
-        )
+            linked_provisions = []
 
-        provisions = []
+            if node is not None:
 
-        linkable_provisions = get_objects_for_user(
-            waiter.registry.user, "facade.can_link_to"
-        )
-        for prov in linkable_provisions.filter(template=t).all():
-            # All provisions queues will receive a reserve request (even if they are not created?)
+                # templates: BaseManager = get_objects_for_user(
+                #     waiter.registry.user, "facade.providable"
+                # )
+                #  TODO: Do we really need the providable permission?
+                templates = Template.objects
+                templates = templates.filter(node_id=node).all()
 
-            t = ReserveHareMessage(
-                queue=prov.agent.queue, reservation=res.id, provision=prov.id
-            )
+                # We are doing a round robin here, all templates
+                for template in templates:
+                    if len(linked_provisions) >= params.desiredInstances:
+                        break
 
-            provisions.append(prov)
-            forwards.append(t)
+                    linkable_provisions = get_objects_for_user(
+                        waiter.registry.user, "facade.can_link_to"
+                    )
 
-        while len(provisions) < (params.minimalInstances or 1):
+                    for prov in linkable_provisions.filter(template=template).all():
+                        if len(linked_provisions) >= params.desiredInstances:
+                            break
 
-            agent = Agent.objects.filter(registry=t.registry).first()
-            if not agent:
-                raise ScheduleException("No Agent found")
+                        prov, linkforwards = prov.link(res)
+                        linked_provisions.append(prov)
+                        forwards += linkforwards
 
-            prov = Provision.objects.create(template=t, agent=agent, reservation=res)
-            prov.reservations.add(res)
-            prov.save()
+                if len(linked_provisions) < params.desiredInstances:
 
-            t = ProvideHareMessage(
-                queue=agent.queue,
-                provision=prov.id,
-                template=t.id,
-                status=prov.status,
-                reservation=res.id,
-            )
+                    for template in templates:
+                        if len(linked_provisions) >= params.desiredInstances:
+                            break
 
-            forwards.append(t)
-            provisions.append(prov)
+                        linkable_agents = get_objects_for_user(
+                            waiter.registry.user, "facade.can_provide_on"
+                        )
 
-        res.provisions.add(*provisions)
+                        available_agents = linkable_agents.filter(
+                            registry=template.registry
+                        ).all()
 
-        res.save()
+                        for agent in available_agents:
+                            if len(linked_provisions) >= params.desiredInstances:
+                                break
+
+                            prov = Provision.objects.create(
+                                template=template, agent=agent, reservation=res
+                            )
+
+                            prov, linkforwards = prov.link(res)
+                            linked_provisions.append(prov)
+                            forwards += linkforwards
+
+            else:
+                raise NotImplementedError(
+                    "No node specified. Template reservation not implemented yet."
+                )
+
+            res.provisions.add(*linked_provisions)
+
+            if len(res.provisions.all()) >= params.minimalInstances:
+                res.viable = True
+
+            if len(res.provisions.all()) >= params.desiredInstances:
+                res.happy = True
+
+            res.save()
 
         return res, forwards
 

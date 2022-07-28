@@ -45,7 +45,6 @@ class BalderInheritedModel(graphene.Interface):
 
     @classmethod
     def resolve_inherited(cls, instance, info):
-        print(cls, instance, cls._meta.child_models)
         for key, value in cls._meta.child_models.items():
             attr_name = key.__name__.lower()
             if hasattr(instance, attr_name):

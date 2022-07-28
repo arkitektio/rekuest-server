@@ -6,7 +6,7 @@ from balder.types import BalderMutation
 from lok import bounced
 import graphene
 import logging
-
+from hare.connection import rmq
 
 logger = logging.getLogger(__name__)  #
 
@@ -30,7 +30,9 @@ class LinkMutation(BalderMutation):
             ["facade.can_link_to"], prov
         ), "You don't have permission to link to this provision"
 
-        prov.reservations.add(res)
-        prov.save()
+        prov, forwards = prov.link(res)
+
+        for forward_res in forwards:
+            rmq.publish(forward_res.queue, forward_res.to_message())
 
         return prov

@@ -5,6 +5,7 @@ import graphene
 import logging
 from facade import models, types
 from facade.enums import ProvisionStatus
+from hare.connection import rmq
 
 logger = logging.getLogger(__name__)  #
 
@@ -27,7 +28,9 @@ class UnprovideMutation(BalderMutation):
     def mutate(root, info, provision=None):
 
         provision = models.Provision.objects.get(id=provision)
-        provision.status == ProvisionStatus.CANCELING
-        provision.save()
+        prov, forwards = provision.unprovide()
+
+        for forward_res in forwards:
+            rmq.publish(forward_res.queue, forward_res.to_message())
 
         return provision

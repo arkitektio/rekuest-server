@@ -51,7 +51,7 @@ class GatewayConsumer(AsyncConsumer):
         self.progress_name = self.progress_queue.queue
 
     async def on_rabbit_in(self, aiomessage):
-        print(aiomessage)
+        pass
 
     async def forward(self, message: MessageModel, routing_key):
         """Forwards the message to our processing layer

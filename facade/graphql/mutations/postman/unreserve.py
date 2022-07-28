@@ -7,6 +7,7 @@ from balder.types import BalderMutation
 from lok import bounced
 import graphene
 import logging
+from hare.connection import rmq
 
 logger = logging.getLogger(__name__)  #
 
@@ -24,12 +25,12 @@ class UnreserveMutation(BalderMutation):
 
     @bounced(only_jwt=True)
     def mutate(root, info, id=None):
-        reference = str(uuid.uuid4())
-        bounce = info.context.bounced
 
         res = Reservation.objects.get(id=id)
-        res.status = ReservationStatus.CANCELING
-        res.save()
 
+        res, forward = res.unreserve()
+
+        for forward_res in forward:
+            rmq.publish(forward_res.queue, forward_res.to_message())
 
         return res

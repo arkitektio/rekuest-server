@@ -69,7 +69,6 @@ def activate_provision(prov: Provision, message: ProvideTransitionMessage):
             logger.info(f"[green] Listening to {res}")
 
             res_params = ReserveParams(**res.params)
-            print(res_params)
             viable_provisions_amount = min(
                 res_params.minimalInstances, res_params.desiredInstances
             )

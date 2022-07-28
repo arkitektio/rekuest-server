@@ -6,6 +6,9 @@ from asgiref.sync import sync_to_async
 import ujson
 from lok.bouncer.utils import bounced_ws
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PostmanConsumer(AsyncWebsocketConsumer):
@@ -23,7 +26,6 @@ class PostmanConsumer(AsyncWebsocketConsumer):
             .get(b"instance_id", [b"default"])[0]
             .decode("utf8")
         )
-        print(instance_id)
 
         if self.user is None or self.user.is_anonymous:
             registry, _ = Registry.objects.get_or_create(user=None, app=self.app)
@@ -69,10 +71,9 @@ class PostmanConsumer(AsyncWebsocketConsumer):
                 self.incoming_queue.task_done()
 
         except Exception as e:
-            print(e)
+            logger.exception(e)
 
     async def reply(self, m: JSONMessage):  #
-        print("Sending to client")
         await self.send(text_data=m.json())
 
     async def on_reserve(self, message):

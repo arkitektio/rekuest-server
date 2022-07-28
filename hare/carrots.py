@@ -20,6 +20,8 @@ class HareMessageTypes(str, Enum):
     PROVIDE = "PROVIDE"
     RESERVE = "RESERVE"
 
+    UNPROVIDE = "UNPROVIDE"
+
     UNRESERVE = "UNRESERVE"
 
     ASSIGN = "ASSIGN"
@@ -64,6 +66,11 @@ class ReserveHareMessage(HareMessage):
     type: Literal[HareMessageTypes.RESERVE] = HareMessageTypes.RESERVE
     provision: str
     reservation: str
+
+
+class UnprovideHareMessage(HareMessage):
+    type: Literal[HareMessageTypes.UNPROVIDE] = HareMessageTypes.UNPROVIDE
+    provision: str
 
 
 class UnrouteHareMessage(HareMessage):

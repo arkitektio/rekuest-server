@@ -55,16 +55,12 @@ class HarePostmanConsumer(PostmanConsumer):
     async def on_rmq_message_in(self, rmq_message: aiormq.abc.DeliveredMessage):
         try:
             json_dict = ujson.loads(rmq_message.body)
-            print("Reveiced on Waiter")
             type = json_dict.pop("type")
-            print(type)
             if type == HareMessageTypes.RESERVE_CHANGED:
                 m = ReserveSubUpdate(**json_dict)
-                print(m)
                 await self.reply(m)
             if type == HareMessageTypes.ASSIGN_CHANGED:
                 m = AssignSubUpdate(**json_dict)
-                print(m)
                 await self.reply(m)
 
             if type == PostmanSubMessageTypes.ASSIGN_UPDATE:
@@ -72,7 +68,7 @@ class HarePostmanConsumer(PostmanConsumer):
                 await self.reply(m)
 
         except Exception:
-            console.print_exception()
+            logger.exception(exc_info=True)
 
         self.channel.basic_ack(rmq_message.delivery.delivery_tag)
 
@@ -104,7 +100,6 @@ class HarePostmanConsumer(PostmanConsumer):
             await self.reply(r)
 
         for f in forwards:
-            print(f)
             await self.forward(f)
 
     async def on_unassign(self, message: UnassignPub):

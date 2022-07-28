@@ -69,29 +69,12 @@ class ReserveMutation(BalderMutation):
             node or template
         ), "Please provide either a node or template you want to reserve"
 
-        try:
-            res = Reservation.objects.get(
-                node_id=node, params=params.dict(), waiter=waiter
-            )
-            res.statusmessage = "Wait for your reservation to come alive"
+        res, cr = Reservation.objects.get_or_create(
+            node_id=node, params=params.dict(), waiter=waiter
+        )
+        res, forwards = res.schedule()
 
-            if (
-                res.status == ReservationStatus.CANCELLED
-                or res.status == ReservationStatus.CANCELING
-                or res.status == ReservationStatus.REROUTING
-            ):
-                res.statusmessage = (
-                    "This reservation was cancelled and we need to reschedule it."
-                )
-
-                res, forward = Reservation.objects.reschedule(id=res.id)
-
-        except Reservation.DoesNotExist:
-            res, forward = Reservation.objects.schedule(
-                node=node, params=params, waiter=waiter, title=title
-            )
-
-            for forward_res in forward:
-                rmq.publish(forward_res.queue, forward_res.to_message())
+        for forward_res in forwards:
+            rmq.publish(forward_res.queue, forward_res.to_message())
 
         return res

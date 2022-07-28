@@ -313,7 +313,6 @@ class AgentConsumer(BaseConsumer):  # TODO: Seperate that bitch
         self, provision_reference, aiomessage: aiormq.abc.DeliveredMessage
     ):
         message = expandFromRabbitMessage(aiomessage)
-        print("RECEIVED", aiomessage)
 
         try:
             if isinstance(message, BouncedReserveMessage):

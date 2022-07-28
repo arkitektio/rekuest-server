@@ -27,7 +27,6 @@ class AgentConsumer(AsyncWebsocketConsumer):
             .get(b"instance_id", [b"default"])[0]
             .decode("utf8")
         )
-        print(instance_id)
 
         if self.user is None or self.user.is_anonymous:
             registry, _ = Registry.objects.get_or_create(user=None, app=self.app)
@@ -83,7 +82,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
                 self.incoming_queue.task_done()
 
         except Exception as e:
-            print(e)
+            logger.exception(e)
 
     async def reply(self, m: JSONMessage):  #
         await self.send(text_data=m.json())

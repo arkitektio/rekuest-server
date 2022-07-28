@@ -1,3 +1,14 @@
+from turtle import forward
+from typing import List, Tuple
+from hare.carrots import (
+    HareMessage,
+    ProvideHareMessage,
+    ReserveHareMessage,
+    UnprovideHareMessage,
+    UnreserveHareMessage,
+    ReservationChangedMessage,
+)
+from hare.messages import ReserveParams
 from lok.models import LokApp
 from facade.managers import NodeManager, ReservationManager
 from facade.fields import (
@@ -24,6 +35,7 @@ from django.contrib.auth import get_user_model
 import uuid
 import logging
 import requests
+from guardian.shortcuts import get_objects_for_user
 
 logger = logging.getLogger(__name__)
 
@@ -98,26 +110,6 @@ class MirrorRepository(Repository):
     url = models.URLField(null=True, blank=True, unique=True, default="None")
     updated_at = models.DateTimeField(auto_now=True)
 
-    def scan(self, force=False):
-        result = requests.post(
-            self.url,
-            data={
-                "query": """
-                query Nodes{
-                    __Nodes {
-                        name
-                    }
-                    
-                    __Models {
-                        name
-                    }
-
-                }
-            """
-            },
-        )
-        print(result)
-
     def __str__(self):
         return f"{self.name} at {self.url}"
 
@@ -153,6 +145,7 @@ class Agent(models.Model):
     )
 
     class Meta:
+        permissions = [("can_provide_on", "Can provide on this Agent")]
         constraints = [
             models.UniqueConstraint(
                 fields=["registry", "identifier"],
@@ -412,6 +405,9 @@ class Provision(models.Model):
         blank=True,
     )
 
+    dropped = models.BooleanField(
+        default=True, help_text="Is the connection to this Provision lost?"
+    )
     # Platform specific Details (non relational Data)
     params = models.JSONField(
         null=True,
@@ -477,6 +473,181 @@ class Provision(models.Model):
         """
         return [res.queue for res in self.reservations.all()]
 
+    def link(self, reservation) -> Tuple["Provision", List[HareMessage]]:
+        """
+        Link this provision to a reservation
+        """
+        self.reservations.add(reservation)
+        forwards = []
+
+        params = ReserveParams(**reservation.params)
+
+        active_provisions = reservation.provisions.filter(
+            status=ProvisionStatus.ACTIVE.value, dropped=False
+        ).all()
+
+        if len(active_provisions) + 1 >= params.minimalInstances:
+            # +1 because we have not propagated our status yet
+            res, resforwards = reservation.activate()
+            forwards += resforwards
+
+        if len(self.reservations.all()) == 1:
+            # this means we had previously no reservations, so we need to signal that we are active
+            forwards.append(
+                ProvideHareMessage(
+                    queue=self.agent.queue,
+                    provision=self.id,
+                    reservation=reservation.id,
+                )
+            )
+        else:
+            forwards.append(
+                ReserveHareMessage(
+                    queue=self.agent.queue,
+                    reservation=reservation.id,
+                    provision=self.id,
+                )
+            )
+        self.save()
+        return self, forwards
+
+    def unlink(self, reservation) -> Tuple["Provision", List[HareMessage]]:
+        """
+        Link this provision to a reservation
+        """
+        self.reservations.remove(reservation)
+        forwards = []
+
+        params = ReserveParams(**reservation.params)
+        active_provisions = reservation.provisions.filter(
+            status=ProvisionStatus.ACTIVE.value, dropped=False
+        ).all()
+
+        if (
+            len(active_provisions) - 1 < params.minimalInstances
+        ):  # minus one because we self *will* be critical
+            res, resforwards = reservation.critical()
+            forwards += resforwards
+
+        if len(self.reservations.all()) == 0:
+            self.status = ProvisionStatus.CANCELING.value
+            # If we have no reservations left, we can unprovide this provision
+            forwards.append(
+                UnprovideHareMessage(queue=self.agent.queue, provision=self.id)
+            )
+        else:
+            forwards.append(
+                UnreserveHareMessage(
+                    queue=self.agent.queue,
+                    reservation=reservation.id,
+                    provision=self.id,
+                )
+            )
+        self.save()
+        return self, forwards
+
+    def activate(self) -> Tuple["Provision", List[HareMessage]]:
+        """
+        Activate this provision
+        """
+        self.status = ProvisionStatus.ACTIVE.value
+        forwards = []
+        for reservation in self.reservations.all():
+            if reservation.status == ReservationStatus.ACTIVE.value:
+                # omiting reservations that are already active
+                continue
+
+            params = ReserveParams(**reservation.params)
+
+            active_provisions = reservation.provisions.filter(
+                status=ProvisionStatus.ACTIVE.value, dropped=False
+            ).all()
+
+            if len(active_provisions) + 1 >= params.minimalInstances:
+                # +1 because we have not propagated our status yet
+                res, resforwards = reservation.activate()
+                forwards += resforwards
+
+        self.save()
+        return self, forwards
+
+    def critical(self) -> Tuple["Provision", List[HareMessage]]:
+        """
+        Critical this provision
+        """
+        self.status = ProvisionStatus.CRITICAL.value
+        forwards = []
+        for reservation in self.reservations.all():
+            if reservation.status == ReservationStatus.CRITICAL.value:
+                # omiting reservations that are already active
+                continue
+
+            params = ReserveParams(**reservation.params)
+
+            active_provisions = reservation.provisions.filter(
+                status=ProvisionStatus.ACTIVE.value, dropped=False
+            ).all()
+
+            if (
+                len(active_provisions) - 1 < params.minimalInstances
+            ):  # minus one because we self *will* be critical
+                res, resforwards = reservation.critical()
+                forwards += resforwards
+
+        self.save()
+        return self, forwards
+
+    def drop(self) -> Tuple["Provision", List[HareMessage]]:
+        """Drop this Provision (gets called by the agent)"""
+        self.dropped = True
+        forwards = []
+        for reservation in self.reservations.all():
+            if reservation.status == ReservationStatus.CRITICAL.value:
+                # omiting reservations that are already active
+                continue
+
+            params = ReserveParams(**reservation.params)
+
+            active_provisions = reservation.provisions.filter(
+                status=ProvisionStatus.ACTIVE.value, dropped=False
+            ).all()
+
+            if (
+                len(active_provisions) - 1 < params.minimalInstances
+            ):  # minus one because we self *will* be critical
+                res, resforwards = reservation.critical()
+                forwards += resforwards
+
+        self.save()
+        return self, forwards
+
+    def unprovide(self) -> Tuple["Provision", List[HareMessage]]:
+        self.status = ProvisionStatus.CANCELING.value
+        forwards = []
+        for reservation in self.reservations.all():
+            if reservation.status == ReservationStatus.CRITICAL.value:
+                # omiting reservations that are already active
+                continue
+
+            params = ReserveParams(**reservation.params)
+
+            active_provisions = reservation.provisions.filter(
+                status=ProvisionStatus.ACTIVE.value, dropped=False
+            ).all()
+
+            if (
+                len(active_provisions) - 1 < params.minimalInstances
+            ):  # minus one because we self *will* be critical
+                res, resforwards = reservation.critical()
+                forwards += resforwards
+
+            self.reservations.remove(reservation)
+
+        forwards.append(UnprovideHareMessage(queue=self.agent.queue, provision=self.id))
+
+        self.save()
+        return self, forwards
+
 
 class ReservationLog(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
@@ -512,6 +683,15 @@ class Reservation(models.Model):
         unique=True,
         default=uuid.uuid4,
         help_text="The channel of this Reservation",
+    )
+
+    happy = models.BooleanField(
+        default=False,
+        help_text="Is this reservation happy? (aka: does it have as many linked provisions as desired",
+    )
+    viable = models.BooleanField(
+        default=False,
+        help_text="Is this reservation viable? (aka: does it have as many linked provisions as minimal",
     )
 
     # 1 Inputs to the the Reservation (it can be either already a template to provision or just a node)
@@ -635,6 +815,130 @@ class Reservation(models.Model):
     @property
     def queue(self):
         return f"reservation_{self.channel}"
+
+    def unreserve(self) -> Tuple["Reservation", List[HareMessage]]:
+        """Unreserve this reservation"""
+        forwards = []
+        self.status = ReservationStatus.CANCELLED
+
+        for provision in self.provisions.all():
+            prov, provforwards = provision.unlink(self)  # Unlink from Provision
+            forwards += provforwards
+
+        self.save()
+        return self, forwards
+
+    def reschedule(self) -> Tuple["Reservation", List[HareMessage]]:
+        """Unreserve this reservation"""
+        forwards = []
+        self.status = ReservationStatus.CANCELLED
+
+        for provision in self.provisions.all():
+            prov, provforwards = provision.unlink(self)  # Unlink from Provision
+            forwards += provforwards
+
+        self.save()
+        return self, forwards
+
+    def schedule(self) -> Tuple["Reservation", List[HareMessage]]:
+        """Schedule this reservation"""
+        forwards = []
+        linked_provisions = []
+        params = ReserveParams(**self.params)
+
+        if self.node is not None:
+
+            templates = Template.objects
+            templates = templates.filter(node=self.node).all()
+
+            # We are doing a round robin here, all templates
+            for template in templates:
+                if len(linked_provisions) >= params.desiredInstances:
+                    break
+
+                linkable_provisions = get_objects_for_user(
+                    self.waiter.registry.user, "facade.can_link_to"
+                )
+
+                for prov in linkable_provisions.filter(template=template).all():
+                    if len(linked_provisions) >= params.desiredInstances:
+                        break
+
+                    prov, linkforwards = prov.link(self)
+                    linked_provisions.append(prov)
+                    forwards += linkforwards
+
+                if len(linked_provisions) < params.desiredInstances:
+
+                    for template in templates:
+                        if len(linked_provisions) >= params.desiredInstances:
+                            break
+
+                        linkable_agents = get_objects_for_user(
+                            self.waiter.registry.user, "facade.can_provide_on"
+                        )
+
+                        available_agents = linkable_agents.filter(
+                            registry=template.registry
+                        ).all()
+
+                        for agent in available_agents:
+                            if len(linked_provisions) >= params.desiredInstances:
+                                break
+
+                            prov = Provision.objects.create(
+                                template=template, agent=agent, reservation=self
+                            )
+
+                            prov, linkforwards = prov.link(self)
+                            linked_provisions.append(prov)
+                            forwards += linkforwards
+
+        else:
+            raise NotImplementedError(
+                "No node specified. Template reservation not implemented yet."
+            )
+
+        self.provisions.add(*linked_provisions)
+        self.status = ReservationStatus.ROUTING
+
+        if len(self.provisions.all()) >= params.minimalInstances:
+            self.viable = True
+
+        if len(self.provisions.all()) >= params.desiredInstances:
+            self.happy = True
+
+        self.save()
+
+        return self, forwards
+
+    def activate(self) -> Tuple["Reservation", List[HareMessage]]:
+        """Activate the reservation"""
+        self.status = ReservationStatus.ACTIVE
+        forwards = [
+            ReservationChangedMessage(
+                queue=self.waiter.queue,
+                reservation=self.id,
+                status=ReservationStatus.ACTIVE.value,
+            )
+        ]
+        self.viable = True
+        self.save()
+        return self, forwards
+
+    def critical(self) -> Tuple["Reservation", List[HareMessage]]:
+        """Activate the reservation"""
+        self.status = ReservationStatus.CRITICAL
+        forwards = [
+            ReservationChangedMessage(
+                queue=self.waiter.queue,
+                reservation=self.id,
+                status=ReservationStatus.CRITICAL.value,
+            )
+        ]
+        self.viable = False
+        self.save()
+        return self, forwards
 
 
 class Assignation(models.Model):

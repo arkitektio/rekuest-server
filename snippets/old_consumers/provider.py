@@ -60,7 +60,8 @@ def deactivateProvider(provider: Provider):
     provisions = Provision.objects.filter(template__provider_id=provider.id)
 
     for provision in provisions:
-        print(provision)
+
+        continue
         # TODO: Maybe send a signal here to the provisions
 
     provider.active = False

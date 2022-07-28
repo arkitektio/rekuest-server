@@ -5,6 +5,7 @@ from hare.carrots import (
     ProvideHareMessage,
     ReserveHareMessage,
     UnassignHareMessage,
+    UnprovideHareMessage,
     UnreserveHareMessage,
 )
 from hare.connection import rmq
@@ -67,8 +68,11 @@ class HareAgentConsumer(AgentConsumer):
             if type == HareMessageTypes.PROVIDE:
                 await self.on_provide(ProvideHareMessage(**json_dict))
 
+            if type == HareMessageTypes.UNPROVIDE:
+                await self.on_unprovide(UnprovideHareMessage(**json_dict))
+
         except Exception:
-            console.print_exception()
+            logger.exception("Error on on_rmq_message_in")
 
         self.channel.basic_ack(rmq_message.delivery.delivery_tag)
 
@@ -205,6 +209,18 @@ class HareAgentConsumer(AgentConsumer):
         for r in replies:
             await self.reply(r)
 
+    async def on_unprovide(self, message: UnprovideHareMessage):
+        logger.warning(f"Agent received UNPROVIDE {message}")
+
+        replies = [
+            UnprovideSubMessage(
+                provision=message.provision,
+            )
+        ]
+
+        for r in replies:
+            await self.reply(r)
+
     async def disconnect(self, close_code):
         try:
             logger.warning(f"Disconnecting Postman with close_code {close_code}")
@@ -212,7 +228,6 @@ class HareAgentConsumer(AgentConsumer):
             forwards = await disconnect_agent(self.agent, close_code)
 
             for r in forwards:
-                print(r)
                 await self.forward(r)
 
             await self.channel.close()

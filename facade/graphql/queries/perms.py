@@ -6,6 +6,7 @@ from facade import types
 from balder.registry import register_type
 import graphene
 from guardian.shortcuts import get_users_with_perms, get_groups_with_perms
+from django.contrib.contenttypes.models import ContentType
 
 
 class UserAssignment(graphene.ObjectType):
@@ -56,11 +57,12 @@ class PermissionsOf(BalderQuery):
 
     def resolve(self, info, model, id):
 
-        ct = ct_types[model]
-        f = Permission.objects.filter(content_type=ct)
+        ct = guarded_models[model]
+        f = Permission.objects.filter(
+            content_type=ContentType.objects.get_for_model(ct)
+        )
 
-        ct = ct_types[model]
-        model = ct.model_class()
+        model = guarded_models[model]
 
         instance = model.objects.get(id=id)
 

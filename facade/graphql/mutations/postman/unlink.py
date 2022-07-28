@@ -6,6 +6,8 @@ from balder.types import BalderMutation
 from lok import bounced
 import graphene
 import logging
+from hare.connection import rmq
+
 
 logger = logging.getLogger(__name__)  #
 
@@ -26,7 +28,9 @@ class UnlinkMutation(BalderMutation):
         res = Reservation.objects.get(id=reservation)
         prov = Provision.objects.get(id=provision)
 
-        prov.reservations.remove(res)
-        prov.save()
+        prov, forwards = prov.unlink(res)
+
+        for forward_res in forwards:
+            rmq.publish(forward_res.queue, forward_res.to_message())
 
         return prov

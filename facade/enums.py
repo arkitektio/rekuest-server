@@ -20,8 +20,6 @@ class LogLevel(TextChoices):
     EVENT = "EVENT", "Event Level (only handled by plugins)"
 
 
-
-
 class RepositoryType(TextChoices):
     """Repository Types expresses what sort of Repository we are dealing with, e.g is this a local, mirror??"""
 
@@ -74,14 +72,16 @@ class AssignationStatus(TextChoices):
     DONE = "DONE", "Assignment has finished"
 
 
-
-
 class ReservationStatus(TextChoices):
 
     # Start State
     ROUTING = (
         "ROUTING",
         "Routing (Reservation has been requested but no Topic found yet)",
+    )
+    NON_VIABLE = (
+        "NON_VIABLE",
+        "SHould signal that this reservation is non viable (has less linked provisions than minimalInstances)",
     )
 
     # Life States
@@ -137,8 +137,6 @@ class WaiterStatus(TextChoices):
     VANILLA = "VANILLA", "Complete Vanilla Scenario after a forced restart of"
 
 
-
-
 class ProvisionStatus(TextChoices):
 
     # Start State
@@ -182,4 +180,3 @@ class ProvisionStatus(TextChoices):
         "CANCELLED",
         "Cancelled (Provision was cancelled by the User and will no longer create Topics)",
     )
-
