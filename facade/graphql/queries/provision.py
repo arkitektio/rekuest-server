@@ -1,6 +1,6 @@
 from balder.types import BalderQuery
 from facade import types
-from facade.models import Provision, Reservation
+from facade.models import Provision, Reservation, Agent, Registry
 import graphene
 from lok import bounced
 from guardian.shortcuts import get_objects_for_user
@@ -24,6 +24,7 @@ class Provisions(BalderQuery):
     class Meta:
         type = types.Provision
         list = True
+        operation = "allprovisions"
 
 
 class LinkableProvisions(BalderQuery):
@@ -43,7 +44,7 @@ class LinkableProvisions(BalderQuery):
     class Meta:
         type = types.Provision
         list = True
-        operation = "linkableProvisions"
+        operation = "linkableprovisions"
 
 
 class MyProvisions(BalderQuery):
@@ -69,3 +70,43 @@ class MyProvisions(BalderQuery):
         type = types.Provision
         list = True
         paginate = True
+        operation = "myprovisions"
+
+
+class Provisions(BalderQuery):
+    class Arguments:
+        exclude = graphene.List(
+            ProvisionStatusInput, description="The excluded values", required=False
+        )
+        filter = graphene.List(
+            ProvisionStatusInput, description="The included values", required=False
+        )
+        identifier = graphene.List(
+            graphene.String,
+            description="The agent identifier",
+            required=False,
+            default_value="default",
+        )
+
+    @bounced(anonymous=False)
+    def resolve(root, info, exclude=None, filter=None, identifier="default"):
+
+        creator = info.context.bounced.user
+        app = info.context.bounced.app
+
+        registry, _ = Registry.objects.get_or_create(user=creator, app=app)
+        agent, _ = Agent.objects.get_or_create(registry=registry, identifier=identifier)
+
+        qs = Provision.objects.filter(agent=agent)
+        if filter:
+            qs = qs.filter(status__in=filter)
+        if exclude:
+            qs = qs.exclude(status__in=exclude)
+
+        return qs.all()
+
+    class Meta:
+        type = types.Provision
+        list = True
+        paginate = True
+        operation = "provisions"

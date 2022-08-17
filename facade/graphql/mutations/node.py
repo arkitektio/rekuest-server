@@ -2,8 +2,6 @@ from facade.inputs import ArgPortInput, DefinitionInput, KwargPortInput, ReturnP
 from facade import types
 from facade.models import AppRepository, Node, Structure
 from balder.types import BalderMutation
-from facade.enums import NodeType
-from facade.inputs import NodeTypeInput
 from lok import bounced
 import graphene
 import logging
@@ -29,7 +27,7 @@ class DefineNode(BalderMutation):
         description = definition.description or "No Description"
         name = definition.name
         interfaces = definition.interfaces or []
-        type = definition.type
+        kind = definition.kind
 
         repository, _ = AppRepository.objects.update_or_create(
             app=info.context.bounced.app,
@@ -62,7 +60,7 @@ class DefineNode(BalderMutation):
                 "kwargs": kwargs,
                 "returns": returns,
                 "name": name,
-                "type": type,
+                "kind": kind,
                 "repository": repository,
                 "interfaces": interfaces,
             },

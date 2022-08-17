@@ -14,11 +14,9 @@ class ProvisionEvent(graphene.ObjectType):
     log = graphene.Field(ProvisionLogEvent)
 
 
-class ProvisionEventSubscription(BalderSubscription):
+class ProvisionSubscription(BalderSubscription):
     class Arguments:
-        reference = graphene.ID(
-            description="The reference of the assignation", required=True
-        )
+        id = graphene.ID(description="The reference of the assignation", required=True)
         level = graphene.String(description="The log level for alterations")
 
     @classmethod
@@ -28,8 +26,8 @@ class ProvisionEventSubscription(BalderSubscription):
         )
 
     @bounced(only_jwt=True)
-    def subscribe(root, info, *args, reference=None, level=None):
-        provision = models.Provision.objects.get(reference=reference)
+    def subscribe(root, info, id, level=None):
+        provision = models.Provision.objects.get(id=id)
         return [f"provision_{provision.id}"]
 
     def publish(payload, info, *args, **kwargs):
@@ -42,7 +40,7 @@ class ProvisionEventSubscription(BalderSubscription):
 
     class Meta:
         type = ProvisionEvent
-        operation = "provisionEvent"
+        operation = "provision"
 
 
 class ProvisionsEvent(graphene.ObjectType):
@@ -51,12 +49,11 @@ class ProvisionsEvent(graphene.ObjectType):
     create = graphene.Field(types.Provision)
 
 
-class MyProvisionsEvent(BalderSubscription):
+class ProvisionsSubscription(BalderSubscription):
     class Arguments:
-        identifier = graphene.ID(
+        identifier = graphene.String(
             description="The reference of this waiter", required=True
         )
-        level = graphene.String(description="The log level for alterations")
 
     @bounced(only_jwt=True)
     def subscribe(root, info, identifier, **kwargs):
@@ -66,7 +63,7 @@ class MyProvisionsEvent(BalderSubscription):
         waiter, _ = models.Waiter.objects.get_or_create(
             registry=registry, identifier=identifier
         )
-        return [f"provisions_waiter_{waiter.unique}"]
+        return [f"provisions_{waiter.unique}"]
 
     def publish(payload, info, *args, **kwargs):
         payload = payload["payload"]
@@ -81,3 +78,26 @@ class MyProvisionsEvent(BalderSubscription):
     class Meta:
         type = ProvisionsEvent
         operation = "provisions"
+
+
+class MyProvisionsSubscription(BalderSubscription):
+    class Arguments:
+        pass
+
+    @bounced(only_jwt=True)
+    def subscribe(root, info, identifier, **kwargs):
+        return [f"myprovisions_{info.context.user.id}"]
+
+    def publish(payload, info, *args, **kwargs):
+        payload = payload["payload"]
+        action = payload["action"]
+        data = payload["data"]
+
+        if action == "create":
+            return {"create": data}
+        else:
+            return {"update": data}
+
+    class Meta:
+        type = ProvisionsEvent
+        operation = "myprovisions"

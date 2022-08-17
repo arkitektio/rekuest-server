@@ -16,7 +16,7 @@ get_widget_types = lambda: {
 
 @register_type
 class Widget(graphene.Interface):
-    type = graphene.String()
+    kind = graphene.String(required=True)
     dependencies = graphene.List(
         graphene.String,
         description="The set-keys this widget depends on, check *query parameters*",
@@ -25,7 +25,7 @@ class Widget(graphene.Interface):
     @classmethod
     def resolve_type(cls, instance, info):
         typemap = get_widget_types()
-        _type = instance.get("type", instance.get("typename"))
+        _type = instance.get("kind")
         return typemap.get(_type, Widget)
 
 

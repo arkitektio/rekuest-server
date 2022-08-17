@@ -1,4 +1,3 @@
-from facade.enums import ReservationStatus
 from facade.models import Reservation
 from facade import types
 import uuid

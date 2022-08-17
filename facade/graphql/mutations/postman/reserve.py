@@ -1,8 +1,6 @@
-from typing import List
 import uuid
 from facade import types
-from facade.enums import ReservationStatus
-from facade.models import Reservation, Waiter, Registry
+from facade.models import Provision, Reservation, Waiter, Registry
 from balder.types import BalderMutation
 from lok import bounced
 import graphene
@@ -29,7 +27,9 @@ class ReserveMutation(BalderMutation):
         app_group = graphene.ID(
             description="A unique identifier", required=False, default_value="default"
         )
+        allow_auto_request = graphene.Boolean(required=False)
         imitate = graphene.String(required=False)
+        provision = graphene.ID(required=False)
 
     class Meta:
         type = types.Reservation
@@ -47,6 +47,8 @@ class ReserveMutation(BalderMutation):
         persist=True,
         imitate=None,
         app_group=None,
+        provision=None,
+        allow_auto_request=False,
     ):
         reference = reference or str(uuid.uuid4())
         params = ReserveParams(**params)
@@ -65,16 +67,22 @@ class ReserveMutation(BalderMutation):
             registry=registry, identifier=app_group
         )
 
+        if provision:
+            provision = Provision.objects.get(id=provision)
+
         assert (
             node or template
         ), "Please provide either a node or template you want to reserve"
 
         res, cr = Reservation.objects.get_or_create(
-            node_id=node, params=params.dict(), waiter=waiter
+            node_id=node, params=params.dict(), waiter=waiter, provision=provision
         )
-        res, forwards = res.schedule()
+        if cr:
+            res, forwards = res.schedule()
 
-        for forward_res in forwards:
-            rmq.publish(forward_res.queue, forward_res.to_message())
+            for forward_res in forwards:
+                rmq.publish(forward_res.queue, forward_res.to_message())
 
+        res.allow_auto_request = allow_auto_request
+        res.save()
         return res

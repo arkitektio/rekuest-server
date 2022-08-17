@@ -1,5 +1,6 @@
 from facade.enums import AssignationStatus, ReservationStatus
 from facade.models import Registry, Reservation, Waiter
+from facade.scalars import AnyInput
 from facade import types, models
 import uuid
 from balder.types import BalderMutation
@@ -21,7 +22,7 @@ class AssignMutation(BalderMutation):
     class Arguments:
         reservation = graphene.ID(required=True)
         args = graphene.List(
-            GenericScalar,
+            AnyInput,
             required=True,
         )
         kwargs = GenericScalar(description="Additional Params")

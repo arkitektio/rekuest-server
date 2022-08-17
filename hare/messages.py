@@ -40,8 +40,8 @@ class ProvideTactic(str, Enum):
 
 
 class ReserveParams(BaseModel):
-    desiredInstances: Optional[int] = 1
-    minimalInstances: Optional[int] = 1
+    desiredInstances: int = 1
+    minimalInstances: int = 1
     registries: Optional[List[str]]
     agents: Optional[List[str]]
     templates: Optional[List[str]]

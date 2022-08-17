@@ -33,19 +33,6 @@ def samp_post_save(sender, instance=None, created=None, **kwargs):
     )
 
 
-@receiver(post_save, sender=Reservation)
-def res_post_save(sender, instance=None, created=None, **kwargs):
-    from facade.graphql.subscriptions import ReservationsSubscription
-
-    logging.error("asdasd")
-    if instance.waiter:
-        logging.error("CALLLLED")
-        ReservationsSubscription.broadcast(
-            {"action": "create" if created else "update", "data": instance},
-            [f"reservations_waiter_{instance.waiter.unique}"],
-        )
-
-
 @receiver(post_save, sender=Template)
 def template_post_save(sender, instance=None, created=None, **kwargs):
 
@@ -62,12 +49,11 @@ def template_post_save(sender, instance=None, created=None, **kwargs):
 
 @receiver(post_save, sender=AssignationLog)
 def ass_log_post_save(sender, instance=None, created=None, **kwargs):
-    from facade.graphql.subscriptions import AssignationEventSubscription
+    from facade.graphql.subscriptions import AssignationSubscription
 
     logging.error("asdasd")
     if instance.assignation:
-        logging.error("CALLLLED")
-        AssignationEventSubscription.broadcast(
+        AssignationSubscription.broadcast(
             {"action": "log", "data": instance},
             [f"assignation_{instance.assignation.id}"],
         )
@@ -75,21 +61,30 @@ def ass_log_post_save(sender, instance=None, created=None, **kwargs):
 
 @receiver(post_save, sender=Assignation)
 def ass_post_save(sender, instance: Assignation = None, created=None, **kwargs):
-    from facade.graphql.subscriptions import TodosSubscription, MyAssignationsEvent
+    from facade.graphql.subscriptions import (
+        RequestsSubscription,
+        MyRequestsSubscription,
+    )
 
-    if instance.reservation.waiter:
-        MyAssignationsEvent.broadcast(
+    if instance.reservation:
+        RequestsSubscription.broadcast(
             {"action": "create" if created else "update", "data": instance},
-            [f"assignations_user_{instance.reservation.waiter.registry.user.id}"],
+            [
+                f"requests_{instance.reservation.waiter.unique}",
+            ],
+        )
+        MyRequestsSubscription.broadcast(
+            {"action": "create" if created else "update", "data": instance},
+            [
+                f"myrequests_{instance.reservation.waiter.registry.user.id}",
+            ],
         )
 
 
 @receiver(post_save, sender=Provision)
 def prov_post_save(sender, instance: Provision = None, created=None, **kwargs):
-    from facade.graphql.subscriptions import MyProvisionsEvent
+    from facade.graphql.subscriptions import ProvisionSubscription
     from facade.enums import ProvisionStatus
-
-    send_to_arkitekt("hallo", "hallo")
 
     if created:
         assign_perm("can_link_to", instance.reservation.waiter.registry.user, instance)
@@ -110,16 +105,33 @@ def prov_post_save(sender, instance: Provision = None, created=None, **kwargs):
             f"Provision {instance}: was requested to be cancelled. Sending this to the agent.."
         )
 
-    if instance.reservation:
-        MyProvisionsEvent.broadcast(
+    if instance.id:
+        ProvisionSubscription.broadcast(
             {"action": "create" if created else "update", "data": instance},
-            [f"provisions_waiter_{instance.reservation.waiter.unique}"],
+            [f"provision_{instance.id}"],
         )
 
 
 @receiver(post_save, sender=Reservation)
 def res_post_save(sender, instance: Reservation = None, created=None, **kwargs):
-    from facade.graphql.subscriptions import MyProvisionsEvent
+    from facade.graphql.subscriptions import (
+        ReservationsSubscription,
+        MyReservationsSubscription,
+    )
+
+    if instance.waiter:
+        ReservationsSubscription.broadcast(
+            {"action": "create" if created else "update", "data": instance},
+            [
+                f"reservations_{instance.waiter.unique}",
+            ],
+        )
+        MyReservationsSubscription.broadcast(
+            {"action": "create" if created else "update", "data": instance},
+            [
+                f"myreservations_{instance.waiter.registry.user.id}",
+            ],
+        )
 
 
 @receiver(post_save, sender=get_user_model())

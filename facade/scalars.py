@@ -27,3 +27,7 @@ class QString(Scalar):
 
 class Any(GenericScalar):
     """Any any field"""
+
+
+class AnyInput(GenericScalar):
+    """Any any field"""

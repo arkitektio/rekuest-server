@@ -20,10 +20,11 @@ class ReservationDetailQuery(BalderQuery):
         operation = "reservation"
 
 
-class Reservations(BalderQuery):
+class AllReservations(BalderQuery):
     class Meta:
         type = types.Reservation
         list = True
+        operation = "allreservations"
 
 
 class MyReservations(BalderQuery):
@@ -49,9 +50,10 @@ class MyReservations(BalderQuery):
         type = types.Reservation
         list = True
         paginate = True
+        operation = "myreservations"
 
 
-class WaitListQuery(BalderQuery):
+class ReservationsQuery(BalderQuery):
     class Arguments:
         exclude = graphene.List(
             ReservationStatusInput, description="The excluded values", required=False
@@ -59,17 +61,17 @@ class WaitListQuery(BalderQuery):
         filter = graphene.List(
             ReservationStatusInput, description="The included values", required=False
         )
-        app_group = graphene.ID(required=False, default_value="main")
+        identifier = graphene.String(required=False, default_value="default")
 
     @bounced(only_jwt=True)
-    def resolve(root, info, exclude=None, filter=None, app_group="main"):
+    def resolve(root, info, exclude=None, filter=None, identifier="default"):
 
         creator = info.context.bounced.user
         app = info.context.bounced.app
 
         registry, _ = models.Registry.objects.get_or_create(user=creator, app=app)
         waiter, _ = models.Waiter.objects.get_or_create(
-            registry=registry, identifier=app_group
+            registry=registry, identifier=identifier
         )
 
         qs = Reservation.objects.filter(waiter=waiter)
@@ -83,4 +85,4 @@ class WaitListQuery(BalderQuery):
     class Meta:
         type = types.Reservation
         list = True
-        operation = "waitlist"
+        operation = "reservations"

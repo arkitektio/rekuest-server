@@ -29,13 +29,8 @@ class HarePostmanConsumer(PostmanConsumer):
         await super().connect()
         self.channel = await rmq.open_channel()
 
-        await self.channel.exchange_declare(
-            exchange=self.waiter.queue, exchange_type="fanout"
-        )
-
-        self.callback_queue = await self.channel.queue_declare(exclusive=True)
-        await self.channel.queue_bind(
-            exchange=self.waiter.queue, queue=self.callback_queue.queue
+        self.callback_queue = await self.channel.queue_declare(
+            self.waiter.queue, auto_delete=True
         )
 
         # Start listening the queue with name 'hello'
@@ -43,7 +38,7 @@ class HarePostmanConsumer(PostmanConsumer):
             self.callback_queue.queue, self.on_rmq_message_in
         )
 
-        logger.debug(f"Listening on '{ self.waiter.queue}'")
+        logger.error(f"Listening on '{ self.waiter.queue}'")
 
     async def forward(self, f: HareMessage):
         logger.debug(f"POSTMAN FORWARDING: {f}")
@@ -55,12 +50,16 @@ class HarePostmanConsumer(PostmanConsumer):
     async def on_rmq_message_in(self, rmq_message: aiormq.abc.DeliveredMessage):
         try:
             json_dict = ujson.loads(rmq_message.body)
+            logger.error(
+                "NOAINDOAWNDÜUIAWNDPOAWINDOAWINDPOAUWINDPOAWIDNOAWINDPOAWINDOAWINDAWODN"
+            )
             type = json_dict.pop("type")
             if type == HareMessageTypes.RESERVE_CHANGED:
                 m = ReserveSubUpdate(**json_dict)
                 await self.reply(m)
             if type == HareMessageTypes.ASSIGN_CHANGED:
                 m = AssignSubUpdate(**json_dict)
+                logger.error("SEOINDING UPDATE TO CONNECTED CLIENT")
                 await self.reply(m)
 
             if type == PostmanSubMessageTypes.ASSIGN_UPDATE:

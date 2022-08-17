@@ -2,7 +2,7 @@ from facade.enums import (
     AgentStatus,
     AssignationStatus,
     LogLevel,
-    NodeType,
+    NodeKind,
     ProvisionStatus,
     ReservationStatus,
 )
@@ -10,10 +10,10 @@ from balder.enum import InputEnum
 from graphene.types.generic import GenericScalar
 import graphene
 
-from facade.scalars import Any
+from facade.scalars import Any, AnyInput
 
 
-NodeTypeInput = InputEnum.from_choices(NodeType)
+NodeKindInput = InputEnum.from_choices(NodeKind)
 
 ReservationStatusInput = InputEnum.from_choices(ReservationStatus)
 AgentStatusInput = InputEnum.from_choices(AgentStatus)
@@ -23,7 +23,7 @@ AssignationStatusInput = InputEnum.from_choices(AssignationStatus)
 LogLevelInput = InputEnum.from_choices(LogLevel)
 
 
-class PortTypeInput(graphene.Enum):
+class PortKindInput(graphene.Enum):
     INT = "INT"
     STRING = "STRING"
     STRUCTURE = "STRUCTURE"
@@ -33,27 +33,34 @@ class PortTypeInput(graphene.Enum):
     DICT = "DICT"
 
 
+class ChoiceInput(graphene.InputObjectType):
+    value = AnyInput(required=True)
+    label = graphene.String(required=True)
+
+
 class WidgetInput(graphene.InputObjectType):
-    typename = graphene.String(description="type", required=True)
+    kind = graphene.String(description="type", required=True)
     query = graphene.String(description="Do we have a possible")
     dependencies = graphene.List(
         graphene.String, description="The dependencies of this port"
     )
+    choices = graphene.List(ChoiceInput, description="The dependencies of this port")
     max = graphene.Int(description="Max value for int widget")
     min = graphene.Int(description="Max value for int widget")
     placeholder = graphene.String(description="Placeholder for any widget")
 
 
 class ReturnWidgetInput(graphene.InputObjectType):
-    typename = graphene.String(description="type", required=True)
+    kind = graphene.String(description="type", required=True)
     query = graphene.String(description="Do we have a possible")
 
 
 class ChildPortInput(graphene.InputObjectType):
     identifier = graphene.String(description="The identifier")
     name = graphene.String(description="The name of this port")
-    type = graphene.String(description="The type of this port")
+    kind = PortKindInput(description="The type of this port")
     description = graphene.String(description="The description of this port")
+    child = graphene.Field(lambda: ChildPortInput, description="The child port")
 
 
 class ArgPortInput(graphene.InputObjectType):
@@ -61,7 +68,7 @@ class ArgPortInput(graphene.InputObjectType):
     key = graphene.String(description="The key of the arg", required=True)
     name = graphene.String(description="The name of this argument")
     label = graphene.String(description="The name of this argument")
-    type = PortTypeInput(description="The type of this argument", required=True)
+    kind = PortKindInput(description="The type of this argument", required=True)
     description = graphene.String(description="The description of this argument")
     child = graphene.Field(ChildPortInput, description="The child of this argument")
     widget = graphene.Field(WidgetInput, description="The child of this argument")
@@ -73,7 +80,7 @@ class KwargPortInput(graphene.InputObjectType):
     default = Any(description="The key of the arg", required=False)
     label = graphene.String(description="The name of this argument")
     name = graphene.String(description="The name of this argument")
-    type = PortTypeInput(description="The type of this argument", required=True)
+    kind = PortKindInput(description="The type of this argument", required=True)
     description = graphene.String(description="The description of this argument")
     child = graphene.Field(ChildPortInput, description="The child of this argument")
     widget = graphene.Field(WidgetInput, description="The child of this argument")
@@ -84,7 +91,7 @@ class ReturnPortInput(graphene.InputObjectType):
     key = graphene.String(description="The key of the arg", required=True)
     name = graphene.String(description="The name of this argument")
     label = graphene.String(description="The name of this argument")
-    type = PortTypeInput(description="The type of this argument", required=True)
+    kind = PortKindInput(description="The type of this argument", required=True)
     description = graphene.String(description="The description of this argument")
     child = graphene.Field(ChildPortInput, description="The child of this argument")
     widget = graphene.Field(ReturnWidgetInput, description="The child of this argument")
@@ -104,10 +111,10 @@ class DefinitionInput(graphene.InputObjectType):
         graphene.String,
         description="The Interfaces this node provides [eg. bridge, filter]",
     )  # todo infer interfaces from args kwargs
-    type = graphene.Argument(
-        NodeTypeInput,
+    kind = graphene.Argument(
+        NodeKindInput,
         description="The variety",
-        default_value=NodeType.FUNCTION.value,
+        default_value=NodeKind.FUNCTION.value,
         required=True,
     )
     interface = graphene.String(description="The Interface", required=True)

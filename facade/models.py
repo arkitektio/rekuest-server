@@ -24,7 +24,7 @@ from facade.enums import (
     AssignationStatus,
     LogLevel,
     ProvisionMode,
-    NodeType,
+    NodeKind,
     ProvisionStatus,
     ReservationStatus,
     RepositoryType,
@@ -210,10 +210,10 @@ class Node(models.Model):
         default=False, help_text="Is this function pure. e.g can we cache the result?"
     )
 
-    type = models.CharField(
+    kind = models.CharField(
         max_length=1000,
-        choices=NodeType.choices,
-        default=NodeType.FUNCTION,
+        choices=NodeKind.choices,
+        default=NodeKind.FUNCTION,
         help_text="Function, generator? Check async Programming Textbook",
     )
     repository = models.ForeignKey(
@@ -481,12 +481,13 @@ class Provision(models.Model):
         forwards = []
 
         params = ReserveParams(**reservation.params)
+        minimalInstances = params.minimalInstances or 1
 
         active_provisions = reservation.provisions.filter(
             status=ProvisionStatus.ACTIVE.value, dropped=False
         ).all()
 
-        if len(active_provisions) + 1 >= params.minimalInstances:
+        if len(active_provisions) + 1 >= minimalInstances:
             # +1 because we have not propagated our status yet
             res, resforwards = reservation.activate()
             forwards += resforwards
@@ -519,12 +520,13 @@ class Provision(models.Model):
         forwards = []
 
         params = ReserveParams(**reservation.params)
+        minimalInstances = params.minimalInstances or 1
         active_provisions = reservation.provisions.filter(
             status=ProvisionStatus.ACTIVE.value, dropped=False
         ).all()
 
         if (
-            len(active_provisions) - 1 < params.minimalInstances
+            len(active_provisions) - 1 < minimalInstances
         ):  # minus one because we self *will* be critical
             res, resforwards = reservation.critical()
             forwards += resforwards
@@ -558,12 +560,13 @@ class Provision(models.Model):
                 continue
 
             params = ReserveParams(**reservation.params)
+            minimalInstances = params.minimalInstances or 1
 
             active_provisions = reservation.provisions.filter(
                 status=ProvisionStatus.ACTIVE.value, dropped=False
             ).all()
 
-            if len(active_provisions) + 1 >= params.minimalInstances:
+            if len(active_provisions) + 1 >= minimalInstances:
                 # +1 because we have not propagated our status yet
                 res, resforwards = reservation.activate()
                 forwards += resforwards
@@ -583,13 +586,14 @@ class Provision(models.Model):
                 continue
 
             params = ReserveParams(**reservation.params)
+            minimalInstances = params.minimalInstances or 1
 
             active_provisions = reservation.provisions.filter(
                 status=ProvisionStatus.ACTIVE.value, dropped=False
             ).all()
 
             if (
-                len(active_provisions) - 1 < params.minimalInstances
+                len(active_provisions) - 1 < minimalInstances
             ):  # minus one because we self *will* be critical
                 res, resforwards = reservation.critical()
                 forwards += resforwards
@@ -607,13 +611,14 @@ class Provision(models.Model):
                 continue
 
             params = ReserveParams(**reservation.params)
+            minimalInstances = params.minimalInstances or 1
 
             active_provisions = reservation.provisions.filter(
                 status=ProvisionStatus.ACTIVE.value, dropped=False
             ).all()
 
             if (
-                len(active_provisions) - 1 < params.minimalInstances
+                len(active_provisions) - 1 < minimalInstances
             ):  # minus one because we self *will* be critical
                 res, resforwards = reservation.critical()
                 forwards += resforwards
@@ -630,13 +635,14 @@ class Provision(models.Model):
                 continue
 
             params = ReserveParams(**reservation.params)
+            minimalInstances = params.minimalInstances or 1
 
             active_provisions = reservation.provisions.filter(
                 status=ProvisionStatus.ACTIVE.value, dropped=False
             ).all()
 
             if (
-                len(active_provisions) - 1 < params.minimalInstances
+                len(active_provisions) - 1 < minimalInstances
             ):  # minus one because we self *will* be critical
                 res, resforwards = reservation.critical()
                 forwards += resforwards
@@ -693,6 +699,10 @@ class Reservation(models.Model):
         default=False,
         help_text="Is this reservation viable? (aka: does it have as many linked provisions as minimal",
     )
+    allow_auto_request = models.BooleanField(
+        default=False,
+        help_text="Allow automatic requests for this reservation",
+    )
 
     # 1 Inputs to the the Reservation (it can be either already a template to provision or just a node)
     node = models.ForeignKey(
@@ -733,6 +743,12 @@ class Reservation(models.Model):
     )
     extensions = models.JSONField(default=dict, help_text="The Platform extensions")
     context = models.JSONField(default=dict, help_text="The Platform context")
+    hash = models.CharField(
+        default=uuid.uuid4,
+        max_length=1000,
+        help_text="The hash of the Reservation",
+        unique=True,
+    )
 
     # Status Field
     status = models.CharField(
@@ -846,6 +862,9 @@ class Reservation(models.Model):
         linked_provisions = []
         params = ReserveParams(**self.params)
 
+        desiredInstances = params.desiredInstances or 1
+        minimalInstances = params.minimalInstances or 1
+
         if self.node is not None:
 
             templates = Template.objects
@@ -853,7 +872,7 @@ class Reservation(models.Model):
 
             # We are doing a round robin here, all templates
             for template in templates:
-                if len(linked_provisions) >= params.desiredInstances:
+                if len(linked_provisions) >= desiredInstances:
                     break
 
                 linkable_provisions = get_objects_for_user(
@@ -861,17 +880,17 @@ class Reservation(models.Model):
                 )
 
                 for prov in linkable_provisions.filter(template=template).all():
-                    if len(linked_provisions) >= params.desiredInstances:
+                    if len(linked_provisions) >= desiredInstances:
                         break
 
                     prov, linkforwards = prov.link(self)
                     linked_provisions.append(prov)
                     forwards += linkforwards
 
-                if len(linked_provisions) < params.desiredInstances:
+                if len(linked_provisions) < desiredInstances:
 
                     for template in templates:
-                        if len(linked_provisions) >= params.desiredInstances:
+                        if len(linked_provisions) >= desiredInstances:
                             break
 
                         linkable_agents = get_objects_for_user(
@@ -883,7 +902,7 @@ class Reservation(models.Model):
                         ).all()
 
                         for agent in available_agents:
-                            if len(linked_provisions) >= params.desiredInstances:
+                            if len(linked_provisions) >= desiredInstances:
                                 break
 
                             prov = Provision.objects.create(
@@ -902,10 +921,10 @@ class Reservation(models.Model):
         self.provisions.add(*linked_provisions)
         self.status = ReservationStatus.ROUTING
 
-        if len(self.provisions.all()) >= params.minimalInstances:
+        if len(self.provisions.all()) >= minimalInstances:
             self.viable = True
 
-        if len(self.provisions.all()) >= params.desiredInstances:
+        if len(self.provisions.all()) >= desiredInstances:
             self.happy = True
 
         self.save()

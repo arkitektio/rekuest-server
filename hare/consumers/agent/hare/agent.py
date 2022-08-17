@@ -49,10 +49,13 @@ class HareAgentConsumer(AgentConsumer):
         )
 
     async def forward(self, f: HareMessage):
-        await self.channel.basic_publish(
-            f.to_message(),
-            routing_key=f.queue,  # Lets take the first best one
-        )
+        try:
+            await self.channel.basic_publish(
+                f.to_message(),
+                routing_key=f.queue,
+            )
+        except Exception:
+            logger.exception("Error on forward", exc_info=True)
 
     async def on_rmq_message_in(self, rmq_message: aiormq.abc.DeliveredMessage):
         try:
@@ -146,6 +149,7 @@ class HareAgentConsumer(AgentConsumer):
     async def on_assignation_changed(self, message: AssignationChangedMessage):
 
         replies, forwards = await change_assignation(message, agent=self.agent)
+        logger.info(f"Received Assignation for {message.assignation} {forwards}")
 
         for r in forwards:
             await self.forward(r)

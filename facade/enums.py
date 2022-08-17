@@ -37,7 +37,7 @@ class AccessStrategy(TextChoices):
     EVERYONE = "EVERYONE", "Everyone can link to this Topic"
 
 
-class NodeType(TextChoices):
+class NodeKind(TextChoices):
     GENERATOR = "generator", "Generator"
     FUNCTION = "function", "Function"
 

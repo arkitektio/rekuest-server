@@ -8,7 +8,7 @@ from facade.inputs import (
     AgentStatusInput,
     AssignationStatusInput,
     LogLevelInput,
-    NodeTypeInput,
+    NodeKindInput,
     ProvisionStatusInput,
 )
 from .models import Node, Repository, Template
@@ -46,7 +46,7 @@ class NodeFilter(django_filters.FilterSet):
     )
     name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
     search = django_filters.CharFilter(method="search_filter", label="Search")
-    type = EnumFilter(type=NodeTypeInput, field_name="type")
+    type = EnumFilter(type=NodeKindInput, field_name="type")
     arg_types = django_filters.BaseInFilter(method="arg_types_filter", label="Args")
 
     def search_filter(self, queryset, name, value):

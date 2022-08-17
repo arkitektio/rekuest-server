@@ -4,7 +4,6 @@ from lok import bounced
 import graphene
 import logging
 from facade import models, types
-from facade.enums import ProvisionStatus
 from hare.connection import rmq
 
 logger = logging.getLogger(__name__)  #

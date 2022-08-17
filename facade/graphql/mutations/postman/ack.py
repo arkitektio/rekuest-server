@@ -1,5 +1,4 @@
 from facade.enums import AssignationStatus
-from facade.graphql.subscriptions.assignation import MyAssignationsEvent
 from facade.models import Assignation
 from facade import types
 from balder.types import BalderMutation

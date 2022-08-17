@@ -87,12 +87,11 @@ class ReserveParamsInput(graphene.InputObjectType):
     templates = graphene.List(
         graphene.ID, description="Templates that can be selected", required=False
     )
-
     desiredInstances = graphene.Int(
-        description="The desired amount of Instances", required=False
+        description="The desired amount of Instances", required=True, default=1
     )
     minimalInstances = graphene.Int(
-        description="The minimal amount of Instances", required=False
+        description="The minimal amount of Instances", required=True, default=1
     )
 
 
@@ -114,7 +113,7 @@ class ReserveParams(graphene.ObjectType):
     )
 
 
-class PortType(graphene.Enum):
+class PortKind(graphene.Enum):
     INT = "INT"
     STRING = "STRING"
     STRUCTURE = "STRUCTURE"
@@ -125,52 +124,54 @@ class PortType(graphene.Enum):
 
 
 class ChildPort(graphene.ObjectType):
-    type = PortType(description="the type of input", required=False)
+    kind = PortKind(description="the type of input", required=False)
     description = graphene.String(
         description="A description for this Port", required=False
     )
     identifier = graphene.String(description="The corresponding Model")
     child = graphene.Field(lambda: ChildPort, description="The child", required=False)
+
+
+class Port(graphene.Interface):
+    key = graphene.String(required=True)
+    label = graphene.String()
+    kind = PortKind(description="the type of input", required=True)
+    description = graphene.String(
+        description="A description for this Port", required=False
+    )
+    identifier = graphene.String(description="The corresponding Model")
+    child = graphene.Field(lambda: ChildPort, description="The child", required=False)
+
+    class Meta:
+        description = "A Port"
 
 
 class ArgPort(graphene.ObjectType):
-    key = graphene.String(required=True)
-    label = graphene.String()
-    type = PortType(description="the type of input", required=False)
-    description = graphene.String(
-        description="A description for this Port", required=False
-    )
     identifier = graphene.String(description="The corresponding Model")
     nullable = graphene.Boolean()
-    child = graphene.Field(lambda: ChildPort, description="The child", required=False)
     widget = graphene.Field(Widget, description="Description of the Widget")
+
+    class Meta:
+        interfaces = (Port,)
 
 
 class KwargPort(graphene.ObjectType):
-    key = graphene.String(required=True)
-    type = PortType(description="the type of input", required=False)
-    description = graphene.String(
-        description="A description for this Port", required=False
-    )
-    label = graphene.String()
-    identifier = graphene.String(description="The corresponding Model")
     nullable = graphene.Boolean()
     default = Any()
     child = graphene.Field(lambda: ChildPort, description="The child", required=False)
     widget = graphene.Field(Widget, description="Description of the Widget")
 
+    class Meta:
+        interfaces = (Port,)
+
 
 class ReturnPort(graphene.ObjectType):
-    key = graphene.String(required=True)
-    type = PortType(description="the type of input", required=False)
-    label = graphene.String()
-    description = graphene.String(
-        description="A description for this Port", required=False
-    )
-    identifier = graphene.String(description="The corresponding Model")
     nullable = graphene.Boolean()
     child = graphene.Field(lambda: ChildPort, description="The child", required=False)
     widget = graphene.Field(ReturnWidget, description="A return widget")
+
+    class Meta:
+        interfaces = (Port,)
 
 
 class LokApp(BalderObject):
@@ -232,6 +233,8 @@ class Assignation(BalderObject):
         AssignationLog, filterset_class=AssignationLogFilter, related_field="log"
     )
     args = graphene.List(Any)
+    kwargs = graphene.List(Any)
+    returns = graphene.List(Any)
 
     class Meta:
         model = models.Assignation

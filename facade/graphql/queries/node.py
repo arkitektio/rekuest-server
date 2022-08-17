@@ -39,3 +39,4 @@ class Nodes(BalderQuery):
         type = types.Node
         list = True
         filter = NodeFilter
+        operation = "allnodes"

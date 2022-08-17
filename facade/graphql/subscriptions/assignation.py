@@ -1,3 +1,4 @@
+from ast import Delete
 from lok import bounced
 from balder.types import BalderSubscription
 from facade.types import Assignation
@@ -18,7 +19,7 @@ class AssignationEvent(graphene.ObjectType):
     log = graphene.Field(AssignationLogEvent)
 
 
-class AssignationEventSubscription(BalderSubscription):
+class AssignationSubscription(BalderSubscription):
     class Arguments:
         id = graphene.ID(description="The reference of the assignation", required=True)
         level = graphene.String(description="The log level for alterations")
@@ -41,22 +42,22 @@ class AssignationEventSubscription(BalderSubscription):
 
     class Meta:
         type = AssignationEvent
-        operation = "assignationEvent"
+        operation = "assignation"
 
 
 class AssignationsEvent(graphene.ObjectType):
-    ended = graphene.ID()
+    delete = graphene.ID()
     update = graphene.Field(Assignation)
     create = graphene.Field(Assignation)
 
 
-class MyAssignationsEvent(BalderSubscription):
+class MyRequestsSubscription(BalderSubscription):
     class Arguments:
         level = graphene.String(description="The log level for alterations")
 
     @bounced(only_jwt=True)
     def subscribe(root, info, *args, **kwargs):
-        return [f"assignations_user_{info.context.user.id}"]
+        return [f"myrequests_{info.context.user.id}"]
 
     def publish(payload, info, *args, **kwargs):
         payload = payload["payload"]
@@ -72,4 +73,37 @@ class MyAssignationsEvent(BalderSubscription):
 
     class Meta:
         type = AssignationsEvent
-        operation = "myAssignationsEvent"
+        operation = "myrequests"
+
+
+class RequestsSubscription(BalderSubscription):
+    class Arguments:
+        identifier = graphene.String(
+            description="The log level for alterations", required=True
+        )
+
+    @bounced(only_jwt=True)
+    def subscribe(root, info, identifier, **kwargs):
+        registry, _ = models.Registry.objects.get_or_create(
+            user=info.context.bounced.user, app=info.context.bounced.app
+        )
+        waiter, _ = models.Waiter.objects.get_or_create(
+            registry=registry, identifier=identifier
+        )
+        return [f"requests_{waiter.unique}"]
+
+    def publish(payload, info, *args, **kwargs):
+        payload = payload["payload"]
+        action = payload["action"]
+        data = payload["data"]
+
+        logger.error(payload)
+
+        if action == "create":
+            return {"create": data}
+        else:
+            return {"update": data}
+
+    class Meta:
+        type = AssignationsEvent
+        operation = "requests"

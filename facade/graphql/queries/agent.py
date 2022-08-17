@@ -24,3 +24,10 @@ class Agents(BalderQuery):
         type = types.Agent
         list = True
         filter = AgentFilter
+
+
+class MyAgents(BalderQuery):
+    class Meta:
+        type = types.Agent
+        list = True
+        filter = AgentFilter

@@ -20,16 +20,14 @@ class ReservationEvent(graphene.ObjectType):
     log = graphene.Field(ReservationLogEvent)
 
 
-class ReservationEventSubscription(BalderSubscription):
+class ReservationSubscription(BalderSubscription):
     class Arguments:
-        reference = graphene.ID(
-            description="The reference of the assignation", required=True
-        )
+        id = graphene.ID(description="The reference of the assignation", required=True)
         level = graphene.String(description="The log level for alterations")
 
     @bounced(only_jwt=True)
-    def subscribe(root, info, *args, reference=None, level=None):
-        reservation = models.Reservation.objects.get(reference=reference)
+    def subscribe(root, info, id, level=None):
+        reservation = models.Reservation.objects.get(id=id)
         assert (
             reservation.creator == info.context.bounced.user
         ), "You cannot listen to a reservation that you have not created"
@@ -48,16 +46,16 @@ class ReservationEventSubscription(BalderSubscription):
 
     class Meta:
         type = ReservationEvent
-        operation = "reservationEvent"
+        operation = "reservation"
 
 
-class MyReservationsEvent(BalderSubscription):
+class MyReservationsSubscription(BalderSubscription):
     class Arguments:
         level = graphene.String(description="The log level for alterations")
 
     @bounced(only_jwt=True)
     def subscribe(root, info, *args, **kwargs):
-        return [f"reservations_user_{info.context.user.id}"]
+        return [f"myreservations_{info.context.user.id}"]
 
     def publish(payload, info, *args, **kwargs):
         payload = payload["payload"]
@@ -78,7 +76,7 @@ class MyReservationsEvent(BalderSubscription):
 
 class ReservationsSubscription(BalderSubscription):
     class Arguments:
-        identifier = graphene.ID(
+        identifier = graphene.String(
             description="The reference of this waiter", required=True
         )
 
@@ -90,7 +88,7 @@ class ReservationsSubscription(BalderSubscription):
         waiter, _ = models.Waiter.objects.get_or_create(
             registry=registry, identifier=identifier
         )
-        return [f"reservations_waiter_{waiter.unique}"]
+        return [f"reservations_{waiter.unique}"]
 
     def publish(payload, info, *args, **kwargs):
         payload = payload["payload"]

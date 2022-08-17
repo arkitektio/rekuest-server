@@ -46,9 +46,10 @@ class MyAssignations(BalderQuery):
         type = types.Assignation
         list = True
         paginate = True
+        operation = "myrequests"
 
 
-class TodosQuery(BalderQuery):
+class RequestsQuery(BalderQuery):
     class Arguments:
         exclude = graphene.List(
             AssignationStatusInput, description="The excluded values", required=False
@@ -56,17 +57,17 @@ class TodosQuery(BalderQuery):
         filter = graphene.List(
             AssignationStatusInput, description="The included values", required=False
         )
-        app_group = graphene.ID(required=False, default_value="main")
+        identifier = graphene.String(required=False, default_value="default")
 
     @bounced(only_jwt=True)
-    def resolve(root, info, exclude=None, filter=None, app_group="main"):
+    def resolve(root, info, exclude=None, filter=None, identifier="default"):
 
         creator = info.context.bounced.user
         app = info.context.bounced.app
 
         registry, _ = models.Registry.objects.get_or_create(user=creator, app=app)
         waiter, _ = models.Waiter.objects.get_or_create(
-            registry=registry, identifier=app_group
+            registry=registry, identifier=identifier
         )
 
         qs = Assignation.objects.filter(waiter=waiter)
@@ -80,4 +81,68 @@ class TodosQuery(BalderQuery):
     class Meta:
         type = types.Assignation
         list = True
-        operation = "todolist"
+        operation = "requests"
+
+
+class MyTodos(BalderQuery):
+    class Arguments:
+        exclude = graphene.List(
+            AssignationStatusInput, description="The excluded values", required=False
+        )
+        filter = graphene.List(
+            AssignationStatusInput, description="The included values", required=False
+        )
+        limit = graphene.Int(description="The excluded values", required=False)
+
+    @bounced(anonymous=False)
+    def resolve(root, info, exclude=None, filter=None, limit=None):
+        qs = Assignation.objects.filter(creator=info.context.user)
+        if filter:
+            qs = qs.filter(status__in=filter)
+        if exclude:
+            qs = qs.exclude(status__in=exclude)
+        if limit:
+            qs = qs[:limit]
+
+        return qs
+
+    class Meta:
+        type = types.Assignation
+        list = True
+        paginate = True
+        operation = "mytodos"
+
+
+class TodosQuery(BalderQuery):
+    class Arguments:
+        exclude = graphene.List(
+            AssignationStatusInput, description="The excluded values", required=False
+        )
+        filter = graphene.List(
+            AssignationStatusInput, description="The included values", required=False
+        )
+        identifier = graphene.String(required=False, default_value="default")
+
+    @bounced(only_jwt=True)
+    def resolve(root, info, exclude=None, filter=None, identifier="default"):
+
+        creator = info.context.bounced.user
+        app = info.context.bounced.app
+
+        registry, _ = models.Registry.objects.get_or_create(user=creator, app=app)
+        waiter, _ = models.Agent.objects.get_or_create(
+            registry=registry, identifier=identifier
+        )
+
+        qs = Assignation.objects.filter(waiter=waiter)
+        if filter:
+            qs = qs.filter(status__in=filter)
+        if exclude:
+            qs = qs.exclude(status__in=exclude)
+
+        return qs.all()
+
+    class Meta:
+        type = types.Assignation
+        list = True
+        operation = "todos"

@@ -1,6 +1,4 @@
-from facade.enums import AssignationStatus
-from facade.graphql.subscriptions.assignation import MyAssignationsEvent
-from facade.models import Assignation, Provision, Reservation
+from facade.models import Provision, Reservation
 from facade import types
 from balder.types import BalderMutation
 from lok import bounced
