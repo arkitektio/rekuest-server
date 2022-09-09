@@ -96,7 +96,6 @@ class AssignHareMessage(HareMessage):
     assignation: str
     reservation: str
     args: List[Any]
-    kwargs: Dict[str, Any]
     log: bool = True
 
 

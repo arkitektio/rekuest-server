@@ -15,7 +15,7 @@ from guardian.admin import GuardedModelAdmin
 
 
 class ReservationAdmin(GuardedModelAdmin):
-    readonly_fields = ("params", "context")
+    readonly_fields = ("params",)
 
 
 class ProvisionsAdmin(GuardedModelAdmin):

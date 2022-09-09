@@ -11,6 +11,7 @@ get_widget_types = lambda: {
     "LinkWidget": LinkWidget,
     "BoolWidget": BoolWidget,
     "ChoiceWidget": ChoiceWidget,
+    "CustomWIdget": CustomWidget,
 }
 
 
@@ -92,6 +93,15 @@ class SliderWidget(graphene.ObjectType):
 @register_type
 class StringWidget(graphene.ObjectType):
     placeholder = graphene.String(description="A placeholder to display")
+    as_paragraph = graphene.Boolean(description="Whether to display as paragraph")
+
+    class Meta:
+        interfaces = (Widget,)
+
+
+@register_type
+class CustomWidget(graphene.ObjectType):
+    hook = graphene.String(description="A hook for the app to call")
 
     class Meta:
         interfaces = (Widget,)

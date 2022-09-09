@@ -3,6 +3,7 @@ import graphene
 
 get_widget_types = lambda: {
     "ImageReturnWidget": ImageReturnWidget,
+    "CustomReturnWidget": CustomReturnWidget,
 }
 
 
@@ -20,6 +21,14 @@ class ReturnWidget(graphene.Interface):
 @register_type
 class ImageReturnWidget(graphene.ObjectType):
     query = graphene.String(description="A query that returns an image path")
+
+    class Meta:
+        interfaces = (ReturnWidget,)
+
+
+@register_type
+class CustomReturnWidget(graphene.ObjectType):
+    hook = graphene.String(description="A hook for the app to call")
 
     class Meta:
         interfaces = (ReturnWidget,)

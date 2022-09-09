@@ -72,7 +72,6 @@ def list_assignations(m: AssignationsList, agent: models.Agent, **kwargs):
                 assignation=ass.id,
                 status=ass.status,
                 args=ass.args,
-                kwargs=ass.kwargs,
                 reservation=ass.reservation.id,
                 provision=ass.provision.id,
             )
@@ -101,7 +100,6 @@ def bind_assignation(m: AssignHareMessage, prov: str, **kwargs):
                 assignation=ass.id,
                 status=ass.status,
                 args=ass.args,
-                kwargs=ass.kwargs,
                 reservation=ass.reservation.id,
                 provision=ass.provision.id,
             )
@@ -121,7 +119,6 @@ def change_assignation(m: AssignationChangedMessage, agent: models.Agent):
         ass = models.Assignation.objects.get(id=m.assignation)
         ass.status = m.status if m.status else ass.status
         ass.args = m.args if m.args else ass.args
-        ass.kwargs = m.kwargs if m.kwargs else ass.kwargs
         ass.returns = m.returns if m.returns else ass.returns
         ass.statusmessage = m.message if m.message else ass.statusmessage
         ass.save()
@@ -278,6 +275,7 @@ def activate_provision(m: ProvisionChangedMessage, agent: models.Agent):
         provision.status = m.status if m.status else provision.status
         provision.statusmessage = m.message if m.message else provision.statusmessage
         provision.mode = m.mode if m.mode else provision.mode  #
+        provision_queue = (provision.id, provision.queue)
         provision.save()
 
         for res in provision.reservations.filter():
@@ -302,10 +300,10 @@ def activate_provision(m: ProvisionChangedMessage, agent: models.Agent):
 
             reservation_queues += [(res.id, res.queue)]
 
+        return reply, forward, reservation_queues, provision_queue
+
     except Exception:
         logger.error("active provision failure", exc_info=True)
-
-    return reply, forward, reservation_queues
 
 
 @sync_to_async
@@ -346,7 +344,7 @@ def disconnect_agent(agent: models.Agent, close_code: int):
 
 @sync_to_async
 def log_to_provision(message: ProvisionLogMessage, agent: models.Agent):
-
+    logging.info("log to provision {message}")
     models.ProvisionLog.objects.create(
         provision_id=message.provision, message=message.message, level=message.level
     )

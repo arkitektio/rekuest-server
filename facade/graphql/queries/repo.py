@@ -28,3 +28,15 @@ class Repositories(BalderQuery):
     class Meta:
         type = types.Repository
         list = True
+        operation = "allrepositories"
+
+
+class MyRepositories(BalderQuery):
+    @bounced(anonymous=True)
+    def resolve(root, info):
+        return chain(AppRepository.objects.all(), MirrorRepository.objects.all())
+
+    class Meta:
+        type = types.Repository
+        list = True
+        operation = "myrepositories"

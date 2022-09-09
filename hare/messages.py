@@ -65,7 +65,6 @@ class Assignation(UpdatableModel):
     provision: Optional[str]
     reservation: Optional[str]
     args: Optional[List[Any]]
-    kwargs: Optional[Dict[str, Any]]
     returns: Optional[List[Any]]
     persist: Optional[bool]
     log: Optional[bool]

@@ -32,11 +32,11 @@ class CreateMirror(BalderMutation):
         return {"created": created, "repo": repo}
 
 
-class DeleteMirrorReturn(graphene.ObjectType):
+class DeleteRepoReturn(graphene.ObjectType):
     id = graphene.String()
 
 
-class DeleteMirror(BalderMutation):
+class DeleteRepo(BalderMutation):
     """Create an experiment (only signed in users)"""
 
     class Arguments:
@@ -49,7 +49,8 @@ class DeleteMirror(BalderMutation):
         return {"id": id}
 
     class Meta:
-        type = DeleteMirrorReturn
+        type = DeleteRepoReturn
+        operation = "deleterepo"
 
 
 class UpdateMirrorReturn(graphene.ObjectType):

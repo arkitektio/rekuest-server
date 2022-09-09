@@ -4,6 +4,7 @@ from hare.carrots import (
     HareMessage,
     ProvideHareMessage,
     ReserveHareMessage,
+    UnassignHareMessage,
     UnprovideHareMessage,
     UnreserveHareMessage,
     ReservationChangedMessage,
@@ -219,14 +220,17 @@ class Node(models.Model):
     repository = models.ForeignKey(
         Repository,
         on_delete=models.CASCADE,
-        null=True,
-        blank=True,
         related_name="nodes",
     )
-    interfaces = models.JSONField(default=[], help_text="Intercae that we ahdere to")
+    interfaces = models.JSONField(
+        default=list, help_text="Intercae that we use to interpret the meta data"
+    )
 
     name = models.CharField(
         max_length=1000, help_text="The cleartext name of this Node"
+    )
+    meta = models.JSONField(
+        null=True, blank=True, help_text="Meta data about this Node"
     )
     package = models.CharField(max_length=1000, help_text="Package (think Module)")
     interface = models.CharField(
@@ -239,7 +243,6 @@ class Node(models.Model):
     )
 
     args = ArgsField(default=list, help_text="Inputs for this Node")
-    kwargs = KwargsField(default=list, help_text="Inputs for this Node")
     returns = ReturnField(default=list, help_text="Outputs for this Node")
 
     objects = NodeManager()
@@ -381,14 +384,6 @@ class Provision(models.Model):
         related_name="provisions",
     )
 
-    provision = models.ForeignKey(
-        "self",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        help_text="Provision that created this provision (if we were auto created)",
-        related_name="created_provisions",
-    )
     title = models.CharField(
         max_length=200,
         help_text="A Short Hand Way to identify this reservation for you",
@@ -464,6 +459,10 @@ class Provision(models.Model):
     class Meta:
         permissions = [("can_link_to", "Can link a reservation to a provision")]
 
+    @property
+    def queue(self):
+        return f"provision_{self.unique}"
+
     def __str__(self):
         return f"Provision for Template: {self.template if self.template else ''}: {self.status}"
 
@@ -532,11 +531,7 @@ class Provision(models.Model):
             forwards += resforwards
 
         if len(self.reservations.all()) == 0:
-            self.status = ProvisionStatus.CANCELING.value
-            # If we have no reservations left, we can unprovide this provision
-            forwards.append(
-                UnprovideHareMessage(queue=self.agent.queue, provision=self.id)
-            )
+            self.delete()
         else:
             forwards.append(
                 UnreserveHareMessage(
@@ -545,7 +540,7 @@ class Provision(models.Model):
                     provision=self.id,
                 )
             )
-        self.save()
+            self.save()
         return self, forwards
 
     def activate(self) -> Tuple["Provision", List[HareMessage]]:
@@ -626,34 +621,6 @@ class Provision(models.Model):
         self.save()
         return self, forwards
 
-    def unprovide(self) -> Tuple["Provision", List[HareMessage]]:
-        self.status = ProvisionStatus.CANCELING.value
-        forwards = []
-        for reservation in self.reservations.all():
-            if reservation.status == ReservationStatus.CRITICAL.value:
-                # omiting reservations that are already active
-                continue
-
-            params = ReserveParams(**reservation.params)
-            minimalInstances = params.minimalInstances or 1
-
-            active_provisions = reservation.provisions.filter(
-                status=ProvisionStatus.ACTIVE.value, dropped=False
-            ).all()
-
-            if (
-                len(active_provisions) - 1 < minimalInstances
-            ):  # minus one because we self *will* be critical
-                res, resforwards = reservation.critical()
-                forwards += resforwards
-
-            self.reservations.remove(reservation)
-
-        forwards.append(UnprovideHareMessage(queue=self.agent.queue, provision=self.id))
-
-        self.save()
-        return self, forwards
-
 
 class ReservationLog(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
@@ -710,8 +677,6 @@ class Reservation(models.Model):
         on_delete=models.CASCADE,
         help_text="The node this reservation connects",
         related_name="reservations",
-        null=True,
-        blank=True,
     )
     title = models.CharField(
         max_length=200,
@@ -741,8 +706,7 @@ class Reservation(models.Model):
     params = models.JSONField(
         default=dict, help_text="Params for the Policy (including Agent etc..)"
     )
-    extensions = models.JSONField(default=dict, help_text="The Platform extensions")
-    context = models.JSONField(default=dict, help_text="The Platform context")
+
     hash = models.CharField(
         default=uuid.uuid4,
         max_length=1000,
@@ -779,8 +743,6 @@ class Reservation(models.Model):
         on_delete=models.CASCADE,
         max_length=1000,
         help_text="This Reservations app",
-        null=True,
-        blank=True,
         related_name="reservations",
     )
     app = models.ForeignKey(
@@ -801,8 +763,7 @@ class Reservation(models.Model):
     )
     reference = models.CharField(
         max_length=1000,
-        unique=True,
-        default=uuid.uuid4,
+        default="default",
         help_text="The Unique identifier of this Assignation",
     )
     provision = models.ForeignKey(
@@ -819,7 +780,7 @@ class Reservation(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["params", "node", "waiter"],
+                fields=["reference", "node", "waiter"],
                 name="Equal Reservation on this App by this Waiter is already in place",
             )
         ]
@@ -831,18 +792,6 @@ class Reservation(models.Model):
     @property
     def queue(self):
         return f"reservation_{self.channel}"
-
-    def unreserve(self) -> Tuple["Reservation", List[HareMessage]]:
-        """Unreserve this reservation"""
-        forwards = []
-        self.status = ReservationStatus.CANCELLED
-
-        for provision in self.provisions.all():
-            prov, provforwards = provision.unlink(self)  # Unlink from Provision
-            forwards += provforwards
-
-        self.save()
-        return self, forwards
 
     def reschedule(self) -> Tuple["Reservation", List[HareMessage]]:
         """Unreserve this reservation"""
@@ -974,7 +923,7 @@ class Assignation(models.Model):
     context = models.JSONField(default=dict, help_text="The Platform context")
 
     # 1. The State of Everything
-    args = models.JSONField(blank=True, null=True, help_text="The Args")
+    args = models.JSONField(blank=True, null=True, help_text="The Args", default=list)
     provision = models.ForeignKey(
         Provision,
         on_delete=models.CASCADE,
@@ -1042,6 +991,19 @@ class Assignation(models.Model):
 
     def __str__(self):
         return f"{self.status} for {self.reservation}"
+
+    def unassign(self) -> Tuple["Assignation", List[HareMessage]]:
+        """Activate the reservation"""
+        self.status = AssignationStatus.CANCELING
+        forwards = [
+            UnassignHareMessage(
+                queue=self.provision.queue,
+                assignation=self.id,
+                provision=self.provision.id,
+            )
+        ]
+        self.save()
+        return self, forwards
 
 
 class AssignationLog(models.Model):

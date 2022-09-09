@@ -1,5 +1,5 @@
 from .node import DefineNode, DeleteNode
-from .repo import CreateMirror, UpdateMirror, DeleteMirror
+from .repo import CreateMirror, UpdateMirror, DeleteRepo
 from .template import CreateTemplate
 from .postman import (
     AcknowledgeMutation,
@@ -26,7 +26,7 @@ __all__ = [
     "DeleteNode",
     "CreateMirror",
     "UpdateMirror",
-    "DeleteMirror",
+    "DeleteRepo",
     "CreateTemplate",
     "AcknowledgeMutation",
     "AssignMutation",

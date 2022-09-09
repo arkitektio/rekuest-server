@@ -33,6 +33,8 @@ class HareAgentConsumer(AgentConsumer):
         super().__init__(*args, **kwargs)
         self.res_queues = {}
         self.res_consumers = {}
+        self.prov_queues = {}
+        self.prov_consumers = {}
 
     async def connect(self):
         await super().connect()
@@ -120,8 +122,12 @@ class HareAgentConsumer(AgentConsumer):
 
     async def on_provision_changed(self, message: ProvisionChangedMessage):
 
+        if message.status == ProvisionStatus.CANCELLED:
+            # TODO: SOmehow acknowled this by logging it
+            return
+
         if message.status == ProvisionStatus.ACTIVE:
-            replies, forwards, queues = await activate_provision(
+            replies, forwards, queues, prov_queue = await activate_provision(
                 message, agent=self.agent
             )
 
@@ -134,8 +140,19 @@ class HareAgentConsumer(AgentConsumer):
                 self.res_consumers[res] = await self.channel.basic_consume(
                     self.res_queues[res].queue,
                     lambda aio: self.on_assignment_in(message.provision, aio),
-                    consumer_tag=f"{res}-{message.provision}",
+                    consumer_tag=f"res-{res}-prov-{message.provision}",
                 )
+
+            prov_id, prov_queue = prov_queue
+            self.prov_queues[prov_id] = await self.channel.queue_declare(
+                prov_queue,
+                auto_delete=True,
+            )
+            self.prov_consumers[prov_id] = await self.channel.basic_consume(
+                self.prov_queues[prov_id].queue,
+                lambda aio: self.on_assignment_in(message.provision, aio),
+                consumer_tag=f"prov-{prov_id}",
+            )
 
         else:
             replies, forwards = await change_provision(message, agent=self.agent)
@@ -172,7 +189,7 @@ class HareAgentConsumer(AgentConsumer):
             await self.channel.basic_consume(
                 self.res_queues[res].queue,
                 lambda aio: self.on_assignment_in(message.provision, aio),
-                consumer_tag=f"{res}-{message.provision}",
+                consumer_tag=f"res-{res}-prov-{message.provision}",
             )
 
         for r in forwards:
@@ -188,7 +205,7 @@ class HareAgentConsumer(AgentConsumer):
         )
 
         for id in delete_queue_id:
-            await self.channel.basic_cancel(f"{id}-{message.provision}")
+            await self.channel.basic_cancel(f"res-{id}-prov-{message.provision}")
             logger.debug(
                 f"Deleting consumer for queue {id} of Reservation {message.provision}"
             )

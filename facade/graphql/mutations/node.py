@@ -1,4 +1,4 @@
-from facade.inputs import ArgPortInput, DefinitionInput, KwargPortInput, ReturnPortInput
+from facade.inputs import DefinitionInput
 from facade import types
 from facade.models import AppRepository, Node, Structure
 from balder.types import BalderMutation
@@ -20,7 +20,6 @@ class DefineNode(BalderMutation):
     def mutate(root, info, definition: DefinitionInput):
 
         args = definition.args or []
-        kwargs = definition.kwargs or []
         returns = definition.returns or []
         interface = definition.interface
         package = definition.package
@@ -35,12 +34,11 @@ class DefineNode(BalderMutation):
         )
 
         arg_identifiers = [arg.identifier for arg in args if arg.identifier]
-        kwarg_identifiers = [kwarg.identifier for kwarg in kwargs if kwarg.identifier]
         return_identifiers = [
             returnitem.identifier for returnitem in returns if returnitem.identifier
         ]
 
-        all_identifiers = set(arg_identifiers + kwarg_identifiers + return_identifiers)
+        all_identifiers = set(arg_identifiers + return_identifiers)
         for identifier in all_identifiers:
             try:
                 model = Structure.objects.get(identifier=identifier)
@@ -57,7 +55,7 @@ class DefineNode(BalderMutation):
             defaults={
                 "description": description,
                 "args": args,
-                "kwargs": kwargs,
+                "meta": definition.meta or None,
                 "returns": returns,
                 "name": name,
                 "kind": kind,

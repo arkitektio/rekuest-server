@@ -11,6 +11,10 @@ from hare.connection import rmq
 logger = logging.getLogger(__name__)  #
 
 
+class UnreserveResult(graphene.ObjectType):
+    id = graphene.ID()
+
+
 class UnreserveMutation(BalderMutation):
     class Arguments:
         id = graphene.ID(
@@ -26,10 +30,6 @@ class UnreserveMutation(BalderMutation):
     def mutate(root, info, id=None):
 
         res = Reservation.objects.get(id=id)
+        res.delete()
 
-        res, forward = res.unreserve()
-
-        for forward_res in forward:
-            rmq.publish(forward_res.queue, forward_res.to_message())
-
-        return res
+        return res.id

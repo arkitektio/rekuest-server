@@ -1,4 +1,4 @@
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, post_delete, pre_delete
 from django.dispatch.dispatcher import receiver
 from facade.models import (
     Agent,
@@ -13,12 +13,21 @@ import logging
 from guardian.shortcuts import assign_perm
 from django.contrib.auth import get_user_model
 from hare.k import send_to_arkitekt
+from hare.connection import rmq
+from hare.carrots import (
+    HareMessage,
+    ProvideHareMessage,
+    ReserveHareMessage,
+    UnprovideHareMessage,
+    UnreserveHareMessage,
+    ReservationChangedMessage,
+)
 
 logger = logging.getLogger(__name__)
 
 
 @receiver(post_save, sender=Node)
-def samp_post_save(sender, instance=None, created=None, **kwargs):
+def node_post_save(sender, instance=None, created=None, **kwargs):
     from facade.graphql.subscriptions import NodesEvent, NodeDetailEvent
 
     NodesEvent.broadcast(
@@ -31,6 +40,82 @@ def samp_post_save(sender, instance=None, created=None, **kwargs):
     NodeDetailEvent.broadcast(
         {"action": "updated", "data": instance}, [f"node_{instance.id}"]
     )
+
+    if instance.interfaces:
+        for interface in instance.interfaces:
+            NodesEvent.broadcast(
+                {"action": "created", "data": instance}
+                if created
+                else {"action": "updated", "data": instance},
+                [f"interface_{interface}"],
+            )
+
+
+@receiver(pre_delete, sender=Reservation)
+def res_pre_delete(sender, instance=None, created=None, **kwargs):
+    """Unreserve this reservation"""
+    from facade.graphql.subscriptions import (
+        ReservationsSubscription,
+        MyReservationsSubscription,
+    )
+
+    forwards = []
+
+    for provision in instance.provisions.all():
+        prov, provforwards = provision.unlink(instance)  # Unlink from Provision
+        forwards += provforwards
+
+    for forward_res in forwards:
+        rmq.publish(forward_res.queue, forward_res.to_message())
+
+    if instance.waiter:
+        ReservationsSubscription.broadcast(
+            {"action": "delete", "data": instance.id},
+            [
+                f"reservations_{instance.waiter.unique}",
+            ],
+        )
+        MyReservationsSubscription.broadcast(
+            {"action": "delete", "data": instance.id},
+            [
+                f"myreservations_{instance.waiter.registry.user.id}",
+            ],
+        )
+
+
+@receiver(pre_delete, sender=Provision)
+def prov_pre_delete(sender, instance=None, created=None, **kwargs):
+    """Unreserve this reservation"""
+    from facade.graphql.subscriptions import (
+        ReservationsSubscription,
+        MyReservationsSubscription,
+    )
+
+    forwards = []
+
+    for reservation in instance.caused_reservations.all():
+        reservation.delete()
+
+    forwards.append(
+        UnprovideHareMessage(queue=instance.agent.queue, provision=instance.id)
+    )
+
+    for forward_res in forwards:
+        rmq.publish(forward_res.queue, forward_res.to_message())
+
+
+@receiver(post_delete, sender=Node)
+def node_post_del(sender, instance=None, created=None, **kwargs):
+    from facade.graphql.subscriptions import NodesEvent, NodeDetailEvent
+
+    print
+
+    if instance.interfaces:
+        for interface in instance.interfaces:
+            NodesEvent.broadcast(
+                {"action": "delete", "data": instance.id},
+                [f"interface_{interface}"],
+            )
 
 
 @receiver(post_save, sender=Template)
@@ -102,7 +187,7 @@ def prov_post_save(sender, instance: Provision = None, created=None, **kwargs):
 
     if instance.status == ProvisionStatus.CANCELING:
         logging.info(
-            f"Provision {instance}: was requested to be cancelled. Sending this to the agent.."
+            f"Provision {instance}: was requsested to be cancselsled. Sending tshiss to tssshe agent.."
         )
 
     if instance.id:
@@ -119,7 +204,13 @@ def res_post_save(sender, instance: Reservation = None, created=None, **kwargs):
         MyReservationsSubscription,
     )
 
-    if instance.waiter:
+    if created:
+        res, forwards = instance.schedule()
+
+        for forward_res in forwards:
+            rmq.publish(forward_res.queue, forward_res.to_message())
+
+    else:
         ReservationsSubscription.broadcast(
             {"action": "create" if created else "update", "data": instance},
             [
@@ -132,6 +223,16 @@ def res_post_save(sender, instance: Reservation = None, created=None, **kwargs):
                 f"myreservations_{instance.waiter.registry.user.id}",
             ],
         )
+
+        print("UPDATEDING RESERVATION", instance.provision)
+
+        if instance.provision:
+            ReservationsSubscription.broadcast(
+                {"action": "create" if created else "update", "data": instance},
+                [
+                    f"reservations_provision_{instance.provision.id}",
+                ],
+            )
 
 
 @receiver(post_save, sender=get_user_model())

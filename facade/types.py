@@ -1,5 +1,5 @@
 from typing import Type
-from facade.scalars import Any
+from facade.scalars import Any, Identifier
 from graphene.types.interface import InterfaceOptions
 from django.contrib.auth import get_user_model
 from facade.filters import (
@@ -119,8 +119,8 @@ class PortKind(graphene.Enum):
     STRUCTURE = "STRUCTURE"
     LIST = "LIST"
     BOOL = "BOOL"
-    ENUM = "ENUM"
     DICT = "DICT"
+    FLOAT = "FLOAT"
 
 
 class ChildPort(graphene.ObjectType):
@@ -128,8 +128,9 @@ class ChildPort(graphene.ObjectType):
     description = graphene.String(
         description="A description for this Port", required=False
     )
-    identifier = graphene.String(description="The corresponding Model")
+    identifier = Identifier(description="The corresponding Model")
     child = graphene.Field(lambda: ChildPort, description="The child", required=False)
+    nullable = graphene.Boolean(description="Is this argument nullable", required=True)
 
 
 class Port(graphene.Interface):
@@ -139,7 +140,8 @@ class Port(graphene.Interface):
     description = graphene.String(
         description="A description for this Port", required=False
     )
-    identifier = graphene.String(description="The corresponding Model")
+    identifier = Identifier(description="The corresponding Model")
+    nullable = graphene.Boolean(required=True)
     child = graphene.Field(lambda: ChildPort, description="The child", required=False)
 
     class Meta:
@@ -147,18 +149,7 @@ class Port(graphene.Interface):
 
 
 class ArgPort(graphene.ObjectType):
-    identifier = graphene.String(description="The corresponding Model")
-    nullable = graphene.Boolean()
-    widget = graphene.Field(Widget, description="Description of the Widget")
-
-    class Meta:
-        interfaces = (Port,)
-
-
-class KwargPort(graphene.ObjectType):
-    nullable = graphene.Boolean()
     default = Any()
-    child = graphene.Field(lambda: ChildPort, description="The child", required=False)
     widget = graphene.Field(Widget, description="Description of the Widget")
 
     class Meta:
@@ -166,8 +157,6 @@ class KwargPort(graphene.ObjectType):
 
 
 class ReturnPort(graphene.ObjectType):
-    nullable = graphene.Boolean()
-    child = graphene.Field(lambda: ChildPort, description="The child", required=False)
     widget = graphene.Field(ReturnWidget, description="A return widget")
 
     class Meta:
@@ -233,7 +222,6 @@ class Assignation(BalderObject):
         AssignationLog, filterset_class=AssignationLogFilter, related_field="log"
     )
     args = graphene.List(Any)
-    kwargs = graphene.List(Any)
     returns = graphene.List(Any)
 
     class Meta:
@@ -281,7 +269,6 @@ class Template(BalderObject):
 
 class Node(BalderObject):
     args = graphene.List(ArgPort)
-    kwargs = graphene.List(KwargPort)
     returns = graphene.List(ReturnPort)
     interfaces = graphene.List(graphene.String)
     templates = BalderFiltered(
@@ -295,12 +282,10 @@ class Node(BalderObject):
 
 @register_type
 class Repository(BalderInheritedModel):
-
-    id = graphene.ID(description="Id of the Repository")
+    id = graphene.ID(description="Id of the Repository", required=True)
     nodes = BalderFiltered(Node, filterset_class=NodesFilter, related_field="nodes")
     name = graphene.String(
         description="The Name of the Repository",
-        deprecation_reason="Will be replaced in the future",
     )
 
     class Meta:

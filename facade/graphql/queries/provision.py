@@ -2,6 +2,7 @@ from balder.types import BalderQuery
 from facade import types
 from facade.models import Provision, Reservation, Agent, Registry
 import graphene
+from facade.filters import ProvisionFilter
 from lok import bounced
 from guardian.shortcuts import get_objects_for_user
 from facade.inputs import ProvisionStatusInput
@@ -23,6 +24,7 @@ class ProvisionDetailQuery(BalderQuery):
 class Provisions(BalderQuery):
     class Meta:
         type = types.Provision
+        filter = ProvisionFilter
         list = True
         operation = "allprovisions"
 

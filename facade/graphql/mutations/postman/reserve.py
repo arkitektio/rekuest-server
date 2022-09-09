@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)  #
 
 class ReserveMutation(BalderMutation):
     class Arguments:
-        node = graphene.ID(required=False)
+        node = graphene.ID(required=True)
         template = graphene.ID(required=False)
         reference = graphene.String(required=False)
         title = graphene.String(required=False)
@@ -43,14 +43,14 @@ class ReserveMutation(BalderMutation):
         template=None,
         params={},
         title=None,
-        reference=None,
+        reference="default",
         persist=True,
         imitate=None,
         app_group=None,
         provision=None,
         allow_auto_request=False,
     ):
-        reference = reference or str(uuid.uuid4())
+        reference = reference
         params = ReserveParams(**params)
 
         if imitate:
@@ -74,15 +74,14 @@ class ReserveMutation(BalderMutation):
             node or template
         ), "Please provide either a node or template you want to reserve"
 
-        res, cr = Reservation.objects.get_or_create(
-            node_id=node, params=params.dict(), waiter=waiter, provision=provision
+        res, cr = Reservation.objects.update_or_create(
+            node_id=node,
+            reference=reference,
+            waiter=waiter,
+            defaults={
+                "params": params.dict(),
+                "provision": provision,
+                "allow_auto_request": allow_auto_request,
+            },
         )
-        if cr:
-            res, forwards = res.schedule()
-
-            for forward_res in forwards:
-                rmq.publish(forward_res.queue, forward_res.to_message())
-
-        res.allow_auto_request = allow_auto_request
-        res.save()
         return res

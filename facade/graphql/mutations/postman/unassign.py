@@ -5,6 +5,7 @@ from balder.types import BalderMutation
 from lok import bounced
 import graphene
 import logging
+from hare.connection import rmq
 
 logger = logging.getLogger(__name__)  #
 
@@ -28,8 +29,11 @@ class UnassignMutation(BalderMutation):
         reference = str(uuid.uuid4())
         bounce = info.context.bounced
 
-        assignation = Assignation.objects.get(reference=assignation)
+        assignation = Assignation.objects.get(id=assignation)
 
-       
+        assignation, forwards = assignation.unassign()
+
+        for forward_res in forwards:
+            rmq.publish(forward_res.queue, forward_res.to_message())
 
         return assignation

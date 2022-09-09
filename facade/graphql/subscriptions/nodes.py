@@ -11,11 +11,17 @@ class NodeEvent(graphene.ObjectType):
 
 
 class NodesEvent(BalderSubscription):
+    INTERFACE_GROUP = lambda interface: f"nodes_interface_{interface}"
+
     class Arguments:
         level = graphene.String(description="The log level for alterations")
+        interface = graphene.String(description="List only nodes with this interface")
 
     @bounced(only_jwt=True)
-    def subscribe(root, info, *args, **kwargs):
+    def subscribe(root, info, *args, interface=None, level=None):
+        if interface:
+            return [NodesEvent.INTERFACE_GROUP(interface)]
+
         return [f"nodes_user_{info.context.user.id}", "all_nodes"]
 
     def publish(payload, info, *args, **kwargs):
@@ -31,7 +37,7 @@ class NodesEvent(BalderSubscription):
 
     class Meta:
         type = NodeEvent
-        operation = "nodesEvent"
+        operation = "nodes"
 
 
 class NodeDetailEvent(BalderSubscription):

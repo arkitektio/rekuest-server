@@ -79,15 +79,24 @@ class ReservationsSubscription(BalderSubscription):
         identifier = graphene.String(
             description="The reference of this waiter", required=True
         )
+        provision = graphene.String(
+            description="The reference of the provision (if we want to only listen to this)",
+            required=False,
+        )
 
     @bounced(only_jwt=True)
-    def subscribe(root, info, *args, identifier=None):
+    def subscribe(root, info, *args, identifier=None, provision=None):
         registry, _ = models.Registry.objects.get_or_create(
             user=info.context.bounced.user, app=info.context.bounced.app
         )
         waiter, _ = models.Waiter.objects.get_or_create(
             registry=registry, identifier=identifier
         )
+
+        if provision:
+            provision = models.Provision.objects.get(id=provision)
+            return [f"reservations_provision_{provision.id}"]
+
         return [f"reservations_{waiter.unique}"]
 
     def publish(payload, info, *args, **kwargs):

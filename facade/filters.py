@@ -11,7 +11,7 @@ from facade.inputs import (
     NodeKindInput,
     ProvisionStatusInput,
 )
-from .models import Node, Repository, Template
+from .models import Agent, Node, Repository, Template
 from django.db.models import Q
 
 # class PodFilter(django_filters.FilterSet):
@@ -48,11 +48,17 @@ class NodeFilter(django_filters.FilterSet):
     search = django_filters.CharFilter(method="search_filter", label="Search")
     type = EnumFilter(type=NodeKindInput, field_name="type")
     arg_types = django_filters.BaseInFilter(method="arg_types_filter", label="Args")
+    interfaces = django_filters.BaseInFilter(method="interfaces_filter", label="Args")
 
     def search_filter(self, queryset, name, value):
         return queryset.filter(
             Q(name__icontains=value) | Q(description__icontains=value)
         )
+
+    def interfaces_filter(self, queryset, name, value):
+        for i in value:
+            queryset = queryset.filter(interfaces__contains=i)
+        return queryset
 
     def arg_types_filter(self, queryset, name, value):
         filter_args = {}
@@ -66,6 +72,7 @@ class NodeFilter(django_filters.FilterSet):
 
 class ProvisionFilter(django_filters.FilterSet):
     status = MultiEnumFilter(type=ProvisionStatusInput, field_name="status")
+    agent = django_filters.ModelChoiceFilter(queryset=Agent.objects, field_name="agent")
 
 
 class AssignationFilter(django_filters.FilterSet):
@@ -98,6 +105,7 @@ class TemplateFilter(django_filters.FilterSet):
     package = django_filters.CharFilter(
         field_name="node__package", lookup_expr="icontains"
     )
+    name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
     interface = django_filters.CharFilter(
         field_name="node__interface", lookup_expr="icontains"
     )

@@ -21,11 +21,7 @@ class Assign(graphene.ObjectType):
 class AssignMutation(BalderMutation):
     class Arguments:
         reservation = graphene.ID(required=True)
-        args = graphene.List(
-            AnyInput,
-            required=True,
-        )
-        kwargs = GenericScalar(description="Additional Params")
+        args = graphene.List(AnyInput, description="Additional Params")
         reference = graphene.String(description="A reference")
         cached = graphene.Boolean(
             description="Should we allow cached results (only applicable if node was registered as pure)"
@@ -33,7 +29,7 @@ class AssignMutation(BalderMutation):
         log = graphene.Boolean(
             description="Should we log intermediate resulst? (if also persist is true these will be persisted to the log system)"
         )
-        mother = graphene.ID(description="If this task inherits from another task")
+        parent = graphene.ID(description="If this task inherits from another task")
 
     class Meta:
         type = types.Assignation
@@ -44,10 +40,10 @@ class AssignMutation(BalderMutation):
         root,
         info,
         reservation=None,
-        args=[],
-        kwargs={},
+        args=None,
         reference=None,
         cached=True,
+        parent=None,
     ):
         reference = reference or str(uuid.uuid4())
 
@@ -66,10 +62,11 @@ class AssignMutation(BalderMutation):
         ass = models.Assignation.objects.create(
             **{
                 "reservation": res,
-                "args": args,
-                "kwargs": kwargs,
+                "args": args or [],
                 "creator": creator,
                 "status": AssignationStatus.ASSIGNED,
+                "reference": reference,
+                "parent_id": parent,
             }
         )
 
@@ -79,7 +76,6 @@ class AssignMutation(BalderMutation):
                 reservation=ass.reservation.id,
                 assignation=ass.id,
                 args=ass.args,
-                kwargs=ass.kwargs,
             )
         ]
 

@@ -29,8 +29,8 @@ class PortKindInput(graphene.Enum):
     STRUCTURE = "STRUCTURE"
     LIST = "LIST"
     BOOL = "BOOL"
-    ENUM = "ENUM"
     DICT = "DICT"
+    FLOAT = "FLOAT"
 
 
 class ChoiceInput(graphene.InputObjectType):
@@ -48,11 +48,14 @@ class WidgetInput(graphene.InputObjectType):
     max = graphene.Int(description="Max value for int widget")
     min = graphene.Int(description="Max value for int widget")
     placeholder = graphene.String(description="Placeholder for any widget")
+    as_paragraph = graphene.Boolean(description="Is this a paragraph")
+    hook = graphene.String(description="A hook for the app to call")
 
 
 class ReturnWidgetInput(graphene.InputObjectType):
     kind = graphene.String(description="type", required=True)
     query = graphene.String(description="Do we have a possible")
+    hook = graphene.String(description="A hook for the app to call")
 
 
 class ChildPortInput(graphene.InputObjectType):
@@ -61,6 +64,7 @@ class ChildPortInput(graphene.InputObjectType):
     kind = PortKindInput(description="The type of this port")
     description = graphene.String(description="The description of this port")
     child = graphene.Field(lambda: ChildPortInput, description="The child port")
+    nullable = graphene.Boolean(description="Is this argument nullable", required=True)
 
 
 class ArgPortInput(graphene.InputObjectType):
@@ -72,18 +76,8 @@ class ArgPortInput(graphene.InputObjectType):
     description = graphene.String(description="The description of this argument")
     child = graphene.Field(ChildPortInput, description="The child of this argument")
     widget = graphene.Field(WidgetInput, description="The child of this argument")
-
-
-class KwargPortInput(graphene.InputObjectType):
-    identifier = graphene.String(description="The identifier")
-    key = graphene.String(description="The key of the arg", required=True)
     default = Any(description="The key of the arg", required=False)
-    label = graphene.String(description="The name of this argument")
-    name = graphene.String(description="The name of this argument")
-    kind = PortKindInput(description="The type of this argument", required=True)
-    description = graphene.String(description="The description of this argument")
-    child = graphene.Field(ChildPortInput, description="The child of this argument")
-    widget = graphene.Field(WidgetInput, description="The child of this argument")
+    nullable = graphene.Boolean(description="Is this argument nullable", required=True)
 
 
 class ReturnPortInput(graphene.InputObjectType):
@@ -95,6 +89,7 @@ class ReturnPortInput(graphene.InputObjectType):
     description = graphene.String(description="The description of this argument")
     child = graphene.Field(ChildPortInput, description="The child of this argument")
     widget = graphene.Field(ReturnWidgetInput, description="The child of this argument")
+    nullable = graphene.Boolean(description="Is this argument nullable", required=True)
 
 
 class DefinitionInput(graphene.InputObjectType):
@@ -105,11 +100,10 @@ class DefinitionInput(graphene.InputObjectType):
     )
     name = graphene.String(description="The name of this template", required=True)
     args = graphene.List(ArgPortInput, description="The Args")
-    kwargs = graphene.List(KwargPortInput, description="The Kwargs")
     returns = graphene.List(ReturnPortInput, description="The Returns")
     interfaces = graphene.List(
         graphene.String,
-        description="The Interfaces this node provides [eg. bridge, filter]",
+        description="The Interfaces this node provides makes sense of the metadata",
     )  # todo infer interfaces from args kwargs
     kind = graphene.Argument(
         NodeKindInput,
@@ -119,3 +113,4 @@ class DefinitionInput(graphene.InputObjectType):
     )
     interface = graphene.String(description="The Interface", required=True)
     package = graphene.String(description="The Package", required=False)
+    meta = GenericScalar(description="The metadata", required=False)
