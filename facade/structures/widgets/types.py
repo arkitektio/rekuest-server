@@ -48,7 +48,8 @@ class LinkWidget(graphene.ObjectType):
 
 @register_type
 class SearchWidget(graphene.ObjectType):
-    query = graphene.String(description="A Complex description")
+    query = graphene.String(description="A Complex description", required=True)
+    ward = graphene.String(description="A ward for the app to call", required=True)
 
     class Meta:
         interfaces = (Widget,)
@@ -101,7 +102,8 @@ class StringWidget(graphene.ObjectType):
 
 @register_type
 class CustomWidget(graphene.ObjectType):
-    hook = graphene.String(description="A hook for the app to call")
+    hook = graphene.String(description="A hook for the ward to call")
+    ward = graphene.String(description="A ward for the app to call")
 
     class Meta:
         interfaces = (Widget,)

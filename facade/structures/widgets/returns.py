@@ -21,6 +21,7 @@ class ReturnWidget(graphene.Interface):
 @register_type
 class ImageReturnWidget(graphene.ObjectType):
     query = graphene.String(description="A query that returns an image path")
+    ward = graphene.String(description="A hook for the app to call")
 
     class Meta:
         interfaces = (ReturnWidget,)
@@ -29,6 +30,7 @@ class ImageReturnWidget(graphene.ObjectType):
 @register_type
 class CustomReturnWidget(graphene.ObjectType):
     hook = graphene.String(description="A hook for the app to call")
+    ward = graphene.String(description="A hook for the app to call")
 
     class Meta:
         interfaces = (ReturnWidget,)

@@ -50,12 +50,14 @@ class WidgetInput(graphene.InputObjectType):
     placeholder = graphene.String(description="Placeholder for any widget")
     as_paragraph = graphene.Boolean(description="Is this a paragraph")
     hook = graphene.String(description="A hook for the app to call")
+    ward = graphene.String(description="A ward for the app to call")
 
 
 class ReturnWidgetInput(graphene.InputObjectType):
     kind = graphene.String(description="type", required=True)
     query = graphene.String(description="Do we have a possible")
     hook = graphene.String(description="A hook for the app to call")
+    ward = graphene.String(description="A hook for the app to call")
 
 
 class ChildPortInput(graphene.InputObjectType):
