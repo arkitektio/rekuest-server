@@ -133,7 +133,7 @@ def template_post_save(sender, instance=None, created=None, **kwargs):
 
 
 @receiver(post_save, sender=AssignationLog)
-def ass_log_post_save(sender, instance=None, created=None, **kwargs):
+def ass_log_post_save(sender, instance: AssignationLog = None, created=None, **kwargs):
     from facade.graphql.subscriptions import AssignationSubscription
 
     logging.error("asdasd")

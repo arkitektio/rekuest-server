@@ -29,7 +29,7 @@ Markdown
 lok>=0.1.17
 
 # GraphQL abstaction
-balder[subscription]>=0.1.12
+balder[subscription]>=0.1.21
 
 # Testing and Linting
 ptvsd

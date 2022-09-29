@@ -120,6 +120,7 @@ def change_assignation(m: AssignationChangedMessage, agent: models.Agent):
         ass.status = m.status if m.status else ass.status
         ass.args = m.args if m.args else ass.args
         ass.returns = m.returns if m.returns else ass.returns
+        ass.progress = m.progress if m.progress else ass.progress
         ass.statusmessage = m.message if m.message else ass.statusmessage
         ass.save()
 

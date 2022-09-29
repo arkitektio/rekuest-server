@@ -67,6 +67,7 @@ class Assignation(UpdatableModel):
     args: Optional[List[Any]]
     returns: Optional[List[Any]]
     persist: Optional[bool]
+    progress: Optional[int]
     log: Optional[bool]
     status: Optional[AssignationStatus]
     message: Optional[str]

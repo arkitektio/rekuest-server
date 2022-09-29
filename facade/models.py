@@ -921,6 +921,9 @@ class Assignation(models.Model):
         null=True,
     )
     context = models.JSONField(default=dict, help_text="The Platform context")
+    progress = models.IntegerField(
+        null=True, blank=True, help_text="The progress of this assignation"
+    )
 
     # 1. The State of Everything
     args = models.JSONField(blank=True, null=True, help_text="The Args", default=list)
