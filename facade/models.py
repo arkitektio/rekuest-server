@@ -35,7 +35,6 @@ from django.db import models
 from django.contrib.auth import get_user_model
 import uuid
 import logging
-import requests
 from guardian.shortcuts import get_objects_for_user
 
 logger = logging.getLogger(__name__)

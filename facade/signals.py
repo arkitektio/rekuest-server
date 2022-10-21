@@ -12,7 +12,6 @@ from facade.models import (
 import logging
 from guardian.shortcuts import assign_perm
 from django.contrib.auth import get_user_model
-from hare.k import send_to_arkitekt
 from hare.connection import rmq
 from hare.carrots import (
     HareMessage,

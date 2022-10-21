@@ -3,14 +3,17 @@ LABEL maintainer="jhnnsrs@gmail.com"
 
 
 # Install Minimal Dependencies for Django
-ADD requirements.txt /tmp
-WORKDIR /tmp
-RUN pip install -r requirements.txt
+RUN pip install poetry
+
 
 # Install Arbeid
 RUN mkdir /workspace
 ADD . /workspace
 WORKDIR /workspace
+
+RUN poetry config virtualenvs.create false 
+RUN poetry install
+
 
 CMD bash run.sh
 

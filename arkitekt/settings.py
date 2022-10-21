@@ -64,7 +64,7 @@ INSTALLED_APPS = [
     "django_probes",
     "guardian",
     "graphene_django",
-    "rest_framework",
+    #"rest_framework",
     "balder",
     "facade",
     "hare",
@@ -199,7 +199,6 @@ STATICFILES_DIRS = [
 
 STATIC_ROOT = "/var/www/static/"
 
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 LOGGING = {
     "version": 1,
