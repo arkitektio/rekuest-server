@@ -95,9 +95,10 @@ def prov_pre_delete(sender, instance=None, created=None, **kwargs):
     for reservation in instance.caused_reservations.all():
         reservation.delete()
 
-    forwards.append(
-        UnprovideHareMessage(queue=instance.agent.queue, provision=instance.id)
-    )
+    if instance.agent:
+        forwards.append(
+            UnprovideHareMessage(queue=instance.agent.queue, provision=instance.id)
+        )
 
     for forward_res in forwards:
         rmq.publish(forward_res.queue, forward_res.to_message())
@@ -171,7 +172,7 @@ def prov_post_save(sender, instance: Provision = None, created=None, **kwargs):
     from facade.enums import ProvisionStatus
 
     if created:
-        assign_perm("can_link_to", instance.reservation.waiter.registry.user, instance)
+        assign_perm("can_link_to", instance.creator, instance)
 
     if instance.status == ProvisionStatus.ACTIVE:
         logging.info(

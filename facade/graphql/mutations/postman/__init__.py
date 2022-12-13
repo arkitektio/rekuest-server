@@ -8,7 +8,7 @@ from .unprovide import UnprovideMutation
 from .unreserve import UnreserveMutation
 from .link import LinkMutation
 from .unlink import UnlinkMutation
-
+from .tell import TellMutation
 
 __all__ = [
     "AcknowledgeMutation",
@@ -20,5 +20,6 @@ __all__ = [
     "UnprovideMutation",
     "UnreserveMutation",
     "LinkMutation",
+    "TellMutation",
     "UnlinkMutation",
 ]

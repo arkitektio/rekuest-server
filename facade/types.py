@@ -20,7 +20,7 @@ from balder.types import BalderObject
 import graphene
 from balder.registry import register_type
 from graphene.types.generic import GenericScalar
-
+from facade.structures.annotations import Annotation
 from django.contrib.auth.models import (
     Permission as PermissionModel,
     Group as GroupModel,
@@ -131,6 +131,8 @@ class ChildPort(graphene.ObjectType):
     identifier = Identifier(description="The corresponding Model")
     child = graphene.Field(lambda: ChildPort, description="The child", required=False)
     nullable = graphene.Boolean(description="Is this argument nullable", required=True)
+    annotations = graphene.List(Annotation, description="The annotations of this port")
+
 
 
 class Port(graphene.Interface):
@@ -143,6 +145,7 @@ class Port(graphene.Interface):
     identifier = Identifier(description="The corresponding Model")
     nullable = graphene.Boolean(required=True)
     child = graphene.Field(lambda: ChildPort, description="The child", required=False)
+    annotations = graphene.List(Annotation, description="The annotations of this port")
 
     class Meta:
         description = "A Port"
@@ -239,6 +242,7 @@ class ProvisionParams(graphene.ObjectType):
 
 class Provision(BalderObject):
     params = graphene.Field(ProvisionParams)
+    template = graphene.Field(lambda: Template, required=True)
     log = BalderFiltered(
         ProvisionLog, filterset_class=ProvisionLogFilter, related_field="log"
     )
@@ -274,7 +278,6 @@ class Node(BalderObject):
     templates = BalderFiltered(
         Template, filterset_class=TemplateFilter, related_field="templates"
     )
-    repository = BalderInheritedField(lambda: Repository, related_field="repository")
 
     class Meta:
         model = models.Node
@@ -336,11 +339,15 @@ class Group(BalderObject):
 
 class User(BalderObject):
     color = graphene.String(description="The associated color for this user")
+    name = graphene.String(description="The name of the user")
 
     def resolve_color(root, info):
         if hasattr(root, "meta"):
             return root.meta.color
         return "#FF0000"
+
+    def resolve_name(root, info):
+        return root.first_name + " " + root.last_name
 
     class Meta:
         model = get_user_model()

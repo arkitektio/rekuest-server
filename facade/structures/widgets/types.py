@@ -2,16 +2,16 @@ from balder.registry import register_type
 import graphene
 from graphene.types.generic import GenericScalar
 
-get_widget_types = lambda: {
-    "QueryWidget": QueryWidget,
-    "IntWidget": IntWidget,
-    "StringWidget": StringWidget,
-    "SearchWidget": SearchWidget,
-    "SliderWidget": SliderWidget,
-    "LinkWidget": LinkWidget,
-    "BoolWidget": BoolWidget,
-    "ChoiceWidget": ChoiceWidget,
-    "CustomWIdget": CustomWidget,
+widget_types = {
+    "QueryWidget": lambda: QueryWidget,
+    "IntWidget": lambda: IntWidget,
+    "StringWidget": lambda: StringWidget,
+    "SearchWidget": lambda: SearchWidget,
+    "SliderWidget": lambda: SliderWidget,
+    "LinkWidget": lambda: LinkWidget,
+    "BoolWidget": lambda: BoolWidget,
+    "ChoiceWidget": lambda: ChoiceWidget,
+    "CustomWidget": lambda: CustomWidget,
 }
 
 
@@ -25,9 +25,9 @@ class Widget(graphene.Interface):
 
     @classmethod
     def resolve_type(cls, instance, info):
-        typemap = get_widget_types()
+        typemap = widget_types
         _type = instance.get("kind")
-        return typemap.get(_type, Widget)
+        return typemap.get(_type, lambda: Widget)()
 
 
 @register_type

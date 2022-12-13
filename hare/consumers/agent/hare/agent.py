@@ -222,6 +222,7 @@ class HareAgentConsumer(AgentConsumer):
         replies = [
             ProvideSubMessage(
                 provision=message.provision,
+                guardian=message.provision,
                 template=message.template,
                 status=message.status,
             )

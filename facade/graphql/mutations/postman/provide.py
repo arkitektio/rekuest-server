@@ -1,6 +1,6 @@
 import uuid
 from facade import types
-from facade.models import Provision
+from facade.models import Provision, Agent, Template
 from balder.types import BalderMutation
 from graphene.types.generic import GenericScalar
 from lok import bounced
@@ -14,9 +14,8 @@ class ProvideMutation(BalderMutation):
     """Scan allows you to add Datapoints to your Arnheim Schema, this is only available to Admin users"""
 
     class Arguments:
-        node = graphene.ID(required=False)
-        template = graphene.ID(required=False)
-        reference = graphene.String(required=False)
+        template = graphene.ID(required=True)
+        agent = graphene.ID(required=True)
         params = GenericScalar(description="Additional Params")
 
     class Meta:
@@ -24,16 +23,19 @@ class ProvideMutation(BalderMutation):
         operation = "provide"
 
     @bounced(only_jwt=True)
-    def mutate(root, info, node=None, template=None, params={}, reference=None):
-        reference = reference or str(uuid.uuid4())
+    def mutate(root, info, node=None, template=None, params={}, agent=None):
         bounce = info.context.bounced
+
+        temp = Template.objects.get(id=template)
+        agent = Agent.objects.get(id=agent)
+
+        assert agent.registry == temp.registry, "Agent and Template must be in the same Registry"
 
         pro = Provision.objects.create(
             **{
-                "node_id": node,
-                "template_id": template,
+                "template": temp,
                 "params": params,
-                "reference": reference,
+                "agent": agent,
                 "creator": bounce.user,
                 "app": bounce.app,
             }

@@ -11,8 +11,9 @@ from facade.inputs import (
     NodeKindInput,
     ProvisionStatusInput,
 )
-from .models import Agent, Node, Repository, Template
+from .models import Agent, Node, Repository, Template, Registry
 from django.db.models import Q
+from django.db.models import Count
 
 # class PodFilter(django_filters.FilterSet):
 #    agent = django_filters.ModelChoiceFilter(queryset=Agent.objects.all(),field_name= "template__provider")
@@ -34,10 +35,17 @@ class UserFilter(django_filters.FilterSet):
 
 class AgentFilter(django_filters.FilterSet):
     app = django_filters.CharFilter(method="app_filter")
+    registry = django_filters.ModelChoiceFilter(
+        queryset=Registry.objects.all(), field_name="registry"
+    )
     status = MultiEnumFilter(type=AgentStatusInput, field_name="status")
+    search = django_filters.CharFilter(method="search_filter", label="Search")
 
-    def app_filter(self, queryset, name, value):
-        return queryset.filter(registry__app__client_id=value)
+
+    def search_filter(self, queryset, name, value):
+        return queryset.filter(
+            Q(registry__app__name__icontains=value) | Q(template__interface__icontains=value)
+        )
 
 
 class NodeFilter(django_filters.FilterSet):
@@ -49,6 +57,8 @@ class NodeFilter(django_filters.FilterSet):
     type = EnumFilter(type=NodeKindInput, field_name="type")
     arg_types = django_filters.BaseInFilter(method="arg_types_filter", label="Args")
     interfaces = django_filters.BaseInFilter(method="interfaces_filter", label="Args")
+    restrict = django_filters.BaseInFilter(method="restrict_filter", label="Restrict")
+    templated = django_filters.BooleanFilter(method="templated_filter", label="Currently Templated")
 
     def search_filter(self, queryset, name, value):
         return queryset.filter(
@@ -59,6 +69,12 @@ class NodeFilter(django_filters.FilterSet):
         for i in value:
             queryset = queryset.filter(interfaces__contains=i)
         return queryset
+
+    def restrict_filter(self, queryset, name, value):
+        return queryset.filter(templates__registry__unique__in=value)
+
+    def templated_filter(self, queryset, name, value):
+        return queryset.annotate(num_templates=Count('templates')).filter(num_templates__gt= 0)
 
     def arg_types_filter(self, queryset, name, value):
         filter_args = {}
@@ -99,6 +115,10 @@ class ReservationLogFilter(django_filters.FilterSet):
 
 class NodesFilter(django_filters.FilterSet):
     package = django_filters.CharFilter(field_name="package", lookup_expr="icontains")
+
+
+class RegistryFilter(django_filters.FilterSet):
+    unique = django_filters.CharFilter(field_name="unique", lookup_expr="icontains")
 
 
 class TemplateFilter(django_filters.FilterSet):

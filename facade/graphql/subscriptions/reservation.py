@@ -86,9 +86,11 @@ class ReservationsSubscription(BalderSubscription):
 
     @bounced(only_jwt=True)
     def subscribe(root, info, *args, identifier=None, provision=None):
-        registry, _ = models.Registry.objects.get_or_create(
-            user=info.context.bounced.user, app=info.context.bounced.app
-        )
+        client = info.context.bounced.client
+        user = info.context.bounced.user
+
+       
+        registry, _ = models.Registry.objects.update_or_create(user=user, client=client, defaults=dict(app=info.context.bounced.app))
         waiter, _ = models.Waiter.objects.get_or_create(
             registry=registry, identifier=identifier
         )

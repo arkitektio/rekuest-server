@@ -1,5 +1,14 @@
 from balder.enum import InputEnum
 from django.db.models import TextChoices
+import graphene
+from facade.structures.annotations import annotation_types
+from facade.structures.widgets.types import widget_types
+from facade.structures.widgets.returns import return_widget_types
+
+AnnotationKind = type("AnnotationKind", (graphene.Enum,), {"__doc__": "The kind of annotation", **{key: key for key, value in annotation_types.items()}})
+WidgetKind = type("WidgetKind", (graphene.Enum,), {"__doc__": "The kind of widget", **{key: key for key, value in widget_types.items()}})
+ReturnWidgetKind = type("ReturnWidgetKind", (graphene.Enum,), {"__doc__": "The kind of return widget", **{key: key for key, value in return_widget_types.items()}})
+
 
 
 class ProvisionMode(TextChoices):

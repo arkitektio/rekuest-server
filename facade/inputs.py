@@ -9,9 +9,9 @@ from facade.enums import (
 from balder.enum import InputEnum
 from graphene.types.generic import GenericScalar
 import graphene
-
-from facade.scalars import Any, AnyInput
-
+from .enums import AnnotationKind, ReturnWidgetKind, WidgetKind
+from facade.scalars import Any, AnyInput, SearchQuery, Identifier
+from facade.structures.annotations import IsPredicateType
 
 NodeKindInput = InputEnum.from_choices(NodeKind)
 
@@ -38,9 +38,30 @@ class ChoiceInput(graphene.InputObjectType):
     label = graphene.String(required=True)
 
 
+
+class MessageKind(graphene.Enum):
+    
+    TERMINATE = "TERMINATE" # terminate the assignation 
+    CANCEL = "CANCEL" # Cancel an ongoing assignation (e.g. )
+    ASSIGN = "ASSIGN" # Assign, execute, and return (only available for definitions that are function or generators)
+    
+
+    TELL = "TELL" # Tell and forget
+
+
+
+class MessageInput(graphene.InputObjectType):
+    kind = MessageKind(required=True)
+    text = graphene.String(required=True)
+    reference = graphene.String(required=True)
+    data = AnyInput(required=True)
+
+
+
+
 class WidgetInput(graphene.InputObjectType):
-    kind = graphene.String(description="type", required=True)
-    query = graphene.String(description="Do we have a possible")
+    kind = graphene.Argument(WidgetKind, description="type", required=True)
+    query = SearchQuery(description="Do we have a possible")
     dependencies = graphene.List(
         graphene.String, description="The dependencies of this port"
     )
@@ -54,23 +75,35 @@ class WidgetInput(graphene.InputObjectType):
 
 
 class ReturnWidgetInput(graphene.InputObjectType):
-    kind = graphene.String(description="type", required=True)
+    kind = graphene.Argument(ReturnWidgetKind, description="type", required=True)
     query = graphene.String(description="Do we have a possible")
     hook = graphene.String(description="A hook for the app to call")
     ward = graphene.String(description="A hook for the app to call")
 
 
 class ChildPortInput(graphene.InputObjectType):
-    identifier = graphene.String(description="The identifier")
+    identifier = Identifier(description="The identifier")
     name = graphene.String(description="The name of this port")
     kind = PortKindInput(description="The type of this port")
     description = graphene.String(description="The description of this port")
     child = graphene.Field(lambda: ChildPortInput, description="The child port")
     nullable = graphene.Boolean(description="Is this argument nullable", required=True)
+    annotations = graphene.List(lambda: AnnotationInput, description="The annotations of this argument")
+
+class AnnotationInput(graphene.InputObjectType):
+    kind = graphene.Argument(AnnotationKind, description="The kind of annotation", required=True)
+    name = graphene.String(description="The name of this annotation")
+    args = graphene.String(description="The value of this annotation")
+    min = graphene.Float(description="The min of this annotation (Value Range)")
+    max = graphene.Float(description="The max of this annotation (Value Range)")
+    hook = graphene.String(description="A hook for the app to call")
+    predicate = graphene.Argument(IsPredicateType, description="The predicate of this annotation (IsPredicate)")
+    attribute = graphene.String(description="The attribute to check")
+    annotations = graphene.List(lambda: AnnotationInput, description="The annotation of this annotation")
 
 
 class ArgPortInput(graphene.InputObjectType):
-    identifier = graphene.String(description="The identifier")
+    identifier = Identifier(description="The identifier")
     key = graphene.String(description="The key of the arg", required=True)
     name = graphene.String(description="The name of this argument")
     label = graphene.String(description="The name of this argument")
@@ -80,10 +113,12 @@ class ArgPortInput(graphene.InputObjectType):
     widget = graphene.Field(WidgetInput, description="The child of this argument")
     default = Any(description="The key of the arg", required=False)
     nullable = graphene.Boolean(description="Is this argument nullable", required=True)
+    annotations = graphene.List(AnnotationInput, description="The annotations of this argument")
+
 
 
 class ReturnPortInput(graphene.InputObjectType):
-    identifier = graphene.String(description="The identifier")
+    identifier = Identifier(description="The identifier")
     key = graphene.String(description="The key of the arg", required=True)
     name = graphene.String(description="The name of this argument")
     label = graphene.String(description="The name of this argument")
@@ -92,10 +127,11 @@ class ReturnPortInput(graphene.InputObjectType):
     child = graphene.Field(ChildPortInput, description="The child of this argument")
     widget = graphene.Field(ReturnWidgetInput, description="The child of this argument")
     nullable = graphene.Boolean(description="Is this argument nullable", required=True)
+    annotations = graphene.List(AnnotationInput, description="The annotations of this argument")
 
 
 class DefinitionInput(graphene.InputObjectType):
-    """A definition for a node"""
+    """A definition for a template"""
 
     description = graphene.String(
         description="A description for the Node", required=False
@@ -103,6 +139,7 @@ class DefinitionInput(graphene.InputObjectType):
     name = graphene.String(description="The name of this template", required=True)
     args = graphene.List(ArgPortInput, description="The Args")
     returns = graphene.List(ReturnPortInput, description="The Returns")
+    interface = graphene.String(description="The interface of this template")
     interfaces = graphene.List(
         graphene.String,
         description="The Interfaces this node provides makes sense of the metadata",
@@ -113,6 +150,5 @@ class DefinitionInput(graphene.InputObjectType):
         default_value=NodeKind.FUNCTION.value,
         required=True,
     )
-    interface = graphene.String(description="The Interface", required=True)
-    package = graphene.String(description="The Package", required=False)
-    meta = GenericScalar(description="The metadata", required=False)
+    pure = graphene.Boolean(required=False, default_value=False)
+    idempotent = graphene.Boolean(required=False, default_value=False)

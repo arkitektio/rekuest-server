@@ -10,7 +10,7 @@ from hare.carrots import (
     ReservationChangedMessage,
 )
 from hare.messages import ReserveParams
-from lok.models import LokApp
+from lok.models import LokApp, LokClient
 from facade.managers import NodeManager, ReservationManager
 from facade.fields import (
     ArgsField,
@@ -57,6 +57,7 @@ class Repository(models.Model):
 
 
 class Registry(models.Model):
+    client = models.ForeignKey(LokClient, on_delete=models.CASCADE)
     app = models.ForeignKey(
         LokApp, on_delete=models.CASCADE, null=True, help_text="The Associated App"
     )
@@ -66,20 +67,12 @@ class Registry(models.Model):
         null=True,
         help_text="The Associated App",
     )
-    unique = models.CharField(
-        max_length=1000, default=uuid.uuid4, help_text="A world-unique identifier"
-    )
-    name = models.CharField(
-        max_length=2000,
-        default="Unnamed",
-        help_text="A name for this registzry",
-    )
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["app", "user"],
-                name="No multiple Registry for same App and User allowed",
+                fields=["client", "user"],
+                name="No multiple Clients for same App and User allowed",
             )
         ]
 
@@ -89,10 +82,6 @@ class Registry(models.Model):
 
 class Structure(models.Model):
     """A Structure is a uniquely identifiable model for a Repository"""
-
-    repository = models.ForeignKey(
-        Repository, on_delete=models.CASCADE, related_name="models"
-    )
     extenders = models.JSONField(
         help_text="Registered Extenders on this Model", null=True
     )
@@ -103,7 +92,7 @@ class Structure(models.Model):
     )
 
     def __str__(self):
-        return f"{self.identifier} at {self.repository}"
+        return f"{self.identifier}"
 
 
 class MirrorRepository(Repository):
@@ -205,35 +194,26 @@ class Node(models.Model):
     """Nodes are abstraction of RPC Tasks. They provide a common API to deal with creating tasks.
 
     See online Documentation"""
-
     pure = models.BooleanField(
         default=False, help_text="Is this function pure. e.g can we cache the result?"
     )
-
+    idempotent = models.BooleanField(
+        default=False, help_text="Is this function pure. e.g can we cache the result?"
+    )
     kind = models.CharField(
         max_length=1000,
         choices=NodeKind.choices,
         default=NodeKind.FUNCTION,
         help_text="Function, generator? Check async Programming Textbook",
     )
-    repository = models.ForeignKey(
-        Repository,
-        on_delete=models.CASCADE,
-        related_name="nodes",
-    )
     interfaces = models.JSONField(
         default=list, help_text="Intercae that we use to interpret the meta data"
     )
-
     name = models.CharField(
         max_length=1000, help_text="The cleartext name of this Node"
     )
     meta = models.JSONField(
         null=True, blank=True, help_text="Meta data about this Node"
-    )
-    package = models.CharField(max_length=1000, help_text="Package (think Module)")
-    interface = models.CharField(
-        max_length=1000, help_text="Interface (think Function)"
     )
 
     description = models.TextField(help_text="A description for the Node")
@@ -241,26 +221,24 @@ class Node(models.Model):
         null=True, blank=True, help_text="Beautiful images for beautiful Nodes"
     )
 
+
+    hash = models.CharField(max_length=1000, help_text="The hash of the Node (completely unique)", unique=True)
+
     args = ArgsField(default=list, help_text="Inputs for this Node")
     returns = ReturnField(default=list, help_text="Outputs for this Node")
 
     objects = NodeManager()
 
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["package", "interface"],
-                name="package, interface, cannot be the same",
-            )
-        ]
-
     def __str__(self):
-        return f"{self.name}/{self.interface}"
+        return f"{self.name}"
 
 
 class Template(models.Model):
     """A Template is a conceptual implementation of A Node. It represents its implementation as well as its performance"""
 
+    interface = models.CharField(
+        max_length=1000, help_text="Interface (think Function)"
+    )
     node = models.ForeignKey(
         Node,
         on_delete=models.CASCADE,
@@ -296,12 +274,6 @@ class Template(models.Model):
         null=True,
         help_text="Who created this template on this instance",
     )
-    version = models.CharField(
-        max_length=400,
-        help_text="A short descriptor for the kind of version",
-        null=True,
-        blank=True,
-    )  # Subject to change
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -309,7 +281,7 @@ class Template(models.Model):
         permissions = [("providable", "Can provide this template")]
         constraints = [
             models.UniqueConstraint(
-                fields=["node", "version", "registry"],
+                fields=["interface", "registry"],
                 name="A template has unique versions for every node it trys to implement",
             )
         ]
@@ -497,6 +469,7 @@ class Provision(models.Model):
                     queue=self.agent.queue,
                     provision=self.id,
                     reservation=reservation.id,
+                    template=self.template.id,
                 )
             )
         else:
@@ -854,7 +827,8 @@ class Reservation(models.Model):
                                 break
 
                             prov = Provision.objects.create(
-                                template=template, agent=agent, reservation=self
+                                template=template, agent=agent, reservation=self,
+                                creator=self.waiter.registry.user,
                             )
 
                             prov, linkforwards = prov.link(self)

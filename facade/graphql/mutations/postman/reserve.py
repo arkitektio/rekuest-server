@@ -8,7 +8,7 @@ import logging
 from hare.messages import ReserveParams
 from hare.connection import rmq
 from django.contrib.auth import get_user_model
-
+from facade.utils import get_imitiate
 logger = logging.getLogger(__name__)  #
 
 
@@ -28,7 +28,7 @@ class ReserveMutation(BalderMutation):
             description="A unique identifier", required=False, default_value="default"
         )
         allow_auto_request = graphene.Boolean(required=False)
-        imitate = graphene.String(required=False)
+        imitate = graphene.ID(required=False)
         provision = graphene.ID(required=False)
 
     class Meta:
@@ -59,10 +59,10 @@ class ReserveMutation(BalderMutation):
                 "imitate", imitate
             ), "You don't have permission to imitate this user"
 
-        creator = info.context.bounced.user if not imitate else imitate
-        app = info.context.bounced.app
+        user = info.context.user if imitate is None else get_imitiate(info.context.user, imitate)
+        client = info.context.bounced.client
 
-        registry, _ = Registry.objects.get_or_create(user=creator, app=app)
+        registry, _ = Registry.objects.update_or_create(user=user, client=client, defaults=dict(app=info.context.bounced.app))
         waiter, _ = Waiter.objects.get_or_create(
             registry=registry, identifier=app_group
         )

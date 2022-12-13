@@ -67,9 +67,10 @@ class ReservationsQuery(BalderQuery):
     def resolve(root, info, exclude=None, filter=None, identifier="default"):
 
         creator = info.context.bounced.user
-        app = info.context.bounced.app
+        client = info.context.bounced.client
 
-        registry, _ = models.Registry.objects.get_or_create(user=creator, app=app)
+       
+        registry, _ = models.Registry.objects.update_or_create(user=creator, client=client, defaults=dict(app=info.context.bounced.app))
         waiter, _ = models.Waiter.objects.get_or_create(
             registry=registry, identifier=identifier
         )

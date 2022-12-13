@@ -35,7 +35,7 @@ def list_provisions(m: ProvisionList, agent: models.Agent, **kwargs):
 
         provisions = [
             messages.Provision(
-                provision=prov.id, status=prov.status, template=prov.template.id
+                provision=prov.id, guardian=prov.id, status=prov.status, template=prov.template.id
             )
             for prov in provisions
         ]
@@ -70,10 +70,12 @@ def list_assignations(m: AssignationsList, agent: models.Agent, **kwargs):
         assignations = [
             messages.Assignation(
                 assignation=ass.id,
+                guardian=ass.id,
                 status=ass.status,
                 args=ass.args,
                 reservation=ass.reservation.id,
                 provision=ass.provision.id,
+                user=ass.creator.id,
             )
             for ass in assignations
         ]
@@ -98,10 +100,12 @@ def bind_assignation(m: AssignHareMessage, prov: str, **kwargs):
         reply += [
             AssignSubMessage(
                 assignation=ass.id,
+                guardian=ass.id,
                 status=ass.status,
                 args=ass.args,
                 reservation=ass.reservation.id,
                 provision=ass.provision.id,
+                user=ass.creator.id,
             )
         ]
 

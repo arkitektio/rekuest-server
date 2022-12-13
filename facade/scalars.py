@@ -6,10 +6,8 @@ import graphene
 
 class QString(Scalar):
     """A q-string is a universal identifier for a node on the
-    arkitekt platform, its akin to a npm package or pip package
-    and follows the following syntax:
-
-    @package/interface
+    arkitekt platform, its a hash of the node's name and the
+    and its functional signature.
     """
 
     @staticmethod
@@ -40,3 +38,4 @@ class SearchQuery(graphene.String):
 
 class Identifier(graphene.String):
     """A unique Structure identifier"""
+

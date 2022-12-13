@@ -71,6 +71,7 @@ class Assignation(UpdatableModel):
     log: Optional[bool]
     status: Optional[AssignationStatus]
     message: Optional[str]
+    user: Optional[str]
 
 
 class Unassignation(UpdatableModel):
@@ -80,6 +81,7 @@ class Unassignation(UpdatableModel):
 
 class Provision(UpdatableModel):
     provision: str
+    guardian: Optional[str]
     template: Optional[str]
     status: Optional[ProvisionStatus]
 

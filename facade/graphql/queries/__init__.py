@@ -9,8 +9,7 @@ from .structure import Structure, StructureDetailQuery, Structures
 from .provision import Provision, MyProvisions, Provisions, ProvisionDetailQuery
 from .perms import PermissionsFor
 from .user import Users, Me
-
-
+from .registries import Registries, RegistryDetailQuery
 __all__ = [
     "AgentDetailQuery",
     "Agents",
@@ -38,4 +37,6 @@ __all__ = [
     "Users",
     "Me",
     "User",
+    "Registries",
+    "RegistryDetailQuery",
 ]

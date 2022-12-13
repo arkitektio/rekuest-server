@@ -1,9 +1,9 @@
 from balder.registry import register_type
 import graphene
 
-get_widget_types = lambda: {
-    "ImageReturnWidget": ImageReturnWidget,
-    "CustomReturnWidget": CustomReturnWidget,
+return_widget_types = {
+    "ImageReturnWidget": lambda: ImageReturnWidget,
+    "CustomReturnWidget": lambda: CustomReturnWidget,
 }
 
 
@@ -13,9 +13,9 @@ class ReturnWidget(graphene.Interface):
 
     @classmethod
     def resolve_type(cls, instance, info):
-        typemap = get_widget_types()
+        typemap = return_widget_types
         _type = instance.get("kind")
-        return typemap.get(_type, ReturnWidget)
+        return typemap.get(_type, lambda: ReturnWidget)()
 
 
 @register_type

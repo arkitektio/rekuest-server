@@ -105,10 +105,12 @@ class ProvisionChangedMessage(JSONMessage):
 
 class AssignSubMessage(JSONMessage, Assignation):
     type: Literal[AgentSubMessageTypes.ASSIGN] = AgentSubMessageTypes.ASSIGN
+    guardian: str
 
 
 class ProvideSubMessage(JSONMessage, Provision):
     type: Literal[AgentSubMessageTypes.PROVIDE] = AgentSubMessageTypes.PROVIDE
+    guardian: str
 
 
 class UnassignSubMessage(JSONMessage, Unassignation):

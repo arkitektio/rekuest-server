@@ -21,7 +21,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
 
     @sync_to_async
     def set_agent(self):
-        self.app, self.user = self.scope["bounced"].app, self.scope["bounced"].user
+        self.client, self.user = self.scope["bounced"].client, self.scope["bounced"].user
         instance_id = (
             parse_qs(self.scope["query_string"])
             .get(b"instance_id", [b"default"])[0]
@@ -29,9 +29,9 @@ class AgentConsumer(AsyncWebsocketConsumer):
         )
 
         if self.user is None or self.user.is_anonymous:
-            registry, _ = Registry.objects.get_or_create(user=None, app=self.app)
+            registry, _ = Registry.objects.get_or_create(user=None, client=self.client)
         else:
-            registry, _ = Registry.objects.get_or_create(user=self.user, app=self.app)
+            registry, _ = Registry.objects.get_or_create(user=self.user, client=self.client)
 
         self.agent, _ = Agent.objects.get_or_create(
             registry=registry, identifier=instance_id

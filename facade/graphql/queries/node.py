@@ -17,13 +17,11 @@ class NodeDetailQuery(BalderQuery):
     class Arguments:
         q = graphene.Argument(QString, description="The identifier string")
         id = graphene.ID(description="The query node")
-        package = graphene.String(description="The package of this node")
-        interface = graphene.String(description="The interface of this node")
+        hash = graphene.String(description="The query node")
         template = graphene.ID(
             description="Get node for a template (overrides the others)"
         )
-
-    @bounced(anonymous=True)
+    
     def resolve(root, info, template=None, **kwargs):
         if template:
             return Template.objects.get(id=template).node
