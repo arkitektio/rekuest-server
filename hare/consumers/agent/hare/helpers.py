@@ -64,6 +64,7 @@ def list_assignations(m: AssignationsList, agent: models.Agent, **kwargs):
                 AssignationStatus.ACKNOWLEDGED,
                 AssignationStatus.DONE,
                 AssignationStatus.ERROR,
+                AssignationStatus.CRITICAL,
             ]
         )
 

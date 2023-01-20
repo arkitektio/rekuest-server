@@ -19,6 +19,7 @@ from .admin import (
     ResetProvisions,
     ResetReservations,
 )
+from .agent import DeleteAgent
 from .perms import ChangePermissions
 
 __all__ = [
@@ -43,4 +44,5 @@ __all__ = [
     "ResetProvisions",
     "ResetReservations",
     "ChangePermissions",
+    "DeleteAgent"
 ]
