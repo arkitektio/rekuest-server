@@ -54,7 +54,7 @@ def list_assignations(m: AssignationsList, agent: models.Agent, **kwargs):
     forward = []
 
     try:
-        assignations = models.Assignation.objects.filter(
+        """ assignations = models.Assignation.objects.filter(
             provision__agent=agent
         ).exclude(
             status__in=[
@@ -66,7 +66,8 @@ def list_assignations(m: AssignationsList, agent: models.Agent, **kwargs):
                 AssignationStatus.ERROR,
                 AssignationStatus.CRITICAL,
             ]
-        )
+        ) """
+        assignations =  []
 
         assignations = [
             messages.Assignation(
@@ -80,11 +81,13 @@ def list_assignations(m: AssignationsList, agent: models.Agent, **kwargs):
             )
             for ass in assignations
         ]
-
+        
         reply += [AssignationsListReply(id=m.id, assignations=assignations)]
     except Exception as e:
         logger.error("list assign failure", exc_info=True)
         reply += [AssignationsListDenied(id=m.id, error=str(e))]
+
+
 
     return reply, forward
 

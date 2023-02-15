@@ -49,8 +49,9 @@ class AssignMutation(BalderMutation):
 
         creator = info.context.bounced.user
         app = info.context.bounced.app
+        client = info.context.bounced.client
 
-        registry, _ = Registry.objects.get_or_create(user=creator, app=app)
+        registry, _ = Registry.objects.get_or_create(user=creator, client=client, defaults=dict(app=info.context.bounced.app))
 
         creator = info.context.bounced.user
         app = info.context.bounced.app

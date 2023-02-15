@@ -23,11 +23,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = conf.server.secret_key
+SECRET_KEY = conf.django.secret_key
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = conf.server.debug
-ALLOWED_HOSTS = conf.server.hosts
+DEBUG = conf.django.debug
+ALLOWED_HOSTS = conf.django.hosts
 CORS_ORIGIN_ALLOW_ALL = True
 
 LOK = {
@@ -38,9 +38,9 @@ LOK = {
 
 SUPERUSERS = [
     {
-        "USERNAME": conf.server.admin.username,
-        "EMAIL": conf.server.admin.email,
-        "PASSWORD": conf.server.admin.password,
+        "USERNAME": conf.django.admin.username,
+        "EMAIL": conf.django.admin.email,
+        "PASSWORD": conf.django.admin.password,
     }
 ]
 
@@ -68,7 +68,11 @@ INSTALLED_APPS = [
     "balder",
     "facade",
     "hare",
+    "perms",
 ]
+
+SHARABLE_APPS = ["facade","lok"]
+
 
 HEALTH_CHECK = {
     "DISK_USAGE_MAX": 90,  # percent
@@ -122,18 +126,18 @@ ASGI_APPLICATION = "arkitekt.asgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": conf.postgres.db_name,
-        "USER": conf.postgres.user,
-        "PASSWORD": conf.postgres.password,
-        "HOST": conf.postgres.host,
-        "PORT": conf.postgres.port,
+        "ENGINE": conf.db.engine,
+        "NAME": conf.db.db_name,
+        "USER": conf.db.username,
+        "PASSWORD": conf.db.password,
+        "HOST": conf.db.host,
+        "PORT": conf.db.port,
     }
 }
 
 
 REDIS_URL = f"redis://{conf.redis.host}:{conf.redis.port}"
-BROKER_URL = f"amqp://{conf.rabbit.username}:{conf.rabbit.password}@{conf.rabbit.host}:{conf.rabbit.port}/{conf.rabbit.v_host}"
+BROKER_URL = f"amqp://{conf.rabbitmq.username}:{conf.rabbitmq.password}@{conf.rabbitmq.host}:{conf.rabbitmq.port}/{conf.rabbitmq.v_host}"
 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

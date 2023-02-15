@@ -11,6 +11,7 @@ from facade.inputs import (
     NodeKindInput,
     ProvisionStatusInput,
 )
+from lok.models import LokClient
 from .models import Agent, Node, Repository, Template, Registry
 from django.db.models import Q
 from django.db.models import Count
@@ -88,7 +89,9 @@ class NodeFilter(django_filters.FilterSet):
 
 class ProvisionFilter(django_filters.FilterSet):
     status = MultiEnumFilter(type=ProvisionStatusInput, field_name="status")
-    agent = django_filters.ModelChoiceFilter(queryset=Agent.objects, field_name="agent")
+    agent = django_filters.ModelChoiceFilter(queryset=Agent.objects.all(), field_name="agent")
+    client = django_filters.ModelChoiceFilter(queryset=LokClient.objects.all(), field_name="client")
+    client_id = django_filters.CharFilter(field_name="agent__registry__client__client_id", lookup_expr="iexact")
 
 
 class AssignationFilter(django_filters.FilterSet):

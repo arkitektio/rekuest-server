@@ -1,4 +1,4 @@
-from facade.models import Registry, Template, Structure, Node
+from facade.models import Registry, Template, Structure, Node, Agent
 from facade import types
 from balder.types import BalderMutation
 import graphene
@@ -15,6 +15,7 @@ from facade.utils import get_imitiate
 class CreateTemplate(BalderMutation):
     class Arguments:
         definition = graphene.Argument(DefinitionInput, required=True)
+        instance_id = graphene.ID(description="The instance id", required=True)
         extensions = graphene.List(
             graphene.String, description="Desired Extensions", required=False
         )
@@ -36,6 +37,7 @@ class CreateTemplate(BalderMutation):
         policy=None,
         extensions=[],
         imitate=None,
+        instance_id="main",
     ):
         args = definition.args or []
         returns = definition.returns or []
@@ -92,9 +94,12 @@ class CreateTemplate(BalderMutation):
             client=info.context.bounced.client, user=user, defaults=dict(app=info.context.bounced.app)
         )
 
+        agent, _ = Agent.objects.update_or_create(
+            registry = registry, instance_id = instance_id, name="default"
+        )
         try:
             template = Template.objects.get(
-                interface=definition.interface, registry=registry
+                interface=definition.interface, agent=agent
             )
             template.node = node
             template.extensions = extensions
@@ -106,7 +111,7 @@ class CreateTemplate(BalderMutation):
                 interface=definition.interface,
                 node=node,
                 params=params or {},
-                registry=registry,
+                agent=agent,
                 extensions=extensions,
             )
 

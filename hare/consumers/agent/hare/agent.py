@@ -33,8 +33,10 @@ class HareAgentConsumer(AgentConsumer):
         super().__init__(*args, **kwargs)
         self.res_queues = {}
         self.res_consumers = {}
+        self.res_consumer_tags = {}
         self.prov_queues = {}
         self.prov_consumers = {}
+        self.prov_consumer_tags = {}
 
     async def connect(self):
         await super().connect()
@@ -77,7 +79,7 @@ class HareAgentConsumer(AgentConsumer):
                 await self.on_unprovide(UnprovideHareMessage(**json_dict))
 
         except Exception:
-            logger.exception("Error on on_rmq_message_in")
+            logger.exception("Error on on_rmq_message_ins")
 
         self.channel.basic_ack(rmq_message.delivery.delivery_tag)
 
@@ -120,6 +122,9 @@ class HareAgentConsumer(AgentConsumer):
         for r in forwards:
             await self.forward(r)
 
+        #self.channel.basic_ack(rmq_message.delivery.delivery_tag)
+        logger.error(f"OINOINOINOIN Acknowledged Assignment for {provid} {rmq_message}")
+
     async def on_provision_changed(self, message: ProvisionChangedMessage):
 
         if message.status == ProvisionStatus.CANCELLED:
@@ -132,17 +137,23 @@ class HareAgentConsumer(AgentConsumer):
             )
 
             for res, queue in queues:
-                logger.debug(f"Lisenting for queue of Reservation {res}")
+                logger.error(f"Lisenting for queue of Reservation {res}")
                 self.res_queues[res] = await self.channel.queue_declare(
                     queue,
                     auto_delete=True,
                 )
+                tag =  str(uuid.uuid4())
                 self.res_consumers[res] = await self.channel.basic_consume(
                     self.res_queues[res].queue,
                     lambda aio: self.on_assignment_in(message.provision, aio),
-                    consumer_tag=f"res-{res}-prov-{message.provision}",
+                    consumer_tag=tag,
+                    no_ack=True,
                 )
+                self.res_consumer_tags[res] = tag
 
+
+
+            tag =  str(uuid.uuid4())
             prov_id, prov_queue = prov_queue
             self.prov_queues[prov_id] = await self.channel.queue_declare(
                 prov_queue,
@@ -151,8 +162,10 @@ class HareAgentConsumer(AgentConsumer):
             self.prov_consumers[prov_id] = await self.channel.basic_consume(
                 self.prov_queues[prov_id].queue,
                 lambda aio: self.on_assignment_in(message.provision, aio),
-                consumer_tag=f"prov-{prov_id}",
+                consumer_tag=tag,
+                no_ack=True,
             )
+            self.prov_consumer_tags[prov_id] = tag
 
         else:
             replies, forwards = await change_provision(message, agent=self.agent)
@@ -205,7 +218,8 @@ class HareAgentConsumer(AgentConsumer):
         )
 
         for id in delete_queue_id:
-            await self.channel.basic_cancel(f"res-{id}-prov-{message.provision}")
+            consumer_tag = self.res_consumer_tags[id]
+            await self.channel.basic_cancel(consumer_tag)
             logger.debug(
                 f"Deleting consumer for queue {id} of Reservation {message.provision}"
             )
@@ -240,6 +254,13 @@ class HareAgentConsumer(AgentConsumer):
             )
         ]
 
+        loose_tag = self.prov_consumer_tags[message.provision]
+        await self.channel.basic_cancel(loose_tag)
+        logger.debug(
+            f"Deleting consumer for queue {id} of Reservation {message.provision}"
+        )
+
+
         for r in replies:
             await self.reply(r)
 
@@ -251,6 +272,7 @@ class HareAgentConsumer(AgentConsumer):
 
             for r in forwards:
                 await self.forward(r)
+
 
             await self.channel.close()
         except Exception as e:

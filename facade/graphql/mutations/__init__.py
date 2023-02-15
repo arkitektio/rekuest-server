@@ -1,4 +1,4 @@
-from .node import DeleteNode
+from .node import DeleteNode, PurgeNodes
 from .repo import CreateMirror, UpdateMirror, DeleteRepo
 from .template import CreateTemplate
 from .postman import (

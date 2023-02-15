@@ -32,3 +32,27 @@ class DeleteNode(BalderMutation):
 
     class Meta:
         type = DeleteNodeReturn
+
+
+
+class PurgeNodesReturn(graphene.ObjectType):
+    ids = graphene.List(graphene.String)
+
+
+class PurgeNodes(BalderMutation):
+
+    class Arguments:
+        app = graphene.String(required=False)
+
+    @bounced()
+    def mutate(root, info, **kwargs):
+        nodes = Node.objects.filter(templates=None)
+        deleting = []
+        for node in nodes:
+            deleting.append(node.id)
+            node.delete()
+        return {"ids": deleting}
+
+    class Meta:
+        type = PurgeNodesReturn
+

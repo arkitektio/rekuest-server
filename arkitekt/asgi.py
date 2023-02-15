@@ -48,7 +48,9 @@ application = ProtocolTypeRouter(
                     re_path("graphql/", MyGraphqlWsConsumer.as_asgi()),
                     re_path("graphql", MyGraphqlWsConsumer.as_asgi()),
                     re_path(r"watchi\/$", HarePostmanConsumer.as_asgi()),
+                    re_path(r"watchi$", HarePostmanConsumer.as_asgi()),
                     re_path(r"agi\/$", HareAgentConsumer.as_asgi()),
+                    re_path(r"agi$", HareAgentConsumer.as_asgi()),
                 ]
             )
         ),

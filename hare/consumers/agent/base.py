@@ -34,7 +34,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
             registry, _ = Registry.objects.get_or_create(user=self.user, client=self.client)
 
         self.agent, _ = Agent.objects.get_or_create(
-            registry=registry, identifier=instance_id
+            registry=registry, instance_id=instance_id
         )
 
         self.agent.status = AgentStatus.ACTIVE

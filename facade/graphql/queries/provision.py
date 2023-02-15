@@ -83,22 +83,21 @@ class Provisions(BalderQuery):
         filter = graphene.List(
             ProvisionStatusInput, description="The included values", required=False
         )
-        identifier = graphene.List(
-            graphene.String,
-            description="The agent identifier",
+        instance_id = graphene.String(
+            description="The agent instance_ids",
             required=False,
-            default_value="default",
+            default_value="main",
         )
 
     @bounced(anonymous=False)
-    def resolve(root, info, exclude=None, filter=None, identifier="default"):
+    def resolve(root, info, exclude=None, filter=None, instance_id="main"):
 
         creator = info.context.bounced.user
         client = info.context.bounced.client
 
        
         registry, _ = Registry.objects.update_or_create(user=creator, client=client, defaults=dict(app=info.context.bounced.app))
-        agent, _ = Agent.objects.get_or_create(registry=registry, identifier=identifier)
+        agent, _ = Agent.objects.get_or_create(registry=registry, instance_id=instance_id)
 
         qs = Provision.objects.filter(agent=agent)
         if filter:

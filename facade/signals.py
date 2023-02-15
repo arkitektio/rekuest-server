@@ -50,37 +50,6 @@ def node_post_save(sender, instance=None, created=None, **kwargs):
             )
 
 
-@receiver(pre_delete, sender=Reservation)
-def res_pre_delete(sender, instance=None, created=None, **kwargs):
-    """Unreserve this reservation"""
-    from facade.graphql.subscriptions import (
-        ReservationsSubscription,
-        MyReservationsSubscription,
-    )
-
-    forwards = []
-
-    for provision in instance.provisions.all():
-        prov, provforwards = provision.unlink(instance)  # Unlink from Provision
-        forwards += provforwards
-
-    for forward_res in forwards:
-        rmq.publish(forward_res.queue, forward_res.to_message())
-
-    if instance.waiter:
-        ReservationsSubscription.broadcast(
-            {"action": "delete", "data": instance.id},
-            [
-                f"reservations_{instance.waiter.unique}",
-            ],
-        )
-        MyReservationsSubscription.broadcast(
-            {"action": "delete", "data": instance.id},
-            [
-                f"myreservations_{instance.waiter.registry.user.id}",
-            ],
-        )
-
 
 @receiver(pre_delete, sender=Provision)
 def prov_pre_delete(sender, instance=None, created=None, **kwargs):
@@ -122,7 +91,7 @@ def node_post_del(sender, instance=None, created=None, **kwargs):
 def template_post_save(sender, instance=None, created=None, **kwargs):
 
     if created:
-        assign_perm("providable", instance.registry.user, instance)
+        assign_perm("providable", instance.agent.registry.user, instance)
 
 
 @receiver(post_save, sender=Agent)
@@ -224,7 +193,7 @@ def res_post_save(sender, instance: Reservation = None, created=None, **kwargs):
             ],
         )
 
-        print("UPDATEDING RESERVATION", instance.provision)
+        print("UPDATEDING RESERVATION", instance)
 
         if instance.provision:
             ReservationsSubscription.broadcast(
@@ -233,6 +202,8 @@ def res_post_save(sender, instance: Reservation = None, created=None, **kwargs):
                     f"reservations_provision_{instance.provision.id}",
                 ],
             )
+
+            
 
 
 @receiver(post_save, sender=get_user_model())

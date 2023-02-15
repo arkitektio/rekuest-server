@@ -114,7 +114,7 @@ class Agent(models.Model):
     name = models.CharField(
         max_length=2000, help_text="This providers Name", default="Nana"
     )
-    identifier = models.CharField(default="main", max_length=1000)
+    instance_id = models.CharField(default="main", max_length=1000)
     installed_at = models.DateTimeField(auto_created=True, auto_now_add=True)
     unique = models.CharField(
         max_length=1000, default=uuid.uuid4, help_text="The Channel we are listening to"
@@ -137,13 +137,13 @@ class Agent(models.Model):
         permissions = [("can_provide_on", "Can provide on this Agent")]
         constraints = [
             models.UniqueConstraint(
-                fields=["registry", "identifier"],
+                fields=["registry", "instance_id"],
                 name="No multiple Agents for same App and User allowed on same identifier",
             )
         ]
 
     def __str__(self):
-        return f"{self.registry} on {self.identifier}"
+        return f"{self.registry} on {self.instance_id}"
 
     @property
     def queue(self):
@@ -245,8 +245,8 @@ class Template(models.Model):
         help_text="The node this template is implementatig",
         related_name="templates",
     )
-    registry = models.ForeignKey(
-        Registry,
+    agent = models.ForeignKey(
+        Agent,
         on_delete=models.CASCADE,
         help_text="The associated registry for this Template",
         related_name="templates",
@@ -281,13 +281,13 @@ class Template(models.Model):
         permissions = [("providable", "Can provide this template")]
         constraints = [
             models.UniqueConstraint(
-                fields=["interface", "registry"],
+                fields=["interface", "agent"],
                 name="A template has unique versions for every node it trys to implement",
             )
         ]
 
     def __str__(self):
-        return f"{self.node} implemented by {self.registry}"
+        return f"{self.node} implemented by {self.agent} on {self.interface}"
 
 
 class ProvisionLog(models.Model):
@@ -798,9 +798,9 @@ class Reservation(models.Model):
 
                 linkable_provisions = get_objects_for_user(
                     self.waiter.registry.user, "facade.can_link_to"
-                )
+                ).filter(template=template).all()
 
-                for prov in linkable_provisions.filter(template=template).all():
+                for prov in linkable_provisions:
                     if len(linked_provisions) >= desiredInstances:
                         break
 
@@ -814,26 +814,14 @@ class Reservation(models.Model):
                         if len(linked_provisions) >= desiredInstances:
                             break
 
-                        linkable_agents = get_objects_for_user(
-                            self.waiter.registry.user, "facade.can_provide_on"
+                        prov = Provision.objects.create(
+                            template=template, agent=template.agent, reservation=self,
+                            creator=self.waiter.registry.user,
                         )
 
-                        available_agents = linkable_agents.filter(
-                            registry=template.registry
-                        ).all()
-
-                        for agent in available_agents:
-                            if len(linked_provisions) >= desiredInstances:
-                                break
-
-                            prov = Provision.objects.create(
-                                template=template, agent=agent, reservation=self,
-                                creator=self.waiter.registry.user,
-                            )
-
-                            prov, linkforwards = prov.link(self)
-                            linked_provisions.append(prov)
-                            forwards += linkforwards
+                        prov, linkforwards = prov.link(self)
+                        linked_provisions.append(prov)
+                        forwards += linkforwards
 
         else:
             raise NotImplementedError(

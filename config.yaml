@@ -6,7 +6,7 @@ port: 8090
 postgres:
   db_name: arkitekt_db
   host: daten
-  password: 6398045f7711b517ac0aa3c7e6b77a63
+  password: 6398045f7711b517ac0aa3sc7e6b77a63
   port: 5432
   user: arkitekt
 rabbit:

@@ -29,14 +29,19 @@ class HarePostmanConsumer(PostmanConsumer):
         await super().connect()
         self.channel = await rmq.open_channel()
 
-        self.callback_queue = await self.channel.queue_declare(
-            self.waiter.queue, auto_delete=True
+        await self.channel.exchange_declare(
+            exchange=self.waiter.queue, exchange_type='fanout'
         )
 
-        # Start listening the queue with name 'hello'
-        await self.channel.basic_consume(
-            self.callback_queue.queue, self.on_rmq_message_in
-        )
+        # Declaring queue
+        declare_ok = await self.channel.queue_declare(exclusive=True)
+
+        # Binding the queue to the exchange
+        await self.channel.queue_bind(declare_ok.queue,self.waiter.queue)
+
+        # Start listening the queue with name 'task_queue'
+        await self.channel.basic_consume(declare_ok.queue, self.on_rmq_message_in)
+
 
         logger.error(f"Listening on '{ self.waiter.queue}'")
 

@@ -15,7 +15,7 @@ from balder.fields.filtered import BalderFiltered
 from facade.structures.widgets.types import Widget
 from facade.structures.widgets.returns import ReturnWidget
 from facade import models
-from lok.models import LokApp as HerreAppModel
+from lok.models import LokApp as HerreAppModel, LokClient as LokClientModel
 from balder.types import BalderObject
 import graphene
 from balder.registry import register_type
@@ -99,9 +99,6 @@ class ReserveParams(graphene.ObjectType):
     registries = graphene.List(
         graphene.ID, description="Registry thar are allowed", required=False
     )
-    agents = graphene.List(
-        graphene.ID, description="Agents that are allowed", required=False
-    )
     templates = graphene.List(
         graphene.ID, description="Templates that can be selected", required=False
     )
@@ -170,6 +167,10 @@ class LokApp(BalderObject):
     class Meta:
         model = HerreAppModel
 
+
+class LokClient(BalderObject):
+    class Meta:
+        model = LokClientModel
 
 class LokUser(BalderObject):
     class Meta:

@@ -15,7 +15,6 @@ class ProvideMutation(BalderMutation):
 
     class Arguments:
         template = graphene.ID(required=True)
-        agent = graphene.ID(required=True)
         params = GenericScalar(description="Additional Params")
 
     class Meta:
@@ -23,19 +22,17 @@ class ProvideMutation(BalderMutation):
         operation = "provide"
 
     @bounced(only_jwt=True)
-    def mutate(root, info, node=None, template=None, params={}, agent=None):
+    def mutate(root, info, node=None, template=None, params={}):
         bounce = info.context.bounced
 
         temp = Template.objects.get(id=template)
-        agent = Agent.objects.get(id=agent)
 
-        assert agent.registry == temp.registry, "Agent and Template must be in the same Registry"
 
         pro = Provision.objects.create(
             **{
                 "template": temp,
                 "params": params,
-                "agent": agent,
+                "agent": temp.agent,
                 "creator": bounce.user,
                 "app": bounce.app,
             }
