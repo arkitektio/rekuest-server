@@ -6,7 +6,7 @@ from django.contrib.contenttypes.models import ContentType
 from balder.registry import register_type
 import graphene
 from guardian.shortcuts import get_users_with_perms, get_groups_with_perms
-from facade import types
+from perms import types
 
 class UserAssignment(graphene.ObjectType):
     permissions = graphene.List(graphene.String, required=True)

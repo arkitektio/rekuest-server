@@ -39,6 +39,11 @@ class ProvideTactic(str, Enum):
     BALANCE = "BALANCE"
 
 
+class BindParams(BaseModel):
+    templates: Optional[List[str]]
+    clients: Optional[List[str]]
+
+
 class ReserveParams(BaseModel):
     desiredInstances: int = 1
     minimalInstances: int = 1

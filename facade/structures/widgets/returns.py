@@ -1,9 +1,10 @@
 from balder.registry import register_type
 import graphene
-
+from facade.structures.widgets.types import Choice
 return_widget_types = {
     "ImageReturnWidget": lambda: ImageReturnWidget,
     "CustomReturnWidget": lambda: CustomReturnWidget,
+    "ChoiceReturnWidget": lambda: ChoiceReturnWidget,
 }
 
 
@@ -31,6 +32,14 @@ class ImageReturnWidget(graphene.ObjectType):
 class CustomReturnWidget(graphene.ObjectType):
     hook = graphene.String(description="A hook for the app to call")
     ward = graphene.String(description="A hook for the app to call")
+
+    class Meta:
+        interfaces = (ReturnWidget,)
+
+
+@register_type
+class ChoiceReturnWidget(graphene.ObjectType):
+    choices = graphene.List(Choice, description="A list of choices")
 
     class Meta:
         interfaces = (ReturnWidget,)

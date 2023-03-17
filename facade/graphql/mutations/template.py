@@ -48,11 +48,32 @@ class CreateTemplate(BalderMutation):
         pure = definition.pure == True
 
 
+        user = info.context.user if imitate is None else get_imitiate(info.context.user, imitate)
+
+        registry, _ = Registry.objects.update_or_create(
+            client=info.context.bounced.client, user=user, defaults=dict(app=info.context.bounced.app)
+        )
+
+        agent, _ = Agent.objects.update_or_create(
+            registry = registry, instance_id = instance_id, name="default"
+        )
+
+
         hashable_definition = {key: value for key, value in dict(definition).items() if key not in ["meta","interface"]}
 
 
         hash = hashlib.sha256(json.dumps(hashable_definition, sort_keys=True).encode()).hexdigest()
         print(hash)
+
+        template = Template.objects.filter(interface=definition.interface, agent=agent).first()
+
+        if template:
+            if template.node.hash == hash:
+                return template
+            else:
+                if template.node.templates.count() == 1:
+                    logger.info("Deleting Node because it has no more templates")
+                    template.node.delete()
 
         try:
             node = Node.objects.get(hash=hash)
@@ -87,16 +108,9 @@ class CreateTemplate(BalderMutation):
             logger.info(f"Created {node}")
 
 
-        user = info.context.user if imitate is None else get_imitiate(info.context.user, imitate)
 
 
-        registry, _ = Registry.objects.update_or_create(
-            client=info.context.bounced.client, user=user, defaults=dict(app=info.context.bounced.app)
-        )
-
-        agent, _ = Agent.objects.update_or_create(
-            registry = registry, instance_id = instance_id, name="default"
-        )
+        
         try:
             template = Template.objects.get(
                 interface=definition.interface, agent=agent

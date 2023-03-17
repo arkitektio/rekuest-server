@@ -9,7 +9,7 @@ from hare.carrots import (
     UnreserveHareMessage,
     ReservationChangedMessage,
 )
-from hare.messages import ReserveParams
+from hare.messages import ReserveParams, BindParams
 from lok.models import LokApp, LokClient
 from facade.managers import NodeManager, ReservationManager
 from facade.fields import (
@@ -36,7 +36,7 @@ from django.contrib.auth import get_user_model
 import uuid
 import logging
 from guardian.shortcuts import get_objects_for_user
-
+from django.db.models import Q
 logger = logging.getLogger(__name__)
 
 
@@ -65,7 +65,7 @@ class Registry(models.Model):
         get_user_model(),
         on_delete=models.CASCADE,
         null=True,
-        help_text="The Associated App",
+        help_text="The Associatsed App",
     )
 
     class Meta:
@@ -678,6 +678,10 @@ class Reservation(models.Model):
     params = models.JSONField(
         default=dict, help_text="Params for the Policy (including Agent etc..)"
     )
+    binds = models.JSONField(
+        help_text="Params for the Policy (including Agent etc..)", null=True,
+        blank=True,
+    )
 
     hash = models.CharField(
         default=uuid.uuid4,
@@ -786,13 +790,27 @@ class Reservation(models.Model):
         desiredInstances = params.desiredInstances or 1
         minimalInstances = params.minimalInstances or 1
 
+        binds = BindParams(**self.binds) if self.binds else None
+        
+
         if self.node is not None:
 
             templates = Template.objects
-            templates = templates.filter(node=self.node).all()
+            templates = templates.filter(node=self.node)
+
+            if binds:
+                if binds.templates and binds.clients:
+                    templates = templates.filter(
+                        Q(id__in=binds.templates) | Q(agent__registry__client__client_id__in=binds.clients)
+                    )
+                elif binds.templates:
+                    templates = templates.filter(id__in=binds.templates)
+                elif binds.clients:
+                    templates = templates.filter(agent__registry__client__client_id__in=binds.clients)
+
 
             # We are doing a round robin here, all templates
-            for template in templates:
+            for template in templates.all():
                 if len(linked_provisions) >= desiredInstances:
                     break
 

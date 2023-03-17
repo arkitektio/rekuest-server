@@ -44,6 +44,8 @@ SUPERUSERS = [
     }
 ]
 
+COMMENTABLE_APPS = ["facade",]
+
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -64,6 +66,7 @@ INSTALLED_APPS = [
     "django_probes",
     "guardian",
     "graphene_django",
+    "komment",
     #"rest_framework",
     "balder",
     "facade",
@@ -144,7 +147,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CHANNEL_LAYERS = {
     "default": {
-        # This example app uses the Redis channel layer implementation channels_redis
+        # This example app uses the Redisss channel layer implementation channels_redis
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
             "hosts": [(conf.redis.host, conf.redis.port)],

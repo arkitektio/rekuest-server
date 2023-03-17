@@ -62,9 +62,10 @@ class ReservationsQuery(BalderQuery):
             ReservationStatusInput, description="The included values", required=False
         )
         identifier = graphene.String(required=False, default_value="default")
+        node_interfaces = graphene.List(graphene.String, required=False)    
 
     @bounced(only_jwt=True)
-    def resolve(root, info, exclude=None, filter=None, identifier="default"):
+    def resolve(root, info, exclude=None, filter=None, identifier="default", node_interfaces=None):
 
         creator = info.context.bounced.user
         client = info.context.bounced.client
@@ -80,6 +81,9 @@ class ReservationsQuery(BalderQuery):
             qs = qs.filter(status__in=filter)
         if exclude:
             qs = qs.exclude(status__in=exclude)
+        if node_interfaces:
+            for i in node_interfaces:
+                qs = qs.filter(node__interfaces__contains=i)
 
         return qs.all()
 

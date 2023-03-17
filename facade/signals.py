@@ -91,14 +91,9 @@ def node_post_del(sender, instance=None, created=None, **kwargs):
 def template_post_save(sender, instance=None, created=None, **kwargs):
 
     if created:
+        print("CREATED TEMPLATE", instance)
         assign_perm("providable", instance.agent.registry.user, instance)
 
-
-@receiver(post_save, sender=Agent)
-def template_post_save(sender, instance=None, created=None, **kwargs):
-
-    if created:
-        assign_perm("can_provide_on", instance.registry.user, instance)
 
 
 @receiver(post_save, sender=AssignationLog)

@@ -15,26 +15,42 @@ from lok.models import LokClient
 from .models import Agent, Node, Repository, Template, Registry
 from django.db.models import Q
 from django.db.models import Count
-
-# class PodFilter(django_filters.FilterSet):
-#    agent = django_filters.ModelChoiceFilter(queryset=Agent.objects.all(),field_name= "template__provider")
-#    status = EnumFilter(choices=PodStatus.choices, field_name="status")
-
-
-class UserFilter(django_filters.FilterSet):
-    username = django_filters.CharFilter(
-        field_name="username",
-        lookup_expr="icontains",
-        label="Search for substring of name",
-    )
-    email = django_filters.CharFilter(
-        field_name="email",
-        lookup_expr="icontains",
-        label="Search for substring of name",
-    )
+import graphene
+from django import forms
+from graphene_django.forms.converter import convert_form_field
 
 
-class AgentFilter(django_filters.FilterSet):
+class IDChoiceField(forms.JSONField):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+    def overwritten_type(self, **kwargs):
+        return graphene.List(graphene.ID, **kwargs)
+
+
+@convert_form_field.register(IDChoiceField)
+def convert_form_field_to_string_list(field):
+    return field.overwritten_type(required=field.required)
+
+
+class IDChoiceFilter(django_filters.MultipleChoiceFilter):
+    field_class = IDChoiceField
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs, field_name="pk")
+
+
+class IdsFilter(django_filters.FilterSet):
+
+    ids = IDChoiceFilter(label="Filter by values")
+
+    def my_values_filter(self, queryset, name, value):
+        if value:
+            return queryset.filter(id__in=value)
+        else:
+            return queryset
+
+class AgentFilter(IdsFilter, django_filters.FilterSet):
     app = django_filters.CharFilter(method="app_filter")
     registry = django_filters.ModelChoiceFilter(
         queryset=Registry.objects.all(), field_name="registry"
@@ -49,7 +65,7 @@ class AgentFilter(django_filters.FilterSet):
         )
 
 
-class NodeFilter(django_filters.FilterSet):
+class NodeFilter(IdsFilter, django_filters.FilterSet):
     repository = django_filters.ModelChoiceFilter(
         queryset=Repository.objects.all(), field_name="repository"
     )
@@ -87,40 +103,40 @@ class NodeFilter(django_filters.FilterSet):
         return queryset.filter(**filter_args)
 
 
-class ProvisionFilter(django_filters.FilterSet):
+class ProvisionFilter(IdsFilter, django_filters.FilterSet):
     status = MultiEnumFilter(type=ProvisionStatusInput, field_name="status")
     agent = django_filters.ModelChoiceFilter(queryset=Agent.objects.all(), field_name="agent")
     client = django_filters.ModelChoiceFilter(queryset=LokClient.objects.all(), field_name="client")
     client_id = django_filters.CharFilter(field_name="agent__registry__client__client_id", lookup_expr="iexact")
 
 
-class AssignationFilter(django_filters.FilterSet):
+class AssignationFilter(IdsFilter, django_filters.FilterSet):
     status = MultiEnumFilter(type=AssignationStatusInput, field_name="status")
 
 
-class ProvisionLogFilter(django_filters.FilterSet):
+class ProvisionLogFilter(IdsFilter, django_filters.FilterSet):
     level = EnumFilter(type=LogLevelInput, field_name="level")
     created_at = TimeRangeFilter()
     o = OrderingFilter(fields={"created_at": "time"})
 
 
-class AssignationLogFilter(django_filters.FilterSet):
+class AssignationLogFilter(IdsFilter, django_filters.FilterSet):
     level = EnumFilter(type=LogLevelInput, field_name="level")
     created_at = TimeRangeFilter()
     o = OrderingFilter(fields={"created_at": "time"})
 
 
-class ReservationLogFilter(django_filters.FilterSet):
+class ReservationLogFilter(IdsFilter, django_filters.FilterSet):
     level = EnumFilter(type=LogLevelInput, field_name="level")
     created_at = TimeRangeFilter()
     o = OrderingFilter(fields={"created_at": "time"})
 
 
-class NodesFilter(django_filters.FilterSet):
+class NodesFilter(IdsFilter, django_filters.FilterSet):
     package = django_filters.CharFilter(field_name="package", lookup_expr="icontains")
 
 
-class RegistryFilter(django_filters.FilterSet):
+class RegistryFilter(IdsFilter, django_filters.FilterSet):
     unique = django_filters.CharFilter(field_name="unique", lookup_expr="icontains")
 
 

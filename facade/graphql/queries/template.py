@@ -30,14 +30,18 @@ class Templates(BalderQuery):
 class ReservableTemplates(BalderQuery):
 
     class Arguments:
-        node = graphene.ID(description="The node provisions", required=True)
+        node = graphene.ID(description="The node provisions", required=False)
+        hash = graphene.String(description="The hash of the template", required=False)
 
     @bounced()
-    def resolve(root, info, node=None):
+    def resolve(root, info, node=None, hash=None):
+        assert node or hash, "You must provide a node or a hash"
         template_queryset = get_objects_for_user(
             info.context.user,
             "facade.providable",
         )
+        if hash:
+            return template_queryset.filter(node__hash=hash)
 
         return template_queryset.filter(node__id=node)
 

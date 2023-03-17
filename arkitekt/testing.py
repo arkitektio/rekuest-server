@@ -140,6 +140,7 @@ CHANNEL_LAYERS = {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
             "hosts": [(conf.redis.host, conf.redis.port)],
+            "prefix": "rekuest"
         },
     },
 }

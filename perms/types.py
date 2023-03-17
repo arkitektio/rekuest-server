@@ -23,3 +23,29 @@ class Permission(BalderObject):
         model = Permission
 
 
+class User(BalderObject):
+    color = graphene.String(description="The associated color for this user")
+    name = graphene.String(description="The name of the user")
+    sub = graphene.String(description="The sub of the user")
+
+    def resolve_color(root, info):
+        if hasattr(root, "meta"):
+            return root.meta.color
+        return "#FF0000"
+
+    def resolve_name(root, info):
+        return root.first_name + " " + root.last_name
+
+    def resolve_sub(root, info):
+        return root.sub 
+
+        
+    class Meta:
+        model = get_user_model()
+        description = get_user_model().__doc__
+
+
+class Group(BalderObject):
+    class Meta:
+        model = GroupModel
+

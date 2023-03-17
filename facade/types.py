@@ -120,19 +120,21 @@ class PortKind(graphene.Enum):
     FLOAT = "FLOAT"
 
 
+
+
 class ChildPort(graphene.ObjectType):
-    kind = PortKind(description="the type of input", required=False)
-    description = graphene.String(
-        description="A description for this Port", required=False
-    )
+    kind = PortKind(description="the type of input", required=True)
     identifier = Identifier(description="The corresponding Model")
     child = graphene.Field(lambda: ChildPort, description="The child", required=False)
     nullable = graphene.Boolean(description="Is this argument nullable", required=True)
+    default = Any()
     annotations = graphene.List(Annotation, description="The annotations of this port")
+    assign_widget = graphene.Field(Widget, description="Description of the Widget")
+    return_widget = graphene.Field(ReturnWidget, description="A return widget")
 
 
 
-class Port(graphene.Interface):
+class Port(graphene.ObjectType):
     key = graphene.String(required=True)
     label = graphene.String()
     kind = PortKind(description="the type of input", required=True)
@@ -141,26 +143,15 @@ class Port(graphene.Interface):
     )
     identifier = Identifier(description="The corresponding Model")
     nullable = graphene.Boolean(required=True)
+    default = Any()
     child = graphene.Field(lambda: ChildPort, description="The child", required=False)
     annotations = graphene.List(Annotation, description="The annotations of this port")
+    assign_widget = graphene.Field(Widget, description="Description of the Widget")
+    return_widget = graphene.Field(ReturnWidget, description="A return widget")
 
     class Meta:
         description = "A Port"
 
-
-class ArgPort(graphene.ObjectType):
-    default = Any()
-    widget = graphene.Field(Widget, description="Description of the Widget")
-
-    class Meta:
-        interfaces = (Port,)
-
-
-class ReturnPort(graphene.ObjectType):
-    widget = graphene.Field(ReturnWidget, description="A return widget")
-
-    class Meta:
-        interfaces = (Port,)
 
 
 class LokApp(BalderObject):
@@ -172,9 +163,6 @@ class LokClient(BalderObject):
     class Meta:
         model = LokClientModel
 
-class LokUser(BalderObject):
-    class Meta:
-        model = get_user_model()
 
 
 class Registry(BalderObject):
@@ -202,11 +190,21 @@ class DataQuery(graphene.ObjectType):
 
 
 class Agent(BalderObject):
+    client_id = graphene.String(required=True)
+
+    def resolve_client_id(self, info):
+        return self.registry.client.client_id
+
     class Meta:
         model = models.Agent
 
 
 class Waiter(BalderObject):
+    client_id = graphene.String(required=True)
+
+    def resolve_client_id(self, info):
+        return self.registry.client.client_id
+
     class Meta:
         model = models.Waiter
 
@@ -273,8 +271,8 @@ class Template(BalderObject):
 
 
 class Node(BalderObject):
-    args = graphene.List(ArgPort)
-    returns = graphene.List(ReturnPort)
+    args = graphene.List(Port)
+    returns = graphene.List(Port)
     interfaces = graphene.List(graphene.String)
     templates = BalderFiltered(
         Template, filterset_class=TemplateFilter, related_field="templates"
@@ -323,33 +321,5 @@ class Reservation(BalderObject):
         model = models.Reservation
 
 
-class Permission(BalderObject):
-    unique = graphene.String(description="Unique ID for this permission", required=True)
-
-    def resolve_unique(root, info):
-        return f"{root.content_type.app_label}.{root.codename}"
-
-    class Meta:
-        model = PermissionModel
 
 
-class Group(BalderObject):
-    class Meta:
-        model = GroupModel
-
-
-class User(BalderObject):
-    color = graphene.String(description="The associated color for this user")
-    name = graphene.String(description="The name of the user")
-
-    def resolve_color(root, info):
-        if hasattr(root, "meta"):
-            return root.meta.color
-        return "#FF0000"
-
-    def resolve_name(root, info):
-        return root.first_name + " " + root.last_name
-
-    class Meta:
-        model = get_user_model()
-        description = get_user_model().__doc__

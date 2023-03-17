@@ -1,11 +1,12 @@
 import uuid
 from facade import types
+from facade import inputs
 from facade.models import Provision, Reservation, Waiter, Registry
 from balder.types import BalderMutation
 from lok import bounced
 import graphene
 import logging
-from hare.messages import ReserveParams
+from hare.messages import ReserveParams, BindParams
 from hare.connection import rmq
 from django.contrib.auth import get_user_model
 from facade.utils import get_imitiate
@@ -20,6 +21,9 @@ class ReserveMutation(BalderMutation):
         title = graphene.String(required=False)
         params = graphene.Argument(
             types.ReserveParamsInput, description="Additional Params", required=False
+        )
+        binds = graphene.Argument(
+            inputs.ReserveBindsInput, description="bindings", required=False
         )
         persist = graphene.Boolean(
             default_value=True, description="Additional Params", required=False
@@ -42,6 +46,7 @@ class ReserveMutation(BalderMutation):
         node=None,
         template=None,
         params={},
+        binds=None, 
         title=None,
         reference="default",
         persist=True,
@@ -52,6 +57,7 @@ class ReserveMutation(BalderMutation):
     ):
         reference = reference
         params = ReserveParams(**params)
+        binds = BindParams(**binds) if binds else None
 
         if imitate:
             imitate = get_user_model().objects.get(id=imitate)
@@ -80,6 +86,7 @@ class ReserveMutation(BalderMutation):
             waiter=waiter,
             defaults={
                 "params": params.dict(),
+                "binds": binds.dict() if binds else None,
                 "provision": provision,
                 "allow_auto_request": allow_auto_request,
             },

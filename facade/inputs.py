@@ -76,6 +76,7 @@ class WidgetInput(graphene.InputObjectType):
 
 class ReturnWidgetInput(graphene.InputObjectType):
     kind = graphene.Argument(ReturnWidgetKind, description="type", required=True)
+    choices = graphene.List(ChoiceInput, description="The dependencies of this port")
     query = graphene.String(description="Do we have a possible")
     hook = graphene.String(description="A hook for the app to call")
     ward = graphene.String(description="A hook for the app to call")
@@ -85,10 +86,11 @@ class ChildPortInput(graphene.InputObjectType):
     identifier = Identifier(description="The identifier")
     name = graphene.String(description="The name of this port")
     kind = PortKindInput(description="The type of this port")
-    description = graphene.String(description="The description of this port")
     child = graphene.Field(lambda: ChildPortInput, description="The child port")
     nullable = graphene.Boolean(description="Is this argument nullable", required=True)
     annotations = graphene.List(lambda: AnnotationInput, description="The annotations of this argument")
+    assign_widget = graphene.Field(WidgetInput, description="The child of this argument")
+    return_widget = graphene.Field(ReturnWidgetInput, description="The child of this argument")
 
 class AnnotationInput(graphene.InputObjectType):
     kind = graphene.Argument(AnnotationKind, description="The kind of annotation", required=True)
@@ -102,7 +104,7 @@ class AnnotationInput(graphene.InputObjectType):
     annotations = graphene.List(lambda: AnnotationInput, description="The annotation of this annotation")
 
 
-class ArgPortInput(graphene.InputObjectType):
+class PortInput(graphene.InputObjectType):
     identifier = Identifier(description="The identifier")
     key = graphene.String(description="The key of the arg", required=True)
     name = graphene.String(description="The name of this argument")
@@ -110,24 +112,21 @@ class ArgPortInput(graphene.InputObjectType):
     kind = PortKindInput(description="The type of this argument", required=True)
     description = graphene.String(description="The description of this argument")
     child = graphene.Field(ChildPortInput, description="The child of this argument")
-    widget = graphene.Field(WidgetInput, description="The child of this argument")
+    assign_widget = graphene.Field(WidgetInput, description="The child of this argument")
+    return_widget = graphene.Field(ReturnWidgetInput, description="The child of this argument")
     default = Any(description="The key of the arg", required=False)
     nullable = graphene.Boolean(description="Is this argument nullable", required=True)
     annotations = graphene.List(AnnotationInput, description="The annotations of this argument")
 
 
+class ReserveBindsInput(graphene.InputObjectType):
+    templates = graphene.List(
+        graphene.ID, description="The templates that we are allowed to use", required=True
+    )
+    clients = graphene.List(
+        graphene.ID, description="The clients that we are allowed to use", required=True
+    )
 
-class ReturnPortInput(graphene.InputObjectType):
-    identifier = Identifier(description="The identifier")
-    key = graphene.String(description="The key of the arg", required=True)
-    name = graphene.String(description="The name of this argument")
-    label = graphene.String(description="The name of this argument")
-    kind = PortKindInput(description="The type of this argument", required=True)
-    description = graphene.String(description="The description of this argument")
-    child = graphene.Field(ChildPortInput, description="The child of this argument")
-    widget = graphene.Field(ReturnWidgetInput, description="The child of this argument")
-    nullable = graphene.Boolean(description="Is this argument nullable", required=True)
-    annotations = graphene.List(AnnotationInput, description="The annotations of this argument")
 
 
 class DefinitionInput(graphene.InputObjectType):
@@ -137,8 +136,8 @@ class DefinitionInput(graphene.InputObjectType):
         description="A description for the Node", required=False
     )
     name = graphene.String(description="The name of this template", required=True)
-    args = graphene.List(ArgPortInput, description="The Args")
-    returns = graphene.List(ReturnPortInput, description="The Returns")
+    args = graphene.List(PortInput, description="The Args")
+    returns = graphene.List(PortInput, description="The Returns")
     interface = graphene.String(description="The interface of this template")
     interfaces = graphene.List(
         graphene.String,

@@ -1,8 +1,8 @@
 from balder.types.query.base import BalderQuery
 from graphene import types
 import graphene
-from facade.filters import UserFilter
-from facade import types, models
+from perms.filters import UserFilter
+from perms import types, models
 from lok import bounced
 from django.contrib.auth import get_user_model
 
