@@ -50,7 +50,6 @@ def node_post_save(sender, instance=None, created=None, **kwargs):
             )
 
 
-
 @receiver(pre_delete, sender=Provision)
 def prov_pre_delete(sender, instance=None, created=None, **kwargs):
     """Unreserve this reservation"""
@@ -89,11 +88,9 @@ def node_post_del(sender, instance=None, created=None, **kwargs):
 
 @receiver(post_save, sender=Template)
 def template_post_save(sender, instance=None, created=None, **kwargs):
-
     if created:
         print("CREATED TEMPLATE", instance)
         assign_perm("providable", instance.agent.registry.user, instance)
-
 
 
 @receiver(post_save, sender=AssignationLog)
@@ -197,8 +194,6 @@ def res_post_save(sender, instance: Reservation = None, created=None, **kwargs):
                     f"reservations_provision_{instance.provision.id}",
                 ],
             )
-
-            
 
 
 @receiver(post_save, sender=get_user_model())
