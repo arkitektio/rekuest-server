@@ -209,17 +209,27 @@ class Node(models.Model):
     interfaces = models.JSONField(
         default=list, help_text="Intercae that we use to interpret the meta data"
     )
+    port_groups = models.JSONField(
+        default=list, help_text="Intercae that we use to interpret the meta data"
+    )
     name = models.CharField(
         max_length=1000, help_text="The cleartext name of this Node"
     )
     meta = models.JSONField(
         null=True, blank=True, help_text="Meta data about this Node"
     )
+    
 
     description = models.TextField(help_text="A description for the Node")
     image = models.ImageField(
         null=True, blank=True, help_text="Beautiful images for beautiful Nodes"
     )
+    scope = models.CharField(
+        max_length=1000,
+        default="GLOBAL",
+        help_text="The scope of this Node. e.g. does the data it needs or produce live only in the scope of this Node or is it global or does it bridge data?",
+    )
+
 
 
     hash = models.CharField(max_length=1000, help_text="The hash of the Node (completely unique)", unique=True)
@@ -402,7 +412,7 @@ class Provision(models.Model):
     )
 
     statusmessage = models.CharField(
-        max_length=1000,
+        max_length=10000,
         help_text="Clear Text status of the Provision as for now",
         blank=True,
     )
@@ -809,34 +819,30 @@ class Reservation(models.Model):
                     templates = templates.filter(agent__registry__client__client_id__in=binds.clients)
 
 
-            # We are doing a round robin here, all templates
+
+
             for template in templates.all():
-                if len(linked_provisions) >= desiredInstances:
+                if len(linked_provisions) >= desiredInstances and not binds:
                     break
+
 
                 linkable_provisions = get_objects_for_user(
                     self.waiter.registry.user, "facade.can_link_to"
                 ).filter(template=template).all()
 
-                for prov in linkable_provisions:
-                    if len(linked_provisions) >= desiredInstances:
-                        break
+                if linkable_provisions.count() == 0:
+                    assert self.waiter.registry.user.has_perm('facade.providable', template), "User cannot provide this template and no linked provision is found"
+
+                    prov = Provision.objects.create(
+                        template=template, agent=template.agent, reservation=self,
+                        creator=self.waiter.registry.user,
+                    )
 
                     prov, linkforwards = prov.link(self)
                     linked_provisions.append(prov)
                     forwards += linkforwards
-
-                if len(linked_provisions) < desiredInstances:
-
-                    for template in templates:
-                        if len(linked_provisions) >= desiredInstances:
-                            break
-
-                        prov = Provision.objects.create(
-                            template=template, agent=template.agent, reservation=self,
-                            creator=self.waiter.registry.user,
-                        )
-
+                else:
+                    for prov in linkable_provisions:
                         prov, linkforwards = prov.link(self)
                         linked_provisions.append(prov)
                         forwards += linkforwards
@@ -977,13 +983,16 @@ class Assignation(models.Model):
     def unassign(self) -> Tuple["Assignation", List[HareMessage]]:
         """Activate the reservation"""
         self.status = AssignationStatus.CANCELING
-        forwards = [
-            UnassignHareMessage(
-                queue=self.provision.queue,
-                assignation=self.id,
-                provision=self.provision.id,
-            )
-        ]
+        if self.provision:
+            forwards = [
+                UnassignHareMessage(
+                    queue=self.provision.queue,
+                    assignation=self.id,
+                    provision=self.provision.id,
+                )
+            ]
+        else:
+            forwards = []
         self.save()
         return self, forwards
 

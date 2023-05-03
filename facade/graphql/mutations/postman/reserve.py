@@ -48,7 +48,7 @@ class ReserveMutation(BalderMutation):
         params={},
         binds=None, 
         title=None,
-        reference="default",
+        reference=None,
         persist=True,
         imitate=None,
         app_group=None,
@@ -80,11 +80,15 @@ class ReserveMutation(BalderMutation):
             node or template
         ), "Please provide either a node or template you want to reserve"
 
+        reference = reference or (binds.hash() if binds else "default")
+
+
         res, cr = Reservation.objects.update_or_create(
             node_id=node,
             reference=reference,
             waiter=waiter,
             defaults={
+                "title": title,
                 "params": params.dict(),
                 "binds": binds.dict() if binds else None,
                 "provision": provision,

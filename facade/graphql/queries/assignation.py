@@ -11,7 +11,6 @@ class AssignationDetailQuery(BalderQuery):
     class Arguments:
         id = graphene.ID(description="The query assignation", required=True)
 
-    @bounced(anonymous=True)
     def resolve(root, info, id=None):
         return Assignation.objects.get(id=id)
 
@@ -30,7 +29,7 @@ class MyAssignations(BalderQuery):
         )
         limit = graphene.Int(description="The excluded values", required=False)
 
-    @bounced(anonymous=False)
+    @bounced(anonymous=True)
     def resolve(root, info, exclude=None, filter=None, limit=None):
         qs = Assignation.objects.filter(creator=info.context.user)
         if filter:

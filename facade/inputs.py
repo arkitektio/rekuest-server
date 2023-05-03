@@ -49,6 +49,16 @@ class MessageKind(graphene.Enum):
     TELL = "TELL" # Tell and forget
 
 
+class Scope(graphene.Enum):
+    GLOBAL = "GLOBAL"
+    LOCAL = "LOCAL"
+
+class NodeScope(graphene.Enum):
+    GLOBAL = "GLOBAL"
+    LOCAL = "LOCAL"
+    BRIDGE_GLOBAL_TO_LOCAL = "BRIDGE_GLOBAL_TO_LOCAL"
+    BRIDGE_LOCAL_TO_GLOBAL = "BRIDGE_LOCAL_TO_GLOBAL"
+
 
 class MessageInput(graphene.InputObjectType):
     kind = MessageKind(required=True)
@@ -84,6 +94,7 @@ class ReturnWidgetInput(graphene.InputObjectType):
 
 class ChildPortInput(graphene.InputObjectType):
     identifier = Identifier(description="The identifier")
+    scope = graphene.Argument(Scope, description="The scope of this port", required=True)
     name = graphene.String(description="The name of this port")
     kind = PortKindInput(description="The type of this port")
     child = graphene.Field(lambda: ChildPortInput, description="The child port")
@@ -107,6 +118,7 @@ class AnnotationInput(graphene.InputObjectType):
 class PortInput(graphene.InputObjectType):
     identifier = Identifier(description="The identifier")
     key = graphene.String(description="The key of the arg", required=True)
+    scope = graphene.Argument(Scope, description="The scope of this port", required=True)
     name = graphene.String(description="The name of this argument")
     label = graphene.String(description="The name of this argument")
     kind = PortKindInput(description="The type of this argument", required=True)
@@ -117,6 +129,7 @@ class PortInput(graphene.InputObjectType):
     default = Any(description="The key of the arg", required=False)
     nullable = graphene.Boolean(description="Is this argument nullable", required=True)
     annotations = graphene.List(AnnotationInput, description="The annotations of this argument")
+    groups = graphene.List(graphene.String, description="The port group of this argument")
 
 
 class ReserveBindsInput(graphene.InputObjectType):
@@ -127,6 +140,9 @@ class ReserveBindsInput(graphene.InputObjectType):
         graphene.ID, description="The clients that we are allowed to use", required=True
     )
 
+class PortGroupInput(graphene.InputObjectType):
+    key = graphene.String(description="The key of the port group", required=True)
+    hidden = graphene.Boolean(description="Is this port group hidden", required=False)
 
 
 class DefinitionInput(graphene.InputObjectType):
@@ -136,6 +152,7 @@ class DefinitionInput(graphene.InputObjectType):
         description="A description for the Node", required=False
     )
     name = graphene.String(description="The name of this template", required=True)
+    port_groups = graphene.List(PortGroupInput, required=True)
     args = graphene.List(PortInput, description="The Args")
     returns = graphene.List(PortInput, description="The Returns")
     interface = graphene.String(description="The interface of this template")

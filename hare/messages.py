@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, Dict, List, Optional, TypeVar
+from typing import Any, Dict, List, Optional, TypeVar, Tuple
 from pydantic import BaseModel
 from facade.enums import LogLevel, ReservationStatus, AssignationStatus, ProvisionStatus
 
@@ -40,8 +40,12 @@ class ProvideTactic(str, Enum):
 
 
 class BindParams(BaseModel):
-    templates: Optional[List[str]]
-    clients: Optional[List[str]]
+    templates: Tuple[str, ...]
+    clients: Tuple[str, ...]
+
+    def hash(self):
+        return "binds-" + "t".join(self.templates) + "c".join(self.clients)
+
 
 
 class ReserveParams(BaseModel):

@@ -12,6 +12,21 @@ logger = logging.getLogger(__name__)
 from facade.utils import get_imitiate
 
 
+def traverse_scope(port: dict, scope="LOCAL"):
+    if port["kind"] == "STRUCTURE":
+        if port["scope"] == scope:
+            return True
+    if port["child"]:
+        return traverse_scope(port["child"], scope)
+    return False
+
+
+def has_locals(ports: list):
+    for port in ports:
+        if traverse_scope(port, "LOCAL"):
+            return True
+    return False
+
 class CreateTemplate(BalderMutation):
     class Arguments:
         definition = graphene.Argument(DefinitionInput, required=True)
@@ -46,6 +61,8 @@ class CreateTemplate(BalderMutation):
         interfaces = definition.interfaces or []
         kind = definition.kind
         pure = definition.pure == True
+        port_groups = definition.port_groups or []
+        print("The port groups", port_groups)
 
 
         user = info.context.user if imitate is None else get_imitiate(info.context.user, imitate)
@@ -78,29 +95,47 @@ class CreateTemplate(BalderMutation):
         try:
             node = Node.objects.get(hash=hash)
         except Node.DoesNotExist:
-            arg_identifiers = [arg.identifier for arg in args if arg.identifier]
-            return_identifiers = [
-                returnitem.identifier for returnitem in returns if returnitem.identifier
-            ]
 
-            all_identifiers = set(arg_identifiers + return_identifiers)
-            for identifier in all_identifiers:
-                try:
-                    model = Structure.objects.get(identifier=identifier)
-                except Structure.DoesNotExist:
-                    # assert "can_create_identifier" in info.context.bounced.scopes, "You cannot create a new DataModel if you dont have the 'can_create_identifier' scopes"
-                    new_structure = Structure.objects.create(
-                        identifier=identifier
-                    )
-                    logger.info(f"Created {new_structure}")
+            has_local_argports = has_locals(args)
+            has_local_returnports = has_locals(returns)
+
+            if has_local_argports and has_local_returnports:
+                scope = "LOCAL"
+            if not has_local_argports and not has_local_returnports:
+                scope = "GLOBAL"
+            if not has_local_argports and has_local_returnports:
+                scope = "BRIDGE_GLOBAL_TO_LOCAL"
+            if has_local_argports and not has_local_returnports:
+                scope = "BRIDGE_LOCAL_TO_GLOBAL"
+
+
+
+
+            # arg_identifiers = [arg.identifier for arg in args if arg.identifier]
+            # return_identifiers = [
+            #     returnitem.identifier for returnitem in returns if returnitem.identifier
+            # ]
+
+            # all_identifiers = set(arg_identifiers + return_identifiers)
+            # for identifier in all_identifiers:
+            #     try:
+            #         model = Structure.objects.get(identifier=identifier)
+            #     except Structure.DoesNotExist:
+            #         # assert "can_create_identifier" in info.context.bounced.scopes, "You cannot create a new DataModel if you dont have the 'can_create_identifier' scopes"
+            #         new_structure = Structure.objects.create(
+            #             identifier=identifier
+            #         )
+            #         logger.info(f"Created {new_structure}")
 
 
             node = Node.objects.create(
                 hash=hash,
                 description=description,
                 args=args,
+                scope=scope,
                 kind=kind,
                 pure=pure,
+                port_groups=port_groups,
                 interfaces=interfaces,
                 returns=returns,
                 name=name,

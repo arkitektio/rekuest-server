@@ -15,6 +15,7 @@ from balder.fields.filtered import BalderFiltered
 from facade.structures.widgets.types import Widget
 from facade.structures.widgets.returns import ReturnWidget
 from facade import models
+from facade.inputs import Scope, NodeScope
 from lok.models import LokApp as HerreAppModel, LokClient as LokClientModel
 from balder.types import BalderObject
 import graphene
@@ -125,6 +126,7 @@ class PortKind(graphene.Enum):
 class ChildPort(graphene.ObjectType):
     kind = PortKind(description="the type of input", required=True)
     identifier = Identifier(description="The corresponding Model")
+    scope = Scope(description="The scope of this port", required=True)
     child = graphene.Field(lambda: ChildPort, description="The child", required=False)
     nullable = graphene.Boolean(description="Is this argument nullable", required=True)
     default = Any()
@@ -134,6 +136,10 @@ class ChildPort(graphene.ObjectType):
 
 
 
+class PortGroup(graphene.ObjectType):
+    key = graphene.String(required=True)
+    hidden = graphene.Boolean(required=False)
+
 class Port(graphene.ObjectType):
     key = graphene.String(required=True)
     label = graphene.String()
@@ -142,12 +148,15 @@ class Port(graphene.ObjectType):
         description="A description for this Port", required=False
     )
     identifier = Identifier(description="The corresponding Model")
+    scope = Scope(description="The scope of this port", required=True)
     nullable = graphene.Boolean(required=True)
     default = Any()
     child = graphene.Field(lambda: ChildPort, description="The child", required=False)
     annotations = graphene.List(Annotation, description="The annotations of this port")
     assign_widget = graphene.Field(Widget, description="Description of the Widget")
     return_widget = graphene.Field(ReturnWidget, description="A return widget")
+    groups = graphene.List(graphene.String, description="The port groups", required=False)
+
 
     class Meta:
         description = "A Port"
@@ -277,6 +286,8 @@ class Node(BalderObject):
     templates = BalderFiltered(
         Template, filterset_class=TemplateFilter, related_field="templates"
     )
+    scope = NodeScope(description="The scope of this port", required=True)
+    port_groups = graphene.List(PortGroup, description="The port groups", required=False)
 
     class Meta:
         model = models.Node
@@ -311,8 +322,22 @@ class MirrorRepository(BalderObject):
         interfaces = (Repository,)
 
 
+
+class Binds(graphene.ObjectType):
+    clients = graphene.List(LokClient, description="The clients of this bind")
+    templates = graphene.List(Template, description="The templates of this bind")
+
+    def resolve_clients(self, info):
+        return LokClientModel.objects.filter(client_id__in=self["clients"])
+    
+    def resolve_templates(self, info):
+        return models.Template.objects.filter(id__in=self["templates"])
+
+
+
 class Reservation(BalderObject):
     params = graphene.Field(ReserveParams)
+    binds = graphene.Field(Binds)
     log = BalderFiltered(
         ReservationLog, filterset_class=ReservationLogFilter, related_field="log"
     )

@@ -10,6 +10,7 @@ from facade.inputs import (
     LogLevelInput,
     NodeKindInput,
     ProvisionStatusInput,
+    NodeScope,
 )
 from lok.models import LokClient
 from .models import Agent, Node, Repository, Template, Registry
@@ -72,6 +73,7 @@ class NodeFilter(IdsFilter, django_filters.FilterSet):
     name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
     search = django_filters.CharFilter(method="search_filter", label="Search")
     type = EnumFilter(type=NodeKindInput, field_name="type")
+    scopes = MultiEnumFilter(type=NodeScope, field_name="scope")
     arg_types = django_filters.BaseInFilter(method="arg_types_filter", label="Args")
     interfaces = django_filters.BaseInFilter(method="interfaces_filter", label="Args")
     restrict = django_filters.BaseInFilter(method="restrict_filter", label="Restrict")
