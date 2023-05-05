@@ -37,6 +37,7 @@ class HareAgentConsumer(AgentConsumer):
         self.prov_queues = {}
         self.prov_consumers = {}
         self.prov_consumer_tags = {}
+        self.ass_delivery_tags = {}
 
     async def connect(self):
         await super().connect()
@@ -103,12 +104,16 @@ class HareAgentConsumer(AgentConsumer):
         try:
             json_dict = ujson.loads(rmq_message.body)
             type = json_dict["type"]
+
+
             if type == HareMessageTypes.ASSIGN:
                 m = AssignHareMessage(**json_dict)
+                self.ass_delivery_tags[m.assignation] = rmq_message.delivery.delivery_tag
                 replies, forwards = await bind_assignation(m, provid)
 
             if type == HareMessageTypes.UNASSIGN:
                 m = UnassignHareMessage(**json_dict)
+                self.channel.basic_ack(rmq_message.delivery.delivery_tag)
                 replies = [UnassignSubMessage(**json_dict)]
 
         except Exception:
@@ -122,7 +127,7 @@ class HareAgentConsumer(AgentConsumer):
         for r in forwards:
             await self.forward(r)
 
-        #self.channel.basic_ack(rmq_message.delivery.delivery_tag)
+        
         logger.error(f"OINOINOINOIN Acknowledged Assignment for {provid} {rmq_message}")
 
     async def on_provision_changed(self, message: ProvisionChangedMessage):
@@ -177,6 +182,13 @@ class HareAgentConsumer(AgentConsumer):
             await self.reply(r)
 
     async def on_assignation_changed(self, message: AssignationChangedMessage):
+
+        if message.status == AssignationStatus.ASSIGNED:
+            if message.assignation in self.ass_delivery_tags:
+                logger.error("Aknowledging this shit")
+                self.channel.basic_ack(self.ass_delivery_tags[message.assignation])
+            else:
+                logger.error("Unaknowledgeablebl")
 
         replies, forwards = await change_assignation(message, agent=self.agent)
         logger.info(f"Received Assignation for {message.assignation} {forwards}")

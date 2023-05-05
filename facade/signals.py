@@ -12,7 +12,7 @@ from facade.models import (
 import logging
 from guardian.shortcuts import assign_perm
 from django.contrib.auth import get_user_model
-from hare.connection import rmq
+from hare.connection import pikaconnection
 from hare.carrots import (
     HareMessage,
     ProvideHareMessage,
@@ -69,7 +69,7 @@ def prov_pre_delete(sender, instance=None, created=None, **kwargs):
         )
 
     for forward_res in forwards:
-        rmq.publish(forward_res.queue, forward_res.to_message())
+        pikaconnection.publish(forward_res.queue, forward_res.to_message())
 
 
 @receiver(post_delete, sender=Node)
@@ -169,7 +169,7 @@ def res_post_save(sender, instance: Reservation = None, created=None, **kwargs):
         res, forwards = instance.schedule()
 
         for forward_res in forwards:
-            rmq.publish(forward_res.queue, forward_res.to_message())
+            pikaconnection.publish(forward_res.queue, forward_res.to_message())
 
     else:
         ReservationsSubscription.broadcast(

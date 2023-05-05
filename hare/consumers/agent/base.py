@@ -82,7 +82,9 @@ class AgentConsumer(AsyncWebsocketConsumer):
                 self.incoming_queue.task_done()
 
         except Exception as e:
-            logger.exception(e)
+            logger.critical("Critical Error in handling message in constumer", exc_info=e)
+            await self.close(4001)
+            raise e
 
     async def reply(self, m: JSONMessage):  #
         await self.send(text_data=m.json())

@@ -97,6 +97,7 @@ class AssignHareMessage(HareMessage):
     reservation: str
     args: List[Any]
     log: bool = True
+    
 
 
 class UnassignHareMessage(HareMessage):

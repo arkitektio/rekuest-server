@@ -4,7 +4,7 @@ from lok import bounced
 import graphene
 import logging
 from facade import models, types
-from hare.connection import rmq
+from hare.connection import pikaconnection
 
 logger = logging.getLogger(__name__)  #
 

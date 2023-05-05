@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "whitenoise.runserver_nostatic",
     "django_filters",
     "corsheaders",
     "taggit",
@@ -89,6 +90,7 @@ IMITATE_GROUPS = ["team:sibarita"]
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -141,6 +143,13 @@ DATABASES = {
 
 REDIS_URL = f"redis://{conf.redis.host}:{conf.redis.port}"
 BROKER_URL = f"amqp://{conf.rabbitmq.username}:{conf.rabbitmq.password}@{conf.rabbitmq.host}:{conf.rabbitmq.port}/{conf.rabbitmq.v_host}"
+
+
+BROKER_USERNAME = conf.rabbitmq.username
+BROKER_PASSWORD = conf.rabbitmq.password
+BROKER_HOST = conf.rabbitmq.host
+BROKER_PORT = conf.rabbitmq.port
+BROKER_VHOST = conf.rabbitmq.v_host
 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

@@ -9,7 +9,7 @@ from lok import bounced
 import graphene
 import logging
 from hare.carrots import *
-from hare.connection import rmq
+from hare.connection import pikaconnection
 
 logger = logging.getLogger(__name__)  #
 
@@ -83,7 +83,7 @@ class AssignMutation(BalderMutation):
         logger.error(forward[0].dict())
 
         for forward_res in forward:
-            rmq.publish(forward_res.queue, forward_res.to_message())
+            pikaconnection.publish(forward_res.queue, forward_res.to_message())
 
         # GatewayConsumer.send(bounced)
 

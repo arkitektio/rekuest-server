@@ -4,10 +4,10 @@
 {% block header_text %}rekuest{% endblock %}
 {% load static %}
 {% block content %}
-    <div class="cover-container d-flex w-100 h-100 p-3 mx-auto flex-column">
-      <header class="masthead mb-auto">
-        <div class="inner">
-          <h3 class="masthead-brand">rekuest</h3>
+    <div class="flex flex w-[50%] h-full p-3 mx-auto flex-column">
+      <header class="flex flex-row">
+          <h3 class="flex-initial my-auto">Rekuest</h3>
+          <div class="flex-grow"></div>
           <nav class="nav nav-masthead justify-content-center">
             <a class="nav-link" href="#">Home</a>
             {% if user.is_superuser %}
@@ -16,30 +16,25 @@
             <a class="nav-link" href="{% url 'graphql' %}">GraphQL</a>
             {% if user.is_authenticated %}
             <a class="nav-link" href="{% url 'logout' %}">Logout</a>
-            {% else %}
-            <a class="nav-link" href="{% url 'login' %}?next={% url 'index' %}">Login</a>
             {% endif %}
-
           </nav>
-        </div>
       </header>
 
-      <main role="main" class="inner cover">
-        <div class="img-wrap">
-          <img src="{% static 'img/service.png' %}">
+      <main role="main" class="flex flex-col items-center text-center flex-grow">
+        <div class="flex w-[600px]">
+          <img src="{% static 'img/lok.svg' %}" width="600" height="600">
         </div>
           
           <br/>
-          <h1 class="cover-heading"><p>rekuest</p> </h1>
-        <p class="lead">rekuest is a RPC Protocol Server. We love Schemas and Streams.<br/> Checkout our cool GraphQL</p>
-        <p class="lead">
-          <a href="#" class="btn btn-lg btn-secondary">Learn more</a>
-        </p>
+          <h1 class="font-bold text-3xl"><p>Rekuest</p> </h1>
+        <div class="font-light mt-2 mb-4">Managing your workloads on your apps since 2020</p></div>
+        <div class="font-bold mt-2 mb-4">
+        </div>
       </main>
 
-      <footer class="mastfoot mt-auto">
+      <footer class="font-light text-xs flex-initial text-center">
         <div class="inner">
-          <p><a href="https://github.com/jhnnsrs/rekuest">rekuest</a>, by <a href="https://github.com/jhnnsrs">@jhnnsrs</a>.</p>
+          <p><a href="https://github.com/jhnnsrs/rekuest-server">rekuest</a>, by <a href="https://github.com/jhnnsrs">@jhnnsrs</a>.</p>
         </div>
       </footer>
     </div>

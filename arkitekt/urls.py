@@ -36,6 +36,4 @@ urlpatterns = (
         path("graphql", BalderView, name="graphql"),
         path(r"ht/", include("health_check.urls")),
     ]
-    + static("static", document_root=settings.STATIC_ROOT)
-    + static("media", document_root=settings.MEDIA_ROOT)
 )

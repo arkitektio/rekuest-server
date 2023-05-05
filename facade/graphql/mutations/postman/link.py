@@ -4,7 +4,7 @@ from balder.types import BalderMutation
 from lok import bounced
 import graphene
 import logging
-from hare.connection import rmq
+from hare.connection import pikaconnection
 
 logger = logging.getLogger(__name__)  #
 
@@ -31,6 +31,6 @@ class LinkMutation(BalderMutation):
         prov, forwards = prov.link(res)
 
         for forward_res in forwards:
-            rmq.publish(forward_res.queue, forward_res.to_message())
+            pikaconnection.publish(forward_res.queue, forward_res.to_message())
 
         return prov
