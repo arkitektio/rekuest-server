@@ -50,9 +50,12 @@ class ThreadedConnection(threading.Thread):
             self.connection.process_data_events(time_limit=1)
 
     def publish(self, routing_key, message):
+
         self.connection.add_callback_threadsafe(lambda: self._publish(routing_key, message))
 
     def _publish(self, routing_key, message):
+        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=settings.BROKER_HOST, port=settings.BROKER_PORT, credentials=pika.PlainCredentials(username=settings.BROKER_USERNAME, password=settings.BROKER_PASSWORD), heartbeat=600, blocked_connection_timeout=300))
+        self.channel = self.connection.channel()
         self.channel.basic_publish(
             body=message,
             routing_key=routing_key,
@@ -67,6 +70,27 @@ class ThreadedConnection(threading.Thread):
         if self.connection.is_open:
             self.connection.close()
         print("Stopped")
+
+
+class MeNotLikey:
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.daemon = True
+        self.is_running = True
+        self.name = "Publisher"
+        self.queue = "downstream_queue"
+
+    def publish(self, routing_key, message):
+        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=settings.BROKER_HOST, port=settings.BROKER_PORT, credentials=pika.PlainCredentials(username=settings.BROKER_USERNAME, password=settings.BROKER_PASSWORD), heartbeat=600, blocked_connection_timeout=300))
+        self.channel = self.connection.channel()
+        self.channel.basic_publish(
+            body=message,
+            routing_key=routing_key,
+            exchange="",
+        )
+        self.connection.close()
+
 
 class AioRMQConnection:
     def __init__(self, url= None) -> None:
@@ -138,5 +162,4 @@ class AioRMQConnection:
 
 
 rmq = AioRMQConnection()
-pikaconnection = ThreadedConnection()
-pikaconnection.start()
+pikaconnection = MeNotLikey()

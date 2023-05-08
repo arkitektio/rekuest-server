@@ -125,11 +125,11 @@ def change_assignation(m: AssignationChangedMessage, agent: models.Agent):
     forward = []
     try:
         ass = models.Assignation.objects.get(id=m.assignation)
-        ass.status = m.status if m.status else ass.status
-        ass.args = m.args if m.args else ass.args
-        ass.returns = m.returns if m.returns else ass.returns
-        ass.progress = m.progress if m.progress else ass.progress
-        ass.statusmessage = m.message if m.message else ass.statusmessage
+        ass.status = m.status if m.status is not None else ass.status
+        ass.args = m.args if m.args is not None else ass.args
+        ass.returns = m.returns if m.returns is not None else ass.returns
+        ass.progress = m.progress if m.progress is not None else ass.progress
+        ass.statusmessage = m.message if m.message is not None else ass.statusmessage
         ass.save()
 
         forward += [
