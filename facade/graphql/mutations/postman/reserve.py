@@ -1,7 +1,7 @@
 import uuid
 from facade import types
 from facade import inputs
-from facade.models import Provision, Reservation, Waiter, Registry
+from facade.models import Provision, Reservation, Waiter, Registry, Node
 from balder.types import BalderMutation
 from lok import bounced
 import graphene
@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)  #
 
 class ReserveMutation(BalderMutation):
     class Arguments:
-        node = graphene.ID(required=True)
-        template = graphene.ID(required=False)
+        node = graphene.ID(required=False)
+        hash = graphene.String(required=False)
         reference = graphene.String(required=False)
         title = graphene.String(required=False)
         params = graphene.Argument(
@@ -44,7 +44,7 @@ class ReserveMutation(BalderMutation):
         root,
         info,
         node=None,
-        template=None,
+        hash=None,
         params={},
         binds=None, 
         title=None,
@@ -77,14 +77,14 @@ class ReserveMutation(BalderMutation):
             provision = Provision.objects.get(id=provision)
 
         assert (
-            node or template
+            node or hash 
         ), "Please provide either a node or template you want to reserve"
 
         reference = reference or (binds.hash() if binds else "default")
 
 
         res, cr = Reservation.objects.update_or_create(
-            node_id=node,
+            node_id=node if node else Node.objects.get(hash=hash).id,
             reference=reference,
             waiter=waiter,
             defaults={

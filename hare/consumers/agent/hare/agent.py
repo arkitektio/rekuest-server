@@ -266,15 +266,17 @@ class HareAgentConsumer(AgentConsumer):
             )
         ]
 
-        loose_tag = self.prov_consumer_tags[message.provision]
-        await self.channel.basic_cancel(loose_tag)
-        logger.debug(
-            f"Deleting consumer for queue {id} of Reservation {message.provision}"
-        )
-
 
         for r in replies:
             await self.reply(r)
+
+
+        loose_tag = self.prov_consumer_tags[message.provision]
+        await self.channel.basic_cancel(loose_tag)
+        logger.debug(
+            f"Deleting consumer for queue {id} of Provision {message.provision}"
+        )
+
 
     async def disconnect(self, close_code):
         try:

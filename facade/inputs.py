@@ -68,6 +68,13 @@ class MessageInput(graphene.InputObjectType):
 
 
 
+class TemplateFieldInput(graphene.InputObjectType):
+    parent = graphene.String(required=False, description="The parent key (if nested)")
+    key = graphene.String(required=True, description="The key of the field")
+    type = graphene.String(required=True, description="The key of the field")
+    description = graphene.String(required=False, description="A short description of the field")
+
+
 
 class WidgetInput(graphene.InputObjectType):
     kind = graphene.Argument(WidgetKind, description="type", required=True)
@@ -82,6 +89,7 @@ class WidgetInput(graphene.InputObjectType):
     as_paragraph = graphene.Boolean(description="Is this a paragraph")
     hook = graphene.String(description="A hook for the app to call")
     ward = graphene.String(description="A ward for the app to call")
+    fields = graphene.List(TemplateFieldInput, description="The fields of this widget (onbly on TemplateWidget)", required=False)
 
 
 class ReturnWidgetInput(graphene.InputObjectType):
@@ -153,12 +161,12 @@ class DefinitionInput(graphene.InputObjectType):
     )
     name = graphene.String(description="The name of this template", required=True)
     port_groups = graphene.List(PortGroupInput, required=True)
-    args = graphene.List(PortInput, description="The Args")
-    returns = graphene.List(PortInput, description="The Returns")
-    interface = graphene.String(description="The interface of this template")
+    args = graphene.List(PortInput, description="The Args", required=True)
+    returns = graphene.List(PortInput, description="The Returns", required=True)
     interfaces = graphene.List(
         graphene.String,
         description="The Interfaces this node provides makes sense of the metadata",
+        required=True,
     )  # todo infer interfaces from args kwargs
     kind = graphene.Argument(
         NodeKindInput,

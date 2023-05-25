@@ -284,7 +284,7 @@ def activate_provision(m: ProvisionChangedMessage, agent: models.Agent):
         provision.status = m.status if m.status else provision.status
         provision.statusmessage = m.message if m.message else provision.statusmessage
         provision.mode = m.mode if m.mode else provision.mode  #
-        provision_queue = (provision.id, provision.queue)
+        provision_queue = (str(provision.id), provision.queue)
         provision.save()
 
         for res in provision.reservations.filter():

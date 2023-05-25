@@ -12,6 +12,7 @@ widget_types = {
     "BoolWidget": lambda: BoolWidget,
     "ChoiceWidget": lambda: ChoiceWidget,
     "CustomWidget": lambda: CustomWidget,
+    "TemplateWidget": lambda: TemplateWidget,
 }
 
 
@@ -104,6 +105,23 @@ class StringWidget(graphene.ObjectType):
 class CustomWidget(graphene.ObjectType):
     hook = graphene.String(description="A hook for the ward to call")
     ward = graphene.String(description="A ward for the app to call")
+
+    class Meta:
+        interfaces = (Widget,)
+
+
+
+class TemplateField(graphene.ObjectType):
+    parent = graphene.String(required=False, description="The parent key (if nested)")
+    key = graphene.String(required=True, description="The key of the field")
+    type = graphene.String(required=True, description="The type of the field")
+    description = graphene.String(required=True, description="A short description of the field")
+
+
+
+@register_type
+class TemplateWidget(graphene.ObjectType):
+    fields = graphene.List(TemplateField, required=True)
 
     class Meta:
         interfaces = (Widget,)

@@ -150,13 +150,27 @@ class TemplateFilter(django_filters.FilterSet):
     interface = django_filters.CharFilter(
         field_name="node__interface", lookup_expr="icontains"
     )
+    scopes = MultiEnumFilter(type=NodeScope, field_name="node__scope")
     providable = django_filters.BooleanFilter(
         method="providable_filter", label="Get active pods?"
     )
+    node_name = django_filters.CharFilter(
+        field_name="node__name", lookup_expr="icontains"
+    )
+    node_description = django_filters.CharFilter(
+        field_name="node__description", lookup_expr="icontains"
+    )
     node = django_filters.ModelChoiceFilter(queryset=Node.objects, field_name="node")
+    search = django_filters.CharFilter(method="search_filter", label="Search")
 
     def providable_filter(self, queryset, name, value):
         return queryset.filter(agent__active=True)
+    
+    def search_filter(self, queryset, name, value):
+        return queryset.filter(
+            Q(node__name__icontains=value) | Q(node__description__icontains=value)
+        )
+
 
     class Meta:
         model = Template

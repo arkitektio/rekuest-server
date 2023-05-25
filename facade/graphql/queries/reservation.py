@@ -9,11 +9,18 @@ from facade.inputs import ReservationStatusInput
 
 class ReservationDetailQuery(BalderQuery):
     class Arguments:
-        id = graphene.ID(description="The query reservation", required=True)
+        id = graphene.ID(description="The query reservation", required=False)
+        provision = graphene.ID(description="The parent provision", required=False)
+        reference = graphene.String(description="The reference", required=False)
 
     @bounced(anonymous=True)
-    def resolve(root, info, id=None):
-        return Reservation.objects.get(id=id)
+    def resolve(root, info, id=None, provision: str = None, reference: str = None):
+        if id:
+            return Reservation.objects.get(id=id)
+        elif provision and reference:
+            return Reservation.objects.get(provision=provision, reference=reference)
+        else:
+            raise Exception("No id or provision and reference provided")
 
     class Meta:
         type = types.Reservation

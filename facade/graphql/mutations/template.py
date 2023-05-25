@@ -16,13 +16,14 @@ def traverse_scope(port: dict, scope="LOCAL"):
     if port["kind"] == "STRUCTURE":
         if port["scope"] == scope:
             return True
-    if port["child"]:
+    if "child" in port and port["child"]:
         return traverse_scope(port["child"], scope)
     return False
 
 
 def has_locals(ports: list):
     for port in ports:
+        print(port)
         if traverse_scope(port, "LOCAL"):
             return True
     return False
@@ -30,6 +31,7 @@ def has_locals(ports: list):
 class CreateTemplate(BalderMutation):
     class Arguments:
         definition = graphene.Argument(DefinitionInput, required=True)
+        interface = graphene.String(required=True)
         instance_id = graphene.ID(description="The instance id", required=True)
         extensions = graphene.List(
             graphene.String, description="Desired Extensions", required=False
@@ -48,6 +50,7 @@ class CreateTemplate(BalderMutation):
         root,
         info,
         definition,
+        interface,
         params=None,
         policy=None,
         extensions=[],
@@ -72,7 +75,7 @@ class CreateTemplate(BalderMutation):
         )
 
         agent, _ = Agent.objects.update_or_create(
-            registry = registry, instance_id = instance_id, name="default"
+            registry = registry, instance_id = instance_id, defaults=dict(name=f"{str(registry)} on {instance_id}",)
         )
 
 
@@ -82,7 +85,7 @@ class CreateTemplate(BalderMutation):
         hash = hashlib.sha256(json.dumps(hashable_definition, sort_keys=True).encode()).hexdigest()
         print(hash)
 
-        template = Template.objects.filter(interface=definition.interface, agent=agent).first()
+        template = Template.objects.filter(interface=interface, agent=agent).first()
 
         if template:
             if template.node.hash == hash:
@@ -148,7 +151,7 @@ class CreateTemplate(BalderMutation):
         
         try:
             template = Template.objects.get(
-                interface=definition.interface, agent=agent
+                interface=interface, agent=agent
             )
             template.node = node
             template.extensions = extensions
@@ -157,7 +160,7 @@ class CreateTemplate(BalderMutation):
 
         except:
             template = Template.objects.create(
-                interface=definition.interface,
+                interface=interface,
                 node=node,
                 params=params or {},
                 agent=agent,
