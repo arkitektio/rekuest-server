@@ -9,6 +9,7 @@ from facade.enums import (
 from balder.enum import InputEnum
 from graphene.types.generic import GenericScalar
 import graphene
+from .global_enums import LogicalCondition, EffectKind
 from .enums import AnnotationKind, ReturnWidgetKind, WidgetKind
 from facade.scalars import Any, AnyInput, SearchQuery, Identifier
 from facade.structures.annotations import IsPredicateType
@@ -38,20 +39,18 @@ class ChoiceInput(graphene.InputObjectType):
     label = graphene.String(required=True)
 
 
-
 class MessageKind(graphene.Enum):
-    
-    TERMINATE = "TERMINATE" # terminate the assignation 
-    CANCEL = "CANCEL" # Cancel an ongoing assignation (e.g. )
-    ASSIGN = "ASSIGN" # Assign, execute, and return (only available for definitions that are function or generators)
-    
+    TERMINATE = "TERMINATE"  # terminate the assignation
+    CANCEL = "CANCEL"  # Cancel an ongoing assignation (e.g. )
+    ASSIGN = "ASSIGN"  # Assign, execute, and return (only available for definitions that are function or generators)
 
-    TELL = "TELL" # Tell and forget
+    TELL = "TELL"  # Tell and forget
 
 
 class Scope(graphene.Enum):
     GLOBAL = "GLOBAL"
     LOCAL = "LOCAL"
+
 
 class NodeScope(graphene.Enum):
     GLOBAL = "GLOBAL"
@@ -67,21 +66,39 @@ class MessageInput(graphene.InputObjectType):
     data = AnyInput(required=True)
 
 
-
 class TemplateFieldInput(graphene.InputObjectType):
     parent = graphene.String(required=False, description="The parent key (if nested)")
     key = graphene.String(required=True, description="The key of the field")
     type = graphene.String(required=True, description="The key of the field")
-    description = graphene.String(required=False, description="A short description of the field")
+    description = graphene.String(
+        required=False, description="A short description of the field"
+    )
 
+
+class DependencyInput(graphene.InputObjectType):
+    key = graphene.String(
+        required=False, description="The key of the port, defaults to self"
+    )
+    condition = graphene.Argument(
+        LogicalCondition, required=True, description="The condition of the dependency"
+    )
+    value = AnyInput(required=True)
+
+
+class EffectInput(graphene.InputObjectType):
+    dependencies = graphene.List(
+        DependencyInput, description="The dependencies of this effect"
+    )
+    kind = graphene.Argument(
+        EffectKind, required=True, description="The condition of the dependency"
+    )
+    message = graphene.String()
 
 
 class WidgetInput(graphene.InputObjectType):
     kind = graphene.Argument(WidgetKind, description="type", required=True)
     query = SearchQuery(description="Do we have a possible")
-    dependencies = graphene.List(
-        graphene.String, description="The dependencies of this port"
-    )
+
     choices = graphene.List(ChoiceInput, description="The dependencies of this port")
     max = graphene.Int(description="Max value for int widget")
     min = graphene.Int(description="Max value for int widget")
@@ -89,7 +106,11 @@ class WidgetInput(graphene.InputObjectType):
     as_paragraph = graphene.Boolean(description="Is this a paragraph")
     hook = graphene.String(description="A hook for the app to call")
     ward = graphene.String(description="A ward for the app to call")
-    fields = graphene.List(TemplateFieldInput, description="The fields of this widget (onbly on TemplateWidget)", required=False)
+    fields = graphene.List(
+        TemplateFieldInput,
+        description="The fields of this widget (onbly on TemplateWidget)",
+        required=False,
+    )
 
 
 class ReturnWidgetInput(graphene.InputObjectType):
@@ -102,51 +123,80 @@ class ReturnWidgetInput(graphene.InputObjectType):
 
 class ChildPortInput(graphene.InputObjectType):
     identifier = Identifier(description="The identifier")
-    scope = graphene.Argument(Scope, description="The scope of this port", required=True)
+    scope = graphene.Argument(
+        Scope, description="The scope of this port", required=True
+    )
     name = graphene.String(description="The name of this port")
     kind = PortKindInput(description="The type of this port")
     child = graphene.Field(lambda: ChildPortInput, description="The child port")
     nullable = graphene.Boolean(description="Is this argument nullable", required=True)
-    annotations = graphene.List(lambda: AnnotationInput, description="The annotations of this argument")
-    assign_widget = graphene.Field(WidgetInput, description="The child of this argument")
-    return_widget = graphene.Field(ReturnWidgetInput, description="The child of this argument")
+    annotations = graphene.List(
+        lambda: AnnotationInput, description="The annotations of this argument"
+    )
+    assign_widget = graphene.Field(
+        WidgetInput, description="The child of this argument"
+    )
+    return_widget = graphene.Field(
+        ReturnWidgetInput, description="The child of this argument"
+    )
+
 
 class AnnotationInput(graphene.InputObjectType):
-    kind = graphene.Argument(AnnotationKind, description="The kind of annotation", required=True)
+    kind = graphene.Argument(
+        AnnotationKind, description="The kind of annotation", required=True
+    )
     name = graphene.String(description="The name of this annotation")
     args = graphene.String(description="The value of this annotation")
     min = graphene.Float(description="The min of this annotation (Value Range)")
     max = graphene.Float(description="The max of this annotation (Value Range)")
     hook = graphene.String(description="A hook for the app to call")
-    predicate = graphene.Argument(IsPredicateType, description="The predicate of this annotation (IsPredicate)")
+    predicate = graphene.Argument(
+        IsPredicateType, description="The predicate of this annotation (IsPredicate)"
+    )
     attribute = graphene.String(description="The attribute to check")
-    annotations = graphene.List(lambda: AnnotationInput, description="The annotation of this annotation")
+    annotations = graphene.List(
+        lambda: AnnotationInput, description="The annotation of this annotation"
+    )
 
 
 class PortInput(graphene.InputObjectType):
+    effects = graphene.List(EffectInput, description="The dependencies of this port")
     identifier = Identifier(description="The identifier")
     key = graphene.String(description="The key of the arg", required=True)
-    scope = graphene.Argument(Scope, description="The scope of this port", required=True)
+    scope = graphene.Argument(
+        Scope, description="The scope of this port", required=True
+    )
     name = graphene.String(description="The name of this argument")
     label = graphene.String(description="The name of this argument")
     kind = PortKindInput(description="The type of this argument", required=True)
     description = graphene.String(description="The description of this argument")
     child = graphene.Field(ChildPortInput, description="The child of this argument")
-    assign_widget = graphene.Field(WidgetInput, description="The child of this argument")
-    return_widget = graphene.Field(ReturnWidgetInput, description="The child of this argument")
+    assign_widget = graphene.Field(
+        WidgetInput, description="The child of this argument"
+    )
+    return_widget = graphene.Field(
+        ReturnWidgetInput, description="The child of this argument"
+    )
     default = Any(description="The key of the arg", required=False)
     nullable = graphene.Boolean(description="Is this argument nullable", required=True)
-    annotations = graphene.List(AnnotationInput, description="The annotations of this argument")
-    groups = graphene.List(graphene.String, description="The port group of this argument")
+    annotations = graphene.List(
+        AnnotationInput, description="The annotations of this argument"
+    )
+    groups = graphene.List(
+        graphene.String, description="The port group of this argument"
+    )
 
 
 class ReserveBindsInput(graphene.InputObjectType):
     templates = graphene.List(
-        graphene.ID, description="The templates that we are allowed to use", required=True
+        graphene.ID,
+        description="The templates that we are allowed to use",
+        required=True,
     )
     clients = graphene.List(
         graphene.ID, description="The clients that we are allowed to use", required=True
     )
+
 
 class PortGroupInput(graphene.InputObjectType):
     key = graphene.String(description="The key of the port group", required=True)
@@ -159,6 +209,7 @@ class DefinitionInput(graphene.InputObjectType):
     description = graphene.String(
         description="A description for the Node", required=False
     )
+    collections = graphene.List(graphene.ID, required=False)
     name = graphene.String(description="The name of this template", required=True)
     port_groups = graphene.List(PortGroupInput, required=True)
     args = graphene.List(PortInput, description="The Args", required=True)
@@ -173,6 +224,9 @@ class DefinitionInput(graphene.InputObjectType):
         description="The variety",
         default_value=NodeKind.FUNCTION.value,
         required=True,
+    )
+    is_test_for = graphene.List(
+        graphene.String, description="The nodes this is a test for", required=False
     )
     pure = graphene.Boolean(required=False, default_value=False)
     idempotent = graphene.Boolean(required=False, default_value=False)

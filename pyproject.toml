@@ -9,7 +9,7 @@ python = "^3.8"
 django = ">=3,<4"
 channels = "^3.0.5"
 channels-redis = "^4.0.0"
-balder = { version = "0.1.22", extras = ["subscription"] }
+balder = { version = "0.1.30", extras = ["subscription"] }
 omegaconf = "^2.2.3"
 rich = "^12.6.0"
 django-cors-headers = "^3.13.0"

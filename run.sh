@@ -13,4 +13,4 @@ python manage.py collectstatic --noinput
 
 # Start the first process
 echo "=> Starting Server"
-daphne -b 0.0.0.0 -p 8090 arkitekt.asgi:application
+daphne -b 0.0.0.0 -p 8090 --websocket_timeout -1 arkitekt.asgi:application 

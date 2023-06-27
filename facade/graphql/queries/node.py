@@ -36,5 +36,6 @@ class Nodes(BalderQuery):
     class Meta:
         type = types.Node
         list = True
+        paginate = True
         filter = NodeFilter
         operation = "allnodes"

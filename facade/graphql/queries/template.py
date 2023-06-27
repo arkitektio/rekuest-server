@@ -24,6 +24,7 @@ class Templates(BalderQuery):
     class Meta:
         type = types.Template
         list = True
+        paginate = True
         filter = TemplateFilter
 
 

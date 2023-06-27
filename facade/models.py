@@ -5,11 +5,14 @@ from hare.carrots import (
     ProvideHareMessage,
     ReserveHareMessage,
     UnassignHareMessage,
+    KickHareMessage,
     UnprovideHareMessage,
+    BounceHareMessage,
     UnreserveHareMessage,
     ReservationChangedMessage,
 )
 from hare.messages import ReserveParams, BindParams
+from hare.connection import pikaconnection
 from lok.models import LokApp, LokClient
 from facade.managers import NodeManager, ReservationManager
 from facade.fields import (
@@ -37,6 +40,7 @@ import uuid
 import logging
 from guardian.shortcuts import get_objects_for_user
 from django.db.models import Q
+
 logger = logging.getLogger(__name__)
 
 
@@ -82,6 +86,7 @@ class Registry(models.Model):
 
 class Structure(models.Model):
     """A Structure is a uniquely identifiable model for a Repository"""
+
     extenders = models.JSONField(
         help_text="Registered Extenders on this Model", null=True
     )
@@ -110,7 +115,6 @@ class AppRepository(Repository):
 
 
 class Agent(models.Model):
-
     name = models.CharField(
         max_length=2000, help_text="This providers Name", default="Nana"
     )
@@ -118,6 +122,11 @@ class Agent(models.Model):
     installed_at = models.DateTimeField(auto_created=True, auto_now_add=True)
     unique = models.CharField(
         max_length=1000, default=uuid.uuid4, help_text="The Channel we are listening to"
+    )
+    on_instance = models.CharField(
+        max_length=1000,
+        help_text="The Instance this Agent is running on",
+        default="all",
     )
     status = models.CharField(
         max_length=1000,
@@ -132,6 +141,10 @@ class Agent(models.Model):
         null=True,
         related_name="agents",
     )
+    blocked = models.BooleanField(
+        default=False,
+        help_text="If this Agent is blocked, it will not be used for provision, nor will it be able to provide",
+    )
 
     class Meta:
         permissions = [("can_provide_on", "Can provide on this Agent")]
@@ -143,15 +156,45 @@ class Agent(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.registry} on {self.instance_id}"
+        return f"{self.status} {self.registry} on {self.instance_id} managed by {self.on_instance}"
+
+    def kick(self):
+        """Kick the Agent to reinitialize the connection"""
+        forwards = []
+
+        print("Kicking agent", self)
+        forwards.append(KickHareMessage(queue=self.queue))
+
+        for forward_res in forwards:
+            pikaconnection.publish(forward_res.queue, forward_res.to_message())
+
+        self.status = AgentStatus.KICKED
+        self.save()
+
+    def bounce(self):
+        """Kick the Agent to reinitialize the connection"""
+        forwards = []
+
+        print("Bouncing agents", self)
+        forwards.append(BounceHareMessage(queue=self.queue))
+
+        for forward_res in forwards:
+            pikaconnection.publish(forward_res.queue, forward_res.to_message())
 
     @property
     def queue(self):
         return f"agent_{self.unique}"
 
 
-class Waiter(models.Model):
+class Collection(models.Model):
+    name = models.CharField(
+        max_length=1000, unique=True, help_text="The name of this Collection"
+    )
+    description = models.TextField(help_text="A description for the Collection")
+    defined_at = models.DateTimeField(auto_created=True, auto_now_add=True)
 
+
+class Waiter(models.Model):
     name = models.CharField(
         max_length=2000, help_text="This waiters Name", default="Nana"
     )
@@ -194,6 +237,12 @@ class Node(models.Model):
     """Nodes are abstraction of RPC Tasks. They provide a common API to deal with creating tasks.
 
     See online Documentation"""
+
+    collections = models.ManyToManyField(
+        Collection,
+        related_name="nodes",
+        help_text="The collections this Node belongs to",
+    )
     pure = models.BooleanField(
         default=False, help_text="Is this function pure. e.g can we cache the result?"
     )
@@ -218,7 +267,6 @@ class Node(models.Model):
     meta = models.JSONField(
         null=True, blank=True, help_text="Meta data about this Node"
     )
-    
 
     description = models.TextField(help_text="A description for the Node")
     image = models.ImageField(
@@ -229,10 +277,19 @@ class Node(models.Model):
         default="GLOBAL",
         help_text="The scope of this Node. e.g. does the data it needs or produce live only in the scope of this Node or is it global or does it bridge data?",
     )
+    is_test_for = models.ManyToManyField(
+        "self",
+        related_name="tests",
+        blank=True,
+        symmetrical=False,
+        help_text="The users that have pinned the position",
+    )
 
-
-
-    hash = models.CharField(max_length=1000, help_text="The hash of the Node (completely unique)", unique=True)
+    hash = models.CharField(
+        max_length=1000,
+        help_text="The hash of the Node (completely unique)",
+        unique=True,
+    )
 
     args = ArgsField(default=list, help_text="Inputs for this Node")
     returns = ReturnField(default=list, help_text="Outputs for this Node")
@@ -689,7 +746,8 @@ class Reservation(models.Model):
         default=dict, help_text="Params for the Policy (including Agent etc..)"
     )
     binds = models.JSONField(
-        help_text="Params for the Policy (including Agent etc..)", null=True,
+        help_text="Params for the Policy (including Agent etc..)",
+        null=True,
         blank=True,
     )
 
@@ -801,40 +859,45 @@ class Reservation(models.Model):
         minimalInstances = params.minimalInstances or 1
 
         binds = BindParams(**self.binds) if self.binds else None
-        
 
         if self.node is not None:
-
             templates = Template.objects
             templates = templates.filter(node=self.node)
 
             if binds:
                 if binds.templates and binds.clients:
                     templates = templates.filter(
-                        Q(id__in=binds.templates) | Q(agent__registry__client__client_id__in=binds.clients)
+                        Q(id__in=binds.templates)
+                        | Q(agent__registry__client__client_id__in=binds.clients)
                     )
                 elif binds.templates:
                     templates = templates.filter(id__in=binds.templates)
                 elif binds.clients:
-                    templates = templates.filter(agent__registry__client__client_id__in=binds.clients)
-
-
-
+                    templates = templates.filter(
+                        agent__registry__client__client_id__in=binds.clients
+                    )
 
             for template in templates.all():
                 if len(linked_provisions) >= desiredInstances and not binds:
                     break
 
-
-                linkable_provisions = get_objects_for_user(
-                    self.waiter.registry.user, "facade.can_link_to"
-                ).filter(template=template).all()
+                linkable_provisions = (
+                    get_objects_for_user(
+                        self.waiter.registry.user, "facade.can_link_to"
+                    )
+                    .filter(template=template)
+                    .all()
+                )
 
                 if linkable_provisions.count() == 0:
-                    assert self.waiter.registry.user.has_perm('facade.providable', template), "User cannot provide this template and no linked provision is found"
+                    assert self.waiter.registry.user.has_perm(
+                        "facade.providable", template
+                    ), "User cannot provide this template and no linked provision is found"
 
                     prov = Provision.objects.create(
-                        template=template, agent=template.agent, reservation=self,
+                        template=template,
+                        agent=template.agent,
+                        reservation=self,
                         creator=self.waiter.registry.user,
                     )
 
@@ -948,9 +1011,8 @@ class Assignation(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     reference = models.CharField(
         max_length=1000,
-        unique=True,
         default=uuid.uuid4,
-        help_text="The Unique identifier of this Assignation",
+        help_text="The Unique identifier of this Assignation considering its parent",
     )
     creator = models.ForeignKey(
         get_user_model(),
@@ -979,6 +1041,9 @@ class Assignation(models.Model):
 
     def __str__(self):
         return f"{self.status} for {self.reservation}"
+
+    class Meta:
+        pass
 
     def unassign(self) -> Tuple["Assignation", List[HareMessage]]:
         """Activate the reservation"""
@@ -1009,6 +1074,30 @@ class AssignationLog(models.Model):
     level = models.CharField(
         choices=LogLevel.choices, default=LogLevel.INFO.value, max_length=200
     )
+
+
+class TestCase(models.Model):
+    node = models.ForeignKey(
+        Node,
+        on_delete=models.CASCADE,
+        related_name="testcases",
+        help_text="The node this test belongs to",
+    )
+    key = models.CharField(max_length=2000, null=True, blank=True)
+    name = models.CharField(max_length=2000, null=True, blank=True)
+    description = models.CharField(max_length=2000, null=True, blank=True)
+    is_benchmark = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class TestResult(models.Model):
+    case = models.ForeignKey(TestCase, on_delete=models.CASCADE, related_name="results")
+    template = models.ForeignKey(
+        Template, on_delete=models.CASCADE, related_name="testresults"
+    )
+    passed = models.BooleanField(default=False)
+    result = models.JSONField(default=dict, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
 
 import facade.signals

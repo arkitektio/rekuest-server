@@ -47,5 +47,7 @@ class Agents(BalderQuery):
 class MyAgents(BalderQuery):
     class Meta:
         type = types.Agent
+        personal = "registry__user"
         list = True
         filter = AgentFilter
+        operation = "myagents"

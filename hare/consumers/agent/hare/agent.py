@@ -6,17 +6,22 @@ from hare.carrots import (
     ReserveHareMessage,
     UnassignHareMessage,
     UnprovideHareMessage,
+    KickHareMessage,
+    BounceHareMessage,
+    HeartbeatHareMessage,
     UnreserveHareMessage,
 )
 from hare.connection import rmq
 from hare.consumers.agent.protocols.agent_json import *
 import ujson
 from arkitekt.console import console
-from hare.consumers.agent.base import AgentConsumer
+from hare.consumers.agent.base import AgentConsumer, denied_codes
 from .helpers import *
 import logging
 
 logger = logging.getLogger(__name__)
+
+
 
 
 class HareAgentConsumer(AgentConsumer):
@@ -69,6 +74,16 @@ class HareAgentConsumer(AgentConsumer):
 
             if type == HareMessageTypes.RESERVE:
                 await self.on_reserve(ReserveHareMessage(**json_dict))
+
+            if type == HareMessageTypes.KICK:
+                await self.on_kick(KickHareMessage(**json_dict))
+
+            if type == HareMessageTypes.BOUNCE:
+                await self.on_bounce(BounceHareMessage(**json_dict))
+
+            if type == HareMessageTypes.HEARTBEAT:
+                await self.on_heartbeat(HeartbeatHareMessage(**json_dict))
+
 
             if type == HareMessageTypes.UNRESERVE:
                 await self.on_unreserve(UnreserveHareMessage(**json_dict))
@@ -223,6 +238,8 @@ class HareAgentConsumer(AgentConsumer):
         for r in replies:
             await self.reply(r)
 
+
+
     async def on_unreserve(self, message: UnreserveHareMessage):
 
         replies, forwards, delete_queue_id = await loose_reservation(
@@ -279,10 +296,15 @@ class HareAgentConsumer(AgentConsumer):
 
 
     async def disconnect(self, close_code):
+
+    
         try:
-            logger.warning(f"Disconnecting Postman with close_code {close_code}")
+            logger.warning(f"Disconnecting Agent with close_code {close_code}")
             # We are deleting all associated Provisions for this Agent
-            forwards = await disconnect_agent(self.agent, close_code)
+            forwards = []
+
+            if close_code not in denied_codes:
+                forwards = await disconnect_agent(self.agent, close_code)
 
             for r in forwards:
                 await self.forward(r)

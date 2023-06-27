@@ -23,7 +23,7 @@ class UnreserveMutation(BalderMutation):
         )
 
     class Meta:
-        type = types.Reservation
+        type = UnreserveResult
         operation = "unreserve"
 
     @bounced(only_jwt=True)
@@ -32,4 +32,4 @@ class UnreserveMutation(BalderMutation):
         res = Reservation.objects.get(id=id)
         res.delete()
 
-        return res.id
+        return {"id": id }

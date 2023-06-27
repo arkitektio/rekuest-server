@@ -1,5 +1,5 @@
 from balder.types import BalderQuery
-from facade import types
+from facade import types, filters
 from facade.models import Assignation
 import graphene
 from lok import bounced
@@ -11,7 +11,7 @@ class AssignationDetailQuery(BalderQuery):
     class Arguments:
         id = graphene.ID(description="The query assignation", required=True)
 
-    def resolve(root, info, id=None):
+    def resolve(root, info, id=None, parent=None, reference=None):
         return Assignation.objects.get(id=id)
 
     class Meta:
@@ -46,6 +46,18 @@ class MyAssignations(BalderQuery):
         list = True
         paginate = True
         operation = "myrequests"
+
+
+class Assignations(BalderQuery):
+
+
+    class Meta:
+        type = types.Assignation
+        list = True
+        paginate = True
+        filter = filters.AssignationFilter
+        operation = "assignations"
+
 
 
 class RequestsQuery(BalderQuery):

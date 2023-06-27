@@ -21,6 +21,7 @@ from hare.messages import (
 
 
 class AgentMessageTypes(str, Enum):
+    HELLO = "HELLO"
 
     ASSIGN_CHANGED = "ASSIGN_CHANGED"
     PROVIDE_CHANGED = "PROVIDE_CHANGED"
@@ -31,6 +32,9 @@ class AgentMessageTypes(str, Enum):
     LIST_ASSIGNATIONS = "LIST_ASSIGNATIONS"
     LIST_ASSIGNATIONS_REPLY = "LIST_ASSIGNATIONS_REPLY"
     LIST_ASSIGNATIONS_DENIED = "LIST_ASSIGNATIONS_DENIED"
+
+
+    INQUIRY = "INQUIRY"
 
     LIST_PROVISIONS = "LIST_PROVISIONS"
     LIST_PROVISIONS_REPLY = "LIST_PROVISIONS_REPLY"
@@ -60,6 +64,14 @@ class AssignationsList(JSONMessage):
         AgentMessageTypes.LIST_ASSIGNATIONS
     ] = AgentMessageTypes.LIST_ASSIGNATIONS
     exclude: Optional[List[AssignationStatus]]
+
+
+class AssignationsInquiry(JSONMessage):
+    type: Literal[
+        AgentMessageTypes.INQUIRY
+    ] = AgentMessageTypes.INQUIRY
+    assignations: List[Assignation]
+
 
 
 class AssignationsListReply(JSONMessage):

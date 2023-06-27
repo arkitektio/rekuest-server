@@ -17,79 +17,71 @@ from hare.carrots import (
 from hare import messages
 from hare.consumers.agent.protocols.agent_json import *
 import logging
+from facade.utils import cascade_agent_failure
 
 logger = logging.getLogger(__name__)
 
 
 @sync_to_async
-def list_provisions(m: ProvisionList, agent: models.Agent, **kwargs):
+def list_provisions(agent: models.Agent, **kwargs):
     reply = []
-    forward = []
 
-    try:
-        provisions = models.Provision.objects.filter(agent=agent).exclude(
-            status__in=[
-                ProvisionStatus.CANCELLED,
-            ]
-        )
-
-        provisions = [
-            messages.Provision(
-                provision=prov.id, guardian=prov.id, status=prov.status, template=prov.template.id
-            )
-            for prov in provisions
+    provisions = models.Provision.objects.filter(agent=agent).exclude(
+        status__in=[
+            ProvisionStatus.CANCELLED,
         ]
+    )
 
-        reply += [ProvisionListReply(id=m.id, provisions=provisions)]
-    except Exception as e:
-        logger.error("list provisiosn failure", exc_info=True)
-        reply += [ProvisionListDenied(id=m.id, error=str(e))]
+    provisions = [
+        messages.Provision(
+            provision=prov.id, guardian=prov.id, status=prov.status, template=prov.template.id
+        )
+        for prov in provisions
+    ]
 
-    return reply, forward
+    reply += [ProvisionListReply(provisions=provisions)]
+
+    return reply
 
 
 @sync_to_async
-def list_assignations(m: AssignationsList, agent: models.Agent, **kwargs):
+def list_assignations(agent: models.Agent, **kwargs):
     reply = []
     forward = []
 
-    try:
-        """ assignations = models.Assignation.objects.filter(
-            provision__agent=agent
-        ).exclude(
-            status__in=[
-                AssignationStatus.RETURNED,
-                AssignationStatus.CANCELING,
-                AssignationStatus.CANCELLED,
-                AssignationStatus.ACKNOWLEDGED,
-                AssignationStatus.DONE,
-                AssignationStatus.ERROR,
-                AssignationStatus.CRITICAL,
-            ]
-        ) """
-        assignations =  []
-
-        assignations = [
-            messages.Assignation(
-                assignation=ass.id,
-                guardian=ass.id,
-                status=ass.status,
-                args=ass.args,
-                reservation=ass.reservation.id,
-                provision=ass.provision.id,
-                user=ass.creator.id,
-            )
-            for ass in assignations
+    assignations = models.Assignation.objects.filter(
+        provision__agent=agent
+    ).exclude(
+        status__in=[
+            AssignationStatus.RETURNED,
+            AssignationStatus.CANCELING,
+            AssignationStatus.CANCELLED,
+            AssignationStatus.ACKNOWLEDGED,
+            AssignationStatus.DONE,
+            AssignationStatus.ERROR,
+            AssignationStatus.CRITICAL,
         ]
-        
-        reply += [AssignationsListReply(id=m.id, assignations=assignations)]
-    except Exception as e:
-        logger.error("list assign failure", exc_info=True)
-        reply += [AssignationsListDenied(id=m.id, error=str(e))]
+    ) 
+    assignations =  []
+
+    assignations = [
+        messages.Assignation(
+            assignation=ass.id,
+            guardian=ass.id,
+            status=ass.status,
+            args=ass.args,
+            reservation=ass.reservation.id,
+            provision=ass.provision.id,
+            user=ass.creator.id,
+        )
+        for ass in assignations
+    ]
+    
+    reply += [AssignationsInquiry(assignations=assignations)]
 
 
 
-    return reply, forward
+    return reply
 
 
 @sync_to_async
@@ -317,38 +309,10 @@ def activate_provision(m: ProvisionChangedMessage, agent: models.Agent):
 
 @sync_to_async
 def disconnect_agent(agent: models.Agent, close_code: int):
-    forward = []
 
-    for provision in agent.provisions.exclude(
-        status__in=[ProvisionStatus.CANCELLED, ProvisionStatus.ENDED]
-    ).all():
-        provision.status = ProvisionStatus.DISCONNECTED
-        provision.save()
 
-        for res in provision.reservations.all():
-            res_params = ReserveParams(**res.params)
-            viable_provisions_amount = min(
-                res_params.minimalInstances, res_params.desiredInstances
-            )
+    return cascade_agent_failure(agent, AgentStatus.DISCONNECTED)
 
-            if (
-                res.provisions.filter(status=ProvisionStatus.ACTIVE).count()
-                < viable_provisions_amount
-            ):
-                res.status = ReservationStatus.DISCONNECT
-                res.save()
-                forward += [
-                    ReservationChangedMessage(
-                        queue=res.waiter.queue,
-                        reservation=res.id,
-                        status=res.status,
-                    )
-                ]
-
-    agent.status = AgentStatus.DISCONNECTED
-    agent.save()
-
-    return forward
 
 
 @sync_to_async

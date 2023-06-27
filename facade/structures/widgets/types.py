@@ -1,6 +1,7 @@
 from balder.registry import register_type
 import graphene
 from graphene.types.generic import GenericScalar
+from facade.global_enums import LogicalCondition, EffectKind
 
 widget_types = {
     "QueryWidget": lambda: QueryWidget,
@@ -19,10 +20,6 @@ widget_types = {
 @register_type
 class Widget(graphene.Interface):
     kind = graphene.String(required=True)
-    dependencies = graphene.List(
-        graphene.String,
-        description="The set-keys this widget depends on, check *query parameters*",
-    )
 
     @classmethod
     def resolve_type(cls, instance, info):
@@ -110,13 +107,13 @@ class CustomWidget(graphene.ObjectType):
         interfaces = (Widget,)
 
 
-
 class TemplateField(graphene.ObjectType):
     parent = graphene.String(required=False, description="The parent key (if nested)")
     key = graphene.String(required=True, description="The key of the field")
     type = graphene.String(required=True, description="The type of the field")
-    description = graphene.String(required=True, description="A short description of the field")
-
+    description = graphene.String(
+        required=True, description="A short description of the field"
+    )
 
 
 @register_type

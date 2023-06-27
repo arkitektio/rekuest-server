@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/3.1/ref/settings/
 import os
 from pathlib import Path
 from omegaconf import OmegaConf
+import socket
 
 conf = OmegaConf.load("config.yaml")
 
@@ -29,6 +30,9 @@ SECRET_KEY = conf.django.secret_key
 DEBUG = conf.django.debug
 ALLOWED_HOSTS = conf.django.hosts
 CORS_ORIGIN_ALLOW_ALL = True
+
+INSTANCE_NAME = conf.django.get("instance_name", "all")
+
 
 LOK = {
     "PUBLIC_KEY": conf.lok.public_key,

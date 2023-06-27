@@ -8,8 +8,29 @@ from facade.enums import AgentStatus
 from hare.consumers.agent.protocols.agent_json import *
 from urllib.parse import parse_qs
 import asyncio
-
+from django.conf import settings
 logger = logging.getLogger(__name__)
+from hare.consumers.agent.hare.helpers import *
+
+
+THIS_INSTANCE_NAME = settings.INSTANCE_NAME # corresponds to the hostname
+KICKED_CLOSE = 3001
+BUSY_CLOSE = 3002
+BLOCKED_CLOSE = 3003
+BOUNCE_CODE = 3004
+
+class AgentBlocked(Exception):
+    pass
+
+class AgentKicked(Exception):
+    pass
+
+class AgentBusy(Exception):
+    pass
+
+
+
+denied_codes = [BUSY_CLOSE] # These are codes that should not change the state of the agent
 
 
 class AgentConsumer(AsyncWebsocketConsumer):
@@ -34,24 +55,63 @@ class AgentConsumer(AsyncWebsocketConsumer):
             registry, _ = Registry.objects.get_or_create(user=self.user, client=self.client)
 
         self.agent, _ = Agent.objects.get_or_create(
-            registry=registry, instance_id=instance_id
+            registry=registry, instance_id=instance_id, defaults={"on_instance": THIS_INSTANCE_NAME, "status": AgentStatus.VANILLA}
         )
+        if self.agent.status == AgentStatus.ACTIVE:
+            raise AgentBusy("Agent already active")
+        if self.agent.blocked:
+            raise AgentBlocked("Agent blocked. Please unblock it first")
 
+        self.agent.on_instance = THIS_INSTANCE_NAME
         self.agent.status = AgentStatus.ACTIVE
         self.agent.save()
 
     @bounced_ws(only_jwt=True)
     async def connect(self):
-        await self.set_agent()
+        await super().connect()
         self.queue_length = 5000
         self.incoming_queue = asyncio.Queue(maxsize=self.queue_length)
+
+        try:
+            await self.set_agent()
+        except AgentBlocked as e:
+            logger.error(e)
+            await self.close(BLOCKED_CLOSE)
+            return
+        except AgentBusy as e:
+            logger.error(e)
+            await self.close(BUSY_CLOSE)
+            return
+        
+        await self.reply(JSONMessage(type=AgentMessageTypes.HELLO))
+
+        replies = await list_provisions(self.agent)
+        for reply in replies:
+            await self.reply(reply)
+
+        assignations = await list_assignations(self.agent)
+        for reply in assignations:
+            await self.reply(reply)
+
         self.incoming_task = asyncio.create_task(self.consumer())
-        return await super().connect()
 
     async def receive(self, text_data=None, bytes_data=None):
         self.incoming_queue.put_nowait(
             text_data
         )  # We are buffering here and raise an exception if postman is producing to fast
+
+
+
+    async def on_kick(self, message: str):
+        print("KICKING")
+        await self.close(KICKED_CLOSE)
+
+    async def on_bounce(self, message: str):
+        print("IS BOUNCED")
+        await self.close(BOUNCE_CODE)
+
+
+
 
     async def consumer(self):
         try:

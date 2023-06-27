@@ -216,13 +216,13 @@ def user_saved(sender, instance: Reservation = None, created=None, **kwargs):
 def agen_post_save(sender, instance: Agent = None, created=None, **kwargs):
     from facade.graphql.subscriptions import AgentsEvent
 
+
+    print("UPDATEDING AGENT", instance)
+
     if instance.registry.user:
+        print("SENDING TO USER", instance.registry.user.id)
         AgentsEvent.broadcast(
             {"action": "create" if created else "update", "data": instance},
             [f"agents_user_{instance.registry.user.id}"],
         )
 
-    AgentsEvent.broadcast(
-        {"action": "create" if created else "update", "data": instance},
-        [f"all_agents"],
-    )

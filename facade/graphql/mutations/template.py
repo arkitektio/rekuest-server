@@ -1,4 +1,4 @@
-from facade.models import Registry, Template, Structure, Node, Agent
+from facade.models import Registry, Template, Structure, Node, Agent, Collection
 from facade import types
 from balder.types import BalderMutation
 import graphene
@@ -8,6 +8,7 @@ from facade.inputs import DefinitionInput
 import logging
 import json
 import hashlib
+
 logger = logging.getLogger(__name__)
 from facade.utils import get_imitiate
 
@@ -28,6 +29,7 @@ def has_locals(ports: list):
             return True
     return False
 
+
 class CreateTemplate(BalderMutation):
     class Arguments:
         definition = graphene.Argument(DefinitionInput, required=True)
@@ -43,13 +45,12 @@ class CreateTemplate(BalderMutation):
             required=False, description="Some additional Params for your offering"
         )
         imitate = graphene.ID(description="User to imitate", required=False)
-      
 
     @bounced(only_jwt=True)
     def mutate(
         root,
         info,
-        definition,
+        definition: DefinitionInput,
         interface,
         params=None,
         policy=None,
@@ -67,22 +68,35 @@ class CreateTemplate(BalderMutation):
         port_groups = definition.port_groups or []
         print("The port groups", port_groups)
 
-
-        user = info.context.user if imitate is None else get_imitiate(info.context.user, imitate)
+        user = (
+            info.context.user
+            if imitate is None
+            else get_imitiate(info.context.user, imitate)
+        )
 
         registry, _ = Registry.objects.update_or_create(
-            client=info.context.bounced.client, user=user, defaults=dict(app=info.context.bounced.app)
+            client=info.context.bounced.client,
+            user=user,
+            defaults=dict(app=info.context.bounced.app),
         )
 
         agent, _ = Agent.objects.update_or_create(
-            registry = registry, instance_id = instance_id, defaults=dict(name=f"{str(registry)} on {instance_id}",)
+            registry=registry,
+            instance_id=instance_id,
+            defaults=dict(
+                name=f"{str(registry)} on {instance_id}",
+            ),
         )
 
+        hashable_definition = {
+            key: value
+            for key, value in dict(definition).items()
+            if key not in ["meta", "interface"]
+        }
 
-        hashable_definition = {key: value for key, value in dict(definition).items() if key not in ["meta","interface"]}
-
-
-        hash = hashlib.sha256(json.dumps(hashable_definition, sort_keys=True).encode()).hexdigest()
+        hash = hashlib.sha256(
+            json.dumps(hashable_definition, sort_keys=True).encode()
+        ).hexdigest()
         print(hash)
 
         template = Template.objects.filter(interface=interface, agent=agent).first()
@@ -98,7 +112,6 @@ class CreateTemplate(BalderMutation):
         try:
             node = Node.objects.get(hash=hash)
         except Node.DoesNotExist:
-
             has_local_argports = has_locals(args)
             has_local_returnports = has_locals(returns)
 
@@ -110,9 +123,6 @@ class CreateTemplate(BalderMutation):
                 scope = "BRIDGE_GLOBAL_TO_LOCAL"
             if has_local_argports and not has_local_returnports:
                 scope = "BRIDGE_LOCAL_TO_GLOBAL"
-
-
-
 
             # arg_identifiers = [arg.identifier for arg in args if arg.identifier]
             # return_identifiers = [
@@ -130,7 +140,6 @@ class CreateTemplate(BalderMutation):
             #         )
             #         logger.info(f"Created {new_structure}")
 
-
             node = Node.objects.create(
                 hash=hash,
                 description=description,
@@ -143,16 +152,20 @@ class CreateTemplate(BalderMutation):
                 returns=returns,
                 name=name,
             )
+
+            if definition.is_test_for:
+                for nodehash in definition.is_test_for:
+                    node.is_test_for.add(Node.objects.get(hash=nodehash))
+
+            if definition.collections:
+                for collection_name in definition.collections:
+                    c, _ = Collection.objects.get_or_create(name=collection_name)
+                    node.collections.add(c)
+
             logger.info(f"Created {node}")
 
-
-
-
-        
         try:
-            template = Template.objects.get(
-                interface=interface, agent=agent
-            )
+            template = Template.objects.get(interface=interface, agent=agent)
             template.node = node
             template.extensions = extensions
             template.params = params or {}

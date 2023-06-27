@@ -21,6 +21,7 @@ from .admin import (
 )
 from .agent import DeleteAgent
 from .perms import ChangePermissions
+from .test import *
 
 __all__ = [
     "DefineNode",

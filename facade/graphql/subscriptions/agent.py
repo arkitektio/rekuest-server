@@ -17,7 +17,7 @@ class AgentsEvent(BalderSubscription):
 
     @bounced(only_jwt=True)
     def subscribe(root, info, *args, **kwargs):
-        return [f"agents_user_{info.context.user.id}", "all_agents"]
+        return [f"agents_user_{info.context.user.id}"]
 
     def publish(payload, info, *args, **kwargs):
         payload = payload["payload"]

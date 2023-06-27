@@ -155,6 +155,7 @@ class ReservationStatus(TextChoices):
 
 class AgentStatus(TextChoices):
     ACTIVE = "ACTIVE", "Active"
+    KICKED = "KICKED", "Just kicked"
     DISCONNECTED = "DISCONNECTED", "Disconnected"
     VANILLA = "VANILLA", "Complete Vanilla Scenario after a forced restart of"
 
