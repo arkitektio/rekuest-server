@@ -50,14 +50,10 @@ def list_provisions(m: ProvisionList, agent: Agent, **kwargs):
 def list_assignations(m: AssignationsList, agent: Agent, **kwargs):
     reply = []
     forward = []
-    print(agent.name)
     try:
         assignations = Assignation.objects.filter(
             provision__bound=agent,
         )
-        for assignation in assignations:
-            print(assignation.args)
-            print(assignation.kwargs)
 
         assignations = [
             AssignationFragment(
@@ -71,8 +67,6 @@ def list_assignations(m: AssignationsList, agent: Agent, **kwargs):
             for ass in assignations
         ]
 
-        print(assignations)
-
         reply += [AssignationsListReply(id=m.id, assignations=assignations)]
     except Exception as e:
         logger.exception(e)
@@ -85,7 +79,6 @@ def list_assignations(m: AssignationsList, agent: Agent, **kwargs):
 def change_provision(m: ProvisionChangedMessage, agent: Agent):
     reply = []
     forward = []
-    print(agent.name)
     try:
         provision = Provision.objects.get(id=m.provision)
         provision.status = m.status if m.status else provision.status
@@ -94,11 +87,9 @@ def change_provision(m: ProvisionChangedMessage, agent: Agent):
         provision.save()
 
         if provision.status == ProvisionStatus.ACTIVE:
-            print("We are now active?")
             for res in provision.reservations.filter(
                 status=ReservationStatus.DISCONNECT
             ):
-                print("Found one?")
                 res_params = ReserveParams(**res.params)
                 viable_provisions_amount = min(
                     res_params.minimalInstances, res_params.desiredInstances
@@ -110,7 +101,6 @@ def change_provision(m: ProvisionChangedMessage, agent: Agent):
                 ):
                     res.status = ReservationStatus.ACTIVE
                     res.save()
-                    print("Nanananan")
                     forward += [
                         ReservationChangedMessage(
                             queue=res.waiter.queue,
@@ -120,11 +110,7 @@ def change_provision(m: ProvisionChangedMessage, agent: Agent):
                     ]
 
         if provision.status == ProvisionStatus.CRITICAL:
-            print("We are now Dead??")
-            for res in provision.reservations.filter(
-                status=ReservationStatus.ACTIVE
-            ):
-                print("Found one?")
+            for res in provision.reservations.filter(status=ReservationStatus.ACTIVE):
                 res_params = ReserveParams(**res.params)
                 viable_provisions_amount = min(
                     res_params.minimalInstances, res_params.desiredInstances
@@ -136,7 +122,6 @@ def change_provision(m: ProvisionChangedMessage, agent: Agent):
                 ):
                     res.status = ReservationStatus.DISCONNECT
                     res.save()
-                    print("You are dead boy?")
                     forward += [
                         ReservationChangedMessage(
                             queue=res.waiter.queue,
@@ -144,7 +129,6 @@ def change_provision(m: ProvisionChangedMessage, agent: Agent):
                             status=res.status,
                         )
                     ]
-        
 
     except Exception as e:
         logger.exception(e)

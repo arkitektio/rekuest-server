@@ -6,6 +6,9 @@ from asgiref.sync import sync_to_async
 import ujson
 from lok.bouncer.utils import bounced_ws
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PostmanConsumer(AsyncWebsocketConsumer):
@@ -17,28 +20,26 @@ class PostmanConsumer(AsyncWebsocketConsumer):
 
     @sync_to_async
     def set_waiter(self):
-        self.app, self.user = self.scope["bounced"].app, self.scope["bounced"].user
-        instance_id = parse_qs(self.scope["query_string"])[b"instance_id"][0].decode(
-            "utf8"
+        self.client, self.user = self.scope["bounced"].client, self.scope["bounced"].user
+        instance_id = (
+            parse_qs(self.scope["query_string"])
+            .get(b"instance_id", [b"default"])[0]
+            .decode("utf8")
         )
-        print(instance_id)
 
         if self.user is None or self.user.is_anonymous:
-            registry, _ = Registry.objects.get_or_create(user=None, app=self.app)
+            registry, _ = Registry.objects.get_or_create(user=None, client=self.client)
         else:
-            registry, _ = Registry.objects.get_or_create(user=self.user, app=self.app)
+            registry, _ = Registry.objects.get_or_create(user=self.user, client=self.client)
 
         self.waiter, _ = Waiter.objects.get_or_create(
             registry=registry, identifier=instance_id
         )
 
-
-
-
     @bounced_ws(only_jwt=True)
     async def connect(self):
         await self.set_waiter()
-        self.queue_length = 10
+        self.queue_length = 5000
         self.incoming_queue = asyncio.Queue(maxsize=self.queue_length)
         self.incoming_task = asyncio.create_task(self.consumer())
         return await super().connect()
@@ -70,10 +71,9 @@ class PostmanConsumer(AsyncWebsocketConsumer):
                 self.incoming_queue.task_done()
 
         except Exception as e:
-            print(e)
+            logger.exception(e)
 
     async def reply(self, m: JSONMessage):  #
-        print("Sending to client")
         await self.send(text_data=m.json())
 
     async def on_reserve(self, message):

@@ -3,7 +3,13 @@ import uuid
 
 from pydantic import BaseModel, Field
 from datetime import datetime
-from hare.messages import Assignation, Reservation, Unassignation, Unreservation, ReserveParams
+from hare.messages import (
+    Assignation,
+    Reservation,
+    Unassignation,
+    Unreservation,
+    ReserveParams,
+)
 from facade.enums import ReservationStatus, AssignationStatus
 from enum import Enum
 
@@ -49,7 +55,6 @@ class JSONMessage(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     type: str
     meta: JSONMeta = Field(default_factory=JSONMeta)
-    pass
 
 
 class ReserveList(JSONMessage):
@@ -73,11 +78,9 @@ class ReserveListDenied(JSONMessage):
     error: str
 
 
-
-
-
 class ReservePub(JSONMessage):
     type: Literal[PostmanMessageTypes.RESERVE] = PostmanMessageTypes.RESERVE
+    provision: Optional[str]
     params: Optional[ReserveParams]  # TODO: Enforce typing here
     node: Optional[str]
     template: Optional[str]

@@ -1,7 +1,7 @@
 from enum import Enum
-from typing import Any, Dict, List, Optional, TypeVar
+from typing import Any, Dict, List, Optional, TypeVar, Tuple
 from pydantic import BaseModel
-from facade.enums import ReservationStatus, AssignationStatus, ProvisionStatus
+from facade.enums import LogLevel, ReservationStatus, AssignationStatus, ProvisionStatus
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -35,13 +35,22 @@ class ProvideTactic(str, Enum):
     FILTER_OWN = "FILTER_OWN"
     FILTER_ACTIVE = "FILTER_ACTIVE"
     FILTER_AGENTS = "FILTER_AGENTS"
-    FILTER_TEMPLATES ="FILTER_TEMPLATES"
+    FILTER_TEMPLATES = "FILTER_TEMPLATES"
     BALANCE = "BALANCE"
 
 
+class BindParams(BaseModel):
+    templates: Tuple[str, ...]
+    clients: Tuple[str, ...]
+
+    def hash(self):
+        return "binds-" + "t".join(self.templates) + "c".join(self.clients)
+
+
+
 class ReserveParams(BaseModel):
-    desiredInstances: Optional[int] = 1
-    minimalInstances: Optional[int] = 1
+    desiredInstances: int = 1
+    minimalInstances: int = 1
     registries: Optional[List[str]]
     agents: Optional[List[str]]
     templates: Optional[List[str]]
@@ -59,30 +68,36 @@ class ReserveParams(BaseModel):
         ProvideTactic.FILTER_AGENTS,
     ]
 
+
 class Assignation(UpdatableModel):
     assignation: str
     provision: Optional[str]
     reservation: Optional[str]
     args: Optional[List[Any]]
-    kwargs: Optional[Dict[str, Any]]
     returns: Optional[List[Any]]
     persist: Optional[bool]
+    progress: Optional[int]
     log: Optional[bool]
     status: Optional[AssignationStatus]
     message: Optional[str]
+    user: Optional[str]
+
 
 class Unassignation(UpdatableModel):
     assignation: str
+    provision: Optional[str]
 
 
 class Provision(UpdatableModel):
     provision: str
+    guardian: Optional[str]
     template: Optional[str]
     status: Optional[ProvisionStatus]
 
 
 class Unprovision(UpdatableModel):
     provision: str
+    message: Optional[str]
 
 
 class Reservation(UpdatableModel):
@@ -90,7 +105,20 @@ class Reservation(UpdatableModel):
     template: Optional[str]
     node: Optional[str]
     status: Optional[ReservationStatus] = None
+    message: Optional[str] = ""
 
 
 class Unreservation(BaseModel):
     reservation: str
+
+
+class AssignationLog(BaseModel):
+    assignation: str
+    level: LogLevel
+    message: Optional[str]
+
+
+class ProvisionLog(BaseModel):
+    provision: str
+    level: LogLevel
+    message: Optional[str]

@@ -1,11 +1,34 @@
-from logging import WARN
 from balder.enum import InputEnum
-from typing import Text
 from django.db.models import TextChoices
+import graphene
+from facade.structures.annotations import annotation_types
+from facade.structures.widgets.types import widget_types
+from facade.structures.widgets.returns import return_widget_types
 
-
-class HookType(TextChoices):
-    NEGOTIATE = "negotiate", "Negotiate Hook (syncronous Api call)"
+AnnotationKind = type(
+    "AnnotationKind",
+    (graphene.Enum,),
+    {
+        "__doc__": "The kind of annotation",
+        **{key: key for key, value in annotation_types.items()},
+    },
+)
+WidgetKind = type(
+    "WidgetKind",
+    (graphene.Enum,),
+    {
+        "__doc__": "The kind of widget",
+        **{key: key for key, value in widget_types.items()},
+    },
+)
+ReturnWidgetKind = type(
+    "ReturnWidgetKind",
+    (graphene.Enum,),
+    {
+        "__doc__": "The kind of return widget",
+        **{key: key for key, value in return_widget_types.items()},
+    },
+)
 
 
 class ProvisionMode(TextChoices):
@@ -26,9 +49,6 @@ class LogLevel(TextChoices):
     EVENT = "EVENT", "Event Level (only handled by plugins)"
 
 
-LogLevelInput = InputEnum.from_choices(LogLevel)
-
-
 class RepositoryType(TextChoices):
     """Repository Types expresses what sort of Repository we are dealing with, e.g is this a local, mirror??"""
 
@@ -37,7 +57,7 @@ class RepositoryType(TextChoices):
 
 
 class AccessStrategy(TextChoices):
-    """How this Topic is accessible"""
+    """How this Provision is accessible"""
 
     EXCLUSIVE = (
         "EXCLUSIVE",
@@ -46,46 +66,15 @@ class AccessStrategy(TextChoices):
     EVERYONE = "EVERYONE", "Everyone can link to this Topic"
 
 
-class NodeType(TextChoices):
+class NodeKind(TextChoices):
     GENERATOR = "generator", "Generator"
     FUNCTION = "function", "Function"
-
-
-class BoundType(TextChoices):
-    AGENT = "AGENT", "Bound to one Agent (Instance Dependented)"
-    REGISTRY = "REGISTRY", "Registry (User Dependent)"
-    APP = "APP", "Bound to one Application (User independent)"
-    GLOBAL = "GLOBAL", "Unbound and usable for every application"
 
 
 class TopicMode(TextChoices):
     PRODUCTION = "PRODUCTION", "Production (Topic is in production mode)"
     DEBUG = "DEBUG", "Debug (Topic is in debug Mode)"
     TEST = "TEST", "Test (is currently being tested)"
-
-
-class PodStatus(TextChoices):
-    DOWN = "DOWN", "Down"
-    ERROR = "ERROR", "Error"
-    PENDING = "PENDING", "Pending"
-    ACTIVE = "ACTIVE", "Active"
-
-
-class TopicStatus(TextChoices):
-    DOWN = "DOWN", "Down (Subscribers to this Topic are offline)"
-    DISCONNECTED = "LOST", "Lost (Subscribers to this Topic have lost their connection)"
-    RECONNECTING = (
-        "RECONNECTING",
-        "Reconnecting (We are trying to Reconnect to this Topic)",
-    )
-    CRITICAL = (
-        "CRITICAL",
-        "Criticial (This Topic has errored and needs to be inspected)",
-    )
-    ACTIVE = (
-        "ACTIVE",
-        "Active (This topic has subscribers and is available being Routed To",
-    )
 
 
 class AssignationStatus(TextChoices):
@@ -112,17 +101,15 @@ class AssignationStatus(TextChoices):
     DONE = "DONE", "Assignment has finished"
 
 
-AssignationStatusInput = InputEnum.from_choices(AssignationStatus)
-NodeTypeInput = InputEnum.from_choices(NodeType)
-BoundTypeInput = InputEnum.from_choices(BoundType)
-
-
 class ReservationStatus(TextChoices):
-
     # Start State
     ROUTING = (
         "ROUTING",
         "Routing (Reservation has been requested but no Topic found yet)",
+    )
+    NON_VIABLE = (
+        "NON_VIABLE",
+        "SHould signal that this reservation is non viable (has less linked provisions than minimalInstances)",
     )
 
     # Life States
@@ -168,6 +155,7 @@ class ReservationStatus(TextChoices):
 
 class AgentStatus(TextChoices):
     ACTIVE = "ACTIVE", "Active"
+    KICKED = "KICKED", "Just kicked"
     DISCONNECTED = "DISCONNECTED", "Disconnected"
     VANILLA = "VANILLA", "Complete Vanilla Scenario after a forced restart of"
 
@@ -178,12 +166,7 @@ class WaiterStatus(TextChoices):
     VANILLA = "VANILLA", "Complete Vanilla Scenario after a forced restart of"
 
 
-ReservationStatusInput = InputEnum.from_choices(ReservationStatus)
-AgentStatusInput = InputEnum.from_choices(AgentStatus)
-
-
 class ProvisionStatus(TextChoices):
-
     # Start State
     PENDING = (
         "PENDING",
@@ -225,6 +208,3 @@ class ProvisionStatus(TextChoices):
         "CANCELLED",
         "Cancelled (Provision was cancelled by the User and will no longer create Topics)",
     )
-
-
-ProvisionStatusInput = InputEnum.from_choices(ProvisionStatus)

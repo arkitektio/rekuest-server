@@ -52,7 +52,6 @@ class AgentConsumer(AsyncWebsocketConsumer):
         instance_id = parse_qs(self.scope["query_string"])[b"instance_id"][0].decode(
             "utf8"
         )
-        print(instance_id)
 
         if self.user is None or self.user.is_anonymous:
             registry, _ = Registry.objects.get_or_create(user=None, app=self.app)
@@ -93,7 +92,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
                     )
 
         except Exception as e:
-            print(e)
+            logger.error(e)
 
     async def reply(self, m: JSONMessage):  #
         await self.send(text_data=m.json())
@@ -128,7 +127,6 @@ class HareAgentConsumer(AgentConsumer):
             self.agent.queue, auto_delete=True
         )
 
-        print(f"Liustenting Agent on '{self.agent.queue}'")
         # Start listening the queue with name 'hello'
         await self.channel.basic_consume(
             self.callback_queue.queue, self.on_rmq_message_in
@@ -141,10 +139,9 @@ class HareAgentConsumer(AgentConsumer):
         try:
             json_dict = ujson.loads(rmq_message.body)
             type = json_dict["type"]
-            print(json_dict)
 
         except Exception as e:
-            console.print_exception()
+            logger.exception(e, exc_info=True)
 
         self.channel.basic_ack(rmq_message.delivery.delivery_tag)
 

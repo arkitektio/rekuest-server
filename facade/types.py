@@ -1,11 +1,7 @@
 from typing import Type
-from facade.scalars import Any
-from graphene.types.base import BaseOptions
+from facade.scalars import Any, Identifier
 from graphene.types.interface import InterfaceOptions
-from pydantic.fields import Required
-from facade.enums import RepositoryType
 from django.contrib.auth import get_user_model
-from graphene_django.types import DjangoObjectType
 from facade.filters import (
     AssignationFilter,
     AssignationLogFilter,
@@ -16,16 +12,21 @@ from facade.filters import (
     ProvisionFilter,
 )
 from balder.fields.filtered import BalderFiltered
-from django.utils.translation import templatize
-from facade.structures.ports.returns.types import ReturnPort
-from facade.structures.ports.kwargs.types import KwargPort
-from facade.structures.ports.args.types import ArgPort
+from facade.structures.widgets.types import Widget
+from facade.structures.widgets.returns import ReturnWidget
+from facade.global_enums import LogicalCondition, EffectKind
 from facade import models
-from lok.models import LokApp as HerreAppModel
+from facade.inputs import Scope, NodeScope
+from lok.models import LokApp as HerreAppModel, LokClient as LokClientModel
 from balder.types import BalderObject
 import graphene
 from balder.registry import register_type
 from graphene.types.generic import GenericScalar
+from facade.structures.annotations import Annotation
+from django.contrib.auth.models import (
+    Permission as PermissionModel,
+    Group as GroupModel,
+)
 
 
 class BalderInheritedModelOptions(InterfaceOptions):
@@ -46,7 +47,6 @@ class BalderInheritedModel(graphene.Interface):
 
     @classmethod
     def resolve_inherited(cls, instance, info):
-        print(cls, instance, cls._meta.child_models)
         for key, value in cls._meta.child_models.items():
             attr_name = key.__name__.lower()
             if hasattr(instance, attr_name):
@@ -65,7 +65,7 @@ class BalderInheritedField(graphene.Field):
         _type: Type[BalderInheritedModel],
         resolver=None,
         related_field=None,
-        **kwargs
+        **kwargs,
     ):
         resolver = lambda root, info: self.type.resolve_inherited(
             getattr(root, related_field), info
@@ -89,21 +89,17 @@ class ReserveParamsInput(graphene.InputObjectType):
     templates = graphene.List(
         graphene.ID, description="Templates that can be selected", required=False
     )
-
     desiredInstances = graphene.Int(
-        description="The desired amount of Instances", required=False
+        description="The desired amount of Instances", required=True, default=1
     )
     minimalInstances = graphene.Int(
-        description="The minimal amount of Instances", required=False
+        description="The minimal amount of Instances", required=True, default=1
     )
 
 
 class ReserveParams(graphene.ObjectType):
     registries = graphene.List(
         graphene.ID, description="Registry thar are allowed", required=False
-    )
-    agents = graphene.List(
-        graphene.ID, description="Agents that are allowed", required=False
     )
     templates = graphene.List(
         graphene.ID, description="Templates that can be selected", required=False
@@ -116,14 +112,94 @@ class ReserveParams(graphene.ObjectType):
     )
 
 
+class PortKind(graphene.Enum):
+    INT = "INT"
+    STRING = "STRING"
+    STRUCTURE = "STRUCTURE"
+    LIST = "LIST"
+    BOOL = "BOOL"
+    DICT = "DICT"
+    FLOAT = "FLOAT"
+    UNION = "UNION"
+
+
+class ChildPort(graphene.ObjectType):
+    kind = PortKind(description="the type of input", required=True)
+    identifier = Identifier(description="The corresponding Model")
+    scope = Scope(description="The scope of this port", required=True)
+    child = graphene.Field(lambda: ChildPort, description="The child", required=False)
+    nullable = graphene.Boolean(description="Is this argument nullable", required=True)
+    default = Any()
+    variants = graphene.List(
+        lambda: ChildPort,
+        description="The varients of this port (only for unions)",
+        required=False,
+    )
+    annotations = graphene.List(Annotation, description="The annotations of this port")
+    assign_widget = graphene.Field(Widget, description="Description of the Widget")
+    return_widget = graphene.Field(ReturnWidget, description="A return widget")
+
+
+class PortGroup(graphene.ObjectType):
+    key = graphene.String(required=True)
+    hidden = graphene.Boolean(required=False)
+
+
+class Dependency(graphene.ObjectType):
+    key = graphene.String(
+        required=False, description="The key of the port (null should be self)"
+    )
+    condition = LogicalCondition(
+        required=True, description="The condition of the dependency"
+    )
+    value = GenericScalar(required=True)
+
+
+class Effect(graphene.ObjectType):
+    dependencies = graphene.List(
+        Dependency, description="The dependencies of this effect"
+    )
+    kind = EffectKind(required=True, description="The condition of the dependency")
+    message = graphene.String()
+
+
+class Port(graphene.ObjectType):
+    key = graphene.String(required=True)
+    label = graphene.String()
+    kind = PortKind(description="the type of input", required=True)
+    description = graphene.String(
+        description="A description for this Port", required=False
+    )
+    effects = graphene.List(Effect, description="The effects of this port")
+    identifier = Identifier(description="The corresponding Model")
+    scope = Scope(description="The scope of this port", required=True)
+    nullable = graphene.Boolean(required=True)
+    variants = graphene.List(
+        ChildPort,
+        description="The varients of this port (only for unions)",
+        required=False,
+    )
+    default = Any()
+    child = graphene.Field(lambda: ChildPort, description="The child", required=False)
+    annotations = graphene.List(Annotation, description="The annotations of this port")
+    assign_widget = graphene.Field(Widget, description="Description of the Widget")
+    return_widget = graphene.Field(ReturnWidget, description="A return widget")
+    groups = graphene.List(
+        graphene.String, description="The port groups", required=False
+    )
+
+    class Meta:
+        description = "A Port"
+
+
 class LokApp(BalderObject):
     class Meta:
         model = HerreAppModel
 
 
-class LokUser(BalderObject):
+class LokClient(BalderObject):
     class Meta:
-        model = get_user_model()
+        model = LokClientModel
 
 
 class Registry(BalderObject):
@@ -151,11 +227,21 @@ class DataQuery(graphene.ObjectType):
 
 
 class Agent(BalderObject):
+    client_id = graphene.String(required=True)
+
+    def resolve_client_id(self, info):
+        return self.registry.client.client_id
+
     class Meta:
         model = models.Agent
 
 
 class Waiter(BalderObject):
+    client_id = graphene.String(required=True)
+
+    def resolve_client_id(self, info):
+        return self.registry.client.client_id
+
     class Meta:
         model = models.Waiter
 
@@ -175,6 +261,7 @@ class Assignation(BalderObject):
         AssignationLog, filterset_class=AssignationLogFilter, related_field="log"
     )
     args = graphene.List(Any)
+    returns = graphene.List(Any)
 
     class Meta:
         model = models.Assignation
@@ -191,6 +278,7 @@ class ProvisionParams(graphene.ObjectType):
 
 class Provision(BalderObject):
     params = graphene.Field(ProvisionParams)
+    template = graphene.Field(lambda: Template, required=True)
     log = BalderFiltered(
         ProvisionLog, filterset_class=ProvisionLogFilter, related_field="log"
     )
@@ -213,21 +301,37 @@ class Template(BalderObject):
     provisions = BalderFiltered(
         Provision, filterset_class=ProvisionFilter, related_field="provisions"
     )
-    params = graphene.Field(TemplateParams)
+    params = graphene.Field(GenericScalar)
 
     class Meta:
         model = models.Template
 
 
 class Node(BalderObject):
-    args = graphene.List(ArgPort)
-    kwargs = graphene.List(KwargPort)
-    returns = graphene.List(ReturnPort)
+    args = graphene.List(Port)
+    returns = graphene.List(Port)
     interfaces = graphene.List(graphene.String)
     templates = BalderFiltered(
         Template, filterset_class=TemplateFilter, related_field="templates"
     )
-    repository = BalderInheritedField(lambda: Repository, related_field="repository")
+    scope = NodeScope(description="The scope of this port", required=True)
+    port_groups = graphene.List(
+        PortGroup, description="The port groups", required=False
+    )
+    is_test_for = BalderFiltered(
+        lambda: Node,
+        model=models.Node,
+        filterset_class=NodesFilter,
+        description="The nodes this node tests",
+        related_field="is_test_for",
+    )
+    tests = BalderFiltered(
+        lambda: Node,
+        model=models.Node,
+        filterset_class=NodesFilter,
+        description="The tests of its node",
+        related_field="tests",
+    )
 
     class Meta:
         model = models.Node
@@ -235,12 +339,10 @@ class Node(BalderObject):
 
 @register_type
 class Repository(BalderInheritedModel):
-
-    id = graphene.ID(description="Id of the Repository")
+    id = graphene.ID(description="Id of the Repository", required=True)
     nodes = BalderFiltered(Node, filterset_class=NodesFilter, related_field="nodes")
     name = graphene.String(
         description="The Name of the Repository",
-        deprecation_reason="Will be replaced in the future",
     )
 
     class Meta:
@@ -264,11 +366,46 @@ class MirrorRepository(BalderObject):
         interfaces = (Repository,)
 
 
+class Binds(graphene.ObjectType):
+    clients = graphene.List(LokClient, description="The clients of this bind")
+    templates = graphene.List(Template, description="The templates of this bind")
+
+    def resolve_clients(self, info):
+        return LokClientModel.objects.filter(client_id__in=self["clients"])
+
+    def resolve_templates(self, info):
+        return models.Template.objects.filter(id__in=self["templates"])
+
+
 class Reservation(BalderObject):
     params = graphene.Field(ReserveParams)
+    binds = graphene.Field(Binds)
     log = BalderFiltered(
         ReservationLog, filterset_class=ReservationLogFilter, related_field="log"
     )
 
     class Meta:
         model = models.Reservation
+
+
+class Collection(BalderObject):
+    nodes = BalderFiltered(
+        lambda: Node,
+        model=models.Node,
+        filterset_class=NodesFilter,
+        description="The nodes this collection has",
+        related_field="nodes",
+    )
+
+    class Meta:
+        model = models.Collection
+
+
+class TestCase(BalderObject):
+    class Meta:
+        model = models.TestCase
+
+
+class TestResult(BalderObject):
+    class Meta:
+        model = models.TestResult

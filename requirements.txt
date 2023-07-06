@@ -26,10 +26,10 @@ graphql-core<3,>=2.1.0
 Markdown
 
 # JWT
-lok>=0.1.12
+lok>=0.1.17
 
 # GraphQL abstaction
-balder[subscription]>=0.1.12
+balder[subscription]>=0.1.21
 
 # Testing and Linting
 ptvsd
