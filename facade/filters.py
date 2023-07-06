@@ -13,7 +13,7 @@ from facade.inputs import (
     NodeScope,
 )
 from lok.models import LokClient
-from .models import Agent, Node, Repository, Template, Registry, Assignation, Reservation, TestCase, TestResult
+from .models import Agent, Node, Repository, Template, Registry, Assignation, Reservation, TestCase, TestResult, Collection
 from django.db.models import Q
 from django.db.models import Count
 import graphene
@@ -86,10 +86,22 @@ class AgentFilter(IdsFilter, django_filters.FilterSet):
         )
 
 
+class CollectionFilter(IdsFilter, django_filters.FilterSet):
+    search = django_filters.CharFilter(method="search_filter", label="Search")
+
+
+    def search_filter(self, queryset, name, value):
+        return queryset.filter(name__icontains=value)
+        
+
+
+
+
 class NodeFilter(IdsFilter, django_filters.FilterSet):
     repository = django_filters.ModelChoiceFilter(
         queryset=Repository.objects.all(), field_name="repository"
     )
+    collections = django_filters.ModelMultipleChoiceFilter(queryset=Collection.objects.all(), field_name="collections")
     name = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
     search = django_filters.CharFilter(method="search_filter", label="Search")
     type = EnumFilter(type=NodeKindInput, field_name="type")

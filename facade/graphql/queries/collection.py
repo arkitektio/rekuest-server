@@ -1,5 +1,5 @@
 from balder.types import BalderQuery
-from facade import types
+from facade import types, filters
 from facade.models import Collection
 import graphene
 from lok import bounced
@@ -24,5 +24,6 @@ class Collections(BalderQuery):
     class Meta:
         type = types.Collection
         list = True
+        filter= filters.CollectionFilter
         paginate = True
         operation = "collections"

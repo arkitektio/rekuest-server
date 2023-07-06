@@ -120,6 +120,7 @@ class PortKind(graphene.Enum):
     BOOL = "BOOL"
     DICT = "DICT"
     FLOAT = "FLOAT"
+    UNION = "UNION"
 
 
 class ChildPort(graphene.ObjectType):
@@ -129,6 +130,11 @@ class ChildPort(graphene.ObjectType):
     child = graphene.Field(lambda: ChildPort, description="The child", required=False)
     nullable = graphene.Boolean(description="Is this argument nullable", required=True)
     default = Any()
+    variants = graphene.List(
+        lambda: ChildPort,
+        description="The varients of this port (only for unions)",
+        required=False,
+    )
     annotations = graphene.List(Annotation, description="The annotations of this port")
     assign_widget = graphene.Field(Widget, description="Description of the Widget")
     return_widget = graphene.Field(ReturnWidget, description="A return widget")
@@ -168,6 +174,11 @@ class Port(graphene.ObjectType):
     identifier = Identifier(description="The corresponding Model")
     scope = Scope(description="The scope of this port", required=True)
     nullable = graphene.Boolean(required=True)
+    variants = graphene.List(
+        ChildPort,
+        description="The varients of this port (only for unions)",
+        required=False,
+    )
     default = Any()
     child = graphene.Field(lambda: ChildPort, description="The child", required=False)
     annotations = graphene.List(Annotation, description="The annotations of this port")

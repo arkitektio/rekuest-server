@@ -32,6 +32,7 @@ class PortKindInput(graphene.Enum):
     BOOL = "BOOL"
     DICT = "DICT"
     FLOAT = "FLOAT"
+    UNION = "UNION"
 
 
 class ChoiceInput(graphene.InputObjectType):
@@ -133,6 +134,11 @@ class ChildPortInput(graphene.InputObjectType):
     annotations = graphene.List(
         lambda: AnnotationInput, description="The annotations of this argument"
     )
+    variants = graphene.List(
+        lambda: ChildPortInput,
+        description="The varients of this port (only for union)",
+        required=False,
+    )
     assign_widget = graphene.Field(
         WidgetInput, description="The child of this argument"
     )
@@ -165,6 +171,11 @@ class PortInput(graphene.InputObjectType):
     key = graphene.String(description="The key of the arg", required=True)
     scope = graphene.Argument(
         Scope, description="The scope of this port", required=True
+    )
+    variants = graphene.List(
+        ChildPortInput,
+        description="The varients of this port (only for union)",
+        required=False,
     )
     name = graphene.String(description="The name of this argument")
     label = graphene.String(description="The name of this argument")
