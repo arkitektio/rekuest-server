@@ -14,6 +14,8 @@ widget_types = {
     "ChoiceWidget": lambda: ChoiceWidget,
     "CustomWidget": lambda: CustomWidget,
     "TemplateWidget": lambda: TemplateWidget,
+    "DateWidget": lambda: DateWidget,
+    "ColorWidget": lambda: ColorWidget,
 }
 
 
@@ -62,6 +64,7 @@ class BoolWidget(graphene.ObjectType):
 class Choice(graphene.ObjectType):
     value = GenericScalar(required=True)
     label = graphene.String(required=True)
+    description = graphene.String(required=False)
 
 
 @register_type
@@ -102,6 +105,22 @@ class StringWidget(graphene.ObjectType):
 class CustomWidget(graphene.ObjectType):
     hook = graphene.String(description="A hook for the ward to call")
     ward = graphene.String(description="A ward for the app to call")
+
+    class Meta:
+        interfaces = (Widget,)
+
+
+@register_type
+class DateWidget(graphene.ObjectType):
+    start_date = graphene.String(description="A start date")
+
+    class Meta:
+        interfaces = (Widget,)
+
+
+@register_type
+class ColorWidget(graphene.ObjectType):
+    start_date = graphene.String(description="A start date")
 
     class Meta:
         interfaces = (Widget,)

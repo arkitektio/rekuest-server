@@ -76,7 +76,7 @@ class MyReservationsSubscription(BalderSubscription):
 
 class ReservationsSubscription(BalderSubscription):
     class Arguments:
-        identifier = graphene.String(
+        instance_id = graphene.String(
             description="The reference of this waiter", required=True
         )
         provision = graphene.String(
@@ -85,14 +85,15 @@ class ReservationsSubscription(BalderSubscription):
         )
 
     @bounced(only_jwt=True)
-    def subscribe(root, info, *args, identifier=None, provision=None):
+    def subscribe(root, info, *args, instance_id=None, provision=None):
         client = info.context.bounced.client
         user = info.context.bounced.user
 
-       
-        registry, _ = models.Registry.objects.update_or_create(user=user, client=client, defaults=dict(app=info.context.bounced.app))
+        registry, _ = models.Registry.objects.update_or_create(
+            user=user, client=client, defaults=dict(app=info.context.bounced.app)
+        )
         waiter, _ = models.Waiter.objects.get_or_create(
-            registry=registry, identifier=identifier
+            registry=registry, identifier=instance_id
         )
 
         if provision:

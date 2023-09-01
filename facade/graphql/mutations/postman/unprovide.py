@@ -10,14 +10,12 @@ logger = logging.getLogger(__name__)  #
 
 
 class UnprovideReturn(graphene.ObjectType):
-    id = graphene.ID()
+    id = graphene.ID(required=True)
 
 
 class UnprovideMutation(BalderMutation):
     class Arguments:
-        id = graphene.ID(
-            description="The reference of the Provision you want to ruin"
-        )
+        id = graphene.ID(description="The reference of the Provision you want to ruin")
 
     class Meta:
         type = UnprovideReturn
@@ -25,9 +23,7 @@ class UnprovideMutation(BalderMutation):
 
     @bounced(only_jwt=True)
     def mutate(root, info, id=None):
-
         provision = models.Provision.objects.get(id=id)
         provision.delete()
-
 
         return {"id": id}

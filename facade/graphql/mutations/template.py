@@ -36,7 +36,9 @@ class CreateTemplate(BalderMutation):
         interface = graphene.String(required=True)
         instance_id = graphene.ID(description="The instance id", required=True)
         extensions = graphene.List(
-            graphene.String, description="Desired Extensions", required=False
+            graphene.String,
+            description="Desired Extensions (e.g reaktion)",
+            required=False,
         )
         params = GenericScalar(
             required=False, description="Some additional Params for your offering"
@@ -54,7 +56,7 @@ class CreateTemplate(BalderMutation):
         interface,
         params=None,
         policy=None,
-        extensions=[],
+        extensions=None,
         imitate=None,
         instance_id="main",
     ):
@@ -66,6 +68,7 @@ class CreateTemplate(BalderMutation):
         kind = definition.kind
         pure = definition.pure == True
         port_groups = definition.port_groups or []
+        extensions = extensions or []
         print("The port groups", port_groups)
 
         user = (
@@ -102,9 +105,7 @@ class CreateTemplate(BalderMutation):
         template = Template.objects.filter(interface=interface, agent=agent).first()
 
         if template:
-            if template.node.hash == hash:
-                return template
-            else:
+            if template.node.hash != hash:
                 if template.node.templates.count() == 1:
                     logger.info("Deleting Node because it has no more templates")
                     template.node.delete()
@@ -171,7 +172,7 @@ class CreateTemplate(BalderMutation):
             template.params = params or {}
             template.save()
 
-        except:
+        except Template.DoesNotExist:
             template = Template.objects.create(
                 interface=interface,
                 node=node,

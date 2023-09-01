@@ -1,5 +1,5 @@
 lok:
-  issuer: herre
+  issuer: lok
   key_type: RS256
   public_key: YOUR_PUBLIC_KEY
 port: 8090

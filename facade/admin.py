@@ -4,7 +4,7 @@ from .models import *
 
 # Register your models here.
 
-
+admin.site.register(Protocol)
 admin.site.register(Repository)
 admin.site.register(Registry)
 admin.site.register(Agent)

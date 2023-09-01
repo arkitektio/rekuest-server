@@ -5,6 +5,7 @@ from .provision import *
 from .waiter import *
 from .reservation import *
 from .nodes import *
+from .templates import *
 
 
 __all__ = [

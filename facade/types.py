@@ -9,6 +9,7 @@ from facade.filters import (
     ProvisionLogFilter,
     ReservationLogFilter,
     TemplateFilter,
+    ProtocolFilter,
     ProvisionFilter,
 )
 from balder.fields.filtered import BalderFiltered
@@ -121,6 +122,7 @@ class PortKind(graphene.Enum):
     DICT = "DICT"
     FLOAT = "FLOAT"
     UNION = "UNION"
+    DATE = "DATE"
 
 
 class ChildPort(graphene.ObjectType):
@@ -307,6 +309,11 @@ class Template(BalderObject):
         model = models.Template
 
 
+class Protocol(BalderObject):
+    class Meta:
+        model = models.Protocol
+
+
 class Node(BalderObject):
     args = graphene.List(Port)
     returns = graphene.List(Port)
@@ -331,6 +338,13 @@ class Node(BalderObject):
         filterset_class=NodesFilter,
         description="The tests of its node",
         related_field="tests",
+    )
+    protocols = BalderFiltered(
+        lambda: Protocol,
+        model=models.Protocol,
+        filterset_class=ProtocolFilter,
+        description="The tests of its node",
+        related_field="protocols",
     )
 
     class Meta:

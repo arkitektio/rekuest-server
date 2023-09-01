@@ -12,19 +12,20 @@ class TodoEvent(graphene.ObjectType):
 
 class TodosSubscription(BalderSubscription):
     class Arguments:
-        identifier = graphene.String(
+        instance_id = graphene.String(
             description="The reference of this todos", required=True
         )
 
     @bounced(only_jwt=True)
-    def subscribe(root, info, *args, identifier=None):
+    def subscribe(root, info, *args, instance_id=None):
         client = info.context.bounced.client
         user = info.context.bounced.user
 
-       
-        registry, _ = models.Registry.objects.update_or_create(user=user, client=client, defaults=dict(app=info.context.bounced.app))
+        registry, _ = models.Registry.objects.update_or_create(
+            user=user, client=client, defaults=dict(app=info.context.bounced.app)
+        )
         agent, _ = models.Agent.objects.get_or_create(
-            registry=registry, identifier=identifier
+            registry=registry, identifier=instance_id
         )
         return [f"todos_{agent.unique}"]
 

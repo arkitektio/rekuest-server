@@ -51,7 +51,9 @@ class AssignMutation(BalderMutation):
         app = info.context.bounced.app
         client = info.context.bounced.client
 
-        registry, _ = Registry.objects.get_or_create(user=creator, client=client, defaults=dict(app=info.context.bounced.app))
+        registry, _ = Registry.objects.get_or_create(
+            user=creator, client=client, defaults=dict(app=info.context.bounced.app)
+        )
 
         creator = info.context.bounced.user
         app = info.context.bounced.app
@@ -65,7 +67,7 @@ class AssignMutation(BalderMutation):
                 "reservation": res,
                 "args": args or [],
                 "creator": creator,
-                "status": AssignationStatus.ASSIGNED,
+                "status": AssignationStatus.RECEIVED,
                 "reference": reference,
                 "parent_id": parent,
             }
