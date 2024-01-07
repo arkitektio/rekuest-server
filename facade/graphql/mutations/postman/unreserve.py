@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)  #
 
 
 class UnreserveResult(graphene.ObjectType):
-    id = graphene.ID()
+    id = graphene.ID(required=True)
 
 
 class UnreserveMutation(BalderMutation):
@@ -28,8 +28,7 @@ class UnreserveMutation(BalderMutation):
 
     @bounced(only_jwt=True)
     def mutate(root, info, id=None):
-
         res = Reservation.objects.get(id=id)
         res.delete()
 
-        return {"id": id }
+        return {"id": id}

@@ -50,6 +50,22 @@ def node_post_save(sender, instance=None, created=None, **kwargs):
             )
 
 
+@receiver(post_save, sender=Template)
+def template_post_save(sender, instance=None, created=None, **kwargs):
+    from facade.graphql.subscriptions import TemplatesEvent
+
+    if instance.params:
+        TemplatesEvent.broadcast(
+            {"action": "created", "data": instance}
+            if created
+            else {"action": "updated", "data": instance},
+            [
+                TemplatesEvent.PARAMS_GROUP(key, value)
+                for key, value in instance.params.items()
+            ],
+        )
+
+
 @receiver(pre_delete, sender=Provision)
 def prov_pre_delete(sender, instance=None, created=None, **kwargs):
     """Unreserve this reservation"""
@@ -216,7 +232,6 @@ def user_saved(sender, instance: Reservation = None, created=None, **kwargs):
 def agen_post_save(sender, instance: Agent = None, created=None, **kwargs):
     from facade.graphql.subscriptions import AgentsEvent
 
-
     print("UPDATEDING AGENT", instance)
 
     if instance.registry.user:
@@ -225,4 +240,3 @@ def agen_post_save(sender, instance: Agent = None, created=None, **kwargs):
             {"action": "create" if created else "update", "data": instance},
             [f"agents_user_{instance.registry.user.id}"],
         )
-

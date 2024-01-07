@@ -28,14 +28,18 @@ class MyAssignations(BalderQuery):
             AssignationStatusInput, description="The included values", required=False
         )
         limit = graphene.Int(description="The excluded values", required=False)
+        latest = graphene.Boolean(description="The excluded values", required=False)
+        only_mine = graphene.Boolean(description="The excluded values", required=False)
 
     @bounced(anonymous=True)
-    def resolve(root, info, exclude=None, filter=None, limit=None):
+    def resolve(root, info, exclude=None, filter=None, limit=None, latest=False, only_mine=False):
         qs = Assignation.objects.filter(creator=info.context.user)
         if filter:
             qs = qs.filter(status__in=filter)
         if exclude:
             qs = qs.exclude(status__in=exclude)
+        if latest:
+            qs = qs.order_by("-created_at")
         if limit:
             qs = qs[:limit]
 
@@ -49,8 +53,6 @@ class MyAssignations(BalderQuery):
 
 
 class Assignations(BalderQuery):
-
-
     class Meta:
         type = types.Assignation
         list = True
@@ -59,29 +61,27 @@ class Assignations(BalderQuery):
         operation = "assignations"
 
 
-
 class RequestsQuery(BalderQuery):
     class Arguments:
+        instance_id = graphene.String(required=True)
         exclude = graphene.List(
             AssignationStatusInput, description="The excluded values", required=False
         )
         filter = graphene.List(
             AssignationStatusInput, description="The included values", required=False
         )
-        identifier = graphene.String(required=False, default_value="default")
 
     @bounced(only_jwt=True)
-    def resolve(root, info, exclude=None, filter=None, identifier="default"):
-
+    def resolve(root, info, exclude=None, filter=None, instance_id=None):
         creator = info.context.bounced.user
         app = info.context.bounced.app
 
         registry, _ = models.Registry.objects.get_or_create(user=creator, app=app)
         waiter, _ = models.Waiter.objects.get_or_create(
-            registry=registry, identifier=identifier
+            registry=registry, identifier=instance_id
         )
 
-        qs = Assignation.objects.filter(waiter=waiter)
+        qs = Assignation.objects.filter(reservation__waiter=waiter)
         if filter:
             qs = qs.filter(status__in=filter)
         if exclude:
@@ -136,7 +136,6 @@ class TodosQuery(BalderQuery):
 
     @bounced(only_jwt=True)
     def resolve(root, info, exclude=None, filter=None, identifier="default"):
-
         creator = info.context.bounced.user
         app = info.context.bounced.app
 

@@ -78,8 +78,9 @@ class TopicMode(TextChoices):
 
 
 class AssignationStatus(TextChoices):
-    PENDING = "PENDING", "Pending"  # Assignation has been requested
-    ACKNOWLEDGED = "ACKNOWLEDGED", "Acknowledged"  # Assignation has been requested
+    PENDING = "PENDING", "Pending"  # Assignation is pending
+    BOUND = "BOUND", "Bound"  # Assignation was just bound to a provision
+    ACKNOWLEDGED = "ACKNOWLEDGED", "Acknowledged"  # Assignation has been request
     RETURNED = "RETURNED", "Assignation Returned (Only for Functions)"
     # Arnheim acknowledgments
     DENIED = "DENIED", "Denied (Assingment was rejected)"

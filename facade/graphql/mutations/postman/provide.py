@@ -27,7 +27,6 @@ class ProvideMutation(BalderMutation):
 
         temp = Template.objects.get(id=template)
 
-
         pro = Provision.objects.create(
             **{
                 "template": temp,

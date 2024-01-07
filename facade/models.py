@@ -84,6 +84,16 @@ class Registry(models.Model):
         return f"{self.app} used by {self.user}"
 
 
+class Protocol(models.Model):
+    name = models.CharField(
+        max_length=1000, unique=True, help_text="The name of this Protocol"
+    )
+    description = models.TextField(help_text="A description for the Protocol")
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class Structure(models.Model):
     """A Structure is a uniquely identifiable model for a Repository"""
 
@@ -268,6 +278,13 @@ class Node(models.Model):
         null=True, blank=True, help_text="Meta data about this Node"
     )
 
+    protocols = models.ManyToManyField(
+        Protocol,
+        related_name="nodes",
+        blank=True,
+        help_text="The protocols this Node implements (e.g. Predicate)",
+    )
+
     description = models.TextField(help_text="A description for the Node")
     image = models.ImageField(
         null=True, blank=True, help_text="Beautiful images for beautiful Nodes"
@@ -290,6 +307,7 @@ class Node(models.Model):
         help_text="The hash of the Node (completely unique)",
         unique=True,
     )
+    created_at = models.DateTimeField(auto_now_add=True)
 
     args = ArgsField(default=list, help_text="Inputs for this Node")
     returns = ReturnField(default=list, help_text="Outputs for this Node")

@@ -24,6 +24,11 @@ AssignationStatusInput = InputEnum.from_choices(AssignationStatus)
 LogLevelInput = InputEnum.from_choices(LogLevel)
 
 
+class TemplateParamInput(graphene.InputObjectType):
+    key = graphene.String(required=True)
+    value = GenericScalar(required=False)
+
+
 class PortKindInput(graphene.Enum):
     INT = "INT"
     STRING = "STRING"
@@ -33,11 +38,23 @@ class PortKindInput(graphene.Enum):
     DICT = "DICT"
     FLOAT = "FLOAT"
     UNION = "UNION"
+    DATE = "DATE"
+
+
+class PortDemandInput(graphene.InputObjectType):
+    at = graphene.Int(required=False)
+    key = graphene.String(required=False)  # Needs specific key
+    kind = PortKindInput(required=False)  # if false == Any
+    identifier = graphene.String(required=False)  # if false == Any
+    nullable = graphene.Boolean(required=False)  # if false == Any
+    variants = graphene.List(lambda: PortDemandInput, required=False)  # if false == Any
+    child = graphene.Field(lambda: PortDemandInput, required=False)  # if false == Any
 
 
 class ChoiceInput(graphene.InputObjectType):
     value = AnyInput(required=True)
     label = graphene.String(required=True)
+    description = graphene.String(required=False)
 
 
 class MessageKind(graphene.Enum):
@@ -101,8 +118,9 @@ class WidgetInput(graphene.InputObjectType):
     query = SearchQuery(description="Do we have a possible")
 
     choices = graphene.List(ChoiceInput, description="The dependencies of this port")
-    max = graphene.Int(description="Max value for int widget")
-    min = graphene.Int(description="Max value for int widget")
+    max = graphene.Float(description="Max value for slider widget")
+    min = graphene.Float(description="Min value for slider widget")
+    step = graphene.Float(description="Step value for slider widget")
     placeholder = graphene.String(description="Placeholder for any widget")
     as_paragraph = graphene.Boolean(description="Is this a paragraph")
     hook = graphene.String(description="A hook for the app to call")

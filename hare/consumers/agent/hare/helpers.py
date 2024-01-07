@@ -34,7 +34,10 @@ def list_provisions(agent: models.Agent, **kwargs):
 
     provisions = [
         messages.Provision(
-            provision=prov.id, guardian=prov.id, status=prov.status, template=prov.template.id
+            provision=prov.id,
+            guardian=prov.id,
+            status=prov.status,
+            template=prov.template.id,
         )
         for prov in provisions
     ]
@@ -49,9 +52,7 @@ def list_assignations(agent: models.Agent, **kwargs):
     reply = []
     forward = []
 
-    assignations = models.Assignation.objects.filter(
-        provision__agent=agent
-    ).exclude(
+    assignations = models.Assignation.objects.filter(provision__agent=agent).exclude(
         status__in=[
             AssignationStatus.RETURNED,
             AssignationStatus.CANCELING,
@@ -61,8 +62,8 @@ def list_assignations(agent: models.Agent, **kwargs):
             AssignationStatus.ERROR,
             AssignationStatus.CRITICAL,
         ]
-    ) 
-    assignations =  []
+    )
+    assignations = []
 
     assignations = [
         messages.Assignation(
@@ -76,10 +77,8 @@ def list_assignations(agent: models.Agent, **kwargs):
         )
         for ass in assignations
     ]
-    
+
     reply += [AssignationsInquiry(assignations=assignations)]
-
-
 
     return reply
 
@@ -91,6 +90,7 @@ def bind_assignation(m: AssignHareMessage, prov: str, **kwargs):
     try:
         ass = models.Assignation.objects.get(id=m.assignation)
         ass.provision_id = prov
+        ass.status = AssignationStatus.BOUND
         ass.save()
 
         reply += [
@@ -247,7 +247,6 @@ def loose_reservation(m: UnreserveHareMessage, agent: models.Agent):
         prov.reservations.remove(res)
 
         if prov.reservations.count() == 0:
-
             reply += [
                 UnprovideSubMessage(
                     provision=prov.id,
@@ -309,10 +308,7 @@ def activate_provision(m: ProvisionChangedMessage, agent: models.Agent):
 
 @sync_to_async
 def disconnect_agent(agent: models.Agent, close_code: int):
-
-
     return cascade_agent_failure(agent, AgentStatus.DISCONNECTED)
-
 
 
 @sync_to_async
@@ -325,7 +321,6 @@ def log_to_provision(message: ProvisionLogMessage, agent: models.Agent):
 
 @sync_to_async
 def log_to_assignation(message: AssignationLogMessage, agent: models.Agent):
-
     models.AssignationLog.objects.create(
         assignation_id=message.assignation, message=message.message, level=message.level
     )
