@@ -35,4 +35,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: jhnnsrs/arkitekt:latest
+          tags: jhnnsrs/rekuest:latest
