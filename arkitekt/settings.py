@@ -43,7 +43,7 @@ LOK = {
 SUPERUSERS = [
     {
         "USERNAME": conf.django.admin.username,
-        "EMAIL": conf.django.admin.email,
+        "EMAIL": "fake@fake.com",
         "PASSWORD": conf.django.admin.password,
     }
 ]

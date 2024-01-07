@@ -85,8 +85,9 @@ class IntWidget(graphene.ObjectType):
 
 @register_type
 class SliderWidget(graphene.ObjectType):
-    min = graphene.Int(description="A Complex description")
-    max = graphene.Int(description="A Complex description")
+    min = graphene.Float(description="A Complex description")
+    max = graphene.Float(description="A Complex description")
+    step = graphene.Float(description="A Complex description")
 
     class Meta:
         interfaces = (Widget,)

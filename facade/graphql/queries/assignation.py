@@ -28,14 +28,18 @@ class MyAssignations(BalderQuery):
             AssignationStatusInput, description="The included values", required=False
         )
         limit = graphene.Int(description="The excluded values", required=False)
+        latest = graphene.Boolean(description="The excluded values", required=False)
+        only_mine = graphene.Boolean(description="The excluded values", required=False)
 
     @bounced(anonymous=True)
-    def resolve(root, info, exclude=None, filter=None, limit=None):
+    def resolve(root, info, exclude=None, filter=None, limit=None, latest=False, only_mine=False):
         qs = Assignation.objects.filter(creator=info.context.user)
         if filter:
             qs = qs.filter(status__in=filter)
         if exclude:
             qs = qs.exclude(status__in=exclude)
+        if latest:
+            qs = qs.order_by("-created_at")
         if limit:
             qs = qs[:limit]
 
@@ -77,7 +81,7 @@ class RequestsQuery(BalderQuery):
             registry=registry, identifier=instance_id
         )
 
-        qs = Assignation.objects.filter(waiter=waiter)
+        qs = Assignation.objects.filter(reservation__waiter=waiter)
         if filter:
             qs = qs.filter(status__in=filter)
         if exclude:

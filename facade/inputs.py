@@ -118,8 +118,9 @@ class WidgetInput(graphene.InputObjectType):
     query = SearchQuery(description="Do we have a possible")
 
     choices = graphene.List(ChoiceInput, description="The dependencies of this port")
-    max = graphene.Int(description="Max value for int widget")
-    min = graphene.Int(description="Max value for int widget")
+    max = graphene.Float(description="Max value for slider widget")
+    min = graphene.Float(description="Min value for slider widget")
+    step = graphene.Float(description="Step value for slider widget")
     placeholder = graphene.String(description="Placeholder for any widget")
     as_paragraph = graphene.Boolean(description="Is this a paragraph")
     hook = graphene.String(description="A hook for the app to call")
