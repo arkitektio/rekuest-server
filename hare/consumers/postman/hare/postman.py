@@ -5,6 +5,9 @@ import aiormq
 import ujson
 from .helpers import *
 from arkitekt.console import console
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class HarePostmanConsumer(PostmanConsumer):
@@ -26,46 +29,50 @@ class HarePostmanConsumer(PostmanConsumer):
         await super().connect()
         self.channel = await rmq.open_channel()
 
-        await self.channel.exchange_declare(exchange=self.waiter.queue, exchange_type="fanout")
-        self.callback_queue = await self.channel.queue_declare(exclusive=True)
-        await self.channel.queue_bind(exchange=self.waiter.queue, queue=self.callback_queue.queue)
-
-        # Start listening the queue with name 'hello'
-        await self.channel.basic_consume(
-            self.callback_queue.queue, self.on_rmq_message_in
+        await self.channel.exchange_declare(
+            exchange=self.waiter.queue, exchange_type='fanout'
         )
 
-        print(f"Listening on '{ self.waiter.queue}'")
+        # Declaring queue
+        declare_ok = await self.channel.queue_declare(exclusive=True)
+
+        # Binding the queue to the exchange
+        await self.channel.queue_bind(declare_ok.queue,self.waiter.queue)
+
+        # Start listening the queue with name 'task_queue'
+        await self.channel.basic_consume(declare_ok.queue, self.on_rmq_message_in)
+
+
+        logger.error(f"Listening on '{ self.waiter.queue}'")
 
     async def forward(self, f: HareMessage):
-        print(f"Forwading {f}")
+        logger.debug(f"POSTMAN FORWARDING: {f}")
         await self.channel.basic_publish(
-            f.to_message(), routing_key=f.queue, # Lets take the first best one    
+            f.to_message(),
+            routing_key=f.queue,  # Lets take the first best one
         )
-
-
 
     async def on_rmq_message_in(self, rmq_message: aiormq.abc.DeliveredMessage):
         try:
             json_dict = ujson.loads(rmq_message.body)
-            print("Reveiced on Waiter")
+            logger.error(
+                "NOAINDOAWNDÜUIAWNDPOAWINDOAWINDPOAUWINDPOAWIDNOAWINDPOAWINDOAWINDAWODN"
+            )
             type = json_dict.pop("type")
-            print(type)
             if type == HareMessageTypes.RESERVE_CHANGED:
                 m = ReserveSubUpdate(**json_dict)
-                print(m)
                 await self.reply(m)
             if type == HareMessageTypes.ASSIGN_CHANGED:
                 m = AssignSubUpdate(**json_dict)
-                print(m)
+                logger.error("SEOINDING UPDATE TO CONNECTED CLIENT")
                 await self.reply(m)
 
             if type == PostmanSubMessageTypes.ASSIGN_UPDATE:
                 m = AssignSubUpdate(**json_dict)
                 await self.reply(m)
 
-        except Exception as e:
-            console.print_exception()
+        except Exception:
+            logger.exception(exc_info=True)
 
         self.channel.basic_ack(rmq_message.delivery.delivery_tag)
 

@@ -18,23 +18,21 @@ logger = logging.getLogger(__name__)
 # Zarr Specific Settings
 head_rows = 5
 
-class BordViewSetMixIn():
 
-    def dataFrameSelect(self,request):
+class BordViewSetMixIn:
+    def dataFrameSelect(self, request):
         larvik = self.get_object()
         query_params = request.query_params
         df = larvik.bord
         # We are trying to pass on selection params
         return df
 
-
-    @action(methods=['get'], detail=True,
-            url_path='head', url_name='head')
+    @action(methods=["get"], detail=True, url_path="head", url_name="head")
     def head(self, request, pk):
         # We are trying to pass on selection params
         df: DataFrame = self.dataFrameSelect(request)
-        answer = df.head(n=head_rows).compute(scheduler="threads").to_json(orient='records')
+        answer = (
+            df.head(n=head_rows).compute(scheduler="threads").to_json(orient="records")
+        )
         response = HttpResponse(answer, content_type="application/json")
         return responses
-
-    

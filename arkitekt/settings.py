@@ -12,169 +12,195 @@ https://docs.djangoproject.com/en/3.1/ref/settings/
 import os
 from pathlib import Path
 from omegaconf import OmegaConf
+import socket
 
-conf = OmegaConf.load('config.yaml')
+conf = OmegaConf.load("config.yaml")
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-print(BASE_DIR)
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = conf.security.secret_key
+SECRET_KEY = conf.django.secret_key
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = conf.server.debug
-ALLOWED_HOSTS = conf.server.hosts
+DEBUG = conf.django.debug
+ALLOWED_HOSTS = conf.django.hosts
 CORS_ORIGIN_ALLOW_ALL = True
 
+INSTANCE_NAME = conf.django.get("instance_name", "all")
+
+
 LOK = {
-    "PUBLIC_KEY": conf.herre.public_key,
-    "KEY_TYPE": conf.herre.key_type,
-    "ISSUER": conf.herre.issuer
+    "PUBLIC_KEY": conf.lok.public_key,
+    "KEY_TYPE": conf.lok.key_type,
+    "ISSUER": conf.lok.issuer,
 }
 
-SUPERUSERS = [{
-    "USERNAME": su.username,
-    "EMAIL": su.email,
-    "PASSWORD": su.password
-} for su in conf.security.admins]
+SUPERUSERS = [
+    {
+        "USERNAME": conf.django.admin.username,
+        "EMAIL": "fake@fake.com",
+        "PASSWORD": conf.django.admin.password,
+    }
+]
+
+COMMENTABLE_APPS = ["facade",]
 
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'django_filters',
-    'corsheaders',
-    'taggit',
-    'channels',
-    'health_check',
-    'health_check.db',  
-    'health_check.contrib.rabbitmq',          # requires RabbitMQ broker
-    'health_check.contrib.redis', 
-    'lok',
-    'django_probes',
-    'guardian',
-    'graphene_django',
-    "rest_framework",
-    'balder',
-    'facade',
-    "hare"
-] 
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "whitenoise.runserver_nostatic",
+    "django_filters",
+    "corsheaders",
+    "taggit",
+    "channels",
+    "health_check",
+    "health_check.db",
+    "health_check.contrib.rabbitmq",  # requires RabbitMQ broker
+    "health_check.contrib.redis",
+    "lok",
+    "django_probes",
+    "guardian",
+    "graphene_django",
+    "komment",
+    #"rest_framework",
+    "balder",
+    "facade",
+    "hare",
+    "perms",
+]
+
+SHARABLE_APPS = ["facade","lok"]
+
 
 HEALTH_CHECK = {
-    'DISK_USAGE_MAX': 90,  # percent
-    'MEMORY_MIN': 100,    # in MB
+    "DISK_USAGE_MAX": 90,  # percent
+    "MEMORY_MIN": 100,  # in MB
 }
 
 
+IMITATE_GROUPS = ["team:sibarita"]
+
+
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'lok.middlewares.request.jwt.JWTTokenMiddleWare',
-    'lok.middlewares.request.bouncer.BouncedMiddleware', # needs to be after JWT and session 
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "lok.middlewares.request.jwt.JWTTokenMiddleWare",
+    "lok.middlewares.request.bouncer.BouncedMiddleware",  # needs to be after JWT and session
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 
-ROOT_URLCONF = 'arkitekt.urls'
+ROOT_URLCONF = "arkitekt.urls"
 
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [
-            'templates',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [
+            "templates",
         ],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'arkitekt.wsgi.application'
-ASGI_APPLICATION = 'arkitekt.asgi.application'
+WSGI_APPLICATION = "arkitekt.wsgi.application"
+ASGI_APPLICATION = "arkitekt.asgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/3.1/ref/settings/#databases
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": conf.postgres.db_name,
-        "USER": conf.postgres.user,
-        "PASSWORD": conf.postgres.password,
-        "HOST": conf.postgres.host,
-        "PORT": conf.postgres.port,
+        "ENGINE": conf.db.engine,
+        "NAME": conf.db.db_name,
+        "USER": conf.db.username,
+        "PASSWORD": conf.db.password,
+        "HOST": conf.db.host,
+        "PORT": conf.db.port,
     }
 }
 
 
-REDIS_URL = f'redis://{conf.redis.host}:{conf.redis.port}'
-BROKER_URL = f'amqp://{conf.rabbit.username}:{conf.rabbit.password}@{conf.rabbit.host}:{conf.rabbit.port}/{conf.rabbit.vhost}'
+REDIS_URL = f"redis://{conf.redis.host}:{conf.redis.port}"
+BROKER_URL = f"amqp://{conf.rabbitmq.username}:{conf.rabbitmq.password}@{conf.rabbitmq.host}:{conf.rabbitmq.port}/{conf.rabbitmq.v_host}"
 
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+BROKER_USERNAME = conf.rabbitmq.username
+BROKER_PASSWORD = conf.rabbitmq.password
+BROKER_HOST = conf.rabbitmq.host
+BROKER_PORT = conf.rabbitmq.port
+BROKER_VHOST = conf.rabbitmq.v_host
+
+
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CHANNEL_LAYERS = {
     "default": {
-        # This example app uses the Redis channel layer implementation channels_redis
+        # This example app uses the Redisss channel layer implementation channels_redis
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [(conf.redis.host,conf.redis.port)],
+            "hosts": [(conf.redis.host, conf.redis.port)],
         },
     },
 }
 
-AUTH_USER_MODEL = 'lok.LokUser'
+AUTH_USER_MODEL = "lok.LokUser"
 
-AUTHENTICATION_BACKENDS = ('django.contrib.auth.backends.ModelBackend', 'guardian.backends.ObjectPermissionBackend')
+AUTHENTICATION_BACKENDS = (
+    "django.contrib.auth.backends.ModelBackend",
+    "guardian.backends.ObjectPermissionBackend",
+)
 
 # Password validation
 # https://docs.djangoproject.com/en/3.1/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
-GRAPHENE = {
-    "SCHEMA": "balder.schema.graphql_schema"
-}
+GRAPHENE = {"SCHEMA": "balder.schema.graphql_schema"}
 
 # Internationalization
 # https://docs.djangoproject.com/en/3.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = "UTC"
 
 USE_I18N = True
 
@@ -186,51 +212,50 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/3.1/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = "static/"
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "static"),
 ]
 
-STATIC_ROOT = '/var/www/static/'
+STATIC_ROOT = "/var/www/static/"
 
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'console': {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "console": {
             # exact format is not important, this is the minimum information
-            'format': '%(message)s',
+            "format": "%(message)s",
         },
     },
-    'handlers': {
-        'console': {
-            'class': 'rich.logging.RichHandler',
-            'formatter': 'console',
+    "handlers": {
+        "console": {
+            "class": "rich.logging.RichHandler",
+            "formatter": "console",
             "rich_tracebacks": True,
         },
     },
-    'loggers': {
-    # root logger
-        '': {
-            'level': "INFO",
-            'handlers': ['console'],
+    "loggers": {
+        # root logger
+        "": {
+            "level": "INFO",
+            "handlers": ["console"],
         },
-        'oauthlib': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': True,
+        "oauthlib": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": True,
         },
-        'delt': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
+        "delt": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
         },
-        'oauth2_provider': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
+        "oauth2_provider": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
         },
     },
 }

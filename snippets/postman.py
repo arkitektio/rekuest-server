@@ -49,8 +49,6 @@ class PostmanConsumer(AsyncWebsocketConsumer):
         instance_id = parse_qs(self.scope["query_string"])[b"instance_id"][0].decode(
             "utf8"
         )
-        print(instance_id)
-
         if self.user is None or self.user.is_anonymous:
             registry, _ = Registry.objects.get_or_create(user=None, app=self.app)
         else:
@@ -93,7 +91,7 @@ class PostmanConsumer(AsyncWebsocketConsumer):
                     await self.on_list_assignations(AssignList(**json_dict))
 
         except Exception as e:
-            print(e)
+            logger.exception(exc_info=True)
 
     async def reply(self, m: JSONMessage):  #
         await self.send(text_data=m.json())
@@ -140,7 +138,6 @@ class HarePostmanConsumer(PostmanConsumer):
             self.waiter.queue, auto_delete=True
         )
 
-        print(f"Listening on '{ self.waiter.queue}'")
         # Start listening the queue with name 'hello'
         await self.channel.basic_consume(
             self.callback_queue.queue, self.on_rmq_message_in
@@ -161,7 +158,7 @@ class HarePostmanConsumer(PostmanConsumer):
                 await self.send(text_data=m.json())
 
         except Exception as e:
-            console.print_exception()
+            logger.exception(exc_info=True)
 
         self.channel.basic_ack(rmq_message.delivery.delivery_tag)
 

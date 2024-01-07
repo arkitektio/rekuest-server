@@ -1,5 +1,6 @@
 from health_check.backends import BaseHealthCheckBackend
 
+
 class HareHealthBackend(BaseHealthCheckBackend):
     #: The status endpoints will respond with a 200 status code
     #: even if the check errors.

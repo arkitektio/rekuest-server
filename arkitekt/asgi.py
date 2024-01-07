@@ -9,25 +9,19 @@ https://docs.djangoproject.com/en/3.1/howto/deployment/asgi/
 
 import os
 import django
-
-from facade.consumers.watchman import WatchmanConsumer
+from django.urls import re_path
 
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "arkitekt.settings")
 django.setup(set_prefix=False)
 
 from django.core.asgi import get_asgi_application
-from facade.consumers.agent import AgentConsumer
-from facade.consumers.postman import PostmanConsumer
-from facade.workers.gateway import GatewayConsumer
 from channels.auth import AuthMiddlewareStack
-from channels.routing import ChannelNameRouter, ProtocolTypeRouter, URLRouter
+from channels.routing import ProtocolTypeRouter, URLRouter
 from django.conf.urls import url
-from django.core.asgi import get_asgi_application
 from balder.consumers import MyGraphqlWsConsumer
 from lok.middlewares.scope.bouncer import BouncerChannelMiddleware
 from lok.middlewares.scope.jwt import JWTChannelMiddleware
-from django.views.static import serve
 
 from hare.consumers.postman.hare.postman import HarePostmanConsumer
 from hare.consumers.agent.hare.agent import HareAgentConsumer
@@ -51,16 +45,14 @@ application = ProtocolTypeRouter(
         "websocket": MiddleWareStack(
             URLRouter(
                 [
-                    url("graphql/", MyGraphqlWsConsumer.as_asgi()),
-                    url("graphql", MyGraphqlWsConsumer.as_asgi()),
-                    url(r"agent\/$", AgentConsumer.as_asgi()),
-                    url(r"postman\/$", PostmanConsumer.as_asgi()),
-                    url(r"watchman\/$", WatchmanConsumer.as_asgi()),
-                    url(r"watchi\/$", HarePostmanConsumer.as_asgi()),
-                    url(r"agi\/$", HareAgentConsumer.as_asgi()),
+                    re_path("graphql/", MyGraphqlWsConsumer.as_asgi()),
+                    re_path("graphql", MyGraphqlWsConsumer.as_asgi()),
+                    re_path(r"watchi\/$", HarePostmanConsumer.as_asgi()),
+                    re_path(r"watchi$", HarePostmanConsumer.as_asgi()),
+                    re_path(r"agi\/$", HareAgentConsumer.as_asgi()),
+                    re_path(r"agi$", HareAgentConsumer.as_asgi()),
                 ]
             )
         ),
-        "channel": ChannelNameRouter({"gateway": GatewayConsumer.as_asgi()}),
     }
 )
