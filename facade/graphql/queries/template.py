@@ -21,6 +21,7 @@ class TemplateDetailQuery(BalderQuery):
         operation = "template"
 
 
+
 class MyTemplateForQuery(BalderQuery):
     """Asss
 
