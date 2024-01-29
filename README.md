@@ -1,4 +1,4 @@
-# Rekuest
+# Rekuest-Server
 
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/arkitektio/rekuest-server/)
 ![Maintainer](https://img.shields.io/badge/maintainer-jhnnsrs-blue)
