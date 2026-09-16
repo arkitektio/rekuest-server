@@ -1369,9 +1369,6 @@ type Client {
   """Unique ID of the client."""
   id: ID!
 
-  """Name of the client."""
-  name: String!
-
   """OAuth2 client ID."""
   clientId: String!
 

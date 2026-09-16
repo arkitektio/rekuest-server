@@ -38,7 +38,6 @@ class Release:
 @strawberry_django.type(auth_models.Client, filters=filters.ClientFilter, pagination=True, ordering=filters.ClientOrder, description="Represents a registered OAuth2 client.")
 class Client:
     id: strawberry.ID = strawberry_django.field(description="Unique ID of the client.")
-    name: str = strawberry_django.field(description="Name of the client.")
     client_id: str = strawberry_django.field(description="OAuth2 client ID.")
     release: Release | None = strawberry_django.field(description="Release associated with the client.")
     device: Device | None = strawberry_django.field(description="Device associated with the client.")
