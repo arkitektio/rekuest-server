@@ -466,7 +466,7 @@ def _check_descriptor(descriptor: "RequiresInputModel | ProvidesInputModel", own
 
 
 class RequiresInputModel(BaseModel):
-    key: str = Field(min_length=1, description="The key of the requirement: the path into the object the constraint reads")
+    key: str = Field(min_length=1, description="The key of the requirement: the descriptor name the constraint reads, matched verbatim as one flat key of the candidate object (any non-empty string, e.g. 'axes' or '@mikro/n_space_axes')")
     operator: enums.DescriptorOperator = Field(description="The operator for the requirement")
     value: Any = Field(default=None, description="The value of the requirement. This can be any JSON serializable value; IN/NOT_IN take a list, LTE/GTE a number, EXISTS none")
 
@@ -480,7 +480,7 @@ class RequiresInputModel(BaseModel):
 
 
 class ProvidesInputModel(BaseModel):
-    key: str = Field(min_length=1, description="The key of the provision: the path into the object the constraint reads")
+    key: str = Field(min_length=1, description="The key of the provision: the descriptor name the constraint reads, matched verbatim as one flat key of the candidate object (any non-empty string, e.g. 'axes' or '@mikro/n_space_axes')")
     operator: enums.DescriptorOperator = Field(description="The operator for the provision")
     value: Any = Field(default=None, description="The value of the provision. This can be any JSON serializable value; IN/NOT_IN take a list, LTE/GTE a number, EXISTS none")
 

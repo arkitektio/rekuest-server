@@ -65,9 +65,12 @@ declares no data constraints and accepts any object"**.
 
 Two safety details worth knowing:
 
-- **Injection guard.** Descriptor keys are interpolated into the JSONPath string, so they are
-  validated against `^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$` (dotted word paths only). Values are always
-  rendered through `json.dumps`, never interpolated raw.
+- **Injection guard.** Descriptor keys are interpolated into the JSONPath string, so each key is
+  rendered as a *quoted* member accessor (`$."axes"`, `$."@mikro/n_space_axes"`) through
+  `json.dumps` — JSON string escaping is a subset of jsonpath string-literal escaping, so no
+  character in a key can close the accessor. A key is one flat member name: the query side builds
+  the candidate as a flat `{key: value}` object, so `options.advanced` is the member
+  `"options.advanced"`, not a nested path. Values are always rendered through `json.dumps` too.
 - **Dependency-light by design.** The module imports only `json`, `re`, and the operator enum so it
   can be used from migrations and unit tests without dragging in the mutation/ORM layer.
 

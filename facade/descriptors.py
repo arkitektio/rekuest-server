@@ -5,27 +5,30 @@ on the *data* that flows through the port (e.g. ``{"axes": "c"}``). They are com
 write time, into a PostgreSQL JSONPath predicate stored on the relational ArgPort/ReturnPort
 row, and evaluated at query time via ``jsonb_path_match`` against a candidate descriptor object.
 
-This module is intentionally dependency-light (only ``json``, ``re`` and the operator enum) so it
+This module is intentionally dependency-light (only ``json`` and the operator enum) so it
 can be imported from migrations and unit tests without pulling in the mutation layer.
 """
 
 import json
-import re
 
 from rekuest_core.enums import RequiresOperator
 
-# Descriptor keys are interpolated into a JSONPath string, so they must be validated to prevent
-# JSONPath injection. We allow dotted paths of word characters only (e.g. "axes",
-# "options.advanced.mask"). Values are always rendered via json.dumps.
-_JSONPATH_KEY_RE = re.compile(r"^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$")
+# Descriptor keys are interpolated into a JSONPath string, so they must not be able to break out
+# of the member accessor. The key is one *flat* member name (the query side builds the candidate
+# object as ``{key: value}``, see ``facade.managers``), rendered as a quoted jsonpath string
+# literal via ``json.dumps`` — JSON string escaping is a subset of jsonpath string-literal escaping,
+# so any character (``@``, ``/``, ``.``, quotes, backslashes) is safe. Values are always rendered
+# via json.dumps as well.
 
 
 def _normalize_jsonpath_key(key: str) -> str:
-    """Validate a descriptor key and render it as a rooted JSONPath (``$.path``)."""
-    raw = key[2:] if key.startswith("$.") else key
-    if not _JSONPATH_KEY_RE.match(raw):
+    """Validate a descriptor key and render it as a rooted, quoted JSONPath member (``$."key"``)."""
+    # A non-string or empty key is a client error, surfaced as ValueError like every other
+    # descriptor problem so the mutation reports it uniformly.
+    raw = key.removeprefix("$.") if isinstance(key, str) else ""
+    if not raw:
         raise ValueError(f"Invalid descriptor key for JSONPath compilation: {key!r}")
-    return f"$.{raw}"
+    return f"$.{json.dumps(raw)}"
 
 
 def _compile_descriptor_condition(desc) -> str:
