@@ -362,6 +362,44 @@ class ModelPersistBackend:
         """Async face of :meth:`_claim_task_transition_sync`."""
         return await database_sync_to_async(self._claim_task_transition_sync)(task_id, **kwargs)
 
+    async def _finalize_terminal(
+        self,
+        task_id: int,
+        kind: str,
+        message: str,
+        *,
+        only_if: Callable[[models.Task], bool] | None = None,
+        extra: Dict[str, Any] | None = None,
+        skip_locked: bool = False,
+        task: models.Task | None = None,
+    ) -> bool:
+        """Finalize a task the SERVER decided is over, and project it onto any wrapper.
+
+        Every server-side terminal — a lost executor, an unconfirmed interrupt, a silent physical
+        op, an expired task — is the same two steps: claim the transition (which writes the
+        ``TaskEvent`` in the same transaction) and, only if this backend won the claim, unfold the
+        outcome onto a higher-order wrapper. Doing the unfold outside the win check would let two
+        backends both project the same terminal onto the wrapper.
+
+        Returns whether we won. ``skip_locked`` defaults to False, matching :meth:`_claim`: a sweep
+        stepping over a row another backend holds passes True, a single-task op does not.
+
+        Not for an agent-*reported* terminal — that is :meth:`_finalize_from_agent`, which has to
+        resolve and authenticate the task first.
+        """
+        won = await self._claim(
+            task_id,
+            to_kind=kind,
+            mark_done=True,
+            only_if=only_if,
+            extra=extra,
+            event={"message": message},
+            skip_locked=skip_locked,
+        )
+        if won:
+            await self._unfold_to_higher_order(str(task_id), kind, message=message, task=task)
+        return won
+
     @staticmethod
     def _effect_of(task: models.Task) -> str:
         """The task's effect class — decides the retry axis (physical work is never re-run)."""
@@ -391,9 +429,12 @@ class ModelPersistBackend:
                 continue  # undelivered, not orphaned (callers that pre-filter never get here)
 
             if self._effect_of(task) == enums.EffectClassChoices.PHYSICAL.value:
-                message = "Executor lost while running physical-effect work — terminal, not retried."
-                if await self._claim(task.pk, to_kind=enums.TaskEventKind.CRITICAL, mark_done=True, event={"message": message}):
-                    await self._unfold_to_higher_order(str(task.pk), enums.TaskEventKind.CRITICAL, message=message, task=task)
+                await self._finalize_terminal(
+                    task.pk,
+                    enums.TaskEventKind.CRITICAL,
+                    "Executor lost while running physical-effect work — terminal, not retried.",
+                    task=task,
+                )
                 continue
 
             if task.action is not None and task.action.idempotent:
@@ -511,8 +552,15 @@ class ModelPersistBackend:
     def _reclaimable_q() -> Q:
         """Open work a (re)connecting agent may actually hold — what it is inquired about.
 
-        Unlike :meth:`_orphanable_q` this keeps ``DISCONNECTED`` rows: a same-session reconnect
-        is exactly how a fate-unknown task gets its real outcome reported.
+        Same shape as :meth:`_orphanable_q` but WITHOUT its ``~DISCONNECTED`` term: a same-session
+        reconnect is how a fate-unknown task gets its real outcome reported, so the agent must be
+        asked about those, whereas a *sweep* has nothing left to do to them.
+
+        Spelled out rather than derived from ``_orphanable_q`` on purpose. ``_orphanable_q() | Q(
+        is_done=False, latest_event_kind=DISCONNECTED)`` reads equivalent and is not: the added
+        disjunct would readmit DISCONNECTED *higher-order wrappers*, which both predicates exclude
+        — and asking an agent about a virtual wrapper it never held gets "unknown task" back, which
+        finalizes it wrongly.
         """
         return Q(is_done=False) & ~Q(latest_event_kind=enums.TaskEventKind.QUEUED, picked_up_at__isnull=True) & ~Q(implementation__higher_order_for__isnull=False)
 
@@ -556,6 +604,18 @@ class ModelPersistBackend:
         rows = await models.Agent.objects.filter(id=agent_id, lease_epoch=lease_epoch).aupdate(last_seen=timezone.now())
         return rows == 1
 
+    @staticmethod
+    def _agent_and_caller_sync(agent_id: int) -> Tuple[models.Agent, models.Caller]:
+        """An agent and the durable ``Caller`` row for its own identity.
+
+        The ``(client, user, organization)`` triple is a correctness-bearing key — it decides which
+        realtime topics the work is published to — and it was spelled out at three call sites.
+        Returns the agent too: two of those sites need it for the ``CallerContext``.
+        """
+        agent = models.Agent.objects.select_related("user", "client", "organization").get(id=agent_id)
+        caller, _ = models.Caller.objects.get_or_create(client=agent.client, user=agent.user, organization=agent.organization)
+        return agent, caller
+
     async def get_or_create_caller_id(self, agent_id: int) -> str:
         """The durable ``Caller`` id for an agent's identity (user/client/organization).
 
@@ -563,12 +623,7 @@ class ModelPersistBackend:
         originated. Mirrors ``get_caller_for_context`` (``facade/backend.py``) but resolves
         the identity from the agent instead of a GraphQL request.
         """
-        agent = await models.Agent.objects.select_related("user", "client", "organization").aget(id=agent_id)
-        caller, _ = await models.Caller.objects.aget_or_create(
-            client=agent.client,
-            user=agent.user,
-            organization=agent.organization,
-        )
+        _, caller = await database_sync_to_async(self._agent_and_caller_sync)(agent_id)
         return str(caller.pk)
 
     async def on_caller_assign(
@@ -602,8 +657,7 @@ class ModelPersistBackend:
         from facade.caller_context import CallerContext
         from facade.provenance import principal
 
-        agent = models.Agent.objects.select_related("user", "client", "organization").get(id=agent_id)
-        caller, _ = models.Caller.objects.get_or_create(client=agent.client, user=agent.user, organization=agent.organization)
+        agent, caller = self._agent_and_caller_sync(agent_id)
 
         # Idempotency: a resend of the same reference returns the existing task.
         existing = models.Task.objects.filter(caller=caller, reference=message.reference).first()
@@ -648,8 +702,7 @@ class ModelPersistBackend:
         from facade import inputs
         from facade.backend import controll_backend
 
-        agent = models.Agent.objects.select_related("user", "client", "organization").get(id=agent_id)
-        caller, _ = models.Caller.objects.get_or_create(client=agent.client, user=agent.user, organization=agent.organization)
+        _, caller = self._agent_and_caller_sync(agent_id)
         task = models.Task.objects.get(id=task_id)
         if task.caller_id != caller.pk:
             raise PermissionError("Not authorized to control this task (not its caller).")
@@ -712,18 +765,14 @@ class ModelPersistBackend:
         handled = 0
         for task_id, deadline, instruct_kind in due:
             if instruct_kind == enums.TaskInstructKind.INTERRUPT:
-                message = "Interrupt was never confirmed by the agent — finalized by the server."
-                won = await self._claim(
+                if await self._finalize_terminal(
                     task_id,
-                    to_kind=enums.TaskEventKind.INTERRUPTED,
-                    mark_done=True,
+                    enums.TaskEventKind.INTERRUPTED,
+                    "Interrupt was never confirmed by the agent — finalized by the server.",
                     only_if=lambda t, deadline=deadline: t.interrupt_at == deadline,
                     extra={"interrupt_at": None},
-                    event={"message": message},
                     skip_locked=True,
-                )
-                if won:
-                    await self._unfold_to_higher_order(str(task_id), enums.TaskEventKind.INTERRUPTED, message=message)
+                ):
                     handled += 1
                 continue
 
@@ -826,29 +875,28 @@ class ModelPersistBackend:
         # The agent accepted and began executing — record it (mirrored to the caller as StartedEvent).
         await self._on_nonterminal_confirm(agent_id, message.task, enums.TaskEventKind.STARTED)
 
+    async def _record_event(self, agent_id: int, task_id: str, kind: str, **fields: Any) -> bool:
+        """Append a non-terminal event to a task this agent owns. Returns whether it was recorded.
+
+        The stream events (log / yield / progress) are fire-and-forget: they append to the log and
+        deliberately do NOT move ``latest_event_kind``, so a running task keeps reading ``QUEUED``
+        (``picked_up_at``, stamped by ``_agent_task``, is what records that it was picked up). An
+        event for an unknown task — or another agent's — is dropped rather than tearing down the
+        transport.
+        """
+        if await self._agent_task(agent_id, task_id) is None:
+            return False
+        await models.TaskEvent.objects.acreate(task_id=task_id, kind=kind, **fields)
+        return True
+
     async def on_agent_log(self, agent_id: int, message: messages.Log) -> None:
         logger.info(f"Log Task {message}")
-
-        if await self._agent_task(agent_id, message.task) is None:
-            return
-        await models.TaskEvent.objects.acreate(
-            task_id=message.task,
-            kind=enums.TaskEventKind.LOG,
-            message=message.message,
-            level=message.level,
-        )
+        await self._record_event(agent_id, message.task, enums.TaskEventKind.LOG, message=message.message, level=message.level)
 
     async def on_agent_yield(self, agent_id: int, message: messages.Yield) -> None:
         logger.info(f"Yield Task {message}")
-
-        if await self._agent_task(agent_id, message.task) is None:
-            return
-        await models.TaskEvent.objects.acreate(
-            task_id=message.task,
-            kind=enums.TaskEventKind.YIELD,
-            returns=message.returns,
-        )
-        await self._unfold_to_higher_order(message.task, enums.TaskEventKind.YIELD, returns=message.returns)
+        if await self._record_event(agent_id, message.task, enums.TaskEventKind.YIELD, returns=message.returns):
+            await self._unfold_to_higher_order(message.task, enums.TaskEventKind.YIELD, returns=message.returns)
 
     async def on_agent_done(self, agent_id: int, message: messages.Completed) -> None:
         logger.info(f"Completed Task {message}")
@@ -868,16 +916,8 @@ class ModelPersistBackend:
 
     async def on_agent_progress(self, agent_id: int, message: messages.Progress) -> None:
         logger.info(f"Progress Task {message}")
-
-        if await self._agent_task(agent_id, message.task) is None:
-            return
-        await models.TaskEvent.objects.acreate(
-            task_id=message.task,
-            kind=enums.TaskEventKind.PROGRESS,
-            progress=message.progress,
-            message=message.message,
-        )
-        await self._arm_progress_lease(message.task)
+        if await self._record_event(agent_id, message.task, enums.TaskEventKind.PROGRESS, progress=message.progress, message=message.message):
+            await self._arm_progress_lease(message.task)
 
     async def _arm_progress_lease(self, task_id: str) -> None:
         """(Re)arm the silent-physical-op lease for a physical task, if enabled.
@@ -895,19 +935,14 @@ class ModelPersistBackend:
 
     async def reconcile_silent_physical_op(self, task_id: str | int, *, cutoff=None) -> bool:
         """Fail a physical task that reported progress then went silent. Claim-based DB op."""
-        message = "Physical op went silent past its progress lease — terminal, not retried."
-        won = await self._claim(
+        return await self._finalize_terminal(
             int(task_id),
-            to_kind=enums.TaskEventKind.CRITICAL,
-            mark_done=True,
+            enums.TaskEventKind.CRITICAL,
+            "Physical op went silent past its progress lease — terminal, not retried.",
             # Re-checked under the lock: a Progress that landed since the scan re-armed the lease.
             only_if=(lambda t: t.last_progress_at is not None and t.last_progress_at < cutoff) if cutoff is not None else None,
-            event={"message": message},
             skip_locked=cutoff is not None,
         )
-        if won:
-            await self._unfold_to_higher_order(str(task_id), enums.TaskEventKind.CRITICAL, message=message)
-        return won
 
     async def reconcile_silent_physical_ops(self, limit: int = 200) -> int:
         """Fail physical tasks whose last Progress is older than the progress lease."""
@@ -948,6 +983,9 @@ class ModelPersistBackend:
             if (task.dispatched_at or task.created_at) >= cutoff:
                 return "skip", None, None  # re-dispatched / clock restarted since the scan
 
+            # Deliberately NOT ``_finalize_terminal``: we are already inside this row's
+            # ``select_for_update`` above, and the helper's claim would open a nested transaction
+            # and re-lock the row we hold. Same three writes, done under the lock we already have.
             def finalize(kind, message: str) -> Tuple[str, None, None]:
                 task.latest_event_kind = kind
                 task.is_done = True
@@ -1042,17 +1080,14 @@ class ModelPersistBackend:
             .filter(Q(last_event_at__lt=cutoff) | Q(last_event_at__isnull=True, created_at__lt=cutoff))
             .values_list("pk", flat=True)[:limit]
         ]
-        message = "Agent disconnected and the task's fate stayed unknown — expired."
         for pk in disconnected:
-            if await self._claim(
+            if await self._finalize_terminal(
                 pk,
-                to_kind=enums.TaskEventKind.CRITICAL,
-                mark_done=True,
+                enums.TaskEventKind.CRITICAL,
+                "Agent disconnected and the task's fate stayed unknown — expired.",
                 only_if=lambda t: t.latest_event_kind == enums.TaskEventKind.DISCONNECTED,
-                event={"message": message},
                 skip_locked=True,
             ):
-                await self._unfold_to_higher_order(str(pk), enums.TaskEventKind.CRITICAL, message=message)
                 expired += 1
 
         undelivered = [
@@ -1063,17 +1098,14 @@ class ModelPersistBackend:
             .exclude(implementation__higher_order_for__isnull=False)
             .values_list("pk", flat=True)[:limit]
         ]
-        message = "The agent never came back to pick this task up — expired."
         for pk in undelivered:
-            if await self._claim(
+            if await self._finalize_terminal(
                 pk,
-                to_kind=enums.TaskEventKind.CRITICAL,
-                mark_done=True,
+                enums.TaskEventKind.CRITICAL,
+                "The agent never came back to pick this task up — expired.",
                 only_if=lambda t: t.picked_up_at is None and t.latest_event_kind == enums.TaskEventKind.QUEUED and (t.dispatched_at or t.created_at) < cutoff,
-                event={"message": message},
                 skip_locked=True,
             ):
-                await self._unfold_to_higher_order(str(pk), enums.TaskEventKind.CRITICAL, message=message)
                 expired += 1
         return expired
 
