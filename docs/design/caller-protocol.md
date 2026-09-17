@@ -184,12 +184,37 @@ sequenceDiagram
 
 An agent without a persistent socket (a HookAgent / another service) can use the HTTP intake at
 **`POST agi/http/<agent_id>`** (`facade/http_intake.py`, `rekuest/urls.py`). The body is the same
-FromAgent message JSON; it must be HMAC-signed with the agent's `hook_url_secret` in the
-`X-Rekuest-Signature` header (`facade/hooks.py`). The request is verified, parsed
-(`FromAgentPayload`), and routed through the **same** `route_from_agent_message` the socket uses — so
-`AssignRequest` / `CancelRequest` / … behave identically. The reply (`AssignResponse` /
-`ControlResponse`) is returned in the **HTTP response** instead of over a socket. Such a caller
-that is itself a webhook agent receives its `…Event` mirrors as signed POSTs to its `hook_url`.
+FromAgent message JSON; it must be HMAC-signed with the agent's `hook_url_secret`. The request is
+verified, parsed (`FromAgentPayload`), and routed through the **same** `route_from_agent_message`
+the socket uses — so `AssignRequest` / `CancelRequest` / … behave identically. The reply
+(`AssignResponse` / `ControlResponse`) is returned in the **HTTP response** instead of over a
+socket. Such a caller that is itself a webhook agent receives its `…Event` mirrors as signed POSTs
+to its `hook_url`.
+
+### Signing a request
+
+Unlike a socket, an HTTP request has no session: it must stand on its own, or a captured one can be
+replayed forever against any replica. So the signature covers a **timestamp and the agent id**, not
+just the body (`facade/hooks.py`):
+
+```
+X-Rekuest-Signature-V1: t=<unix seconds>,v1=<hex>
+    hex = HMAC-SHA256(hook_url_secret, f"v1:{agent_id}:{t}:" + body)
+```
+
+* the timestamp bounds how long a captured request stays usable (`rekuest.hook_max_skew`,
+  default 300 s, checked in both directions) and is inside the signed payload, so it cannot be edited;
+* the agent id is bound in because two HookAgents may share a secret;
+* the digest is claimed once in redis, shared by every replica. A replayed **report** gets its
+  `EventAck` without being persisted twice, a replayed **`AssignRequest`** is routed anyway (it is
+  idempotent on `(caller, reference)`, so it returns the same task with `created=False`), and a
+  replayed **control request** gets `409` — an instruction the server did not apply must not be
+  acked. Fire-and-forget events (`Yield`/`Log`/`Progress`) are simply accepted and dropped, which
+  is what makes an ordinary HTTP retry safe.
+
+The legacy `X-Rekuest-Signature` header (HMAC over the body alone, with no replay protection) is
+still accepted while `rekuest.hook_signature_mode` is `compat`, and both headers are sent outbound.
+Set it to `strict` once your HookAgents sign V1.
 
 ## Quick reference — what the caller sends
 

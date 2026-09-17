@@ -216,8 +216,8 @@ previously fired every `AGENT_HEARTBEAT_INTERVAL` for every connected agent.
 
 ## The stale sweep
 
-`reconcile_stale_agents` (driven by the in-process `reaper` loop and the `reconcile_tasks` command)
-finds agents that are stuck-connected past the stale window and revokes them: `connected = False`
+`reconcile_stale_agents` (driven by the in-process `reaper` loop of every backend — there is no
+management command) finds agents that are stuck-connected past the stale window and revokes them: `connected = False`
 plus an epoch bump, under a row lock that re-checks staleness. That lock is also the **claim** —
 production runs several daphne processes, each with its own reaper, so only the worker that
 actually flips a row goes on to `reconcile_orphaned_executor_work`. The task transitions inside
@@ -242,9 +242,48 @@ reconnect, whereas a `group_send` to an empty group would be dropped.
   protocol **delivers first, then `ack`s** (`lrem` from the processing list).
 
 The send-then-ack ordering gives **at-least-once** semantics: a crash between `pop` and `ack` leaves
-the message in the processing list, recoverable rather than lost. The queue is an abstract port
-(`AgentQueue`) with a `RedisAgentQueue` for real deployments and an `InMemoryAgentQueue` for unit
-tests.
+the message in the processing list, and the next connection that wins the agent's lease **recovers
+it** — `queue.recover` moves everything still in `{agent_id}_processing` back to the head of the
+queue (oldest first) before it starts popping. The queue is an abstract port (`AgentQueue`) with a
+`RedisAgentQueue` for real deployments and an `InMemoryAgentQueue` for unit tests.
+
+The drain loop is the *only* way work reaches an agent, while liveness is decided by the heartbeat
+loop next to it — so it must never stop on its own, or the agent keeps looking alive, keeps being
+selected, and receives nothing:
+
+- a **queue failure** (redis restart, a half-dead connection — pops block for a finite
+  `POP_BLOCK_SECONDS`, never forever) is survived: drop the connection, back off, recover, continue;
+- a **socket write failure** closes the connection (`AGENT_TRANSPORT_FAILED_CODE`, 3005) with the
+  frame left in the processing list, so the agent reconnects and the frame is recovered;
+- a **displaced** connection stops draining the moment it is told (`agent_displace`), not at its
+  next heartbeat — until then it would compete for the new connection's Assigns;
+- an Assign whose task the server has **already finalized** (the *delivery-time fence*,
+  `is_task_open`) is acked and dropped instead of delivered.
+
+At-least-once means an agent can see the same task id twice; agents dedupe an Assign by task id.
+
+Two connections can briefly contend for one agent's queue, because the displacement hint
+(`agent.displace`) rides the channel layer and the channel layer drops messages when a process's
+receive queue is full. So ownership is not taken on trust: `listen_for_tasks` asks
+`holds_lease(agent, epoch)` — one primary-key lookup — immediately before every `_send`. A
+connection that has been fenced hands the frame back with `queue.requeue` (atomic: `LREM` from
+in-flight, `RPUSH` to the head, so a concurrent `recover` by the new holder cannot duplicate it)
+and closes itself. That narrows the window from one heartbeat interval to a single frame; it
+cannot be closed entirely, because a socket write is not transactional with the lease. A lease
+holder also calls `recover()` whenever a pop comes back empty, which rescues frames stranded by a
+holder that died between its own pop and requeue.
+
+### The pickup watchdog
+
+Everything above still cannot prove an Assign *arrived*. The server therefore tracks, per task,
+`dispatched_at` / `dispatch_attempts` (handed to the transport) and `picked_up_at` (the first report
+of **any** kind from the agent — `latest_event_kind` cannot serve, because `Progress`/`Log`/`Yield`
+never move it off `QUEUED`). `reconcile_unpicked_tasks` redelivers, once, a task whose *live* agent
+(or webhook endpoint) has reported nothing within `pickup_deadline`; silent again → `CRITICAL`.
+Physical-effect work that verifiably left is never redelivered. Tasks of agents that are not live
+are left to the disconnect path. A reconnecting agent is not *inquired* about work it never picked
+up (it would answer "unknown → Critical" for a task it is about to receive); that work's clock is
+restarted instead.
 
 ## Message catalogue
 

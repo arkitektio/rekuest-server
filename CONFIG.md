@@ -131,6 +131,9 @@ Secret fields are flagged with 🔒. "Required" means there is no default.
 |---|---|---|---|---|
 | `host` | `REDIS__HOST` | str | **required** | Redis host. |
 | `port` | `REDIS__PORT` | int | `6379` | Redis port. |
+| `key_prefix` | `REDIS__KEY_PREFIX` | str | `rekuest` | Namespace for every redis key this service writes (agent queues, probe state, reaper token, webhook replay guard). Two deployments sharing one redis MUST differ here, or agent 42 of one receives the other's Assigns. |
+| `channel_prefix` | `REDIS__CHANNEL_PREFIX` | str | `rekuest` | Key prefix for the `channels_redis` channel layer. Must differ from every other service on the same redis, or group messages bleed between services. |
+| `channel_capacity` | `REDIS__CHANNEL_CAPACITY` | int | `5000` | `channels_redis` capacity. This bounds the **one** receive queue a whole replica shares — not one per socket — and messages beyond it are dropped silently, so it is set far above the library default of 100. |
 
 ### `authentikate` — inbound token verification
 
@@ -172,6 +175,38 @@ scopes that gate agent modes. All optional with sensible defaults.
 | `grace_default` | `REKUEST__GRACE_DEFAULT` | int | `30` | Default reclaim grace window (seconds) after a disconnect. |
 | `grace_physical` | `REKUEST__GRACE_PHYSICAL` | int | `5` | Grace window (seconds) for `effect:physical` work. |
 | `progress_lease` | `REKUEST__PROGRESS_LEASE` | int | `0` | Progress lease (seconds); `0` disables the wedged-task lease. |
+| `hook_signature_mode` | `REKUEST__HOOK_SIGNATURE_MODE` | str | `compat` | HookAgent HTTP signatures. `compat` accepts the timestamped `X-Rekuest-Signature-V1` **or** the legacy body-only `X-Rekuest-Signature`, and sends both. `strict` accepts and sends V1 only — the legacy signature is replayable, so move to `strict` once your HookAgents are updated. |
+| `hook_max_skew` | `REKUEST__HOOK_MAX_SKEW` | int | `300` | Maximum age/clock skew (seconds) for a V1-signed HookAgent request. Also the replay guard's memory: a digest is remembered for twice this. |
+| `sweep_interval` | `REKUEST__SWEEP_INTERVAL` | int | `5` | How often (seconds) the in-process reaper sweeps the DB-held deadlines below. Bounds how late any of them can fire. |
+| `pickup_deadline` | `REKUEST__PICKUP_DEADLINE` | int | `60` | Seconds a dispatched task may go without **any** report from its live agent (or webhook endpoint) before the Assign is redelivered once, then failed `CRITICAL`; `0` disables. Physical-effect work is never redelivered. |
+| `disconnected_expiry` | `REKUEST__DISCONNECTED_EXPIRY` | int | `3600` | Seconds a `DISCONNECTED` (fate unknown) task — or an undelivered task of an agent that is gone — stays recoverable before it is finalized `CRITICAL`; `0` = never. |
+| `control_deadline` | `REKUEST__CONTROL_DEADLINE` | int | `0` | Seconds an unconfirmed cancel waits before escalating to an interrupt, and an unconfirmed interrupt before it is finalized; `0` disables. A socket `CancelRequest.auto_interrupt` takes precedence. |
+
+None of these is a timer. Each deadline starts at a database column and is enforced by the
+reaper loop inside every backend process (`facade/reaper.py`) — there is no management command,
+cron job or sidecar to run, a backend can be killed at any moment without losing a pending
+deadline, and any number of backends can run side by side (every transition is a row-locked
+claim with exactly one winner).
+
+## Running more than one replica
+
+Nothing needs to be configured to scale the service: state lives in Postgres and redis, no
+request needs to return to the replica that served the last one (sticky sessions are **not**
+required), and `manage.py migrate` takes a Postgres advisory lock so every replica can run it at
+boot with one winner. What does need attention:
+
+- **`redis.channel_prefix` and `redis.key_prefix`** must be unique per service, and per
+  deployment if two deployments share a redis. See above.
+- **Clocks.** Liveness compares one replica's clock against another's writes, so hosts must be
+  NTP-synced. A replica measures itself against the database clock and, if it is off by more than
+  `(AGENT_STALE_AFTER − heartbeat interval − heartbeat timeout) / 2` (7.5 s at the defaults),
+  stops sweeping and reports unhealthy on `/ht` rather than deciding other replicas' agents are
+  dead. See `facade/clock.py`.
+- **`control_deadline`** should stay non-zero. A Cancel/Interrupt frame can be lost when a
+  connection is displaced or redis restarts, and nothing redelivers it — the deadline is what
+  stops the database from saying `CANCELLING` forever while the agent runs on.
+- **Postgres connections.** Each replica opens its own; raise the server's `max_connections`
+  before scaling a stack that shares one cluster between services.
 
 ### `provenance` — provenance (attestation) signing keypair and policy
 

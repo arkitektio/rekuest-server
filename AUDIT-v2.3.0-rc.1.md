@@ -415,6 +415,8 @@ Full suite: **445 passed, 0 failed**.
 | 5 | Media mutations unauthenticated/unowned | Registered through the local `mutation()` wrapper so `@auth` applies (verified in the SDL); `DatalayerStore` gained `organization` + `creator` (migration `datalayer/0002`), stamped on upload and enforced by `_owned_store()`. Fails closed for legacy unowned rows. |
 | 6 | Agent/task control accepted any ID | `_agent_in_org()` scopes `bounce`/`block`/`unblock`/`kick`; `_request_control` refuses tasks outside the caller's organization. |
 | 8 | `DEBUG` hardcoded | `DEBUG` and `ALLOWED_HOSTS` now read from config (`debug` already defaulted to `False`), restoring authentikate's static-token guard. |
+| C1 | Unlocked terminal task transitions | Every agent-reported terminal (`_finalize_from_agent`) and every sweep transition goes through the row-locked `_claim_task_transition_sync`, which now writes the `TaskEvent` in the same transaction. `tests/agent/test_pickup_watchdog.py::TestTerminalReportsAreExactlyOnce`. |
+| C2 | `{agent_id}_processing` never drained | `AgentQueue.recover` — the lease holder returns popped-but-unacked frames to the queue before draining; the drain loop survives queue failures and stops on displacement. `tests/agent/test_delivery.py::TestAtLeastOnceDelivery`. |
 | C3 | `TaskEventKind` missing `UNASSIGN` | Added, matching `TaskEventChoices`. |
 | C8 | basedpyright could not start | Removed the deleted `facade/capabilities.py` from `include`; added the four `facade/probes/*` modules. It now runs (18 pre-existing errors newly visible). |
 | C11 | `uv.lock` stale after every release | Release workflow runs `uv lock` before semantic-release commits. |

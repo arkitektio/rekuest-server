@@ -165,8 +165,12 @@ stateDiagram-v2
 - `QUEUED` → `BOUND` → `ASSIGN` is the path to a running task; `LOG` and `PROGRESS` are non-terminal
   annotations along the way.
 - `YIELD` carries returns — a `FUNCTION` yields once, a `GENERATOR` many times.
-- Terminal kinds: `DONE`, `CANCELLED`, `INTERUPTED`, `ERROR`, `CRITICAL`, and `DISCONNECTED` (the
-  agent dropped mid-task; "fate unknown").
+- Terminal kinds: `DONE`, `CANCELLED`, `INTERUPTED`, `ERROR`, `CRITICAL`.
+- `DISCONNECTED` (the agent dropped mid-task; "fate unknown") is **not** terminal by itself: the
+  task stays open (`is_done=False`) so a returning agent can still report the real outcome — any
+  report reclaims it to `STARTED`, a terminal report finalizes it. If nothing is heard within
+  `disconnected_expiry` the server finalizes it as `CRITICAL`. No state is open-ended: see
+  *Deadlines* below.
 
 ## Instructing a running task
 
@@ -192,6 +196,44 @@ When an agent drops, `on_agent_disconnected` (guarded by `active_connection_id`,
 FK** deliberately — a task may have a null/reassigned `implementation`, so filtering through
 `implementation__agent` would silently skip work the agent actually owns.
 
+Work the agent had **not picked up yet** (`QUEUED`, no report) is not orphaned by a disconnect —
+its Assign is still in the agent's queue — and is left alone; it simply runs when the agent is
+back, and expires like `DISCONNECTED` work if it never is.
+
+## Deadlines — nothing waits forever
+
+Every non-terminal state has a server-side deadline. None is a timer: each starts at a DB column
+and is enforced by the reaper loop inside every backend (`facade/reaper.py`), so deadlines survive
+restarts and any number of backends can enforce them concurrently (row-locked claims, one winner).
+
+| waiting on | deadline starts at | setting | outcome |
+|---|---|---|---|
+| a live agent to report on a dispatched task | `Task.dispatched_at` | `pickup_deadline` | redelivered once, then `CRITICAL` |
+| a disconnected agent to come back (grace) | `Agent.last_seen` | `grace_default` | retry axis: `CRITICAL` / re-`QUEUED` / `DISCONNECTED` |
+| a `DISCONNECTED` task's real outcome | last `TaskEvent` | `disconnected_expiry` | `CRITICAL` |
+| undelivered work of an agent that is gone | `Task.dispatched_at` | `disconnected_expiry` | `CRITICAL` |
+| a cancel to be confirmed | `Task.interrupt_at` | `auto_interrupt` / `control_deadline` | escalated to interrupt |
+| an interrupt to be confirmed | `Task.interrupt_at` | `control_deadline` | `INTERRUPTED` |
+| a physical op's next progress | `Task.last_progress_at` | `progress_lease` | `CRITICAL` |
+
+## Idempotency is a database guarantee
+
+`assign` dedupes on the caller-supplied `reference`, and `Task` carries
+`UniqueConstraint(caller, reference)` to make that true under concurrency. The
+`filter(caller, reference).first()` ahead of the insert is only a fast path: two retries of one
+assign can reach two backends at the same instant and both read "absent". The constraint lets
+exactly one insert through; the loser catches `IntegrityError`, returns the winner's task with
+`created=False`, and dispatches nothing and runs no init hooks — otherwise the work would be sent
+to the agent twice, which for `effect:physical` work is the worst outcome in the system. Dispatch
+itself is deferred with `transaction.on_commit`, so no agent can report on a task other
+connections cannot see yet.
+
+`Task.revision` is bumped by every write to the row (in `Task.save`, as `F("revision") + 1`) and
+carried in the change feeds. Changes are produced by several backends and the channel layer does
+not deliver in commit order, so a consumer must discard any `TaskChange` whose revision is not
+greater than the one it already applied. `updated_at` cannot serve that purpose — `auto_now` is
+skipped whenever `update_fields` omits it, which is how almost every task write is made.
+
 ## Roots, lineage and idempotency
 
 A GraphQL `assign` is a ROOT by definition — the schema no longer exposes
@@ -206,8 +248,7 @@ always had.
 ## Retention
 
 Terminal root task trees older than `TASK_RETENTION_SECONDS` are deleted by the
-retention sweep (`facade/retention.py`, driven by the reaper loop and the
-`reconcile_tasks` command); trees with any live member are skipped. Default 0 =
+retention sweep (`facade/retention.py`, driven by the reaper loop); trees with any live member are skipped. Default 0 =
 disabled — deletion also removes runs from replay discovery, so it is an explicit
 operator opt-in. Control ops (cancel/interrupt/pause/resume) write a `TaskInstruct`
 audit row naming the requesting caller.
