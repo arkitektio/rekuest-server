@@ -58,7 +58,7 @@ AGENT_HEARTBEAT_NOT_RESPONDED_CODE = 3001
 # a brief blip can reclaim same-session in-flight work before it fires. 0 means no grace
 # (strict). ``PHYSICAL`` overrides the window for effect:physical work, which may warrant a
 # shorter (or zero) window than freely-retryable effect:none work. Consumed by the
-# reclaim/grace backend via ``facade.grace.grace_seconds``.
+# reclaim/grace backend via ``facade.deadlines.grace_seconds``.
 REKUEST_GRACE = {
     "DEFAULT": conf.rekuest.grace_default,
     "PHYSICAL": conf.rekuest.grace_physical,
@@ -68,7 +68,7 @@ REKUEST_GRACE = {
     "PROGRESS_LEASE": conf.rekuest.progress_lease,
     # None of these windows is a timer: each starts at a DB column and is enforced by the
     # in-process sweep (``facade.reaper``), every SWEEP_INTERVAL seconds, on whichever
-    # backend gets there first. See ``facade.grace`` for the accessors.
+    # backend gets there first. See ``facade.deadlines`` for the accessors.
     "SWEEP_INTERVAL": conf.rekuest.sweep_interval,
     # A dispatched task its live agent never reports on: redelivered once, then CRITICAL.
     "PICKUP_DEADLINE": conf.rekuest.pickup_deadline,
