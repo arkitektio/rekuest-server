@@ -1,7 +1,7 @@
 # Audit — rekuest-server v2.3.0-rc.1
 
 > **Remediation status.** All five promotion blockers plus most secondary findings are fixed;
-> the suite is green at **445 passed**. Two items are deliberately open pending a product
+> the suite is green at **721 passed** (was 445 at the time of this audit). Two items are deliberately open pending a product
 > decision (state-history API, untenanted models) and one is operational (key rotation).
 > See *Remediation status* at the end.
 
@@ -266,24 +266,16 @@ catch it is dead. `DEBUG=True` independently leaks tracebacks and settings on 50
 
 | # | Sev | Finding | Location |
 |---|---|---|---|
-| C1 | Medium | Terminal task transitions are unlocked read-then-write on a **retrying** transport, while `_claim_task_transition_sync:251-274` in the same module uses `select_for_update` for the identical decision. Two workers can both emit a terminal event. | `facade/persist_backend.py:606-672` |
-| C2 | Medium | `{agent_id}_processing` is never drained. `stop_executing` can cancel between deliver and ack, stranding frames no reconnect path recovers. | `facade/consumers/agent_queue.py:115-122` |
-| C3 | Medium | `TaskEventKind` (GraphQL enum) omits `UNASSIGN`, which `TaskEventChoices` defines — a persisted `UNASSIGN` breaks coercion in task subscriptions. | `facade/enums/task.py:15-38` vs `:65-93` |
 | C4 | Medium | `get_latest_state` swallows every patch failure (`except Exception: pass`), silently yielding a partial state; `:120` dereferences a `.first()` that can be `None`. | `facade/logic.py:100-186` |
-| C5 | Medium | `Session` has no unique constraint, so concurrent `SessionInit`/`StateSnapshot` can create duplicate rows; `get_latest_state` then picks arbitrarily by `-created_at`. | `facade/models/state.py:71-78` |
-| C6 | Medium | `reinit` is **dead** — `persist_backend` has no `on_reinit`, so every call raises `AttributeError`. | `facade/mutations/lifeline.py:11-14` |
 | C7 | Low | `force_script_name` is assigned to `MY_SCRIPT_NAME`, not Django's `FORCE_SCRIPT_NAME`; nothing reads it, so the documented option is inert. | `rekuest/settings.py:151` |
-| C8 | Low | basedpyright **fails to start** — `include` lists `facade/capabilities.py`, deleted in `2af6406`. No `facade/probes/*` is in typecheck scope. | `pyproject.toml` |
 | C9 | Low | Real type error in the new fencing path: `int \| None` passed to a parameter typed `int`. | `facade/consumers/agent_protocol.py:434` |
 | C10 | Low | `Agent.user` declared twice; the second silently overrides the first. | `facade/types/agent.py:31,34` |
-| C11 | Low | Release bumps `pyproject.toml` but never `uv.lock`, so the lock is stale after **every** release — the standing cause of the recurring `chore/sync-uv-lock` branch. | `.github/workflows/release.yaml` |
-| C12 | Low | `run.sh:9` calls `manage.py ensureadmin`, which is not a registered command. It fails, and `run.sh` has no `set -e`, so startup continues silently. | `run.sh:9` |
 
 ## Process findings
 
 | # | Sev | Finding |
 |---|---|---|
-| P1 | **High** | **Authorization is essentially untested.** Across 83 test files / 9k lines there are exactly **two** negative-authz assertions, both in the new probe tests. No test asserts that org A cannot reach org B's data, though `tests/factories.py` already builds multiple organizations. This is the root cause that let findings #1–#6 accumulate, and the highest-leverage thing to fix. |
+| P1 | **High** | **Authorization is essentially untested.** Across 93 test files / ~13k lines there are only a handful of negative-authz assertions (the probe tests, plus the agent-mutation tenancy test added with the multi-replica work). No test asserts that org A cannot reach org B's data, though `tests/factories.py` already builds multiple organizations. This is the root cause that let findings #1–#6 accumulate, and the highest-leverage thing to fix. |
 | P2 | Medium | Quality gates are advisory (`continue-on-error: true`), hiding **3,015** ruff errors and 25 unformatted files behind a green check — and masking that basedpyright has not run at all (C8). |
 | P3 | Medium | No SDL snapshot existed, so client-visible API changes were undetectable. `schema.graphql` is now generated (see *Artifacts*). |
 
@@ -402,7 +394,9 @@ The only working-tree additions are the three artifacts listed above.
 
 # Remediation status
 
-Full suite: **445 passed, 0 failed**.
+Full suite at the time of this audit: **445 passed, 0 failed**. (Now 721, after the stuck-task and
+multi-replica hardening added `tests/agent/test_pickup_watchdog.py`, `test_multi_replica.py` and
+`tests/models/test_constraint_migrations.py`.)
 
 ## Fixed
 
@@ -415,6 +409,8 @@ Full suite: **445 passed, 0 failed**.
 | 5 | Media mutations unauthenticated/unowned | Registered through the local `mutation()` wrapper so `@auth` applies (verified in the SDL); `DatalayerStore` gained `organization` + `creator` (migration `datalayer/0002`), stamped on upload and enforced by `_owned_store()`. Fails closed for legacy unowned rows. |
 | 6 | Agent/task control accepted any ID | `_agent_in_org()` scopes `bounce`/`block`/`unblock`/`kick`; `_request_control` refuses tasks outside the caller's organization. |
 | 8 | `DEBUG` hardcoded | `DEBUG` and `ALLOWED_HOSTS` now read from config (`debug` already defaulted to `False`), restoring authentikate's static-token guard. |
+| C5 | `Session` had no unique constraint | `UniqueConstraint(agent, session_id)` (migration `0008`), preceded by a dedupe that re-points the losers' `Patch`/`Snapshot` rows onto the surviving session rather than truncating the log. `tests/models/test_constraint_migrations.py::TestSessionDedupe`. |
+| C6 | `reinit` was dead | Removed with the rest of the dead `lifeline` surface (see the Removals table). |
 | C1 | Unlocked terminal task transitions | Every agent-reported terminal (`_finalize_from_agent`) and every sweep transition goes through the row-locked `_claim_task_transition_sync`, which now writes the `TaskEvent` in the same transaction. `tests/agent/test_pickup_watchdog.py::TestTerminalReportsAreExactlyOnce`. |
 | C2 | `{agent_id}_processing` never drained | `AgentQueue.recover` — the lease holder returns popped-but-unacked frames to the queue before draining; the drain loop survives queue failures and stops on displacement. `tests/agent/test_delivery.py::TestAtLeastOnceDelivery`. |
 | C3 | `TaskEventKind` missing `UNASSIGN` | Added, matching `TaskEventChoices`. |

@@ -104,7 +104,7 @@ to pass.
 
 Because the user watches the **wrapper** but the work runs on the **child**, the server re-emits the
 child's terminal/yield events onto the wrapper. `_unfold_to_higher_order` (called from the `YIELD` /
-`DONE` / `CANCELLED` / `ERROR` / `CRITICAL` handlers in `persist_backend.py`):
+`COMPLETED` / `CANCELLED` / `FAILED` / `CRITICAL` handlers in `persist_backend.py`):
 
 1. Loads the child, finds its `parent`, and checks the parent's implementation is a wrapper
    (`higher_order_for_id is not None`). Non-higher-order children (hooks, dependency sub-assignments)
@@ -113,7 +113,7 @@ child's terminal/yield events onto the wrapper. `_unfold_to_higher_order` (calle
    child`. For `YIELD`, the returns are run through `project_returns` first.
 3. On a terminal kind, marks the wrapper `is_done` and stamps `finished_at`.
 
-That wrapper event then fans out to the caller's `ass_caller_{id}` channel exactly like any other
+That wrapper event then fans out to the caller's `task_caller_{id}` topic exactly like any other
 event ([realtime.md](realtime.md)) — so subscribers see the wrapper complete with mapped returns, as
 if it had executed the work directly.
 

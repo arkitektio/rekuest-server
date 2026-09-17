@@ -12,7 +12,6 @@ rules that encode most of the business logic.
 ```mermaid
 erDiagram
     Caller ||--o{ Task : "requests"
-    Caller ||--o{ Reservation : "owns"
     Agent ||--o{ Implementation : "provides"
     Agent ||--o{ Task : "executes"
     Agent ||--o{ State : "reports"
@@ -21,14 +20,10 @@ erDiagram
     Action ||--o{ ArgPort : "input ports"
     Action ||--o{ ReturnPort : "output ports"
     Action ||--o{ Implementation : "implemented by"
-    Action ||--o{ Reservation : "served by"
 
     Implementation ||--o{ Dependency : "declares"
     Implementation ||--o{ Resolution : "configured by"
     Implementation }o--|| Implementation : "higher_order_for"
-
-    Reservation }o--o{ Implementation : "pools"
-    Reservation ||--o{ Task : "routes"
 
     Task ||--o{ TaskEvent : "logs"
     Task ||--o{ TaskInstruct : "instructed by"
@@ -47,7 +42,7 @@ erDiagram
 
 | Model | Purpose |
 | --- | --- |
-| `Caller` | The `(client, user, organization)` requestor identity. Owns `Task`/`Reservation`. |
+| `Caller` | The `(client, user, organization)` requestor identity. Owns `Task`. |
 | `Agent` | The provider runtime: same triple + `app`/`release`/`device` + connection state. |
 
 See [identity.md](identity.md). The rest of the graph attaches to one of these two.
@@ -87,7 +82,7 @@ relational matching engine — that whole story is [action-matching.md](action-m
 
 **`Implementation`** (`facade/models/implementation.py`) binds an **Action to an Agent**: "this
 agent can run this action, via this `interface`". Key fields: `action`, `agent`, `release`,
-`interface`, `params` (bound overrides), `dynamic` (may create reservations at runtime),
+`interface`, `params` (bound overrides), `dynamic`,
 `manipulates` (M2M to `State`), and the higher-order pair `higher_order_for` /
 `higher_order_config` (see [higher-order.md](higher-order.md)).
 
@@ -100,17 +95,7 @@ implementation's dependencies, each `ResolvedDependency` picks a concrete `Imple
 satisfy one dependency, and `down_stream_resolution` recurses for that implementation's *own*
 dependencies. Resolutions can be named templates (`is_template`) for reuse.
 
-## 4. Routing layer — Reservation
-
-**`Reservation`** (`facade/models/reservation.py`) is a **standing pool**: a durable channel that
-pre-binds a set of `implementations` for an `action`, owned by a `caller`. Assignments submitted to
-a reservation are routed to one of its implementations by a `strategy`
-(`RANDOM`, `ROUND_ROBIN`, `LEAST_BUSY`, `LEAST_TIME`, `LEAST_LOAD`, `DIRECT`). It records
-`saved_args` (defaults), `binds` (routing config) and provenance (`causing_task`,
-`causing_dependency`). Reservations are optional — a caller can also assign directly to an action
-or implementation without one.
-
-## 5. Execution layer — Task and its events
+## 4. Execution layer — Task and its events
 
 **`Task`** (`facade/models/task.py`) is the **central execution log** — one row per
 task run, tracking it from assignment to completion. The fields that matter most:
@@ -121,7 +106,6 @@ task run, tracking it from assignment to completion. The fields that matter most
 | `implementation` (nullable) | Currently-bound implementation (can be reassigned). |
 | `agent` | Who executes it. |
 | `caller` (nullable) | Who requested it (the realtime routing key). |
-| `reservation` (nullable) | The pool it came from, if any. |
 | `resolution` (nullable) | Dependency resolution used. |
 | `parent` / `root` (self-FKs) | Task chains — `parent` is the immediate creator, `root` the top. |
 | `args` / `dependencies` (JSON) | Inputs and the resolved dependency tree. |
@@ -136,7 +120,7 @@ task run, tracking it from assignment to completion. The fields that matter most
 unfolding).
 
 **`TaskInstruct`** is a command directed *at* a running task by a `caller`
-(`ASSIGN`, `CANCEL`, `STEP`, `RESUME`, `PAUSE`, `INTERRUPT`, `COLLECT`).
+(`ASSIGN`, `CANCEL`, `RESUME`, `PAUSE`, `INTERRUPT`, `COLLECT`).
 
 **`AgentEvent`** is the agent-lifecycle analogue (`CONNECT`/`DISCONNECT`), separate from task
 events.
@@ -144,7 +128,7 @@ events.
 **`Lock`** (in `agent.py`) is a per-agent mutual-exclusion key, optionally `hold_by` an
 `Task`.
 
-## 6. State layer
+## 5. State layer
 
 Agents can expose structured, evolving state:
 
@@ -158,7 +142,7 @@ Agents can expose structured, evolving state:
 
 State changes fan out over `patches_state_{id}` / `patches_agent_{id}`; see [realtime.md](realtime.md).
 
-## 7. Catalogue metadata & extras
+## 6. Catalogue metadata & extras
 
 Supporting models round out the catalogue: `Collection` / `Protocol` (groupings and behaviour
 contracts on Actions), `Structure` / `Interface` / `Descriptor` / `StructurePackage` (the type

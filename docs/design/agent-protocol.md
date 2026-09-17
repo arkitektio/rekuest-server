@@ -235,15 +235,19 @@ on purpose: a message pushed while the agent is briefly offline persists in Redi
 reconnect, whereas a `group_send` to an empty group would be dropped.
 
 - **Producer:** `AgentConsumer.broadcast(agent_id, message)` (called from backend/signal code)
-  pushes the serialized message with `lpush` onto `{agent_id}_my_queue`, reusing a pooled sync Redis
-  connection.
+  pushes the serialized message with `lpush` onto `{prefix}:agent:{agent_id}:queue`, reusing a pooled sync Redis
+  connection. Every key this service writes is built by `facade/redis_keys.py` under
+  `redis.key_prefix` (default `rekuest`): Redis is shared infrastructure, and a bare `42_my_queue`
+  is one integer away from another deployment's agent 42 receiving this one's Assigns. Frames left
+  under the old un-namespaced keys by a previous release are adopted once per connection
+  (`_adopt_legacy_lists`), oldest first, so nothing already queued is stranded.
 - **Consumer:** `listen_for_tasks` calls `queue.pop`, which uses `blmove` to atomically move the
-  message into a per-agent processing list `{agent_id}_processing` (it stays there), then the
+  message into a per-agent processing list `{prefix}:agent:{agent_id}:processing` (it stays there), then the
   protocol **delivers first, then `ack`s** (`lrem` from the processing list).
 
 The send-then-ack ordering gives **at-least-once** semantics: a crash between `pop` and `ack` leaves
 the message in the processing list, and the next connection that wins the agent's lease **recovers
-it** — `queue.recover` moves everything still in `{agent_id}_processing` back to the head of the
+it** — `queue.recover` moves everything still in `{prefix}:agent:{agent_id}:processing` back to the head of the
 queue (oldest first) before it starts popping. The queue is an abstract port (`AgentQueue`) with a
 `RedisAgentQueue` for real deployments and an `InMemoryAgentQueue` for unit tests.
 
@@ -305,7 +309,7 @@ inquiries (`AssignInquiry`). (The caller-bound `…Event` mirrors and the `Assig
 | `YieldEvent` | `on_agent_yield` | `TaskEvent(YIELD, returns)` + higher-order unfold |
 | `DoneEvent` | `on_agent_done` | terminal: `is_done`, `finished_at` |
 | `CancelledEvent` | `on_agent_cancelled` | terminal — confirms a `Cancel` (→ `CANCELLED`) |
-| `InterruptedEvent` | `on_agent_interrupted` | terminal — confirms an `Interrupt` (→ `INTERUPTED`) |
+| `InterruptedEvent` | `on_agent_interrupted` | terminal — confirms an `Interrupt` (→ `INTERRUPTED`) |
 | `PausedEvent` | `on_agent_paused` | non-terminal — confirms a `Pause` (→ `PAUSED`) |
 | `ResumedEvent` | `on_agent_resumed` | non-terminal — confirms a `Resume` (→ `RESUMED`) |
 | `ErrorEvent` / `CriticalEvent` | `on_agent_error` / `on_agent_critical` | terminal with message |

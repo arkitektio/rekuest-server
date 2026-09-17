@@ -1,4 +1,4 @@
-# Task Lifecycle: assign / reserve / events
+# Task Lifecycle: assign / events
 
 An **Task** is the record of one task execution. This document traces its life: how `assign`
 resolves an implementation and agent, how the work reaches the agent, how the agent's events are
@@ -28,15 +28,15 @@ sequenceDiagram
     BE->>DB: create Task (caller, agent, args, deps,<br/>latest_event_kind = QUEUED)
     BE->>Q: AgentConsumer.broadcast(agent.pk, Assign{...})
     Q->>AG: deliver Assign
-    AG-->>PB: ProgressEvent / YieldEvent / DoneEvent / ErrorEvent
+    AG-->>PB: Progress / Yield / Completed / Failed
     PB->>DB: create TaskEvent + update latest_event_kind / is_done
-    DB-->>CH: post_save signal → ass_caller_{caller_id}
+    DB-->>CH: post_save (on_commit) → root_tasks_caller_{caller_id}
     CH-->>C: subscription yields TaskChangeEvent
 ```
 
 ## Step 1 — identify the caller
 
-Every `assign`/`reserve` begins with `get_caller_for_context(info)`, which `get_or_create`s the
+Every `assign` begins with `get_caller_for_context(info)`, which `get_or_create`s the
 `Caller` for the request's `(client, user, organization)` (see [identity.md](identity.md)). That
 caller is stamped on the Task and is the key the caller later subscribes on.
 
@@ -103,26 +103,36 @@ hooks on the input are recursively assigned as child tasks.
 The agent streams events back over its socket; `ModelPersistBackend` handles each
 (`facade/persist_backend.py`):
 
-| Agent event | Persisted as | Side effects |
+| Agent message | Persisted as | Side effects |
 | --- | --- | --- |
-| `ProgressEvent` | `TaskEvent(PROGRESS, progress, message)` | — |
-| `LogEvent` | `TaskEvent(LOG, message)` | — |
-| `YieldEvent` | `TaskEvent(YIELD, returns)` | unfold to higher-order wrapper |
-| `DoneEvent` | `TaskEvent(DONE)` | set `is_done`, `finished_at`, `latest_event_kind` |
-| `CancelledEvent` | `TaskEvent(CANCELLED)` | terminal (set `is_done` …) |
-| `ErrorEvent` | `TaskEvent(ERROR, message)` | terminal |
-| `CriticalEvent` | `TaskEvent(CRITICAL, message)` | terminal |
+| `Started` | `TaskEvent(STARTED)` | moves `latest_event_kind` off `QUEUED` |
+| `Progress` | `TaskEvent(PROGRESS, progress, message)` | re-arms the progress lease (physical work) |
+| `Log` | `TaskEvent(LOG, message, level)` | — |
+| `Yield` | `TaskEvent(YIELD, returns)` | unfold to higher-order wrapper |
+| `Paused` / `Resumed` | `TaskEvent(PAUSED/RESUMED)` | confirms a pause/resume instruct |
+| `Completed` | `TaskEvent(COMPLETED)` | terminal (`is_done`, `finished_at`) + unfold |
+| `Cancelled` | `TaskEvent(CANCELLED)` | terminal + unfold |
+| `Interrupted` | `TaskEvent(INTERRUPTED)` | terminal + unfold |
+| `Failed` | `TaskEvent(FAILED, message)` | terminal + unfold |
+| `Critical` | `TaskEvent(CRITICAL, message)` | terminal + unfold |
 
-Terminal events set `is_done = True` and stamp `finished_at`. `YIELD`/`DONE`/error events also call
-`_unfold_to_higher_order` so a wrapper task sees a mapped event when its child finishes (see
+Terminal events set `is_done = True` and stamp `finished_at`. Every terminal — and `YIELD` — also
+calls `_unfold_to_higher_order`, so a wrapper task sees a mapped event when its child finishes (see
 [higher-order.md](higher-order.md)).
+
+Note what is **not** in the middle column: `Progress`, `Log` and `Yield` write a `TaskEvent` but
+never move `Task.latest_event_kind`. A healthy, actively reporting task therefore still reads
+`QUEUED` — which is why "has an agent picked this up?" is answered by `Task.picked_up_at`, stamped
+on the first report of any kind, and not by the denormalized kind.
 
 ## Step 6 — fan back to the caller
 
 Creating an `TaskEvent` (and the Task itself) fires Django `post_save` signals that
-broadcast to the caller's realtime channel `ass_caller_{caller_id}`. The caller's `tasks` /
-`taskEvents` subscription is listening there and re-yields the change. The full channel/
-signal/subscription mechanism is [realtime.md](realtime.md).
+broadcast to the caller's realtime topics. Root-task changes go to
+`root_tasks_caller_{caller_id}` (and `root_tasks_org_{org_id}`), which is what the `myTasks` /
+`tasks` subscriptions listen on; every caller event, root or child, is also mirrored to
+`task_caller_{caller_id}`, which an agent socket consumes to receive results for work it
+originated. The full channel/signal/subscription mechanism is [realtime.md](realtime.md).
 
 ## The event state machine
 
@@ -132,40 +142,49 @@ transition; `Task.latest_event_kind` denormalizes the current one for fast reads
 ```mermaid
 stateDiagram-v2
     [*] --> QUEUED
-    QUEUED --> BOUND
-    BOUND --> ASSIGN
-    ASSIGN --> PROGRESS
+    QUEUED --> STARTED
+    QUEUED --> PROGRESS: the agent may report progress without a Started
+    STARTED --> PROGRESS
     PROGRESS --> PROGRESS
+    STARTED --> YIELD
     PROGRESS --> YIELD
-    ASSIGN --> YIELD
     YIELD --> YIELD: generator (many yields)
-    YIELD --> DONE
-    PROGRESS --> DONE
+    YIELD --> COMPLETED
+    PROGRESS --> COMPLETED
+    STARTED --> COMPLETED
 
-    ASSIGN --> DELEGATE: higher-order / hand-off
-    DELEGATE --> DONE
+    STARTED --> PAUSING: pause instruct
+    PAUSING --> PAUSED
+    PAUSED --> RESUMING: resume instruct
+    RESUMING --> RESUMED
+    RESUMED --> PROGRESS
 
-    ASSIGN --> CANCELING
-    CANCELING --> CANCELLED
-    ASSIGN --> INTERUPTING
-    INTERUPTING --> INTERUPTED
+    STARTED --> CANCELLING: cancel instruct
+    CANCELLING --> CANCELLED
+    STARTED --> INTERRUPTING: interrupt instruct
+    INTERRUPTING --> INTERRUPTED
 
-    ASSIGN --> ERROR
-    ASSIGN --> CRITICAL
-    ASSIGN --> DISCONNECTED
+    STARTED --> FAILED
+    STARTED --> CRITICAL
+    STARTED --> DISCONNECTED
+    QUEUED --> CRITICAL: never picked up / expired
+    DISCONNECTED --> STARTED: the agent came back and reported
+    DISCONNECTED --> CRITICAL: expired
 
-    DONE --> [*]
+    COMPLETED --> [*]
     CANCELLED --> [*]
-    INTERUPTED --> [*]
-    ERROR --> [*]
+    INTERRUPTED --> [*]
+    FAILED --> [*]
     CRITICAL --> [*]
-    DISCONNECTED --> [*]
 ```
 
-- `QUEUED` → `BOUND` → `ASSIGN` is the path to a running task; `LOG` and `PROGRESS` are non-terminal
-  annotations along the way.
+- `QUEUED` → `STARTED` is the path to a running task; `LOG` and `PROGRESS` are non-terminal
+  annotations along the way and do not move `latest_event_kind` (see the note above).
 - `YIELD` carries returns — a `FUNCTION` yields once, a `GENERATOR` many times.
-- Terminal kinds: `DONE`, `CANCELLED`, `INTERUPTED`, `ERROR`, `CRITICAL`.
+- Terminal kinds: `COMPLETED`, `CANCELLED`, `INTERRUPTED`, `FAILED`, `CRITICAL`.
+- `BOUND`, `DELEGATE` and `UNASSIGN` exist in `TaskEventKind` but no server code writes them; they
+  are retained for historical rows and protocol symmetry, and `DELEGATE`/`BOUND` are still *read* by
+  the caller-event mirrors. Do not expect them in a new task's history.
 - `DISCONNECTED` (the agent dropped mid-task; "fate unknown") is **not** terminal by itself: the
   task stays open (`is_done=False`) so a returning agent can still report the real outcome — any
   report reclaims it to `STARTED`, a terminal report finalizes it. If nothing is heard within
@@ -174,19 +193,14 @@ stateDiagram-v2
 
 ## Instructing a running task
 
-A caller steers in-flight work with **instructs** (`TaskInstructKind`): `CANCEL`, `PAUSE`,
-`RESUME`, `STEP`, `INTERRUPT`, `COLLECT`. Each backend method (`cancel`, `interrupt`, `step`,
-`resume`, …) sets `Task.latest_instruct_kind` and broadcasts the corresponding
-`messages.*` to the agent — and, importantly, **forwards to children** (e.g. `cancel`/`interrupt`
-propagate to the lower task a higher-order wrapper delegated to, possibly on another agent).
+A caller steers in-flight work with **instructs** (`TaskInstructKind`): `ASSIGN`, `CANCEL`, `PAUSE`,
+`RESUME`, `INTERRUPT`, `COLLECT`. Each backend method (`cancel`, `interrupt`, `pause`, `resume`)
+sets `Task.latest_instruct_kind` and broadcasts the corresponding `messages.*` to the agent.
 
-## Reservations — standing pools
-
-`reserve` (`backend.py`) `update_or_create`s a `Reservation` for a `(reference, caller)`,
-associates an `action` and its set of `implementations`, and stores a `strategy`
-(default `ROUND_ROBIN`). A reservation is a durable channel: later `assign`s targeting it route to
-one of the pooled implementations by strategy, instead of re-resolving each time. Reservations are
-optional — direct `assign` to an action/implementation works without one.
+Only `interrupt` **forwards to descendants** (`propagate_children=True`) — reaching the lower task a
+higher-order wrapper delegated to, possibly on another agent. `cancel` targets the mother alone and
+relies on the actor to wind its own children down. Stepping is carried on `resume(step=True)` and on
+the `step` flag of an assign; there is no `STEP` instruct kind and no `step` mutation.
 
 ## Disconnect handling
 

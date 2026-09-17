@@ -143,6 +143,7 @@ library). At least one issuer is required.
 | Key | Env var | Type | Default | Description |
 |---|---|---|---|---|
 | `issuers` | — (use YAML) | list[issuer] | **required** | Trusted token issuers whose keys verify incoming tokens (see issuer kinds below). |
+| `audience` | `AUTHENTIKATE__AUDIENCE` | str | **required** | This service's identifier, checked against an incoming token's `aud` claim. Required so the choice is always deliberate. `"*"` accepts a token minted for any service — the token must still carry an `aud`, so the wildcard widens the check rather than removing it. A token whose own `aud` is `"*"` gains nothing by it: a service configured with a literal audience still rejects that token. |
 | `authorization_headers` | `AUTHENTIKATE__AUTHORIZATION_HEADERS` | list[str] | `["Authorization", "X-Authorization", "AUTHORIZATION", "authorization"]` | Request headers searched (in order) for a Bearer token. |
 | `provenance_header` | `AUTHENTIKATE__PROVENANCE_HEADER` | list[str] | rekuest/provenance task header names | Request headers searched for an inbound provenance token. |
 | `static_tokens` | — (use YAML) | map | `{}` | Pre-defined tokens that bypass signature verification. **Tests only.** |
@@ -157,6 +158,7 @@ Each entry in `issuers` is discriminated by its `kind`:
 
 ```yaml
 authentikate:
+  audience: "*"
   issuers:
     - kind: rsa
       iss: lok
@@ -165,10 +167,11 @@ authentikate:
   static_tokens: {}
 ```
 
-### `rekuest` — assignment grace + capability tuning
+### `rekuest` — deadlines, retention and probe limits
 
-Tuning for how lost/disconnected agent work is reclaimed or failed, and the capability
-scopes that gate agent modes. All optional with sensible defaults.
+Every window the server enforces over agent work: how long a lost agent's tasks are held
+before being failed, how long a task may go unreported, how long finished work is kept, and
+the probe limits. All optional with sensible defaults.
 
 | Key | Env var | Type | Default | Description |
 |---|---|---|---|---|
@@ -177,10 +180,14 @@ scopes that gate agent modes. All optional with sensible defaults.
 | `progress_lease` | `REKUEST__PROGRESS_LEASE` | int | `0` | Progress lease (seconds); `0` disables the wedged-task lease. |
 | `hook_signature_mode` | `REKUEST__HOOK_SIGNATURE_MODE` | str | `compat` | HookAgent HTTP signatures. `compat` accepts the timestamped `X-Rekuest-Signature-V1` **or** the legacy body-only `X-Rekuest-Signature`, and sends both. `strict` accepts and sends V1 only — the legacy signature is replayable, so move to `strict` once your HookAgents are updated. |
 | `hook_max_skew` | `REKUEST__HOOK_MAX_SKEW` | int | `300` | Maximum age/clock skew (seconds) for a V1-signed HookAgent request. Also the replay guard's memory: a digest is remembered for twice this. |
+| `task_retention` | `REKUEST__TASK_RETENTION` | int | `0` | Seconds to keep terminal root task trees before the retention sweep deletes them; `0` disables. Deleting past runs also removes them from replay discovery (`reusableTaskFor`), so it is an explicit opt-in. Suggested production value: `2592000` (30 days). |
+| `probe_ttl` | `REKUEST__PROBE_TTL` | int | `3600` | Lifetime (seconds) of a probe's redis state while it is live. |
+| `probe_linger` | `REKUEST__PROBE_LINGER` | int | `300` | How long (seconds) a finished probe's state lingers so a late subscriber can still read its outcome. |
+| `probe_max_inflight` | `REKUEST__PROBE_MAX_INFLIGHT` | int | `32` | Maximum concurrent probes per caller. Exceeding it refuses the probe rather than queueing it — probes are hover-grade work. |
 | `sweep_interval` | `REKUEST__SWEEP_INTERVAL` | int | `5` | How often (seconds) the in-process reaper sweeps the DB-held deadlines below. Bounds how late any of them can fire. |
 | `pickup_deadline` | `REKUEST__PICKUP_DEADLINE` | int | `60` | Seconds a dispatched task may go without **any** report from its live agent (or webhook endpoint) before the Assign is redelivered once, then failed `CRITICAL`; `0` disables. Physical-effect work is never redelivered. |
 | `disconnected_expiry` | `REKUEST__DISCONNECTED_EXPIRY` | int | `3600` | Seconds a `DISCONNECTED` (fate unknown) task — or an undelivered task of an agent that is gone — stays recoverable before it is finalized `CRITICAL`; `0` = never. |
-| `control_deadline` | `REKUEST__CONTROL_DEADLINE` | int | `0` | Seconds an unconfirmed cancel waits before escalating to an interrupt, and an unconfirmed interrupt before it is finalized; `0` disables. A socket `CancelRequest.auto_interrupt` takes precedence. |
+| `control_deadline` | `REKUEST__CONTROL_DEADLINE` | int | `60` | Seconds an unconfirmed cancel waits before escalating to an interrupt, and an unconfirmed interrupt before it is finalized; `0` disables. On by default: a Cancel/Interrupt frame lost in transit is otherwise never noticed, and nothing redelivers it the way the pickup deadline redelivers an Assign. A socket `CancelRequest.auto_interrupt` takes precedence. |
 
 None of these is a timer. Each deadline starts at a database column and is enforced by the
 reaper loop inside every backend process (`facade/reaper.py`) — there is no management command,
@@ -262,6 +269,8 @@ redis:
   host: redis
   port: 6379
 authentikate:
+  # No default — omitting `audience` fails validation at startup.
+  audience: "*"
   issuers:
     - kind: rsa
       iss: lok

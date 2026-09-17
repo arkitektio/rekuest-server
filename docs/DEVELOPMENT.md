@@ -78,7 +78,7 @@ rekuest-server-next/
 │   ├── types/              # GraphQL types (package)
 │   ├── inputs.py           # GraphQL input types
 │   ├── filters/            # Query filters + org/auth scoping
-│   ├── backend.py          # Assign/reserve orchestration (RedisControllBackend)
+│   ├── backend.py          # Assign + lifecycle-control orchestration (RedisControllBackend)
 │   ├── persist_backend.py  # Agent-event persistence (ModelPersistBackend)
 │   ├── descriptors.py      # requires/provides → JSONPath compiler
 │   ├── managers.py         # Relational port-matching engine
@@ -125,7 +125,7 @@ Core models in the `facade/models/` package:
 - **Action**: Abstract, versioned task/function contracts.
 - **Implementation**: Concrete realizations of actions by agents.
 - **State / Patch / Snapshot**: Agent state, its incremental history, and checkpoints.
-- **Reservation / Task**: Task routing and the execution log.
+- **Task / TaskEvent**: the unit of work and its append-only execution log.
 
 ### Authentication
 

@@ -33,8 +33,8 @@ for detail. In brief:
 ### Identity — Caller and Agent
 Every authenticated request carries a `(client, user, organization)` triple.
 
-- **Caller** — that triple acting as a **requestor** (who asks for work). Owns tasks and
-  reservations; keys the realtime channel `ass_caller_{id}`. A frontend has a Caller and no Agent.
+- **Caller** — that triple acting as a **requestor** (who asks for work). Owns tasks; keys the
+  realtime topics `root_tasks_caller_{id}` and `task_caller_{id}`. A frontend has a Caller and no Agent.
 - **Agent** — that triple plus an `app`/`release`/`device`, acting as a **provider** (who executes
   work). Connects over the WebSocket and runs implementations.
 
@@ -44,8 +44,7 @@ Every authenticated request carries a `(client, user, organization)` triple.
 - **Implementation** — binds an Action to an Agent via an `interface`. Carries bound `params`,
   dependencies, and optional higher-order wrapping.
 
-### Reservations and Tasks
-- **Reservation** — a standing pool of implementations for an action, routed by a strategy.
+### Tasks
 - **Task** — one task execution: the central log, stamped with the caller, routed to an
   agent, accumulating `TaskEvent`s. See
   [`design/task-lifecycle.md`](design/task-lifecycle.md).
@@ -119,14 +118,9 @@ mutation EnsureAgent($input: AgentInput!) {
 }
 
 # Assign a task. Provide exactly one routing target: action, implementation,
-# reservation, actionHash, or a dependency (+ method/parent). Plus args, hooks, etc.
+# actionHash, agent + interface, or a dependency (+ method/parent). Plus args, hooks, etc.
 mutation Assign($input: AssignInput!) {
   assign(input: $input) { id reference latestEventKind }
-}
-
-# Reserve a pool of implementations for an action
-mutation Reserve($input: ReserveInput!) {
-  reserve(input: $input) { id }
 }
 
 # Steer a running task
@@ -161,8 +155,9 @@ subscription WatchState($stateId: ID!) {
 }
 ```
 
-Other streams: `task_events`, `child_tasks`, `reservations`, `implementations` /
-`implementation_change`, `state_update_events`, `latest_patches`, `watch_agent`, `new_actions`.
+Other streams (SDL names): `newActions`, `mytasks`, `tasks`, `agents`, `childTasks`, `agentTasks`,
+`implementations` / `implementationChange`, `stateUpdateEvents`, `latestPatches`, `watchAgent`,
+`watchState`, `probeEvents`.
 
 ## Authentication
 

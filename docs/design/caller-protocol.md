@@ -94,7 +94,7 @@ The op **resolves only on the agent's confirmation** — a request alone is not 
 | You send | Forwarded to the agent as | Confirmed by | Resolves to | Terminal? |
 | --- | --- | --- | --- | --- |
 | `CancelRequest{ task, auto_interrupt? }` | `Cancel` (mother only) | `CancelledEvent` | `CANCELLED` | yes |
-| `InterruptRequest{ task }` | `Interrupt` (**all children**) | `InterruptedEvent` | `INTERUPTED` | yes |
+| `InterruptRequest{ task }` | `Interrupt` (**all children**) | `InterruptedEvent` | `INTERRUPTED` | yes |
 | `PauseRequest{ task }` | `Pause` | `PausedEvent` | `PAUSED` | no (suspended) |
 | `ResumeRequest{ task, step? }` | `Resume` | `ResumedEvent` | `RESUMED` | no (running) |
 
@@ -115,7 +115,7 @@ two-phase: a silent agent is not force-killed by either.
 
 **`auto_interrupt`** (on `CancelRequest`, seconds, default `None`): if the cancel is not confirmed
 within the window, the backend auto-escalates to an interrupt on the same task. `None`
-disables escalation — the cancel then stays pending (`CANCELING`) until the agent confirms or you
+disables escalation — the cancel then stays pending (`CANCELLING`) until the agent confirms or you
 escalate manually by sending a `InterruptRequest`.
 
 **`step`** (on `ResumeRequest`): `step=true` resumes only to the next breakpoint (the equivalent of
@@ -139,7 +139,7 @@ Every mirror carries (`ExecutionEvent` base):
 - `event` — the originating `TaskEvent` id (a stable dedup handle).
 - `seq` — its monotonic PK (an ordering / gap-detection key).
 
-**Delivery is best-effort.** Mirrors are fanned out over the `ass_caller_{caller_id}` channel-layer
+**Delivery is best-effort.** Mirrors are fanned out over the `task_caller_{caller_id}` channel-layer
 group (see [realtime.md](realtime.md)). On a brief disconnect, events emitted while you were away are
 **missed** — the durable source of truth is the persisted `TaskEvent` log, which you can read
 back via GraphQL. Use `seq` to detect gaps.
@@ -231,7 +231,7 @@ Set it to `strict` once your HookAgents sign V1.
 
 - [agent-protocol.md](agent-protocol.md) — registration, liveness and execution on the same socket.
 - [task-lifecycle.md](task-lifecycle.md) — the Task event state machine.
-- [realtime.md](realtime.md) — the `ass_caller_{id}` fan-out the mirrors ride on.
+- [realtime.md](realtime.md) — the `task_caller_{id}` fan-out the mirrors ride on.
 - [identity.md](identity.md) — the Caller identity and ownership.
 
 ## Probes over the socket

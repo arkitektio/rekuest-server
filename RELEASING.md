@@ -16,7 +16,7 @@ release branch runs `.github/workflows/release.yaml`, which:
 | Commit prefix | Bump | Example |
 | --- | --- | --- |
 | `fix:` | patch | `fix: handle empty agent queue` |
-| `feat:` | minor | `feat: add reservation hooks` |
+| `feat:` | minor | `feat: add a pickup deadline for undelivered tasks` |
 | `feat!:` / `BREAKING CHANGE:` footer | **major** | `feat!: new agent protocol` |
 
 Commits that aren't releasable (`chore:`, `docs:`, `refactor:` …) don't trigger

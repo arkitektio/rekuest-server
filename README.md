@@ -34,9 +34,11 @@ diagram shows the high-level design of Rekuest:
 
 ## Developmental Notices
 
-Rekuest is currently being rewritten to support other message brokers, such as [Kafka](https://kafka.apache.org/). This will
-however remain an opt-in feature, and RabbitMQ will remain the default message broker. To learn more about this design decision,
-please refer to the [Why Not?](https://arkitekt.live/docs/design/why-not) section.
+Transport is Redis: agent commands travel through a per-agent Redis list (chosen over the Channels
+layer so a message pushed while an agent is briefly offline survives its reconnect), and GraphQL
+subscriptions fan out through `channels_redis`. There is no RabbitMQ and no Kafka. To learn more
+about this design decision, please refer to the
+[Why Not?](https://arkitekt.live/docs/design/why-not) section.
 
 You can find the current developmental action of Rekuest [here](https://github.com/arkitektio/rekuest-server-next)
 Efforts from this new repository will be merged into this repository once the new version is ready for production.

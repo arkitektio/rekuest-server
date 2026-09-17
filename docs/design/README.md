@@ -93,7 +93,7 @@ Start at the top and follow the flow of a request:
    choices it carries, how defaults and assignment values are checked, and which widgets fit.
 4. **[action-matching.md](action-matching.md)** — how an Action's `provides`/`requires`
    descriptors compile to JSONPath and how the relational port engine finds matching actions.
-4. **[task-lifecycle.md](task-lifecycle.md)** — `assign` / `reserve`, the
+4. **[task-lifecycle.md](task-lifecycle.md)** — `assign`, the
    Task event state machine, and how results flow back to the caller.
 5. **[agent-protocol.md](agent-protocol.md)** — the WebSocket wire protocol: register, authenticate,
    the liveness lease and its fencing token, task delivery, and connection takeover.
@@ -115,6 +115,6 @@ token. A **Caller** is that triple acting as a requestor; an **Agent** is that t
 app/release/device) acting as a provider. An **Action** is an abstract, versioned function
 contract; an **Implementation** binds an Action to an Agent. A caller's `assign` creates an
 **Task** (the execution log) stamped with the caller, routed to an agent; the agent streams
-**TaskEvents** back, which are persisted and fanned out to the caller's realtime channel
-`ass_caller_{id}`. **Reservations** are standing pools that pre-bind a set of implementations for
-repeated assignment. That is the whole system in miniature; the rest is detail.
+**TaskEvents** back, which are persisted and fanned out to the caller's realtime topics
+(`root_tasks_caller_{id}` for its own feed, `task_caller_{id}` for the agent-socket mirror). That is
+the whole system in miniature; the rest is detail.

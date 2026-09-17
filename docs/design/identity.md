@@ -64,10 +64,11 @@ def get_caller_for_context(info: Info) -> models.Caller:
 
 The Caller's roles:
 
-- **Owns requests.** It is stamped on `Task.caller` and `Reservation.caller` — the record of
+- **Owns requests.** It is stamped on `Task.caller` — the record of
   *who requested* the work, stored separately from *who executes* it.
-- **Keys the realtime channel.** Task events are broadcast to `ass_caller_{caller_id}`
-  (`facade/signals.py`); the caller subscribes there to watch its own work. See
+- **Keys the realtime topics.** Task events are broadcast to `task_caller_{caller_id}`, and root
+  task changes additionally to `root_tasks_caller_{caller_id}` (`facade/signals.py`); the caller
+  subscribes there to watch its own work. See
   [realtime.md](realtime.md).
 - **Exists without an Agent.** A pure frontend that only assigns and watches has a `Caller` and no
   `Agent` at all. This is the normal case, not an edge case.
@@ -125,7 +126,7 @@ tempting. It is wrong, for concrete reasons:
   `device` and "I am a provider" — conflating *requestor* with *executor*.
 - **Requestor ≠ executor on a single record.** `Task.caller` (who asked) and
   `Task.agent` (who runs) are deliberately different FKs. User A can assign to user B's
-  agent. A merged model would have to denormalize the triple onto every task/reservation and
+  agent. A merged model would have to denormalize the triple onto every task and
   lose the single, deduplicated identity object.
 - **They evolve independently.** Provider cardinality might later become 1-per-device (same user,
   two machines); requestor identity stays 1-per-triple. Two models keep that future open.
@@ -142,8 +143,10 @@ and agent-owner, via a 1:1 `Agent.registry` FK). It was split:
 
 - `Registry` was renamed to **`Caller`** to name its real role (the requestor).
 - `Agent` gained its **own** `client` FK and **dropped** `registry`, so it stands alone.
-- The requestor FK on `Task` / `Reservation` / `TaskInstruct` was renamed
-  `registry` → **`caller`**, and the realtime channel `ass_registry_{id}` → **`ass_caller_{id}`**.
+- The requestor FK on `Task` / `TaskInstruct` was renamed
+  `registry` → **`caller`**. The realtime topic was renamed with it, and has since been split into
+  `task_caller_{id}` (every event of work this identity originated) and `root_tasks_caller_{id}`
+  (the root-task change feed).
 
 If you encounter `registry` in old branches, migrations, or external schema snapshots, read it as
 "the Caller / the agent's own identity" depending on context.
