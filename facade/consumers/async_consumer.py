@@ -58,8 +58,6 @@ class AgentConsumer(AsyncWebsocketConsumer):
     manages the connection lifecycle.
     """
 
-    groups = ["broadcast"]
-
     @classmethod
     def broadcast(cls, agent: "models.Agent | int | str", message: messages.ToAgentMessage, *, priority: bool = False) -> bool:
         """Send a message to a specific agent over its transport (thin facade).

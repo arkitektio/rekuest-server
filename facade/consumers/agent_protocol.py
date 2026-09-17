@@ -157,6 +157,12 @@ class RegisteredSession:
         self.heartbeat_interval = heartbeat_interval
         self.heartbeat_timeout = heartbeat_timeout
         self.refresh_groups = refresh_groups
+        # The queue key for this agent, derived ONCE. ``agent.pk`` is an int, and the queue is
+        # addressed by string: passing the raw pk to some queue methods and ``str(pk)`` to others
+        # works only as long as the backing store stringifies for you. Redis does; an in-memory
+        # queue keyed by the value it was handed does not, and would silently park a frame under
+        # ``1`` that ``recover`` then looks for under ``"1"``.
+        self.agent_key = str(agent.pk)
 
         self.heartbeat_future: Optional[asyncio.Future] = None
         self.listen_task: Optional[asyncio.Task] = None
@@ -236,7 +242,7 @@ class RegisteredSession:
         except Exception:
             logger.error("Error cancelling the executor listen loop", exc_info=True)
 
-    async def heartbeat(self, agent_id: str) -> None:
+    async def heartbeat(self) -> None:
         """Periodically ping the agent and close if it stops answering."""
         last_group_refresh = asyncio.get_running_loop().time()
         try:
@@ -252,14 +258,14 @@ class RegisteredSession:
                     try:
                         await self.refresh_groups()
                     except Exception:
-                        logger.error("Agent %s: refreshing channel-layer groups failed", agent_id, exc_info=True)
+                        logger.error("Agent %s: refreshing channel-layer groups failed", self.agent.pk, exc_info=True)
                 # Arm the future before sending so an answer always has a target.
                 self.heartbeat_future = asyncio.Future()
                 await self.send_to_agent_message(messages.Heartbeat())
                 try:
                     await asyncio.wait_for(self.heartbeat_future, self.heartbeat_timeout)
                 except asyncio.TimeoutError:
-                    logger.error(f"Timeout on client {agent_id} for heartbeat")
+                    logger.error(f"Timeout on client {self.agent.pk} for heartbeat")
                     # Same reasoning as the fenced-lease path: an agent that stopped answering
                     # must stop being handed work immediately, not whenever the close is
                     # acknowledged. (Pre-existing: this path closed without stopping the drain.)
@@ -290,7 +296,7 @@ class RegisteredSession:
             return False
         return not await self.backend.is_task_open(str(task_id))
 
-    async def listen_for_tasks(self, agent_id: str) -> None:
+    async def listen_for_tasks(self) -> None:
         """Relay queued messages (e.g. from ``broadcast``) to the agent — and never die quietly.
 
         This loop is the ONLY way work reaches the agent, while liveness is decided by the
@@ -311,35 +317,35 @@ class RegisteredSession:
                     if not recovered:
                         # We hold the lease and the previous holder was told to stop draining,
                         # so anything still in-flight was popped but (possibly) never delivered.
-                        count = await self.queue.recover(str(agent_id))
+                        count = await self.queue.recover(self.agent_key)
                         if count:
-                            logger.warning("Recovered %s undelivered message(s) for agent %s", count, agent_id)
+                            logger.warning("Recovered %s undelivered message(s) for agent %s", count, self.agent.pk)
                         recovered = True
-                    task = await self.queue.pop(agent_id)
+                    task = await self.queue.pop(self.agent_key)
                     backoff = 0.5
                     if not task:
                         # Idle, so nothing of OURS is in flight: whatever sits in the in-flight
                         # area was stranded by someone else — a displaced holder that died between
                         # its pop and its requeue, or a cancel that landed mid-``BLMOVE``.
-                        await self.queue.recover(str(agent_id))
+                        await self.queue.recover(self.agent_key)
                         continue
                     if not await self.backend.holds_lease(self.agent.pk, self.lease_epoch):
                         # Fenced: a newer connection (possibly on another backend) owns this agent
                         # and this frame is meant for ITS socket. Hand it back untouched and stop —
                         # without waiting for the displacement hint (which the channel layer may
                         # drop) or for our next heartbeat to notice.
-                        logger.warning("Agent %s: lost the lease (epoch %s) — returning an undelivered frame and closing", agent_id, self.lease_epoch)
-                        await self.queue.requeue(str(agent_id), task)
+                        logger.warning("Agent %s: lost the lease (epoch %s) — returning an undelivered frame and closing", self.agent.pk, self.lease_epoch)
+                        await self.queue.requeue(self.agent_key, task)
                         await self.close(codes.AGENT_REPLACED_CODE)
                         return
                     if await self._is_stale_assign(task):
-                        logger.info("Dropping a queued Assign for an already finalized task (agent %s)", agent_id)
-                        await self.queue.ack(agent_id, task)
+                        logger.info("Dropping a queued Assign for an already finalized task (agent %s)", self.agent.pk)
+                        await self.queue.ack(self.agent_key, task)
                         continue
                 except asyncio.CancelledError:
                     raise
                 except Exception:
-                    logger.error("Agent %s: task queue failed; retrying in %.1fs", agent_id, backoff, exc_info=True)
+                    logger.error("Agent %s: task queue failed; retrying in %.1fs", self.agent.pk, backoff, exc_info=True)
                     try:
                         await self.queue.close()
                     except Exception:
@@ -356,18 +362,18 @@ class RegisteredSession:
                 except asyncio.CancelledError:
                     raise
                 except Exception:
-                    logger.error("Agent %s: could not write to the socket; closing so it reconnects", agent_id, exc_info=True)
+                    logger.error("Agent %s: could not write to the socket; closing so it reconnects", self.agent.pk, exc_info=True)
                     await self.close(codes.AGENT_TRANSPORT_FAILED_CODE)
                     return
 
                 try:
-                    await self.queue.ack(agent_id, task)
+                    await self.queue.ack(self.agent_key, task)
                 except asyncio.CancelledError:
                     raise
                 except Exception:
                     # Delivered but not acked: it is recovered and delivered once more, which
                     # at-least-once allows (the agent dedupes an Assign by task id).
-                    logger.error("Agent %s: could not ack a delivered message", agent_id, exc_info=True)
+                    logger.error("Agent %s: could not ack a delivered message", self.agent.pk, exc_info=True)
                     recovered = False
         except asyncio.CancelledError:
             return
@@ -567,9 +573,9 @@ class AgentProtocol:
             )
         )
 
-        self.session.listen_task = asyncio.create_task(self.session.listen_for_tasks(agent.pk))
+        self.session.listen_task = asyncio.create_task(self.session.listen_for_tasks())
         self.session.listen_task.add_done_callback(self.session._on_listen_task_done)
-        self.session.heartbeat_task = asyncio.create_task(self.session.heartbeat(agent.pk))
+        self.session.heartbeat_task = asyncio.create_task(self.session.heartbeat())
 
     async def _refresh_groups(self, agent_pk: str, caller_id: str) -> None:
         """Re-join this connection's groups (``group_add`` is idempotent and resets the expiry)."""

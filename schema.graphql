@@ -385,7 +385,7 @@ type Agent {
   """The client (app instance) this agent runs as."""
   client: Client!
 
-  """User associated with the agent."""
+  """The user this agent belongs to."""
   user: User!
 
   """The organization this agent belongs to."""

@@ -4,8 +4,11 @@ from rekuest_core.inputs.models import ActionDemandInputModel
 from facade import models, managers
 from kante.types import Info
 from dataclasses import dataclass
+import logging
 import uuid
 import jsonpatch
+
+logger = logging.getLogger(__name__)
 
 
 def auto_resolve(info: Info, implementation: models.Implementation, resolution: models.Resolution, visited_implementations: set[str] | None = None) -> None:
@@ -13,7 +16,7 @@ def auto_resolve(info: Info, implementation: models.Implementation, resolution: 
         visited_implementations = set()
 
     for dependency in implementation.dependencies.all():
-        print(f"Resolving, {dependency}")
+        logger.debug("Resolving dependency %s", dependency)
         agentsqs = models.Agent.objects.filter(organization=info.context.request.organization)
 
         matched_ids: dict[str, list[int]] = {}

@@ -612,6 +612,36 @@ class TestLoadersAreRequestScoped:
         assert loaders.agent_loader(self._info("ws")).cache is False
 
 
+class TestSingleObjectResolversAreOrgScoped:
+    """``get_queryset`` does not run for a resolver that returns one instance, so every
+    single-object root resolver has to scope itself. One had not: ``ack``."""
+
+    @pytest.mark.asyncio
+    async def test_ack_cannot_read_another_organizations_task(self, authenticated_context):
+        from types import SimpleNamespace
+
+        from facade.mutations import postman
+
+        stranger_task = await build_task("tenant-ack-stranger")
+        info = SimpleNamespace(context=authenticated_context)
+
+        with pytest.raises(PermissionError):
+            await sync_to_async(postman.ack)(info, postman.AckInput(task=str(stranger_task.pk)))
+
+    @pytest.mark.asyncio
+    async def test_ack_still_returns_my_own_task(self, agent_ws, authenticated_context):
+        from types import SimpleNamespace
+
+        from facade.mutations import postman
+
+        session = await open_agent(agent_ws, "tenant-ack-mine")
+        mine = await build_task("tenant-ack-mine-task", agent_pk=session.agent_pk)
+        info = SimpleNamespace(context=authenticated_context)
+
+        got = await sync_to_async(postman.ack)(info, postman.AckInput(task=str(mine.pk)))
+        assert got.pk == mine.pk
+
+
 class TestAgentMutationsAreOrgScoped:
     """``pin``/``update``/``delete`` resolved the agent by id alone, so any authenticated user
     could rename or delete another organization's production agent by naming its id."""

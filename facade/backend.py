@@ -19,6 +19,8 @@ import logging
 from rekuest_core.objects.models import ArgPortModel
 from rekuest_core.values import validate_assignment_args
 
+logger = logging.getLogger(__name__)
+
 
 def agent_available_q(prefix: str = "agent") -> Q:
     """Q matching an agent that can receive work: a live WEBSOCKET, OR any WEBHOOK HookAgent.
@@ -218,7 +220,7 @@ class RedisControllBackend:
         try:
             delivered = AgentConsumer.broadcast(agent, message)
         except Exception:
-            logging.error("Dispatching task %s to agent %s failed; the pickup watchdog will retry it", task.pk, agent.pk, exc_info=True)
+            logger.error("Dispatching task %s to agent %s failed; the pickup watchdog will retry it", task.pk, agent.pk, exc_info=True)
             delivered = False
         if delivered is False:
             models.Task.objects.filter(pk=task.pk, is_done=False).update(dispatched_at=None)
@@ -282,7 +284,7 @@ class RedisControllBackend:
             try:
                 AgentConsumer.broadcast(target.agent, to_agent_factory(str(target.pk)))
             except Exception:
-                logging.error("Could not deliver %s for task %s to agent %s", instruct_kind, target.pk, target.agent_id, exc_info=True)
+                logger.error("Could not deliver %s for task %s to agent %s", instruct_kind, target.pk, target.agent_id, exc_info=True)
 
         return task
 
@@ -353,8 +355,12 @@ class RedisControllBackend:
 
         action = None
         implementation = None
-        # The half-built Resolutions feature: rows are created by auto_resolve/create_resolution;
-        # linking one to a task was never wired — do so when the caller passes it.
+        # Resolutions are half-built, but not in the way this comment used to claim: a row IS
+        # created (auto_resolve/create_resolution), linked to the task below, and forwarded to the
+        # agent in the Assign. What no code does is *consult* it — ``build_dependency_dict``
+        # resolves dependencies from ``models.Dependency`` plus the caller's overwrites and never
+        # reads the task's ``ResolvedDependency`` rows, so a Resolution records an intent that
+        # never changes which agent runs the work.
         resolution = models.Resolution.objects.get(id=input.resolution) if input.resolution else None
         agent = None
         dependency_dict = None
@@ -716,7 +722,7 @@ class RedisControllBackend:
 
         for agent_id, drawers in agents.items():
             agent = models.Agent.objects.get(id=agent_id)
-            logging.info(f"collecting {drawers} from agent {agent_id}")
+            logger.info(f"collecting {drawers} from agent {agent_id}")
             AgentConsumer.broadcast(
                 agent,
                 message=messages.Collect(

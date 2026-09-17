@@ -762,7 +762,7 @@ class ModelPersistBackend:
         try:
             x = await models.Task.objects.aget(id=task_id, agent_id=agent_id)
         except (models.Task.DoesNotExist, ValueError, TypeError):
-            logging.warning(f"Agent {agent_id} reported on task {task_id}, which is not assigned to it. Dropping.")
+            logger.warning(f"Agent {agent_id} reported on task {task_id}, which is not assigned to it. Dropping.")
             return None
 
         if x.picked_up_at is None and not x.is_done:
@@ -827,7 +827,7 @@ class ModelPersistBackend:
         await self._on_nonterminal_confirm(agent_id, message.task, enums.TaskEventKind.STARTED)
 
     async def on_agent_log(self, agent_id: int, message: messages.Log) -> None:
-        logging.info(f"Log Task {message}")
+        logger.info(f"Log Task {message}")
 
         if await self._agent_task(agent_id, message.task) is None:
             return
@@ -839,7 +839,7 @@ class ModelPersistBackend:
         )
 
     async def on_agent_yield(self, agent_id: int, message: messages.Yield) -> None:
-        logging.info(f"Yield Task {message}")
+        logger.info(f"Yield Task {message}")
 
         if await self._agent_task(agent_id, message.task) is None:
             return
@@ -851,23 +851,23 @@ class ModelPersistBackend:
         await self._unfold_to_higher_order(message.task, enums.TaskEventKind.YIELD, returns=message.returns)
 
     async def on_agent_done(self, agent_id: int, message: messages.Completed) -> None:
-        logging.info(f"Completed Task {message}")
+        logger.info(f"Completed Task {message}")
         await self._finalize_from_agent(agent_id, message.task, enums.TaskEventKind.COMPLETED)
 
     async def on_agent_cancelled(self, agent_id: int, message: messages.Cancelled) -> None:
-        logging.info(f"Cancelled Task {message}")
+        logger.info(f"Cancelled Task {message}")
         await self._finalize_from_agent(agent_id, message.task, enums.TaskEventKind.CANCELLED)
 
     async def on_agent_error(self, agent_id: int, message: messages.Failed) -> None:
-        logging.info(f"Failed Task {message}")
+        logger.info(f"Failed Task {message}")
         await self._finalize_from_agent(agent_id, message.task, enums.TaskEventKind.FAILED, message=message.error)
 
     async def on_agent_critical(self, agent_id: int, message: messages.Critical) -> None:
-        logging.info(f"Critical Task {message}")
+        logger.info(f"Critical Task {message}")
         await self._finalize_from_agent(agent_id, message.task, enums.TaskEventKind.CRITICAL, message=message.error)
 
     async def on_agent_progress(self, agent_id: int, message: messages.Progress) -> None:
-        logging.info(f"Progress Task {message}")
+        logger.info(f"Progress Task {message}")
 
         if await self._agent_task(agent_id, message.task) is None:
             return
@@ -1078,7 +1078,7 @@ class ModelPersistBackend:
         return expired
 
     async def on_agent_state_patch(self, agent_id: int, message: messages.StatePatch) -> None:
-        logging.info(f"Log Patch for Task {message.state_name}")
+        logger.info(f"Log Patch for Task {message.state_name}")
 
         state = await models.State.objects.aget(agent_id=agent_id, interface=message.state_name)
         session, _ = await models.Session.objects.aget_or_create(agent_id=agent_id, session_id=message.session_id)
@@ -1096,7 +1096,7 @@ class ModelPersistBackend:
         )
 
     async def on_agent_state_snapshot(self, agent_id: int, message: messages.StateSnapshot) -> None:
-        logging.info(f"Log Snapshot for Task {agent_id}")
+        logger.info(f"Log Snapshot for Task {agent_id}")
 
         session, _ = await models.Session.objects.aget_or_create(agent_id=agent_id, session_id=message.session_id)
         agent = await models.Agent.objects.aget(id=agent_id)
@@ -1113,7 +1113,7 @@ class ModelPersistBackend:
             )
 
     async def on_agent_session_init(self, agent_id: int, message: messages.SessionInit) -> None:
-        logging.info(f"Session init {message.session_id} with data {message}")
+        logger.info(f"Session init {message.session_id} with data {message}")
         # For now we don't do anything with this, but it could be used to initialize session-specific data
 
         session, _ = await models.Session.objects.aget_or_create(agent_id=agent_id, session_id=message.session_id)
@@ -1136,7 +1136,7 @@ class ModelPersistBackend:
         # An unknown task is ignored (a stray lock must not tear down the transport, and
         # setting a dangling FK would raise IntegrityError → socket close).
         if not await models.Task.objects.filter(pk=message.task).aexists():
-            logging.warning(f"Lock {message.key} requested by unknown task {message.task} — ignored")
+            logger.warning(f"Lock {message.key} requested by unknown task {message.task} — ignored")
             return
         await models.Lock.objects.aupdate_or_create(
             agent_id=agent_id,

@@ -4,6 +4,7 @@ from facade.backend import controll_backend, get_caller_for_context
 from facade.caller_context import CallerContext
 import strawberry
 from facade import inputs, models, types
+from facade.types.base import scoped_get
 from kante.types import Info
 
 logger = logging.getLogger(__name__)
@@ -33,7 +34,15 @@ class AckInput:
 
 
 def ack(info: Info, input: AckInput) -> types.Task:
-    return models.Task.objects.get(id=input.task)
+    """Read a task back by id. Acknowledges nothing — it writes no row and sends no message.
+
+    Scoped like every other single-object root resolver: ``get_queryset`` does not run for a
+    resolver that returns one instance, so an unscoped ``objects.get(id=…)`` let any authenticated
+    user read any organization's task by naming its id. Scoped through ``agent`` for the same
+    reason ``types.Task.get_queryset`` is: ``implementation`` is nullable, so scoping through it
+    would drop not-yet-mapped tasks.
+    """
+    return scoped_get(models.Task, info, input.task, field="agent__organization")
 
 
 def cancel(info: Info, input: inputs.CancelInput) -> types.Task:

@@ -35,7 +35,6 @@ class Agent:
     user: "User" = strawberry_django.field(description="The user this agent belongs to.")
     organization: "Organization" = strawberry_django.field(description="The organization this agent belongs to.")
     hardware_records: list[HardwareRecord] = strawberry_django.field(description="Historical records of agent's hardware.")
-    user: User = strawberry_django.field(description="User associated with the agent.")
 
     @strawberry_django.field(description="Device associated with the agent, via its client (if any).")
     def device(self, info: Info) -> Device | None:

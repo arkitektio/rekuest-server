@@ -157,10 +157,6 @@ class Agent(models.Model):
         return f"{self.name}"
 
     @property
-    def queue(self):
-        return f"agent_{self.unique}"
-
-    @property
     def is_active(self):
         return liveness.agent_is_live(self.connected, self.last_seen)
 

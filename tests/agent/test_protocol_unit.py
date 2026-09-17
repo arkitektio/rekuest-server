@@ -719,3 +719,57 @@ class TestDrainLoopNeverDiesQuietly:
         assert await _wait_for(lambda: any('"42"' in s for s in sent))
         assert not any('"task":"41"' in s for s in sent)
         await protocol.shutdown()
+
+
+class RecordingKeyQueue(InMemoryAgentQueue):
+    """Records the agent key every queue method is called with."""
+
+    def __init__(self):
+        super().__init__()
+        self.keys: dict[str, set] = {}
+
+    def _note(self, method, agent_id):
+        self.keys.setdefault(method, set()).add(repr(agent_id))
+
+    def push(self, agent_id, message_json, *, priority=False):
+        self._note("push", agent_id)
+        return super().push(agent_id, message_json, priority=priority)
+
+    async def pop(self, agent_id):
+        self._note("pop", agent_id)
+        return await super().pop(agent_id)
+
+    async def ack(self, agent_id, message):
+        self._note("ack", agent_id)
+        return await super().ack(agent_id, message)
+
+    async def recover(self, agent_id):
+        self._note("recover", agent_id)
+        return await super().recover(agent_id)
+
+    async def requeue(self, agent_id, message):
+        self._note("requeue", agent_id)
+        return await super().requeue(agent_id, message)
+
+
+@pytest.mark.asyncio
+async def test_every_queue_method_gets_the_same_agent_key():
+    """One key type, or the in-flight area silently splits in two.
+
+    ``agent.pk`` is an int and the queue is addressed by string. Passing the raw pk to some
+    methods and ``str(pk)`` to others works only while the backing store stringifies for you:
+    redis does (its keys are built by ``redis_keys.key``), an in-memory queue keyed by the value
+    it was handed does not — it would park a frame under ``1`` that ``recover`` then hunts for
+    under ``"1"``, which is exactly how a recovered frame goes missing.
+    """
+    queue = RecordingKeyQueue()
+    protocol, sent, closed, agent = make_protocol(queue=queue)
+    await protocol.receive(_register_frame())
+
+    queue.push(protocol.session.agent_key, '{"hello": 1}')
+    assert await _wait_for(lambda: any('"hello"' in s for s in sent))
+    await protocol.shutdown()
+
+    used = {k for keys in queue.keys.values() for k in keys}
+    assert len(used) == 1, f"queue methods disagreed on the agent key: {queue.keys}"
+    assert used == {repr(str(agent.pk))}, f"the queue must be addressed by str(pk), got {used}"
