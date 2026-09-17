@@ -1,4 +1,4 @@
-"""Resolve the deadlines the reaper enforces (``REKUEST_GRACE``).
+"""Every deadline the server enforces, resolved from ``REKUEST_GRACE``.
 
 On a disconnect the failure/cascade is delayed by a grace window so a brief blip can
 reclaim same-session in-flight work before it fires. That window — like every other deadline

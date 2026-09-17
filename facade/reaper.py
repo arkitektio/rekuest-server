@@ -44,8 +44,9 @@ from channels.db import database_sync_to_async
 from django.conf import settings
 
 from facade import clock, redis_keys
-from facade.grace import sweep_interval_seconds
-from facade.persist_backend import persist_backend
+from facade.deadlines import sweep_interval_seconds
+from facade.persist_backend import persist_backend as _default_backend
+from facade.ports import ReconcileBackend
 from facade.retention import sweep_terminal_tasks
 
 logger = logging.getLogger(__name__)
@@ -70,9 +71,14 @@ def ensure_reaper_started() -> None:
     _reaper_task = asyncio.ensure_future(_reaper_loop())
 
 
-def _sweeps() -> "List[Tuple[str, Callable[[], Awaitable[int]]]]":
+def _sweeps(backend: "ReconcileBackend | None" = None) -> "List[Tuple[str, Callable[[], Awaitable[int]]]]":
     """The ordered sweep steps. Agents before tasks: healing a stuck-connected agent is what
-    makes its work visible to the task sweeps of the same tick."""
+    makes its work visible to the task sweeps of the same tick.
+
+    Typed against :class:`facade.ports.ReconcileBackend` rather than the concrete singleton, so
+    what the loop needs from the backend is stated rather than implied.
+    """
+    persist_backend = backend if backend is not None else _default_backend
     return [
         ("stale agents", persist_backend.reconcile_stale_agents),
         ("disconnected agents", persist_backend.reconcile_disconnected_agents),

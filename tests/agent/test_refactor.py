@@ -21,6 +21,28 @@ def test_persist_backend_satisfies_port():
     assert isinstance(persist_backend, PersistBackend)
 
 
+def test_persist_backend_satisfies_the_reconcile_port():
+    """The reaper's surface is a separate seam with separate callers.
+
+    `PersistBackend` is what a transport needs (react to what one agent just said);
+    `ReconcileBackend` is what the sweep loop needs (what has fallen past its deadline?). They were
+    one implicit surface, which is why `reaper.py` had to import the concrete singleton.
+    """
+    from facade.ports import ReconcileBackend
+
+    assert isinstance(persist_backend, ReconcileBackend)
+
+
+def test_the_reaper_only_needs_the_reconcile_port():
+    """Every step the loop binds must be named by the port, or the port is not the contract."""
+    from facade import reaper
+    from facade.ports import ReconcileBackend
+
+    declared = {m for m in dir(ReconcileBackend) if not m.startswith("_")}
+    bound = {fn.__name__ for _, fn in reaper._sweeps()}
+    assert bound <= declared, f"the reaper binds methods the port does not declare: {bound - declared}"
+
+
 def test_deliver_to_agent_routes_by_kind(monkeypatch):
     pushed, posted = [], []
     monkeypatch.setattr(transport.RedisAgentQueue, "from_settings", classmethod(lambda cls: type("Q", (), {"push": lambda self, a, b, priority=False: pushed.append((a, b))})()))

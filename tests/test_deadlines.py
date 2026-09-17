@@ -7,7 +7,7 @@ effect:physical override.
 
 from django.test import override_settings
 
-from facade.grace import grace_seconds
+from facade.deadlines import grace_seconds
 
 
 @override_settings(REKUEST_GRACE={"DEFAULT": 30, "PHYSICAL": 5})

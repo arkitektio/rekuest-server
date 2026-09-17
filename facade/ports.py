@@ -94,3 +94,28 @@ class PersistBackend(Protocol):
     # --- distributed locks (acquire / release) -------------------------------- #
     async def on_agent_lock(self, agent_id: int, message: messages.Lock) -> None: ...
     async def on_agent_unlock(self, agent_id: int, message: messages.Unlock) -> None: ...
+
+
+@runtime_checkable
+class ReconcileBackend(Protocol):
+    """The sweep surface :mod:`facade.reaper` drives — the *other* seam on the same backend.
+
+    Split from :class:`PersistBackend` because the two have different callers and different
+    contracts. A transport (websocket, HTTP intake) reacts to what one agent just said; these
+    answer "what has fallen past its deadline?" across the whole table, from any backend, and each
+    returns how many rows it acted on so the loop can log it.
+
+    Every one is idempotent and safe to run concurrently with itself in another process: candidates
+    are scanned with ``skip_locked`` and each transition is a row-locked claim with one winner. That
+    is what lets the reaper run in every replica with no leader election.
+    """
+
+    # Agents first: healing a stuck-connected agent is what makes its work visible to the task
+    # sweeps of the same tick.
+    async def reconcile_stale_agents(self) -> int: ...
+    async def reconcile_disconnected_agents(self) -> int: ...
+
+    async def reconcile_unpicked_tasks(self, limit: int = ...) -> int: ...
+    async def escalate_due_controls(self, limit: int = ...) -> int: ...
+    async def reconcile_silent_physical_ops(self, limit: int = ...) -> int: ...
+    async def expire_disconnected_tasks(self, limit: int = ...) -> int: ...

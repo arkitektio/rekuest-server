@@ -10,7 +10,7 @@ from django.utils import timezone
 from facade import enums, inputs, liveness, models, types, messages
 from facade.caller_context import CallerContext
 from facade.consumers.async_consumer import AgentConsumer
-from facade.grace import control_deadline_seconds
+from facade.deadlines import control_deadline_seconds
 from facade.higher_order import build_lower_args, build_lower_dependencies
 from facade.provenance import mint_token_for_task
 from facade.provenance.canonical import args_hash
