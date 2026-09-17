@@ -773,3 +773,75 @@ async def test_every_queue_method_gets_the_same_agent_key():
     used = {k for keys in queue.keys.values() for k in keys}
     assert len(used) == 1, f"queue methods disagreed on the agent key: {queue.keys}"
     assert used == {repr(str(agent.pk))}, f"the queue must be addressed by str(pk), got {used}"
+
+
+@pytest.mark.asyncio
+class TestAtLeastOnceIsActuallyTestable:
+    """These three branches of ``listen_for_tasks`` were unreachable in every unit test until the
+    in-memory queue grew a real in-flight area: with a no-op ``ack``, a ``recover`` hardcoded to 0
+    and a ``pop`` that blocked forever, there was nothing to recover and no idle tick to do it on."""
+
+    async def test_a_delivered_frame_is_acked_out_of_flight(self):
+        queue = InMemoryAgentQueue()
+        protocol, sent, closed, agent = make_protocol(queue=queue)
+        await protocol.receive(_register_frame())
+        key = protocol.session.agent_key
+
+        queue.push(key, '{"delivered": 1}')
+        assert await _wait_for(lambda: any('"delivered"' in s for s in sent))
+        # Delivered AND acked: nothing is left in flight, so a later recover finds nothing.
+        assert await _wait_for(lambda: not queue._inflight[key])
+        assert await queue.recover(key) == 0
+        await protocol.shutdown()
+
+    async def test_an_idle_tick_recovers_a_frame_stranded_by_a_dead_holder(self):
+        """A holder that died between its pop and its ack leaves the frame in flight. The next
+        holder has nothing of its own outstanding, so an empty pop is when it looks."""
+        queue = InMemoryAgentQueue()
+        protocol, sent, closed, agent = make_protocol(queue=queue)
+        await protocol.receive(_register_frame())
+        key = protocol.session.agent_key
+
+        # Simulate the previous connection's popped-but-unacked frame.
+        queue._inflight[key].appendleft('{"stranded": 1}')
+
+        assert await _wait_for(lambda: any('"stranded"' in s for s in sent), timeout=5.0)
+        await protocol.shutdown()
+
+    async def test_a_frame_whose_ack_failed_is_recovered_not_lost(self):
+        class AckFails(InMemoryAgentQueue):
+            def __init__(self):
+                super().__init__()
+                self.failed = False
+
+            async def ack(self, agent_id, message):
+                if not self.failed:
+                    self.failed = True
+                    raise ConnectionError("ack lost the connection")
+                return await super().ack(agent_id, message)
+
+        queue = AckFails()
+        protocol, sent, closed, agent = make_protocol(queue=queue)
+        await protocol.receive(_register_frame())
+        key = protocol.session.agent_key
+
+        queue.push(key, '{"unacked": 1}')
+
+        # Delivered; its ack failed, so at-least-once redelivers it rather than dropping it.
+        assert await _wait_for(lambda: len([s for s in sent if '"unacked"' in s]) >= 2, timeout=5.0)
+        assert queue.failed
+        await protocol.shutdown()
+
+    async def test_requeue_will_not_duplicate_a_frame_a_new_holder_recovered(self):
+        """The conditional requeue is the reason redis uses a Lua ``LREM>0 then RPUSH``."""
+        queue = InMemoryAgentQueue()
+        queue.push("7", '{"frame": 1}')
+        frame = await queue.pop("7")
+        assert frame is not None and queue._inflight["7"]
+
+        # The new lease holder recovers it first…
+        assert await queue.recover("7") == 1
+        # …and the displaced holder then tries to hand back the same frame.
+        await queue.requeue("7", frame)
+
+        assert len(queue._queues["7"]) == 1, "the frame must exist exactly once"

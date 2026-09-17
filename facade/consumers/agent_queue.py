@@ -12,6 +12,7 @@ monkeypatching the ``redis``/``redis.asyncio`` factories.
 
 import abc
 import asyncio
+import logging
 from collections import defaultdict, deque
 from typing import DefaultDict, Dict, Optional, Tuple
 
@@ -21,8 +22,13 @@ from django.conf import settings
 
 from facade import redis_keys
 
+logger = logging.getLogger(__name__)
+
 # Pre-namespace key shapes (``42_my_queue``). Still read once per connection so frames queued
 # by a previous release are not stranded — see ``RedisAgentQueue.recover``. Remove after one release.
+# Remove both of these — and the two places that read them, ``_adopt_legacy_lists`` and ``drop`` —
+# one release after the namespacing ships (target: v3.2). Until then a frame queued by the previous
+# release would be stranded under a key nothing looks at.
 LEGACY_QUEUE_SUFFIX = "_my_queue"
 LEGACY_PROCESSING_SUFFIX = "_processing"
 
@@ -112,6 +118,10 @@ class AgentQueue(abc.ABC):
     async def close(self) -> None:
         """Release any underlying connections."""
 
+    # Deliberately NOT on this port: ``drop`` (discard an agent's whole queue). It is a sync,
+    # one-off administrative operation used when an agent stops being a websocket agent, and its
+    # caller reaches for the concrete class. This port is the delivery path.
+
 
 # How long one blocking pop waits before returning empty-handed. Finite on purpose: a
 # ``timeout=0`` BLMOVE parks the consumer on the socket forever, so a half-dead redis connection
@@ -185,8 +195,12 @@ class RedisAgentQueue(AgentQueue):
         while await connection.lmove(processing_key(agent_id), queue_key(agent_id), src="LEFT", dest="RIGHT") is not None:
             recovered += 1
         if not self._legacy_checked:
-            recovered += await self._adopt_legacy_lists(agent_id)
+            # Counted separately: adopting a previous release's frames is not the same event as
+            # rescuing an undelivered one, and the caller logs the latter as a warning.
+            adopted = await self._adopt_legacy_lists(agent_id)
             self._legacy_checked = True
+            if adopted:
+                logger.warning("Adopted %s message(s) queued for agent %s under the pre-namespacing keys", adopted, agent_id)
         return recovered
 
     async def _adopt_legacy_lists(self, agent_id: str) -> int:
@@ -232,38 +246,89 @@ class RedisAgentQueue(AgentQueue):
 class InMemoryAgentQueue(AgentQueue):
     """In-process queue for unit tests — no redis, no network.
 
-    Mirrors the redis list semantics: a deque holds the messages (append-left = FIFO
-    tail, append-right = priority head, pop from the right) and a token queue provides
-    the blocking wait.
+    Mirrors :class:`RedisAgentQueue` **including its in-flight area**, which matters more than it
+    sounds: without one, `ack` is a no-op, `recover` can only return 0 and `requeue` cannot be
+    conditional, so the at-least-once contract is untestable and three branches of
+    ``listen_for_tasks`` (idle-recover, ack-failure, fenced-requeue) are unreachable. A regression
+    that turned `requeue` into a double delivery would have passed every unit test.
+
+    The list semantics are the redis ones: a deque per agent, ``appendleft`` = FIFO tail,
+    ``append`` = the next one popped (redis ``RPUSH``), popped from the right. ``pop`` moves the
+    frame into the in-flight deque rather than removing it, and only ``ack`` drops it.
+
+    What this still cannot mirror is redis *durability*: state lives in the object. The
+    at-least-once behaviour that survives a process restart is pinned by the redis-backed tests in
+    ``tests/agent/test_delivery.py``, not here.
     """
 
-    def __init__(self) -> None:
-        self._queues: DefaultDict[str, "deque[str]"] = defaultdict(deque)
-        self._tokens: DefaultDict[str, "asyncio.Queue[None]"] = defaultdict(asyncio.Queue)
+    #: How long ``pop`` blocks before returning None, mirroring ``POP_BLOCK_SECONDS``. Tiny by
+    #: default so a test that exercises the idle path does not pay five seconds for it.
+    pop_timeout: float = 0.05
 
-    def push(self, agent_id: str, message_json: str, *, priority: bool = False) -> None:
-        if priority:
+    def __init__(self, pop_timeout: float | None = None) -> None:
+        self._queues: DefaultDict[str, "deque[str]"] = defaultdict(deque)
+        self._inflight: DefaultDict[str, "deque[str]"] = defaultdict(deque)
+        self._tokens: DefaultDict[str, "asyncio.Queue[None]"] = defaultdict(asyncio.Queue)
+        if pop_timeout is not None:
+            self.pop_timeout = pop_timeout
+
+    def _offer(self, agent_id: str, message_json: str, *, next_up: bool) -> None:
+        """Put a frame on the queue and wake one waiter. ``next_up`` = redis ``RPUSH``."""
+        if next_up:
             self._queues[agent_id].append(message_json)
         else:
             self._queues[agent_id].appendleft(message_json)
         self._tokens[agent_id].put_nowait(None)
 
+    def push(self, agent_id: str, message_json: str, *, priority: bool = False) -> None:
+        self._offer(agent_id, message_json, next_up=priority)
+
     async def pop(self, agent_id: str) -> Optional[str]:
-        await self._tokens[agent_id].get()
-        return self._queues[agent_id].pop()
+        try:
+            await asyncio.wait_for(self._tokens[agent_id].get(), timeout=self.pop_timeout)
+        except (asyncio.TimeoutError, TimeoutError):
+            return None
+        queue = self._queues[agent_id]
+        if not queue:
+            return None  # a token whose frame another consumer already took
+        message = queue.pop()
+        # Parked, not removed: ``ack`` is what removes it. ``appendleft`` mirrors redis moving into
+        # the LEFT of the processing list, which is what makes the RIGHT end the oldest.
+        self._inflight[agent_id].appendleft(message)
+        return message
 
     async def ack(self, agent_id: str, message: str) -> None:
-        # ``pop`` already removed the item; nothing to do.
-        return None
+        try:
+            self._inflight[agent_id].remove(message)
+        except ValueError:
+            pass  # already acked, or recovered by a newer lease holder — both benign
 
     async def recover(self, agent_id: str) -> int:
-        # No in-flight area to recover from.
-        return 0
+        inflight = self._inflight[agent_id]
+        recovered = 0
+        # Newest first onto the front of the queue, so the OLDEST in-flight frame ends up next.
+        while inflight:
+            self._offer(agent_id, inflight.popleft(), next_up=True)
+            recovered += 1
+        return recovered
 
     async def requeue(self, agent_id: str, message: str) -> None:
-        # ``pop`` removed it; put it back as the next one popped.
-        self._queues[agent_id].append(message)
-        self._tokens[agent_id].put_nowait(None)
+        # Conditional, exactly like the redis Lua script: only a frame still in flight goes back.
+        # If a new lease holder's ``recover`` already took it, pushing again would duplicate it.
+        try:
+            self._inflight[agent_id].remove(message)
+        except ValueError:
+            return
+        self._offer(agent_id, message, next_up=True)
+
+    def drop(self, agent_id: str) -> int:
+        """Discard everything queued and in flight for an agent (see the redis counterpart)."""
+        dropped = len(self._queues[agent_id]) + len(self._inflight[agent_id])
+        self._queues[agent_id].clear()
+        self._inflight[agent_id].clear()
+        while not self._tokens[agent_id].empty():
+            self._tokens[agent_id].get_nowait()
+        return dropped
 
     async def close(self) -> None:
         return None
