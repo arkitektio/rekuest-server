@@ -13,6 +13,10 @@ from __future__ import annotations
 from django.conf import settings
 
 
+# The settings key keeps the name ``REKUEST_GRACE`` although this module is no longer only about
+# grace: renaming it would touch every deadline test plus ``settings_test.py`` and CONFIG.md, for no
+# behavioural gain. The module name is the one readers look things up by; the key is a config
+# contract.
 def _cfg() -> dict:
     return getattr(settings, "REKUEST_GRACE", {}) or {}
 

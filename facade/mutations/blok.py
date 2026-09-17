@@ -16,7 +16,7 @@ from facade.types.base import scoped_get
 from rekuest_core.inputs import models as rimodels
 
 
-def _sync_dependencies(blok: models.Blok, dependencies: Iterable[rimodels.AgentDependencyInputModel] | None, *, replace: bool) -> list[models.BlokDependency]:
+def _sync_blok_dependencies(blok: models.Blok, dependencies: Iterable[rimodels.AgentDependencyInputModel] | None, *, replace: bool) -> list[models.BlokDependency]:
     """Upsert ``BlokDependency`` rows by ``(blok, key)`` from a manifest.
 
     Writes every declared field (``optional`` included: before this helper only demands and the
@@ -84,7 +84,7 @@ def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
 
     # create is an upsert on (name, organization); dependencies a previous registration declared
     # but this one does not are stale and go too.
-    _sync_dependencies(blok, model.dependencies, replace=True)
+    _sync_blok_dependencies(blok, model.dependencies, replace=True)
 
     return blok
 
@@ -122,6 +122,6 @@ def update_blok(info: Info, input: inputs.UpdateBlokInput) -> types.Blok:
     blok.save()
 
     if model.dependencies is not None:
-        _sync_dependencies(blok, model.dependencies, replace=True)
+        _sync_blok_dependencies(blok, model.dependencies, replace=True)
 
     return blok

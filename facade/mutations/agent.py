@@ -12,8 +12,9 @@ from facade import types, models, inputs, unique
 from pydantic import BaseModel, Field
 import kante
 from facade.catalog_validation import dump_diagnostics, validate_manifest_against_catalog
-from facade.mutations.blok import _sync_dependencies
+from facade.mutations.blok import _sync_blok_dependencies
 from facade.registration_lock import lock_organization
+from facade.types.base import scoped_get
 
 logger = logging.getLogger(__name__)
 
@@ -278,7 +279,7 @@ def implement_agent(info: Info, input: ImplementAgentInput) -> types.Agent:
             defaults=dict(name=x.name, description=x.description or ""),
         )
 
-        for dep in _sync_dependencies(x, blok.dependencies, replace=True):
+        for dep in _sync_blok_dependencies(x, blok.dependencies, replace=True):
             models.BlokAgentMapping.objects.update_or_create(
                 materialized_blok=mblok,
                 key=dep.key,
@@ -288,16 +289,8 @@ def implement_agent(info: Info, input: ImplementAgentInput) -> types.Agent:
     return agent
 
 
-def _own_agent(info: Info, agent_id) -> models.Agent:
-    """An agent of the requesting organization — naming another tenant's agent id must not work."""
-    try:
-        return models.Agent.objects.get(id=agent_id, organization=info.context.request.organization)
-    except models.Agent.DoesNotExist:
-        raise PermissionError(f"No agent {agent_id} in your organization.")
-
-
 def pin_agent(info: Info, input: inputs.PinInput) -> types.Agent:
-    agent = _own_agent(info, input.id)
+    agent = scoped_get(models.Agent, info, input.id)
     if input.pin:
         agent.pinned_by.add(info.context.request.user)
     else:
@@ -309,7 +302,7 @@ def pin_agent(info: Info, input: inputs.PinInput) -> types.Agent:
 
 
 def update_agent(info: Info, input: inputs.UpdateAgentInput) -> types.Agent:
-    agent = _own_agent(info, input.id)
+    agent = scoped_get(models.Agent, info, input.id)
     if input.name is not None:
         agent.name = input.name
     agent.save(update_fields=["name"])
@@ -317,6 +310,6 @@ def update_agent(info: Info, input: inputs.UpdateAgentInput) -> types.Agent:
 
 
 def delete_agent(info: Info, input: DeleteAgentInput) -> strawberry.ID:
-    agent = _own_agent(info, input.id)
+    agent = scoped_get(models.Agent, info, input.id)
     agent.delete()
     return input.id

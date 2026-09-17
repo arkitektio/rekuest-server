@@ -133,6 +133,9 @@ def _resolve_test_targets(definition: DefinitionInputModel, agent: models.Agent)
 
 
 def _sync_dependencies(implementation: models.Implementation, dependencies: t.Any) -> None:
+    # Not to be confused with ``mutations.blok._sync_blok_dependencies``, which syncs a *blok's*
+    # dependencies. Both used to be called ``_sync_dependencies`` and both are imported into
+    # ``mutations/agent.py``, which is a trap in the registration path.
     """Upsert the implementation's declared dependencies with the full persisted shape.
 
     Single writer for both the create and update flows — previously the two inline copies
@@ -188,57 +191,29 @@ def _relational_state_is_current(action: models.Action, definition: DefinitionIn
     return True
 
 
-@transaction.atomic
-def _create_implementation(
-    input: ImplementationInputModel,
+def _upsert_action(
+    definition: DefinitionInputModel,
     agent: models.Agent,
     *,
-    action_map: dict[tuple[str, str], models.Action] | None = None,
-    implementation_map: dict[str, models.Implementation] | None = None,
-) -> models.Implementation:
-    """Register one implementation (and its Action) for ``agent``.
+    scope: t.Any,
+    desired_idempotent: bool,
+    action_map: dict[tuple[str, str], models.Action] | None,
+) -> tuple[models.Action, bool]:
+    """Find or create the Action this definition describes; say whether it changed.
 
-    ``action_map`` (keyed ``(key, version)``, scoped to the agent's app + organization) and
-    ``implementation_map`` (keyed ``interface``, ``select_related("action")``) are optional
-    batch prefetches: ``implement_agent`` passes them so a reconnecting agent with N
-    implementations does two lookups total instead of 2·N. Rows created here are inserted
-    back into the maps so duplicate keys within one batch resolve like sequential lookups
-    would. ``None`` (the default, used by ``create_implementation``) keeps the per-row
-    lookup path.
+    Returns ``(action, definition_changed)``. That flag is the whole reason this is one step: it
+    decides whether the expensive derived-state rebuild downstream runs at all, and it used to be a
+    local whose meaning had to be carried across seventy lines of unrelated work.
+
+    An Action is shared by every agent of an app+organization, so three cases have to be
+    distinguished: the same definition (nothing to do), a changed one from its owner (rewrite), and
+    a changed one from somebody else (refuse — otherwise any agent could redefine another app's
+    contract).
     """
-    definition = input.definition
-
     hash = definition.unique_hash
     key = definition.key
     version = definition.version
     app = agent.app
-
-    scope = infer_action_scope(definition)
-
-    # Qualifier coherence — the only place both the definition's semantic claims and the
-    # implementation's effect class are visible together.
-    if definition.pure and getattr(input.effect, "value", input.effect) == "PHYSICAL":
-        raise ValueError(f"Action {definition.key} is declared pure but its implementation has a PHYSICAL effect class — a pure action cannot touch the real world.")
-    if definition.pure and definition.stateful:
-        raise ValueError(f"Action {definition.key} is declared both pure and stateful — a pure action cannot depend on or change state.")
-
-    # A pure function is definitionally idempotent — upgrade rather than reject, so consumers
-    # only ever check `idempotent` for the retry axis and `pure` for replayability.
-    desired_idempotent = definition.idempotent or definition.pure
-
-    # Effect/validator calls are evaluated client-side against the base catalog plus the UI catalog
-    # the definition names. Argument mismatches on known operations abort registration; operations
-    # neither catalog provides are stored as warnings so UI apps can roll out new ones independently.
-    catalogs, diagnostics = catalogs_for_definition(definition, agent)
-    diagnostics = [
-        *validate_calls_against_catalogs(catalogs, iter_definition_calls(definition, input.optimistics), f"Definition {definition.key}"),
-        *validate_widgets_against_catalogs(catalogs, iter_definition_widgets(definition)),
-        *diagnostics,
-    ]
-    for diagnostic in diagnostics:
-        logger.warning(diagnostic.message)
-    stored_diagnostics = dump_diagnostics(diagnostics)
-
     definition_changed = True
     try:
         if action_map is not None:
@@ -296,6 +271,74 @@ def _create_implementation(
         )
         if action_map is not None:
             action_map[(key, version)] = action
+    return action, definition_changed
+
+
+def _validate_qualifiers(definition: DefinitionInputModel, effect: t.Any) -> bool:
+    """Check the definition's semantic claims against its effect class; return ``idempotent``.
+
+    The one place where both are visible together, which is why the contradictions are caught here
+    rather than on either model alone. Returns the *effective* idempotence: a pure function is
+    definitionally idempotent, so it is upgraded rather than rejected — consumers then only ever
+    read ``idempotent`` for the retry axis and ``pure`` for replayability.
+    """
+    if definition.pure and getattr(effect, "value", effect) == "PHYSICAL":
+        raise ValueError(f"Action {definition.key} is declared pure but its implementation has a PHYSICAL effect class — a pure action cannot touch the real world.")
+    if definition.pure and definition.stateful:
+        raise ValueError(f"Action {definition.key} is declared both pure and stateful — a pure action cannot depend on or change state.")
+    return definition.idempotent or definition.pure
+
+
+def _collect_diagnostics(definition: DefinitionInputModel, agent: models.Agent, optimistics: t.Any) -> list[dict[str, t.Any]]:
+    """Validate the definition's calls and widgets against its catalogs; return stored diagnostics.
+
+    Effect/validator calls are evaluated client-side against the base catalog plus the UI catalog
+    the definition names. An argument mismatch on a *known* operation raises and aborts
+    registration; an operation neither catalog provides is kept as a warning instead, so a UI app
+    can roll out a new operation without every agent having to be redeployed first.
+    """
+    catalogs, diagnostics = catalogs_for_definition(definition, agent)
+    diagnostics = [
+        *validate_calls_against_catalogs(catalogs, iter_definition_calls(definition, optimistics), f"Definition {definition.key}"),
+        *validate_widgets_against_catalogs(catalogs, iter_definition_widgets(definition)),
+        *diagnostics,
+    ]
+    for diagnostic in diagnostics:
+        logger.warning(diagnostic.message)
+    return dump_diagnostics(diagnostics)
+
+
+@transaction.atomic
+def _create_implementation(
+    input: ImplementationInputModel,
+    agent: models.Agent,
+    *,
+    action_map: dict[tuple[str, str], models.Action] | None = None,
+    implementation_map: dict[str, models.Implementation] | None = None,
+) -> models.Implementation:
+    """Register one implementation (and its Action) for ``agent``.
+
+    ``action_map`` (keyed ``(key, version)``, scoped to the agent's app + organization) and
+    ``implementation_map`` (keyed ``interface``, ``select_related("action")``) are optional
+    batch prefetches: ``implement_agent`` passes them so a reconnecting agent with N
+    implementations does two lookups total instead of 2·N. Rows created here are inserted
+    back into the maps so duplicate keys within one batch resolve like sequential lookups
+    would. ``None`` (the default, used by ``create_implementation``) keeps the per-row
+    lookup path.
+    """
+    definition = input.definition
+    scope = infer_action_scope(definition)
+
+    desired_idempotent = _validate_qualifiers(definition, input.effect)
+    stored_diagnostics = _collect_diagnostics(definition, agent, input.optimistics)
+
+    action, definition_changed = _upsert_action(
+        definition,
+        agent,
+        scope=scope,
+        desired_idempotent=desired_idempotent,
+        action_map=action_map,
+    )
 
     # Qualifiers are not identity-bearing (deliberately excluded from unique_hash so flipping
     # them doesn't force fleet re-registration) — sync them unconditionally, covering the

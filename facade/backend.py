@@ -7,12 +7,13 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from facade import enums, inputs, liveness, models, types, messages
+from facade import enums, inputs, liveness, models, messages
 from facade.caller_context import CallerContext
 from facade.consumers.async_consumer import AgentConsumer
 from facade.deadlines import control_deadline_seconds
 from facade.higher_order import build_lower_args, build_lower_dependencies
 from facade.provenance import mint_token_for_task
+from facade.types.base import scoped_get
 from facade.provenance.canonical import args_hash
 from kante.types import Info
 import logging
@@ -168,6 +169,59 @@ def resolve_direct_target(
     raise ValueError("You need to provide an action, action_hash, implementation, or agent+interface to create an assignment for an agent")
 
 
+def resolve_dependency_target(
+    *,
+    parent_id: str | None,
+    dependency: str | None,
+    method: str | None,
+) -> tuple[models.Action, models.Implementation, models.Agent, Dict[str, Any]]:
+    """Resolve ``(action, implementation, agent, dependencies)`` from a parent's dependency slot.
+
+    The sibling of :func:`resolve_direct_target`, for the one form that cannot be addressed
+    directly: an agent calling a *dependency* it declared. The routing was decided when the PARENT
+    was assigned and frozen into ``Task.dependencies``, so this reads that snapshot rather than
+    re-resolving — which is the point, since a dependency must keep hitting the same peer for the
+    whole tree.
+
+    It also returns the nested ``dependencies`` map for the chosen implementation, which the caller
+    stores on the child so its own dependency calls resolve the same way.
+    """
+    if not method:
+        raise ValueError("Method key must be provided when assigning to a dependency")
+    if not parent_id:
+        raise ValueError("Dependency assignments must have a parent task")
+
+    parent = models.Task.objects.get(id=parent_id)
+    dependencies = parent.dependencies
+    if dependency not in dependencies:
+        raise ValueError(f"Dependency {dependency} not found in parent task dependencies. {parent.dependencies}")
+
+    agent_dependency = dependencies[dependency]
+
+    # The snapshot was frozen at the parent's assign time; the agents in it may have gone since.
+    # Only ever choose one that can receive work right now — otherwise the child lands in a dead
+    # agent's queue with nothing left to revisit it.
+    available_ids = {
+        str(pk)
+        for pk in models.Agent.objects.filter(pk__in=[entry.get("agent") for entry in agent_dependency if entry.get("agent")])
+        .filter(agent_available_q(""))
+        .values_list("pk", flat=True)
+    }
+    candidates = [entry for entry in agent_dependency if str(entry.get("agent")) in available_ids]
+    if not candidates:
+        raise ValueError(f"No agent resolved for dependency {dependency} is available right now")
+
+    chosen_agent = choice(candidates)
+    if "actions" not in chosen_agent:
+        raise ValueError(f"Dependency {dependency} does not contain an action")
+    if method not in chosen_agent["actions"]:
+        raise ValueError(f"Method {method} not found in dependency {dependency} actions")
+
+    implementation_dep = chosen_agent["actions"][method]
+    implementation = models.Implementation.objects.get(id=implementation_dep["implementation"])
+    return implementation.action, implementation, implementation.agent, implementation_dep["dependencies"]
+
+
 # TODO: Implement this for nested structures and interfaces as well
 def acted_on_from_args(args: dict, action: models.Action) -> list[str]:
     acted_on = []
@@ -192,11 +246,11 @@ def _agent_in_org(info: Info, agent_id) -> "models.Agent":
     ``bounce``/``block``/``unblock``/``kick`` are destructive to a running deployment, so the
     target must belong to the caller — otherwise any authenticated user could permanently block
     another organization's production agent by naming its id.
+
+    Thin wrapper over :func:`facade.types.base.scoped_get`, which is the one place single-object
+    resolvers scope themselves; kept as a name because these four read better with it.
     """
-    try:
-        return models.Agent.objects.get(id=agent_id, organization=info.context.request.organization)
-    except models.Agent.DoesNotExist:
-        raise PermissionError(f"No agent {agent_id} in your organization.")
+    return scoped_get(models.Agent, info, agent_id)
 
 
 class RedisControllBackend:
@@ -377,49 +431,11 @@ class RedisControllBackend:
                 return existing, False
 
         if input.dependency:
-            if not input.method:
-                raise ValueError("Method key must be provided when assigning to a dependency")
-            if not input.parent:
-                raise ValueError("Dependency assignments must have a parent task")
-
-            parent = models.Task.objects.get(id=input.parent)
-            dependencies = parent.dependencies
-
-            if input.dependency not in dependencies:
-                raise ValueError(f"Dependency {input.dependency} not found in parent task dependencies. {parent.dependencies}")
-
-            agent_dependency = dependencies[input.dependency]
-
-            # The parent's dependency snapshot was frozen at ITS assign time; the agents in it
-            # may have gone since. Only ever choose one that can receive work right now —
-            # otherwise the child lands in a dead agent's queue with nothing left to revisit it.
-            available_ids = {
-                str(pk)
-                for pk in models.Agent.objects.filter(pk__in=[entry.get("agent") for entry in agent_dependency if entry.get("agent")])
-                .filter(agent_available_q(""))
-                .values_list("pk", flat=True)
-            }
-            candidates = [entry for entry in agent_dependency if str(entry.get("agent")) in available_ids]
-            if not candidates:
-                raise ValueError(f"No agent resolved for dependency {input.dependency} is available right now")
-
-            # Choose random agent
-            chosen_agent = choice(candidates)
-
-            if "actions" not in chosen_agent:
-                raise ValueError(f"Dependency {input.dependency} does not contain an action")
-
-            if input.method not in chosen_agent["actions"]:
-                raise ValueError(f"Method {input.method} not found in dependency {input.dependency} actions")
-
-            implementation_dep = chosen_agent["actions"][input.method]
-
-            implementation_id = implementation_dep["implementation"]
-            dependency_dict = implementation_dep["dependencies"]
-
-            implementation = models.Implementation.objects.get(id=implementation_id)
-            action = implementation.action
-            agent = implementation.agent
+            action, implementation, agent, dependency_dict = resolve_dependency_target(
+                parent_id=input.parent,
+                dependency=input.dependency,
+                method=input.method,
+            )
 
         else:
             action, implementation, agent = resolve_direct_target(
@@ -498,8 +514,6 @@ class RedisControllBackend:
             if winner is None:
                 raise
             return winner, False
-
-        action = implementation.action
 
         # Dispatched only once the row is visible to everyone: inside an outer transaction an
         # agent could otherwise report on a task no other connection can see yet. Outside one,
