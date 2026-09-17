@@ -130,10 +130,31 @@ class MaterializedBlok(models.Model):
     """A Blok Implementation is a specific implementation of a Blok"""
 
     blok = models.ForeignKey(Blok, on_delete=models.CASCADE, related_name="materialized_bloks")
+    declared_by = models.ForeignKey(
+        "Agent",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="declared_materialized_bloks",
+        help_text="The agent whose registration auto-materialized this blok, if any. NULL means a user created it by hand. An auto-materialization is meaningless without its agent, hence CASCADE.",
+    )
     name = models.CharField(max_length=1000, help_text="The name of this Blok Implementation")
     description = models.TextField(help_text="A description for this Blok Implementation")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            # A blok may be materialized many times by hand, but each agent that DECLARES one
+            # gets exactly one row. Registration used to upsert on ``blok`` alone: two agents
+            # declaring the same blok fought over one row, and a single hand-made row made every
+            # registration raise ``MultipleObjectsReturned`` from then on.
+            models.UniqueConstraint(
+                fields=["blok", "declared_by"],
+                condition=models.Q(declared_by__isnull=False),
+                name="mblok_unique_declaration_per_agent",
+            ),
+        ]
 
 
 class DashboardPlacement(models.Model):

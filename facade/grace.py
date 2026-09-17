@@ -1,65 +1,20 @@
-"""Resolve the per-mode reclaim grace window.
+"""Resolve the deadlines the reaper enforces (``REKUEST_GRACE``).
 
 On a disconnect the failure/cascade is delayed by a grace window so a brief blip can
-reclaim same-session in-flight work before it fires (see the reclaim/grace backend). The
-window is configured by the ``REKUEST_GRACE`` setting and resolved here so both the
-executor-death and caller-death paths read it the same way.
+reclaim same-session in-flight work before it fires. That window — like every other deadline
+here — is *not* a timer: the moment it starts is a DB column (``Agent.last_seen``,
+``Task.dispatched_at``, ``Task.interrupt_at``, ``Task.last_progress_at``) and the periodic
+sweep in :mod:`facade.reaper` acts once it has elapsed. Nothing is held in process memory,
+so a backend can die at any instant, and any other backend picks the deadline up.
 """
 
 from __future__ import annotations
 
-import asyncio
-from typing import Awaitable, Callable, Dict, Optional
-
 from django.conf import settings
 
 
-ReconcileAction = Callable[[], Awaitable[None]]
-
-
-class GraceScheduler:
-    """A keyed set of single-shot delayed tasks — the *responsive* reconcile trigger.
-
-    ``schedule(key, delay, action)`` runs ``action`` after ``delay`` unless ``cancel(key)``
-    is called first (a reconnect). It is just a trigger: ``action`` is an idempotent DB
-    reconcile op (the WHAT), so the DB stays authoritative whether the trigger is this timer,
-    a reconnect, or the periodic sweep. Keys are normalized to ``str`` so int pks and string
-    session/connection ids interoperate. Supports ``in`` / ``[]`` for introspection + tests.
-    """
-
-    def __init__(self) -> None:
-        self._tasks: Dict[str, asyncio.Task] = {}
-
-    def schedule(self, key: object, delay: float, action: ReconcileAction) -> None:
-        skey = str(key)
-        self.cancel(skey)
-        self._tasks[skey] = asyncio.create_task(self._run(skey, delay, action))
-
-    def cancel(self, key: object) -> None:
-        if key is None:
-            return
-        task = self._tasks.pop(str(key), None)
-        if task is not None and not task.done():
-            task.cancel()
-
-    async def _run(self, key: str, delay: float, action: ReconcileAction) -> None:
-        try:
-            await asyncio.sleep(delay)
-        except asyncio.CancelledError:
-            return  # reclaimed — a reconnect / terminal cancelled us
-        try:
-            await action()
-        finally:
-            self._tasks.pop(key, None)
-
-    def __contains__(self, key: object) -> bool:
-        return str(key) in self._tasks
-
-    def __getitem__(self, key: object) -> asyncio.Task:
-        return self._tasks[str(key)]
-
-    def get(self, key: object) -> Optional[asyncio.Task]:
-        return self._tasks.get(str(key))
+def _cfg() -> dict:
+    return getattr(settings, "REKUEST_GRACE", {}) or {}
 
 
 def grace_seconds(*, physical: bool = False) -> float:
@@ -75,7 +30,7 @@ def grace_seconds(*, physical: bool = False) -> float:
     NOTE: no call site currently passes ``physical=`` — effect-awareness lives in the
     fail/reclaim branching of ``persist_backend``, not in the grace timer.
     """
-    cfg = getattr(settings, "REKUEST_GRACE", {}) or {}
+    cfg = _cfg()
 
     if physical and cfg.get("PHYSICAL") is not None:
         return float(cfg["PHYSICAL"])
@@ -85,5 +40,25 @@ def grace_seconds(*, physical: bool = False) -> float:
 
 def progress_lease_seconds() -> float:
     """The progress-lease window (seconds); 0 disables the lease."""
-    cfg = getattr(settings, "REKUEST_GRACE", {}) or {}
-    return float(cfg.get("PROGRESS_LEASE", 0))
+    return float(_cfg().get("PROGRESS_LEASE", 0))
+
+
+def sweep_interval_seconds() -> float:
+    """How often the in-process reaper ticks. Bounds how late any deadline can fire."""
+    return max(0.05, float(_cfg().get("SWEEP_INTERVAL", 5)))
+
+
+def pickup_deadline_seconds() -> float:
+    """How long a dispatched task may go without ANY agent report; 0 disables the watchdog."""
+    return float(_cfg().get("PICKUP_DEADLINE", 0))
+
+
+def disconnected_expiry_seconds() -> float:
+    """How long a DISCONNECTED (fate unknown) task stays recoverable; 0 = never expires."""
+    return float(_cfg().get("DISCONNECTED_EXPIRY", 0))
+
+
+def control_deadline_seconds() -> float:
+    """How long a cancel may stay unconfirmed before it escalates to an interrupt (and an
+    interrupt before it is finalized); 0 disables. A per-request ``auto_interrupt`` wins."""
+    return float(_cfg().get("CONTROL_DEADLINE", 0))

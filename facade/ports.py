@@ -51,6 +51,13 @@ class PersistBackend(Protocol):
 
     async def get_or_create_caller_id(self, agent_id: int) -> str: ...
 
+    # The delivery-time fence: is an Assign for this task still worth sending? (The server may
+    # have finalized the task while its frame waited in an offline agent's queue.)
+    async def is_task_open(self, task_id: str) -> bool: ...
+
+    # Fencing at delivery time: does this connection still hold the agent's lease?
+    async def holds_lease(self, agent_id: int, lease_epoch: int) -> bool: ...
+
     # --- sub-assignment (dependent work only; roots come from GraphQL) --------- #
     async def on_caller_assign(
         self,

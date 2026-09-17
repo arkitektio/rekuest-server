@@ -41,14 +41,23 @@ def action_singal(sender, instance=None, created=None, **kwargs):
             _broadcast_on_commit(channels.action_channel, channel_events.ActionEvent(update=instance.id), [f"actions_{instance.organization.id}"])
 
 
+def broadcast_agent_update(agent: models.Agent, created: bool = False) -> None:
+    """Refresh the agent feeds — callable directly when a change needs no row write (an M2M
+    edit), so nobody has to ``save()`` an agent merely to fire this signal."""
+    _broadcast_on_commit(
+        channels.agent_updated_channel,
+        channel_events.AgentEvent(create=agent.id) if created else channel_events.AgentEvent(update=agent.id),
+        [f"agents_for_{agent.organization_id}"],
+    )
+
+
 @receiver(post_save, sender=models.Agent)
 def agent_post_save(sender, instance: models.Agent = None, created=None, **kwargs):
     if instance:
-        _broadcast_on_commit(
-            channels.agent_updated_channel,
-            channel_events.AgentEvent(create=instance.id) if created else channel_events.AgentEvent(update=instance.id),
-            [f"agents_for_{instance.organization.id}"],
-        )
+        broadcast_agent_update(instance, created=bool(created))
+        # The writing backend sees its own routing change at once (other backends within the
+        # cache's few-second TTL) — see ``facade.transport``.
+        transport.forget_agent_routing(instance)
 
 
 @receiver(post_delete, sender=models.Agent)

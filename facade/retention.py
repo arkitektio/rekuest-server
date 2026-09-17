@@ -12,8 +12,8 @@ Retention is an explicit operator opt-in (default 0 = disabled): deleting past r
 removes them from replay discovery (``reusable_task_for``). 2592000 (30 days) is a
 sensible production value.
 
-Triggered by the in-process reaper loop (one batch per slow tick) and by the
-``reconcile_tasks`` management command (sweeps to exhaustion).
+Triggered by the in-process reaper loop (``facade.reaper``): one batch per slow tick, so a
+backlog drains over successive ticks rather than in one long transaction.
 """
 
 from __future__ import annotations

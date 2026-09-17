@@ -4,7 +4,7 @@ from django.db import transaction
 from kante.types import Info
 from facade.mutations.implementation import _create_implementation
 import strawberry
-from facade import types, models, inputs, scalars, enums
+from facade import types, models, inputs, scalars, enums, signals
 from rekuest_core.inputs.types import BlokImplementationInput, ImplementationInput, LockImplementationInput, StateImplementationInput
 from rekuest_core.inputs.models import BlokImplementationInputModel, ImplementationInputModel, StateImplementationInputModel, LockImplementationInputModel
 import logging
@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 import kante
 from facade.catalog_validation import dump_diagnostics, validate_manifest_against_catalog
 from facade.mutations.blok import _sync_dependencies
+from facade.registration_lock import lock_organization
 
 logger = logging.getLogger(__name__)
 
@@ -97,8 +98,11 @@ def ensure_agent(info: Info, input: AgentInput) -> types.Agent:
 
     # Configure the transport (idempotent): a HookAgent declares its kind + endpoint here.
     updated_fields = []
+    became_webhook = False
     if input.kind is not None:
-        agent.kind = getattr(input.kind, "value", input.kind)
+        new_kind = getattr(input.kind, "value", input.kind)
+        became_webhook = new_kind == enums.AgentKind.WEBHOOK.value and agent.kind != new_kind
+        agent.kind = new_kind
         updated_fields.append("kind")
     if input.hook_url is not None:
         agent.hook_url = input.hook_url
@@ -108,8 +112,30 @@ def ensure_agent(info: Info, input: AgentInput) -> types.Agent:
         updated_fields.append("hook_url_secret")
     if updated_fields:
         agent.save(update_fields=updated_fields)
+    if became_webhook:
+        transaction.on_commit(lambda: _abandon_socket_queue(agent.pk))
 
     return agent
+
+
+def _abandon_socket_queue(agent_pk: int) -> None:
+    """An agent left the websocket transport: what was queued for its socket is now unreachable.
+
+    No connection will ever drain those redis lists again, so drop them and mark the agent's
+    not-yet-picked-up tasks as "never dispatched" — the pickup watchdog then redelivers their
+    Assigns over the webhook. (Queued control frames are covered by the control deadline.)
+    The raw frames are deliberately not re-POSTed: their order is gone and their tokens may be stale.
+    """
+    from facade.consumers.agent_queue import RedisAgentQueue
+
+    try:
+        dropped = RedisAgentQueue.from_settings().drop(str(agent_pk))
+    except Exception:
+        logger.error("Could not drop the socket queue of agent %s", agent_pk, exc_info=True)
+        dropped = 0
+    models.Task.objects.filter(agent_id=agent_pk, is_done=False, picked_up_at__isnull=True).update(dispatched_at=None)
+    if dropped:
+        logger.warning("Agent %s became a HookAgent: dropped %s frame(s) queued for its socket", agent_pk, dropped)
 
 
 class ImplementAgentInputModel(BaseModel):
@@ -145,6 +171,13 @@ def implement_agent(info: Info, input: ImplementAgentInput) -> types.Agent:
     """
     input = input.to_pydantic()
 
+    # Before ANY row is read or written: a registration writes org-shared rows (actions,
+    # protocols, collections, bloks) interleaved with agent-owned ones, so two agents of one
+    # fleet registering at once would lock them in declaration order and deadlock. Taking it
+    # before the Agent upsert also keeps that row's lock short — it is the row every heartbeat
+    # renewal and every lease claim for this agent needs.
+    lock_organization(info.context.request.organization)
+
     agent, _ = models.Agent.objects.update_or_create(
         client=info.context.request.client,
         user=info.context.request.user,
@@ -176,7 +209,8 @@ def implement_agent(info: Info, input: ImplementAgentInput) -> types.Agent:
     # Batch prefetch for the per-implementation loop: one Action query + one Implementation
     # query for the whole declared set instead of two lookups per implementation. Scoped to
     # the agent's app/org, exactly what _create_implementation's per-row lookups filter on.
-    declared_implementations = input.implementations or []
+    # Deterministic order, so two registrations of overlapping sets behave identically.
+    declared_implementations = sorted(input.implementations or [], key=lambda impl: (impl.definition.key, impl.definition.version))
     action_map = None
     implementation_map = None
     if declared_implementations:
@@ -240,6 +274,7 @@ def implement_agent(info: Info, input: ImplementAgentInput) -> types.Agent:
         # declaring agent itself.
         mblok, _ = models.MaterializedBlok.objects.update_or_create(
             blok=x,
+            declared_by=agent,
             defaults=dict(name=x.name, description=x.description or ""),
         )
 
@@ -253,25 +288,35 @@ def implement_agent(info: Info, input: ImplementAgentInput) -> types.Agent:
     return agent
 
 
+def _own_agent(info: Info, agent_id) -> models.Agent:
+    """An agent of the requesting organization — naming another tenant's agent id must not work."""
+    try:
+        return models.Agent.objects.get(id=agent_id, organization=info.context.request.organization)
+    except models.Agent.DoesNotExist:
+        raise PermissionError(f"No agent {agent_id} in your organization.")
+
+
 def pin_agent(info: Info, input: inputs.PinInput) -> types.Agent:
-    agent = models.Agent.objects.get(id=input.id)
+    agent = _own_agent(info, input.id)
     if input.pin:
         agent.pinned_by.add(info.context.request.user)
     else:
         agent.pinned_by.remove(info.context.request.user)
-    agent.save()
+    # An M2M change needs no row write — a ``save()`` here only ever existed to fire the feed
+    # refresh, at the price of rewriting the whole row from a possibly stale snapshot.
+    signals.broadcast_agent_update(agent)
     return agent
 
 
 def update_agent(info: Info, input: inputs.UpdateAgentInput) -> types.Agent:
-    agent = models.Agent.objects.get(id=input.id)
+    agent = _own_agent(info, input.id)
     if input.name is not None:
         agent.name = input.name
-    agent.save()
+    agent.save(update_fields=["name"])
     return agent
 
 
 def delete_agent(info: Info, input: DeleteAgentInput) -> strawberry.ID:
-    agent = models.Agent.objects.get(id=input.id)
+    agent = _own_agent(info, input.id)
     agent.delete()
     return input.id

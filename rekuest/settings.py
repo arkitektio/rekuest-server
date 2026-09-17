@@ -44,6 +44,12 @@ AGENT_STALE_AFTER = 3 * AGENT_HEARTBEAT_INTERVAL
 # Redis endpoint the agent queue (broadcast -> agent delivery) talks to.
 AGENT_REDIS_HOST = conf.redis.host
 AGENT_REDIS_PORT = conf.redis.port
+# Namespace of every first-party redis key — see ``facade.redis_keys``.
+REDIS_KEY_PREFIX = conf.redis.key_prefix
+
+# HookAgent HTTP signatures — see ``facade.hooks``.
+HOOK_SIGNATURE_MODE = conf.rekuest.hook_signature_mode
+HOOK_MAX_SKEW = conf.rekuest.hook_max_skew
 
 
 AGENT_HEARTBEAT_NOT_RESPONDED_CODE = 3001
@@ -60,10 +66,20 @@ REKUEST_GRACE = {
     # goes silent this long — while its agent is still connected (wedged-but-alive) — is
     # failed as terminal. 0 disables the lease (default).
     "PROGRESS_LEASE": conf.rekuest.progress_lease,
+    # None of these windows is a timer: each starts at a DB column and is enforced by the
+    # in-process sweep (``facade.reaper``), every SWEEP_INTERVAL seconds, on whichever
+    # backend gets there first. See ``facade.grace`` for the accessors.
+    "SWEEP_INTERVAL": conf.rekuest.sweep_interval,
+    # A dispatched task its live agent never reports on: redelivered once, then CRITICAL.
+    "PICKUP_DEADLINE": conf.rekuest.pickup_deadline,
+    # DISCONNECTED ("fate unknown") stays recoverable this long, then is finalized.
+    "DISCONNECTED_EXPIRY": conf.rekuest.disconnected_expiry,
+    # Unconfirmed cancel → interrupt → finalized. A request's own ``auto_interrupt`` wins.
+    "CONTROL_DEADLINE": conf.rekuest.control_deadline,
 }
 
 # Task retention: terminal root task trees older than this are deleted by the retention
-# sweep (reaper loop + reconcile_tasks command). 0 disables — history then grows forever.
+# sweep (the in-process reaper loop). 0 disables — history then grows forever.
 TASK_RETENTION_SECONDS = conf.rekuest.task_retention
 
 # Probes (facade.probes): redis-held, zero-DB-row invocations. TTL is the garbage
@@ -140,7 +156,16 @@ CHANNEL_LAYERS = {
     "default": {
         # This example app uses the Redis chasnnel layer implementation channels_redis
         "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {"hosts": [(conf.redis.host, conf.redis.port)], "prefix": "mikro"},
+        # ``prefix`` namespaces every group/channel key: it MUST be unique per service on a
+        # shared redis (it used to be a copy-pasted "mikro" across most of the stack).
+        # ``capacity`` is NOT per socket: channels_redis multiplexes every consumer of a
+        # process onto one receive queue, and silently drops what does not fit.
+        "CONFIG": {
+            "hosts": [(conf.redis.host, conf.redis.port)],
+            "prefix": conf.redis.channel_prefix,
+            "capacity": conf.redis.channel_capacity,
+            "expiry": 60,
+        },
     },
 }
 

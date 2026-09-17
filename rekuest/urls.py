@@ -50,6 +50,9 @@ urlpatterns = [
             HealthCheckView.as_view(
                 checks=[
                     "health_check.Database",
+                    # A backend whose clock has drifted must be taken out of rotation: it would
+                    # revoke healthy agents' leases in a loop. See ``facade.clock``.
+                    "facade.clock.ClockSkewHealthCheck",
                 ]
             )
         ),

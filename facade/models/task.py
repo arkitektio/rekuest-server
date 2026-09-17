@@ -125,11 +125,80 @@ class Task(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
+    revision = models.PositiveBigIntegerField(
+        default=1,
+        db_default=1,
+        help_text="Monotonic per-task version, bumped by every write to this row (see ``save``). Carried in the task change feeds so a consumer can discard an update that arrives out of order — with several backends writing, channel-layer arrival order is not commit order.",
+    )
+    # --- Deadline bookkeeping -------------------------------------------------------------
+    # Every deadline the server enforces lives in these columns rather than in a process-local
+    # timer, so any backend (or a freshly restarted one) can act on it — see ``facade.reaper``.
+    step = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text="Whether this task was assigned in step mode — persisted so a redelivered Assign stays stepped.",
+    )
+    dispatched_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the Assign was last handed to the agent's transport. NULL = never pushed (virtual higher-order wrapper, or the push failed) — the pickup watchdog owns the retry.",
+    )
+    dispatch_attempts = models.PositiveSmallIntegerField(
+        default=0,
+        db_default=0,
+        help_text="How many times the Assign was dispatched (the pickup watchdog redelivers once, then fails the task).",
+    )
+    picked_up_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the executing agent first reported ANYTHING about this task. ``latest_event_kind`` cannot answer this: Progress/Log/Yield never move it, so a healthy running task still reads QUEUED.",
+    )
+    interrupt_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Deadline after which an unconfirmed cancel is escalated to an interrupt (auto_interrupt / control deadline).",
+    )
+    last_progress_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last Progress report of a physical-effect task — only stamped while the progress lease is enabled.",
+    )
 
     def __str__(self):
         return f"{self.latest_event_kind} for {self.action_id}"
 
+    def save(self, *args, **kwargs):
+        """Every update bumps ``revision`` — atomically, in the database.
+
+        ``F("revision") + 1`` rather than ``self.revision + 1``: the latter is only right when the
+        instance was read under a row lock, and not every writer holds one. Django assigns the
+        value the UPDATE returned back onto the instance *before* ``post_save`` fires, so the
+        change-feed payload built there carries the fresh integer. ``updated_at`` rides along:
+        ``auto_now`` is silently skipped whenever ``update_fields`` omits it, which is how nearly
+        every task write is made — it used to be frozen at creation time.
+
+        ``.update()`` sites bypass this on purpose: they touch only bookkeeping columns
+        (``dispatched_at``, ``picked_up_at``, ``interrupt_at``, ``last_progress_at``) that no
+        change feed carries.
+        """
+        if not self._state.adding:
+            update_fields = kwargs.get("update_fields")
+            if update_fields is None or len(update_fields) > 0:
+                self.revision = models.F("revision") + 1
+                if update_fields is not None:
+                    kwargs["update_fields"] = list({*update_fields, "revision", "updated_at"})
+        super().save(*args, **kwargs)
+
     class Meta:
+        constraints = [
+            # THE assign idempotency guarantee. ``assign`` dedupes on the caller-supplied
+            # reference with a read-then-create; with more than one backend two retries of the
+            # same assign land on different processes at the same instant, both read "absent",
+            # and without this both create a task and both dispatch it — the work runs twice.
+            # NULL callers are distinct in Postgres, so caller-less rows are unaffected. The
+            # constraint's own index serves the dedupe lookup.
+            models.UniqueConstraint(fields=["caller", "reference"], name="task_unique_reference_per_caller"),
+        ]
         indexes = [
             # The org-scoped ``tasks`` list. The org restriction lives on Agent (see
             # ``types.Task.get_queryset`` -> ``agent__organization``), so this is the Task-side
@@ -157,12 +226,22 @@ class Task(models.Model):
                 condition=models.Q(is_done=True, ephemeral=False, latest_event_kind=enums.TaskEventChoices.COMPLETED),
                 name="task_replay_idx",
             ),
+            # The pickup watchdog: open tasks no agent has reported on yet, by dispatch time.
+            models.Index(
+                fields=["dispatched_at"],
+                condition=models.Q(is_done=False, picked_up_at__isnull=True),
+                name="task_unpicked_idx",
+            ),
+            # The cancel→interrupt escalation sweep: only rows with a pending deadline.
+            models.Index(
+                fields=["interrupt_at"],
+                condition=models.Q(is_done=False, interrupt_at__isnull=False),
+                name="task_interrupt_due_idx",
+            ),
             # The agent-disconnect and orphaned-executor sweeps (``ModelPersistBackend``,
-            # ``reconcile_tasks``) all run filter(agent_id=, is_done=False). A partial index holds
+            # ``facade.reaper``) all run filter(agent_id=, is_done=False). A partial index holds
             # only in-flight rows instead of walking that agent's whole history.
             models.Index(fields=["agent"], condition=models.Q(is_done=False), name="task_agent_open_idx"),
-            # The assign dedupe — filter(caller=, reference=) — on the hottest write path.
-            models.Index(fields=["caller", "reference"], name="task_caller_ref_idx"),
             # The retention sweep: filter(is_done=True, root__isnull=True, finished_at__lt=cutoff).
             # Partial on exactly those constants so it only ever holds terminal roots.
             models.Index(

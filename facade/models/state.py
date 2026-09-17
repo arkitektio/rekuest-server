@@ -86,6 +86,15 @@ class Session(models.Model):
     updated_at = models.DateTimeField(auto_now=True, help_text="The time this session was last updated")
     active = models.BooleanField(default=True, help_text="Is this session active?")
 
+    class Meta:
+        constraints = [
+            # ``aget_or_create(agent, session_id)`` runs from three handlers on whichever backend
+            # holds the socket. Two rows for one logical session split its patch/snapshot log, and
+            # state reconstruction then silently returns half a history (``logic.py`` picks the
+            # newest row). The constraint makes ``get_or_create`` retry into the winner instead.
+            models.UniqueConstraint(fields=["agent", "session_id"], name="session_unique_id_per_agent"),
+        ]
+
 
 class Patch(models.Model):
     """A Patch is a representation of a change to a state. Patches are used to represent the changes that happen to a state over time. They are stored as a log of changes to a state and can be used to reconstruct the state at any point in time."""

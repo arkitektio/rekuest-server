@@ -61,25 +61,26 @@ class AgentConsumer(AsyncWebsocketConsumer):
     groups = ["broadcast"]
 
     @classmethod
-    def broadcast(cls, agent: "models.Agent | int | str", message: messages.ToAgentMessage, *, priority: bool = False) -> None:
+    def broadcast(cls, agent: "models.Agent | int | str", message: messages.ToAgentMessage, *, priority: bool = False) -> bool:
         """Send a message to a specific agent over its transport (thin facade).
 
         Kept for the existing backend/signal call sites; delegates to the typed
         :func:`facade.transport.deliver_to_agent`, which picks redis queue (WEBSOCKET) vs
         HMAC-signed POST (WEBHOOK). Called only AFTER the row is persisted, so a failed
         delivery is recoverable from the DB. Pass the ``Agent`` row when it is already
-        loaded; an id falls back to the TTL-cached delivery lookup.
+        loaded; an id falls back to the TTL-cached delivery lookup. Returns whether the
+        transport accepted the message (see ``deliver_to_agent``).
         """
         from facade import transport  # lazy: transport imports this consumer's queue module
 
         if not isinstance(agent, models.Agent):
             agent = transport.get_agent_for_delivery(int(agent))
-        transport.deliver_to_agent(agent, message, priority=priority)
+        return transport.deliver_to_agent(agent, message, priority=priority)
 
     async def connect(self) -> None:
         """Accept the socket and build a protocol bound to this transport."""
-        # Lazily start the process-wide stale-agent reaper (idempotent). Under daphne there is
-        # no lifespan hook, so the first websocket connection is our startup signal.
+        # Make sure the process-wide reaper runs (idempotent). ``rekuest/asgi.py`` starts it as
+        # soon as the server's event loop is up; this covers any other way of hosting the consumer.
         from facade.reaper import ensure_reaper_started  # lazy: avoids import at app-load time
 
         ensure_reaper_started()
@@ -166,8 +167,17 @@ class AgentConsumer(AsyncWebsocketConsumer):
         )
 
     async def agent_displace(self, event: dict) -> None:
-        """Channel-layer handler: close unless we initiated the displacement."""
+        """Channel-layer handler: close unless we initiated the displacement.
+
+        Stop draining FIRST. ``close()`` only sends the close frame — if our peer is half-open it
+        is never acknowledged, ``disconnect()`` never runs, and until our next heartbeat failed
+        its lease renewal we would keep popping the new connection's Assigns off the shared
+        queue and "delivering" them into a dead socket.
+        """
         if event.get("initiator") != self.connection_id:
+            protocol = getattr(self, "protocol", None)
+            if protocol is not None and protocol.session is not None:
+                await protocol.session.stop_executing()
             await self.close(code=codes.AGENT_REPLACED_CODE)
 
     async def receive(self, text_data: Optional[str] = None, bytes_data: Optional[bytes] = None) -> None:

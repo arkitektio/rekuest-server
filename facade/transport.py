@@ -22,42 +22,54 @@ from facade.consumers.agent_queue import RedisAgentQueue
 
 logger = logging.getLogger(__name__)
 
-# Delivery-routing fields (kind, hook_url, hook_url_secret) change ~never, so a short
-# process-local TTL cache is safe: worst case a redirected webhook or kind flip is
-# picked up one TTL late, while the per-message Agent SELECT disappears.
+# Process-local caches are per BACKEND: with several of them, each holds its own opinion for a
+# full TTL, and which one a request lands on is the load balancer's coin toss. So only things
+# that cannot change are cached long (a caller's organization), a merely-advisory lookup is
+# cached briefly (the caller's webhook: the hot path is "none", and a miss costs a best-effort
+# mirror POST, never the persisted event) — and the ROUTING of a command to an agent is not
+# cached at all. It used to be, for 60 s: after an agent flipped WEBSOCKET→WEBHOOK a backend
+# with a warm entry kept pushing its commands into a redis list no socket would ever drain
+# again — not late, lost — while its neighbours delivered correctly.
 _DELIVERY_CACHE_TTL = 60.0
+_WEBHOOK_LOOKUP_TTL = 5.0
 _DELIVERY_CACHE_MAX = 4096
-_agent_delivery_cache: dict[int, tuple[float, models.Agent]] = {}
 _caller_webhook_cache: dict[int, tuple[float, models.Agent | None]] = {}
 
 
-def _cache_put(cache: dict, key: int, value) -> None:
+def _cache_put(cache: dict, key: int, value, ttl: float = _DELIVERY_CACHE_TTL) -> None:
     if len(cache) >= _DELIVERY_CACHE_MAX:
         cache.clear()
-    cache[key] = (time.monotonic() + _DELIVERY_CACHE_TTL, value)
+    cache[key] = (time.monotonic() + ttl, value)
 
 
 def get_agent_for_delivery(agent_id: int) -> models.Agent:
-    """The slim Agent row needed to route a delivery, behind the process-local TTL cache."""
-    hit = _agent_delivery_cache.get(agent_id)
-    if hit is not None and hit[0] > time.monotonic():
-        return hit[1]
-    agent = models.Agent.objects.only("id", "kind", "hook_url", "hook_url_secret").get(id=agent_id)
-    _cache_put(_agent_delivery_cache, agent_id, agent)
-    return agent
+    """The slim Agent row needed to route a delivery — always read fresh (one PK lookup)."""
+    return models.Agent.objects.only("id", "kind", "hook_url", "hook_url_secret").get(id=agent_id)
 
 
-def deliver_to_agent(agent: models.Agent, message: messages.ToAgentMessage, *, priority: bool = False) -> None:
+def forget_agent_routing(agent: models.Agent) -> None:
+    """Drop what this process cached about ``agent``'s webhook identity (called on save)."""
+    for caller_id, (_, cached) in list(_caller_webhook_cache.items()):
+        if cached is None or cached.pk == agent.pk:
+            _caller_webhook_cache.pop(caller_id, None)
+
+
+def deliver_to_agent(agent: models.Agent, message: messages.ToAgentMessage, *, priority: bool = False) -> bool:
     """Send one ToAgent message to ``agent`` over its transport (queue or webhook).
+
+    Returns whether the transport accepted it: the webhook answered 2xx, or the message is in
+    the agent's redis queue (which also holds it for an offline agent). A redis failure still
+    raises. Dispatch paths record a ``False``/raise on the task (``dispatched_at=NULL``) so the
+    pickup watchdog retries it — a webhook that was down is otherwise never heard from again.
 
     ``priority`` (probe traffic) jumps the agent's queued backlog; the webhook transport
     has no queue to jump, so it is ignored there.
     """
     body = message.model_dump_json()
     if agent.kind == enums.AgentKind.WEBHOOK.value:
-        hooks.deliver_to_hook(agent, body)
-    else:
-        RedisAgentQueue.from_settings().push(str(agent.pk), body, priority=priority)
+        return hooks.deliver_to_hook(agent, body)
+    RedisAgentQueue.from_settings().push(str(agent.pk), body, priority=priority)
+    return True
 
 
 def publish_task_event(event: models.TaskEvent) -> None:
@@ -120,7 +132,7 @@ def _get_webhook_agent_for_caller(caller_id: int) -> models.Agent | None:
         .exclude(hook_url="")
         .first()
     )
-    _cache_put(_caller_webhook_cache, caller_id, agent)
+    _cache_put(_caller_webhook_cache, caller_id, agent, ttl=_WEBHOOK_LOOKUP_TTL)
     return agent
 
 

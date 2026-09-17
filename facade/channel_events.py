@@ -79,6 +79,10 @@ class TaskChangePayload(BaseModel):
     created_at: datetime.datetime
     updated_at: datetime.datetime
     finished_at: Optional[datetime.datetime] = None
+    # Monotonic per-task version. Several backends write the same task (an agent report here, a
+    # cancel or a sweep there) and the channel layer does not deliver in commit order — a
+    # consumer applies a change only if its revision is greater than the last one it applied.
+    revision: int = 0
 
     @classmethod
     def from_task(cls, t) -> "TaskChangePayload":
@@ -99,6 +103,7 @@ class TaskChangePayload(BaseModel):
             created_at=t.created_at,
             updated_at=t.updated_at,
             finished_at=t.finished_at,
+            revision=t.revision if isinstance(t.revision, int) else 0,
         )
 
 

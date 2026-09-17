@@ -113,6 +113,14 @@ class FakeBackend:
         self.calls.append(("caller_id", agent_id))
         return f"caller-{agent_id}"
 
+    async def holds_lease(self, agent_id, lease_epoch):
+        # Fencing at delivery time — the same truth ``renew_agent_lease`` reports.
+        return lease_epoch == self.epoch
+
+    async def is_task_open(self, task_id):
+        # The delivery-time fence: ``closed_tasks`` stands in for tasks the server finalized.
+        return task_id not in getattr(self, "closed_tasks", set())
+
     async def on_agent_disconnected(self, agent_id, connection_id=None):
         self.calls.append(("disconnected", agent_id))
 
@@ -634,3 +642,80 @@ class TestAgentProtocolUnit:
         # The original pair is the one shutdown cancels — nothing left orphaned.
         assert first_listen.cancelled() or first_listen.done()
         assert first_heartbeat.cancelled() or first_heartbeat.done()
+
+
+class FlakyQueue(InMemoryAgentQueue):
+    """An in-memory queue whose next ``failures`` pops raise — a redis blip, without a redis."""
+
+    def __init__(self, failures=1):
+        super().__init__()
+        self.failures = failures
+        self.closes = 0
+        self.recoveries = 0
+
+    async def pop(self, agent_id):
+        if self.failures > 0:
+            self.failures -= 1
+            raise ConnectionError("redis went away")
+        return await super().pop(agent_id)
+
+    async def recover(self, agent_id):
+        self.recoveries += 1
+        return 0
+
+    async def close(self):
+        self.closes += 1
+
+
+@pytest.mark.asyncio
+class TestDrainLoopNeverDiesQuietly:
+    """The drain loop is the ONLY way work reaches the agent, while liveness is decided by the
+    heartbeat next to it. If it stops on its own the agent keeps looking alive, keeps being
+    selected, and never receives anything — every task assigned to it stays QUEUED forever."""
+
+    async def test_queue_failure_is_survived(self):
+        queue = FlakyQueue(failures=2)
+        protocol, sent, closed, agent = make_protocol(queue=queue)
+        await protocol.receive(_register_frame())
+
+        queue.push(str(agent.pk), '{"after": "the-blip"}')
+
+        assert await _wait_for(lambda: any('"the-blip"' in s for s in sent), timeout=5.0)
+        assert not protocol.session.listen_task.done()
+        assert closed == []  # a queue blip is not the agent's problem
+        assert queue.closes == 2  # the broken connection was dropped each time…
+        assert queue.recoveries == 3  # …and popped-but-unacked frames recovered on every (re)start
+        await protocol.shutdown()
+
+    async def test_send_failure_closes_the_socket(self):
+        queue = InMemoryAgentQueue()
+        protocol, sent, closed, agent = make_protocol(queue=queue)
+        await protocol.receive(_register_frame())
+
+        async def broken_send(text):
+            raise RuntimeError("socket is gone")
+
+        protocol.session._send = broken_send
+        queue.push(str(agent.pk), '{"undeliverable": 1}')
+
+        from facade.codes import AGENT_TRANSPORT_FAILED_CODE
+
+        assert await _wait_for(lambda: AGENT_TRANSPORT_FAILED_CODE in closed)
+        await protocol.shutdown()
+
+    async def test_assign_for_a_finalized_task_is_dropped(self):
+        backend = FakeBackend()
+        backend.closed_tasks = {"41"}
+        queue = InMemoryAgentQueue()
+        protocol, sent, closed, agent = make_protocol(queue=queue, backend=backend)
+        await protocol.receive(_register_frame())
+
+        def _assign(task):
+            return messages.Assign(interface="i", task=task, args={}, user="1", org="o", action="a", implementation="1").model_dump_json()
+
+        queue.push(str(agent.pk), _assign("41"))  # finalized by the server while it waited
+        queue.push(str(agent.pk), _assign("42"))
+
+        assert await _wait_for(lambda: any('"42"' in s for s in sent))
+        assert not any('"task":"41"' in s for s in sent)
+        await protocol.shutdown()

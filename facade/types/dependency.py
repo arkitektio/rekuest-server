@@ -9,6 +9,7 @@ import strawberry
 import strawberry_django
 
 from facade import filters, loaders, models
+from kante.types import Info
 from facade.types.demand import ActionDependencyModel, StateDependencyModel
 from facade.types.base import build_prescoped_queryset
 
@@ -95,8 +96,8 @@ class ImplementationMapping:
         return self._key
 
     @strawberry_django.field(description="Get the key of the implementation mapping.")
-    async def implementation(self) -> Implementation:
-        return await loaders.implementation_loader.load(self._value.get("implementation"))
+    async def implementation(self, info: Info) -> Implementation:
+        return await loaders.implementation_loader(info).load(self._value.get("implementation"))
 
     @strawberry_django.field(description="Get the key of the implementation mapping.")
     def resolved_dependencies(self) -> list["ResolvedAgentDependency"]:
@@ -111,8 +112,8 @@ class AgentMapping:
     _value: strawberry.Private[Dict[str, Any]]
 
     @strawberry_django.field(description="Get the agent's name from the mapping.")
-    async def agent(self) -> Agent:
-        return await loaders.agent_loader.load(self._value.get("agent"))
+    async def agent(self, info: Info) -> Agent:
+        return await loaders.agent_loader(info).load(self._value.get("agent"))
 
     @strawberry_django.field(description="Get the agent's ID from the mapping.")
     def agent_id(self) -> str:

@@ -11,7 +11,7 @@ import redis as sync_redis
 from django.conf import settings
 
 from facade.probes.ids import is_probe_id, new_probe_id
-from facade.probes.store import ProbeStore, _call_key, probe_linger_seconds, probe_ttl_seconds
+from facade.probes.store import ProbeStore, _agent_index_key, _call_key, probe_linger_seconds, probe_ttl_seconds
 
 
 @pytest.fixture()
@@ -58,7 +58,7 @@ class TestProbeStore:
         client = sync_redis.Redis(host=settings.AGENT_REDIS_HOST, port=settings.AGENT_REDIS_PORT, decode_responses=True)
         ttl = client.ttl(_call_key(probe_id))
         assert 0 < ttl <= probe_ttl_seconds()
-        assert probe_id in client.smembers("probe:agent:11")
+        assert probe_id in client.smembers(_agent_index_key(11))
         client.close()
 
     def test_seq_is_monotonic_across_writes(self, store):
@@ -91,7 +91,7 @@ class TestProbeStore:
         # terminal reduces the TTL to the linger window and drops the agent index entry
         client = sync_redis.Redis(host=settings.AGENT_REDIS_HOST, port=settings.AGENT_REDIS_PORT, decode_responses=True)
         assert 0 < client.ttl(_call_key(probe_id)) <= probe_linger_seconds()
-        assert client.smembers("probe:agent:1") == set()
+        assert client.smembers(_agent_index_key(1)) == set()
         client.close()
 
     def test_events_after_terminal_are_dropped(self, store):

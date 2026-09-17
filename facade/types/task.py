@@ -34,6 +34,7 @@ class Task:
     caller: Optional["Caller"] = strawberry.field(description="Caller that created this task.")
     created_at: datetime.datetime = strawberry_django.field(description="Creation timestamp.")
     updated_at: datetime.datetime = strawberry_django.field(description="Last update timestamp.")
+    revision: int = strawberry_django.field(description="Monotonic per-task version, bumped by every write. Pairs with the change feeds: discard a TaskChange whose revision is not greater than the one you hold.")
     finished_at: datetime.datetime | None = strawberry.field(description="Timestamp when the task was finished.")
     acted_on: List[str] = strawberry.field(description="List of resources or entities this task acted upon.")
     children: List["Task"] = strawberry.field(description="Child tasks spawned from this one.")

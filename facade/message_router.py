@@ -38,6 +38,32 @@ def _ack(message: messages.FromAgentEvent) -> messages.EventAck:
     )
 
 
+def reply_for_duplicate(message: messages.FromAgentMessage) -> "tuple[Optional[messages.ToAgentMessage], int] | None":
+    """How to answer a request the replay guard has already seen — or ``None`` to route it anyway.
+
+    A duplicate is not routed a second time; that is the point. But the sender still deserves the
+    answer the original earned, or it keeps retrying:
+
+    * an **assign request** → ``None``: route it. It is idempotent on ``(caller, reference)``, so
+      it returns the existing task with ``created=False``, which is exactly the right answer.
+    * a **report** (Started/Paused/terminals) → its ``EventAck``, so the agent stops retaining it.
+      The original request already persisted it.
+    * a **control request** → 409. Cancel/interrupt/pause/resume are instructions, not facts;
+      acking one the server did not apply this time would be a lie. The sender re-signs and retries.
+    * everything else (Yield/Log/Progress, the state stream) → 200 and nothing. Dropping the
+      duplicate IS the correct handling, and it is what makes a naive HTTP retry safe.
+    """
+    match message:
+        case messages.AssignRequest():
+            return None
+        case messages.ControlRequest():
+            return messages.ProtocolError(error="Replayed control request — re-sign and retry."), 409
+        case messages.FromAgentEvent():
+            return _ack(message), 200
+        case _:
+            return None, 200
+
+
 async def _control(op, agent_id, message, connection_id, session_id) -> messages.ControlResponse:
     """Run a caller lifecycle-control request and return its ack (NACK on error, never raise)."""
     try:

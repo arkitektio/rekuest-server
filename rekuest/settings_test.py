@@ -44,6 +44,11 @@ CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
 # deterministic behavior). The reclaim/grace tests opt into a window with override_settings.
 REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0}
 
+# The in-process reaper sweeps every DB-held deadline in the background. Tests call the sweeps
+# (``persist_backend.reconcile_*`` / ``expire_*`` / ``escalate_*``) explicitly instead, so a
+# background pass can never race a test's own assertions.
+REKUEST_REAPER_ENABLED = False
+
 # Point the agent queue at the published dokker redis port (see
 # tests/integration/docker-compose.yaml). Replaces the old redis-factory monkeypatch.
 AGENT_REDIS_HOST = "localhost"

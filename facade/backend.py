@@ -1,12 +1,16 @@
 import uuid
+from datetime import timedelta
 from random import choice
 from typing import Dict, List, Any
 
+from django.db import IntegrityError, transaction
 from django.db.models import Q
+from django.utils import timezone
 
 from facade import enums, inputs, liveness, models, types, messages
 from facade.caller_context import CallerContext
 from facade.consumers.async_consumer import AgentConsumer
+from facade.grace import control_deadline_seconds
 from facade.higher_order import build_lower_args, build_lower_dependencies
 from facade.provenance import mint_token_for_task
 from facade.provenance.canonical import args_hash
@@ -140,8 +144,8 @@ def resolve_direct_target(
         # A higher-order wrapper is virtual; its agent (== the lower implementation's
         # agent, by the co-location rule) is connectivity-checked in ``_assign_higher_order``,
         # which raises a ValueError. Skip the assert here so that path owns the check.
-        if implementation.higher_order_for_id is None:
-            assert agent_is_available(agent), "Agent is not available (not connected, and not a webhook agent)"
+        if implementation.higher_order_for_id is None and not agent_is_available(agent):
+            raise ValueError("Agent is not available (not connected, and not a webhook agent)")
         return implementation.action, implementation, agent
 
     if action_hash:
@@ -155,8 +159,8 @@ def resolve_direct_target(
         # Direct addressing: the caller knows exactly which peer implementation it wants.
         implementation = models.Implementation.objects.get(agent_id=agent_id, interface=interface)
         agent = implementation.agent
-        if implementation.higher_order_for_id is None:
-            assert agent_is_available(agent), "Agent is not available (not connected, and not a webhook agent)"
+        if implementation.higher_order_for_id is None and not agent_is_available(agent):
+            raise ValueError("Agent is not available (not connected, and not a webhook agent)")
         return implementation.action, implementation, agent
 
     raise ValueError("You need to provide an action, action_hash, implementation, or agent+interface to create an assignment for an agent")
@@ -199,6 +203,28 @@ class RedisControllBackend:
     def create_message_id(self) -> str:
         return str(uuid.uuid4())
 
+    def _dispatch_on_commit(self, task: models.Task, agent: models.Agent, message: messages.Assign) -> None:
+        transaction.on_commit(lambda: self._dispatch(task, agent, message))
+
+    def _dispatch(self, task: models.Task, agent: models.Agent, message: messages.Assign) -> bool:
+        """Hand a freshly committed task's Assign to its agent. Never raises.
+
+        The row is the durable record and is already committed, so a transport failure (redis
+        down, webhook unreachable) must not surface as a failed mutation — the caller would
+        retry with the same ``reference`` and be handed the very row that was never sent.
+        Instead the failure is recorded (``dispatched_at=NULL`` = "never left") and the pickup
+        watchdog (``persist_backend.reconcile_unpicked_tasks``) owns the retry.
+        """
+        try:
+            delivered = AgentConsumer.broadcast(agent, message)
+        except Exception:
+            logging.error("Dispatching task %s to agent %s failed; the pickup watchdog will retry it", task.pk, agent.pk, exc_info=True)
+            delivered = False
+        if delivered is False:
+            models.Task.objects.filter(pk=task.pk, is_done=False).update(dispatched_at=None)
+            return False
+        return True
+
     def _request_control(
         self,
         task_id,
@@ -230,12 +256,33 @@ class RedisControllBackend:
         if propagate_children:
             targets += list(models.Task.objects.filter(root_id=task.id, is_done=False).select_related("agent"))
 
+        # The control deadline is a column the reaper sweeps (``escalate_due_controls``), not a
+        # timer: an unconfirmed cancel escalates to an interrupt, an unconfirmed interrupt is
+        # finalized. Any other instruct clears a pending deadline (a resume supersedes a cancel).
+        deadline = control_deadline_seconds()
+        arms_deadline = deadline > 0 and instruct_kind in (enums.TaskInstructKind.CANCEL, enums.TaskInstructKind.INTERRUPT)
+        interrupt_at = timezone.now() + timedelta(seconds=deadline) if arms_deadline else None
+
         for target in targets:
-            target.latest_instruct_kind = instruct_kind
-            target.save(update_fields=["latest_instruct_kind"])
-            models.TaskEvent.objects.create(task=target, kind=inging_kind)
-            models.TaskInstruct.objects.create(task=target, kind=instruct_kind, caller=caller)
-            AgentConsumer.broadcast(target.agent, to_agent_factory(str(target.pk)))
+            # Persisted per target BEFORE its broadcast, and the broadcast is best-effort: a
+            # transport failure must not leave the remaining targets uninstructed. The -ING row
+            # is the durable record; an unreachable executor is what the deadline is for.
+            with transaction.atomic():
+                # Re-read under the row lock: ``target`` came from an unlocked query, and another
+                # backend may have finalized the task since (an agent report, a sweep). Instructing
+                # a finished task would strand it in an -ING state nobody will ever confirm.
+                locked = models.Task.objects.select_for_update(of=("self",)).filter(pk=target.pk).first()
+                if locked is None or locked.is_done:
+                    continue
+                locked.latest_instruct_kind = instruct_kind
+                locked.interrupt_at = interrupt_at
+                locked.save(update_fields=["latest_instruct_kind", "interrupt_at"])
+                models.TaskEvent.objects.create(task=locked, kind=inging_kind)
+                models.TaskInstruct.objects.create(task=locked, kind=instruct_kind, caller=caller)
+            try:
+                AgentConsumer.broadcast(target.agent, to_agent_factory(str(target.pk)))
+            except Exception:
+                logging.error("Could not deliver %s for task %s to agent %s", instruct_kind, target.pk, target.agent_id, exc_info=True)
 
         return task
 
@@ -272,6 +319,28 @@ class RedisControllBackend:
         )
 
     def assign(self, principal: "CallerContext | Any", input: inputs.AssignInputModel) -> models.Task:
+        """Create (or find) the task for this assign. See :meth:`assign_with_status`."""
+        return self.assign_with_status(principal, input)[0]
+
+    @staticmethod
+    def _lost_reference_race(caller: models.Caller, reference: str) -> models.Task | None:
+        """The task another backend created for this very ``(caller, reference)`` a moment ago.
+
+        Called after an ``IntegrityError`` on the insert: ``task_unique_reference_per_caller``
+        fired because a concurrent retry of the same assign — on this or another backend — won.
+        ``None`` means the error was about something else, and must propagate.
+        """
+        return models.Task.objects.filter(caller=caller, reference=reference).first()
+
+    def assign_with_status(self, principal: "CallerContext | Any", input: inputs.AssignInputModel) -> tuple[models.Task, bool]:
+        """``(task, created)``. ``created`` is False for a resend of a known reference.
+
+        Idempotency is a database guarantee, not a read: the ``filter().first()`` below is only a
+        fast path. Two retries of one assign can reach two backends at the same instant and both
+        read "absent"; the unique constraint lets exactly one insert through, and the loser
+        returns the winner's row — WITHOUT dispatching and without running init hooks, or the
+        work would be sent to the agent twice.
+        """
         ctx = CallerContext.coerce(principal)
         # Replay/reuse of prior results is the orchestrator's decision: tasks carry an
         # indexed ``args_hash`` and the ``reusable_task_for`` query surfaces prior completed
@@ -299,11 +368,13 @@ class RedisControllBackend:
         if input.reference is not None:
             existing = models.Task.objects.filter(caller=caller, reference=input.reference).first()
             if existing is not None:
-                return existing
+                return existing, False
 
         if input.dependency:
-            assert input.method, "Method key must be provided when assigning to a dependency"
-            assert input.parent, "Dependency assignments must have a parent task"
+            if not input.method:
+                raise ValueError("Method key must be provided when assigning to a dependency")
+            if not input.parent:
+                raise ValueError("Dependency assignments must have a parent task")
 
             parent = models.Task.objects.get(id=input.parent)
             dependencies = parent.dependencies
@@ -313,8 +384,21 @@ class RedisControllBackend:
 
             agent_dependency = dependencies[input.dependency]
 
+            # The parent's dependency snapshot was frozen at ITS assign time; the agents in it
+            # may have gone since. Only ever choose one that can receive work right now —
+            # otherwise the child lands in a dead agent's queue with nothing left to revisit it.
+            available_ids = {
+                str(pk)
+                for pk in models.Agent.objects.filter(pk__in=[entry.get("agent") for entry in agent_dependency if entry.get("agent")])
+                .filter(agent_available_q(""))
+                .values_list("pk", flat=True)
+            }
+            candidates = [entry for entry in agent_dependency if str(entry.get("agent")) in available_ids]
+            if not candidates:
+                raise ValueError(f"No agent resolved for dependency {input.dependency} is available right now")
+
             # Choose random agent
-            chosen_agent = choice(agent_dependency)
+            chosen_agent = choice(candidates)
 
             if "actions" not in chosen_agent:
                 raise ValueError(f"Dependency {input.dependency} does not contain an action")
@@ -370,36 +454,54 @@ class RedisControllBackend:
         if dependency_dict is None:
             dependency_dict = build_dependency_dict(implementation, ctx, input.dependencies or [])
 
-        task = models.Task.objects.create(
-            action=action,
-            args=input.args,
-            args_hash=args_hash(input.args or {}),
-            reference=reference,
-            parent_id=input.parent,
-            root_id=root_id,
-            agent=agent,
-            acted_on=acted_on,
-            capture=input.capture if input.capture is not None else False,
-            implementation=implementation,
-            dependency=input.dependency,
-            dependency_method=input.method,
-            resolution=resolution,
-            is_done=False,
-            # QUEUED until the agent confirms with Started — creation is not execution.
-            latest_event_kind=enums.TaskEventKind.QUEUED,
-            latest_instruct_kind=enums.TaskInstructKind.ASSIGN,
-            hooks=[h.model_dump() for h in (input.hooks or [])],
-            dependencies=dependency_dict,
-            caller=caller,
-        )
+        # Row + provenance token are one transaction: a token the policy refuses to mint rolls
+        # the row back instead of stranding a QUEUED task nobody was ever told about (and that
+        # the ``(caller, reference)`` dedupe above would then hand back on every retry).
+        try:
+            with transaction.atomic():
+                task = models.Task.objects.create(
+                    action=action,
+                    args=input.args,
+                    args_hash=args_hash(input.args or {}),
+                    reference=reference,
+                    parent_id=input.parent,
+                    root_id=root_id,
+                    agent=agent,
+                    acted_on=acted_on,
+                    capture=input.capture if input.capture is not None else False,
+                    step=bool(input.step),
+                    implementation=implementation,
+                    dependency=input.dependency,
+                    dependency_method=input.method,
+                    resolution=resolution,
+                    is_done=False,
+                    # QUEUED until the agent confirms with Started — creation is not execution.
+                    latest_event_kind=enums.TaskEventKind.QUEUED,
+                    latest_instruct_kind=enums.TaskInstructKind.ASSIGN,
+                    hooks=[h.model_dump() for h in (input.hooks or [])],
+                    dependencies=dependency_dict,
+                    caller=caller,
+                    # Stamped as "about to be handed over"; ``_dispatch`` resets it to NULL if the
+                    # handoff fails, which is what lets the pickup watchdog retry it.
+                    dispatched_at=timezone.now(),
+                    dispatch_attempts=1,
+                )
+                token = mint_token_for_task(task, ctx)
+        except IntegrityError:
+            winner = self._lost_reference_race(caller, reference)
+            if winner is None:
+                raise
+            return winner, False
 
         action = implementation.action
 
-        token = mint_token_for_task(task, ctx)
-
-        AgentConsumer.broadcast(
+        # Dispatched only once the row is visible to everyone: inside an outer transaction an
+        # agent could otherwise report on a task no other connection can see yet. Outside one,
+        # ``on_commit`` runs immediately.
+        self._dispatch_on_commit(
+            task,
             agent,
-            message=messages.Assign(
+            messages.Assign(
                 task=str(task.pk),
                 args=input.args,
                 user=str(ctx.user.sub),
@@ -432,9 +534,9 @@ class RedisControllBackend:
                         ),
                     )
 
-        return task
+        return task, True
 
-    def _assign_higher_order(self, ctx: CallerContext, input: inputs.AssignInputModel, higher: models.Implementation, caller: models.Caller, root_id: int | None = None) -> models.Task:
+    def _assign_higher_order(self, ctx: CallerContext, input: inputs.AssignInputModel, higher: models.Implementation, caller: models.Caller, root_id: int | None = None) -> tuple[models.Task, bool]:
         """Orchestrate a higher-order task: remap args/deps, run a child on the lower agent.
 
         The wrapper (``higher``) task is virtual — it is never broadcast to an agent.
@@ -465,7 +567,46 @@ class RedisControllBackend:
 
         reference = input.reference or self.create_message_id()
 
-        # The user-facing wrapper task — created but NOT broadcast.
+        # Wrapper, child and the child's token are one transaction: a wrapper without its
+        # child could never be finished by anyone (its fate is only ever projected from the
+        # child — it is excluded from every sweep).
+        # The wrapper carries the caller's reference, so it is the row the uniqueness guards; a
+        # lost race rolls back the whole pair (no orphaned child) and returns the winner's wrapper.
+        try:
+            with transaction.atomic():
+                higher_task, lower_task, token = self._create_higher_order_pair(ctx, input, higher, caller, root_id, reference, higher_dependencies, lower_impl, lower_action, lower_agent, lower_args, lower_dependencies)
+        except IntegrityError:
+            winner = self._lost_reference_race(caller, reference)
+            if winner is None:
+                raise
+            return winner, False
+
+        self._dispatch_on_commit(
+            lower_task,
+            lower_agent,
+            messages.Assign(
+                task=str(lower_task.pk),
+                args=lower_args,
+                user=str(ctx.user.sub),
+                org=str(ctx.organization.slug),
+                parent=str(higher_task.pk),
+                root=str(lower_task.root_id) if lower_task.root_id else None,
+                step=input.step,
+                reference=lower_task.reference,
+                capture=False,
+                resolution=None,
+                interface=lower_impl.interface,
+                action=str(lower_action.hash),
+                implementation=str(lower_impl.pk),
+                token=token,
+            ),
+        )
+
+        return higher_task, True
+
+    def _create_higher_order_pair(self, ctx, input, higher, caller, root_id, reference, higher_dependencies, lower_impl, lower_action, lower_agent, lower_args, lower_dependencies):
+        """Create the virtual wrapper + its executing child (and mint the child's token)."""
+        # The user-facing wrapper task — created but NOT broadcast (``dispatched_at`` stays NULL).
         higher_task = models.Task.objects.create(
             action=higher.action,
             args=input.args,
@@ -498,36 +639,18 @@ class RedisControllBackend:
             acted_on=acted_on_from_args(lower_args, lower_action),
             capture=False,
             implementation=lower_impl,
+            step=bool(input.step),
             is_done=False,
             latest_event_kind=enums.TaskEventKind.QUEUED,
             latest_instruct_kind=enums.TaskInstructKind.ASSIGN,
             dependencies=lower_dependencies,
             caller=caller,
+            dispatched_at=timezone.now(),
+            dispatch_attempts=1,
         )
 
         token = mint_token_for_task(lower_task, ctx)
-
-        AgentConsumer.broadcast(
-            lower_agent,
-            message=messages.Assign(
-                task=str(lower_task.pk),
-                args=lower_args,
-                user=str(ctx.user.sub),
-                org=str(ctx.organization.slug),
-                parent=str(higher_task.pk),
-                root=str(lower_task.root_id) if lower_task.root_id else None,
-                step=input.step,
-                reference=lower_task.reference,
-                capture=False,
-                resolution=None,
-                interface=lower_impl.interface,
-                action=str(lower_action.hash),
-                implementation=str(lower_impl.pk),
-                token=token,
-            ),
-        )
-
-        return higher_task
+        return higher_task, lower_task, token
 
     def resume(self, input: inputs.ResumeInputModel, caller: models.Caller | None = None) -> models.Task:
         return self._request_control(
@@ -552,7 +675,7 @@ class RedisControllBackend:
     def block(self, info: Info, input: inputs.BlockInputModel) -> models.Agent:
         agent = _agent_in_org(info, input.agent)
         agent.blocked = True
-        agent.save()
+        agent.save(update_fields=["blocked"])
 
         AgentConsumer.broadcast(
             agent,
@@ -566,7 +689,7 @@ class RedisControllBackend:
     def unblock(self, info: Info, input: inputs.UnblockInputModel) -> models.Agent:
         agent = _agent_in_org(info, input.agent)
         agent.blocked = False
-        agent.save()
+        agent.save(update_fields=["blocked"])
 
         return agent
 

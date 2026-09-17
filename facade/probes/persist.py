@@ -164,7 +164,9 @@ class ProbeEventBackend:
             seq, state = claimed
             await _publish(probe_id, enums.TaskEventKind.CRITICAL.value, seq, message="Agent disconnected", caller=state.get("caller"), origin=state.get("origin", "graphql"))
             failed += 1
-        await self.store.drop_agent_index(agent_pk)
+        # Only the ids we just looked at (claimed by us, by a racing winner, or expired) —
+        # probes registered since then by a reconnected agent stay indexed.
+        await self.store.forget_agent_calls(agent_pk, probe_ids)
         return failed
 
 

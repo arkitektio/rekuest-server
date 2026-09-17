@@ -30,5 +30,32 @@ async def load_implementations_by_ids(ids: list[PKType]) -> list[models.Implemen
     return [impl_map.get(str(i)) for i in ids]
 
 
-agent_loader = DataLoader(load_fn=load_agents_by_ids)
-implementation_loader = DataLoader(load_fn=load_implementations_by_ids)
+def _loader(info, name: str, load_fn) -> DataLoader:
+    """A DataLoader scoped to this request, kept on kante's per-request ``_loaders`` store.
+
+    These used to be module-level singletons with caching on. A ``DataLoader``'s cache is never
+    evicted, so each process pinned the first ``Agent``/``Implementation`` row it ever loaded for
+    an id: a later query returned an agent's ``connected``/``name`` as they were at some arbitrary
+    past moment, for the life of the process. With several backends that is also *inconsistent* —
+    which stale snapshot you get depends on which one the load balancer picked.
+
+    Batching is what these are for, and batching is per request, so nothing is lost. Caching stays
+    on for an HTTP context (built fresh per request, so it only dedupes within one query) and off
+    for a websocket context, which lives as long as the subscription.
+    """
+    loaders = getattr(info.context, "_loaders", None)
+    if loaders is None:  # a context without the store (or a plain object in tests)
+        return DataLoader(load_fn=load_fn, cache=False)
+    loader = loaders.get(name)
+    if loader is None:
+        loader = DataLoader(load_fn=load_fn, cache=getattr(info.context, "type", None) == "http")
+        loaders[name] = loader
+    return loader
+
+
+def agent_loader(info) -> DataLoader:
+    return _loader(info, "facade.agents", load_agents_by_ids)
+
+
+def implementation_loader(info) -> DataLoader:
+    return _loader(info, "facade.implementations", load_implementations_by_ids)

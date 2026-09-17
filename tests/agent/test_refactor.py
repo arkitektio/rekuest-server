@@ -2,14 +2,11 @@
 
 These pin the new abstractions the real-time refactor introduced. The existing
 ``test_reclaim_grace.py`` still exercises the *timer* trigger over the same reconcile ops;
-here we call the ops directly (no timers) and drive the DB-sweep management command.
+here we call the ops directly and drive the DB sweeps the in-process reaper runs.
 """
 
 from datetime import timedelta
-from io import StringIO
-
 import pytest
-from django.core.management import call_command
 from django.utils import timezone
 
 from facade import enums, messages, transport
@@ -27,14 +24,14 @@ def test_persist_backend_satisfies_port():
 def test_deliver_to_agent_routes_by_kind(monkeypatch):
     pushed, posted = [], []
     monkeypatch.setattr(transport.RedisAgentQueue, "from_settings", classmethod(lambda cls: type("Q", (), {"push": lambda self, a, b, priority=False: pushed.append((a, b))})()))
-    monkeypatch.setattr(transport.hooks, "deliver_to_hook", lambda agent, body: posted.append((agent, body)))
+    monkeypatch.setattr(transport.hooks, "deliver_to_hook", lambda agent, body: posted.append((agent, body)) or True)
 
     ws = type("A", (), {"pk": 7, "kind": enums.AgentKind.WEBSOCKET.value})()
     hook = type("A", (), {"pk": 8, "kind": enums.AgentKind.WEBHOOK.value})()
     msg = messages.Cancel(task="a1")
 
-    transport.deliver_to_agent(ws, msg)
-    transport.deliver_to_agent(hook, msg)
+    assert transport.deliver_to_agent(ws, msg) is True
+    assert transport.deliver_to_agent(hook, msg) is True
 
     assert len(pushed) == 1 and pushed[0][0] == "7"
     assert len(posted) == 1 and posted[0][0] is hook
@@ -73,7 +70,7 @@ class TestReconcileSweep:
         # Disconnected websocket executor, gone well past the grace window.
         Agent.objects.filter(pk=ass.agent_id).update(kind=enums.AgentKind.WEBSOCKET.value, connected=False, last_seen=timezone.now() - timedelta(minutes=5))
 
-        call_command("reconcile_tasks", stdout=StringIO())
+        async_to_sync(ModelPersistBackend().reconcile_disconnected_agents)()
 
         refreshed = Task.objects.get(pk=ass.pk)
         assert refreshed.latest_event_kind == enums.TaskEventKind.DISCONNECTED
@@ -89,7 +86,7 @@ class TestReconcileSweep:
         webhook = async_to_sync(build_task)("sweep-hook", effect="NONE")
         Agent.objects.filter(pk=webhook.agent_id).update(kind=enums.AgentKind.WEBHOOK.value, connected=False, last_seen=timezone.now() - timedelta(minutes=5))
 
-        call_command("reconcile_tasks", stdout=StringIO())
+        async_to_sync(ModelPersistBackend().reconcile_disconnected_agents)()
 
         assert Task.objects.get(pk=connected.pk).latest_event_kind == enums.TaskEventKind.STARTED
         assert Task.objects.get(pk=webhook.pk).latest_event_kind == enums.TaskEventKind.STARTED

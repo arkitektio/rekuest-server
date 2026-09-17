@@ -6,6 +6,7 @@ from django.db.models import Exists, OuterRef, Q
 from facade import inputs, models, types
 from facade.descriptors import compile_descriptors_to_jsonpath, compile_returndescriptors_to_jsonpath
 from facade.protocol import infer_protocols
+from facade.registration_lock import lock_organization
 from facade.unique import infer_action_scope
 from kante.types import Info
 from rekuest_core.inputs.models import DefinitionInputModel, ImplementationInputModel
@@ -266,24 +267,32 @@ def _create_implementation(
             # already current — the expensive rewrites below can be skipped.
             definition_changed = False
     except models.Action.DoesNotExist:
-        action = models.Action.objects.create(
+        # ``get_or_create``, not ``create``: Actions are shared by every agent of the app+org, so
+        # two agents of one fleet registering the same NEW action can both miss the lookup — and a
+        # bare ``create`` then raises ``IntegrityError`` against the (organization, app, key,
+        # version) constraint, aborting an entire registration. ``get_or_create`` runs its insert
+        # in a savepoint and re-reads the winner's row instead. The org lock in
+        # ``implement_agent`` makes this the backstop rather than the mechanism.
+        action, _ = models.Action.objects.get_or_create(
             key=key,
             version=version,
             app=app,
-            hash=hash,
             organization=agent.organization,
-            description=definition.description or "No description",
-            args=[i.model_dump() for i in definition.args],
-            scope=scope,
-            stateful=definition.stateful,
-            pure=definition.pure,
-            idempotent=desired_idempotent,
-            allow_probe=definition.allow_probe,
-            is_dev=definition.is_dev,
-            kind=definition.kind,
-            port_groups=[i.model_dump() for i in definition.port_groups],
-            returns=[i.model_dump() for i in definition.returns],
-            name=definition.name,
+            defaults=dict(
+                hash=hash,
+                description=definition.description or "No description",
+                args=[i.model_dump() for i in definition.args],
+                scope=scope,
+                stateful=definition.stateful,
+                pure=definition.pure,
+                idempotent=desired_idempotent,
+                allow_probe=definition.allow_probe,
+                is_dev=definition.is_dev,
+                kind=definition.kind,
+                port_groups=[i.model_dump() for i in definition.port_groups],
+                returns=[i.model_dump() for i in definition.returns],
+                name=definition.name,
+            ),
         )
         if action_map is not None:
             action_map[(key, version)] = action
@@ -382,6 +391,8 @@ def _create_implementation(
 
 
 def create_implementation(info: Info, input: inputs.CreateImplementationInput) -> types.Implementation:
+    # Same serialization as ``implement_agent``: this path writes the very same org-shared rows.
+    lock_organization(info.context.request.organization)
     agent, _ = models.Agent.objects.update_or_create(
         client=info.context.request.client,
         user=info.context.request.user,

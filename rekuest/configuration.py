@@ -63,6 +63,9 @@ class RedisSettings(BaseModel):
 
     host: str = Field(description="Redis host.")
     port: int = Field(default=6379, description="Redis port.")
+    key_prefix: str = Field(default="rekuest", description="Namespace for every redis key this service writes (agent queues, probe state, reaper token, webhook replay guard). Give each deployment sharing one redis a distinct value.")
+    channel_prefix: str = Field(default="rekuest", description="Key prefix for the channels_redis channel layer. Must differ from every other service on the same redis, or group messages bleed across services.")
+    channel_capacity: int = Field(default=5000, description="channels_redis capacity. This bounds the ONE per-process receive queue shared by every socket and subscription in a replica — messages beyond it are dropped silently — so it must be far above the library default of 100.")
 
 
 class RekuestBlock(BaseModel):
@@ -73,6 +76,12 @@ class RekuestBlock(BaseModel):
     grace_default: int = Field(default=30, description="Default reclaim grace window (seconds) after a disconnect.")
     grace_physical: int = Field(default=5, description="Grace window (seconds) for effect:physical work.")
     progress_lease: int = Field(default=0, description="Progress lease (seconds); 0 disables the wedged-task lease.")
+    sweep_interval: int = Field(default=5, description="How often (seconds) the in-process reaper sweeps the DB-held deadlines. Bounds how late a deadline can fire.")
+    pickup_deadline: int = Field(default=60, description="Seconds a dispatched task may go without any report from its (live) agent before the Assign is redelivered once, then failed; 0 disables.")
+    disconnected_expiry: int = Field(default=3600, description="Seconds a DISCONNECTED (fate unknown) task stays recoverable before it is finalized as terminal; 0 = never.")
+    control_deadline: int = Field(default=60, description="Seconds an unconfirmed cancel may wait before it escalates to an interrupt (and an unconfirmed interrupt before it is finalized); 0 disables. On by default: a Cancel/Interrupt frame lost in transit (a displaced connection, a redis restart) is otherwise never noticed — the DB says CANCELLING while the agent never heard of it.")
+    hook_signature_mode: str = Field(default="compat", description="HookAgent HTTP signatures. 'compat': accept the timestamped V1 signature or the legacy body-only one, send both. 'strict': V1 only (replay-protected).")
+    hook_max_skew: int = Field(default=300, description="Maximum age/clock skew (seconds) accepted for a V1-signed HookAgent request; also bounds the replay-guard window.")
     task_retention: int = Field(default=0, description="Seconds to keep terminal root task trees; 0 disables deletion. Deleting past runs also removes them from replay (reusable_task_for). Suggested production value: 2592000 (30 days).")
     probe_ttl: int = Field(default=3600, description="Lifetime (seconds) of a probe's redis state while live.")
     probe_linger: int = Field(default=300, description="How long (seconds) a terminal call's state lingers for late subscribers.")

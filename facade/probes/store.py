@@ -35,11 +35,9 @@ import redis.asyncio as aredis
 from django.conf import settings
 from django.utils import timezone
 
-logger = logging.getLogger(__name__)
+from facade import redis_keys
 
-_KEY_PREFIX = "probe:"
-_AGENT_INDEX_PREFIX = "probe:agent:"
-_INFLIGHT_PREFIX = "probe:inflight:"
+logger = logging.getLogger(__name__)
 
 
 def probe_ttl_seconds() -> int:
@@ -54,16 +52,18 @@ def probe_max_inflight_per_caller() -> int:
     return int(getattr(settings, "PROBE_MAX_INFLIGHT_PER_CALLER", 32))
 
 
+# All probe keys live under the service's redis namespace (``facade.redis_keys``). Probe state
+# from before the namespacing simply expires with its TTL — probes are hover-grade.
 def _call_key(probe_id: str) -> str:
-    return f"{_KEY_PREFIX}{probe_id}"
+    return redis_keys.key("probe", probe_id)
 
 
 def _agent_index_key(agent_pk: int | str) -> str:
-    return f"{_AGENT_INDEX_PREFIX}{agent_pk}"
+    return redis_keys.key("probe-agent", agent_pk)
 
 
 def _inflight_key(caller_pk: int | str) -> str:
-    return f"{_INFLIGHT_PREFIX}{caller_pk}"
+    return redis_keys.key("probe-inflight", caller_pk)
 
 
 # One decoding pool per (host, port), mirroring the agent queue's pooling so the
@@ -275,7 +275,7 @@ class ProbeStore:
         """
         connection = self._sync()
         total = 0
-        for _ in connection.scan_iter(match=f"{_KEY_PREFIX}p-*", count=500):
+        for _ in connection.scan_iter(match=_call_key("p-*"), count=500):
             total += 1
         raw = connection.get(_inflight_key(caller_pk))
         inflight = max(0, int(raw)) if raw is not None else 0
@@ -288,8 +288,17 @@ class ProbeStore:
     async def live_calls_for_agent(self, agent_pk: int | str) -> list[str]:
         return sorted(await self._async().smembers(_agent_index_key(agent_pk)))
 
-    async def drop_agent_index(self, agent_pk: int | str) -> None:
-        await self._async().delete(_agent_index_key(agent_pk))
+    async def forget_agent_calls(self, agent_pk: int | str, probe_ids: list[str]) -> None:
+        """Remove exactly these ids from the agent's live-probe index.
+
+        Never ``DELETE`` the whole set: the agent may already have reconnected — to this or to
+        another replica — and registered NEW probes in it while the old connection's teardown
+        was still running. Dropping those from the index means no later disconnect fails them,
+        their terminal claim never runs, and the caller's in-flight slots leak until it is
+        refused new probes altogether.
+        """
+        if probe_ids:
+            await self._async().srem(_agent_index_key(agent_pk), *probe_ids)
 
     async def close(self) -> None:
         loop = asyncio.get_running_loop()

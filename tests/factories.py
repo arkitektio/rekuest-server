@@ -300,6 +300,21 @@ def _build_implementation_for_agent(agent_pk, prefix, needs_token=True, allow_pr
     )
 
 
+def _seed_throwaway_agent_graph(prefix):
+    """A standalone Agent with its own user/client/org/app — no token, no socket.
+
+    For tests that only need *an* agent to hang rows off (locks, sessions, bloks), where
+    ``seed_agent`` would tie them to the shared static-token identity and to each other.
+    """
+    user = User.objects.create(username=f"{prefix}-user", password="x", sub=f"{prefix}-sub")
+    device = Device.objects.create(device_id=f"{prefix}-device")
+    client = Client.objects.create(client_id=f"{prefix}-client", device=device)
+    organization = Organization.objects.create(slug=f"{prefix}-org")
+    app = App.objects.create(identifier=f"{prefix}-app")
+    release = Release.objects.create(app=app, version="1.0.0")
+    return Agent.objects.create(app=app, hash=f"{prefix}-hash", release=release, user=user, client=client, organization=organization)
+
+
 def _build_state_for_agent(agent_pk, interface, prefix):
     """Create a State (and its definition) attached to an existing agent."""
     agent = Agent.objects.get(pk=agent_pk)
@@ -342,3 +357,4 @@ build_implementation_for_agent = sync_to_async(_build_implementation_for_agent)
 build_webhook_agent = sync_to_async(_build_webhook_agent)
 build_unimplemented_task_for_agent = sync_to_async(_build_unimplemented_task_for_agent)
 build_state_for_agent = sync_to_async(_build_state_for_agent)
+seed_throwaway_agent_graph = sync_to_async(_seed_throwaway_agent_graph)

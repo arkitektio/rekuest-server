@@ -8,6 +8,7 @@ dispatcher). httpx is stubbed so no real network calls happen.
 import json
 
 import pytest
+from asgiref.sync import sync_to_async
 from django.test import RequestFactory
 
 from facade import enums, hooks, messages
@@ -75,7 +76,10 @@ def test_broadcast_to_webhook_posts_signed(post_recorder):
     assert call["url"] == "https://hook.example/in"
     body = call["content"]
     assert json.loads(body)["type"] == messages.ToAgentMessageType.CANCEL.value
-    # Signed with the agent's secret.
+    # Signed with the agent's secret — the replay-protected V1 header, plus the legacy one
+    # while the compatibility window is open.
+    timestamp, digest = hooks.parse_v1(call["headers"][hooks.SIGNATURE_V1_HEADER])
+    assert digest == hooks.sign("topsecret", hooks.signed_payload_v1(agent.pk, timestamp, body))
     assert call["headers"][hooks.SIGNATURE_HEADER] == hooks.sign("topsecret", body)
 
 
@@ -101,14 +105,30 @@ def test_caller_event_is_posted_to_webhook_caller(post_recorder):
 # --------------------------------------------------------------------------- #
 # HTTP intake
 # --------------------------------------------------------------------------- #
-def _signed_request(agent, message):
-    body = message.model_dump_json().encode("utf-8")
-    sig = hooks.sign(agent.hook_url_secret, body)
+def _header(name: str) -> str:
+    return f"HTTP_{name.upper().replace('-', '_')}"
+
+
+def _signed_request(agent, message, *, body=None, timestamp=None, agent_id=None):
+    """A V1-signed intake request. ``agent_id``/``timestamp`` are overridable to forge one."""
+    body = message.model_dump_json().encode("utf-8") if body is None else body
+    signature = hooks.sign_v1(agent.hook_url_secret, agent.pk if agent_id is None else agent_id, body, timestamp=timestamp)
     return RequestFactory().post(
         f"/agi/http/{agent.pk}",
         data=body,
         content_type="application/json",
-        **{f"HTTP_{hooks.SIGNATURE_HEADER.upper().replace('-', '_')}": sig},
+        **{_header(hooks.SIGNATURE_V1_HEADER): signature},
+    )
+
+
+def _legacy_signed_request(agent, message):
+    """The pre-V1 body-only signature, which ``compat`` still accepts."""
+    body = message.model_dump_json().encode("utf-8")
+    return RequestFactory().post(
+        f"/agi/http/{agent.pk}",
+        data=body,
+        content_type="application/json",
+        **{_header(hooks.SIGNATURE_HEADER): hooks.sign(agent.hook_url_secret, body)},
     )
 
 
@@ -138,7 +158,7 @@ class TestHookIntake:
             f"/agi/http/{agent.pk}",
             data=body,
             content_type="application/json",
-            **{f"HTTP_{hooks.SIGNATURE_HEADER.upper().replace('-', '_')}": "deadbeef"},
+            **{_header(hooks.SIGNATURE_V1_HEADER): "t=1,v1=deadbeef"},
         )
         response = await hook_intake(request, str(agent.pk))
         assert response.status_code == 401
@@ -164,8 +184,6 @@ class TestHookIntake:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 async def test_action_assign_selects_webhook_agent(post_recorder):
-    from asgiref.sync import sync_to_async
-
     from facade.backend import controll_backend, agent_is_available
     from facade.caller_context import CallerContext
     from facade import inputs
@@ -179,3 +197,106 @@ async def test_action_assign_selects_webhook_agent(post_recorder):
     action_id = str(impl.action_id)
     task = await sync_to_async(controll_backend.assign)(ctx, inputs.AssignInputModel(action=action_id, args={}))
     assert str(task.agent_id) == str(agent.pk)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+class TestHookIntakeIsReplaySafe:
+    """A websocket has a session; an HTTP request has to stand alone. A captured body signed with
+    the old body-only scheme was replayable forever, against any backend — and an ordinary retry
+    was indistinguishable from an attack, which is what fed the assign double-execution bug."""
+
+    async def test_a_replayed_report_is_acked_but_not_persisted_twice(self, post_recorder, agent_ws_redis):
+        agent = await build_webhook_agent("hook-replay-report", secret="sek")
+        task = await build_task("hook-replay-report-task", agent_pk=agent.pk)
+        msg = messages.Progress(task=str(task.pk), progress=10)
+        request = _signed_request(agent, msg)
+
+        first = await hook_intake(request, str(agent.pk))
+        replay = await hook_intake(_signed_request(agent, msg, body=request.body, timestamp=hooks.parse_v1(request.headers[hooks.SIGNATURE_V1_HEADER])[0]), str(agent.pk))
+
+        assert first.status_code == 200 and replay.status_code == 200
+        # Dropping the duplicate IS the handling: exactly one PROGRESS event exists.
+        assert await TaskEvent.objects.filter(task=task, kind=enums.TaskEventKind.PROGRESS).acount() == 1
+
+    async def test_a_replayed_assign_request_still_answers_with_the_same_task(self, post_recorder, agent_ws_redis):
+        """It must be routed again, not refused: the sender needs its ``AssignResponse``, and the
+        unique constraint on (caller, reference) makes re-routing return the original task."""
+        agent = await build_webhook_agent("hook-replay-assign", secret="sek")
+        impl = await build_implementation_for_agent(agent.pk, "hook-replay-assign")
+        parent = await build_task("hook-replay-assign-parent")
+        msg = messages.AssignRequest(reference="hr-replay", implementation=str(impl.pk), parent=str(parent.pk), args={})
+        request = _signed_request(agent, msg)
+        timestamp = hooks.parse_v1(request.headers[hooks.SIGNATURE_V1_HEADER])[0]
+
+        first = json.loads((await hook_intake(request, str(agent.pk))).content)
+        replay = json.loads((await hook_intake(_signed_request(agent, msg, body=request.body, timestamp=timestamp), str(agent.pk))).content)
+
+        assert first["created"] is True and replay["created"] is False
+        assert replay["task"] == first["task"]
+        assert await Task.objects.filter(reference="hr-replay").acount() == 1
+
+    async def test_a_replayed_control_request_is_refused_not_acked(self, post_recorder, agent_ws_redis):
+        """A cancel is an instruction, not a fact: acking one the server did not apply is a lie."""
+        agent = await build_webhook_agent("hook-replay-cancel", secret="sek")
+        from facade.models import Caller
+
+        caller = await Caller.objects.acreate(client=agent.client, user=agent.user, organization=agent.organization)
+        task = await build_task("hook-replay-cancel-task", agent_pk=agent.pk)
+        await Task.objects.filter(pk=task.pk).aupdate(caller=caller)
+
+        msg = messages.CancelRequest(task=str(task.pk))
+        request = _signed_request(agent, msg)
+        timestamp = hooks.parse_v1(request.headers[hooks.SIGNATURE_V1_HEADER])[0]
+
+        first = await hook_intake(request, str(agent.pk))
+        replay = await hook_intake(_signed_request(agent, msg, body=request.body, timestamp=timestamp), str(agent.pk))
+
+        assert first.status_code == 200
+        assert replay.status_code == 409
+
+    async def test_a_stale_request_is_rejected_even_though_it_is_signed(self, post_recorder, agent_ws_redis, settings):
+        """The timestamp is inside the signed payload, so it cannot be edited — it is what bounds
+        how long a captured request stays usable."""
+        settings.HOOK_MAX_SKEW = 60
+        agent = await build_webhook_agent("hook-stale", secret="sek")
+        task = await build_task("hook-stale-task", agent_pk=agent.pk)
+        import time
+
+        msg = messages.Completed(task=str(task.pk))
+        response = await hook_intake(_signed_request(agent, msg, timestamp=int(time.time()) - 3600), str(agent.pk))
+
+        assert response.status_code == 401
+        assert (await Task.objects.aget(pk=task.pk)).is_done is False
+
+    async def test_a_request_signed_for_another_agent_is_rejected(self, post_recorder, agent_ws_redis):
+        """Two HookAgents can share a secret; binding the agent id into the payload stops a body
+        signed for one from being replayed against the other."""
+        victim = await build_webhook_agent("hook-victim", secret="shared")
+        other = await build_webhook_agent("hook-other", secret="shared")
+        task = await build_task("hook-victim-task", agent_pk=victim.pk)
+
+        msg = messages.Completed(task=str(task.pk))
+        response = await hook_intake(_signed_request(victim, msg, agent_id=other.pk), str(victim.pk))
+
+        assert response.status_code == 401
+
+    async def test_legacy_signature_is_accepted_in_compat_and_refused_in_strict(self, post_recorder, agent_ws_redis, settings):
+        agent = await build_webhook_agent("hook-compat", secret="sek")
+        task = await build_task("hook-compat-task", agent_pk=agent.pk)
+        msg = messages.Progress(task=str(task.pk), progress=1)
+
+        settings.HOOK_SIGNATURE_MODE = "compat"
+        assert (await hook_intake(_legacy_signed_request(agent, msg), str(agent.pk))).status_code == 200
+
+        settings.HOOK_SIGNATURE_MODE = "strict"
+        assert (await hook_intake(_legacy_signed_request(agent, msg), str(agent.pk))).status_code == 401
+
+    async def test_strict_mode_sends_only_the_replay_protected_header(self, post_recorder, settings):
+        settings.HOOK_SIGNATURE_MODE = "strict"
+        agent = await sync_to_async(_build_webhook_agent)("hook-strict-out", secret="sek")
+        await sync_to_async(AgentConsumer.broadcast)(str(agent.pk), messages.Cancel(task="t-1"))
+
+        headers = post_recorder.calls[-1]["headers"]
+        assert hooks.SIGNATURE_V1_HEADER in headers
+        assert hooks.SIGNATURE_HEADER not in headers

@@ -28,6 +28,15 @@ class Lock(models.Model):
         help_text="The assigniation that currently holds this lock",
     )
 
+    class Meta:
+        constraints = [
+            # One row per lock key. It is upserted from two directions — the agent's socket
+            # (``on_agent_lock``) and its registration, which run on different backends — and
+            # ``update_or_create`` cannot dedupe what the database does not constrain. A second
+            # row makes every later upsert raise ``MultipleObjectsReturned``, permanently.
+            models.UniqueConstraint(fields=["agent", "key"], name="lock_unique_key_per_agent"),
+        ]
+
 
 class Agent(models.Model):
     app = models.ForeignKey(
@@ -125,6 +134,25 @@ class Agent(models.Model):
             )
         ]
 
+    # The executor lease. Owned exclusively by the claim / renew / release / revoke paths in
+    # ``facade.persist_backend``, each of which writes them with explicit ``update_fields``.
+    LEASE_FIELDS = frozenset({"connected", "last_seen", "lease_epoch", "active_connection_id", "active_session_id"})
+
+    def save(self, *args, **kwargs):
+        """A save that names no fields never touches the lease.
+
+        ``agent.save()`` writes EVERY column from whatever snapshot the instance was loaded with.
+        With several backends that snapshot is routinely stale: an operator renames or unblocks an
+        agent on one process while another claims or revokes its lease, and the late full-row
+        save silently restores the old ``lease_epoch`` — un-fencing a connection whose in-flight
+        work was already failed — or flips ``connected`` back. So a bare save of an existing row
+        is narrowed to everything *except* :attr:`LEASE_FIELDS`. Lease writers are unaffected:
+        they always pass ``update_fields``.
+        """
+        if not self._state.adding and kwargs.get("update_fields") is None and not kwargs.get("force_insert"):
+            kwargs["update_fields"] = [f.name for f in self._meta.concrete_fields if not f.primary_key and f.name not in self.LEASE_FIELDS]
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.name}"
 
@@ -200,6 +228,18 @@ class MemoryDrawer(models.Model):
     )
     label = models.CharField(max_length=1000, null=True)
     description = models.TextField(null=True)
+
+    class Meta:
+        constraints = [
+            # ``shelve_in_memory_drawer`` upserts on (shelve, resource_id); without this two
+            # concurrent shelvings of one resource create two drawers and every later upsert
+            # raises. Partial: ``resource_id`` is nullable and NULLs are not a duplicate.
+            models.UniqueConstraint(
+                fields=["shelve", "resource_id"],
+                condition=models.Q(resource_id__isnull=False),
+                name="drawer_unique_resource_per_shelve",
+            ),
+        ]
 
 
 class HardwareRecord(models.Model):

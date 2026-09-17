@@ -24,6 +24,7 @@ class TaskChange:
     created_at: datetime.datetime
     updated_at: datetime.datetime
     finished_at: datetime.datetime | None
+    revision: int = strawberry.field(description="Monotonic per-task version. Changes are produced by several backends and may arrive out of order: apply one only if its revision is greater than the last you applied.")
 
     @classmethod
     def from_model(cls, t: models.Task) -> "TaskChange":
@@ -42,6 +43,7 @@ class TaskChange:
             created_at=t.created_at,
             updated_at=t.updated_at,
             finished_at=t.finished_at,
+            revision=t.revision if isinstance(t.revision, int) else 0,
         )
 
     @classmethod
@@ -61,6 +63,7 @@ class TaskChange:
             created_at=p.created_at,
             updated_at=p.updated_at,
             finished_at=p.finished_at,
+            revision=p.revision,
         )
 
 

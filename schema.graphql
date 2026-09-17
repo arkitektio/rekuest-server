@@ -4705,6 +4705,11 @@ type Task {
   """Last update timestamp."""
   updatedAt: DateTime!
 
+  """
+  Monotonic per-task version, bumped by every write. Pairs with the change feeds: discard a TaskChange whose revision is not greater than the one you hold.
+  """
+  revision: Int!
+
   """Timestamp when the task was finished."""
   finishedAt: DateTime
 
@@ -4760,6 +4765,11 @@ type TaskChange {
   createdAt: DateTime!
   updatedAt: DateTime!
   finishedAt: DateTime
+
+  """
+  Monotonic per-task version. Changes are produced by several backends and may arrive out of order: apply one only if its revision is greater than the last you applied.
+  """
+  revision: Int!
 }
 
 type TaskChangeEvent {
