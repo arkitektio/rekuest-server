@@ -65,7 +65,7 @@ def test_rebuild_builds_relational_ports_and_matches():
     assert action.return_count == 1
     arg = action.arg_ports.get(parent__isnull=True)
     assert arg.identifier == "@mikro/image"
-    assert arg.compiled_jsonpath == '$.axes == "c"'
+    assert arg.compiled_jsonpath == '$."axes" == "c"'
 
     # The matcher finds the action by a satisfying descriptor and rejects a violating one.
     matching = managers.get_action_ids_by_action_demands([_arg_object_demand("@mikro/image", {"axes": "c"})], organization_id=org.id)[0]
@@ -132,11 +132,11 @@ def test_descriptor_change_forces_compiled_jsonpath_rebuild():
 
     implementation = _create_implementation(_implementation_input("c"), agent)
     arg = implementation.action.arg_ports.get(parent__isnull=True)
-    assert arg.compiled_jsonpath == '$.axes == "c"'
+    assert arg.compiled_jsonpath == '$."axes" == "c"'
 
     implementation = _create_implementation(_implementation_input("t"), agent)
     arg = implementation.action.arg_ports.get(parent__isnull=True)
-    assert arg.compiled_jsonpath == '$.axes == "t"'
+    assert arg.compiled_jsonpath == '$."axes" == "t"'
 
 
 @pytest.mark.django_db

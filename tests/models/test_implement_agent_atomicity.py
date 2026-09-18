@@ -1,9 +1,14 @@
 """``implement_agent`` must be all-or-nothing.
 
-A validation error on the Nth declared implementation (here: a malformed requires
-descriptor key, rejected by the JSONPath compiler) used to leave implementations 1..N-1
-registered and skip the stale-implementation reap — a half-registered agent. The mutation
-is now wrapped in one transaction: either the whole declared set lands, or none of it.
+A validation error on the Nth declared implementation (here: a requires descriptor key the
+JSONPath compiler refuses) used to leave implementations 1..N-1 registered and skip the
+stale-implementation reap — a half-registered agent. The mutation is now wrapped in one
+transaction: either the whole declared set lands, or none of it.
+
+What counts as a refused key changed with ``8f55d58``: keys are now rendered as *quoted* jsonpath
+member literals, which is the injection guard, so a key carrying quotes and operators is no longer
+rejected — it is safely escaped (``tests/test_descriptors.py`` covers that directly). The key used
+below is refused for a different and still-live reason: it normalizes to an empty member name.
 """
 
 from types import SimpleNamespace
@@ -49,8 +54,11 @@ def test_implement_agent_rolls_back_on_malformed_descriptor():
         {
             "implementations": [
                 _implementation("good", "axes"),
-                # Invalid descriptor key: rejected by the JSONPath compiler mid-loop.
-                _implementation("bad", 'axes" == "c" || $.x'),
+                # ``$.`` is stripped as the optional root prefix, leaving no member name at all —
+                # a ValueError from the compiler, raised mid-loop. (Not ``""``: the input model
+                # pins ``min_length=1``, so an empty key fails pydantic before the mutation runs,
+                # which would not exercise the rollback at all.)
+                _implementation("bad", "$."),
             ]
         }
     )
