@@ -77,9 +77,10 @@ class Action:
 ActionStats, ActionStatsResolver = create_stats_type(
     models.Action,
     filters=filters.ActionFilter,
+    # Action has no created_at; its creation timestamp is defined_at
     allowed_fields={
-        "created_at": "created_at",
+        "created_at": "defined_at",
     },
-    allowed_datetime_fields={"created_at": "created_at"},
+    allowed_datetime_fields={"created_at": "defined_at"},
     prescope=build_prescoper(field="organization"),
 )
