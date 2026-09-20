@@ -91,6 +91,11 @@ type Action {
   """Tasks created for this action."""
   tasks(filters: TaskFilter, ordering: [TaskOrder!]! = [], pagination: OffsetPaginationInput): [Task!]!
 
+  """
+  Actions whose name and description mean roughly what this one's do, nearest first (cosine distance between embeddings, this action excluded). `filters` narrows the candidates like `actions` does; `maxDistance` (0 identical, 1 unrelated) cuts the tail, otherwise the nearest `limit` come back. Empty while this action has no vector yet or embeddings are off.
+  """
+  similarActions(filters: ActionFilter = null, limit: Int! = 10, maxDistance: Float = null): [Action!]!
+
   """Get the latest completed task for this action."""
   latestTask: Task
 
@@ -3592,6 +3597,11 @@ type Query {
 
   """Fetch a specific action."""
   action(id: ID = null, task: ID = null, implementation: ID = null, agent: ID = null, interface: String = null, hash: ActionHash = null, matching: ActionDemandInput = null): Action! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """
+  Actions whose name and description mean roughly what this action's do, nearest first: the org's other actions ranked by cosine distance between their embeddings. `filters` narrows the candidates like `actions` does; `maxDistance` (0 identical, 1 unrelated) cuts the tail, otherwise the nearest `limit` come back. Empty while the action has no vector yet or embeddings are off.
+  """
+  similarActions(action: ID!, filters: ActionFilter = null, limit: Int! = 10, maxDistance: Float = null): [Action!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """Fetch the root tasks this client created (caller-scoped)."""
   myTasks: [Task!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)

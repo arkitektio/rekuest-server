@@ -63,9 +63,14 @@ def test_sdl_has_base_catalog_and_diagnostics():
 
 
 def test_embedding_columns_stay_out_of_the_schema():
-    """The vector columns are storage, not API: no type or input may expose them."""
+    """The vector columns are storage, not API: no type or input may expose them.
+
+    Field descriptions may talk about embeddings (``similarActions`` does); the check is for
+    the two column names.
+    """
     sdl = str(schema)
-    assert "embedding" not in sdl.lower()
+    assert "embeddingModel" not in sdl
+    assert not any(line.strip().startswith("embedding:") for line in sdl.splitlines())
 
 
 def test_checked_in_sdl_is_current():

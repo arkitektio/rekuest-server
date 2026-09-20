@@ -44,6 +44,12 @@ class Action:
     organization: "Organization" = strawberry_django.field(description="The organization that owns this action.")
     tasks: list["Task"] = strawberry_django.field(description="Tasks created for this action.")
 
+    @strawberry_django.field(description="Actions whose name and description mean roughly what this one's do, nearest first (cosine distance between embeddings, this action excluded). `filters` narrows the candidates like `actions` does; `maxDistance` (0 identical, 1 unrelated) cuts the tail, otherwise the nearest `limit` come back. Empty while this action has no vector yet or embeddings are off.")
+    def similar_actions(self, info: Info, filters: Optional[filters.ActionFilter] = None, limit: int = 10, max_distance: Optional[float] = None) -> list["Action"]:
+        from facade.queries.action import similar_actions_queryset
+
+        return list(similar_actions_queryset(info, self, filters, limit, max_distance))
+
     @strawberry_django.field(description="Get the latest completed task for this action.")
     def latest_task(self) -> Optional["Task"]:
         return models.Task.objects.filter(action=self, is_done=True).order_by("-created_at").first()

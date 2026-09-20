@@ -44,6 +44,7 @@ class Query:
     shortcuts: list[types.Shortcut] = field(description="List of shortcuts.")
     toolboxes: list[types.Toolbox] = field(description="List of toolboxes containing shortcuts.")
     action = field(resolver=queries.action, description="Fetch a specific action.")
+    similar_actions = field(resolver=queries.similar_actions, description="Actions whose name and description mean roughly what this action's do, nearest first: the org's other actions ranked by cosine distance between their embeddings. `filters` narrows the candidates like `actions` does; `maxDistance` (0 identical, 1 unrelated) cuts the tail, otherwise the nearest `limit` come back. Empty while the action has no vector yet or embeddings are off.")
     my_tasks = field(resolver=queries.my_tasks, description="Fetch the root tasks this client created (caller-scoped).")
     probe = field(resolver=queries.probe, description="Fetch a live (or lingering) probe by ID. Expired probes are gone — probes are never persisted.")
     probe_stats = field(resolver=queries.probe_stats, description="Live probe counts: instance-wide total plus your in-flight count and cap.")
