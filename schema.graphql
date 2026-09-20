@@ -308,6 +308,10 @@ input ActionFilter {
   OR: ActionFilter
   NOT: ActionFilter
   DISTINCT: Boolean
+
+  """
+  Search by name: a case-insensitive substring, or semantic similarity of the query to the action's name and description. Substring matches rank first, then by similarity; an explicit `ordering` replaces that ranking.
+  """
   search: String
   ids: [ID!]
   demands: [PortDemandInput!]

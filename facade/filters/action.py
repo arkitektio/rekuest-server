@@ -8,6 +8,7 @@ from typing import Optional
 import strawberry
 import strawberry_django
 from django.db.models import Max, Q
+from embeddings.search import hybrid_search
 from rekuest_core import enums as renums
 from strawberry import auto
 from strawberry.types import Info
@@ -49,9 +50,9 @@ class ActionOrder:
 class ActionFilter:
     name: Optional[FilterLookup[str]]
 
-    @filter_field
+    @filter_field(description="Search by name: a case-insensitive substring, or semantic similarity of the query to the action's name and description. Substring matches rank first, then by similarity; an explicit `ordering` replaces that ranking.")
     def search(self, info: Info, queryset, value: str, prefix: str):
-        return queryset.filter(**{f"{prefix}name__icontains": value}), Q()
+        return hybrid_search(queryset, prefix, value, Q(**{f"{prefix}name__icontains": value}))
 
     @filter_field
     def ids(self, info: Info, queryset, value: list[strawberry.ID], prefix: str):

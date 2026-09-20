@@ -1,7 +1,11 @@
 
 services:
    db:
-      image: jhnnsrs/daten:next
+      # Needs a daten image that carries pgvector (`jhnnsrs/daten:next` does since
+      # 2026-09-20). dokker pulls the stack before every run, so a local build tagged
+      # `:next` is overwritten by the hub's; to test against a local build, tag it
+      # differently and point DATEN_IMAGE at it.
+      image: ${DATEN_IMAGE:-jhnnsrs/daten:next}
       environment:
          POSTGRES_MULTIPLE_DATABASES: testdb
          POSTGRES_PASSWORD: test
@@ -17,6 +21,3 @@ services:
       image: redis
       ports:
          - "${REKUEST_TEST_REDIS_PORT:-6666}:6379"
-
-volumes:
-   chroma_data:

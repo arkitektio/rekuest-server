@@ -174,6 +174,23 @@ STRAWBERRY_DJANGO = {
     "DEFAULT_PK_FIELD_NAME": "id",
 }
 
+# Semantic search (the vendored ``embeddings`` package). Actions embed their name +
+# description into a pgvector column on save, with a model2vec static model that runs in this
+# process (no service, no GPU, ~1 ms per row). ``ActionFilter.search`` ORs "cosine distance
+# below DISTANCE_THRESHOLD" onto its substring match. DIMENSIONS is also the width of the
+# database column: the ``embeddings`` system checks refuse to start when the model, this
+# setting and the column disagree. Rows filled by another model are re-embedded from the
+# reaper tick (``facade.reaper``), never by a command.
+EMBEDDINGS = {
+    "ENABLED": conf.embeddings.enabled,
+    "MODEL": conf.embeddings.model,
+    "MODEL_PATH": conf.embeddings.model_path,
+    "DIMENSIONS": conf.embeddings.dimensions,
+    "DISTANCE_THRESHOLD": conf.embeddings.distance_threshold,
+    "SWEEP_INTERVAL": conf.embeddings.sweep_interval,
+    "SWEEP_BATCH_SIZE": conf.embeddings.sweep_batch_size,
+}
+
 
 CSRF_TRUSTED_ORIGINS = conf.django.csrf_trusted_origins
 # Consumed by kante's ``dynamicpath``/``re_dynamicpath`` (see rekuest/urls.py), which prefixes

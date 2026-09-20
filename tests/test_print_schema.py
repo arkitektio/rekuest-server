@@ -62,6 +62,12 @@ def test_sdl_has_base_catalog_and_diagnostics():
         assert "callJson: JSONSerializable!" in block, effect
 
 
+def test_embedding_columns_stay_out_of_the_schema():
+    """The vector columns are storage, not API: no type or input may expose them."""
+    sdl = str(schema)
+    assert "embedding" not in sdl.lower()
+
+
 def test_checked_in_sdl_is_current():
     """schema.graphql at the repo root is the printed schema."""
     from pathlib import Path

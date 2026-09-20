@@ -24,6 +24,19 @@ from channels.testing import WebsocketCommunicator
 from facade.consumers.async_consumer import AgentConsumer
 
 
+@pytest.fixture(scope="session", autouse=True)
+def embedding_model_warm():
+    """Load the embedding model once per session, outside any test's DB transaction.
+
+    Every save of an Action embeds its text, so the first one would otherwise pay the model
+    load (a one-time download into the Hugging Face cache on a cold box) inside a test.
+    """
+    from embeddings import engine
+
+    engine.warm_up()
+    yield
+
+
 @pytest.fixture(scope="function")
 def aws_credentials() -> None:
     """Mocked AWS Credentials for moto."""

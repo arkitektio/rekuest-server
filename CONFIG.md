@@ -247,6 +247,41 @@ disable it. When present, `access_key` and `secret_key` are required.
 | `region` | `DATALAYER__REGION` | str | `us-east-1` | S3 region name. |
 | `media` / `zarr` / `parquet` / `bigfile` | — (use YAML) | object | `null` | Per-purpose bucket bindings, each `{ bucket: <name> }`. |
 
+### `embeddings` — semantic search
+
+Actions embed their name + description into a pgvector column when they are saved, using a
+[model2vec](https://github.com/MinishLab/model2vec) static model that runs inside the service
+process (CPU, ~1 ms per row, no extra service). The `actions(filters: { search })` argument
+then matches a substring of the name **or** a description whose meaning is close to the
+query, ranking substring matches first and the rest by similarity. Every key has a default;
+the block may be omitted.
+
+| Key | Env var | Type | Default | Description |
+|---|---|---|---|---|
+| `enabled` | `EMBEDDINGS__ENABLED` | bool | `true` | Embed rows on save and give `search` a semantic leg. Off: `search` is substring-only and the columns stay `NULL`. |
+| `model` | `EMBEDDINGS__MODEL` | str | `minishlab/potion-base-8M` | model2vec model id. Recorded on every row (`embedding_model`); rows embedded by another model are re-embedded in-process and skipped by vector search until then. |
+| `model_path` | `EMBEDDINGS__MODEL_PATH` | str | `null` | Directory holding the weights of `model`. The Docker image bakes them under `/opt/models/embeddings` and sets this itself (with `HF_HUB_OFFLINE=1`); unset, model2vec downloads from Hugging Face on first use. |
+| `dimensions` | `EMBEDDINGS__DIMENSIONS` | int | `256` | Vector width of `model` — and of the database column. Checked against both at startup (`embeddings.E001` / `E002`). |
+| `distance_threshold` | `EMBEDDINGS__DISTANCE_THRESHOLD` | float | `0.55` | Cosine distance (0 identical, 1 unrelated) above which a row no longer counts as a semantic hit. Lower is stricter. |
+| `sweep_interval` | `EMBEDDINGS__SWEEP_INTERVAL` | int | `30` | Unused by rekuest: stale rows are re-embedded on the reaper tick (`rekuest.sweep_interval`). Kept for parity with the other services' config. |
+| `sweep_batch_size` | `EMBEDDINGS__SWEEP_BATCH_SIZE` | int | `200` | Rows re-embedded per batch. |
+
+Rows that were written before embeddings were enabled, while the model could not be loaded,
+or by a previous `model` are healed by the reaper loop (`facade/reaper.py`) in row-locked
+batches — no command, no cron, any number of replicas. Until healed, such rows are found by
+the substring leg only.
+
+**Changing the model.** Same `dimensions`: change `model`, restart, and the reaper re-embeds
+every row within a few ticks. Different `dimensions`: the column type changes, so write a
+migration that first nulls the column (`UPDATE facade_action SET embedding = NULL,
+embedding_model = ''` — Postgres refuses to retype non-empty vectors), then `AlterField`s it
+to the new width, then change the config; the reaper refills it after boot. `migrate` refuses
+to run while the column, the setting and the model disagree.
+
+The Docker image bakes the default model; a different `model` needs a rebuild with
+`--build-arg EMBEDDINGS_MODEL=<id>` (or a `model_path` of your own), because the running
+image is offline.
+
 ---
 
 ## Minimal example
@@ -281,6 +316,9 @@ provenance:
     -----BEGIN PRIVATE KEY-----
     ...
     -----END PRIVATE KEY-----
+# Optional — everything defaults; shown for the one knob worth tuning.
+embeddings:
+  distance_threshold: 0.55
 ```
 
 Validate it with `python manage.py validate_settings`.

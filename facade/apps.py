@@ -7,4 +7,8 @@ class FacadeConfig(AppConfig):
 
     def ready(self):
         # Implicitly connect signal handlers decorated with @receiver.
-        pass
+        #
+        # The embedding system checks (model width == EMBEDDINGS.DIMENSIONS == the vector
+        # column's width) register on import; ``migrate`` runs the database-tagged one at
+        # every boot, so a mismatch stops the service before it serves a wrong search.
+        import embeddings.checks  # noqa: F401

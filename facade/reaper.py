@@ -13,7 +13,13 @@ sweep                                 deadline starts at             setting
 ``reconcile_silent_physical_ops``     ``Task.last_progress_at``      ``…PROGRESS_LEASE``
 ``expire_disconnected_tasks``         last ``TaskEvent``             ``…DISCONNECTED_EXPIRY``
 ``sweep_terminal_tasks``              ``Task.finished_at``           ``TASK_RETENTION_SECONDS``
+``reembed_stale`` (embeddings)        ``Action.embedding_model``     ``EMBEDDINGS.MODEL``
 ====================================  =============================  ==========================
+
+The last row is not a deadline but the same discipline: an action whose vector was produced by
+another embedding model (or none) is a DB fact, and the row-locked batch re-embed here is what
+heals it -- after a model change, after a write while the weights were unreachable, after a
+migration on a cold replica. See :mod:`embeddings.healer`.
 
 Consequences, all deliberate:
 
@@ -42,8 +48,9 @@ from typing import Awaitable, Callable, List, Optional, Tuple
 import redis
 from channels.db import database_sync_to_async
 from django.conf import settings
+from embeddings.healer import reembed_stale
 
-from facade import clock, redis_keys
+from facade import clock, models, redis_keys
 from facade.deadlines import sweep_interval_seconds
 from facade.persist_backend import persist_backend as _default_backend
 from facade.ports import ReconcileBackend
@@ -144,6 +151,10 @@ async def _reaper_loop() -> None:
             interval = sweep_interval_seconds()
             if await asyncio.to_thread(_take_tick_token, interval):
                 await run_sweeps()
+                # Stale embeddings: an indexed no-op when there are none, a few hundred rows a
+                # tick when there are (model change, cold write). Off the event loop: the
+                # model runs on the CPU of this process.
+                await database_sync_to_async(reembed_stale)(models.Action, max_batches=5)
                 tick += 1
                 if tick % _RETENTION_EVERY_N_TICKS == 0:
                     # One batch per slow tick; the next one drains any backlog. No-op while

@@ -3,12 +3,16 @@ from django.contrib.auth import get_user_model
 from django.db import models
 from django.db.models.functions import Upper
 from django_choices_field import TextChoicesField
+from embeddings.models import EmbeddedDescriptionMixin, embedding_indexes
 
 from facade import enums
 
 
-class Action(models.Model):
+class Action(EmbeddedDescriptionMixin, models.Model):
     """Actions are abstraction of RPC Tasks. They provide a common API to deal with creating tasks.
+
+    Carries an embedding of its name + description (``EmbeddedDescriptionMixin``) so the
+    catalog's ``search`` finds actions by what they do, not only by a substring of their name.
 
     See online Documentation"""
 
@@ -109,6 +113,8 @@ class Action(models.Model):
             models.Index(fields=["hash"], name="action_hash_idx"),
             models.Index(fields=["organization", "key"], name="action_org_key_idx"),
             models.Index(fields=["name"], name="action_name_idx"),
+            # The embedding healer's "any row not by the current model?" probe.
+            *embedding_indexes("action"),
         ]
 
 

@@ -28,6 +28,8 @@ dependencies = [
     "dokker>=2.8",
     "whitenoise>=6.6",
     "pint>=0.24",
+    "pgvector>=0.5",
+    "model2vec>=0.9",
 ]
 
 [dependency-groups]
@@ -60,7 +62,7 @@ extend-select = ["ANN", "D1", "I"] # Added 'I' for import sorting (speedup)
 extend-ignore = ["ANN002", "ANN003", "D100", "ANN401"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["rekuest"]
+known-first-party = ["rekuest", "embeddings"]
 
 # Type gate for the refactored real-time / protocol plumbing. Run: `basedpyright`.
 # Scoped to the typed plumbing modules; the ORM/pydantic dynamic-inference rules are relaxed
