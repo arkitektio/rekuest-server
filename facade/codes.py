@@ -6,3 +6,4 @@ AGENT_IS_BLOCKED_CODE = 4003
 AGENT_ALREADY_CONNECTED_CODE = 4004  # reject: another connection is already live and force was not set
 AGENT_REPLACED_CODE = 4005  # incumbent connection kicked because a newer connection registered with force
 AGENT_TRANSPORT_FAILED_CODE = 3005  # server-side delivery to this socket failed; the agent should simply reconnect
+AGENT_REGISTRATION_REJECTED_CODE = 4006  # the declaration carried by Register was refused (catalog mismatch, ownership conflict, ...)

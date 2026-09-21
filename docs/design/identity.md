@@ -111,10 +111,10 @@ There is exactly **one Agent per `(client, user, organization)`** — the provid
 Caller constraint. An Agent owns `Implementation`s (the actions it can run), `State`s, `Lock`s and
 the `Task`s routed to it.
 
-> **Note on creation:** the WebSocket `default_authenticator` can only *find* an existing Agent —
-> its `aget_or_create` create-branch omits the required `app`/`release`/`device` columns. Agents are
-> created out-of-band by the `ensureAgent` mutation before they connect. This is pinned behaviour
-> (guarded by `test_register_for_uncreated_agent_is_rejected`).
+> **Note on creation:** the WebSocket `Register` creates the Agent for the token's identity when
+> none exists (`facade.registration.ensure_agent`, shared with the `ensureAgent` mutation): the
+> `app`/`release` come from the token's client. Nothing has to happen over GraphQL before an agent
+> connects (guarded by `test_register_for_uncreated_agent_creates_it`).
 
 ## Why two models and not one
 

@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Protocol, Tuple, runtime_checkable
 
 from facade import messages, models
+from rekuest_core.objects.models import DiagnosticModel
 
 
 @dataclass
@@ -94,6 +95,11 @@ class PersistBackend(Protocol):
     # --- distributed locks (acquire / release) -------------------------------- #
     async def on_agent_lock(self, agent_id: int, message: messages.Lock) -> None: ...
     async def on_agent_unlock(self, agent_id: int, message: messages.Unlock) -> None: ...
+
+    # --- registration (the declaration a Register carries) and shelving -------- #
+    async def on_agent_implement(self, agent_id: int, register: messages.Register) -> Tuple["models.Agent", List[DiagnosticModel]]: ...
+    async def on_agent_shelve(self, agent_id: int, message: messages.Shelve) -> "models.MemoryDrawer": ...
+    async def on_agent_unshelve(self, agent_id: int, message: messages.Unshelve) -> None: ...
 
 
 @runtime_checkable

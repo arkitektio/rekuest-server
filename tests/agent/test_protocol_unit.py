@@ -25,6 +25,7 @@ from facade.ports import LeaseClaim
 from facade.codes import (
     AGENT_ALREADY_CONNECTED_CODE,
     AGENT_IS_BLOCKED_CODE,
+    AGENT_REGISTRATION_REJECTED_CODE,
     AGENT_REPLACED_CODE,
     FROM_AGENT_MESSAGE_DOES_NOT_MATCH_SCHEMA_CODE,
     FROM_AGENT_MESSAGE_IS_NOT_VALID_JSON_CODE,
@@ -32,6 +33,7 @@ from facade.codes import (
 )
 from facade.consumers.agent_protocol import AgentProtocol, RegisteredSession
 from facade.consumers.agent_queue import InMemoryAgentQueue
+from rekuest_core.objects.models import DiagnosticModel
 
 from tests.factories import TEST_TOKEN
 
@@ -54,6 +56,7 @@ class FakeAgent:
         self.connected = connected
         self.last_seen = (timezone.now() if connected else None) if last_seen is _UNSET else last_seen
         self.active_connection_id = None
+        self.hash = ""  # never implemented, like a freshly created row
         self.saves = 0
 
     async def asave(self, **kwargs):
@@ -126,6 +129,26 @@ class FakeBackend:
 
     async def on_agent_log(self, agent_id, message):
         self.calls.append(("log", agent_id, message))
+
+    # Registration and shelving (request/reply). ``registration_error`` makes all three raise.
+    registration_error = None
+
+    async def on_agent_implement(self, agent_id, register):
+        self.calls.append(("implement", agent_id, register))
+        if self.registration_error:
+            raise self.registration_error
+        return SimpleNamespace(pk=agent_id, hash=register.hash, blocked=False), [DiagnosticModel(code="unknown_operation", message="fake finding")]
+
+    async def on_agent_shelve(self, agent_id, message):
+        self.calls.append(("shelve", agent_id, message))
+        if self.registration_error:
+            raise self.registration_error
+        return SimpleNamespace(pk="drawer-1")
+
+    async def on_agent_unshelve(self, agent_id, message):
+        self.calls.append(("unshelve", agent_id, message))
+        if self.registration_error:
+            raise self.registration_error
 
 
 def make_protocol(agent=None, backend=None, queue=None, heartbeat_interval=10.0, heartbeat_timeout=5.0, kick_others=None, register_connection=None):
@@ -425,6 +448,101 @@ class TestAgentProtocolUnit:
         assert result["task"] is None and result["created"] is False
         assert "parent is required" in result["error"]
         assert closed == []  # crucially, the connection stays open
+        await protocol.shutdown()
+
+    async def test_a_declaring_register_implements_and_init_carries_the_diagnostics(self):
+        backend = FakeBackend()
+        protocol, sent, closed, agent = make_protocol(backend=backend)
+
+        await protocol.receive(messages.Register(token=TEST_TOKEN, hash="h1", implementations=[]).model_dump_json())
+
+        (call,) = [c for c in backend.calls if c[0] == "implement"]
+        assert call[1] == agent.pk and call[2].hash == "h1"
+        init = json.loads(sent[-1])
+        assert init["type"] == messages.ToAgentMessageType.INIT.value
+        assert init["hash"] == "h1" and init["diagnostics"][0]["code"] == "unknown_operation"
+        assert closed == []
+        await protocol.shutdown()
+
+    async def test_a_bare_register_implements_nothing(self):
+        backend = FakeBackend()
+        protocol, sent, closed, _ = make_protocol(backend=backend)
+        await protocol.receive(_register_frame())
+
+        assert not any(c[0] == "implement" for c in backend.calls)
+        assert json.loads(sent[-1])["type"] == messages.ToAgentMessageType.INIT.value
+        await protocol.shutdown()
+
+    async def test_a_matching_hash_skips_the_reconciliation(self):
+        agent = FakeAgent()
+        agent.hash = "same"
+        backend = FakeBackend()
+        protocol, sent, closed, _ = make_protocol(agent=agent, backend=backend)
+
+        await protocol.receive(messages.Register(token=TEST_TOKEN, hash="same", implementations=[]).model_dump_json())
+
+        assert not any(c[0] == "implement" for c in backend.calls)
+        assert json.loads(sent[-1])["hash"] == "same"
+        await protocol.shutdown()
+
+    async def test_a_refused_declaration_closes_with_the_registration_code(self):
+        backend = FakeBackend()
+        backend.registration_error = ValueError("does not fit the catalog")
+        protocol, sent, closed, _ = make_protocol(backend=backend)
+
+        await protocol.receive(messages.Register(token=TEST_TOKEN, hash="h2", implementations=[]).model_dump_json())
+
+        error = json.loads(sent[-1])
+        assert error["type"] == messages.ToAgentMessageType.PROTOCOL_ERROR.value
+        assert "does not fit the catalog" in error["error"]
+        assert closed == [AGENT_REGISTRATION_REJECTED_CODE]
+        assert protocol.session is None
+        await protocol.shutdown()
+
+    async def test_shelve_and_unshelve_route_and_reply(self):
+        backend = FakeBackend()
+        protocol, sent, closed, _ = make_protocol(backend=backend)
+        await protocol.receive(_register_frame())
+        sent.clear()
+
+        await protocol.receive(messages.Shelve(ref="s-1", identifier="@x/y", resource_id="1").model_dump_json())
+        shelved = json.loads(sent[-1])
+        assert shelved["type"] == messages.ToAgentMessageType.SHELVED.value
+        assert shelved["ref"] == "s-1" and shelved["drawer"] == "drawer-1" and shelved["error"] is None
+
+        await protocol.receive(messages.Unshelve(ref="u-1", drawer="drawer-1").model_dump_json())
+        unshelved = json.loads(sent[-1])
+        assert unshelved["type"] == messages.ToAgentMessageType.UNSHELVED.value
+        assert unshelved["ref"] == "u-1" and unshelved["error"] is None
+        assert [c[0] for c in backend.calls if c[0] in ("shelve", "unshelve")] == ["shelve", "unshelve"]
+        assert closed == []
+        await protocol.shutdown()
+
+    async def test_shelving_failures_reply_with_an_error_and_keep_the_socket(self):
+        backend = FakeBackend()
+        backend.registration_error = ValueError("refused")
+        protocol, sent, closed, _ = make_protocol(backend=backend)
+        await protocol.receive(_register_frame())
+        sent.clear()
+
+        for request in (
+            messages.Shelve(ref="s-2", identifier="@x/y", resource_id="1"),
+            messages.Unshelve(ref="u-2", drawer="d"),
+        ):
+            await protocol.receive(request.model_dump_json())
+            reply = json.loads(sent[-1])
+            assert reply["ref"] == request.ref and reply["error"] == "refused"
+        assert closed == []
+        await protocol.shutdown()
+
+    async def test_init_carries_the_agents_hash(self):
+        agent = FakeAgent()
+        agent.hash = "stored"
+        protocol, sent, closed, _ = make_protocol(agent=agent)
+        await protocol.receive(_register_frame())
+
+        init = json.loads(sent[-1])
+        assert init["type"] == messages.ToAgentMessageType.INIT.value and init["hash"] == "stored"
         await protocol.shutdown()
 
     async def test_terminal_event_is_acked(self):

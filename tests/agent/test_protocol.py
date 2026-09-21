@@ -4,11 +4,10 @@ These drive the real ``AgentConsumer`` (``facade/consumers/async_consumer.py``)
 through Django Channels' ``WebsocketCommunicator`` against real Postgres and real
 Redis (both started by the ``backend_stack`` dokker fixture in ``conftest.py``).
 
-``default_authenticator`` only *finds* an existing agent — its ``aget_or_create``
-create-branch omits the required ``app``/``release`` columns, so brand-new agents cannot
-be created over the socket. In normal operation the agent is created first via the
-``ensureAgent`` GraphQL mutation and then connects; ``open_agent``/``seed_agent`` reproduce
-that by pre-creating the agent against the exact identity the consumer derives from the token.
+``default_authenticator`` has ensure semantics: a ``Register`` creates the agent (and its
+memory shelve) for the token's identity when none exists. ``open_agent``/``seed_agent`` still
+pre-create it for the tests that need a specific hash or a blocked agent; the socket-only
+registration path is covered in ``test_registration.py``.
 """
 
 import pytest
@@ -88,13 +87,14 @@ class TestAgentProtocol:
         events = [e async for e in TaskEvent.objects.filter(task_id=task.pk, kind=enums.TaskEventKind.DISCONNECTED)]
         assert len(events) == 1
 
-    async def test_register_for_uncreated_agent_is_rejected(self, agent_ws):
-        # Pins current behavior: on_register can only *find* an agent — its aget_or_create
-        # create-branch omits required NOT NULL columns (app/release), so registering without
-        # a pre-created agent raises and the consumer closes with the schema-mismatch code.
+    async def test_register_for_uncreated_agent_creates_it(self, agent_ws):
+        # Ensure semantics: the socket is the agent's only control plane, so a Register from
+        # an identity without an agent creates one (app/release from the token's client).
         session = await connect_agent(agent_ws)
         await session.send(messages.Register(token=TEST_TOKEN))
-        await session.expect_close(FROM_AGENT_MESSAGE_DOES_NOT_MATCH_SCHEMA_CODE)
+        init = await session.receive(messages.Init)
+        assert init.hash is None
+        assert await Agent.objects.filter(pk=init.agent).aexists()
 
     async def test_valid_but_unhandled_message_closes_socket(self, agent_ws):
         # A well-formed FromAgentMessage with no handler hits the ``case _:`` branch in the

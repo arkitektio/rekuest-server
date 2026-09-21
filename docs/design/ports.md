@@ -14,7 +14,7 @@ matching (see [action-matching.md](action-matching.md)), and rendered by UIs thr
 | `STRING` | string | none | no | optional |
 | `BOOL` | boolean | none | no | no |
 | `DATE` | ISO-8601 date or datetime string | none | no | no |
-| `ENUM` | one of `choices` | none | no | **required** |
+| `ENUM` | one of `choices` | none | optional | **required** |
 | `QUANTITY` | number, or `{value, unit}` | none | no | no |
 | `STRUCTURE` | id of an object held by a service | none | **required** | no |
 | `MEMORY_STRUCTURE` | id of an object in the agent's memory (action becomes `LOCAL`) | none | **required** | no |
@@ -23,6 +23,10 @@ matching (see [action-matching.md](action-matching.md)), and rendered by UIs thr
 | `DICT` | string-keyed map; one `...` child = homogeneous value type, named children = known keys | 1 or more | no | no |
 | `UNION` | a value of one of the variants | 2 or more | no | no |
 | `MODEL` | object with one field per child | 1 or more | optional | no |
+
+An `ENUM` or `MODEL` port may name the enum or class it was built from in `identifier`; the
+value on the wire is still one of `choices` (or the fields), the identifier only lets an agent map
+it back to its own type.
 
 `identifier` has the form `@package/key` (for example `@mikro/image`). Ports with the same
 identifier are compatible; the identifier is the only identity a structure has

@@ -186,8 +186,12 @@ An agent without a persistent socket (a HookAgent / another service) can use the
 **`POST agi/http/<agent_id>`** (`facade/http_intake.py`, `rekuest/urls.py`). The body is the same
 FromAgent message JSON; it must be HMAC-signed with the agent's `hook_url_secret`. The request is
 verified, parsed (`FromAgentPayload`), and routed through the **same** `route_from_agent_message`
-the socket uses — so `AssignRequest` / `CancelRequest` / … behave identically. The reply
-(`AssignResponse` / `ControlResponse`) is returned in the **HTTP response** instead of over a
+the socket uses — so `AssignRequest` / `CancelRequest` / … behave identically, and so do
+`Shelve` / `Unshelve`. The socket `Register` (which also carries the declaration) has no HTTP
+counterpart — the intake needs an existing webhook agent to verify the signature against — so
+`ensureAgent{kind, hook_url, hook_url_secret}` and `implementAgent` remain a HookAgent's bootstrap.
+The reply
+(`AssignResponse` / `ControlResponse` / `Shelved` / …) is returned in the **HTTP response** instead of over a
 socket. Such a caller that is itself a webhook agent receives its `…Event` mirrors as signed POSTs
 to its `hook_url`.
 
@@ -220,7 +224,9 @@ Set it to `strict` once your HookAgents sign V1.
 
 | Send (FromAgent) | Get back (ToAgent) | Then observe (mirrors) |
 | --- | --- | --- |
-| `Register{token, session_id}` | `Init{agent, inquiries}` | — |
+| `Register{token, session_id, name, hash, implementations, states, locks, bloks}` | `Init{agent, hash, diagnostics, inquiries}` (or `ProtocolError` + close) | — |
+| `Shelve{ref, identifier, resource_id, label?, description?}` | `Shelved{ref, drawer, error}` | `Collect{drawers}` when the server wants them dropped |
+| `Unshelve{ref, drawer}` | `Unshelved{ref, error}` | — |
 | `AssignRequest{reference, parent, …targeting…, args}` | `AssignResponse{task, created, error}` | `BoundEvent/Queued/Assigned/Progress/Yield/Log/…` then `CompletedEvent/Error/Critical` |
 | `CancelRequest{task, auto_interrupt?}` | `ControlResponse{accepted, error}` | `CancellingEvent` → `CancelledEvent` (or escalated → `InterruptedEvent`) |
 | `InterruptRequest{task}` | `ControlResponse` | `InterruptingEvent` → `InterruptedEvent` |

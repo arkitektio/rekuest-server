@@ -14,7 +14,7 @@ from django.test import RequestFactory
 from facade import enums, hooks, messages
 from facade.consumers.async_consumer import AgentConsumer
 from facade.http_intake import hook_intake
-from facade.models import Task, TaskEvent
+from facade.models import MemoryDrawer, Task, TaskEvent
 
 from tests.factories import (
     _build_task,
@@ -150,6 +150,17 @@ class TestHookIntake:
         assert data["type"] == messages.ToAgentMessageType.ASSIGN_RESPONSE.value
         assert data["reference"] == "hr-1" and data["created"] is True and data["task"]
         assert await Task.objects.filter(reference="hr-1").acount() == 1
+
+    async def test_shelve_over_http(self, post_recorder):
+        agent = await build_webhook_agent("hook-in-shelve", secret="sek")
+        msg = messages.Shelve(ref="hs-1", identifier="@x/y", resource_id="res-1")
+        response = await hook_intake(_signed_request(agent, msg), str(agent.pk))
+
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data["type"] == messages.ToAgentMessageType.SHELVED.value
+        assert data["ref"] == "hs-1" and data["error"] is None
+        assert await MemoryDrawer.objects.filter(pk=data["drawer"], shelve__agent_id=agent.pk).aexists()
 
     async def test_bad_signature_is_rejected(self, post_recorder):
         agent = await build_webhook_agent("hook-in-bad", secret="sek")

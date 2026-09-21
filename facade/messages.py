@@ -19,6 +19,14 @@ from enum import Enum
 from pydantic import Field
 import uuid
 
+from rekuest_core.inputs.models import (
+    BlokImplementationInputModel,
+    ImplementationInputModel,
+    LockImplementationInputModel,
+    StateImplementationInputModel,
+)
+from rekuest_core.objects.models import DiagnosticModel
+
 
 JSONSerializable = Union[str, int, float, bool, None, dict[str, "JSONSerializable"], list["JSONSerializable"]]
 
@@ -63,6 +71,9 @@ class ToAgentMessageType(str, Enum):
     EVENT_ACK = "EVENT_ACK"
     ASSIGN_RESPONSE = "ASSIGN_RESPONSE"
     PROBE_RESPONSE = "PROBE_RESPONSE"
+    # Replies to the agent's shelving requests.
+    SHELVED = "SHELVED"
+    UNSHELVED = "UNSHELVED"
     # Caller-bound event-stream mirrors — one per TaskEventKind — streamed back to the
     # participant that originated the task (see ``ExecutionEvent`` and subclasses).
     BOUND_EVENT = "BOUND_EVENT"
@@ -112,6 +123,9 @@ class FromAgentMessageType(str, Enum):
     SESSION_INIT = "SESSION_INIT"
     ASSIGN_REQUEST = "ASSIGN_REQUEST"
     PROBE_REQUEST = "PROBE_REQUEST"
+    # Shelving: what the agent holds in memory.
+    SHELVE = "SHELVE"
+    UNSHELVE = "UNSHELVE"
     # Caller-issued lifecycle control requests over the socket (mirroring ASSIGN_REQUEST).
     CANCEL_REQUEST = "CANCEL_REQUEST"
     INTERRUPT_REQUEST = "INTERRUPT_REQUEST"
@@ -528,6 +542,22 @@ class Register(Message):
         description="Per-process identifier minted in-memory by the agent at start-up (never persisted). Its volatility is the reclaim signal: a reconnect with the SAME session_id means the process survived (reclaim in-flight work); a DIFFERENT session_id means a fresh process (fail-and-cascade).",
     )
 
+    # The declaration: registering IS implementing. Same shapes as ``ImplementAgentInput``.
+    # The backend reconciles it in one transaction before it claims the lease and answers
+    # ``Init``; when ``hash`` equals the hash it already holds, nothing is reconciled. A
+    # ``Register`` without a declaration (every field None) only ensures the agent exists.
+    name: Optional[str] = Field(default=None, description="The agent's display name.")
+    hash: Optional[str] = Field(default=None, description="The agent's definition hash; stored, compared on the next Register, and returned on Init.")
+    implementations: Optional[List[ImplementationInputModel]] = None
+    states: Optional[List[StateImplementationInputModel]] = None
+    locks: Optional[List[LockImplementationInputModel]] = None
+    bloks: Optional[List[BlokImplementationInputModel]] = None
+
+    @property
+    def declares(self) -> bool:
+        """Whether this Register carries a declaration to reconcile."""
+        return any(value is not None for value in (self.hash, self.implementations, self.states, self.locks, self.bloks))
+
 
 class ProtocolError(Message):
     type: Literal[ToAgentMessageType.PROTOCOL_ERROR] = ToAgentMessageType.PROTOCOL_ERROR
@@ -546,6 +576,59 @@ class Init(Message):
     type: Literal[ToAgentMessageType.INIT] = ToAgentMessageType.INIT
     agent: str
     inquiries: list[AssignInquiry] = []
+    hash: Optional[str] = Field(
+        default=None,
+        description="The definition hash the backend now holds for this agent (what the Register declared, or what an earlier one did), None when it was never implemented.",
+    )
+    diagnostics: List[DiagnosticModel] = Field(
+        default_factory=list,
+        description="Non-fatal findings of the registration the Register carried (unknown catalog operations and the like). A hard finding refuses the connection instead: ProtocolError + close(AGENT_REGISTRATION_REJECTED).",
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Shelving — request/reply pairs over the agent socket, like AssignRequest/
+# AssignResponse: the agent asks, the backend answers with the past-tense twin,
+# correlated by the client-minted ``ref``. Replies carry ``error`` instead of
+# closing the socket. The GraphQL mutations (shelveInMemoryDrawer,
+# unshelveMemoryDrawer) share the same backend functions.
+# --------------------------------------------------------------------------- #
+
+
+class Shelve(Message):
+    """Record that the agent holds a value in memory: the socket twin of ``shelveInMemoryDrawer``."""
+
+    type: Literal[FromAgentMessageType.SHELVE] = FromAgentMessageType.SHELVE
+    ref: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Client-minted correlation id, echoed on Shelved.")
+    identifier: str
+    resource_id: str
+    label: Optional[str] = None
+    description: Optional[str] = None
+
+
+class Shelved(Message):
+    """The backend's answer to ``Shelve``: the drawer's id, or why there is none."""
+
+    type: Literal[ToAgentMessageType.SHELVED] = ToAgentMessageType.SHELVED
+    ref: str
+    drawer: Optional[str] = None
+    error: Optional[str] = None
+
+
+class Unshelve(Message):
+    """The agent dropped a drawer (answering ``Collect``, or on its own): the twin of ``unshelveMemoryDrawer``."""
+
+    type: Literal[FromAgentMessageType.UNSHELVE] = FromAgentMessageType.UNSHELVE
+    ref: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Client-minted correlation id, echoed on Unshelved.")
+    drawer: str
+
+
+class Unshelved(Message):
+    """The backend's answer to ``Unshelve``."""
+
+    type: Literal[ToAgentMessageType.UNSHELVED] = ToAgentMessageType.UNSHELVED
+    ref: str
+    error: Optional[str] = None
 
 
 class AssignRequest(Message):
@@ -884,6 +967,8 @@ ToAgentMessage = Union[
     AssignResponse,
     ProbeResponse,
     ControlResponse,
+    Shelved,
+    Unshelved,
     BoundEvent,
     QueuedEvent,
     StartedEvent,
@@ -904,4 +989,4 @@ ToAgentMessage = Union[
     FailedEvent,
     CriticalEvent,
 ]
-FromAgentMessage = Union[Critical, Log, Progress, Started, Completed, Failed, Yield, Register, HeartbeatEvent, Resumed, Paused, Cancelled, Interrupted, StatePatch, StateSnapshot, Lock, Unlock, SessionInit, AssignRequest, ProbeRequest, CancelRequest, InterruptRequest, PauseRequest, ResumeRequest]
+FromAgentMessage = Union[Critical, Log, Progress, Started, Completed, Failed, Yield, Register, HeartbeatEvent, Resumed, Paused, Cancelled, Interrupted, StatePatch, StateSnapshot, Lock, Unlock, SessionInit, AssignRequest, ProbeRequest, CancelRequest, InterruptRequest, PauseRequest, ResumeRequest, Shelve, Unshelve]

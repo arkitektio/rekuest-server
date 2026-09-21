@@ -1,19 +1,13 @@
-import uuid
-
 from django.db import transaction
 from kante.types import Info
-from facade.mutations.implementation import _create_implementation
 import strawberry
-from facade import types, models, inputs, scalars, enums, signals
+from facade import types, models, inputs, enums, signals
 from rekuest_core.inputs.types import BlokImplementationInput, ImplementationInput, LockImplementationInput, StateImplementationInput
 from rekuest_core.inputs.models import BlokImplementationInputModel, ImplementationInputModel, StateImplementationInputModel, LockImplementationInputModel
 import logging
-from facade import types, models, inputs, unique
+from facade import registration
 from pydantic import BaseModel, Field
 import kante
-from facade.catalog_validation import dump_diagnostics, validate_manifest_against_catalog
-from facade.mutations.blok import _sync_blok_dependencies
-from facade.registration_lock import lock_organization
 from facade.types.base import scoped_get
 
 logger = logging.getLogger(__name__)
@@ -44,58 +38,16 @@ class DeleteAgentInput:
     id: strawberry.ID = strawberry.field(description="The ID of the agent to delete. This is used to identify the agent in the system.")
 
 
-def _register_state(agent: models.Agent, inputstate: StateImplementationInputModel) -> models.State:
-    """Upsert one of the agent's states, defaulting the identity fields: ``key`` falls back
-    to the interface, ``app_identifier`` to the agent's app identifier."""
-    state_definition, _ = models.StateDefinition.objects.update_or_create(
-        hash=unique.hash_state_definition(inputstate.definition),
-        organization=agent.organization,
-        defaults=dict(
-            name=inputstate.definition.name,
-            ports=[i.model_dump() for i in inputstate.definition.ports],
-            description="A state definition",
-        ),
-    )
-
-    state, _ = models.State.objects.update_or_create(
-        interface=inputstate.interface,
-        agent=agent,
-        defaults=dict(
-            definition=state_definition,
-            key=inputstate.key or inputstate.interface,
-            app_identifier=inputstate.app or agent.app.identifier,
-        ),
-    )
-    return state
-
-
 def ensure_agent(info: Info, input: AgentInput) -> types.Agent:
-    # TODO: Hasch this
+    """Create (or find) the caller's agent and forget what a previous process shelved.
 
-    agent, _ = models.Agent.objects.get_or_create(
-        client=info.context.request.client,
-        user=info.context.request.user,
-        organization=info.context.request.organization,
-        defaults=dict(
-            name=input.name or f"{info.context.request.client.client_id}",
-            app=info.context.request.client.release.app,
-            release=info.context.request.client.release,
-        ),
-    )
-
-    memory_shelve, _ = models.MemoryShelve.objects.get_or_create(
-        agent=agent,
-        defaults=dict(
-            name=f"{str(agent)} memory shelve",
-            creator=info.context.request.user,
-            organization=agent.organization,
-        ),
-    )
-
-    for drawer in models.MemoryDrawer.objects.filter(
-        shelve=memory_shelve,
-    ):
-        drawer.delete()
+    The socket ``Register`` does the same through :func:`facade.registration.ensure_agent`;
+    this mutation remains for dashboards and for a HookAgent's bootstrap (``kind``,
+    ``hook_url``, ``hook_url_secret``), which cannot register over a socket it does not have.
+    """
+    request = info.context.request
+    agent = registration.ensure_agent(request.client, request.user, request.organization, name=input.name)
+    registration.clear_drawers(agent)
 
     # Configure the transport (idempotent): a HookAgent declares its kind + endpoint here.
     updated_fields = []
@@ -162,130 +114,14 @@ class ImplementAgentInput:
     hash: str | None = None
 
 
-@transaction.atomic
 def implement_agent(info: Info, input: ImplementAgentInput) -> types.Agent:
     """Reconcile an agent's declared implementations/states/locks/bloks in one transaction.
 
-    Atomicity matters here: a validation error on the Nth implementation (e.g. a malformed
-    requires/provides descriptor key) must not leave the agent half-registered with the
-    stale-implementation reap skipped — either the whole declared set lands, or none of it.
+    The body is :func:`facade.registration.implement_agent`, shared with the socket
+    ``Implement`` message; it is atomic, so either the whole declared set lands or none of it.
     """
-    input = input.to_pydantic()
-
-    # Before ANY row is read or written: a registration writes org-shared rows (actions,
-    # protocols, collections, bloks) interleaved with agent-owned ones, so two agents of one
-    # fleet registering at once would lock them in declaration order and deadlock. Taking it
-    # before the Agent upsert also keeps that row's lock short — it is the row every heartbeat
-    # renewal and every lease claim for this agent needs.
-    lock_organization(info.context.request.organization)
-
-    agent, _ = models.Agent.objects.update_or_create(
-        client=info.context.request.client,
-        user=info.context.request.user,
-        organization=info.context.request.organization,
-        defaults=dict(
-            name=input.name or f"{info.context.request.client.client_id}",
-            app=info.context.request.client.release.app,
-            release=info.context.request.client.release,
-            hash=input.hash or str(uuid.uuid4()),
-        ),
-    )
-
-    created_implementations_id = []
-    created_implementations = []
-    created_states_id = []
-    created_states = []
-
-    for lock in input.locks or []:
-        # update_or_create: a redeclared description takes effect instead of being
-        # silently kept from the first registration.
-        models.Lock.objects.update_or_create(
-            agent=agent,
-            key=lock.key,
-            defaults=dict(
-                description=lock.definition.description,
-            ),
-        )
-
-    # Batch prefetch for the per-implementation loop: one Action query + one Implementation
-    # query for the whole declared set instead of two lookups per implementation. Scoped to
-    # the agent's app/org, exactly what _create_implementation's per-row lookups filter on.
-    # Deterministic order, so two registrations of overlapping sets behave identically.
-    declared_implementations = sorted(input.implementations or [], key=lambda impl: (impl.definition.key, impl.definition.version))
-    action_map = None
-    implementation_map = None
-    if declared_implementations:
-        wanted = {(impl.definition.key, impl.definition.version) for impl in declared_implementations}
-        action_map = {
-            (action.key, action.version): action
-            for action in models.Action.objects.filter(
-                app=agent.app,
-                organization=agent.organization,
-                key__in={key for key, _ in wanted},
-                version__in={version for _, version in wanted},
-            )
-        }
-        implementation_map = {implementation.interface: implementation for implementation in models.Implementation.objects.filter(agent=agent).select_related("action")}
-
-    for implementation in declared_implementations:
-        created_implementation = _create_implementation(implementation, agent, action_map=action_map, implementation_map=implementation_map)
-
-        created_implementations_id.append(created_implementation.id)
-        created_implementations.append(created_implementation)
-
-    for inputstate in input.states or []:
-        state = _register_state(agent, inputstate)
-
-        created_states_id.append(state.id)
-        created_states.append(state)
-
-    # Reap everything the agent no longer declares. Queryset delete still emits per-instance
-    # signals (the subscription fan-out in facade.signals), without the per-row get() loops.
-    #
-    # Implementations carrying non-terminal tasks are kept: an agent that re-registers without an
-    # implementation it is still executing must not have that work deleted out from under it.
-    # ``Task.implementation`` is SET_NULL, so reaping an idle implementation preserves its history.
-    models.State.objects.filter(agent=agent).exclude(id__in=created_states_id).delete()
-
-    stale_implementations = models.Implementation.objects.filter(agent=agent).exclude(id__in=created_implementations_id)
-    live = stale_implementations.filter(tasks__is_done=False).distinct()
-    live_ids = list(live.values_list("id", flat=True))
-    if live_ids:
-        logger.warning(f"Keeping {len(live_ids)} undeclared implementation(s) for agent {agent.id}: still running tasks.")
-    stale_implementations.exclude(id__in=live_ids).delete()
-
-    for blok in input.bloks or []:
-        catalog = models.UICatalog.objects.get_or_create(name=blok.catalog or "default", organization=agent.organization)[0]
-        blok_diagnostics = validate_manifest_against_catalog(catalog, blok.components)
-
-        x, _ = models.Blok.objects.update_or_create(
-            name=blok.key,
-            organization=agent.organization,
-            defaults=dict(
-                components=[x.model_dump() for x in blok.components] if blok.components else [],
-                description=blok.description,
-                creator=info.context.request.user,
-                catalog=catalog,
-                demo_state=blok.demo_state or {},
-                diagnostics=dump_diagnostics(blok_diagnostics),
-            ),
-        )
-
-        # One auto-materialization per agent-declared blok, every dependency bound to the
-        # declaring agent itself.
-        mblok, _ = models.MaterializedBlok.objects.update_or_create(
-            blok=x,
-            declared_by=agent,
-            defaults=dict(name=x.name, description=x.description or ""),
-        )
-
-        for dep in _sync_blok_dependencies(x, blok.dependencies, replace=True):
-            models.BlokAgentMapping.objects.update_or_create(
-                materialized_blok=mblok,
-                key=dep.key,
-                defaults=dict(dependency=dep, agent=agent),
-            )
-
+    request = info.context.request
+    agent, _ = registration.implement_agent(request.client, request.user, request.organization, input.to_pydantic())
     return agent
 
 

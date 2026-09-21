@@ -1,8 +1,8 @@
-from kante.types import Info
 import strawberry
-from facade import types, models, scalars
+from kante.types import Info
+
+from facade import models, registration, types
 from rekuest_core import scalars as rscalars
-from authentikate.vars import get_user, get_client
 
 
 @strawberry.input
@@ -19,36 +19,20 @@ class ShelveInMemoryDrawerInput:
     )
 
 
+def _agent_of(info: Info) -> models.Agent:
+    request = info.context.request
+    return registration.ensure_agent(request.client, request.user, request.organization)
+
+
 def shelve_in_memory_drawer(info: Info, input: ShelveInMemoryDrawerInput) -> types.MemoryDrawer:
-    agent, _ = models.Agent.objects.update_or_create(
-        client=info.context.request.client,
-        user=info.context.request.user,
-        organization=info.context.request.organization,
-        defaults=dict(
-            name=f"{info.context.request.client.client_id}",
-        ),
-    )
-
-    memory_shelve, _ = models.MemoryShelve.objects.get_or_create(
-        agent=agent,
-        defaults=dict(
-            name=f"{str(agent)} memory shelve",
-            creator=info.context.request.user,
-            organization=agent.organization,
-        ),
-    )
-
-    x, _ = models.MemoryDrawer.objects.update_or_create(
-        shelve=memory_shelve,
+    """Record a value the caller's agent holds in memory (the GraphQL twin of ``Shelve``)."""
+    return registration.shelve(
+        _agent_of(info),
+        identifier=input.identifier,
         resource_id=input.resource_id,
-        defaults=dict(
-            label=input.label,
-            description=input.description,
-            identifier=input.identifier,
-        ),
+        label=input.label,
+        description=input.description,
     )
-
-    return x
 
 
 @strawberry.input
@@ -57,24 +41,6 @@ class UnshelveMemoryDrawerInput:
 
 
 def unshelve_memory_drawer(info: Info, input: UnshelveMemoryDrawerInput) -> strawberry.ID:
-    agent, _ = models.Agent.objects.update_or_create(
-        client=info.context.request.client,
-        user=info.context.request.user,
-        organization=info.context.request.organization,
-        defaults=dict(
-            name=f"{info.context.request.client.client_id}",
-        ),
-    )
-
-    x = models.MemoryDrawer.objects.get(
-        id=input.id,
-    )
-
-    if x.shelve != agent.memory_shelve:
-        raise Exception("This drawer does not belong to this agent.")
-
-    id = str(x.id)
-
-    x.delete()
-
-    return id
+    """Drop a drawer from the caller's agent's shelve (the GraphQL twin of ``Unshelve``)."""
+    registration.unshelve(_agent_of(info), input.id)
+    return input.id

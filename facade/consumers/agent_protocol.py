@@ -33,10 +33,11 @@ from authentikate.expand import (
     aexpand_user_from_token,
 )
 from authentikate.utils import authenticate_token_or_none
+from channels.db import database_sync_to_async
 from django.conf import settings
 from pydantic import BaseModel, Field
 
-from facade import codes, messages, models
+from facade import codes, messages, models, registration
 from facade.consumers.agent_queue import AgentQueue
 from facade.message_router import UnknownAgentMessage, route_from_agent_message
 from facade.persist_backend import persist_backend
@@ -55,7 +56,7 @@ CloseCallable = Callable[[int], Awaitable[None]]
 # every outbound frame still funnels through the single outer send-lock.
 SendTextCallable = Callable[[str], Awaitable[None]]
 SendMessageCallable = Callable[[messages.ToAgentMessage], Awaitable[None]]
-# The authenticator resolves a Register to the durable agent identity.
+# The authenticator resolves a Register to the durable agent identity (creating it on first contact).
 Authenticator = Callable[[messages.Register], Awaitable["models.Agent"]]
 # Wired by the adapter so the protocol can join the agent's connection group and
 # displace other live connections — both are no-ops by default (unit tests).
@@ -85,13 +86,13 @@ class FromAgentPayload(BaseModel):
 
 
 async def default_authenticator(register: messages.Register) -> "models.Agent":
-    """Resolve a ``Register`` to its ``Agent`` via the token.
+    """Resolve a ``Register`` to its ``Agent`` via the token, creating it if need be.
 
-    NOTE: the ``aget_or_create`` create-branch omits the required
-    ``app``/``release`` columns, so this can only *find* an
-    already-created agent (created out-of-band via the ``ensureAgent`` mutation).
-    That is pinned behaviour — do not "fix" it here without updating
-    ``test_register_for_uncreated_agent_is_rejected``.
+    Ensure semantics, the socket twin of the ``ensureAgent`` mutation: the agent row (app and
+    release from the token's client; named after the client until its first ``Implement``
+    names it), its memory shelve, and the drawers of any previous process forgotten -- a
+    process that just registered holds nothing in memory. Runs off the event loop: the
+    client's release/app is a lazy FK chain.
     """
     token = await authenticate_token_or_none(register.token)
     if not token:
@@ -101,15 +102,12 @@ async def default_authenticator(register: messages.Register) -> "models.Agent":
     client = await aexpand_client_from_token(token)
     organization = await aexpand_organization_from_token(token)
 
-    agent, _ = await models.Agent.objects.aget_or_create(
-        client=client,
-        user=user,
-        organization=organization,
-        defaults=dict(
-            name=f"{client.client_id}",
-        ),
-    )
-    return agent
+    def ensure() -> "models.Agent":
+        agent = registration.ensure_agent(client, user, organization)
+        registration.clear_drawers(agent)
+        return agent
+
+    return await database_sync_to_async(ensure)()
 
 
 class RegisteredSession:
@@ -502,10 +500,15 @@ class AgentProtocol:
             await self.close(codes.FROM_AGENT_MESSAGE_DOES_NOT_MATCH_SCHEMA_CODE)
 
     async def on_register(self, register: messages.Register) -> None:
-        """Authenticate, claim the agent's write-lease, send ``Init`` and spawn the loops.
+        """Authenticate, reconcile the declaration, claim the lease, send ``Init``, spawn the loops.
 
         Gate order (each gate may close and return, leaving ``self.session`` None):
-        authenticate → blocked → lease claim/displacement → build session + Init + loops.
+        authenticate → blocked → declaration → lease claim/displacement → build session +
+        Init + loops. Registering IS implementing: the declaration the ``Register`` carries is
+        reconciled in one transaction before the lease is claimed (a refused one strands no
+        lease), skipped when its hash is the one already held, and its non-fatal findings
+        ride back on ``Init``. A hard finding (catalog mismatch, ownership conflict) refuses
+        the connection: ``ProtocolError`` + ``AGENT_REGISTRATION_REJECTED``.
         """
         agent = await self.authenticator(register)
         session_id = register.session_id
@@ -513,6 +516,16 @@ class AgentProtocol:
         if agent.blocked:
             await self.close(codes.AGENT_IS_BLOCKED_CODE)
             return
+
+        diagnostics: list = []
+        if register.declares and not (register.hash is not None and register.hash == agent.hash):
+            try:
+                agent, diagnostics = await self.backend.on_agent_implement(agent.pk, register)
+            except Exception as e:
+                logger.error("Registration refused", exc_info=True)
+                await self.send_to_agent_message(messages.ProtocolError(error=f"Registration refused: {e}"))
+                await self.close(codes.AGENT_REGISTRATION_REJECTED_CODE)
+                return
 
         # Join the caller event group: an agent assigns *dependent* work and must receive its
         # results back over this socket. Done before Init so no event is missed.
@@ -569,6 +582,8 @@ class AgentProtocol:
         await self.send_to_agent_message(
             messages.Init(
                 agent=str(agent.pk),
+                hash=agent.hash or None,
+                diagnostics=diagnostics,
                 inquiries=[messages.AssignInquiry(task=str(a.pk)) for a in claim.tasks],
             )
         )

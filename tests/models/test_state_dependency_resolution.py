@@ -135,7 +135,7 @@ def test_auto_resolve_raises_when_no_state_definition_matches(setup):
 def test_state_registration_defaults_identity_fields(db):
     """States registered without explicit key/app get the defaults: key = interface,
     app_identifier = the agent's app identifier; explicit values win."""
-    from facade.mutations.agent import _register_state
+    from facade.registration import _register_state
     from rekuest_core.inputs.models import StateImplementationInputModel
 
     user, _, org, caller = create_registry_bundle("statereg")

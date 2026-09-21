@@ -513,6 +513,9 @@ IDENTIFIER_PATTERN = re.compile(r"^@[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 """A structure identifier: ``@package/key``, e.g. ``@mikro/image``."""
 
 _IDENTIFIED_KINDS = {enums.PortKind.STRUCTURE, enums.PortKind.MEMORY_STRUCTURE, enums.PortKind.INTERFACE}
+"""Kinds that must declare an identifier: it is the only identity the value has."""
+_IDENTIFIABLE_KINDS = {enums.PortKind.MODEL, enums.PortKind.ENUM}
+"""Kinds that may declare one: a MODEL naming its class, an ENUM naming the enum its choices came from."""
 _CHILD_COUNT: dict[enums.PortKind, tuple[int, int | None]] = {
     enums.PortKind.LIST: (1, 1),
     enums.PortKind.DICT: (1, None),
@@ -545,7 +548,7 @@ def _check_port_shape(port: "PortInputModel") -> None:
             raise ValueError(f"{owner} must declare an identifier (@package/key)")
         if not IDENTIFIER_PATTERN.match(port.identifier):
             raise ValueError(f"{owner}: identifier {port.identifier!r} is not of the form @package/key")
-    elif port.identifier is not None and port.kind != enums.PortKind.MODEL:
+    elif port.identifier is not None and port.kind not in _IDENTIFIABLE_KINDS:
         raise ValueError(f"{owner} must not declare an identifier")
     elif port.identifier is not None and not IDENTIFIER_PATTERN.match(port.identifier):
         raise ValueError(f"{owner}: identifier {port.identifier!r} is not of the form @package/key")
@@ -563,7 +566,7 @@ class PortInputModel(BaseModel):
     label: str | None = Field(default=None, description="The label of the port. This is the text that is displayed in the UI")
     kind: enums.PortKind = Field(description="The kind of the port. This is the type of the port. Can be either int, string, structure, list, bool, dict, float, date, union or model")
     description: str | None = Field(default=None, description="The description of the port. This is the text that is displayed in the UI when the user hovers over the port")
-    identifier: str | None = Field(default=None, description="The identifier of a structure port. This is used to uniquely identify a specific type of structure.")
+    identifier: str | None = Field(default=None, description="The identifier of the port's type, of the form @package/key. Required for STRUCTURE, MEMORY_STRUCTURE and INTERFACE, where it is the only identity a value has; optional for MODEL and ENUM, where it names the class or enum the port was built from so that agents can map a value back to it.")
     nullable: bool = Field(default=False, description="Whether the port is nullable or not. If the port is nullable, it can be set to null. If the port is not nullable, it cannot be set to null")
     effects: list[EffectInputModel] | None = Field(default=None, description="The effects of the port")
     choices: list[ChoiceInputModel] | None = Field(default=None, description="The values the port accepts (required for ENUM; optional for INT, FLOAT, STRING). Rendered by CHOICE widgets.")

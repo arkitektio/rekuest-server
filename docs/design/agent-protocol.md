@@ -45,10 +45,16 @@ sequenceDiagram
 
     AG->>AC: WebSocket connect
     AC->>P: build protocol (connection_id)
-    AG->>P: Register{token, force}
-    P->>AU: authenticate(token) → Agent
+    AG->>P: Register{token, force, session_id, name, hash, implementations, states, locks, bloks}
+    P->>AU: authenticate(token) → ensure Agent (+ memory shelve, drawers cleared)
     alt agent.blocked
         P-->>AG: close(AGENT_IS_BLOCKED)
+    end
+    opt declaration carried and hash differs from the stored one
+        P->>PB: on_agent_implement (one atomic registration)
+        alt refused (catalog mismatch, ownership conflict)
+            P-->>AG: ProtocolError + close(AGENT_REGISTRATION_REJECTED)
+        end
     end
     P->>AC: register_connection(agent.pk) (join group)
     P->>PB: on_agent_connected(agent.pk, connection_id, force)
@@ -62,7 +68,7 @@ sequenceDiagram
     opt displaced_incumbent
         P->>AC: kick_others() (best-effort; the epoch bump already fenced them)
     end
-    P-->>AG: Init{agent, inquiries=[AssignInquiry...]}
+    P-->>AG: Init{agent, hash, diagnostics, inquiries=[AssignInquiry...]}
     par background loops
         P->>Q: listen_for_tasks: pop → send → ack
         P-->>AG: heartbeat: periodic Heartbeat
@@ -86,35 +92,76 @@ socket. Frames are parsed and validated through a discriminated-union pydantic m
 (`FromAgentPayload`), so malformed JSON or schema-mismatched frames are rejected with a specific
 close code (`codes.py`).
 
-`Register` carries `token` (identity), `force` (take over an existing connection), and `session_id`
+`Register` carries `token` (identity), `force` (take over an existing connection), `session_id`
 (the per-process reclaim signal: same id on reconnect ⇒ the process survived, reclaim its in-flight
-work; a different id ⇒ a fresh process, fail-and-cascade).
+work; a different id ⇒ a fresh process, fail-and-cascade) and the agent's **declaration** —
+`name`, `hash`, `implementations`, `states`, `locks`, `bloks`, the same shapes as
+`ImplementAgentInput`. Registering *is* implementing (see the lifecycle below); a `Register`
+without a declaration only ensures the agent exists.
 
 Unlike every other message, `Register` **rejects unknown fields**. It used to carry a `mode`, and a
 client still sending `mode: "OBSERVER"` must be told to update rather than be silently admitted as a
 full agent — which would claim the write-lease and displace the real executor.
 
-### Authentication
+### Authentication — ensure semantics
 
-`default_authenticator` expands the register token into `(client, user, organization)` and does
-`Agent.objects.aget_or_create(client=, user=, organization=, defaults=dict(name=client.client_id))`.
-
-> **Pinned behaviour:** the create-branch omits the required `app`/`release`/`device` columns, so
-> this can only *find* an agent that was already created out-of-band by the `ensureAgent` mutation.
-> Registering for an uncreated agent is rejected (guarded by
-> `test_register_for_uncreated_agent_is_rejected`). The authenticator is injected, so deployments can
-> swap it.
+`default_authenticator` expands the register token into `(client, user, organization)` and calls
+`facade.registration.ensure_agent`: `Agent.get_or_create` keyed on that triple (a new agent takes
+`app`/`release` from the client's release and is named after the client until its first
+`Implement` names it), a
+`MemoryShelve.get_or_create` beside it, and every stale `MemoryDrawer` deleted — a process that
+just registered holds nothing in memory. The socket is therefore the agent's complete control
+plane: no GraphQL call precedes it (guarded by `test_register_for_uncreated_agent_creates_it`
+and `tests/agent/test_registration.py`). The `ensureAgent` / `implementAgent` mutations remain for
+dashboards and for a HookAgent's bootstrap (`kind`, `hook_url`, `hook_url_secret`) — they run the
+same functions. The authenticator is injected, so deployments can swap it.
 
 A `blocked` agent is closed immediately after authentication.
 
 ### Init + background loops
 
-On successful register the protocol sends an `Init` carrying the agent id and an `AssignInquiry`
-per pending task (work that was queued/unfinished while it was away — returned by
-`on_agent_connected`). It then spawns two background tasks:
+On successful register the protocol sends an `Init` carrying the agent id, the definition `hash`
+the backend now holds for it (`null` when it was never implemented), the `diagnostics` of the
+registration the `Register` carried, and an `AssignInquiry` per pending task (work that was
+queued/unfinished while it was away — returned by `on_agent_connected`). It then spawns two
+background tasks:
 
 - **`listen_for_tasks`** — relays queued work to the agent (see delivery below).
 - **`heartbeat`** — liveness (see below).
+
+### Registration lifecycle — registering is implementing
+
+```
+Register{token, force, session_id, name, hash, implementations, states, locks, bloks}
+  → (declaration carried, hash differs) one atomic registration
+      ↳ refused: ProtocolError{error} + close(AGENT_REGISTRATION_REJECTED)
+  → Init{agent, hash, diagnostics, inquiries}
+  → SessionInit{session_id, states} → StatePatch / StateSnapshot / Lock / Unlock / … as before
+```
+
+The declaration a `Register` carries is the socket twin of the `implementAgent` mutation and runs
+the same function (`facade.registration.implement_agent`): one atomic reconciliation under the
+organization lock — locks, actions + implementations, state definitions + states upserted,
+undeclared ones reaped, bloks materialized. It runs *before* the lease is claimed, so a refused
+registration strands no lease. When `Register.hash` equals the hash the backend already holds
+nothing is reconciled (the reconnect fast path); a `Register` with no declaration at all only
+ensures the agent exists. Its `State` rows are what the state stream (`SessionInit`,
+`StatePatch`) needs, so an agent that has never registered over GraphQL can stream state.
+`Init.diagnostics` carries the non-fatal findings (unknown catalog operations and the like); a
+catalog mismatch or an ownership conflict aborts the whole registration and refuses the
+connection — the agent is told why in a `ProtocolError` and closed with
+`AGENT_REGISTRATION_REJECTED`. A `Register` that fails *schema* validation (or carries fields a
+backend does not know — `Register` is strict) closes like any other malformed frame.
+
+The registration runs inline in the handshake; it is sub-second, and no heartbeat is pending
+before `Init`.
+
+Shelving is a request/reply pair: `Shelve{ref, identifier, resource_id, label, description}` →
+`Shelved{ref, drawer}` records a value the agent holds in memory; `Unshelve{ref, drawer}` →
+`Unshelved{ref}` drops it, correlated by the client-minted `ref` and answering with `error`
+rather than closing. `Collect{drawers}` remains the server's outbound request to drop drawers,
+which the agent answers with `Unshelve`. Both are twins of the GraphQL `shelveInMemoryDrawer` /
+`unshelveMemoryDrawer` mutations.
 
 All outbound frames funnel through a single `_send` guarded by an `asyncio.Lock`, because the
 heartbeat loop, the listen loop, and `receive` can all try to send concurrently on the same event
@@ -294,8 +341,8 @@ restarted instead.
 Messages are split by direction (`facade/messages.py`):
 
 **Server → agent (`ToAgentMessage`)** — `Init`, `Assign`, the lifecycle control messages `Cancel` /
-`Interrupt` / `Pause` / `Resume`, `Collect`, `Bounce`, `Kick`, `Heartbeat`, `ProtocolError`, and
-inquiries (`AssignInquiry`). (The caller-bound `…Event` mirrors and the `AssignResponse`/`ControlResponse` acks also ride
+`Interrupt` / `Pause` / `Resume`, `Collect`, `Bounce`, `Kick`, `Heartbeat`, `ProtocolError`,
+inquiries (`AssignInquiry`), and the shelving replies `Shelved` / `Unshelved`. (The caller-bound `…Event` mirrors and the `AssignResponse`/`ControlResponse` acks also ride
 `ToAgentMessage` but are addressed to callers — see [caller-protocol.md](caller-protocol.md).)
 
 **Agent → server (`FromAgentMessage`)**, dispatched (via the shared
@@ -304,18 +351,20 @@ inquiries (`AssignInquiry`). (The caller-bound `…Event` mirrors and the `Assig
 | Message | Handler | Effect |
 | --- | --- | --- |
 | `HeartbeatEvent` | `on_agent_heartbeat` | liveness ack |
-| `ProgressEvent` | `on_agent_progress` | `TaskEvent(PROGRESS)` |
-| `LogEvent` | `on_agent_log` | `TaskEvent(LOG)` |
-| `YieldEvent` | `on_agent_yield` | `TaskEvent(YIELD, returns)` + higher-order unfold |
-| `DoneEvent` | `on_agent_done` | terminal: `is_done`, `finished_at` |
-| `CancelledEvent` | `on_agent_cancelled` | terminal — confirms a `Cancel` (→ `CANCELLED`) |
-| `InterruptedEvent` | `on_agent_interrupted` | terminal — confirms an `Interrupt` (→ `INTERRUPTED`) |
-| `PausedEvent` | `on_agent_paused` | non-terminal — confirms a `Pause` (→ `PAUSED`) |
-| `ResumedEvent` | `on_agent_resumed` | non-terminal — confirms a `Resume` (→ `RESUMED`) |
-| `ErrorEvent` / `CriticalEvent` | `on_agent_error` / `on_agent_critical` | terminal with message |
-| `StatePatchEvent` | `on_agent_state_patch` | append a `Patch` |
-| `StateSnapshotEvent` | `on_agent_state_snapshot` | write `Snapshot`s |
-| `SessionInitMessage` | `on_agent_session_init` | initialize a `Session` |
+| `Progress` | `on_agent_progress` | `TaskEvent(PROGRESS)` |
+| `Log` | `on_agent_log` | `TaskEvent(LOG)` |
+| `Yield` | `on_agent_yield` | `TaskEvent(YIELD, returns)` + higher-order unfold |
+| `Completed` | `on_agent_done` | terminal: `is_done`, `finished_at` |
+| `Cancelled` | `on_agent_cancelled` | terminal — confirms a `Cancel` (→ `CANCELLED`) |
+| `Interrupted` | `on_agent_interrupted` | terminal — confirms an `Interrupt` (→ `INTERRUPTED`) |
+| `Paused` | `on_agent_paused` | non-terminal — confirms a `Pause` (→ `PAUSED`) |
+| `Resumed` | `on_agent_resumed` | non-terminal — confirms a `Resume` (→ `RESUMED`) |
+| `Failed` / `Critical` | `on_agent_error` / `on_agent_critical` | terminal with message |
+| `StatePatch` | `on_agent_state_patch` | append a `Patch` |
+| `StateSnapshot` | `on_agent_state_snapshot` | write `Snapshot`s |
+| `SessionInit` | `on_agent_session_init` | initialize a `Session` |
+| `Shelve` | `on_agent_shelve` | upsert a `MemoryDrawer` on the agent's shelve; replies `Shelved{ref, drawer}` / `{ref, error}` |
+| `Unshelve` | `on_agent_unshelve` | drop the drawer if it is the agent's; replies `Unshelved{ref}` / `{ref, error}` |
 
 The four lifecycle **confirmation events** are the executor's half of the two-phase controls: the
 server forwards a `Cancel` / `Interrupt` / `Pause` / `Resume`, and the executing agent reports the
@@ -323,6 +372,9 @@ matching event above when it has acted (terminal for cancel/interrupt, non-termi
 pause/resume). Each terminal/confirmation report is acked with an `EventAck` so the agent can stop
 retaining it. The router also handles the sub-assignment requests (`AssignRequest`,
 `Cancel/Interrupt/Pause/ResumeRequest`) — see [caller-protocol.md](caller-protocol.md).
+
+The declaration a `Register` carries is reconciled by `on_agent_implement` from the handshake
+itself (see the registration lifecycle above), not through the router.
 
 A second `Register` after registration is a protocol violation — it must not re-run `on_register`
 (that would orphan the first listen/heartbeat pair); it falls through to the catch-all and closes.

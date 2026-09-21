@@ -2,9 +2,10 @@
 
 Both transports — the WebSocket ``AgentProtocol`` and the HTTP HookAgent intake — feed
 their validated FromAgent messages through :func:`route_from_agent_message`. It performs
-the side effects (persisting events, originating caller work) and **returns** the optional
-reply message (``EventAck`` / ``AssignResponse``) rather than sending it, so each
-transport delivers the reply its own way (over the socket, or in the HTTP response).
+the side effects (persisting events, originating caller work, shelving) and **returns** the
+optional reply message (``EventAck`` / ``AssignResponse`` / ``Shelved`` / ``Unshelved``)
+rather than sending it, so each transport delivers the reply its own way (over the socket,
+or in the HTTP response).
 
 ``HeartbeatEvent`` is intentionally NOT handled here — it is WebSocket-only liveness and
 stays in ``AgentProtocol``.
@@ -55,6 +56,9 @@ def reply_for_duplicate(message: messages.FromAgentMessage) -> "tuple[Optional[m
     """
     match message:
         case messages.AssignRequest():
+            return None
+        case messages.Shelve() | messages.Unshelve():
+            # An idempotent upsert, and an unshelve that answers "unknown drawer": route again.
             return None
         case messages.ControlRequest():
             return messages.ProtocolError(error="Replayed control request — re-sign and retry."), 409
@@ -198,6 +202,23 @@ async def route_from_agent_message(
         case messages.Unlock():
             await backend.on_agent_unlock(agent_id, message)
             return None
+
+        # Shelving: request/reply, a failure answers with ``error`` and never tears down
+        # the transport.
+        case messages.Shelve():
+            try:
+                drawer = await backend.on_agent_shelve(agent_id, message)
+            except Exception as e:
+                logger.error("Shelve failed", exc_info=True)
+                return messages.Shelved(ref=message.ref, error=str(e))
+            return messages.Shelved(ref=message.ref, drawer=str(drawer.pk))
+        case messages.Unshelve():
+            try:
+                await backend.on_agent_unshelve(agent_id, message)
+            except Exception as e:
+                logger.warning("Unshelve failed: %s", e)
+                return messages.Unshelved(ref=message.ref, error=str(e))
+            return messages.Unshelved(ref=message.ref)
         case _:
             raise UnknownAgentMessage(type(message).__name__)
 
