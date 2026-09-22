@@ -14,6 +14,7 @@ from facade.scalars import scalar_map as fscalar_map
 import kante
 from facade.types.base import scoped_get
 from strawberry.schema.config import StrawberryConfig
+from embeddings.strawberry import scalar_map as escalar_map
 
 
 def field(**kwargs):
@@ -287,6 +288,7 @@ schema = kante.Schema(
             **dscalar_map,
             **rscalar_map,
             **fscalar_map,
+            **escalar_map,
         },
     ),
     # We really need to register

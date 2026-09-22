@@ -16,6 +16,7 @@ from rekuest_core.objects import types as rtypes
 from facade import enums, filters, models
 from facade.type_gen import create_stats_type
 from facade.types.base import build_prescoped_queryset, build_prescoper
+from embeddings.strawberry import Embedding, embedding_of
 
 
 @strawberry_django.type(models.Action, filters=filters.ActionFilter, pagination=True, ordering=filters.ActionOrder, description="Represents an executable action in the system.")
@@ -43,6 +44,10 @@ class Action:
     test_cases: list["TestCase"] | None = strawberry_django.field(description="Test cases for this action.")
     organization: "Organization" = strawberry_django.field(description="The organization that owns this action.")
     tasks: list["Task"] = strawberry_django.field(description="Tasks created for this action.")
+
+    @strawberry_django.field(description="This action's stored vector, as `<model id>:<floats>`. Null until it has been indexed.")
+    def embedding(self) -> Embedding | None:
+        return embedding_of(self)
 
     @strawberry_django.field(description="Actions whose name and description mean roughly what this one's do, nearest first (cosine distance between embeddings, this action excluded). `filters` narrows the candidates like `actions` does; `maxDistance` (0 identical, 1 unrelated) cuts the tail, otherwise the nearest `limit` come back. Empty while this action has no vector yet or embeddings are off.")
     def similar_actions(self, info: Info, filters: Optional[filters.ActionFilter] = None, limit: int = 10, max_distance: Optional[float] = None) -> list["Action"]:

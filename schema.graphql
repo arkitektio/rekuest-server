@@ -92,6 +92,11 @@ type Action {
   tasks(filters: TaskFilter, ordering: [TaskOrder!]! = [], pagination: OffsetPaginationInput): [Task!]!
 
   """
+  This action's stored vector, as `<model id>:<floats>`. Null until it has been indexed.
+  """
+  embedding: Embedding
+
+  """
   Actions whose name and description mean roughly what this one's do, nearest first (cosine distance between embeddings, this action excluded). `filters` narrows the candidates like `actions` does; `maxDistance` (0 identical, 1 unrelated) cuts the tail, otherwise the nearest `limit` come back. Empty while this action has no vector yet or embeddings are off.
   """
   similarActions(filters: ActionFilter = null, limit: Int! = 10, maxDistance: Float = null): [Action!]!
@@ -2162,6 +2167,11 @@ enum EffectKind {
   HIDE
   CUSTOM
 }
+
+"""
+A stored vector, as `<model id>:<comma-separated floats>` -- e.g. `potion-base-8M:0.0123,-0.0456,...`. The model id is part of the value because vectors from different models are not comparable. Null when the row has no vector yet (it carries no text, or indexing has not caught up with it).
+"""
+scalar Embedding
 
 input FinishMediaUploadInput {
   storeId: String!

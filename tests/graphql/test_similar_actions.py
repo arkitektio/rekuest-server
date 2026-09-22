@@ -129,3 +129,43 @@ class TestSimilarActions:
 
         result = await schema.execute(ROOT, context_value=authenticated_context, variable_values={"action": str(foreign.pk)})
         assert result.errors and "No Action" in str(result.errors[0])
+
+
+EMBEDDING = """
+    query Embedding($action: ID!) {
+        action(id: $action) { name embedding }
+    }
+"""
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_action_publishes_its_vector_with_the_model_id(authenticated_context: HttpContext) -> None:
+    """A vector without the model that produced it is not comparable to anything, so the
+    descriptor travels inside the value rather than beside it."""
+    from embeddings.strawberry import format_embedding
+
+    action = await sync_to_async(create_action_for_organization)(authenticated_context.request.organization, "emb-field", name="Segment nuclei", description="Find cell nuclei in a fluorescence image")
+    await action.arefresh_from_db()
+
+    result = await schema.execute(EMBEDDING, context_value=authenticated_context, variable_values={"action": str(action.id)})
+    assert not result.errors, result.errors
+    published = result.data["action"]["embedding"]
+
+    model_id, _, floats = published.partition(":")
+    assert model_id == engine.model_id()
+    # The floats round-trip exactly, so a client can reuse the vector it was handed.
+    assert [float(component) for component in floats.split(",")] == action.embedding
+    assert published == format_embedding(action.embedding, engine.model_id())
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_an_unindexed_action_publishes_null(authenticated_context: HttpContext) -> None:
+    action = await sync_to_async(create_action_for_organization)(authenticated_context.request.organization, "emb-null", name="Nameless")
+    await Action.objects.filter(pk=action.pk).aupdate(embedding=None, embedding_model="")
+
+    result = await schema.execute(EMBEDDING, context_value=authenticated_context, variable_values={"action": str(action.id)})
+    assert not result.errors, result.errors
+
+    assert result.data["action"]["embedding"] is None
