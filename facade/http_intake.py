@@ -25,7 +25,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from facade import enums, hooks, models, redis_keys
 from facade.consumers.agent_protocol import FromAgentPayload
 from facade.hooks import SIGNATURE_HEADER, SIGNATURE_V1_HEADER
-from facade.message_router import UnknownAgentMessage, reply_for_duplicate, route_from_agent_message
+from facade.message_router import UnknownAgentMessage, log_refusal, reply_for_duplicate, route_from_agent_message
 from facade.persist_backend import persist_backend
 
 logger = logging.getLogger(__name__)
@@ -104,7 +104,7 @@ async def hook_intake(request: HttpRequest, agent_id: str) -> HttpResponse:
     except UnknownAgentMessage as e:
         return JsonResponse({"error": f"Unhandled message: {e}"}, status=400)
     except Exception as e:
-        logger.error("Hook intake failed", exc_info=True)
+        log_refusal("Hook intake", e)
         # Release the claim: the request never took effect, so the sender's retry must not be
         # mistaken for a replay.
         if digest is not None:

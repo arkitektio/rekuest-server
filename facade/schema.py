@@ -1,4 +1,5 @@
 import strawberry
+from rekuest.logs import QuietErrorsSchema
 import strawberry_django
 from facade import models, mutations, queries, subscriptions, types
 from kante.types import Info
@@ -273,7 +274,11 @@ class Subscription:
     probe_events = subscription(resolver=subscriptions.probe_events, description="Stream the events of one probe (caller-scoped, payload-carrying). Emits a state snapshot first when events already happened.")
 
 
-schema = kante.Schema(
+class Schema(QuietErrorsSchema, kante.Schema):
+    """kante.Schema, logging expected resolver errors as one line and bugs with a traceback (see logs.py)."""
+
+
+schema = Schema(
     query=Query,
     subscription=Subscription,
     mutation=Mutation,

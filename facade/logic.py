@@ -132,7 +132,6 @@ def get_latest_state(
         snapshot = snapshot_qs.first()
         if not snapshot:
             raise ValueError(f"No snapshot found for state {state_id or state.pk}")
-        print(f"Snapshot for state {state} is {snapshot}")
 
         base_value = snapshot.value if snapshot else {}
         start_time = snapshot.timestamp if snapshot else None

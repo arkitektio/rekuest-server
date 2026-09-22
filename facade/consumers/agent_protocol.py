@@ -39,7 +39,7 @@ from pydantic import BaseModel, Field
 
 from facade import codes, messages, models, registration
 from facade.consumers.agent_queue import AgentQueue
-from facade.message_router import UnknownAgentMessage, route_from_agent_message
+from facade.message_router import UnknownAgentMessage, log_refusal, route_from_agent_message
 from facade.persist_backend import persist_backend
 from facade.ports import PersistBackend
 
@@ -470,15 +470,16 @@ class AgentProtocol:
             return
         try:
             raw = json.loads(text_data)
-        except json.JSONDecodeError:
-            logger.error("Error in agent", exc_info=True)
+        except json.JSONDecodeError as e:
+            logger.warning("Agent sent a frame that is not JSON: %s", e)
             await self.close(codes.FROM_AGENT_MESSAGE_IS_NOT_VALID_JSON_CODE)
             return
 
         try:
             payload = FromAgentPayload(message=raw)
         except Exception as e:
-            logger.error(f"Error in agent {raw}", exc_info=True)
+            logger.warning("Agent message does not match the schema: %s", e)
+            logger.debug("Offending agent message: %.500s", raw)
             await self.send_to_agent_message(messages.ProtocolError(error=str(e)))
             await self.close(codes.FROM_AGENT_MESSAGE_DOES_NOT_MATCH_SCHEMA_CODE)
             return
@@ -522,7 +523,7 @@ class AgentProtocol:
             try:
                 agent, diagnostics = await self.backend.on_agent_implement(agent.pk, register)
             except Exception as e:
-                logger.error("Registration refused", exc_info=True)
+                log_refusal("Registration", e)
                 await self.send_to_agent_message(messages.ProtocolError(error=f"Registration refused: {e}"))
                 await self.close(codes.AGENT_REGISTRATION_REJECTED_CODE)
                 return

@@ -736,7 +736,7 @@ class RedisControllBackend:
 
         for agent_id, drawers in agents.items():
             agent = models.Agent.objects.get(id=agent_id)
-            logger.info(f"collecting {drawers} from agent {agent_id}")
+            logger.debug("Collecting %s drawer(s) from agent %s", len(drawers), agent_id)
             AgentConsumer.broadcast(
                 agent,
                 message=messages.Collect(

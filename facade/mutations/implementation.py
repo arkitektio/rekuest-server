@@ -374,7 +374,7 @@ def _create_implementation(
             collections.append(c)
         action.collections.set(collections)
 
-        logger.info(f"Created {action}")
+        logger.debug("Created %s", action)
         action.save()
 
     # Resolve the provenance audience once, at registration: an explicit declaration
@@ -394,7 +394,7 @@ def _create_implementation(
     if implementation is not None:
         if implementation.action.pk != action.pk:
             if implementation.action.implementations.count() == 1:
-                logger.info("Deleting Action because it has no more implementations")
+                logger.debug("Deleting action: it has no implementations left")
                 implementation.action.delete()
 
         implementation.action = action

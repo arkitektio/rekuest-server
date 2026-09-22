@@ -17,6 +17,7 @@ import logging
 from typing import Optional
 
 from channels.db import database_sync_to_async
+from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 
 from facade import messages
 from facade.probes.ids import is_probe_id
@@ -24,6 +25,18 @@ from facade.probes.persist import probe_event_backend
 from facade.ports import PersistBackend
 
 logger = logging.getLogger(__name__)
+
+# Refusals the backend raises on purpose (task already terminal, not permitted, unknown
+# target, invalid input). They are answered with a NACK carrying the message, so they log
+# as one line; anything else is a bug and keeps its traceback.
+_REFUSALS = (ValueError, LookupError, PermissionError, PermissionDenied, ObjectDoesNotExist)
+
+
+def log_refusal(what: str, e: Exception) -> None:
+    if isinstance(e, _REFUSALS):
+        logger.info("%s refused: %s", what, e)
+    else:
+        logger.exception("%s failed", what)
 
 
 class UnknownAgentMessage(Exception):
@@ -73,7 +86,7 @@ async def _control(op, agent_id, message, connection_id, session_id) -> messages
     try:
         task = await op(agent_id, message, connection_id=connection_id, session_id=session_id)
     except Exception as e:
-        logger.error("Caller control request failed", exc_info=True)
+        log_refusal("Caller control request", e)
         return messages.ControlResponse(request=message.id, task=message.task, accepted=False, error=str(e))
     return messages.ControlResponse(request=message.id, task=str(task.pk), accepted=True)
 
@@ -119,7 +132,7 @@ async def route_from_agent_message(
                     session_id=session_id,
                 )
             except Exception as e:
-                logger.error("AssignRequest failed", exc_info=True)
+                log_refusal("AssignRequest", e)
                 return messages.AssignResponse(request=message.id, reference=message.reference, task=None, created=False, error=str(e))
             return messages.AssignResponse(request=message.id, reference=message.reference, task=str(task.pk), created=created)
 
@@ -132,7 +145,7 @@ async def route_from_agent_message(
             try:
                 state = await database_sync_to_async(probe_backend.probe_for_agent)(agent_id, message)
             except Exception as e:
-                logger.error("ProbeRequest failed", exc_info=True)
+                log_refusal("ProbeRequest", e)
                 return messages.ProbeResponse(request=message.id, probe=None, error=str(e))
             return messages.ProbeResponse(request=message.id, probe=state["id"])
 
@@ -209,7 +222,7 @@ async def route_from_agent_message(
             try:
                 drawer = await backend.on_agent_shelve(agent_id, message)
             except Exception as e:
-                logger.error("Shelve failed", exc_info=True)
+                log_refusal("Shelve", e)
                 return messages.Shelved(ref=message.ref, error=str(e))
             return messages.Shelved(ref=message.ref, drawer=str(drawer.pk))
         case messages.Unshelve():

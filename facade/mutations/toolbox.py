@@ -17,7 +17,7 @@ def create_toolbox(info: Info, input: inputs.CreateToolboxInput) -> types.Toolbo
         ),
     )
 
-    logger.info(f"Toolbox created: {toolbox}")
+    logger.debug("Toolbox created: %s", toolbox)
 
     return toolbox
 

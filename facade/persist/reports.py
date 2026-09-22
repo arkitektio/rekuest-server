@@ -135,32 +135,32 @@ class AgentReportMixin:
         return True
 
     async def on_agent_log(self, agent_id: int, message: messages.Log) -> None:
-        logger.info(f"Log Task {message}")
+        logger.debug("Log for task %s (seq %s)", message.task, getattr(message, "seq", None))
         await self._record_event(agent_id, message.task, enums.TaskEventKind.LOG, message=message.message, level=message.level)
 
     async def on_agent_yield(self, agent_id: int, message: messages.Yield) -> None:
-        logger.info(f"Yield Task {message}")
+        logger.debug("Yield for task %s (seq %s)", message.task, getattr(message, "seq", None))
         if await self._record_event(agent_id, message.task, enums.TaskEventKind.YIELD, returns=message.returns):
             await self._unfold_to_higher_order(message.task, enums.TaskEventKind.YIELD, returns=message.returns)
 
     async def on_agent_done(self, agent_id: int, message: messages.Completed) -> None:
-        logger.info(f"Completed Task {message}")
+        logger.debug("Completed for task %s (seq %s)", message.task, getattr(message, "seq", None))
         await self._finalize_from_agent(agent_id, message.task, enums.TaskEventKind.COMPLETED)
 
     async def on_agent_cancelled(self, agent_id: int, message: messages.Cancelled) -> None:
-        logger.info(f"Cancelled Task {message}")
+        logger.debug("Cancelled for task %s (seq %s)", message.task, getattr(message, "seq", None))
         await self._finalize_from_agent(agent_id, message.task, enums.TaskEventKind.CANCELLED)
 
     async def on_agent_error(self, agent_id: int, message: messages.Failed) -> None:
-        logger.info(f"Failed Task {message}")
+        logger.debug("Failed for task %s (seq %s)", message.task, getattr(message, "seq", None))
         await self._finalize_from_agent(agent_id, message.task, enums.TaskEventKind.FAILED, message=message.error)
 
     async def on_agent_critical(self, agent_id: int, message: messages.Critical) -> None:
-        logger.info(f"Critical Task {message}")
+        logger.debug("Critical for task %s (seq %s)", message.task, getattr(message, "seq", None))
         await self._finalize_from_agent(agent_id, message.task, enums.TaskEventKind.CRITICAL, message=message.error)
 
     async def on_agent_progress(self, agent_id: int, message: messages.Progress) -> None:
-        logger.info(f"Progress Task {message}")
+        logger.debug("Progress for task %s (seq %s)", message.task, getattr(message, "seq", None))
         if await self._record_event(agent_id, message.task, enums.TaskEventKind.PROGRESS, progress=message.progress, message=message.message):
             await self._arm_progress_lease(message.task)
 

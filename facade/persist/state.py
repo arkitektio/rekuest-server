@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 class AgentStateMixin:
     async def on_agent_state_patch(self, agent_id: int, message: messages.StatePatch) -> None:
-        logger.info(f"Log Patch for Task {message.state_name}")
+        logger.debug("Patch for state %s", message.state_name)
 
         state = await models.State.objects.aget(agent_id=agent_id, interface=message.state_name)
         session, _ = await models.Session.objects.aget_or_create(agent_id=agent_id, session_id=message.session_id)
@@ -33,7 +33,7 @@ class AgentStateMixin:
         )
 
     async def on_agent_state_snapshot(self, agent_id: int, message: messages.StateSnapshot) -> None:
-        logger.info(f"Log Snapshot for Task {agent_id}")
+        logger.debug("Snapshot from agent %s", agent_id)
 
         session, _ = await models.Session.objects.aget_or_create(agent_id=agent_id, session_id=message.session_id)
         agent = await models.Agent.objects.aget(id=agent_id)
@@ -50,7 +50,7 @@ class AgentStateMixin:
             )
 
     async def on_agent_session_init(self, agent_id: int, message: messages.SessionInit) -> None:
-        logger.info(f"Session init {message.session_id} with data {message}")
+        logger.debug("Session init %s", message.session_id)
         # For now we don't do anything with this, but it could be used to initialize session-specific data
 
         session, _ = await models.Session.objects.aget_or_create(agent_id=agent_id, session_id=message.session_id)

@@ -7,7 +7,6 @@ import logging
 
 
 logger = logging.getLogger(__name__)
-logger.info("Loading sssignals")
 
 _UNSET = object()
 
@@ -105,7 +104,7 @@ def task_post_save(sender, instance: models.Task = None, created=None, **kwargs)
 
 @receiver(post_save, sender=models.TaskEvent)
 def task_event_post_save(sender, instance: models.TaskEvent = None, created=None, **kwargs):
-    logger.info("Task Event received")
+    logger.debug("Task event %s (%s) for task %s", instance.pk, instance.kind, instance.task_id)
     # One typed publisher fans the persisted event out to its caller (channel layer for the
     # GraphQL subscription + live WS forward, and a webhook POST for a HookAgent caller).
     transaction.on_commit(lambda instance=instance: transport.publish_task_event(instance))

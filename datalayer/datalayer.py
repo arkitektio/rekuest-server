@@ -116,7 +116,6 @@ class Datalayer:
         The datalayer reads all connection and bucket configuration from
         ``settings.DATALAYER``.
         """
-        print("Here")
         self.config = DatalayerConfig(**getattr(settings, "DATALAYER", {}))
 
         client_kwargs = {
@@ -131,7 +130,6 @@ class Datalayer:
 
         self._s3 = boto3.client("s3", **client_kwargs)
         self._sts = boto3.client("sts", **client_kwargs)
-        print("There 2")
 
     def get_bucket_config(self, bucket_key: str) -> BucketConfig:
         """Return bucket configuration for a known datalayer store.
@@ -235,14 +233,13 @@ class Datalayer:
         bucket_name, prefix = self._parse_s3_path(path)
         metadata_key = prefix.rstrip("/") + "/zarr.json"
 
-        print(f"Fetching Zarr metadata from bucket '{bucket_name}' with key '{metadata_key}'")
+        logger.debug("Fetching Zarr metadata from %s/%s", bucket_name, metadata_key)
         try:
             zarr_file = self._s3.get_object(Bucket=bucket_name, Key=metadata_key)
         except Exception as exc:
             raise FileNotFoundError(f"Could not find Zarr v3 metadata for store {store.pk or store.key}.") from exc
 
         metadata = json.loads(zarr_file["Body"].read().decode("utf-8"))
-        print(f"Retrieved Zarr metadata: {metadata}")
         if metadata.get("zarr_format") == 2:
             raise ValueError("Zarr v2 is not supported. Only Zarr v3 stores are supported.")
         if metadata.get("node_type") != "array":
