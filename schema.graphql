@@ -423,6 +423,11 @@ type Agent {
   """Agent name."""
   name: String!
 
+  """
+  What this agent is, in a sentence. Client-declared at registration; null for an agent that never declared one.
+  """
+  description: String
+
   """Current and historical states associated with the agent."""
   states: [State!]!
 
@@ -632,6 +637,11 @@ input AgentInput {
   The name of the agent. This is used to identify the agent in the system.
   """
   name: String = null
+
+  """
+  What this agent is, in a sentence. Omitting it leaves whatever the agent already has: a name is what identifies it, a description is what tells two of them apart.
+  """
+  description: String = null
 
   """
   The transport kind of the agent: WEBSOCKET (default) or WEBHOOK (a HookAgent the backend POSTs to).
@@ -2258,6 +2268,11 @@ input ImplementAgentInput {
   The name of the agent. This is used to identify the agent in the system.
   """
   name: String = null
+
+  """
+  What this agent is, in a sentence. Omitting it leaves whatever the agent already has, unlike `name`, which falls back to the client id.
+  """
+  description: String = null
 
   """
   The states of the agent. This is used to specify the initial states of the agent

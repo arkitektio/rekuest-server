@@ -45,6 +45,7 @@ class Agent:
     last_seen: datetime.datetime | None = strawberry_django.field(description="Last timestamp this agent was seen.")
     connected: bool = strawberry_django.field(description="Is the agent currently connected.")
     name: str = strawberry_django.field(description="Agent name.")
+    description: str | None = strawberry_django.field(description="What this agent is, in a sentence. Client-declared at registration; null for an agent that never declared one.")
     states: list["State"] = strawberry_django.field(description="Current and historical states associated with the agent.")
     kind: enums.AgentKind = strawberry_django.field(description="Kind of the agent.")
     hook_url: str | None = strawberry_django.field(description="Webhook URL for this Agent (only if webhook)", default=None)

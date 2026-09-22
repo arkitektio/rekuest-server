@@ -126,16 +126,24 @@ def implement_agent(client: "Client", user: "User", organization: "Organization"
     # renewal and every lease claim for this agent needs.
     lock_organization(organization)
 
+    defaults = dict(
+        name=payload.name or f"{client.client_id}",
+        app=client.release.app,
+        release=client.release,
+        hash=payload.hash or str(uuid.uuid4()),
+    )
+    # Conditional, unlike `name` on the line above: a register that declares no description
+    # keeps the one the agent already has. `name` resets to the client id in that case, which
+    # also silently undoes an `updateAgent` rename -- a pre-existing clobber this deliberately
+    # does not reproduce rather than quietly fixes.
+    if payload.description is not None:
+        defaults["description"] = payload.description
+
     agent, _ = models.Agent.objects.update_or_create(
         client=client,
         user=user,
         organization=organization,
-        defaults=dict(
-            name=payload.name or f"{client.client_id}",
-            app=client.release.app,
-            release=client.release,
-            hash=payload.hash or str(uuid.uuid4()),
-        ),
+        defaults=defaults,
     )
 
     diagnostics: list[DiagnosticModel] = []

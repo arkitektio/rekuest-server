@@ -547,6 +547,7 @@ class Register(Message):
     # ``Init``; when ``hash`` equals the hash it already holds, nothing is reconciled. A
     # ``Register`` without a declaration (every field None) only ensures the agent exists.
     name: Optional[str] = Field(default=None, description="The agent's display name.")
+    description: Optional[str] = Field(default=None, description="What this agent is, in a sentence. Omitting it keeps whatever the agent already has. Like `name`, it only reaches the row when this Register also declares (see `declares`).")
     hash: Optional[str] = Field(default=None, description="The agent's definition hash; stored, compared on the next Register, and returned on Init.")
     implementations: Optional[List[ImplementationInputModel]] = None
     states: Optional[List[StateImplementationInputModel]] = None

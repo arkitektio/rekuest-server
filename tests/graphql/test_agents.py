@@ -9,6 +9,19 @@ from facade.schema import schema
 
 from tests.graphql_ops import DELETE_AGENT, ENSURE_AGENT, GET_AGENT, GET_AGENTS
 
+#: ``ENSURE_AGENT`` selects only id/name/connected, and is shared with tests that predate this
+#: field. A local operation rather than a widened shared one, so those keep asserting what they
+#: were written to assert.
+ENSURE_AGENT_WITH_DESCRIPTION = """
+    mutation EnsureAgent($input: AgentInput!) {
+        ensureAgent(input: $input) {
+            id
+            name
+            description
+        }
+    }
+"""
+
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
@@ -107,6 +120,50 @@ class TestGraphQLAgents:
         assert first_agent_id == second_agent_id
         assert result2.data["ensureAgent"]["name"] == "First Agent"
         assert await sync_to_async(Agent.objects.count)() == 1
+
+    async def test_ensure_agent_records_and_returns_a_description(self, authenticated_context: HttpContext):
+        """A name identifies an agent; a description is what tells two of them apart.
+
+        Worth asserting on the *returned* payload and not just the row: the point of the field
+        is that a fleet view can read it.
+        """
+        result = await schema.execute(
+            ENSURE_AGENT_WITH_DESCRIPTION,
+            context_value=authenticated_context,
+            variable_values={"input": {"name": "Rig 4", "description": "The GPU box in the basement"}},
+        )
+
+        assert result.data is not None, f"Errors: {result.errors}"
+        assert result.data["ensureAgent"]["description"] == "The GPU box in the basement"
+
+    async def test_ensure_agent_leaves_an_omitted_description_alone(self, authenticated_context: HttpContext):
+        """Omitting it means "unchanged", not "cleared".
+
+        ``ensureAgent`` is called on every bootstrap, and most callers pass only a name -- if an
+        absent description erased the stored one, the field could never survive a restart.
+        """
+        first = await schema.execute(
+            ENSURE_AGENT_WITH_DESCRIPTION,
+            context_value=authenticated_context,
+            variable_values={"input": {"name": "Rig 4", "description": "The GPU box in the basement"}},
+        )
+        assert first.data is not None, f"Errors: {first.errors}"
+
+        second = await schema.execute(ENSURE_AGENT_WITH_DESCRIPTION, context_value=authenticated_context, variable_values={"input": {"name": "Rig 4"}})
+
+        assert second.data is not None, f"Errors: {second.errors}"
+        assert second.data["ensureAgent"]["id"] == first.data["ensureAgent"]["id"]
+        assert second.data["ensureAgent"]["description"] == "The GPU box in the basement"
+
+    async def test_an_agent_that_never_declared_one_has_no_description(self, authenticated_context: HttpContext):
+        """Null, not an empty string: there is nothing to derive a description from.
+
+        Every agent that predates the field reads this way too, which is the honest answer.
+        """
+        result = await schema.execute(ENSURE_AGENT_WITH_DESCRIPTION, context_value=authenticated_context, variable_values={"input": {"name": "Undescribed"}})
+
+        assert result.data is not None, f"Errors: {result.errors}"
+        assert result.data["ensureAgent"]["description"] is None
 
     async def test_delete_agent_mutation(self, authenticated_context: HttpContext):
         """Test deleting an agent via mutation."""

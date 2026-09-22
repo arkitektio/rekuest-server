@@ -19,6 +19,10 @@ class AgentInput:
         default=None,
         description="The name of the agent. This is used to identify the agent in the system.",
     )
+    description: str | None = strawberry.field(
+        default=None,
+        description="What this agent is, in a sentence. Omitting it leaves whatever the agent already has: a name is what identifies it, a description is what tells two of them apart.",
+    )
     kind: enums.AgentKind | None = strawberry.field(
         default=None,
         description="The transport kind of the agent: WEBSOCKET (default) or WEBHOOK (a HookAgent the backend POSTs to).",
@@ -52,6 +56,9 @@ def ensure_agent(info: Info, input: AgentInput) -> types.Agent:
     # Configure the transport (idempotent): a HookAgent declares its kind + endpoint here.
     updated_fields = []
     became_webhook = False
+    if input.description is not None:
+        agent.description = input.description
+        updated_fields.append("description")
     if input.kind is not None:
         new_kind = getattr(input.kind, "value", input.kind)
         became_webhook = new_kind == enums.AgentKind.WEBHOOK.value and agent.kind != new_kind
@@ -93,6 +100,7 @@ def _abandon_socket_queue(agent_pk: int) -> None:
 
 class ImplementAgentInputModel(BaseModel):
     name: str | None = Field(default=None, description="The name of the agent. This is used to identify the agent in the system.")
+    description: str | None = Field(default=None, description="What this agent is, in a sentence. Omitting it leaves whatever the agent already has, unlike `name`, which falls back to the client id.")
     states: list[StateImplementationInputModel] | None = Field(default=None, description="The states of the agent. This is used to specify the initial states of the agent")
     implementations: list[ImplementationInputModel] | None = Field(default=None, description="The implementations of the agent. This is used to specify the initial implementations of the agent")
     locks: list[LockImplementationInputModel] | None = Field(default=None, description="The locks of the agent. This is used to specify which resources the agent needs to run")
@@ -107,6 +115,7 @@ class ImplementAgentInputModel(BaseModel):
 @kante.pydantic_input(ImplementAgentInputModel, description="Implement an agent with the given implementations, states and locks. This will create the agent if it doesn't exist and update it if it does exist.")
 class ImplementAgentInput:
     name: str | None = None
+    description: str | None = None
     locks: list[LockImplementationInput] | None = None
     states: list[StateImplementationInput] | None = None
     bloks: list[BlokImplementationInput] | None = None

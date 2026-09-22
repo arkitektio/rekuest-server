@@ -48,6 +48,7 @@ class Agent(models.Model):
     hash = models.CharField(max_length=1000, help_text="The hash of the Agent (comparing the hash can be used to check if the agent has changed in a definition way)")
     release = models.ForeignKey(Release, on_delete=models.CASCADE, related_name="agents", help_text="The release this agent belongs to (agents are part of a release and are NOT associated only with an app)")
     name = models.CharField(max_length=2000, help_text="This providers Name", default="Nana")
+    description = models.TextField(null=True, blank=True, help_text="A description for the Agent")
     health_check_interval = models.IntegerField(
         default=60 * 5,
         help_text="How often should this agent be checked for its health. Defaults to 5 mins",

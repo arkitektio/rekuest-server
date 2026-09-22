@@ -33,6 +33,7 @@ class AgentRegistrationMixin:
         agent = cls._agent_with_identity_sync(agent_id)
         payload = ImplementAgentInputModel(
             name=register.name,
+            description=register.description,
             implementations=register.implementations,
             states=register.states,
             locks=register.locks,

@@ -67,6 +67,33 @@ class TestRegisterCreates:
         assert agent.pk == int(first.init.agent) and agent.name == "Fresh Agent"
         assert second.init.hash == "n1"
 
+    async def test_a_declaring_register_describes_the_agent(self, agent_ws):
+        """A description reaches the row on exactly the registers a name does.
+
+        It rides in the declaration, so a ``hash`` is sent with it: ``Register.declares``
+        counts only hash/implementations/states/locks/bloks, and a Register carrying nothing
+        else never reaches ``implement_agent`` at all.
+        """
+        session = await _register_fresh(agent_ws, name="Fresh Agent", description="The GPU box in the basement", hash="d1")
+
+        agent = await Agent.objects.aget(pk=session.init.agent)
+        assert agent.description == "The GPU box in the basement"
+
+    async def test_a_register_that_omits_the_description_keeps_it(self, agent_ws):
+        """Unlike ``name``, which a declaring register resets to the client id when omitted.
+
+        A client that describes itself once should not lose that by shipping a build whose
+        registration does not repeat it -- so an absent description means "unchanged", not
+        "cleared".
+        """
+        first = await _register_fresh(agent_ws, description="The GPU box in the basement", hash="d2")
+        await first.disconnect()
+
+        second = await _register_fresh(agent_ws, implementations=[_implementation("scan")], hash="d3")
+        agent = await Agent.objects.aget(pk=second.init.agent)
+        assert agent.pk == int(first.init.agent)
+        assert agent.description == "The GPU box in the basement"
+
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
