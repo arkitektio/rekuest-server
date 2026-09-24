@@ -53,6 +53,14 @@ def test_value_path_roots_resolve_against_state_declared_values_and_dependencies
     _manifest(components, dependencies=["stage"], demo_state={"exposure": {"current": 1}})
 
 
+def test_dotted_paths_resolve_by_their_first_segment() -> None:
+    """Dotted paths, as the python bsx parser emits them, resolve by their first segment."""
+    components = [{"id": "root", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "self.scope.lasers"}}]}]
+    _manifest(components, dependencies=["self"], demo_state={"self": {"scope": {"lasers": ""}}})
+    with pytest.raises(ValidationError, match="references 'other'"):
+        _manifest([{"id": "root", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "other.scope.lasers"}}]}], demo_state={"self": {}})
+
+
 def test_unknown_value_path_root_is_rejected() -> None:
     """Unknown value path root is rejected."""
     components = [{"id": "root", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "/nowhere/x"}}]}]

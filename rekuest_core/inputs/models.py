@@ -58,6 +58,11 @@ def _value_path_root(value_path: str) -> str:
     return value_path.lstrip("/").split("/", 1)[0]
 
 
+def _blok_path_root(path: str) -> str:
+    """First segment of a blok path, split on '/' and '.' like the renderer's splitPathSegments ('self.scope.x' -> 'self', '/exposure/current' -> 'exposure')."""
+    return next((segment for segment in re.split(r"[/.]", path) if segment), "")
+
+
 def _resolve_port_path(path: str, ports: list["PortInputModel"]) -> bool:
     """True if a port path ('a..b..c') resolves through ``children`` from the given root ports."""
     candidates: list[PortInputModel] = ports
@@ -1133,7 +1138,7 @@ def check_blok_manifest(components: Optional[List[ComponentNodeInputModel]], dep
     def check_root(path: Optional[str], owner: str) -> None:
         if path is None or roots is None:
             return
-        root = _value_path_root(path)
+        root = _blok_path_root(path)
         if root not in roots:
             raise ValueError(f"{owner} references {root!r} but it is neither a demo_state key, a declared value nor a dependency key")
 
