@@ -263,11 +263,10 @@ previously fired every `AGENT_HEARTBEAT_INTERVAL` for every connected agent.
 
 ## The stale sweep
 
-`reconcile_stale_agents` (driven by the in-process `reaper` loop of every backend — there is no
-management command) finds agents that are stuck-connected past the stale window and revokes them: `connected = False`
+`reconcile_stale_agents` (driven by the `reaper` loop — its own process, `manage.py reaper`)
+finds agents that are stuck-connected past the stale window and revokes them: `connected = False`
 plus an epoch bump, under a row lock that re-checks staleness. That lock is also the **claim** —
-production runs several daphne processes, each with its own reaper, so only the worker that
-actually flips a row goes on to `reconcile_orphaned_executor_work`. The task transitions inside
+production may run several reapers side by side, so only the one that actually flips a row goes on to `reconcile_orphaned_executor_work`. The task transitions inside
 that reconcile are claimed by the same rowcount discipline, so concurrent sweeps produce exactly
 one terminal `TaskEvent` per task rather than one each.
 

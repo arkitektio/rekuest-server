@@ -893,6 +893,11 @@ input AssignInput {
 
   """Whether the task should step. Ie. go to the next breakpoint"""
   step: Boolean = null
+
+  """
+  Hold the task back until then: it is persisted now but only dispatched once due. A time in the past (or none) dispatches immediately.
+  """
+  notBefore: DateTime = null
 }
 
 enum AssignPolicy {
@@ -1614,6 +1619,22 @@ input CreateResolutionInput {
   resolvedDependencies: [ResolvedDependencyInput!] = null
 }
 
+"""
+Create a schedule. Give exactly one of intervalSeconds or cron; pin an agent with agent + interface, or leave both empty to resolve one per run.
+"""
+input CreateScheduleInput {
+  name: String!
+  action: ID!
+  args: Args = null
+  intervalSeconds: Int = null
+  cron: String = null
+  timezone: String! = "UTC"
+  agent: ID = null
+  interface: String = null
+  ephemeralRuns: Boolean! = false
+  enabled: Boolean! = true
+}
+
 """The input for creating a shortcut."""
 input CreateShortcutInput {
   """
@@ -1706,6 +1727,22 @@ input CreateToolboxInput {
   The description of the toolbox. This can described the toolbox and its purpose.
   """
   description: String
+}
+
+"""
+Create a trigger: on a signal of `kind` for `identifier` whose descriptors satisfy `conditions` (and the port's own requires), run `action` with the object in `port`.
+"""
+input CreateTriggerInput {
+  name: String!
+  kind: SignalKind!
+  identifier: String!
+  action: ID!
+  port: String!
+  args: Args = null
+  conditions: AnyDefault = null
+  agent: ID = null
+  interface: String = null
+  enabled: Boolean! = true
 }
 
 """A catalog component rendered as the port's widget."""
@@ -2842,6 +2879,33 @@ type Mutation {
   """Interrupt the execution of a task."""
   interrupt(input: InterruptInput!): Task! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
+  """
+  Create a trigger: run an action when a service signals a matching object.
+  """
+  createTrigger(input: CreateTriggerInput!): Trigger! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """Change a trigger."""
+  updateTrigger(input: UpdateTriggerInput!): Trigger! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """Delete a trigger; its runs are kept."""
+  deleteTrigger(input: TriggerIdInput!): ID! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """
+  Create a recurring assignment of an action. Its next run is planned immediately.
+  """
+  createSchedule(input: CreateScheduleInput!): Schedule! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """Change a schedule; a waiting run is re-planned."""
+  updateSchedule(input: UpdateScheduleInput!): Schedule! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """Delete a schedule. Its waiting run is cancelled; history is kept."""
+  deleteSchedule(input: ScheduleIdInput!): ID! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """
+  Run a schedule now: its waiting run is moved to now. Refused while a run is executing.
+  """
+  triggerSchedule(input: ScheduleIdInput!): Task! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
   """Block an agent from connecting."""
   block(input: BlockInput!): Agent! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
@@ -3569,6 +3633,17 @@ type Query {
   """All tasks."""
   tasks(filters: TaskFilter, ordering: [TaskOrder!]! = [], pagination: OffsetPaginationInput): [Task!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
+  """All schedules in the organization."""
+  schedules(pagination: OffsetPaginationInput): [Schedule!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """All triggers in the organization."""
+  triggers(pagination: OffsetPaginationInput): [Trigger!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """
+  Signals services sent about the organization's objects, for inspection.
+  """
+  signals(pagination: OffsetPaginationInput): [Signal!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
   """Fetch a specific agent by ID or by app, version and device_id."""
   agent(id: ID = null, app: String = null, version: String = null, deviceId: String = null): Agent! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
@@ -3747,6 +3822,17 @@ type Query {
 
   """Get implementation by ID."""
   implementation(id: ID!): Implementation! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """
+  The signals this hub's services declare they emit — what triggers can wait for. Hub-wide.
+  """
+  signalDeclarations(identifier: String = null): [SignalDeclaration!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """Fetch a trigger by ID."""
+  trigger(id: ID!): Trigger! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """Fetch a schedule by ID."""
+  schedule(id: ID!): Schedule! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """Fetch task by ID."""
   task(id: ID!): Task! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
@@ -4041,6 +4127,74 @@ enum ReturnWidgetKind {
   CUSTOM
 }
 
+"""
+A recurring assignment of one action. It owns at most one open run at a time: the next one, a delayed task created once the previous run finished.
+"""
+type Schedule {
+  """Unique ID of the schedule."""
+  id: ID!
+
+  """Human-readable name."""
+  name: String!
+
+  """The action every run assigns."""
+  action: Action!
+
+  """The agent every run is pinned to, if any."""
+  agent: Agent
+
+  """The implementation interface on the pinned agent."""
+  interface: String
+
+  """The args every run is assigned with."""
+  args: AnyDefault!
+
+  """Run every N seconds (exclusive with cron)."""
+  intervalSeconds: Int
+
+  """
+  A five-field cron line, read in `timezone` (exclusive with intervalSeconds).
+  """
+  cron: String
+
+  """The IANA zone the cron line is read in."""
+  timezone: String!
+
+  """Whether runs are created as ephemeral tasks."""
+  ephemeralRuns: Boolean!
+
+  """A disabled schedule creates no runs."""
+  enabled: Boolean!
+
+  """Creation timestamp."""
+  createdAt: DateTime!
+
+  """Last update timestamp."""
+  updatedAt: DateTime!
+
+  """Runs in a row that ended FAILED or CRITICAL."""
+  consecutiveFailures: Int!
+
+  """Why the last run failed, or why the next one could not be created."""
+  lastError: String
+
+  """The identity every run is assigned as."""
+  caller: Caller!
+
+  """
+  The open run: waiting for its slot, or executing. Null while the next run is being planned, or when disabled.
+  """
+  nextRun: Task
+
+  """The most recent runs, newest first."""
+  runs(limit: Int! = 20): [Task!]!
+}
+
+"""Identify a schedule."""
+input ScheduleIdInput {
+  id: ID!
+}
+
 type SearchAssignWidget implements AssignWidget {
   kind: AssignWidgetKind!
   followValue: String
@@ -4215,6 +4369,78 @@ input ShortcutFilter {
 
 input ShortcutOrder @oneOf {
   name: Ordering
+}
+
+"""
+Something a service announced: an object of a structure was created, updated or deleted.
+"""
+type Signal {
+  """Unique ID of the signal."""
+  id: ID!
+
+  """The service that sent it."""
+  service: String!
+
+  """What happened to the object."""
+  kind: SignalKind!
+
+  """The object's structure identifier, e.g. @mikro/arraydataset."""
+  identifier: String!
+
+  """The object's id within its structure."""
+  object: String!
+
+  """The object's descriptors (flat key → value)."""
+  descriptors: AnyDefault!
+
+  """
+  The task the object was created in, verified from its provenance token.
+  """
+  causingTask: Task
+
+  """When it happened, per the service."""
+  occurredAt: DateTime
+
+  """When rekuest received it."""
+  receivedAt: DateTime!
+
+  """When triggers were matched against it."""
+  processedAt: DateTime
+
+  """The runs this signal fired."""
+  runs: [Task!]!
+}
+
+"""
+A signal a service of this hub declares it emits (from its manifest). Hub-wide.
+"""
+type SignalDeclaration {
+  """Unique ID of the declaration."""
+  id: ID!
+
+  """The structure identifier of the objects signalled."""
+  identifier: String!
+
+  """What happens to them."""
+  kind: SignalKind!
+
+  """
+  The descriptor keys each signal carries — what trigger conditions may test.
+  """
+  descriptorKeys: [String!]!
+
+  """What the service says about the signal."""
+  description: String
+
+  """The service that emits it."""
+  service: String!
+}
+
+"""What happened to the object a service signalled."""
+enum SignalKind {
+  CREATED
+  UPDATED
+  DELETED
 }
 
 type SliderAssignWidget implements AssignWidget {
@@ -4752,6 +4978,17 @@ type Task {
   """Timestamp when the task was finished."""
   finishedAt: DateTime
 
+  """The signal that caused this task, if a trigger fired it."""
+  signal: Signal
+
+  """The trigger that fired this task, if any."""
+  trigger: Trigger
+
+  """
+  The task is held back until then (a delayed task); null = dispatched on creation.
+  """
+  notBefore: DateTime
+
   """List of resources or entities this task acted upon."""
   actedOn: [String!]!
 
@@ -5219,6 +5456,67 @@ input TrackInput {
 }
 
 """
+A rule over signals: on a signal of this kind and structure whose descriptors match, run the action with the object in `port`.
+"""
+type Trigger {
+  """Unique ID of the trigger."""
+  id: ID!
+
+  """Human-readable name."""
+  name: String!
+
+  """A disabled trigger fires nothing."""
+  enabled: Boolean!
+
+  """The signal kind it reacts to."""
+  kind: SignalKind!
+
+  """The structure identifier it reacts to."""
+  identifier: String!
+
+  """Extra descriptor conditions (key, operator, value), requires-style."""
+  conditions: AnyDefault!
+
+  """The action every run assigns."""
+  action: Action!
+
+  """The agent runs are pinned to, if any."""
+  agent: Agent
+
+  """The implementation interface on the pinned agent."""
+  interface: String
+
+  """The STRUCTURE argument that receives the signalled object."""
+  port: String!
+
+  """The other args of every run."""
+  args: AnyDefault!
+
+  """Creation timestamp."""
+  createdAt: DateTime!
+
+  """Last update timestamp."""
+  updatedAt: DateTime!
+
+  """Firings in a row that could not create a run."""
+  consecutiveFailures: Int!
+
+  """Why the last firing did not create a run."""
+  lastError: String
+
+  """The owner; runs are assigned as this identity."""
+  caller: Caller!
+
+  """The most recent runs, newest first."""
+  runs(limit: Int! = 20): [Task!]!
+}
+
+"""Identify a trigger."""
+input TriggerIdInput {
+  id: ID!
+}
+
+"""
 A UI catalog: the components a UI app can render and the pure operations it can evaluate for UtilCalls, registered per organization.
 """
 type UICatalog {
@@ -5370,6 +5668,19 @@ input UpdateResolutionInput {
   resolvedDependencies: [ResolvedDependencyInput!] = null
 }
 
+"""
+Change a schedule. Giving intervalSeconds clears cron and vice versa. A waiting run is re-planned; an executing one finishes first.
+"""
+input UpdateScheduleInput {
+  id: ID!
+  name: String = null
+  args: Args = null
+  intervalSeconds: Int = null
+  cron: String = null
+  timezone: String = null
+  enabled: Boolean = null
+}
+
 """The input for updating a space."""
 input UpdateSpaceInput {
   """The ID of the space to update."""
@@ -5395,6 +5706,15 @@ input UpdateThreeDModelInput {
 
   """The new media store file ID for the 3D model."""
   media: ID = null
+}
+
+"""Change a trigger. Omitted fields stay as they are."""
+input UpdateTriggerInput {
+  id: ID!
+  name: String = null
+  args: Args = null
+  conditions: AnyDefault = null
+  enabled: Boolean = null
 }
 
 """Represents an authenticated user."""

@@ -20,6 +20,8 @@ from .agent import (
     MemoryDrawer,
     MemoryShelve,
 )
+from .schedule import Schedule
+from .signal import Signal, SignalDeclaration, Trigger
 from .task import (
     AgentEvent,
     Task,
@@ -61,6 +63,12 @@ from .threed import Placement, Space, ThreeDModel
 __all__ = [
     # caller
     "Caller",
+    # schedule
+    "Schedule",
+    # signals
+    "Signal",
+    "SignalDeclaration",
+    "Trigger",
     # catalog
     "Collection",
     "Protocol",

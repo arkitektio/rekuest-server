@@ -14,6 +14,8 @@ resolve against the defining module's namespace when Strawberry builds the schem
 from . import (
     action,
     agent,
+    schedule,
+    trigger,
     task,
     auth,
     base,
@@ -33,6 +35,8 @@ from . import (
 )
 from .action import Action, ActionStats, ActionStatsResolver
 from .agent import Agent, HardwareRecord
+from .schedule import Schedule
+from .trigger import Signal, SignalDeclaration, Trigger
 from .task import (
     Task,
     TaskEvent,
@@ -102,6 +106,10 @@ __all__ = [
     "Client",
     "Organization",
     "Caller",
+    "Schedule",
+    "Signal",
+    "SignalDeclaration",
+    "Trigger",
     "Collection",
     "Protocol",
     "Toolbox",
@@ -158,6 +166,8 @@ __all__ = [
 _SUBMODULES = (
     action,
     agent,
+    schedule,
+    trigger,
     task,
     auth,
     blok,

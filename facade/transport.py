@@ -44,7 +44,8 @@ def _cache_put(cache: dict, key: int, value, ttl: float = _DELIVERY_CACHE_TTL) -
 
 def get_agent_for_delivery(agent_id: int) -> models.Agent:
     """The slim Agent row needed to route a delivery — always read fresh (one PK lookup)."""
-    return models.Agent.objects.only("id", "kind", "hook_url", "hook_url_secret").get(id=agent_id)
+    # ``client`` too: it tells a service agent (signed with the instance key) from any other.
+    return models.Agent.objects.select_related("client").only("id", "kind", "hook_url", "hook_url_secret", "client__client_id").get(id=agent_id)
 
 
 def forget_agent_routing(agent: models.Agent) -> None:

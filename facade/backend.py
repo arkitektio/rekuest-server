@@ -1,4 +1,5 @@
 import uuid
+import datetime
 from datetime import timedelta
 from random import choice
 from typing import Dict, List, Any
@@ -240,6 +241,25 @@ def acted_on_from_args(args: dict, action: models.Action) -> list[str]:
 
 
 
+def _aware(moment: "datetime.datetime | None") -> "datetime.datetime | None":
+    """``moment`` as an aware datetime; a naive one is read as UTC (the database's zone)."""
+    if moment is None or timezone.is_aware(moment):
+        return moment
+    return timezone.make_aware(moment, datetime.timezone.utc)
+
+
+# What a cancel / interrupt of a still-delayed task settles it as.
+_WAITING_OUTCOME = {
+    enums.TaskInstructKind.CANCEL: enums.TaskEventKind.CANCELLED,
+    enums.TaskInstructKind.INTERRUPT: enums.TaskEventKind.INTERRUPTED,
+}
+
+
+def _still_delayed(task: "models.Task") -> bool:
+    """A delayed task the reaper has not handed over yet (see ``Task.not_before``)."""
+    return task.not_before is not None and task.dispatch_attempts == 0 and task.picked_up_at is None
+
+
 def _agent_in_org(info: Info, agent_id) -> "models.Agent":
     """Resolve an agent inside the requesting organization, or refuse.
 
@@ -330,6 +350,17 @@ class RedisControllBackend:
                 locked = models.Task.objects.select_for_update(of=("self",)).filter(pk=target.pk).first()
                 if locked is None or locked.is_done:
                     continue
+                if _still_delayed(locked) and instruct_kind in _WAITING_OUTCOME:
+                    # A delayed task that was never handed over: no agent has it, so there is
+                    # nothing to wind down and nobody to confirm — settle it here, send nothing.
+                    locked.latest_instruct_kind = instruct_kind
+                    locked.latest_event_kind = _WAITING_OUTCOME[instruct_kind]
+                    locked.is_done = True
+                    locked.finished_at = timezone.now()
+                    locked.save(update_fields=["latest_instruct_kind", "latest_event_kind", "is_done", "finished_at"])
+                    models.TaskEvent.objects.create(task=locked, kind=locked.latest_event_kind, message="Settled before it was due — never dispatched.")
+                    models.TaskInstruct.objects.create(task=locked, kind=instruct_kind, caller=caller)
+                    continue
                 locked.latest_instruct_kind = instruct_kind
                 locked.interrupt_at = interrupt_at
                 locked.save(update_fields=["latest_instruct_kind", "interrupt_at"])
@@ -388,8 +419,21 @@ class RedisControllBackend:
         """
         return models.Task.objects.filter(caller=caller, reference=reference).first()
 
-    def assign_with_status(self, principal: "CallerContext | Any", input: inputs.AssignInputModel) -> tuple[models.Task, bool]:
+    def assign_with_status(
+        self,
+        principal: "CallerContext | Any",
+        input: inputs.AssignInputModel,
+        *,
+        schedule: "models.Schedule | None" = None,
+        signal: "models.Signal | None" = None,
+        trigger: "models.Trigger | None" = None,
+        trigger_depth: int = 0,
+    ) -> tuple[models.Task, bool]:
         """``(task, created)``. ``created`` is False for a resend of a known reference.
+
+        ``schedule`` marks the task as a run of that schedule (server-internal: the refill sweep
+        and ``triggerSchedule``); its ``ephemeral_runs`` decides the task's ``ephemeral``.
+        ``signal`` / ``trigger`` / ``trigger_depth`` record what fired it (``fire_triggers``).
 
         Idempotency is a database guarantee, not a read: the ``filter().first()`` below is only a
         fast path. Two retries of one assign can reach two backends at the same instant and both
@@ -465,9 +509,19 @@ class RedisControllBackend:
             parent_root_id, parent_pk = models.Task.objects.values_list("root_id", "id").get(pk=input.parent)
             root_id = parent_root_id or parent_pk
 
+        # A future ``not_before`` persists the task now and leaves the handover to the reaper's
+        # ``dispatch_due_tasks``. Hooks and higher-order wrappers act at creation (an INIT hook
+        # would run before its parent was ever due), so they are refused rather than half-delayed.
+        not_before = _aware(input.not_before)
+        delayed = not_before is not None and not_before > timezone.now()
+        if delayed and input.hooks:
+            raise ValueError("A delayed task (not_before in the future) cannot carry hooks")
+
         # Higher-order implementations are orchestrated server-side: the wrapper task
         # is virtual and a child task runs the resolved lower implementation.
         if implementation is not None and implementation.higher_order_for_id is not None:
+            if delayed:
+                raise ValueError("Higher-order implementations cannot be assigned with a future not_before")
             return self._assign_higher_order(ctx, input, implementation, caller, root_id=root_id)
 
         acted_on = acted_on_from_args(input.args, action)
@@ -504,16 +558,28 @@ class RedisControllBackend:
                     dependencies=dependency_dict,
                     caller=caller,
                     # Stamped as "about to be handed over"; ``_dispatch`` resets it to NULL if the
-                    # handoff fails, which is what lets the pickup watchdog retry it.
-                    dispatched_at=timezone.now(),
-                    dispatch_attempts=1,
+                    # handoff fails, which is what lets the pickup watchdog retry it. A delayed
+                    # task is not handed over yet: zero attempts is what marks it as waiting.
+                    dispatched_at=None if delayed else timezone.now(),
+                    dispatch_attempts=0 if delayed else 1,
+                    not_before=not_before if delayed else None,
+                    schedule=schedule,
+                    ephemeral=schedule.ephemeral_runs if schedule is not None else False,
+                    signal=signal,
+                    trigger=trigger,
+                    trigger_depth=trigger_depth,
                 )
+                # Minted even for a delayed task, whose Assign re-mints at dispatch: a policy that
+                # refuses the token must refuse the assign now, not strand a row until it is due.
                 token = mint_token_for_task(task, ctx)
         except IntegrityError:
             winner = self._lost_reference_race(caller, reference)
             if winner is None:
                 raise
             return winner, False
+
+        if delayed:
+            return task, True
 
         # Dispatched only once the row is visible to everyone: inside an outer transaction an
         # agent could otherwise report on a task no other connection can see yet. Outside one,

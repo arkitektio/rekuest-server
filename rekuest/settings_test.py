@@ -44,10 +44,9 @@ CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
 # deterministic behavior). The reclaim/grace tests opt into a window with override_settings.
 REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0}
 
-# The in-process reaper sweeps every DB-held deadline in the background. Tests call the sweeps
-# (``persist_backend.reconcile_*`` / ``expire_*`` / ``escalate_*``) explicitly instead, so a
+# No reaper runs under test (it is its own process: ``manage.py reaper``). Tests call the sweeps
+# (``persist_backend.reconcile_*`` / ``expire_*`` / ``dispatch_due_tasks`` / …) explicitly, so a
 # background pass can never race a test's own assertions.
-REKUEST_REAPER_ENABLED = False
 
 # Point the agent queue at the published dokker redis port (see
 # tests/integration/docker-compose.yaml). Replaces the old redis-factory monkeypatch.
@@ -59,3 +58,21 @@ TASK_RETENTION_SECONDS = 0
 PROBE_TTL_SECONDS = 60
 PROBE_LINGER_SECONDS = 30
 PROBE_MAX_INFLIGHT_PER_CALLER = 8
+
+# The hub trust bundle under test, inline: rekuest's own key plus one key per service the tests
+# play (each a separate ``rekuest_service.Service(key=...)``, as separate processes would be).
+from joserfc.jwk import OKPKey as _TestOKPKey  # noqa: E402
+from rekuest_service.trust import public_jwk as _public_jwk  # noqa: E402
+
+from .settings import INSTANCE, REKUEST_IDENTIFIER  # noqa: E402
+
+TEST_SERVICE_KEYS = {name: _TestOKPKey.generate_key("Ed25519") for name in ("mikro", "housekeeping", "bank")}
+INSTANCE = {
+    **INSTANCE,
+    "TRUST_JWKS": {
+        "keys": [
+            {**_public_jwk(_TestOKPKey.import_key(INSTANCE["PRIVATE_KEY"])), "service": REKUEST_IDENTIFIER},
+            *({**_public_jwk(key), "service": f"live.arkitekt.{name}"} for name, key in TEST_SERVICE_KEYS.items()),
+        ]
+    },
+}

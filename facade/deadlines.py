@@ -48,7 +48,7 @@ def progress_lease_seconds() -> float:
 
 
 def sweep_interval_seconds() -> float:
-    """How often the in-process reaper ticks. Bounds how late any deadline can fire."""
+    """How often the reaper ticks. Bounds how late any deadline can fire."""
     return max(0.05, float(_cfg().get("SWEEP_INTERVAL", 5)))
 
 

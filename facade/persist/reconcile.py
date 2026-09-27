@@ -35,6 +35,15 @@ logger = logging.getLogger(__name__)
 # (redis down, webhook 5xx) count — otherwise a permanently broken transport never fails.
 MAX_DISPATCH_ATTEMPTS = 2
 
+# A delayed task nobody has handed over yet (``Task.not_before``) is waiting, not undelivered:
+# every deadline that falls back to ``created_at`` for a never-dispatched row steps over it.
+# ``dispatch_due_tasks`` owns it until its first dispatch, which is what starts those clocks.
+WAITING_Q = Q(not_before__isnull=False, dispatch_attempts=0)
+
+
+def _is_waiting(task: models.Task) -> bool:
+    return task.not_before is not None and task.dispatch_attempts == 0
+
 
 class ReconcileMixin:
     async def reconcile_orphaned_executor_work(self, agent_id: int) -> None:
@@ -109,8 +118,8 @@ class ReconcileMixin:
         (``connected=False`` + epoch bump) and reconcile the orphaned in-flight work.
 
         Idempotent and multi-worker-safe: the revoke is a lock-guarded claim, so only the worker
-        that actually flips a row goes on to reconcile it. Driven by the in-process reaper loop
-        (:mod:`facade.reaper`) of every backend. Returns the number healed.
+        that actually flips a row goes on to reconcile it. Driven by the reaper loop
+        (:mod:`facade.reaper`). Returns the number healed.
         """
         stale = [
             a
@@ -325,6 +334,8 @@ class ReconcileMixin:
             task = models.Task.objects.select_for_update(skip_locked=True, of=("self",)).filter(pk=task_id).select_related("implementation").first()
             if task is None or task.is_done or task.picked_up_at is not None or task.latest_event_kind != enums.TaskEventKind.QUEUED:
                 return "skip", None, None
+            if _is_waiting(task):
+                return "skip", None, None  # not due yet — dispatch_due_tasks owns it
             if (task.dispatched_at or task.created_at) >= cutoff:
                 return "skip", None, None  # re-dispatched / clock restarted since the scan
 
@@ -388,6 +399,7 @@ class ReconcileMixin:
             .filter(Q(dispatched_at__lt=cutoff) | Q(dispatched_at__isnull=True, created_at__lt=cutoff))
             .filter(Q(agent__kind=enums.AgentKind.WEBHOOK.value) | liveness.live_agent_q("agent"))
             .exclude(implementation__higher_order_for__isnull=False)
+            .exclude(WAITING_Q)
             .order_by("created_at")
             .values_list("pk", flat=True)[:limit]
         ]
@@ -402,6 +414,78 @@ class ReconcileMixin:
                 await self._dispatch(pk, agent_id, assign_message)
             else:
                 await self._unfold_to_higher_order(str(pk), outcome)
+        return acted
+
+    def _claim_due_sync(self, task_id: int) -> Tuple[str, "messages.Assign | None", int | None]:
+        """Claim one due delayed task for its first dispatch — under the row lock, one winner.
+
+        Returns ``(outcome, assign_message, agent_id)``: ``"skip"`` (not a candidate any more, or
+        another backend holds it), ``"failed"`` (finalized CRITICAL: the Assign cannot be built),
+        or ``"dispatch"`` (stamped; the caller pushes AFTER this commit, like the watchdog).
+        """
+        with transaction.atomic():
+            task = models.Task.objects.select_for_update(skip_locked=True, of=("self",)).filter(pk=task_id).first()
+            if task is None or task.is_done or not _is_waiting(task) or task.not_before > timezone.now():
+                return "skip", None, None
+
+            assign_message = self._build_redispatch_assign_sync(task.pk)
+            if assign_message is None:
+                task.latest_event_kind = enums.TaskEventKind.CRITICAL
+                task.is_done = True
+                task.finished_at = timezone.now()
+                task.save(update_fields=["latest_event_kind", "is_done", "finished_at"])
+                models.TaskEvent.objects.create(task=task, kind=enums.TaskEventKind.CRITICAL, message="Due, but the Assign could not be built (no caller identity, or the provenance policy refused).")
+                return "failed", None, None
+
+            # From here on it is an ordinary dispatched task: the pickup watchdog's clock starts now.
+            task.dispatched_at = timezone.now()
+            task.dispatch_attempts = 1
+            task.save(update_fields=["dispatched_at", "dispatch_attempts"])
+            return "dispatch", assign_message, task.agent_id
+
+    async def provision_service_agents(self) -> int:
+        """Keep this hub's services provisioned as HookAgents (:mod:`facade.service_agents`).
+
+        Throttled inside: a manifest is re-read every few minutes, not every tick.
+        """
+        from facade.service_agents import provision_all  # lazy: imports the registration graph
+
+        return await database_sync_to_async(provision_all)()
+
+    async def fire_triggers(self, limit: int = 100) -> int:
+        """Match unprocessed signals to triggers and assign their runs (:mod:`facade.triggers`)."""
+        from facade.triggers import fire_triggers_sync  # lazy: triggers imports the backend
+
+        return await database_sync_to_async(fire_triggers_sync)(limit)
+
+    async def refill_schedules(self, limit: int = 100) -> int:
+        """Give every enabled schedule without an open run its next one (:mod:`facade.schedules`)."""
+        from facade.schedules import refill_schedules_sync  # lazy: schedules imports the backend
+
+        return await database_sync_to_async(refill_schedules_sync)(limit)
+
+    async def dispatch_due_tasks(self, limit: int = 200) -> int:
+        """Hand over delayed tasks whose ``not_before`` has passed. Returns the number acted on.
+
+        A task fires at most one sweep interval late. Cancelled-before-due tasks are already
+        terminal (the control path settles them without an agent), so they never show up here.
+        """
+        now = timezone.now()
+        due = [
+            pk
+            async for pk in models.Task.objects.filter(is_done=False, dispatch_attempts=0, not_before__lte=now)
+            .order_by("not_before")
+            .values_list("pk", flat=True)[:limit]
+        ]
+        acted = 0
+        for pk in due:
+            outcome, assign_message, agent_id = await database_sync_to_async(self._claim_due_sync)(pk)
+            if outcome == "skip":
+                continue
+            acted += 1
+            if outcome == "dispatch":
+                assert assign_message is not None and agent_id is not None
+                await self._dispatch(pk, agent_id, assign_message)
         return acted
 
     async def expire_disconnected_tasks(self, limit: int = 200) -> int:
@@ -441,6 +525,7 @@ class ReconcileMixin:
             .filter(Q(dispatched_at__lt=cutoff) | Q(dispatched_at__isnull=True, created_at__lt=cutoff))
             .exclude(liveness.live_agent_q("agent"))
             .exclude(implementation__higher_order_for__isnull=False)
+            .exclude(WAITING_Q)
             .values_list("pk", flat=True)[:limit]
         ]
         for pk in undelivered:
@@ -448,7 +533,7 @@ class ReconcileMixin:
                 pk,
                 enums.TaskEventKind.CRITICAL,
                 "The agent never came back to pick this task up — expired.",
-                only_if=lambda t: t.picked_up_at is None and t.latest_event_kind == enums.TaskEventKind.QUEUED and (t.dispatched_at or t.created_at) < cutoff,
+                only_if=lambda t: t.picked_up_at is None and t.latest_event_kind == enums.TaskEventKind.QUEUED and not _is_waiting(t) and (t.dispatched_at or t.created_at) < cutoff,
                 skip_locked=True,
             ):
                 expired += 1

@@ -217,8 +217,9 @@ back, and expires like `DISCONNECTED` work if it never is.
 ## Deadlines — nothing waits forever
 
 Every non-terminal state has a server-side deadline. None is a timer: each starts at a DB column
-and is enforced by the reaper loop inside every backend (`facade/reaper.py`), so deadlines survive
-restarts and any number of backends can enforce them concurrently (row-locked claims, one winner).
+and is enforced by the reaper loop (`facade/reaper.py`, its own process: `manage.py reaper`), so
+deadlines survive restarts and any number of reapers can enforce them concurrently (row-locked
+claims, one winner).
 
 | waiting on | deadline starts at | setting | outcome |
 |---|---|---|---|

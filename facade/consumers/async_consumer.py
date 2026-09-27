@@ -77,11 +77,6 @@ class AgentConsumer(AsyncWebsocketConsumer):
 
     async def connect(self) -> None:
         """Accept the socket and build a protocol bound to this transport."""
-        # Make sure the process-wide reaper runs (idempotent). ``rekuest/asgi.py`` starts it as
-        # soon as the server's event loop is up; this covers any other way of hosting the consumer.
-        from facade.reaper import ensure_reaper_started  # lazy: avoids import at app-load time
-
-        ensure_reaper_started()
         await self.accept()
         # Identifies this connection within its agent group so a force-register
         # can displace the others without closing itself.

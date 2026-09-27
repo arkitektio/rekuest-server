@@ -32,6 +32,21 @@ diagram shows the high-level design of Rekuest:
 > task lifecycle, the agent WebSocket protocol, the realtime layer, and higher-order
 > implementations — see **[`docs/design/`](./docs/design/README.md)**.
 
+## Running it: two processes
+
+A rekuest deployment is **two processes from the same image**:
+
+| process | command | role |
+|---|---|---|
+| web (any number of replicas) | `bash run.sh` (daphne) | GraphQL, agent sockets, webhook intake. Never sweeps. |
+| reaper (one is enough) | `bash run-reaper.sh` → `python manage.py reaper` | Every deadline, schedule and delayed task fires from this loop. Healthcheck: `python manage.py reaper --check`. |
+
+> [!IMPORTANT]
+> The reaper used to run inside every web process. It no longer does: **a deployment without a
+> reaper process fires no deadlines, schedules or delayed tasks** (they are rows, so nothing is
+> lost — it all catches up on the reaper's first tick). The reaper holds no state and may run
+> more than once side by side.
+
 ## Developmental Notices
 
 Transport is Redis: agent commands travel through a per-agent Redis list (chosen over the Channels

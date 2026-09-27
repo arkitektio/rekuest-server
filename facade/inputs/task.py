@@ -1,5 +1,6 @@
 """Inputs for tasks and the postman lifecycle controls."""
 
+import datetime
 from typing import Any
 
 import strawberry
@@ -90,6 +91,10 @@ class AssignInputModel(BaseModel):
         description="The dependencies of the task. This maps dependency keys to implementation IDs.",
     )
     step: bool | None = Field(default=None, description="Whether the task should step. Ie. go to the next breakpoint")
+    not_before: datetime.datetime | None = Field(
+        default=None,
+        description="Hold the task back until then: it is persisted now but only dispatched once due. A time in the past (or none) dispatches immediately.",
+    )
 
 
 @pydantic.input(AssignInputModel, description="The input for assigning args to a action. A GraphQL assign is a ROOT by definition — children are created only over the agent socket (AssignRequest, where parent is mandatory) and by server-internal paths like init hooks, so parent/dependency/method are deliberately absent here.")
@@ -106,6 +111,7 @@ class AssignInput:
     reference: str | None = None
     step: bool | None = False
     dependencies: list[ResolvedDependencyInput] | None = None
+    not_before: datetime.datetime | None = None
 
 
 class CancelInputModel(BaseModel):

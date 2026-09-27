@@ -13,25 +13,14 @@ lok:
   public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDGFj0zB7j6KrTRFEP+a2Z7toLEwJ0ROF3qSkq6vo2aK5TGRv+D3V/6VhvM2NgtUIO1iqwvf4XETamhHt2xlVzJyoyMAnAGkwkMyQJpI6wG5g7NtrRc1kkeefWbLBVW+aEI++3ec3eD9PUhnjXbQXJwju8l2ldKg2skw2fZWrjfWo0S0CuvB05nXJ8BmmAo65BBv29gGVywzZEApv/Zu16l6ftCZSEKi/zMbK6YxCekl/h3sfK7uGj6uaab7XSqqANHDZDTSotD5ws8UdMb3IP4/qoJiJm0Lsw5XpmFTt9M+ekiv/9HsWjXtzOd0BpqxynlvF1fWDr0HVnrUCh1XMzn
 provenance:
   # Rekuest acts as the provenance authority: it signs an attestation JWT per
-  # non-trivial assignment. This keypair is orthogonal to the auth keys above
-  # (different issuer, different lifetime). The private key never leaves Rekuest
-  # and is never sent to agents. Dev keypair below — replace in production.
+  # non-trivial assignment with its instance key (`instance.private_key` below).
   issuer: rekuest
-  kid: rekuest-prov-1
   token_ttl_seconds: 3600
   # role(s) on the auth token / membership that mark an accountable human.
   # Empty list = do not enforce the human-root invariant (lenient default).
   human_roles: []
   # require the human-root invariant; when true a non-human root refuses minting.
   strict: false
-  private_key: |
-    -----BEGIN PRIVATE KEY-----
-    MC4CAQAwBQYDK2VwBCIEICiiKTIO7nNNDVtWjD79jxM7alsjZZEhVNICrYhdwr/x
-    -----END PRIVATE KEY-----
-  public_key: |
-    -----BEGIN PUBLIC KEY-----
-    MCowBQYDK2VwAyEADZ32a0NRsa619PGNaXJojnisFVMUfNF/i972xnNpj7M=
-    -----END PUBLIC KEY-----
 redis:
   host: redis
   port: 6379
@@ -63,3 +52,11 @@ postgres:
   password: postgres
   port: 5432
   username: fostgres
+instance:
+  # This instance's Ed25519 key: signs provenance tokens and every request to the hub's
+  # services. Dev key — Konstruktor mints a fresh one per hub. The trust bundle (the hub's
+  # instance public keys) comes from the coord; tests set it inline (settings_test).
+  private_key: |
+    -----BEGIN PRIVATE KEY-----
+    MC4CAQAwBQYDK2VwBCIEICiiKTIO7nNNDVtWjD79jxM7alsjZZEhVNICrYhdwr/x
+    -----END PRIVATE KEY-----

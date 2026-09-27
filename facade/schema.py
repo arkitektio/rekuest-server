@@ -70,6 +70,9 @@ class Query:
     structure_packages = field(resolver=types.structure.list_structure_packages, description="All structure packages referenced by the org's action ports (derived, not registered).")
     interfaces = field(resolver=types.structure.list_interfaces, description="All interfaces referenced by the org's action ports (derived, not registered).")
     tasks: list[types.Task] = field(description="All tasks.")
+    schedules: list[types.Schedule] = field(description="All schedules in the organization.")
+    triggers: list[types.Trigger] = field(description="All triggers in the organization.")
+    signals: list[types.Signal] = field(description="Signals services sent about the organization's objects, for inspection.")
     resolved_implementations = field(resolver=queries.resolved_implementations, description="Fetch resolved dependencies for a resolution.")
 
     agent: types.Agent = field(resolver=queries.agent, description="Fetch a specific agent by ID or by app, version and device_id.")
@@ -165,6 +168,21 @@ class Query:
     def implementation(self, info: Info, id: strawberry.ID) -> types.Implementation:
         return cast(types.Implementation, scoped_get(models.Implementation, info, id, field="action__organization"))
 
+    @field(description="The signals this hub's services declare they emit — what triggers can wait for. Hub-wide.")
+    def signal_declarations(self, info: Info, identifier: str | None = None) -> list[types.SignalDeclaration]:
+        declarations = models.SignalDeclaration.objects.select_related("agent").order_by("identifier", "kind")
+        if identifier is not None:
+            declarations = declarations.filter(identifier=identifier)
+        return cast(list[types.SignalDeclaration], list(declarations))
+
+    @field(description="Fetch a trigger by ID.")
+    def trigger(self, info: Info, id: strawberry.ID) -> types.Trigger:
+        return cast(types.Trigger, scoped_get(models.Trigger, info, id, field="caller__organization"))
+
+    @field(description="Fetch a schedule by ID.")
+    def schedule(self, info: Info, id: strawberry.ID) -> types.Schedule:
+        return cast(types.Schedule, scoped_get(models.Schedule, info, id, field="caller__organization"))
+
     @field(description="Fetch task by ID.")
     def task(self, info: Info, id: strawberry.ID) -> types.Task:
         return cast(types.Task, scoped_get(models.Task, info, id, field="agent__organization"))
@@ -186,6 +204,13 @@ class Mutation:
     resume = mutation(resolver=mutations.resume, description="Resume a paused task.")
     collect = mutation(resolver=mutations.collect, description="Collect results from a task.")
     interrupt = mutation(resolver=mutations.interrupt, description="Interrupt the execution of a task.")
+    create_trigger = mutation(resolver=mutations.create_trigger, description="Create a trigger: run an action when a service signals a matching object.")
+    update_trigger = mutation(resolver=mutations.update_trigger, description="Change a trigger.")
+    delete_trigger = mutation(resolver=mutations.delete_trigger, description="Delete a trigger; its runs are kept.")
+    create_schedule = mutation(resolver=mutations.create_schedule, description="Create a recurring assignment of an action. Its next run is planned immediately.")
+    update_schedule = mutation(resolver=mutations.update_schedule, description="Change a schedule; a waiting run is re-planned.")
+    delete_schedule = mutation(resolver=mutations.delete_schedule, description="Delete a schedule. Its waiting run is cancelled; history is kept.")
+    trigger_schedule = mutation(resolver=mutations.trigger_schedule, description="Run a schedule now: its waiting run is moved to now. Refused while a run is executing.")
     block = mutation(resolver=mutations.block, description="Block an agent from connecting.")
     unblock = mutation(resolver=mutations.unblock, description="Unblock a previously blocked agent.")
     delete_implementation = mutation(resolver=mutations.delete_implementation, description="Delete a registered implementation.")

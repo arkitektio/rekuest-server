@@ -8,7 +8,7 @@ with a ``ValidationError`` if they are not supplied via config or environment.
 """
 
 import os
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_settings import (
@@ -70,6 +70,32 @@ class RedisSettings(BaseModel):
     channel_capacity: int = Field(default=5000, description="channels_redis capacity. This bounds the ONE per-process receive queue shared by every socket and subscription in a replica — messages beyond it are dropped silently — so it must be far above the library default of 100.")
 
 
+class ServiceAgent(BaseModel):
+    """One of this hub's services, provisioned by rekuest as a HookAgent (see ``facade.service_agents``).
+
+    No secret: requests both ways are signed with each side's instance key and checked against
+    the hub's trust bundle (``instance.trust``).
+    """
+
+    service: str = Field(description="The service's name (e.g. 'bank'); names its agent, app and schedules, and its signal endpoint.")
+    hook_url: str = Field(description="Where rekuest POSTs the service's Assigns — its vendored `rekuest_service` endpoint, e.g. http://bank:80/bank/_rekuest/hook.")
+    identifier: Optional[str] = Field(default=None, description="The service's fakts identifier — what its key is listed under in the trust bundle. Default: live.arkitekt.<service>.")
+
+
+class TrustBlock(BaseModel):
+    """Where the hub's instance public keys come from: the coord's bundle, or inline."""
+
+    jwks_uri: Optional[str] = Field(default=None, description="The coord's hub-keys URL (the fakts `self.hub_keys_url`).")
+    jwks: Optional[Dict[str, Any]] = Field(default=None, description="The bundle inline (a JWKS whose keys carry `service`), for a hub not enrolled yet.")
+
+
+class InstanceBlock(BaseModel):
+    """This instance's key — its only secret towards the hub's other services — and whom it trusts."""
+
+    private_key: str = Field(description="Ed25519 private key (PKCS#8 PEM). Signs provenance tokens and requests to the hub's services. Secret — must be set.")
+    trust: TrustBlock = Field(default_factory=TrustBlock, description="The hub's trust bundle.")
+
+
 class RekuestBlock(BaseModel):
     """Rekuest assignment grace + capability tuning."""
 
@@ -78,27 +104,30 @@ class RekuestBlock(BaseModel):
     grace_default: int = Field(default=30, description="Default reclaim grace window (seconds) after a disconnect.")
     grace_physical: int = Field(default=5, description="Grace window (seconds) for effect:physical work.")
     progress_lease: int = Field(default=0, description="Progress lease (seconds); 0 disables the wedged-task lease.")
-    sweep_interval: int = Field(default=5, description="How often (seconds) the in-process reaper sweeps the DB-held deadlines. Bounds how late a deadline can fire.")
+    sweep_interval: int = Field(default=5, description="How often (seconds) the reaper (`manage.py reaper`) sweeps the DB-held deadlines. Bounds how late a deadline can fire.")
     pickup_deadline: int = Field(default=60, description="Seconds a dispatched task may go without any report from its (live) agent before the Assign is redelivered once, then failed; 0 disables.")
     disconnected_expiry: int = Field(default=3600, description="Seconds a DISCONNECTED (fate unknown) task stays recoverable before it is finalized as terminal; 0 = never.")
     control_deadline: int = Field(default=60, description="Seconds an unconfirmed cancel may wait before it escalates to an interrupt (and an unconfirmed interrupt before it is finalized); 0 disables. On by default: a Cancel/Interrupt frame lost in transit (a displaced connection, a redis restart) is otherwise never noticed — the DB says CANCELLING while the agent never heard of it.")
     hook_signature_mode: str = Field(default="compat", description="HookAgent HTTP signatures. 'compat': accept the timestamped V1 signature or the legacy body-only one, send both. 'strict': V1 only (replay-protected).")
     hook_max_skew: int = Field(default=300, description="Maximum age/clock skew (seconds) accepted for a V1-signed HookAgent request; also bounds the replay-guard window.")
     task_retention: int = Field(default=0, description="Seconds to keep terminal root task trees; 0 disables deletion. Deleting past runs also removes them from replay (reusable_task_for). Suggested production value: 2592000 (30 days).")
+    ephemeral_task_retention: int = Field(default=86400, description="Seconds to keep terminal EPHEMERAL root task trees (housekeeping runs of schedules with ephemeralRuns); applies even while task_retention is 0. 0 disables.")
+    identifier: str = Field(default="live.arkitekt.rekuest", description="This rekuest's fakts identifier — what its key is listed under in the hub trust bundle, and what services require rekuest's requests to come from.")
+    service_agents: list[ServiceAgent] = Field(default_factory=list, description="This hub's services whose periodic work rekuest schedules: each becomes a HookAgent whose actions and default schedules come from the service's manifest.")
+    trigger_max_depth: int = Field(default=3, description="How many trigger firings may chain (a triggered run's object signalling another trigger …) before a signal stops firing — the loop guard.")
+    signal_retention: int = Field(default=604800, description="Seconds to keep processed signals (the runs they caused keep their link as null afterwards); 0 keeps them forever.")
+    service_agents_organization: str = Field(default="rekuest-system", description="The organization (slug) the service agents, their actions and schedules live in. Its members see and control them.")
     probe_ttl: int = Field(default=3600, description="Lifetime (seconds) of a probe's redis state while live.")
     probe_linger: int = Field(default=300, description="How long (seconds) a terminal call's state lingers for late subscribers.")
     probe_max_inflight: int = Field(default=32, description="Maximum concurrent probes per caller.")
 
 
 class ProvenanceBlock(BaseModel):
-    """Rekuest provenance (attestation) signing keypair and policy."""
+    """Rekuest provenance (attestation) policy. Tokens are signed with the instance key (`instance`), `kid` its thumbprint."""
 
     model_config = ConfigDict(extra="allow")
 
     issuer: str = Field(default="rekuest", description="Provenance token issuer (iss).")
-    kid: str = Field(default="rekuest-prov-1", description="Key id published at the JWKS endpoint.")
-    private_key: str = Field(description="Ed25519 signing key (PEM). Secret — must be set; the facade refuses to start without it.")
-    public_key: Optional[str] = Field(default=None, description="Ed25519 verifying key (PEM, published via JWKS). Derived from the private key when omitted.")
     token_ttl_seconds: int = Field(default=3600, description="Provenance token lifetime (seconds).")
     human_roles: List[str] = Field(default_factory=list, description="Roles marking an accountable human; empty disables the human-root invariant.")
     strict: bool = Field(default=False, description="Require the human-root invariant when minting.")
@@ -158,6 +187,7 @@ class Settings(BaseSettings):
     authentikate: AuthentikateSettings = Field(description="Token-verification config (authentikate).")
     rekuest: RekuestBlock = Field(default_factory=RekuestBlock, description="Grace/capability tuning.")
     provenance: ProvenanceBlock = Field(description="Provenance signing config (requires a static Ed25519 key).")
+    instance: InstanceBlock = Field(description="This instance's key and the hub trust bundle (no shared secrets between services).")
     datalayer: Optional[DatalayerSettings] = Field(default=None, description="Optional S3 config forwarded to the datalayer app.")
     embeddings: EmbeddingsSettings = Field(default_factory=EmbeddingsSettings, description="Semantic search model and thresholds.")
 

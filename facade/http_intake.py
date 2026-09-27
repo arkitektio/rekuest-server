@@ -41,14 +41,29 @@ def _replay_store():
     return redis.Redis(connection_pool=_sync_pool(settings.AGENT_REDIS_HOST, settings.AGENT_REDIS_PORT))
 
 
-def _authenticate(agent, body: bytes, headers) -> tuple[bool, str | None]:
+def _authenticate(agent, body: bytes, headers, path: str = "") -> tuple[bool, str | None]:
     """``(ok, digest)``. ``digest`` is None for a legacy (unreplayable-guarded) signature.
+
+    A service agent's report must carry a service JWT signed by that service's instance key
+    (``facade.service_trust``); its ``jti`` is the replay-guard digest. No secret is involved.
 
     ``strict`` mode accepts only the timestamped V1 signature. ``compat`` also accepts the
     legacy body-only one when no V1 header is present, so a third-party HookAgent keeps working
     for one release — it cannot be used to *downgrade* a V1 request, because a V1 signature
     cannot be turned into a legacy one without the secret.
     """
+    from facade import service_trust
+    from rekuest_service.trust import TrustError
+
+    entry = service_trust.entry_for_agent(agent)
+    if entry is not None:
+        try:
+            verified = service_trust.verify_from(entry, "POST", path, body, headers.get("Authorization"))
+        except TrustError as error:
+            logger.info("Service agent %s: refused a report: %s", agent.pk, error)
+            return False, None
+        return True, f"jwt:{verified.jti}"
+
     v1_header = headers.get(SIGNATURE_V1_HEADER)
     if v1_header is not None:
         ok, digest = hooks.verify_v1(agent.hook_url_secret, agent.pk, body, v1_header, hooks.max_skew_seconds())
@@ -73,7 +88,7 @@ async def hook_intake(request: HttpRequest, agent_id: str) -> HttpResponse:
         return JsonResponse({"error": "Unknown hook agent"}, status=404)
     if agent.blocked:
         return JsonResponse({"error": "Agent is blocked"}, status=403)
-    authenticated, digest = await sync_to_async(_authenticate)(agent, body, request.headers)
+    authenticated, digest = await sync_to_async(_authenticate)(agent, body, request.headers, request.path)
     if not authenticated:
         return JsonResponse({"error": "Invalid signature"}, status=401)
 

@@ -48,6 +48,20 @@ class TestRetentionSweep:
         assert sweep_terminal_tasks() == 0
         assert Task.objects.filter(pk=root.pk).exists()
 
+    @override_settings(TASK_RETENTION_SECONDS=0, EPHEMERAL_TASK_RETENTION_SECONDS=24 * 3600)
+    def test_ephemeral_runs_have_their_own_horizon_even_while_retention_is_off(self):
+        old_run, old_child = _tree("ret-eph-old", days_ago=2)
+        _finish(old_child, days_ago=2)
+        Task.objects.filter(pk=old_run.pk).update(ephemeral=True)
+        fresh_run = _finish(_build_task("ret-eph-new"), days_ago=0)
+        Task.objects.filter(pk=fresh_run.pk).update(ephemeral=True)
+        kept, kept_child = _tree("ret-eph-kept", days_ago=2)  # not ephemeral: retention is off
+        _finish(kept_child, days_ago=2)
+
+        assert sweep_terminal_tasks() == 1
+        assert not Task.objects.filter(pk=old_run.pk).exists()
+        assert Task.objects.filter(pk__in=[fresh_run.pk, kept.pk]).count() == 2
+
     @override_settings(TASK_RETENTION_SECONDS=30 * 24 * 3600)
     def test_old_terminal_tree_is_deleted_with_events(self):
         root, child = _tree("ret-old", days_ago=90)

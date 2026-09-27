@@ -52,6 +52,12 @@ REDIS_KEY_PREFIX = conf.redis.key_prefix
 # HookAgent HTTP signatures — see ``facade.hooks``.
 HOOK_SIGNATURE_MODE = conf.rekuest.hook_signature_mode
 HOOK_MAX_SKEW = conf.rekuest.hook_max_skew
+# This hub's services, provisioned as HookAgents by the reaper (``facade.service_agents``).
+SERVICE_AGENTS = [agent.model_dump() for agent in conf.rekuest.service_agents]
+SERVICE_AGENTS_ORGANIZATION = conf.rekuest.service_agents_organization
+# Signals and triggers (``facade.triggers``): the loop guard and how long processed signals stay.
+TRIGGER_MAX_DEPTH = conf.rekuest.trigger_max_depth
+SIGNAL_RETENTION_SECONDS = conf.rekuest.signal_retention
 
 
 AGENT_HEARTBEAT_NOT_RESPONDED_CODE = 3001
@@ -69,8 +75,8 @@ REKUEST_GRACE = {
     # failed as terminal. 0 disables the lease (default).
     "PROGRESS_LEASE": conf.rekuest.progress_lease,
     # None of these windows is a timer: each starts at a DB column and is enforced by the
-    # in-process sweep (``facade.reaper``), every SWEEP_INTERVAL seconds, on whichever
-    # backend gets there first. See ``facade.deadlines`` for the accessors.
+    # reaper (``facade.reaper``, its own process: ``manage.py reaper``), every SWEEP_INTERVAL
+    # seconds, on whichever reaper gets there first. See ``facade.deadlines`` for the accessors.
     "SWEEP_INTERVAL": conf.rekuest.sweep_interval,
     # A dispatched task its live agent never reports on: redelivered once, then CRITICAL.
     "PICKUP_DEADLINE": conf.rekuest.pickup_deadline,
@@ -83,6 +89,8 @@ REKUEST_GRACE = {
 # Task retention: terminal root task trees older than this are deleted by the retention
 # sweep (the in-process reaper loop). 0 disables — history then grows forever.
 TASK_RETENTION_SECONDS = conf.rekuest.task_retention
+# Ephemeral runs (a schedule's ``ephemeral_runs``) get a short horizon of their own, on by default.
+EPHEMERAL_TASK_RETENTION_SECONDS = conf.rekuest.ephemeral_task_retention
 
 # Probes (facade.probes): redis-held, zero-DB-row invocations. TTL is the garbage
 # collector — a live probe's state expires after PROBE_TTL_SECONDS without a write, and a
@@ -127,11 +135,23 @@ AUTHENTIKATE = conf.authentikate.model_dump()
 # the verifying key at the JWKS endpoint (see ``rekuest/urls.py``). Loaded from the
 # ``provenance`` block of config.yaml; a static ``provenance.private_key`` is
 # required — the facade refuses to start without it (see facade/provenance/keys.py).
+# This instance's key signs provenance tokens (and every request to the hub's services, via the
+# vendored ``rekuest_service.trust``); its kid is the RFC 7638 thumbprint — what the coord's trust
+# bundle lists it under.
+from joserfc.jwk import OKPKey as _OKPKey  # noqa: E402
+
+INSTANCE = {
+    "PRIVATE_KEY": conf.instance.private_key,
+    "TRUST_JWKS_URI": conf.instance.trust.jwks_uri,
+    "TRUST_JWKS": conf.instance.trust.jwks,
+}
+REKUEST_IDENTIFIER = conf.rekuest.identifier
+
 PROVENANCE = {
     "ISSUER": conf.provenance.issuer,
-    "KID": conf.provenance.kid,
-    "PRIVATE_KEY": conf.provenance.private_key,
-    "PUBLIC_KEY": conf.provenance.public_key,
+    "KID": _OKPKey.import_key(conf.instance.private_key).thumbprint(),
+    "PRIVATE_KEY": conf.instance.private_key,
+    "PUBLIC_KEY": None,
     "TOKEN_TTL_SECONDS": int(conf.provenance.token_ttl_seconds),
     "HUMAN_ROLES": list(conf.provenance.human_roles),
     "STRICT": bool(conf.provenance.strict),

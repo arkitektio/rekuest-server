@@ -180,20 +180,24 @@ the probe limits. All optional with sensible defaults.
 | `progress_lease` | `REKUEST__PROGRESS_LEASE` | int | `0` | Progress lease (seconds); `0` disables the wedged-task lease. |
 | `hook_signature_mode` | `REKUEST__HOOK_SIGNATURE_MODE` | str | `compat` | HookAgent HTTP signatures. `compat` accepts the timestamped `X-Rekuest-Signature-V1` **or** the legacy body-only `X-Rekuest-Signature`, and sends both. `strict` accepts and sends V1 only — the legacy signature is replayable, so move to `strict` once your HookAgents are updated. |
 | `hook_max_skew` | `REKUEST__HOOK_MAX_SKEW` | int | `300` | Maximum age/clock skew (seconds) for a V1-signed HookAgent request. Also the replay guard's memory: a digest is remembered for twice this. |
+| `trigger_max_depth` | `REKUEST__TRIGGER_MAX_DEPTH` | int | `3` | How many trigger firings may chain (a triggered run creates an object whose signal fires another trigger …) before a signal stops firing. The loop guard. |
+| `signal_retention` | `REKUEST__SIGNAL_RETENTION` | int | `604800` | Seconds to keep processed signals; `0` keeps them forever. Runs keep their tasks; their `signal` link turns null. |
+| `ephemeral_task_retention` | `REKUEST__EPHEMERAL_TASK_RETENTION` | int | `86400` | Seconds to keep terminal *ephemeral* root task trees (the runs of schedules with `ephemeralRuns`, e.g. services' housekeeping sweeps). Applies even while `task_retention` is `0`; `0` disables. |
 | `task_retention` | `REKUEST__TASK_RETENTION` | int | `0` | Seconds to keep terminal root task trees before the retention sweep deletes them; `0` disables. Deleting past runs also removes them from replay discovery (`reusableTaskFor`), so it is an explicit opt-in. Suggested production value: `2592000` (30 days). |
 | `probe_ttl` | `REKUEST__PROBE_TTL` | int | `3600` | Lifetime (seconds) of a probe's redis state while it is live. |
 | `probe_linger` | `REKUEST__PROBE_LINGER` | int | `300` | How long (seconds) a finished probe's state lingers so a late subscriber can still read its outcome. |
 | `probe_max_inflight` | `REKUEST__PROBE_MAX_INFLIGHT` | int | `32` | Maximum concurrent probes per caller. Exceeding it refuses the probe rather than queueing it — probes are hover-grade work. |
-| `sweep_interval` | `REKUEST__SWEEP_INTERVAL` | int | `5` | How often (seconds) the in-process reaper sweeps the DB-held deadlines below. Bounds how late any of them can fire. |
+| `sweep_interval` | `REKUEST__SWEEP_INTERVAL` | int | `5` | How often (seconds) the reaper (`manage.py reaper`, the `rekuest-reaper` container) sweeps the DB-held deadlines below, the schedules and the delayed tasks. Bounds how late any of them can fire. |
 | `pickup_deadline` | `REKUEST__PICKUP_DEADLINE` | int | `60` | Seconds a dispatched task may go without **any** report from its live agent (or webhook endpoint) before the Assign is redelivered once, then failed `CRITICAL`; `0` disables. Physical-effect work is never redelivered. |
 | `disconnected_expiry` | `REKUEST__DISCONNECTED_EXPIRY` | int | `3600` | Seconds a `DISCONNECTED` (fate unknown) task — or an undelivered task of an agent that is gone — stays recoverable before it is finalized `CRITICAL`; `0` = never. |
 | `control_deadline` | `REKUEST__CONTROL_DEADLINE` | int | `60` | Seconds an unconfirmed cancel waits before escalating to an interrupt, and an unconfirmed interrupt before it is finalized; `0` disables. On by default: a Cancel/Interrupt frame lost in transit is otherwise never noticed, and nothing redelivers it the way the pickup deadline redelivers an Assign. A socket `CancelRequest.auto_interrupt` takes precedence. |
 
 None of these is a timer. Each deadline starts at a database column and is enforced by the
-reaper loop inside every backend process (`facade/reaper.py`) — there is no management command,
-cron job or sidecar to run, a backend can be killed at any moment without losing a pending
-deadline, and any number of backends can run side by side (every transition is a row-locked
-claim with exactly one winner).
+reaper loop (`facade/reaper.py`), which runs in its own process — `python manage.py reaper`, the
+`rekuest-reaper` container; the web replicas never sweep. It holds no state: a reaper can be
+killed at any moment without losing a pending deadline (while none runs, deadlines are late, not
+lost), and any number can run side by side (every transition is a row-locked claim with exactly
+one winner). `manage.py reaper --check` is its healthcheck (a heartbeat file touched every tick).
 
 ## Running more than one replica
 

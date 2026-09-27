@@ -28,6 +28,8 @@ from .probe import (
     ResumeProbeInput,
     ResumeProbeInputModel,
 )
+from .schedule import CreateScheduleInput, ScheduleIdInput, UpdateScheduleInput
+from .trigger import CreateTriggerInput, TriggerIdInput, UpdateTriggerInput
 from .task import (
     AssignInput,
     AssignInputModel,
@@ -115,6 +117,12 @@ from .toolbox import (
 )
 
 __all__ = [
+    "CreateTriggerInput",
+    "TriggerIdInput",
+    "UpdateTriggerInput",
+    "CreateScheduleInput",
+    "ScheduleIdInput",
+    "UpdateScheduleInput",
     # probe
     "ProbeInput",
     "ProbeInputModel",

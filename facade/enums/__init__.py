@@ -19,9 +19,13 @@ from .task import (
     TaskInstructKind,
 )
 from .log import LogLevel, LogLevelChoices
+from .signal import SignalKind, SignalKindChoices
 from .state import JSONPatchOperation, RetentionPolicyChoices
 
 __all__ = [
+    # signal
+    "SignalKind",
+    "SignalKindChoices",
     # action
     "ActionKindChoices",
     "ActionScope",

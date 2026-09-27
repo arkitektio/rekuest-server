@@ -44,6 +44,9 @@ SIGNATURE_HEADER = "X-Rekuest-Signature"
 #: usable, and binding the agent id stops a body signed for one HookAgent from being replayed
 #: against another that happens to share the secret.
 SIGNATURE_V1_HEADER = "X-Rekuest-Signature-V1"
+#: The HookAgent a delivery is for. The V1 signature is bound to the agent id, so a receiver
+#: needs it to verify — and a forged one fails that very check.
+AGENT_HEADER = "X-Rekuest-Agent"
 _TIMEOUT = 10.0
 
 # Module-level client: connection pooling across many deliveries.
@@ -106,7 +109,10 @@ def verify_v1(secret: str | None, agent_id: object, body: bytes, header: str | N
 
 
 def deliver_to_hook(agent: "models.Agent", body: str) -> bool:
-    """POST ``body`` (a JSON message) to ``agent.hook_url``, HMAC-signed. Never raises.
+    """POST ``body`` (a JSON message) to ``agent.hook_url``, signed. Never raises.
+
+    A service agent's delivery is signed with rekuest's instance key (``facade.service_trust``);
+    a third-party HookAgent's with its shared ``hook_url_secret`` (HMAC V1).
 
     Returns True on a 2xx response. Failures are logged — the persisted Task/event
     row is the durable record, so a failed delivery is recoverable, not lost.
@@ -116,10 +122,19 @@ def deliver_to_hook(agent: "models.Agent", body: str) -> bool:
         logger.error("HookAgent %s has no hook_url; dropping message", getattr(agent, "pk", "?"))
         return False
 
+    from facade import service_trust
+
     raw = body.encode("utf-8")
-    headers = {"Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json", AGENT_HEADER: str(getattr(agent, "pk", ""))}
     secret = getattr(agent, "hook_url_secret", None)
-    if secret:
+    entry = service_trust.entry_for_agent(agent)
+    if entry is not None:
+        try:
+            headers["Authorization"] = service_trust.sign_to(entry, "POST", url, raw)
+        except Exception:
+            logger.error("Could not sign a delivery to service agent %s", getattr(agent, "pk", "?"), exc_info=True)
+            return False
+    elif secret:
         headers[SIGNATURE_V1_HEADER] = sign_v1(secret, getattr(agent, "pk", ""), raw)
         if signature_mode() != "strict":
             # Sent alongside V1 during the compatibility window so a receiver that only knows

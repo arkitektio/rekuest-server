@@ -148,6 +148,40 @@ class Task(models.Model):
         db_default=0,
         help_text="How many times the Assign was dispatched (the pickup watchdog redelivers once, then fails the task).",
     )
+    schedule = models.ForeignKey(
+        "Schedule",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tasks",
+        help_text="The schedule this task is a run of, if any",
+    )
+    signal = models.ForeignKey(
+        "Signal",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tasks",
+        help_text="The signal that caused this task, if a trigger fired it",
+    )
+    trigger = models.ForeignKey(
+        "Trigger",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tasks",
+        help_text="The trigger that fired this task, if any",
+    )
+    trigger_depth = models.PositiveSmallIntegerField(
+        default=0,
+        db_default=0,
+        help_text="How many trigger firings lead to this task (its causing task's depth + 1); bounds trigger loops",
+    )
+    not_before = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Hold the Assign back until then. NULL = dispatch on creation. A delayed task stays undispatched (``dispatch_attempts == 0``) until the reaper's ``dispatch_due_tasks`` hands it over; its pickup deadline starts at that dispatch, not at creation.",
+    )
     picked_up_at = models.DateTimeField(
         null=True,
         blank=True,
@@ -231,6 +265,14 @@ class Task(models.Model):
                 fields=["dispatched_at"],
                 condition=models.Q(is_done=False, picked_up_at__isnull=True),
                 name="task_unpicked_idx",
+            ),
+            # ``refill_schedules``: "does this schedule have an open run?" — at most one row each.
+            models.Index(fields=["schedule"], condition=models.Q(is_done=False, schedule__isnull=False), name="task_schedule_open_idx"),
+            # ``dispatch_due_tasks``: delayed tasks that were never handed over, by due time.
+            models.Index(
+                fields=["not_before"],
+                condition=models.Q(is_done=False, dispatch_attempts=0, not_before__isnull=False),
+                name="task_not_before_due_idx",
             ),
             # The cancel→interrupt escalation sweep: only rows with a pending deadline.
             models.Index(
