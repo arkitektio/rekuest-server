@@ -445,6 +445,7 @@ class RedisControllBackend:
         differs = (
             (input.action is not None and str(existing.action_id) != str(input.action))
             or (input.implementation is not None and str(existing.implementation_id) != str(input.implementation))
+            or (input.action_hash is not None and existing.action is not None and existing.action.hash != input.action_hash)
             or (input.dependency is not None and (existing.dependency, existing.dependency_method) != (input.dependency, input.method))
         )
         if differs:

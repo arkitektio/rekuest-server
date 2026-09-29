@@ -118,3 +118,38 @@ async def test_a_call_key_that_names_another_call_is_refused_as_nondeterministic
     refused = await session.receive(messages.AssignResponse)
     assert refused.task is None and refused.error and refused.error.startswith("Nondeterministic workflow")
     await session.disconnect()
+
+
+async def test_a_workflow_whose_agent_keeps_dying_is_resumed_only_so_often(settings, broadcasts):
+    from facade.persist.reconcile import MAX_RESUMES
+
+    settings.REKUEST_GRACE = {**settings.REKUEST_GRACE, "DEFAULT": 30}
+    task = await _workflow("wf-cap")
+    await Task.objects.filter(pk=task.pk).aupdate(resumes=MAX_RESUMES)
+
+    await _take_over(task)
+
+    lost = await TaskEvent.objects.aget(task_id=task.pk, kind=enums.TaskEventKind.LOST)
+    assert f"Resumed {MAX_RESUMES} times" in lost.message
+    assert broadcasts == []
+
+
+async def test_each_resume_is_counted(settings, broadcasts):
+    settings.REKUEST_GRACE = {**settings.REKUEST_GRACE, "DEFAULT": 30}
+    task = await _workflow("wf-count")
+
+    await _take_over(task)
+
+    assert (await Task.objects.aget(pk=task.pk)).resumes == 1
+
+
+async def test_a_late_resend_of_an_effect_does_not_add_a_second_value():
+    """The first value under a key stands: it is the one a resumed run replays."""
+    task = await build_task("wf-effect-once")
+    backend = ModelPersistBackend()
+
+    await backend.on_agent_effect(task.agent_id, messages.Effect(task=str(task.pk), effect="NOW", value=1.0, key="NOW:1"))
+    await backend.on_agent_effect(task.agent_id, messages.Effect(task=str(task.pk), effect="NOW", value=2.0, key="NOW:1"))
+
+    effects = [e async for e in TaskEvent.objects.filter(task_id=task.pk, kind=enums.TaskEventKind.EFFECT)]
+    assert [(e.key, e.value) for e in effects] == [("NOW:1", 1.0)]

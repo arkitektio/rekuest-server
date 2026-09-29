@@ -47,6 +47,10 @@ class Task(models.Model):
         blank=True,
         help_text="The parent's step this child took (the AssignRequest's parent_step). A task's history is its events and patches by step, plus its children by parent_step. NULL for roots and for children of agents without numbering.",
     )
+    resumes = models.PositiveIntegerField(
+        default=0,
+        help_text="How often this workflow was sent again after its agent died. Capped: an agent that dies every time does not resume it forever.",
+    )
     code_hash = models.CharField(
         max_length=128,
         null=True,
@@ -390,6 +394,17 @@ class TaskEvent(models.Model):
         blank=True,
         help_text="EFFECT events: the value taken (NOW: epoch seconds, RANDOM: hex, SLEEP: the deadline in epoch seconds), which a replay returns instead of taking a new one.",
     )
+
+    class Meta:
+        constraints = [
+            # One value per key: a resumed run replays the first, and a late resend of the
+            # same effect (from the dead process's journal) must not add a second.
+            models.UniqueConstraint(
+                fields=["task", "key"],
+                condition=models.Q(kind="EFFECT", key__isnull=False),
+                name="task_event_one_effect_per_key",
+            ),
+        ]
 
 
 class TaskInstruct(models.Model):

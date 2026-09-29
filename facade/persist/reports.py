@@ -12,7 +12,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from channels.db import database_sync_to_async
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from facade import models, enums, messages
@@ -257,7 +257,12 @@ class AgentReportMixin:
 
     async def on_agent_effect(self, agent_id: int, message: messages.Effect) -> None:
         """A value the task took from outside itself, kept at its step for a later replay."""
-        await self._record_event(agent_id, message.task, enums.TaskEventKind.EFFECT, effect=message.effect, value=message.value, key=message.key, **position_stamp(message))
+        if message.key is not None and await models.TaskEvent.objects.filter(task_id=message.task, kind=enums.TaskEventKind.EFFECT.value, key=message.key).aexists():
+            return  # the value already recorded under this key stands: a resumed run replays it
+        try:
+            await self._record_event(agent_id, message.task, enums.TaskEventKind.EFFECT, effect=message.effect, value=message.value, key=message.key, **position_stamp(message))
+        except IntegrityError:
+            return  # another backend recorded it first
 
     async def _arm_progress_lease(self, task_id: str) -> None:
         """(Re)arm the silent-physical-op lease for a physical task, if enabled.

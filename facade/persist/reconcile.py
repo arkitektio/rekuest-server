@@ -35,6 +35,10 @@ logger = logging.getLogger(__name__)
 # (redis down, webhook 5xx) count — otherwise a permanently broken transport never fails.
 MAX_DISPATCH_ATTEMPTS = 2
 
+# How often a workflow is sent again after its agent died before it ends LOST: an agent that
+# dies every time (a crashing driver, an input that kills it) must not resume it forever.
+MAX_RESUMES = 3
+
 # A delayed task nobody has handed over yet (``Task.not_before``) is waiting, not undelivered:
 # every deadline that falls back to ``created_at`` for a never-dispatched row steps over it.
 # ``dispatch_due_tasks`` owns it until its first dispatch, which is what starts those clocks.
@@ -224,9 +228,12 @@ class ReconcileMixin:
         task was dispatched, replaying the journal onto other code could take another path,
         so it ends LOST instead. Returns whether it was handled (resumed, or lost for that).
         """
-        pinned, current = await database_sync_to_async(
-            lambda: models.Task.objects.filter(pk=task.pk).values_list("code_hash", "implementation__code_hash").first()
+        pinned, current, resumes = await database_sync_to_async(
+            lambda: models.Task.objects.filter(pk=task.pk).values_list("code_hash", "implementation__code_hash", "resumes").first()
         )()
+        if resumes >= MAX_RESUMES:
+            await self._finalize_lost(task, f"Resumed {resumes} times, and its agent died each time.", started=True)
+            return True
         if pinned != current:
             await self._finalize_lost(task, "Its agent died, and the workflow's code changed since this run started, so it cannot be resumed.", started=True)
             return True
@@ -238,7 +245,7 @@ class ReconcileMixin:
             task.pk,
             to_kind=enums.TaskEventKind.QUEUED,
             skip_if_kind=enums.TaskEventKind.QUEUED,
-            extra={"picked_up_at": None, "dispatched_at": timezone.now(), "dispatch_attempts": 1},
+            extra={"picked_up_at": None, "dispatched_at": timezone.now(), "dispatch_attempts": 1, "resumes": resumes + 1},
             event={"message": "Its agent died: the workflow is sent again, to resume from what it recorded."},
         )
         if won:
