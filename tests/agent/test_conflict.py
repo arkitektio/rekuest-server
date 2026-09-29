@@ -50,9 +50,9 @@ class TestAgentConnectionConflict:
         agent = await Agent.objects.aget(pk=incumbent.agent_pk)
         assert agent.connected is True
 
-    async def test_displaced_connection_does_not_mark_tasks_disconnected(self, agent_ws):
+    async def test_displaced_connection_does_not_lose_tasks(self, agent_ws):
         # Generation guard, end to end: an in-flight task owned by the agent must NOT
-        # receive a DISCONNECTED event when the incumbent is displaced by a force-register —
+        # end LOST when the incumbent is displaced by a force-register —
         # only a genuine disconnect of the active connection should.
         incumbent = await open_agent(agent_ws, "dup-agent")
         task = await build_unimplemented_task_for_agent(incumbent.agent_pk, "displace-guard")
@@ -63,8 +63,8 @@ class TestAgentConnectionConflict:
         await incumbent.expect_close(AGENT_REPLACED_CODE)  # let the displaced connection finish closing
         await asyncio.sleep(0.1)
 
-        disconnected = [e async for e in TaskEvent.objects.filter(task_id=task.pk, kind=enums.TaskEventKind.DISCONNECTED)]
-        assert disconnected == []
+        lost = [e async for e in TaskEvent.objects.filter(task_id=task.pk, kind=enums.TaskEventKind.LOST)]
+        assert lost == []
 
     async def test_stale_incumbent_reconnects_without_force(self, agent_ws):
         # The ticket, end to end: a crashed connection left ``connected`` stuck True with a stale

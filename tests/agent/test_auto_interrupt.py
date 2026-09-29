@@ -104,7 +104,7 @@ class TestControlDeadline:
     """The global control deadline covers the GraphQL path, which carries no ``auto_interrupt``."""
 
     async def test_unconfirmed_cancel_escalates_then_interrupt_is_finalized(self, settings):
-        settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "CONTROL_DEADLINE": 0.05}
+        settings.REKUEST_GRACE = {"DEFAULT": 0, "CONTROL_DEADLINE": 0.05}
         agent, ass = await _owned("cd")
         backend = ModelPersistBackend()
         key = str(ass.pk)

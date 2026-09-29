@@ -76,11 +76,6 @@ def test_lost_that_never_started_says_so():
     assert isinstance(msg, messages.LostEvent) and msg.started is False and msg.last_progress is None
 
 
-def test_disconnected_carries_message():
-    msg = build_execution_event(StubEvent(kind=Kind.DISCONNECTED.value, message="fate unknown"))
-    assert isinstance(msg, messages.DisconnectedEvent) and msg.message == "fate unknown"
-
-
 @pytest.mark.parametrize(
     "kind,cls",
     [

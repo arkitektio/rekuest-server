@@ -21,25 +21,12 @@ def _cfg() -> dict:
     return getattr(settings, "REKUEST_GRACE", {}) or {}
 
 
-def grace_seconds(*, physical: bool = False) -> float:
-    """The reclaim grace window (seconds); ``physical`` overrides for effect:physical work.
+def grace_seconds() -> float:
+    """The reclaim grace window (seconds); 0 means no grace (strict).
 
-    Resolution order: explicit ``PHYSICAL`` override (when ``physical``) → ``DEFAULT``. 0 means
-    no grace (strict). Returned as a float so sub-second windows (e.g. in tests) are not
-    truncated to 0.
-
-    The per-mode dimension is gone with ``AgentMode``: every socket connection is an agent, so
-    there is exactly one kind of disconnect to grace.
-
-    NOTE: no call site currently passes ``physical=`` — effect-awareness lives in the
-    fail/reclaim branching of ``persist_backend``, not in the grace timer.
+    A float, so sub-second windows (e.g. in tests) are not truncated to 0.
     """
-    cfg = _cfg()
-
-    if physical and cfg.get("PHYSICAL") is not None:
-        return float(cfg["PHYSICAL"])
-
-    return float(cfg.get("DEFAULT", 0))
+    return float(_cfg().get("DEFAULT", 0))
 
 
 def progress_lease_seconds() -> float:
@@ -58,7 +45,7 @@ def pickup_deadline_seconds() -> float:
 
 
 def disconnected_expiry_seconds() -> float:
-    """How long a DISCONNECTED (fate unknown) task stays recoverable; 0 = never expires."""
+    """How long an agent that is gone keeps its undelivered work before it ends LOST; 0 = never."""
     return float(_cfg().get("DISCONNECTED_EXPIRY", 0))
 
 

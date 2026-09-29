@@ -102,7 +102,6 @@ class RekuestBlock(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     grace_default: int = Field(default=30, description="Default reclaim grace window (seconds) after a disconnect.")
-    grace_physical: int = Field(default=5, description="Grace window (seconds) for effect:physical work.")
     progress_lease: int = Field(default=0, description="Progress lease (seconds); 0 disables the wedged-task lease.")
     sweep_interval: int = Field(default=5, description="How often (seconds) the reaper (`manage.py reaper`) sweeps the DB-held deadlines. Bounds how late a deadline can fire.")
     pickup_deadline: int = Field(default=60, description="Seconds a dispatched task may go without any report from its (live) agent before the Assign is redelivered once, then failed; 0 disables.")

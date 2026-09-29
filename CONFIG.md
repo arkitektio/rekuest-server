@@ -176,7 +176,6 @@ the probe limits. All optional with sensible defaults.
 | Key | Env var | Type | Default | Description |
 |---|---|---|---|---|
 | `grace_default` | `REKUEST__GRACE_DEFAULT` | int | `30` | Default reclaim grace window (seconds) after a disconnect. |
-| `grace_physical` | `REKUEST__GRACE_PHYSICAL` | int | `5` | Grace window (seconds) for `effect:physical` work. |
 | `progress_lease` | `REKUEST__PROGRESS_LEASE` | int | `0` | Progress lease (seconds); `0` disables the wedged-task lease. |
 | `hook_signature_mode` | `REKUEST__HOOK_SIGNATURE_MODE` | str | `compat` | HookAgent HTTP signatures. `compat` accepts the timestamped `X-Rekuest-Signature-V1` **or** the legacy body-only `X-Rekuest-Signature`, and sends both. `strict` accepts and sends V1 only — the legacy signature is replayable, so move to `strict` once your HookAgents are updated. |
 | `hook_max_skew` | `REKUEST__HOOK_MAX_SKEW` | int | `300` | Maximum age/clock skew (seconds) for a V1-signed HookAgent request. Also the replay guard's memory: a digest is remembered for twice this. |
@@ -188,8 +187,8 @@ the probe limits. All optional with sensible defaults.
 | `probe_linger` | `REKUEST__PROBE_LINGER` | int | `300` | How long (seconds) a finished probe's state lingers so a late subscriber can still read its outcome. |
 | `probe_max_inflight` | `REKUEST__PROBE_MAX_INFLIGHT` | int | `32` | Maximum concurrent probes per caller. Exceeding it refuses the probe rather than queueing it — probes are hover-grade work. |
 | `sweep_interval` | `REKUEST__SWEEP_INTERVAL` | int | `5` | How often (seconds) the reaper (`manage.py reaper`, the `rekuest-reaper` container) sweeps the DB-held deadlines below, the schedules and the delayed tasks. Bounds how late any of them can fire. |
-| `pickup_deadline` | `REKUEST__PICKUP_DEADLINE` | int | `60` | Seconds a dispatched task may go without **any** report from its live agent (or webhook endpoint) before the Assign is redelivered once, then failed `CRITICAL`; `0` disables. Physical-effect work is never redelivered. |
-| `disconnected_expiry` | `REKUEST__DISCONNECTED_EXPIRY` | int | `3600` | Seconds a `DISCONNECTED` (fate unknown) task — or an undelivered task of an agent that is gone — stays recoverable before it is finalized `CRITICAL`; `0` = never. |
+| `pickup_deadline` | `REKUEST__PICKUP_DEADLINE` | int | `60` | Seconds a dispatched task may go without **any** report from its live agent (or webhook endpoint) before the Assign is redelivered once, then ended `LOST` (never started); `0` disables. |
+| `disconnected_expiry` | `REKUEST__DISCONNECTED_EXPIRY` | int | `3600` | Seconds an undelivered task of an agent that is gone waits for it before it ends `LOST` (never started); `0` = never. |
 | `control_deadline` | `REKUEST__CONTROL_DEADLINE` | int | `60` | Seconds an unconfirmed cancel waits before escalating to an interrupt, and an unconfirmed interrupt before it is finalized; `0` disables. On by default: a Cancel/Interrupt frame lost in transit is otherwise never noticed, and nothing redelivers it the way the pickup deadline redelivers an Assign. A socket `CancelRequest.auto_interrupt` takes precedence. |
 
 None of these is a timer. Each deadline starts at a database column and is enforced by the

@@ -42,7 +42,7 @@ CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
 
 # Default tests to grace=0 → disconnects cascade inline/immediately (the legacy,
 # deterministic behavior). The reclaim/grace tests opt into a window with override_settings.
-REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0}
+REKUEST_GRACE = {"DEFAULT": 0}
 
 # No reaper runs under test (it is its own process: ``manage.py reaper``). Tests call the sweeps
 # (``persist_backend.reconcile_*`` / ``expire_*`` / ``dispatch_due_tasks`` / …) explicitly, so a

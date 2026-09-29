@@ -64,13 +64,10 @@ AGENT_HEARTBEAT_NOT_RESPONDED_CODE = 3001
 
 # Reclaim grace window (seconds). On a disconnect the failure/cascade is delayed this long so
 # a brief blip can reclaim same-session in-flight work before it fires. 0 means no grace
-# (strict). ``PHYSICAL`` overrides the window for effect:physical work, which may warrant a
-# shorter (or zero) window than freely-retryable effect:none work. Consumed by the
-# reclaim/grace backend via ``facade.deadlines.grace_seconds``.
+# (strict). Consumed by the reclaim/grace backend via ``facade.deadlines.grace_seconds``.
 REKUEST_GRACE = {
     "DEFAULT": conf.rekuest.grace_default,
-    "PHYSICAL": conf.rekuest.grace_physical,
-    # Progress lease (seconds): a physical task that has reported progress but then
+    # Progress lease (seconds): an IRREVERSIBLE task that has reported progress but then
     # goes silent this long — while its agent is still connected (wedged-but-alive) — is
     # failed as terminal. 0 disables the lease (default).
     "PROGRESS_LEASE": conf.rekuest.progress_lease,

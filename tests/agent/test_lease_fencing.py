@@ -33,7 +33,7 @@ pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.asyncio]
 
 
 def _grace(settings, value):
-    settings.REKUEST_GRACE = {"DEFAULT": value, "PHYSICAL": value}
+    settings.REKUEST_GRACE = {"DEFAULT": value}
 
 
 def _session(agent, backend, *, lease_epoch) -> RegisteredSession:

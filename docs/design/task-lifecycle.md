@@ -106,7 +106,7 @@ The agent streams events back over its socket; `ModelPersistBackend` handles eac
 | Agent message | Persisted as | Side effects |
 | --- | --- | --- |
 | `Started` | `TaskEvent(STARTED)` | moves `latest_event_kind` off `QUEUED` |
-| `Progress` | `TaskEvent(PROGRESS, progress, message)` | re-arms the progress lease (physical work) |
+| `Progress` | `TaskEvent(PROGRESS, progress, message)` | re-arms the progress lease (`IRREVERSIBLE` work) |
 | `Log` | `TaskEvent(LOG, message, level)` | — |
 | `Yield` | `TaskEvent(YIELD, returns)` | unfold to higher-order wrapper |
 | `Paused` / `Resumed` | `TaskEvent(PAUSED/RESUMED)` | confirms a pause/resume instruct |
@@ -187,8 +187,7 @@ stateDiagram-v2
   the caller-event mirrors. Do not expect them in a new task's history.
 - `LOST` (its agent died while it ran; how it ended is unknown) is terminal, and final: a later
   report from the agent is kept as `LATE_REPORT`. A workflow is resumed instead (see
-  [workflows.md](workflows.md)). `DISCONNECTED` is no longer written; rows from before end `LOST`
-  on expiry.
+  [workflows.md](workflows.md)).
 
 ## Instructing a running task
 
@@ -211,7 +210,7 @@ FK** deliberately — a task may have a null/reassigned `implementation`, so fil
 
 Work the agent had **not picked up yet** (`QUEUED`, no report) is not orphaned by a disconnect —
 its Assign is still in the agent's queue — and is left alone; it simply runs when the agent is
-back, and expires like `DISCONNECTED` work if it never is.
+back, and ends `LOST` (`started: false`) after `disconnected_expiry` if it never is.
 
 ## Deadlines — nothing waits forever
 
@@ -224,11 +223,10 @@ claims, one winner).
 |---|---|---|---|
 | a live agent to report on a dispatched task | `Task.dispatched_at` | `pickup_deadline` | redelivered once, then `LOST` (`started: false`) |
 | a disconnected agent to come back (grace) | `Agent.last_seen` | `grace_default` | `LOST`, or a workflow resumed |
-| a pre-LOST `DISCONNECTED` row's outcome | last `TaskEvent` | `disconnected_expiry` | `LOST` |
 | undelivered work of an agent that is gone | `Task.dispatched_at` | `disconnected_expiry` | `LOST` |
 | a cancel to be confirmed | `Task.interrupt_at` | `auto_interrupt` / `control_deadline` | escalated to interrupt |
 | an interrupt to be confirmed | `Task.interrupt_at` | `control_deadline` | `INTERRUPTED` |
-| a physical op's next progress | `Task.last_progress_at` | `progress_lease` | `CRITICAL` |
+| an `IRREVERSIBLE` task's next progress | `Task.last_progress_at` | `progress_lease` | `CRITICAL` |
 
 ## Idempotency is a database guarantee
 
@@ -238,7 +236,7 @@ claims, one winner).
 assign can reach two backends at the same instant and both read "absent". The constraint lets
 exactly one insert through; the loser catches `IntegrityError`, returns the winner's task with
 `created=False`, and dispatches nothing and runs no init hooks — otherwise the work would be sent
-to the agent twice, which for `effect:physical` work is the worst outcome in the system. Dispatch
+to the agent twice, which for `IRREVERSIBLE` work is the worst outcome in the system. Dispatch
 itself is deferred with `transaction.on_commit`, so no agent can report on a task other
 connections cannot see yet.
 

@@ -336,8 +336,8 @@ Everything above still cannot prove an Assign *arrived*. The server therefore tr
 `dispatched_at` / `dispatch_attempts` (handed to the transport) and `picked_up_at` (the first report
 of **any** kind from the agent — `latest_event_kind` cannot serve, because `Progress`/`Log`/`Yield`
 never move it off `QUEUED`). `reconcile_unpicked_tasks` redelivers, once, a task whose *live* agent
-(or webhook endpoint) has reported nothing within `pickup_deadline`; silent again → `CRITICAL`.
-Physical-effect work that verifiably left is never redelivered. Tasks of agents that are not live
+(or webhook endpoint) has reported nothing within `pickup_deadline`; silent again → `LOST`
+(`started: false`). Tasks of agents that are not live
 are left to the disconnect path. A reconnecting agent is not *inquired* about work it never picked
 up (it would answer "unknown → Critical" for a task it is about to receive); that work's clock is
 restarted instead.
@@ -390,8 +390,8 @@ A second `Register` after registration is a protocol violation — it must not r
 
 `AgentProtocol.shutdown` (called from the consumer's `disconnect`) cancels the listen and heartbeat
 tasks, calls `on_agent_disconnected(agent.pk, connection_id)` (which no-ops if displaced), and closes
-the queue connection. The persisted disconnect marks the agent offline and flags its still-running
-tasks `DISCONNECTED` — see [task-lifecycle.md](task-lifecycle.md).
+the queue connection. The persisted disconnect marks the agent offline; after the grace window its
+still-running tasks end `LOST` (workflows are resumed) — see [task-lifecycle.md](task-lifecycle.md).
 
 ### Server-initiated closes must stop the drain themselves
 

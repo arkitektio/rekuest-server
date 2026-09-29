@@ -28,7 +28,7 @@ pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.asyncio]
 
 
 def _grace(settings, value):
-    settings.REKUEST_GRACE = {"DEFAULT": value, "PHYSICAL": value}
+    settings.REKUEST_GRACE = {"DEFAULT": value}
 
 
 async def _event_kinds(ass_id):
@@ -58,7 +58,7 @@ class TestExecutorReclaim:
         assert await ModelPersistBackend().reconcile_disconnected_agents() == 0  # live again
         assert any(str(a.pk) == str(ass.pk) for a in claim.tasks)  # handed back as inquiry
 
-        assert enums.TaskEventKind.DISCONNECTED not in await _event_kinds(ass.pk)
+        assert enums.TaskEventKind.LOST not in await _event_kinds(ass.pk)
         refreshed = await Task.objects.aget(pk=ass.pk)
         assert refreshed.is_done is False
 
@@ -123,7 +123,7 @@ class TestExecutorGraceExpiry:
 
 class TestProgressLease:
     async def test_silent_physical_op_fails_terminal(self, settings):
-        settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "PROGRESS_LEASE": 0.05}
+        settings.REKUEST_GRACE = {"DEFAULT": 0, "PROGRESS_LEASE": 0.05}
         ass = await build_task("lease-phys", effects="IRREVERSIBLE")
         backend = ModelPersistBackend()
         key = str(ass.pk)
@@ -138,7 +138,7 @@ class TestProgressLease:
         assert refreshed.latest_event_kind == enums.TaskEventKind.CRITICAL
 
     async def test_fresh_progress_rearms_lease(self, settings):
-        settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "PROGRESS_LEASE": 30}
+        settings.REKUEST_GRACE = {"DEFAULT": 0, "PROGRESS_LEASE": 30}
         ass = await build_task("lease-rearm", effects="IRREVERSIBLE")
         backend = ModelPersistBackend()
 
@@ -147,7 +147,7 @@ class TestProgressLease:
         assert (await Task.objects.aget(pk=ass.pk)).is_done is False
 
     async def test_paused_op_is_not_reaped(self, settings):
-        settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "PROGRESS_LEASE": 0.05}
+        settings.REKUEST_GRACE = {"DEFAULT": 0, "PROGRESS_LEASE": 0.05}
         ass = await build_task("lease-paused", effects="IRREVERSIBLE")
         backend = ModelPersistBackend()
         key = str(ass.pk)
@@ -159,7 +159,7 @@ class TestProgressLease:
         assert (await Task.objects.aget(pk=ass.pk)).is_done is False
 
     async def test_done_clears_lease_no_failure(self, settings):
-        settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "PROGRESS_LEASE": 30}
+        settings.REKUEST_GRACE = {"DEFAULT": 0, "PROGRESS_LEASE": 30}
         ass = await build_task("lease-done", effects="IRREVERSIBLE")
         backend = ModelPersistBackend()
         key = str(ass.pk)
@@ -168,13 +168,13 @@ class TestProgressLease:
         await backend.on_agent_done(ass.agent_id, messages.Completed(task=key))
         # A terminal task is out of the sweep by construction (is_done) — there is no lease to
         # clear: even with its stamp long past the window, nothing fires.
-        settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "PROGRESS_LEASE": 0.01}
+        settings.REKUEST_GRACE = {"DEFAULT": 0, "PROGRESS_LEASE": 0.01}
         await asyncio.sleep(0.05)
         assert await backend.reconcile_silent_physical_ops() == 0
         assert (await Task.objects.aget(pk=ass.pk)).latest_event_kind == enums.TaskEventKind.COMPLETED
 
     async def test_none_effect_has_no_lease(self, settings):
-        settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "PROGRESS_LEASE": 0.05}
+        settings.REKUEST_GRACE = {"DEFAULT": 0, "PROGRESS_LEASE": 0.05}
         ass = await build_task("lease-none", effects="UNKNOWN")
         backend = ModelPersistBackend()
         key = str(ass.pk)

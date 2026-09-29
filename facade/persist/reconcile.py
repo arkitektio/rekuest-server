@@ -67,17 +67,15 @@ class ReconcileMixin:
         agent = await models.Agent.objects.aget(id=agent_id)
         if liveness.agent_is_live(agent.connected, agent.last_seen):
             return
-        in_flight = [a async for a in models.Task.objects.select_related("implementation", "action").filter(agent_id=agent_id).filter(self._orphanable_q())]
+        in_flight = [a async for a in models.Task.objects.select_related("implementation", "action").filter(agent_id=agent_id).filter(self._in_flight_q())]
         await self._fail_and_cascade_inflight(in_flight)
 
     @staticmethod
-    def _orphanable_q() -> Q:
+    def _in_flight_q() -> Q:
         """In-flight work an executor's death actually orphans.
 
         Excluded, because there is nothing (more) to do for them here:
 
-        * already ``DISCONNECTED`` — handled; re-scanning them every sweep would cost a row
-          lock per task per tick until they expire;
         * ``QUEUED`` and never picked up — the agent never had them. Their Assign is still in
           the agent's redis queue (or will be redelivered by the pickup watchdog), so they
           simply run when the agent is back; ``expire_disconnected_tasks`` bounds the wait;
@@ -86,7 +84,6 @@ class ReconcileMixin:
         """
         return (
             Q(is_done=False)
-            & ~Q(latest_event_kind=enums.TaskEventKind.DISCONNECTED)
             & ~Q(latest_event_kind=enums.TaskEventKind.QUEUED, picked_up_at__isnull=True)
             & ~Q(implementation__higher_order_for__isnull=False)
         )
@@ -103,7 +100,7 @@ class ReconcileMixin:
         cutoff = timezone.now() - timedelta(seconds=grace_seconds())
         agent_ids = [
             agent_id
-            async for agent_id in models.Task.objects.filter(self._orphanable_q())
+            async for agent_id in models.Task.objects.filter(self._in_flight_q())
             .filter(agent__kind=enums.AgentKind.WEBSOCKET.value, agent__connected=False)
             .filter(Q(agent__last_seen__lt=cutoff) | Q(agent__last_seen__isnull=True))
             .values_list("agent_id", flat=True)
@@ -204,7 +201,7 @@ class ReconcileMixin:
         ``AgentLost`` from the call, a script from ``call``, a person sees it in the UI. The
         LOST event carries what is known for that decision (see :meth:`_finalize_lost`).
 
-        Work the agent never picked up is left alone entirely (see :meth:`_orphanable_q`): it
+        Work the agent never picked up is left alone entirely (see :meth:`_in_flight_q`): it
         is not orphaned, merely undelivered, and the pickup watchdog redelivers it. Every task
         is claimed first and its event written inside the claim, so concurrent sweeps produce
         exactly one LOST per task rather than one each.
@@ -512,32 +509,13 @@ class ReconcileMixin:
 
         Undelivered ``QUEUED`` tasks of an agent that is no longer live stay open for the
         expiry window (the agent may return and pick them up), then end LOST with
-        ``started=False``: nothing ran. ``DISCONNECTED`` rows are no longer written; the ones
-        written before LOST existed end LOST too. 0 disables. Returns the count.
+        ``started=False``: nothing ran. 0 disables. Returns the count.
         """
         expiry = disconnected_expiry_seconds()
         if expiry <= 0:
             return 0
         cutoff = timezone.now() - timedelta(seconds=expiry)
         expired = 0
-
-        disconnected = [
-            pk
-            async for pk in models.Task.objects.filter(is_done=False, latest_event_kind=enums.TaskEventKind.DISCONNECTED)
-            .annotate(last_event_at=Max("events__created_at"))
-            .filter(Q(last_event_at__lt=cutoff) | Q(last_event_at__isnull=True, created_at__lt=cutoff))
-            .values_list("pk", flat=True)[:limit]
-        ]
-        for pk in disconnected:
-            task = await models.Task.objects.select_related("implementation").aget(pk=pk)
-            if await self._finalize_lost(
-                task,
-                "Its agent disconnected and never came back; how it ended is unknown.",
-                started=True,
-                only_if=lambda t: t.latest_event_kind == enums.TaskEventKind.DISCONNECTED,
-                skip_locked=True,
-            ):
-                expired += 1
 
         undelivered = [
             pk

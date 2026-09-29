@@ -15,7 +15,6 @@ from typing import Optional, Tuple
 
 from channels.db import database_sync_to_async
 from django.db import transaction
-from django.db.models import Q
 from django.utils import timezone
 
 from facade import liveness, models, enums, registration
@@ -159,8 +158,7 @@ class AgentLeaseMixin:
         # The agent is live again, so the grace window (``reconcile_disconnected_agents``) no
         # longer matches it — nothing to cancel. Work it never picked up is not "in flight":
         # its Assign is still queued for it (or the watchdog will redeliver it). Asking the agent
-        # about it would have it answer "unknown → Critical" for a task it is about to receive,
-        # and a fresh session would mark it DISCONNECTED just before it runs. Restart its pickup
+        # about it would have it answer "unknown → Critical" for a task it is about to receive. Restart its pickup
         # clock instead, so a backlog that built up during the outage is not redelivered at once.
         await models.Task.objects.filter(
             agent_id=agent_id,
@@ -170,7 +168,7 @@ class AgentLeaseMixin:
             dispatched_at__isnull=False,
         ).aupdate(dispatched_at=timezone.now())
 
-        in_flight = [a async for a in models.Task.objects.select_related("implementation", "action").filter(agent_id=agent_id).filter(self._reclaimable_q())]
+        in_flight = [a async for a in models.Task.objects.select_related("implementation", "action").filter(agent_id=agent_id).filter(self._in_flight_q())]
 
         # A different session means a FRESH process took over (the old one died): the prior
         # in-flight work is orphaned and must fail-and-cascade rather than be reclaimed.
@@ -181,22 +179,6 @@ class AgentLeaseMixin:
         # Same session (or first connect / no session info) → reclaim: hand the in-flight
         # work back as inquiries so the surviving process can re-sync.
         return LeaseClaim(claimed=True, epoch=epoch, tasks=in_flight, displaced_incumbent=displaced_incumbent)
-
-    @staticmethod
-    def _reclaimable_q() -> Q:
-        """Open work a (re)connecting agent may actually hold — what it is inquired about.
-
-        Same shape as :meth:`_orphanable_q` but WITHOUT its ``~DISCONNECTED`` term: a same-session
-        reconnect is how a fate-unknown task gets its real outcome reported, so the agent must be
-        asked about those, whereas a *sweep* has nothing left to do to them.
-
-        Spelled out rather than derived from ``_orphanable_q`` on purpose. ``_orphanable_q() | Q(
-        is_done=False, latest_event_kind=DISCONNECTED)`` reads equivalent and is not: the added
-        disjunct would readmit DISCONNECTED *higher-order wrappers*, which both predicates exclude
-        — and asking an agent about a virtual wrapper it never held gets "unknown task" back, which
-        finalizes it wrongly.
-        """
-        return Q(is_done=False) & ~Q(latest_event_kind=enums.TaskEventKind.QUEUED, picked_up_at__isnull=True) & ~Q(implementation__higher_order_for__isnull=False)
 
     async def holds_lease(self, agent_id: int, lease_epoch: int) -> bool:
         """Whether ``lease_epoch`` is still the agent's current lease — asked before every delivery.

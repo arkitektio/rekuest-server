@@ -30,7 +30,6 @@ class TaskEventChoices(TextChoices):
     CRITICAL = "CRITICAL"
     LOST = "LOST", "Lost (its agent died while it ran; its fate is unknown)"
     LATE_REPORT = "LATE_REPORT", "Late report (the agent reported an outcome after the task was lost)"
-    DISCONNECTED = "DISCONNECTED"
 
     YIELD = (
         "YIELD",
@@ -79,8 +78,6 @@ class TaskEventKind(str, Enum):
     # Mirrors TaskEventChoices.UNASSIGN. Without it, coercing a persisted UNASSIGN row in the
     # task subscriptions raises ValueError.
     UNASSIGN = "UNASSIGN"
-
-    DISCONNECTED = "DISCONNECTED"
 
     YIELD = "YIELD"
     COMPLETED = "COMPLETED"

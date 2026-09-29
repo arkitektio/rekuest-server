@@ -72,8 +72,6 @@ def build_execution_event(event: EventLike) -> Optional[messages.ExecutionEventM
             effects=details.get("effects"),
             reason=details.get("reason") or event.message,
         )
-    if kind == Kind.DISCONNECTED.value:
-        return messages.DisconnectedEvent(**base, message=event.message)
     if kind == Kind.COMPLETED.value:
         return messages.CompletedEvent(**base)
     if kind == Kind.BOUND.value:

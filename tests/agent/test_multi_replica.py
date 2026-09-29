@@ -380,7 +380,7 @@ class TestReaperIsSafeFromEveryBackend:
         correctness must not depend on it. Run four passes at once and require one outcome."""
         from facade.reaper import run_sweeps
 
-        settings.REKUEST_GRACE = {"DEFAULT": 0.05, "PHYSICAL": 0.05, "DISCONNECTED_EXPIRY": 3600}
+        settings.REKUEST_GRACE = {"DEFAULT": 0.05, "DISCONNECTED_EXPIRY": 3600}
         task = await build_task("reap-race")
         await Agent.objects.filter(pk=task.agent_id).aupdate(connected=False, last_seen=timezone.now() - timedelta(minutes=5))
 
@@ -421,7 +421,7 @@ class TestClockSkewGate:
     async def test_a_skewed_backend_does_not_sweep(self, settings, monkeypatch):
         from facade import clock, reaper
 
-        settings.REKUEST_GRACE = {"DEFAULT": 0.05, "PHYSICAL": 0.05}
+        settings.REKUEST_GRACE = {"DEFAULT": 0.05}
         task = await build_task("skew-guard")
         await Agent.objects.filter(pk=task.agent_id).aupdate(connected=False, last_seen=timezone.now() - timedelta(minutes=5))
 

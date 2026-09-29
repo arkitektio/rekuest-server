@@ -94,7 +94,7 @@ class TestDelayedTasks:
         assert await _sweep() == 0
 
     async def test_watchdog_and_expiry_step_over_a_waiting_task(self, settings, agent_ws):
-        settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "PICKUP_DEADLINE": DEADLINE, "DISCONNECTED_EXPIRY": DEADLINE}
+        settings.REKUEST_GRACE = {"DEFAULT": 0, "PICKUP_DEADLINE": DEADLINE, "DISCONNECTED_EXPIRY": DEADLINE}
         session = await open_agent(agent_ws, "delay-watchdog")
         impl = await build_implementation_for_agent(session.agent.pk, "delay-watchdog")
         task = await _assign_delayed(session, impl, in_seconds=3600)

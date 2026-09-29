@@ -29,7 +29,7 @@ DEADLINE = 0.2
 
 
 def _watchdog(settings, **extra):
-    settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "PICKUP_DEADLINE": DEADLINE, **extra}
+    settings.REKUEST_GRACE = {"DEFAULT": 0, "PICKUP_DEADLINE": DEADLINE, **extra}
 
 
 async def _queued(prefix, agent_pk, *, age=10.0, attempts=1, dispatched=True, **build_kwargs):
@@ -156,7 +156,7 @@ class TestPickupWatchdog:
         assert (await _kinds(task.pk)).count(enums.TaskEventKind.QUEUED) == 1
 
     async def test_disabled_by_default(self, settings, agent_ws):
-        settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0}
+        settings.REKUEST_GRACE = {"DEFAULT": 0}
         session = await open_agent(agent_ws, "wd-off")
         await _queued("wd-off-t", session.agent_pk)
         assert await _sweep() == 0
@@ -199,57 +199,12 @@ class TestReconnectDoesNotKillUndeliveredWork:
 
 
 class TestExpiry:
-    async def _legacy_disconnected(self, prefix):
-        """A DISCONNECTED row written before LOST existed: nothing writes one any more."""
-        task = await build_task(prefix)
-        await Agent.objects.filter(pk=task.agent_id).aupdate(connected=False, last_seen=timezone.now() - timedelta(hours=1))
-        await Task.objects.filter(pk=task.pk).aupdate(latest_event_kind=enums.TaskEventKind.DISCONNECTED)
-        await TaskEvent.objects.acreate(task_id=task.pk, kind=enums.TaskEventKind.DISCONNECTED, message="Agent disconnected. Fate unknown")
-        return task
-
     async def test_a_lost_agent_now_ends_its_work_lost_at_once(self, settings):
         task = await build_task("exp-now")
         await Agent.objects.filter(pk=task.agent_id).aupdate(connected=False, last_seen=timezone.now() - timedelta(hours=1))
         await ModelPersistBackend().reconcile_orphaned_executor_work(task.agent_id)
         refreshed = await Task.objects.aget(pk=task.pk)
         assert (refreshed.latest_event_kind, refreshed.is_done) == (enums.TaskEventKind.LOST, True)
-
-    async def test_legacy_disconnected_work_ends_lost_after_expiry(self, settings):
-        settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "DISCONNECTED_EXPIRY": 0.2}
-        task = await self._legacy_disconnected("exp-dis")
-
-        assert await ModelPersistBackend().expire_disconnected_tasks() == 0  # inside the window
-        await asyncio.sleep(0.3)
-        assert await ModelPersistBackend().expire_disconnected_tasks() == 1
-
-        refreshed = await Task.objects.aget(pk=task.pk)
-        assert refreshed.is_done is True and refreshed.latest_event_kind == enums.TaskEventKind.LOST
-        assert (await TaskEvent.objects.aget(task_id=task.pk, kind=enums.TaskEventKind.LOST)).value["started"] is True
-        assert await ModelPersistBackend().expire_disconnected_tasks() == 0  # idempotent
-
-    async def test_never_expires_when_disabled(self, settings):
-        settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "DISCONNECTED_EXPIRY": 0}
-        task = await self._legacy_disconnected("exp-off")
-        await asyncio.sleep(0.05)
-        assert await ModelPersistBackend().expire_disconnected_tasks() == 0
-        assert (await Task.objects.aget(pk=task.pk)).is_done is False
-
-    async def test_a_late_report_reclaims_legacy_disconnected_work(self, settings):
-        settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "DISCONNECTED_EXPIRY": 0.2}
-        task = await self._legacy_disconnected("exp-late")
-
-        await ModelPersistBackend().on_agent_progress(task.agent_id, messages.Progress(task=str(task.pk), progress=50))
-        assert (await Task.objects.aget(pk=task.pk)).latest_event_kind == enums.TaskEventKind.STARTED
-
-        await asyncio.sleep(0.3)
-        assert await ModelPersistBackend().expire_disconnected_tasks() == 0  # it is alive after all
-        assert (await Task.objects.aget(pk=task.pk)).is_done is False
-
-    async def test_a_late_terminal_report_is_the_outcome_of_legacy_disconnected_work(self, settings):
-        task = await self._legacy_disconnected("exp-done")
-        await ModelPersistBackend().on_agent_done(task.agent_id, messages.Completed(task=str(task.pk)))
-        refreshed = await Task.objects.aget(pk=task.pk)
-        assert refreshed.is_done is True and refreshed.latest_event_kind == enums.TaskEventKind.COMPLETED
 
     async def test_a_late_terminal_report_after_lost_is_kept_beside_it(self, settings):
         """LOST is final: whoever called may already have acted on it."""
@@ -267,7 +222,7 @@ class TestExpiry:
         assert late[1].value == {"kind": "COMPLETED"}
 
     async def test_undelivered_work_of_a_gone_agent_ends_lost_unstarted(self, settings):
-        settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "DISCONNECTED_EXPIRY": 0.2}
+        settings.REKUEST_GRACE = {"DEFAULT": 0, "DISCONNECTED_EXPIRY": 0.2}
         seed = await build_task("exp-gone-seed")
         await Agent.objects.filter(pk=seed.agent_id).aupdate(connected=False, last_seen=timezone.now() - timedelta(hours=1))
         waiting = await _queued("exp-gone-t", seed.agent_id)
@@ -334,7 +289,7 @@ class TestReaperPass:
     async def test_one_pass_heals_a_crashed_backends_leftovers(self, settings):
         from facade.reaper import run_sweeps
 
-        settings.REKUEST_GRACE = {"DEFAULT": 0.05, "PHYSICAL": 0.05, "PICKUP_DEADLINE": DEADLINE, "DISCONNECTED_EXPIRY": 3600}
+        settings.REKUEST_GRACE = {"DEFAULT": 0.05, "PICKUP_DEADLINE": DEADLINE, "DISCONNECTED_EXPIRY": 3600}
         # A backend died: one agent is stuck ``connected=True`` with a long-expired lease…
         stuck = await build_task("reap-stuck", effects="IRREVERSIBLE")
         await Agent.objects.filter(pk=stuck.agent_id).aupdate(connected=True, last_seen=timezone.now() - timedelta(hours=1))
@@ -355,7 +310,7 @@ class TestReaperPass:
     async def test_a_failing_sweep_does_not_starve_the_others(self, settings, monkeypatch):
         import facade.reaper as reaper
 
-        settings.REKUEST_GRACE = {"DEFAULT": 0.05, "PHYSICAL": 0.05}
+        settings.REKUEST_GRACE = {"DEFAULT": 0.05}
         graced = await build_task("reap-isolated")
         await Agent.objects.filter(pk=graced.agent_id).aupdate(connected=False, last_seen=timezone.now() - timedelta(minutes=5))
 
