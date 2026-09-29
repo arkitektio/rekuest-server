@@ -8,7 +8,7 @@ dispatch never recomputes them.
 
 import pytest
 
-from rekuest_core.enums import EffectClass
+from rekuest_core.enums import Effects, Execution
 from rekuest_core.inputs.models import DefinitionInputModel, ImplementationInputModel
 
 from facade import enums
@@ -61,23 +61,39 @@ def test_declared_audience_is_persisted_verbatim():
 
 
 @pytest.mark.django_db
-def test_effect_defaults_to_none():
+def test_an_implementation_is_plain_with_unknown_effects_by_default():
     agent = _agent("effect-default")
     impl = _create_implementation(
         ImplementationInputModel(definition=_definition(), interface="thresholder"),
         agent,
     )
-    assert impl.effect == enums.EffectClassChoices.NONE
+    assert (impl.effects, impl.execution, impl.code_hash) == (
+        enums.EffectsChoices.UNKNOWN,
+        enums.ExecutionChoices.PLAIN,
+        None,
+    )
 
 
 @pytest.mark.django_db
-def test_physical_effect_is_persisted():
-    agent = _agent("effect-physical")
+def test_effects_execution_and_code_hash_are_persisted():
+    agent = _agent("effect-irreversible")
     impl = _create_implementation(
-        ImplementationInputModel(definition=_definition(), interface="thresholder", effect=EffectClass.PHYSICAL),
+        ImplementationInputModel(definition=_definition(), interface="thresholder", effects=Effects.IRREVERSIBLE, execution=Execution.WORKFLOW, code_hash="abc"),
         agent,
     )
-    assert impl.effect == enums.EffectClassChoices.PHYSICAL
     # Re-read from the DB to confirm it actually persisted, not just set in memory.
     impl.refresh_from_db()
-    assert impl.effect == "PHYSICAL"
+    assert (impl.effects, impl.execution, impl.code_hash) == ("IRREVERSIBLE", "WORKFLOW", "abc")
+
+
+@pytest.mark.django_db
+def test_re_registering_updates_effects_execution_and_code_hash():
+    """Not create-only: a changed claim or new code takes effect on the next registration."""
+    agent = _agent("effect-update")
+    _create_implementation(ImplementationInputModel(definition=_definition(), interface="thresholder"), agent)
+    impl = _create_implementation(
+        ImplementationInputModel(definition=_definition(), interface="thresholder", effects=Effects.NONE, execution=Execution.WORKFLOW, code_hash="new"),
+        agent,
+    )
+    impl.refresh_from_db()
+    assert (impl.effects, impl.execution, impl.code_hash) == ("NONE", "WORKFLOW", "new")

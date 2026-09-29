@@ -4,7 +4,7 @@ Split into domain submodules. This ``__init__`` re-exports every public enum so
 the established ``from facade import enums`` / ``enums.X`` access keeps working.
 """
 
-from .action import ActionKindChoices, ActionScope, DemandKind, EffectClassChoices, HookKind
+from .action import ActionKindChoices, ActionScope, DemandKind, EffectsChoices, ExecutionChoices, HookKind
 from .agent import (
     AgentEventChoices,
     AgentEventKind,
@@ -30,7 +30,8 @@ __all__ = [
     "ActionKindChoices",
     "ActionScope",
     "DemandKind",
-    "EffectClassChoices",
+    "EffectsChoices",
+    "ExecutionChoices",
     "HookKind",
     # agent
     "AgentEventChoices",

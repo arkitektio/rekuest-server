@@ -64,7 +64,7 @@ class TestExecutorReclaim:
 
     async def test_different_session_fails_orphaned_work(self, settings):
         _grace(settings, 30)
-        ass = await build_task("recl-diff", effect="NONE")
+        ass = await build_task("recl-diff", effects="UNKNOWN")
         backend = ModelPersistBackend()
         agent_id = str(ass.agent_id)
 
@@ -81,7 +81,7 @@ class TestExecutorReclaim:
 class TestExecutorGraceExpiry:
     async def test_none_effect_expiry_is_recoverable_disconnected(self, settings):
         _grace(settings, 0.05)
-        ass = await build_task("recl-exp-none", effect="NONE")
+        ass = await build_task("recl-exp-none", effects="UNKNOWN")
         backend = ModelPersistBackend()
         agent_id = str(ass.agent_id)
 
@@ -95,7 +95,7 @@ class TestExecutorGraceExpiry:
 
     async def test_physical_effect_expiry_is_terminal_critical(self, settings):
         _grace(settings, 0.05)
-        ass = await build_task("recl-exp-phys", effect="PHYSICAL")
+        ass = await build_task("recl-exp-phys", effects="IRREVERSIBLE")
         backend = ModelPersistBackend()
         agent_id = str(ass.agent_id)
 
@@ -122,7 +122,7 @@ class TestExecutorGraceExpiry:
 class TestProgressLease:
     async def test_silent_physical_op_fails_terminal(self, settings):
         settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "PROGRESS_LEASE": 0.05}
-        ass = await build_task("lease-phys", effect="PHYSICAL")
+        ass = await build_task("lease-phys", effects="IRREVERSIBLE")
         backend = ModelPersistBackend()
         key = str(ass.pk)
 
@@ -137,7 +137,7 @@ class TestProgressLease:
 
     async def test_fresh_progress_rearms_lease(self, settings):
         settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "PROGRESS_LEASE": 30}
-        ass = await build_task("lease-rearm", effect="PHYSICAL")
+        ass = await build_task("lease-rearm", effects="IRREVERSIBLE")
         backend = ModelPersistBackend()
 
         await backend.on_agent_progress(ass.agent_id, messages.Progress(task=str(ass.pk), progress=10))
@@ -146,7 +146,7 @@ class TestProgressLease:
 
     async def test_paused_op_is_not_reaped(self, settings):
         settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "PROGRESS_LEASE": 0.05}
-        ass = await build_task("lease-paused", effect="PHYSICAL")
+        ass = await build_task("lease-paused", effects="IRREVERSIBLE")
         backend = ModelPersistBackend()
         key = str(ass.pk)
 
@@ -158,7 +158,7 @@ class TestProgressLease:
 
     async def test_done_clears_lease_no_failure(self, settings):
         settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "PROGRESS_LEASE": 30}
-        ass = await build_task("lease-done", effect="PHYSICAL")
+        ass = await build_task("lease-done", effects="IRREVERSIBLE")
         backend = ModelPersistBackend()
         key = str(ass.pk)
 
@@ -173,7 +173,7 @@ class TestProgressLease:
 
     async def test_none_effect_has_no_lease(self, settings):
         settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "PROGRESS_LEASE": 0.05}
-        ass = await build_task("lease-none", effect="NONE")
+        ass = await build_task("lease-none", effects="UNKNOWN")
         backend = ModelPersistBackend()
         key = str(ass.pk)
 
@@ -198,7 +198,7 @@ class TestIdempotentRedispatch:
 
     async def test_idempotent_expiry_requeues(self, settings, broadcasts):
         _grace(settings, 0.05)
-        ass = await build_task("recl-idem", effect="NONE", idempotent=True)
+        ass = await build_task("recl-idem", effects="UNKNOWN", idempotent=True)
         backend = ModelPersistBackend()
         agent_id = str(ass.agent_id)
 
@@ -222,7 +222,7 @@ class TestIdempotentRedispatch:
 
     async def test_idempotent_physical_still_terminal(self, settings, broadcasts):
         _grace(settings, 0.05)
-        ass = await build_task("recl-idem-phys", effect="PHYSICAL", idempotent=True)
+        ass = await build_task("recl-idem-phys", effects="IRREVERSIBLE", idempotent=True)
         backend = ModelPersistBackend()
         agent_id = str(ass.agent_id)
 
@@ -237,7 +237,7 @@ class TestIdempotentRedispatch:
 
     async def test_sweep_is_reentrant_single_requeue(self, settings, broadcasts):
         _grace(settings, 30)
-        ass = await build_task("recl-idem-sweep", effect="NONE", idempotent=True)
+        ass = await build_task("recl-idem-sweep", effects="UNKNOWN", idempotent=True)
         backend = ModelPersistBackend()
         agent_id = str(ass.agent_id)
 
@@ -253,7 +253,7 @@ class TestIdempotentRedispatch:
 
     async def test_callerless_idempotent_falls_back_disconnected(self, settings, broadcasts):
         _grace(settings, 30)
-        ass = await build_task("recl-idem-nocaller", effect="NONE", idempotent=True)
+        ass = await build_task("recl-idem-nocaller", effects="UNKNOWN", idempotent=True)
         await Task.objects.filter(pk=ass.pk).aupdate(caller=None)
         backend = ModelPersistBackend()
         agent_id = str(ass.agent_id)

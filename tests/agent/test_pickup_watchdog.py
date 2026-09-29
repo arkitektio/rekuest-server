@@ -91,7 +91,7 @@ class TestPickupWatchdog:
     async def test_physical_work_is_never_redelivered(self, settings, agent_ws):
         _watchdog(settings)
         session = await open_agent(agent_ws, "wd-phys")
-        task = await _queued("wd-phys-t", session.agent_pk, effect="PHYSICAL")
+        task = await _queued("wd-phys-t", session.agent_pk, effects="IRREVERSIBLE")
 
         assert await _sweep() == 1
 
@@ -103,7 +103,7 @@ class TestPickupWatchdog:
         """``dispatched_at`` NULL proves the agent cannot have it — safe to send, even physical."""
         _watchdog(settings)
         session = await open_agent(agent_ws, "wd-phys-null")
-        task = await _queued("wd-phys-null-t", session.agent_pk, effect="PHYSICAL", dispatched=False)
+        task = await _queued("wd-phys-null-t", session.agent_pk, effects="IRREVERSIBLE", dispatched=False)
 
         assert await _sweep() == 1
         assert (await session.receive(messages.Assign)).task == str(task.pk)
@@ -308,7 +308,7 @@ class TestReaperPass:
 
         settings.REKUEST_GRACE = {"DEFAULT": 0.05, "PHYSICAL": 0.05, "PICKUP_DEADLINE": DEADLINE, "DISCONNECTED_EXPIRY": 3600}
         # A backend died: one agent is stuck ``connected=True`` with a long-expired lease…
-        stuck = await build_task("reap-stuck", effect="PHYSICAL")
+        stuck = await build_task("reap-stuck", effects="IRREVERSIBLE")
         await Agent.objects.filter(pk=stuck.agent_id).aupdate(connected=True, last_seen=timezone.now() - timedelta(hours=1))
         # …and another disconnected cleanly, but the process holding its grace window is gone.
         graced = await build_task("reap-graced")

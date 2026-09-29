@@ -194,10 +194,21 @@ class Implementation(models.Model):
         blank=True,
         help_text="Optional declared audience (list of downstream service names) for the provenance token's `aud`. If null, the audience is derived at dispatch from the structures the assignment acts on.",
     )
-    effect = TextChoicesField(
-        choices_enum=enums.EffectClassChoices,
-        default=enums.EffectClassChoices.NONE.value,
-        help_text="The effect class of this implementation. NONE work is freely retryable/reclaimable; PHYSICAL work touches the real world and an ambiguous failure is terminal. Declared by the implementation, read at dispatch from task.implementation.effect — never caller-supplied.",
+    effects = TextChoicesField(
+        choices_enum=enums.EffectsChoices,
+        default=enums.EffectsChoices.UNKNOWN.value,
+        help_text="What running this implementation again would do to the world. Informational: shown to whoever decides about a lost task.",
+    )
+    execution = TextChoicesField(
+        choices_enum=enums.ExecutionChoices,
+        default=enums.ExecutionChoices.PLAIN.value,
+        help_text="How this implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies.",
+    )
+    code_hash = models.CharField(
+        max_length=128,
+        null=True,
+        blank=True,
+        help_text="A hash of the implementation's code. A workflow is only resumed by an implementation with the same hash.",
     )
 
     class Meta:

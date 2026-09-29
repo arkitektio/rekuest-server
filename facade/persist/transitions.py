@@ -184,6 +184,6 @@ class TaskTransitionMixin:
 
     @staticmethod
     def _effect_of(task: models.Task) -> str:
-        """The task's effect class — decides the retry axis (physical work is never re-run)."""
+        """What running the task's implementation again would do (its ``effects``)."""
         implementation = task.implementation
-        return implementation.effect if implementation is not None else enums.EffectClassChoices.NONE.value
+        return implementation.effects if implementation is not None else enums.EffectsChoices.UNKNOWN.value

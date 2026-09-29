@@ -9,16 +9,29 @@ class ActionKindChoices(TextChoices):
     GENERATOR = "GENERATOR", "Generator"
 
 
-class EffectClassChoices(TextChoices):
-    """The effect class of an implementation (persisted on ``Implementation.effect``).
+class EffectsChoices(TextChoices):
+    """What running an implementation again would do (persisted on ``Implementation.effects``).
 
-    NONE work is freely retryable/reclaimable; PHYSICAL work touches the real world, so an
-    ambiguous failure is terminal and must not be retried. Read at runtime from
-    ``task.implementation.effect`` — never supplied by the caller.
+    Purely informational: it is shown to whoever decides about a lost task, and never
+    decides what the server does, with one exception: the progress lease watches
+    IRREVERSIBLE work.
     """
 
-    NONE = "NONE", "None (no real-world effect; freely retryable)"
-    PHYSICAL = "PHYSICAL", "Physical (touches the real world; ambiguous failure is terminal)"
+    NONE = "NONE", "None (changes nothing)"
+    REPEATABLE = "REPEATABLE", "Repeatable (a second run leaves the same state)"
+    UNKNOWN = "UNKNOWN", "Unknown (no claim)"
+    IRREVERSIBLE = "IRREVERSIBLE", "Irreversible (a second run happens again, in the real world)"
+
+
+class ExecutionChoices(TextChoices):
+    """How an implementation runs (persisted on ``Implementation.execution``).
+
+    A WORKFLOW may call other actions and is resumed from its journal when its agent
+    dies; a PLAIN implementation's task ends LOST.
+    """
+
+    PLAIN = "PLAIN", "Plain"
+    WORKFLOW = "WORKFLOW", "Workflow (resumed from its journal)"
 
 
 @strawberry.enum

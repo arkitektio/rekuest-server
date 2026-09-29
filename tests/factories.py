@@ -119,7 +119,7 @@ async def seed_agent(instance_id, token=TEST_TOKEN, blocked=False):
 # --------------------------------------------------------------------------- #
 # Object-graph builders (run synchronously, wrapped via sync_to_async)
 # --------------------------------------------------------------------------- #
-def _build_task(prefix, *, effect="NONE", idempotent=False, pure=False, parent=None, agent_pk=None):
+def _build_task(prefix, *, effects="UNKNOWN", idempotent=False, pure=False, parent=None, agent_pk=None):
     """Create a standalone Action -> Implementation -> Task graph.
 
     ``effect`` sets the implementation's effect class; ``parent`` wires the tree shape.
@@ -167,7 +167,7 @@ def _build_task(prefix, *, effect="NONE", idempotent=False, pure=False, parent=N
         interface=f"{prefix}-iface",
         action=action,
         agent=agent,
-        effect=effect,
+        effects=effects,
     )
 
     return Task.objects.create(

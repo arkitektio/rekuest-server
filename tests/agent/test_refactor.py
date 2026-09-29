@@ -63,8 +63,8 @@ def test_deliver_to_agent_routes_by_kind(monkeypatch):
 @pytest.mark.asyncio
 class TestReconcileOps:
     async def test_reconcile_orphaned_executor_work_is_effect_aware(self):
-        none_ass = await build_task("rec-none", effect="NONE")
-        phys_ass = await build_task("rec-phys", effect="PHYSICAL")
+        none_ass = await build_task("rec-none", effects="UNKNOWN")
+        phys_ass = await build_task("rec-phys", effects="IRREVERSIBLE")
         backend = ModelPersistBackend()
 
         # Mark both agents disconnected (the reconcile op no-ops a connected agent).
@@ -88,7 +88,7 @@ class TestReconcileSweep:
 
         from facade.models import Agent, Task
 
-        ass = async_to_sync(build_task)("sweep-stale", effect="NONE")
+        ass = async_to_sync(build_task)("sweep-stale", effects="UNKNOWN")
         # Disconnected websocket executor, gone well past the grace window.
         Agent.objects.filter(pk=ass.agent_id).update(kind=enums.AgentKind.WEBSOCKET.value, connected=False, last_seen=timezone.now() - timedelta(minutes=5))
 
@@ -103,9 +103,9 @@ class TestReconcileSweep:
 
         from facade.models import Agent, Task
 
-        connected = async_to_sync(build_task)("sweep-conn", effect="NONE")
+        connected = async_to_sync(build_task)("sweep-conn", effects="UNKNOWN")
         Agent.objects.filter(pk=connected.agent_id).update(kind=enums.AgentKind.WEBSOCKET.value, connected=True, last_seen=timezone.now())
-        webhook = async_to_sync(build_task)("sweep-hook", effect="NONE")
+        webhook = async_to_sync(build_task)("sweep-hook", effects="UNKNOWN")
         Agent.objects.filter(pk=webhook.agent_id).update(kind=enums.AgentKind.WEBHOOK.value, connected=False, last_seen=timezone.now() - timedelta(minutes=5))
 
         async_to_sync(ModelPersistBackend().reconcile_disconnected_agents)()
@@ -124,7 +124,7 @@ class TestReconcileStaleAgents:
 
         from facade.models import Agent, Task
 
-        ass = async_to_sync(build_task)("reap-stale", effect="NONE")
+        ass = async_to_sync(build_task)("reap-stale", effects="UNKNOWN")
         # connected stuck True but the heartbeat expired — the crashed-worker case.
         Agent.objects.filter(pk=ass.agent_id).update(kind=enums.AgentKind.WEBSOCKET.value, connected=True, last_seen=timezone.now() - timedelta(minutes=5))
 
@@ -141,7 +141,7 @@ class TestReconcileStaleAgents:
 
         from facade.models import Agent, Task
 
-        ass = async_to_sync(build_task)("reap-fresh", effect="NONE")
+        ass = async_to_sync(build_task)("reap-fresh", effects="UNKNOWN")
         Agent.objects.filter(pk=ass.agent_id).update(kind=enums.AgentKind.WEBSOCKET.value, connected=True, last_seen=timezone.now())
 
         healed = async_to_sync(persist_backend.reconcile_stale_agents)()
@@ -159,7 +159,7 @@ class TestReconcileStaleAgents:
         from facade import channels
         from facade.models import Agent
 
-        ass = async_to_sync(build_task)("reap-signal", effect="NONE")
+        ass = async_to_sync(build_task)("reap-signal", effects="UNKNOWN")
         Agent.objects.filter(pk=ass.agent_id).update(kind=enums.AgentKind.WEBSOCKET.value, connected=True, last_seen=timezone.now() - timedelta(minutes=5))
 
         events = []

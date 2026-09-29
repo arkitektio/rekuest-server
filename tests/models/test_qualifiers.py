@@ -3,7 +3,7 @@
 Qualifiers are declared on the definition, persisted on the Action, and deliberately NOT
 identity-bearing: they're excluded from ``unique_hash`` so flipping them never forces fleet
 re-registration — instead ``_create_implementation`` syncs them unconditionally. Purity is a
-strong claim, so contradictions (pure×PHYSICAL, pure×stateful) are rejected at registration
+strong claim, so contradictions (pure×IRREVERSIBLE, pure×stateful) are rejected at registration
 and pure auto-implies idempotent.
 """
 
@@ -16,11 +16,11 @@ from facade.mutations.implementation import _create_implementation
 from tests.factories import create_agent_for_registry, create_registry_bundle
 
 
-def _input(pure=False, idempotent=False, is_dev=False, stateful=False, allow_probe=False, effect="NONE", name="Quali"):
+def _input(pure=False, idempotent=False, is_dev=False, stateful=False, allow_probe=False, effects="UNKNOWN", name="Quali"):
     return ImplementationInputModel.model_validate(
         {
             "interface": "quali",
-            "effect": effect,
+            "effects": effects,
             "definition": {
                 "key": "quali",
                 "version": "1",
@@ -71,10 +71,10 @@ def test_qualifier_flip_syncs_without_hash_change():
 
 
 @pytest.mark.django_db
-def test_pure_with_physical_effect_is_rejected():
+def test_pure_with_irreversible_effects_is_rejected():
     agent = _agent("quali-phys")
-    with pytest.raises(ValueError, match="PHYSICAL effect class"):
-        _create_implementation(_input(pure=True, effect="PHYSICAL"), agent)
+    with pytest.raises(ValueError, match="IRREVERSIBLE"):
+        _create_implementation(_input(pure=True, effects="IRREVERSIBLE"), agent)
 
 
 @pytest.mark.django_db

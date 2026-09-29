@@ -1893,7 +1893,7 @@ input DefinitionInput {
   stateful: Boolean! = false
 
   """
-  Whether the action is pure: same args always produce the same result and no side effects — its results are replayable/cacheable. Implies idempotent. Incompatible with stateful and with a PHYSICAL effect class.
+  Whether the action is pure: same args always produce the same result and no side effects — its results are replayable/cacheable. Implies idempotent. Incompatible with stateful and with IRREVERSIBLE effects.
   """
   pure: Boolean! = false
 
@@ -2171,14 +2171,6 @@ interface Effect {
   source: String
 }
 
-"""
-The effect class of an implementation — declared by the implementation, never the caller. NONE work is freely retryable/reclaimable; PHYSICAL work touches the real world (no UPSERT), so an ambiguous failure is terminal and must not be retried.
-"""
-enum EffectClass {
-  NONE
-  PHYSICAL
-}
-
 "\n    An effect is a way to modify a port based on a condition. For example,\n    you could have an effect that hides the port if another port meets a condition,\n    e.g. when the user selects a certain option in a dropdown, another port is hidden.\n\n    The condition is a pure blok UtilCall (`call`) evaluated client-side against the\n    catalog; it must return a boolean deciding whether the effect applies. `dependencies`\n    is the authoritative list of other ports the call may reference (plus `value` for the\n    port's own value).\n    "
 input EffectInput {
   """
@@ -2218,9 +2210,27 @@ enum EffectKind {
 }
 
 """
+What running an implementation again would do to the world. Purely informational: shown to whoever decides about a lost task.
+"""
+enum Effects {
+  NONE
+  REPEATABLE
+  UNKNOWN
+  IRREVERSIBLE
+}
+
+"""
 A stored vector, as `<model id>:<comma-separated floats>` -- e.g. `potion-base-8M:0.0123,-0.0456,...`. The model id is part of the value because vectors from different models are not comparable. Null when the row has no vector yet (it carries no text, or indexing has not caught up with it).
 """
 scalar Embedding
+
+"""
+How an implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies; a PLAIN one's task ends LOST.
+"""
+enum Execution {
+  PLAIN
+  WORKFLOW
+}
 
 input FinishMediaUploadInput {
   storeId: String!
@@ -2388,6 +2398,21 @@ type Implementation {
   """
   provenanceAudience: [String!]
 
+  """
+  What running this implementation again would do to the world. Informational: shown to whoever decides about a lost task.
+  """
+  effects: Effects!
+
+  """
+  How this implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies.
+  """
+  execution: Execution!
+
+  """
+  A hash of the implementation's code; a workflow is only resumed by an implementation with the same hash.
+  """
+  codeHash: String
+
   """Constructed name for display, combining interface and agent name."""
   name: String!
 
@@ -2508,9 +2533,19 @@ input ImplementationInput {
   provenanceAudience: [String!] = null
 
   """
-  The effect class of this implementation. NONE work is freely retryable/reclaimable; PHYSICAL work touches the real world and an ambiguous failure is terminal (never retried). Declared by the implementation here — never by the caller.
+  What running this implementation again would do to the world. Informational: shown to whoever decides about a lost task.
   """
-  effect: EffectClass! = NONE
+  effects: Effects! = UNKNOWN
+
+  """
+  How this implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies.
+  """
+  execution: Execution! = PLAIN
+
+  """
+  A hash of the implementation's code. A workflow is only resumed by an implementation with the same hash.
+  """
+  codeHash: String = null
 }
 
 type ImplementationMapping {

@@ -115,7 +115,7 @@ class TestReconcileUsesTheOneLivenessPredicate:
         # forever. Called directly here — i.e. WITHOUT the sweep revoking first, which is the
         # sequencing that used to mask the bug.
         _grace(settings, 0)
-        task = await build_task("reconcile-stale", effect="NONE")
+        task = await build_task("reconcile-stale", effects="UNKNOWN")
         backend = ModelPersistBackend()
         agent_id = str(task.agent_id)
 
@@ -133,7 +133,7 @@ class TestReconcileUsesTheOneLivenessPredicate:
     async def test_live_agent_is_still_a_no_op(self):
         # The other direction: a genuinely live agent's work must never be failed — that is the
         # reclaim guarantee the grace timer depends on.
-        task = await build_task("reconcile-live", effect="NONE")
+        task = await build_task("reconcile-live", effects="UNKNOWN")
         backend = ModelPersistBackend()
         agent_id = str(task.agent_id)
 
@@ -190,7 +190,7 @@ class TestSweepRevocationIsFinal:
         # ``connected = True; last_seen = now()`` write that resurrected the agent as live with
         # its work already terminally failed. The epoch bump makes the revocation stick.
         _grace(settings, 0)
-        task = await build_task("revoke-final", effect="NONE")
+        task = await build_task("revoke-final", effects="UNKNOWN")
         backend = ModelPersistBackend()
         agent_id = str(task.agent_id)
 
@@ -298,7 +298,7 @@ class TestSweepIsIdempotentAcrossWorkers:
         # is genuinely concurrent. It used to select → save → reconcile with no claim, so every
         # worker that saw the stale row went on to emit its own terminal TaskEvent.
         _grace(settings, 0)
-        task = await build_task("sweep-race", effect="NONE")
+        task = await build_task("sweep-race", effects="UNKNOWN")
         backend = ModelPersistBackend()
         agent_id = str(task.agent_id)
 
@@ -315,7 +315,7 @@ class TestSweepIsIdempotentAcrossWorkers:
         # The re-entrancy guarantee the reaper depends on: it re-runs every stale window
         # forever, and a still-disconnected agent must not accrue an event per sweep.
         _grace(settings, 0)
-        task = await build_task("sweep-reentrant", effect="NONE")
+        task = await build_task("sweep-reentrant", effects="UNKNOWN")
         backend = ModelPersistBackend()
         agent_id = str(task.agent_id)
 

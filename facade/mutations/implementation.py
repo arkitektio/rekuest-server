@@ -274,16 +274,16 @@ def _upsert_action(
     return action, definition_changed
 
 
-def _validate_qualifiers(definition: DefinitionInputModel, effect: t.Any) -> bool:
-    """Check the definition's semantic claims against its effect class; return ``idempotent``.
+def _validate_qualifiers(definition: DefinitionInputModel, effects: t.Any) -> bool:
+    """Check the definition's semantic claims against its effects; return ``idempotent``.
 
     The one place where both are visible together, which is why the contradictions are caught here
     rather than on either model alone. Returns the *effective* idempotence: a pure function is
     definitionally idempotent, so it is upgraded rather than rejected — consumers then only ever
     read ``idempotent`` for the retry axis and ``pure`` for replayability.
     """
-    if definition.pure and getattr(effect, "value", effect) == "PHYSICAL":
-        raise ValueError(f"Action {definition.key} is declared pure but its implementation has a PHYSICAL effect class — a pure action cannot touch the real world.")
+    if definition.pure and getattr(effects, "value", effects) == "IRREVERSIBLE":
+        raise ValueError(f"Action {definition.key} is declared pure but its implementation's effects are IRREVERSIBLE — a pure action cannot touch the real world.")
     if definition.pure and definition.stateful:
         raise ValueError(f"Action {definition.key} is declared both pure and stateful — a pure action cannot depend on or change state.")
     return definition.idempotent or definition.pure
@@ -329,7 +329,7 @@ def _create_implementation(
     definition = input.definition
     scope = infer_action_scope(definition)
 
-    desired_idempotent = _validate_qualifiers(definition, input.effect)
+    desired_idempotent = _validate_qualifiers(definition, input.effects)
     stored_diagnostics = _collect_diagnostics(definition, agent, input.optimistics)
 
     action, definition_changed = _upsert_action(
@@ -402,7 +402,9 @@ def _create_implementation(
         implementation.release = agent.release
         implementation.needs_token = input.needs_token
         implementation.provenance_audience = resolved_audience
-        implementation.effect = getattr(input.effect, "value", input.effect)
+        implementation.effects = getattr(input.effects, "value", input.effects)
+        implementation.execution = getattr(input.execution, "value", input.execution)
+        implementation.code_hash = input.code_hash
         implementation.diagnostics = stored_diagnostics
         implementation.save()
     else:
@@ -414,7 +416,9 @@ def _create_implementation(
             params=input.params or {},
             needs_token=input.needs_token,
             provenance_audience=resolved_audience,
-            effect=getattr(input.effect, "value", input.effect),
+            effects=getattr(input.effects, "value", input.effects),
+            execution=getattr(input.execution, "value", input.execution),
+            code_hash=input.code_hash,
             diagnostics=stored_diagnostics,
         )
         if implementation_map is not None:

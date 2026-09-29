@@ -13,6 +13,15 @@ import rekuest_core.enums
 import uuid
 from django.conf import settings
 from django.db import migrations, models
+from django.db.models import TextChoices
+
+
+class _EffectClassChoices(TextChoices):
+    """The enum ``Implementation.effect`` was created with. It left ``facade.enums`` when 0016
+    replaced the field with ``effects``, so history keeps its own copy of it."""
+
+    NONE = "NONE", "None (no real-world effect; freely retryable)"
+    PHYSICAL = "PHYSICAL", "Physical (touches the real world; ambiguous failure is terminal)"
 
 
 class Migration(migrations.Migration):
@@ -208,7 +217,7 @@ class Migration(migrations.Migration):
                 ('tracks', models.JSONField(default=list, help_text='A log of all the tasks that have been provisioned with this implementation, as well as their status and results')),
                 ('needs_token', models.BooleanField(default=True, help_text='Whether Rekuest mints a signed provenance token when this implementation is assigned. Default true (provenance-by-default); false skips minting for trivial/internal tasks.')),
                 ('provenance_audience', models.JSONField(blank=True, help_text="Optional declared audience (list of downstream service names) for the provenance token's `aud`. If null, the audience is derived at dispatch from the structures the assignment acts on.", null=True)),
-                ('effect', django_choices_field.fields.TextChoicesField(choices=[('NONE', 'None (no real-world effect; freely retryable)'), ('PHYSICAL', 'Physical (touches the real world; ambiguous failure is terminal)')], choices_enum=facade.enums.action.EffectClassChoices, default='NONE', help_text='The effect class of this implementation. NONE work is freely retryable/reclaimable; PHYSICAL work touches the real world and an ambiguous failure is terminal. Declared by the implementation, read at dispatch from task.implementation.effect — never caller-supplied.', max_length=8)),
+                ('effect', django_choices_field.fields.TextChoicesField(choices=[('NONE', 'None (no real-world effect; freely retryable)'), ('PHYSICAL', 'Physical (touches the real world; ambiguous failure is terminal)')], choices_enum=_EffectClassChoices, default='NONE', help_text='The effect class of this implementation. NONE work is freely retryable/reclaimable; PHYSICAL work touches the real world and an ambiguous failure is terminal. Declared by the implementation, read at dispatch from task.implementation.effect — never caller-supplied.', max_length=8)),
                 ('action', models.ForeignKey(help_text='The action this implementation is implementatig', on_delete=django.db.models.deletion.CASCADE, related_name='implementations', to='facade.action')),
                 ('agent', models.ForeignKey(help_text='The associated agent for this Implementation', on_delete=django.db.models.deletion.CASCADE, related_name='implementations', to='facade.agent')),
                 ('higher_order_for', models.ForeignKey(blank=True, help_text='If this implementation is a higher order implementation, this field links to the lower order implementation it is wrapping (the implementation will actually get the params, the implementation and the args of this)', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='lower_order_implementations', to='facade.implementation')),

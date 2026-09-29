@@ -242,5 +242,5 @@ class AgentReportMixin:
         await models.Task.objects.filter(
             id=task_id,
             is_done=False,
-            implementation__effect=enums.EffectClassChoices.PHYSICAL.value,
+            implementation__effects=enums.EffectsChoices.IRREVERSIBLE.value,
         ).aupdate(last_progress_at=timezone.now())

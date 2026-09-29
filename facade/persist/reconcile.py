@@ -199,7 +199,7 @@ class ReconcileMixin:
             if task.latest_event_kind == enums.TaskEventKind.QUEUED and task.picked_up_at is None:
                 continue  # undelivered, not orphaned (callers that pre-filter never get here)
 
-            if self._effect_of(task) == enums.EffectClassChoices.PHYSICAL.value:
+            if self._effect_of(task) == enums.EffectsChoices.IRREVERSIBLE.value:
                 await self._finalize_terminal(
                     task.pk,
                     enums.TaskEventKind.CRITICAL,
@@ -313,7 +313,7 @@ class ReconcileMixin:
             async for pk in models.Task.objects.filter(
                 is_done=False,
                 last_progress_at__lt=cutoff,
-                implementation__effect=enums.EffectClassChoices.PHYSICAL.value,
+                implementation__effects=enums.EffectsChoices.IRREVERSIBLE.value,
             ).values_list("pk", flat=True)[:limit]
         ]
         failed = 0
@@ -362,7 +362,7 @@ class ReconcileMixin:
 
             # ``dispatched_at`` set = the Assign verifiably left for the agent. It may have been
             # received and be running with its reports lost — physical work is never sent twice.
-            if task.dispatched_at is not None and self._effect_of(task) == enums.EffectClassChoices.PHYSICAL.value:
+            if task.dispatched_at is not None and self._effect_of(task) == enums.EffectsChoices.IRREVERSIBLE.value:
                 return finalize(enums.TaskEventKind.CRITICAL, "Never picked up: physical-effect work is not redelivered.")
 
             assign_message = self._build_redispatch_assign_sync(task.pk)

@@ -7,6 +7,7 @@ from typing import Optional
 import strawberry
 import strawberry_django
 from kante.types import Info
+from rekuest_core import enums as renums
 from rekuest_core import scalars as rscalars
 from rekuest_core.objects import models as rmodels
 from rekuest_core.objects import types as rtypes
@@ -30,6 +31,9 @@ class Implementation:
     higher_order_config: rscalars.AnyDefault = strawberry_django.field(description="Projection config (bound params, arg/dependency/return maps) when this is a higher-order implementation.")
     needs_token: bool = strawberry_django.field(description="Whether a signed provenance token is minted when this implementation is assigned.")
     provenance_audience: Optional[list[str]] = strawberry_django.field(description="Declared audience for the provenance token's `aud`, or null to derive it at dispatch.")
+    effects: renums.Effects = strawberry_django.field(description="What running this implementation again would do to the world. Informational: shown to whoever decides about a lost task.")
+    execution: renums.Execution = strawberry_django.field(description="How this implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies.")
+    code_hash: Optional[str] = strawberry_django.field(description="A hash of the implementation's code; a workflow is only resumed by an implementation with the same hash.")
 
     @strawberry_django.field(description="Constructed name for display, combining interface and agent name.")
     def name(self) -> str:
