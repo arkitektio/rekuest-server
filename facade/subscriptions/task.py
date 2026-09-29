@@ -75,6 +75,7 @@ class TaskEventChange:
     message: str | None
     progress: int | None
     returns: rscalars.AnyDefault | None
+    value: rscalars.AnyDefault | None = strawberry.field(default=None, description="EFFECT: the value taken. LOST: what is known (started, last_progress, effects, reason).")
     created_at: datetime.datetime
 
     @classmethod
@@ -86,6 +87,7 @@ class TaskEventChange:
             message=e.message,
             progress=e.progress,
             returns=e.returns,
+            value=e.value,
             created_at=e.created_at,
         )
 
@@ -98,6 +100,7 @@ class TaskEventChange:
             message=p.message,
             progress=p.progress,
             returns=p.returns,
+            value=p.value,
             created_at=p.created_at,
         )
 

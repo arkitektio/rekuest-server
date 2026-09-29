@@ -27,6 +27,7 @@ _TERMINAL_KINDS = (
     enums.TaskEventKind.INTERRUPTED,
     enums.TaskEventKind.FAILED,
     enums.TaskEventKind.CRITICAL,
+    enums.TaskEventKind.LOST,
 )
 
 
@@ -154,6 +155,7 @@ class TaskTransitionMixin:
         extra: Dict[str, Any] | None = None,
         skip_locked: bool = False,
         task: models.Task | None = None,
+        value: Dict[str, Any] | None = None,
     ) -> bool:
         """Finalize a task the SERVER decided is over, and project it onto any wrapper.
 
@@ -175,12 +177,56 @@ class TaskTransitionMixin:
             mark_done=True,
             only_if=only_if,
             extra=extra,
-            event={"message": message},
+            event={"message": message, **({"value": value} if value is not None else {})},
             skip_locked=skip_locked,
         )
         if won:
             await self._unfold_to_higher_order(str(task_id), kind, message=message, task=task)
         return won
+
+    async def _finalize_lost(
+        self,
+        task: models.Task,
+        reason: str,
+        *,
+        started: bool,
+        only_if: Callable[[models.Task], bool] | None = None,
+        skip_locked: bool = False,
+    ) -> bool:
+        """End a task LOST: its agent is gone, and so is any way of knowing how it ended.
+
+        Not a failure: the task may have done its work. The event keeps what *is* known, for
+        whoever decides what to do next (a workflow's ``AgentLost``, a script, a person in the
+        UI): whether it was ever picked up (if not, nothing ran and sending it again is safe),
+        the last progress it reported, and its implementation's ``effects``. LOST is final:
+        what the agent reports later is kept as a LATE_REPORT, never in its place.
+        """
+        details = await database_sync_to_async(self._lost_details_sync)(task.pk, started, reason)
+        return await self._finalize_terminal(
+            task.pk,
+            enums.TaskEventKind.LOST,
+            reason,
+            only_if=only_if,
+            skip_locked=skip_locked,
+            task=task,
+            value=details,
+        )
+
+    @staticmethod
+    def _lost_details_sync(task_id: int, started: bool, reason: str) -> Dict[str, Any]:
+        last_progress = (
+            models.TaskEvent.objects.filter(task_id=task_id, kind=enums.TaskEventKind.PROGRESS.value, progress__isnull=False)
+            .order_by("-id")
+            .values_list("progress", flat=True)
+            .first()
+        )
+        effects = models.Task.objects.filter(pk=task_id).values_list("implementation__effects", flat=True).first()
+        return {
+            "started": started,
+            "last_progress": last_progress,
+            "effects": effects or enums.EffectsChoices.UNKNOWN.value,
+            "reason": reason,
+        }
 
     @staticmethod
     def _effect_of(task: models.Task) -> str:

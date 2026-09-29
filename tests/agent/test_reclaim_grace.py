@@ -62,7 +62,7 @@ class TestExecutorReclaim:
         refreshed = await Task.objects.aget(pk=ass.pk)
         assert refreshed.is_done is False
 
-    async def test_different_session_fails_orphaned_work(self, settings):
+    async def test_a_fresh_process_leaves_the_old_work_lost(self, settings):
         _grace(settings, 30)
         ass = await build_task("recl-diff", effects="UNKNOWN")
         backend = ModelPersistBackend()
@@ -75,13 +75,30 @@ class TestExecutorReclaim:
 
         assert claim.claimed
         assert claim.tasks == []
-        assert enums.TaskEventKind.DISCONNECTED in await _event_kinds(ass.pk)
+        refreshed = await Task.objects.aget(pk=ass.pk)
+        assert (refreshed.latest_event_kind, refreshed.is_done) == (enums.TaskEventKind.LOST, True)
 
 
 class TestExecutorGraceExpiry:
-    async def test_none_effect_expiry_is_recoverable_disconnected(self, settings):
+    async def test_expiry_ends_the_work_lost_with_what_is_known(self, settings):
         _grace(settings, 0.05)
-        ass = await build_task("recl-exp-none", effects="UNKNOWN")
+        ass = await build_task("recl-exp", effects="UNKNOWN")
+        backend = ModelPersistBackend()
+        agent_id = str(ass.agent_id)
+
+        await backend.on_agent_connected(agent_id, "c1", session_id="S1")
+        await backend.on_agent_progress(ass.agent_id, messages.Progress(task=str(ass.pk), progress=40))
+        await backend.on_agent_disconnected(agent_id, "c1")
+        assert await _expire_grace() == 1
+
+        refreshed = await Task.objects.aget(pk=ass.pk)
+        assert (refreshed.latest_event_kind, refreshed.is_done) == (enums.TaskEventKind.LOST, True)
+        lost = await TaskEvent.objects.aget(task_id=ass.pk, kind=enums.TaskEventKind.LOST)
+        assert lost.value == {"started": True, "last_progress": 40, "effects": "UNKNOWN", "reason": lost.message}
+
+    async def test_irreversible_work_ends_lost_too_its_effects_are_only_information(self, settings):
+        _grace(settings, 0.05)
+        ass = await build_task("recl-exp-irrev", effects="IRREVERSIBLE")
         backend = ModelPersistBackend()
         agent_id = str(ass.agent_id)
 
@@ -89,23 +106,8 @@ class TestExecutorGraceExpiry:
         await backend.on_agent_disconnected(agent_id, "c1")
         assert await _expire_grace() == 1
 
-        assert enums.TaskEventKind.DISCONNECTED in await _event_kinds(ass.pk)
-        refreshed = await Task.objects.aget(pk=ass.pk)
-        assert refreshed.is_done is False  # none-effect is recoverable
-
-    async def test_physical_effect_expiry_is_terminal_critical(self, settings):
-        _grace(settings, 0.05)
-        ass = await build_task("recl-exp-phys", effects="IRREVERSIBLE")
-        backend = ModelPersistBackend()
-        agent_id = str(ass.agent_id)
-
-        await backend.on_agent_connected(agent_id, "c1", session_id="S1")
-        await backend.on_agent_disconnected(agent_id, "c1")
-        assert await _expire_grace() == 1
-
-        assert enums.TaskEventKind.CRITICAL in await _event_kinds(ass.pk)
-        refreshed = await Task.objects.aget(pk=ass.pk)
-        assert refreshed.is_done is True  # physical ambiguous failure is terminal
+        lost = await TaskEvent.objects.aget(task_id=ass.pk, kind=enums.TaskEventKind.LOST)
+        assert (lost.value["started"], lost.value["effects"]) == (True, "IRREVERSIBLE")
 
     async def test_reconnect_before_expiry_prevents_failure(self, settings):
         _grace(settings, 30)
@@ -183,10 +185,9 @@ class TestProgressLease:
         assert await backend.reconcile_silent_physical_ops() == 0
 
 
-class TestIdempotentRedispatch:
-    """The third level of the retry axis: PHYSICAL (terminal) < default (fate unknown) <
-    idempotent (freely re-dispatchable — QUEUED + Assign re-broadcast into the agent queue,
-    which retains messages for offline agents)."""
+class TestNothingIsReRunOnItsOwn:
+    """Whoever called decides what to do with a lost task. The server re-runs nothing,
+    even for an action that declares itself idempotent."""
 
     @pytest.fixture
     def broadcasts(self, monkeypatch):
@@ -196,7 +197,7 @@ class TestIdempotentRedispatch:
         monkeypatch.setattr(AgentConsumer, "broadcast", staticmethod(lambda agent_id, message: recorded.append((agent_id, message))))
         return recorded
 
-    async def test_idempotent_expiry_requeues(self, settings, broadcasts):
+    async def test_an_idempotent_action_is_lost_not_requeued(self, settings, broadcasts):
         _grace(settings, 0.05)
         ass = await build_task("recl-idem", effects="UNKNOWN", idempotent=True)
         backend = ModelPersistBackend()
@@ -207,53 +208,26 @@ class TestIdempotentRedispatch:
         assert await _expire_grace() == 1
 
         kinds = await _event_kinds(ass.pk)
-        assert enums.TaskEventKind.QUEUED in kinds
-        assert enums.TaskEventKind.DISCONNECTED not in kinds
-        refreshed = await Task.objects.aget(pk=ass.pk)
-        assert refreshed.is_done is False
-        assert refreshed.latest_event_kind == enums.TaskEventKind.QUEUED
-
-        assert len(broadcasts) == 1
-        target_agent, message = broadcasts[0]
-        assert isinstance(message, messages.Assign)
-        assert message.task == str(ass.pk)
-        assert message.args == (ass.args or {})
-        assert message.reference == str(ass.reference)
-
-    async def test_idempotent_physical_still_terminal(self, settings, broadcasts):
-        _grace(settings, 0.05)
-        ass = await build_task("recl-idem-phys", effects="IRREVERSIBLE", idempotent=True)
-        backend = ModelPersistBackend()
-        agent_id = str(ass.agent_id)
-
-        await backend.on_agent_connected(agent_id, "c1", session_id="S1")
-        await backend.on_agent_disconnected(agent_id, "c1")
-        assert await _expire_grace() == 1
-
-        refreshed = await Task.objects.aget(pk=ass.pk)
-        assert refreshed.is_done is True
-        assert refreshed.latest_event_kind == enums.TaskEventKind.CRITICAL
+        assert kinds.count(enums.TaskEventKind.LOST) == 1 and enums.TaskEventKind.QUEUED not in kinds
         assert broadcasts == []
 
-    async def test_sweep_is_reentrant_single_requeue(self, settings, broadcasts):
+    async def test_repeated_reconciles_end_it_lost_once(self, settings, broadcasts):
         _grace(settings, 30)
-        ass = await build_task("recl-idem-sweep", effects="UNKNOWN", idempotent=True)
+        ass = await build_task("recl-reentrant", effects="UNKNOWN")
         backend = ModelPersistBackend()
         agent_id = str(ass.agent_id)
 
         await backend.on_agent_connected(agent_id, "c1", session_id="S1")
         await backend.on_agent_disconnected(agent_id, "c1")
-        # The periodic sweep may reconcile repeatedly — only ONE requeue may result.
         await backend.reconcile_orphaned_executor_work(agent_id)
         await backend.reconcile_orphaned_executor_work(agent_id)
 
-        kinds = await _event_kinds(ass.pk)
-        assert kinds.count(enums.TaskEventKind.QUEUED) == 1
-        assert len(broadcasts) == 1
+        assert (await _event_kinds(ass.pk)).count(enums.TaskEventKind.LOST) == 1
+        assert broadcasts == []
 
-    async def test_callerless_idempotent_falls_back_disconnected(self, settings, broadcasts):
+    async def test_work_without_a_caller_is_lost_too(self, settings, broadcasts):
         _grace(settings, 30)
-        ass = await build_task("recl-idem-nocaller", effects="UNKNOWN", idempotent=True)
+        ass = await build_task("recl-nocaller", effects="UNKNOWN")
         await Task.objects.filter(pk=ass.pk).aupdate(caller=None)
         backend = ModelPersistBackend()
         agent_id = str(ass.agent_id)
@@ -262,7 +236,5 @@ class TestIdempotentRedispatch:
         await backend.on_agent_disconnected(agent_id, "c1")
         await backend.reconcile_orphaned_executor_work(agent_id)
 
-        kinds = await _event_kinds(ass.pk)
-        assert enums.TaskEventKind.DISCONNECTED in kinds
-        assert enums.TaskEventKind.QUEUED not in kinds
+        assert (await Task.objects.aget(pk=ass.pk)).latest_event_kind == enums.TaskEventKind.LOST
         assert broadcasts == []

@@ -25,6 +25,7 @@ class StubEvent:
     progress: Optional[int] = None
     returns: Optional[dict] = None
     level: Optional[str] = None
+    value: Optional[object] = None
 
 
 def test_progress_maps_with_progress_and_message():
@@ -55,6 +56,24 @@ def test_log_defaults_invalid_level_to_info():
     assert isinstance(warn, messages.LogEvent) and warn.level == "WARN"
     coerced = build_execution_event(StubEvent(kind=Kind.LOG.value, level="PROGRESS"))
     assert isinstance(coerced, messages.LogEvent) and coerced.level == "INFO"
+
+
+def test_lost_carries_what_is_known():
+    msg = build_execution_event(
+        StubEvent(
+            kind=Kind.LOST.value,
+            message="Its agent died while it ran; how it ended is unknown.",
+            value={"started": True, "last_progress": 60, "effects": "IRREVERSIBLE", "reason": "Its agent died while it ran; how it ended is unknown."},
+        )
+    )
+    assert isinstance(msg, messages.LostEvent)
+    assert (msg.started, msg.last_progress, msg.effects) == (True, 60, "IRREVERSIBLE")
+    assert msg.reason == "Its agent died while it ran; how it ended is unknown."
+
+
+def test_lost_that_never_started_says_so():
+    msg = build_execution_event(StubEvent(kind=Kind.LOST.value, value={"started": False, "last_progress": None, "effects": "UNKNOWN", "reason": "never picked up"}))
+    assert isinstance(msg, messages.LostEvent) and msg.started is False and msg.last_progress is None
 
 
 def test_disconnected_carries_message():

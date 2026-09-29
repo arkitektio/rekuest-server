@@ -95,6 +95,7 @@ class ToAgentMessageType(str, Enum):
     RESUMED_EVENT = "RESUMED_EVENT"
     FAILED_EVENT = "FAILED_EVENT"
     CRITICAL_EVENT = "CRITICAL_EVENT"
+    LOST_EVENT = "LOST_EVENT"
     # Ack for a caller's lifecycle-control request (cancel/interrupt/pause/resume).
     CONTROL_RESPONSE = "CONTROL_RESPONSE"
     # Cumulative ack of the agent journal: "persisted up to pos" (see ``JournalAck``).
@@ -1007,6 +1008,21 @@ class CriticalEvent(ExecutionEvent):
     error: Optional[str] = None
 
 
+class LostEvent(ExecutionEvent):
+    """The executing agent died while the task ran: not failed, its fate is unknown.
+
+    What is known travels with it, for whoever decides what to do next: whether the task was
+    ever picked up (``started``; if not, nothing ran and sending it again is safe), the last
+    progress it reported, and its implementation's ``effects``.
+    """
+
+    type: Literal[ToAgentMessageType.LOST_EVENT] = ToAgentMessageType.LOST_EVENT
+    started: bool = True
+    last_progress: Optional[int] = None
+    effects: Optional[str] = None
+    reason: Optional[str] = None
+
+
 # Every backend→caller mirror, in TaskEventKind order. Imported by ``facade.caller_events``.
 ExecutionEventMessage = Union[
     BoundEvent,
@@ -1028,6 +1044,7 @@ ExecutionEventMessage = Union[
     ResumedEvent,
     FailedEvent,
     CriticalEvent,
+    LostEvent,
 ]
 
 
@@ -1069,5 +1086,6 @@ ToAgentMessage = Union[
     ResumedEvent,
     FailedEvent,
     CriticalEvent,
+    LostEvent,
 ]
 FromAgentMessage = Union[Critical, Log, Progress, Started, Completed, Failed, Yield, Register, HeartbeatEvent, Resumed, Paused, Cancelled, Interrupted, StatePatch, StateSnapshot, Lock, Unlock, SessionInit, AssignRequest, ProbeRequest, CancelRequest, InterruptRequest, PauseRequest, ResumeRequest, Shelve, Unshelve, Effect]

@@ -138,7 +138,10 @@ class TestPositions:
         assert event.agent_ts is not None
         assert await _projected(session.agent_pk) == 2
 
-    async def test_resend_on_a_new_connection_is_skipped_and_acked(self, agent_ws):
+    async def test_resend_on_a_new_connection_is_skipped_and_acked(self, agent_ws, settings):
+        # A reconnect within the grace window: the task was never lost, so the same process
+        # carries on with it. (Past the grace window it would be LOST, and LOST is final.)
+        settings.REKUEST_GRACE = {**settings.REKUEST_GRACE, "DEFAULT": 30}
         session = await open_agent(agent_ws, "pos-reconnect", session_id="proc-1")
         task = await build_task("pos-reconnect", agent_pk=session.agent_pk)
         for pos in (1, 2, 3):
@@ -315,17 +318,39 @@ class TestOutcomeAfterRestart:
     """After a restart the agent resends its previous session's unacked frames — by then the new
     session's registration has already orphaned that session's in-flight work."""
 
-    async def _restarted(self, agent_ws, prefix: str):
+    async def _opened(self, agent_ws, prefix: str):
         session = await open_agent(agent_ws, prefix, session_id="proc-1")
         task = await build_task(prefix, agent_pk=session.agent_pk)
+        return session, task
+
+    async def _restart(self, agent_ws, session):
         await session.disconnect()
         restarted = AgentSession(await agent_ws(), agent=session.agent)
         await restarted.register(token=TEST_TOKEN, force=True, session_id="proc-2")
-        return restarted, task
+        return restarted
 
-    async def test_the_agents_outcome_replaces_the_servers(self, agent_ws):
-        restarted, task = await self._restarted(agent_ws, "pos-wins")
-        await ModelPersistBackend()._finalize_terminal(task.pk, enums.TaskEventKind.CRITICAL, "orphaned: the agent process was replaced")
+    async def test_a_restart_leaves_in_flight_work_lost_and_a_late_outcome_is_kept_beside_it(self, agent_ws):
+        """LOST is final: whoever called may already have acted on it. The previous session's
+        outcome, resent after the restart, is kept as a LATE_REPORT and changes nothing."""
+        session, task = await self._opened(agent_ws, "pos-lost")
+        restarted = await self._restart(agent_ws, session)
+        assert (await models.Task.objects.aget(pk=task.pk)).latest_event_kind == enums.TaskEventKind.LOST
+
+        await restarted.send(messages.Completed(task=str(task.pk), **_j(9, session="proc-1", step=4)))
+        await restarted.send(messages.Completed(task=str(task.pk), **_j(9, session="proc-1", step=4)))  # a resend
+        await _ack_until(restarted, 9)
+        await restarted.disconnect()
+
+        task = await models.Task.objects.aget(pk=task.pk)
+        assert task.is_done and task.latest_event_kind == enums.TaskEventKind.LOST
+        late = [e async for e in TaskEvent.objects.filter(task_id=task.pk, kind=enums.TaskEventKind.LATE_REPORT)]
+        assert len(late) == 1, "a resend of the same late report is recorded once"
+        assert late[0].value == {"kind": "COMPLETED"} and late[0].agent_pos == 9
+
+    async def test_the_agents_outcome_replaces_a_server_outcome_that_is_not_lost(self, agent_ws):
+        session, task = await self._opened(agent_ws, "pos-wins")
+        await ModelPersistBackend()._finalize_terminal(task.pk, enums.TaskEventKind.CRITICAL, "decided by the server")
+        restarted = await self._restart(agent_ws, session)
 
         await restarted.send(messages.Completed(task=str(task.pk), **_j(9, session="proc-1", step=4)))
         await _ack_until(restarted, 9)
@@ -337,9 +362,10 @@ class TestOutcomeAfterRestart:
         assert completed.agent_pos == 9 and "previous session" in completed.message
 
     async def test_an_outcome_the_agent_reported_stands(self, agent_ws):
-        restarted, task = await self._restarted(agent_ws, "pos-stands")
-        await restarted.send(messages.Failed(task=str(task.pk), error="real failure", **_j(1, session="proc-2", step=1)))
-        await _ack_until(restarted, 1)
+        session, task = await self._opened(agent_ws, "pos-stands")
+        await session.send(messages.Failed(task=str(task.pk), error="real failure", **_j(1, session="proc-1", step=1)))
+        await _ack_until(session, 1)
+        restarted = await self._restart(agent_ws, session)
 
         await restarted.send(messages.Completed(task=str(task.pk), **_j(9, session="proc-1", step=4)))
         await _ack_until(restarted, 9)
@@ -347,13 +373,15 @@ class TestOutcomeAfterRestart:
         assert (await models.Task.objects.aget(pk=task.pk)).latest_event_kind == enums.TaskEventKind.FAILED
 
     async def test_the_current_session_cannot_replace_the_servers_outcome(self, agent_ws):
-        restarted, task = await self._restarted(agent_ws, "pos-current")
+        session, task = await self._opened(agent_ws, "pos-current")
         await ModelPersistBackend()._finalize_terminal(task.pk, enums.TaskEventKind.CANCELLED, "cancelled by the server")
+        restarted = await self._restart(agent_ws, session)
 
         await restarted.send(messages.Completed(task=str(task.pk), **_j(1, session="proc-2", step=1)))
         await _ack_until(restarted, 1)
         await restarted.disconnect()
         assert (await models.Task.objects.aget(pk=task.pk)).latest_event_kind == enums.TaskEventKind.CANCELLED
+
 
 
 def _log(task, pos: int, session: str = "race-1") -> messages.Log:

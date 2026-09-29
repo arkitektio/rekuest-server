@@ -109,6 +109,11 @@ class AgentReportMixin:
         event: Dict[str, Any] = {"message": message} if message is not None else {}
         event.update(stamp or {})
         if x.is_done:
+            if x.latest_event_kind == enums.TaskEventKind.LOST:
+                # From an earlier session or from this one after a partition longer than the
+                # grace window: either way the task is LOST, and that is final.
+                await database_sync_to_async(self._record_late_report_sync)(x.pk, kind, event)
+                return
             # A resent terminal report — or the agent's outcome for work the server orphaned.
             if journal_session is None or not await self._from_earlier_session(agent_id, journal_session):
                 return
@@ -122,6 +127,22 @@ class AgentReportMixin:
     async def _from_earlier_session(self, agent_id: int, journal_session: str) -> bool:
         active = await models.Agent.objects.filter(pk=agent_id).values_list("active_session_id", flat=True).afirst()
         return active is not None and active != journal_session
+
+    @staticmethod
+    def _record_late_report_sync(task_id: int, kind: Any, event: Dict[str, Any]) -> None:
+        """Keep an outcome the agent reported after its task was LOST, next to it.
+
+        LOST is final: whoever called may already have acted on it (a workflow handled its
+        ``AgentLost``, a person retried it). So the late outcome is recorded, never used.
+        A resend of the same late report is recorded once (keyed on its position).
+        """
+        late_kind = str(getattr(kind, "value", kind))
+        position = event.get("agent_pos")
+        if position is not None and models.TaskEvent.objects.filter(task_id=task_id, kind=enums.TaskEventKind.LATE_REPORT.value, agent_pos=position).exists():
+            return
+        note = f"The agent reported {late_kind} after the task was lost; it stays LOST."
+        message = f"{event['message']} ({note})" if event.get("message") else note
+        models.TaskEvent.objects.create(task_id=task_id, kind=enums.TaskEventKind.LATE_REPORT.value, value={"kind": late_kind}, **{**event, "message": message})
 
     def _override_server_outcome_sync(self, task_id: int, kind: str, event: Dict[str, Any]) -> bool:
         """Replace a done task's server-written terminal with the agent's. Returns whether it did."""
@@ -192,6 +213,11 @@ class AgentReportMixin:
         if x is None:
             return False
         if x.is_done:
+            if x.latest_event_kind == enums.TaskEventKind.LOST and kind == enums.TaskEventKind.YIELD:
+                # A result that arrives after the task was lost is kept, for the record: LOST
+                # stays the outcome, but nobody loses the value the work produced.
+                await models.TaskEvent.objects.acreate(task_id=task_id, kind=enums.TaskEventKind.LATE_REPORT.value, message="A result the agent reported after the task was lost.", **fields)
+                return False
             logger.debug("Dropping a %s for task %s, which is already done", kind, task_id)
             return False
         await models.TaskEvent.objects.acreate(task_id=task_id, kind=kind, **fields)

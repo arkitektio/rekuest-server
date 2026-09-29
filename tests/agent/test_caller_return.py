@@ -58,3 +58,31 @@ class TestCallerEventReturn:
         assert msg.task == str(mine.pk) and msg.progress == 77
 
         await session.disconnect()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+class TestCallerHearsItsTaskWasLost:
+    async def test_a_lost_task_comes_back_as_lost_with_what_is_known(self, agent_ws):
+        """The caller stays connected while the agent running its task dies."""
+        from asgiref.sync import sync_to_async
+
+        from facade.models import Agent, Implementation, Task
+        from facade.persist_backend import ModelPersistBackend
+        from tests.factories import _seed_throwaway_agent_graph
+
+        caller = await open_agent(agent_ws, "lost-caller")
+        task = await build_task_for_agent_caller(caller.agent.pk, "lost")
+        # Hand the execution to another agent, which then dies mid-task.
+        executor = await sync_to_async(_seed_throwaway_agent_graph)("lost-executor")
+        await Implementation.objects.filter(pk=task.implementation_id).aupdate(agent=executor, effects="IRREVERSIBLE")
+        await Task.objects.filter(pk=task.pk).aupdate(agent=executor)
+        await ModelPersistBackend().on_agent_progress(executor.pk, messages.Progress(task=str(task.pk), progress=60))
+        await Agent.objects.filter(pk=executor.pk).aupdate(connected=False)
+
+        await ModelPersistBackend().reconcile_orphaned_executor_work(executor.pk)
+
+        msg = await caller.receive(messages.LostEvent)
+        assert msg.task == str(task.pk)
+        assert (msg.started, msg.last_progress, msg.effects) == (True, 60, "IRREVERSIBLE")
+        await caller.disconnect()

@@ -54,7 +54,7 @@ async def _sweep():
 
 
 class TestPickupWatchdog:
-    async def test_silent_live_agent_gets_one_redelivery_then_critical(self, settings, agent_ws):
+    async def test_silent_live_agent_gets_one_redelivery_then_is_lost_unstarted(self, settings, agent_ws):
         _watchdog(settings)
         session = await open_agent(agent_ws, "wd-silent")
         task = await _queued("wd-silent-t", session.agent_pk)
@@ -71,8 +71,10 @@ class TestPickupWatchdog:
 
         refreshed = await Task.objects.aget(pk=task.pk)
         assert refreshed.is_done is True
-        assert refreshed.latest_event_kind == enums.TaskEventKind.CRITICAL
-        assert await _kinds(task.pk) == [enums.TaskEventKind.QUEUED, enums.TaskEventKind.CRITICAL]
+        assert refreshed.latest_event_kind == enums.TaskEventKind.LOST
+        assert await _kinds(task.pk) == [enums.TaskEventKind.QUEUED, enums.TaskEventKind.LOST]
+        # Never picked up: nothing ran, so whoever decides may safely send it again.
+        assert (await TaskEvent.objects.aget(task_id=task.pk, kind=enums.TaskEventKind.LOST)).value["started"] is False
 
     async def test_any_report_counts_as_picked_up(self, settings, agent_ws):
         """Progress never moves ``latest_event_kind`` off QUEUED — the watchdog must not care."""
@@ -88,16 +90,19 @@ class TestPickupWatchdog:
         assert await _sweep() == 0
         assert (await Task.objects.aget(pk=task.pk)).is_done is False
 
-    async def test_physical_work_is_never_redelivered(self, settings, agent_ws):
+    async def test_irreversible_work_that_never_started_is_redelivered_too(self, settings, agent_ws):
+        """An agent reports STARTED before it does anything, and drops an Assign for a task it
+        already runs: a task that never reported STARTED is safe to send again, whatever its
+        effects. (They are information for whoever decides, not the server's rule.)"""
         _watchdog(settings)
         session = await open_agent(agent_ws, "wd-phys")
         task = await _queued("wd-phys-t", session.agent_pk, effects="IRREVERSIBLE")
 
         assert await _sweep() == 1
 
+        assert (await session.receive(messages.Assign)).task == str(task.pk)
         refreshed = await Task.objects.aget(pk=task.pk)
-        assert refreshed.is_done is True and refreshed.latest_event_kind == enums.TaskEventKind.CRITICAL
-        assert refreshed.dispatch_attempts == 1  # no second Assign ever left
+        assert refreshed.is_done is False and refreshed.dispatch_attempts == 2
 
     async def test_physical_work_that_never_left_is_dispatched(self, settings, agent_ws):
         """``dispatched_at`` NULL proves the agent cannot have it — safe to send, even physical."""
@@ -161,7 +166,7 @@ class TestReconnectDoesNotKillUndeliveredWork:
     async def test_unpicked_work_is_not_inquired_and_its_clock_restarts(self, settings):
         """An Assign still waiting in redis is not "in flight": asking the agent about it gets
         ``Critical: no longer managed`` for a task it is about to receive."""
-        _watchdog(settings)
+        _watchdog(settings, DEFAULT=30)  # a reconnect within the grace window: nothing was lost
         running = await build_task("rc-running")
         waiting = await _queued("rc-waiting", running.agent_id)
         backend = ModelPersistBackend()
@@ -177,7 +182,7 @@ class TestReconnectDoesNotKillUndeliveredWork:
         # A backlog that built up while it was away must not be redelivered the instant it returns.
         assert await _sweep() == 0
 
-    async def test_fresh_session_does_not_disconnect_undelivered_work(self, settings):
+    async def test_fresh_session_does_not_lose_undelivered_work(self, settings):
         _watchdog(settings)
         seed = await build_task("rc-fresh-seed")
         waiting = await _queued("rc-fresh-waiting", seed.agent_id)
@@ -188,41 +193,50 @@ class TestReconnectDoesNotKillUndeliveredWork:
         await backend.on_agent_disconnected(agent_id, "c1")
         await backend.on_agent_connected(agent_id, "c2", session_id="S2")
 
-        assert enums.TaskEventKind.DISCONNECTED in await _kinds(seed.pk)  # it WAS running → orphaned
+        assert enums.TaskEventKind.LOST in await _kinds(seed.pk)  # it WAS running → lost
         assert await _kinds(waiting.pk) == []  # it never ran → simply still queued
         assert (await Task.objects.aget(pk=waiting.pk)).latest_event_kind == enums.TaskEventKind.QUEUED
 
 
 class TestExpiry:
-    async def _disconnected(self, prefix):
+    async def _legacy_disconnected(self, prefix):
+        """A DISCONNECTED row written before LOST existed: nothing writes one any more."""
         task = await build_task(prefix)
         await Agent.objects.filter(pk=task.agent_id).aupdate(connected=False, last_seen=timezone.now() - timedelta(hours=1))
-        await ModelPersistBackend().reconcile_orphaned_executor_work(task.agent_id)
-        assert (await Task.objects.aget(pk=task.pk)).latest_event_kind == enums.TaskEventKind.DISCONNECTED
+        await Task.objects.filter(pk=task.pk).aupdate(latest_event_kind=enums.TaskEventKind.DISCONNECTED)
+        await TaskEvent.objects.acreate(task_id=task.pk, kind=enums.TaskEventKind.DISCONNECTED, message="Agent disconnected. Fate unknown")
         return task
 
-    async def test_disconnected_stays_recoverable_then_expires(self, settings):
+    async def test_a_lost_agent_now_ends_its_work_lost_at_once(self, settings):
+        task = await build_task("exp-now")
+        await Agent.objects.filter(pk=task.agent_id).aupdate(connected=False, last_seen=timezone.now() - timedelta(hours=1))
+        await ModelPersistBackend().reconcile_orphaned_executor_work(task.agent_id)
+        refreshed = await Task.objects.aget(pk=task.pk)
+        assert (refreshed.latest_event_kind, refreshed.is_done) == (enums.TaskEventKind.LOST, True)
+
+    async def test_legacy_disconnected_work_ends_lost_after_expiry(self, settings):
         settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "DISCONNECTED_EXPIRY": 0.2}
-        task = await self._disconnected("exp-dis")
+        task = await self._legacy_disconnected("exp-dis")
 
         assert await ModelPersistBackend().expire_disconnected_tasks() == 0  # inside the window
         await asyncio.sleep(0.3)
         assert await ModelPersistBackend().expire_disconnected_tasks() == 1
 
         refreshed = await Task.objects.aget(pk=task.pk)
-        assert refreshed.is_done is True and refreshed.latest_event_kind == enums.TaskEventKind.CRITICAL
+        assert refreshed.is_done is True and refreshed.latest_event_kind == enums.TaskEventKind.LOST
+        assert (await TaskEvent.objects.aget(task_id=task.pk, kind=enums.TaskEventKind.LOST)).value["started"] is True
         assert await ModelPersistBackend().expire_disconnected_tasks() == 0  # idempotent
 
     async def test_never_expires_when_disabled(self, settings):
         settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "DISCONNECTED_EXPIRY": 0}
-        task = await self._disconnected("exp-off")
+        task = await self._legacy_disconnected("exp-off")
         await asyncio.sleep(0.05)
         assert await ModelPersistBackend().expire_disconnected_tasks() == 0
         assert (await Task.objects.aget(pk=task.pk)).is_done is False
 
-    async def test_a_late_report_reclaims_disconnected_work(self, settings):
+    async def test_a_late_report_reclaims_legacy_disconnected_work(self, settings):
         settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "DISCONNECTED_EXPIRY": 0.2}
-        task = await self._disconnected("exp-late")
+        task = await self._legacy_disconnected("exp-late")
 
         await ModelPersistBackend().on_agent_progress(task.agent_id, messages.Progress(task=str(task.pk), progress=50))
         assert (await Task.objects.aget(pk=task.pk)).latest_event_kind == enums.TaskEventKind.STARTED
@@ -231,13 +245,28 @@ class TestExpiry:
         assert await ModelPersistBackend().expire_disconnected_tasks() == 0  # it is alive after all
         assert (await Task.objects.aget(pk=task.pk)).is_done is False
 
-    async def test_a_late_terminal_report_is_the_outcome(self, settings):
-        task = await self._disconnected("exp-done")
+    async def test_a_late_terminal_report_is_the_outcome_of_legacy_disconnected_work(self, settings):
+        task = await self._legacy_disconnected("exp-done")
         await ModelPersistBackend().on_agent_done(task.agent_id, messages.Completed(task=str(task.pk)))
         refreshed = await Task.objects.aget(pk=task.pk)
         assert refreshed.is_done is True and refreshed.latest_event_kind == enums.TaskEventKind.COMPLETED
 
-    async def test_undelivered_work_of_a_gone_agent_expires(self, settings):
+    async def test_a_late_terminal_report_after_lost_is_kept_beside_it(self, settings):
+        """LOST is final: whoever called may already have acted on it."""
+        task = await build_task("exp-after-lost")
+        await Agent.objects.filter(pk=task.agent_id).aupdate(connected=False, last_seen=timezone.now() - timedelta(hours=1))
+        await ModelPersistBackend().reconcile_orphaned_executor_work(task.agent_id)
+
+        await ModelPersistBackend().on_agent_yield(task.agent_id, messages.Yield(task=str(task.pk), returns={"x": 1}))
+        await ModelPersistBackend().on_agent_done(task.agent_id, messages.Completed(task=str(task.pk)))
+
+        refreshed = await Task.objects.aget(pk=task.pk)
+        assert refreshed.latest_event_kind == enums.TaskEventKind.LOST
+        late = [e async for e in TaskEvent.objects.filter(task_id=task.pk, kind=enums.TaskEventKind.LATE_REPORT).order_by("id")]
+        assert [e.returns for e in late] == [{"x": 1}, None], "the late result is kept too"
+        assert late[1].value == {"kind": "COMPLETED"}
+
+    async def test_undelivered_work_of_a_gone_agent_ends_lost_unstarted(self, settings):
         settings.REKUEST_GRACE = {"DEFAULT": 0, "PHYSICAL": 0, "DISCONNECTED_EXPIRY": 0.2}
         seed = await build_task("exp-gone-seed")
         await Agent.objects.filter(pk=seed.agent_id).aupdate(connected=False, last_seen=timezone.now() - timedelta(hours=1))
@@ -246,7 +275,8 @@ class TestExpiry:
         assert await ModelPersistBackend().expire_disconnected_tasks() == 1
 
         refreshed = await Task.objects.aget(pk=waiting.pk)
-        assert refreshed.is_done is True and refreshed.latest_event_kind == enums.TaskEventKind.CRITICAL
+        assert refreshed.is_done is True and refreshed.latest_event_kind == enums.TaskEventKind.LOST
+        assert (await TaskEvent.objects.aget(task_id=waiting.pk, kind=enums.TaskEventKind.LOST)).value["started"] is False
 
 
 class TestTerminalReportsAreExactlyOnce:
@@ -261,19 +291,17 @@ class TestTerminalReportsAreExactlyOnce:
         assert (await _kinds(task.pk)).count(enums.TaskEventKind.COMPLETED) == 1
 
     async def test_a_sweep_and_a_report_do_not_both_win(self, settings):
-        _watchdog(settings, DISCONNECTED_EXPIRY=0.01)
+        _watchdog(settings)
         task = await build_task("once-race")
         await Agent.objects.filter(pk=task.agent_id).aupdate(connected=False, last_seen=timezone.now() - timedelta(hours=1))
-        await ModelPersistBackend().reconcile_orphaned_executor_work(task.agent_id)
-        await asyncio.sleep(0.05)
 
         await asyncio.gather(
-            ModelPersistBackend().expire_disconnected_tasks(),
+            ModelPersistBackend().reconcile_orphaned_executor_work(task.agent_id),
             ModelPersistBackend().on_agent_done(task.agent_id, messages.Completed(task=str(task.pk))),
         )
 
         kinds = await _kinds(task.pk)
-        terminal = [k for k in kinds if k in (enums.TaskEventKind.COMPLETED, enums.TaskEventKind.CRITICAL)]
+        terminal = [k for k in kinds if k in (enums.TaskEventKind.COMPLETED, enums.TaskEventKind.LOST)]
         assert len(terminal) == 1
 
 
@@ -281,7 +309,7 @@ class TestWebhookAgentsAreCovered:
     """A HookAgent is always "available" (no socket to be live), and a failed POST used to be
     logged and forgotten — with both sweeps filtering on WEBSOCKET, nothing ever failed the task."""
 
-    async def test_unreachable_hook_is_retried_once_then_critical(self, settings):
+    async def test_unreachable_hook_is_retried_once_then_lost(self, settings):
         from tests.factories import build_webhook_agent
 
         _watchdog(settings)
@@ -295,7 +323,7 @@ class TestWebhookAgentsAreCovered:
 
         assert await _sweep() == 1  # budget spent
         refreshed = await Task.objects.aget(pk=task.pk)
-        assert refreshed.is_done is True and refreshed.latest_event_kind == enums.TaskEventKind.CRITICAL
+        assert refreshed.is_done is True and refreshed.latest_event_kind == enums.TaskEventKind.LOST
 
 
 class TestReaperPass:
@@ -317,12 +345,12 @@ class TestReaperPass:
         await run_sweeps()
 
         stuck = await Task.objects.aget(pk=stuck.pk)
-        assert stuck.is_done is True and stuck.latest_event_kind == enums.TaskEventKind.CRITICAL
+        assert stuck.is_done is True and stuck.latest_event_kind == enums.TaskEventKind.LOST
         assert (await Agent.objects.aget(pk=stuck.agent_id)).connected is False
-        assert (await Task.objects.aget(pk=graced.pk)).latest_event_kind == enums.TaskEventKind.DISCONNECTED
+        assert (await Task.objects.aget(pk=graced.pk)).latest_event_kind == enums.TaskEventKind.LOST
 
         await run_sweeps()  # idempotent: a second backend's pass changes nothing
-        assert (await _kinds(graced.pk)).count(enums.TaskEventKind.DISCONNECTED) == 1
+        assert (await _kinds(graced.pk)).count(enums.TaskEventKind.LOST) == 1
 
     async def test_a_failing_sweep_does_not_starve_the_others(self, settings, monkeypatch):
         import facade.reaper as reaper
@@ -339,4 +367,4 @@ class TestReaperPass:
 
         await reaper.run_sweeps()
 
-        assert (await Task.objects.aget(pk=graced.pk)).latest_event_kind == enums.TaskEventKind.DISCONNECTED
+        assert (await Task.objects.aget(pk=graced.pk)).latest_event_kind == enums.TaskEventKind.LOST

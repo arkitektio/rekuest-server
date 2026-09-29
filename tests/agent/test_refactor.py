@@ -10,6 +10,7 @@ import pytest
 from django.utils import timezone
 
 from facade import enums, messages, transport
+from facade.models import TaskEvent
 from facade.ports import PersistBackend
 from facade.persist_backend import ModelPersistBackend, persist_backend
 
@@ -62,7 +63,9 @@ def test_deliver_to_agent_routes_by_kind(monkeypatch):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 class TestReconcileOps:
-    async def test_reconcile_orphaned_executor_work_is_effect_aware(self):
+    async def test_orphaned_work_ends_lost_whatever_its_effects(self):
+        """Effects are information for whoever decides, never the server's decision: both end
+        LOST, each carrying its own effects."""
         none_ass = await build_task("rec-none", effects="UNKNOWN")
         phys_ass = await build_task("rec-phys", effects="IRREVERSIBLE")
         backend = ModelPersistBackend()
@@ -76,8 +79,10 @@ class TestReconcileOps:
 
         none_ass = await type(none_ass).objects.aget(pk=none_ass.pk)
         phys_ass = await type(phys_ass).objects.aget(pk=phys_ass.pk)
-        assert none_ass.latest_event_kind == enums.TaskEventKind.DISCONNECTED and none_ass.is_done is False
-        assert phys_ass.latest_event_kind == enums.TaskEventKind.CRITICAL and phys_ass.is_done is True
+        for task, effects in ((none_ass, "UNKNOWN"), (phys_ass, "IRREVERSIBLE")):
+            assert task.latest_event_kind == enums.TaskEventKind.LOST and task.is_done is True
+            lost = await TaskEvent.objects.aget(task_id=task.pk, kind=enums.TaskEventKind.LOST)
+            assert lost.value["effects"] == effects and lost.value["started"] is True
 
 
 @pytest.mark.django_db(transaction=True)
@@ -95,7 +100,7 @@ class TestReconcileSweep:
         async_to_sync(ModelPersistBackend().reconcile_disconnected_agents)()
 
         refreshed = Task.objects.get(pk=ass.pk)
-        assert refreshed.latest_event_kind == enums.TaskEventKind.DISCONNECTED
+        assert refreshed.latest_event_kind == enums.TaskEventKind.LOST
 
     def test_sweep_leaves_connected_and_webhook_untouched(self, settings):
         settings.REKUEST_GRACE = {"DEFAULT": 30, "PHYSICAL": 30}
@@ -133,7 +138,7 @@ class TestReconcileStaleAgents:
         assert healed == 1
         assert Agent.objects.get(pk=ass.agent_id).connected is False
         # its orphaned in-flight work is reconciled in the same pass.
-        assert Task.objects.get(pk=ass.pk).latest_event_kind == enums.TaskEventKind.DISCONNECTED
+        assert Task.objects.get(pk=ass.pk).latest_event_kind == enums.TaskEventKind.LOST
 
     def test_fresh_connected_agent_not_reaped(self, settings):
         settings.REKUEST_GRACE = {"DEFAULT": 30, "PHYSICAL": 30}

@@ -178,61 +178,23 @@ class ReconcileMixin:
         )
 
     async def _fail_and_cascade_inflight(self, tasks: List[models.Task]) -> None:
-        """Mark orphaned in-flight work along the retry axis.
+        """End orphaned in-flight work LOST: its agent is gone, and with it any way of knowing
+        how the task ended.
 
-        ``effect:physical`` failed ambiguously (the executor vanished) → CRITICAL (terminal,
-        never retried). Idempotent actions → QUEUED + the Assign re-broadcast into the
-        agent's redis queue (which retains messages for offline agents), so the work re-runs
-        on reconnect — a same-session reclaim after grace expiry may double-execute, which is
-        safe by the idempotent contract. Everything else → DISCONNECTED (fate unknown,
-        recoverable until ``expire_disconnected_tasks`` finalizes it).
+        The server re-runs nothing on its own. Whoever called decides: a workflow gets
+        ``AgentLost`` from the call, a script from ``call``, a person sees it in the UI. The
+        LOST event carries what is known for that decision (see :meth:`_finalize_lost`).
 
         Work the agent never picked up is left alone entirely (see :meth:`_orphanable_q`): it
-        is not orphaned, merely undelivered. That is also what makes this re-entrant — a
-        re-queued idempotent task is exactly such a row, so a later pass neither piles a second
-        Assign into the queue nor degrades it to DISCONNECTED.
-
-        Every branch claims the transition first and emits its ``TaskEvent`` inside the claim,
-        so concurrent sweeps produce exactly one event per task rather than one each.
+        is not orphaned, merely undelivered, and the pickup watchdog redelivers it. Every task
+        is claimed first and its event written inside the claim, so concurrent sweeps produce
+        exactly one LOST per task rather than one each.
         """
         for task in tasks:
             if task.latest_event_kind == enums.TaskEventKind.QUEUED and task.picked_up_at is None:
                 continue  # undelivered, not orphaned (callers that pre-filter never get here)
 
-            if self._effect_of(task) == enums.EffectsChoices.IRREVERSIBLE.value:
-                await self._finalize_terminal(
-                    task.pk,
-                    enums.TaskEventKind.CRITICAL,
-                    "Executor lost while running physical-effect work — terminal, not retried.",
-                    task=task,
-                )
-                continue
-
-            if task.action is not None and task.action.idempotent:
-                # Built BEFORE the claim: if there is no re-dispatchable identity we must fall
-                # through to the fate-unknown branch, not leave the task marked QUEUED.
-                assign_message = await database_sync_to_async(self._build_redispatch_assign_sync)(task.pk)
-                if assign_message is not None:
-                    # Back to "dispatched, not picked up": the pickup watchdog takes it from here
-                    # once the agent is live again (``on_agent_connected`` restarts the clock).
-                    won = await self._claim(
-                        task.pk,
-                        to_kind=enums.TaskEventKind.QUEUED,
-                        skip_if_kind=enums.TaskEventKind.QUEUED,
-                        extra={"picked_up_at": None, "dispatched_at": timezone.now(), "dispatch_attempts": 1},
-                        event={"message": "Executor lost — idempotent action re-queued for redelivery."},
-                    )
-                    if won:
-                        await self._dispatch(task.pk, task.agent_id, assign_message)
-                    continue
-                # No re-dispatchable identity → fall through to fate-unknown.
-
-            await self._claim(
-                task.pk,
-                to_kind=enums.TaskEventKind.DISCONNECTED,
-                skip_if_kind=enums.TaskEventKind.DISCONNECTED,
-                event={"message": "Agent disconnected. Fate unknown"},
-            )
+            await self._finalize_lost(task, "Its agent died while it ran; how it ended is unknown.", started=True)
 
     async def _dispatch(self, task_id: int, agent_id: int, assign_message: "messages.Assign") -> bool:
         """Hand an Assign to the agent's transport; on failure record that it never left.
@@ -342,13 +304,17 @@ class ReconcileMixin:
             # Deliberately NOT ``_finalize_terminal``: we are already inside this row's
             # ``select_for_update`` above, and the helper's claim would open a nested transaction
             # and re-lock the row we hold. Same three writes, done under the lock we already have.
-            def finalize(kind, message: str) -> Tuple[str, None, None]:
+            def finalize(kind, message: str, value: dict | None = None) -> Tuple[str, None, None]:
                 task.latest_event_kind = kind
                 task.is_done = True
                 task.finished_at = timezone.now()
                 task.save(update_fields=["latest_event_kind", "is_done", "finished_at"])
-                models.TaskEvent.objects.create(task=task, kind=kind, message=message)
+                models.TaskEvent.objects.create(task=task, kind=kind, message=message, value=value)
                 return kind, None, None
+
+            def lost(message: str) -> Tuple[str, None, None]:
+                # Never picked up: nothing ran, so whoever decides may safely send it again.
+                return finalize(enums.TaskEventKind.LOST, message, self._lost_details_sync(task.pk, False, message))
 
             # A control op already targeted it: the agent never had the task, so there is
             # nothing to wind down — honour the request instead of redelivering the Assign.
@@ -358,16 +324,13 @@ class ReconcileMixin:
                 return finalize(enums.TaskEventKind.INTERRUPTED, "Interrupted before any agent picked the task up.")
 
             if task.dispatch_attempts >= MAX_DISPATCH_ATTEMPTS:
-                return finalize(enums.TaskEventKind.CRITICAL, "Never picked up: the agent did not report on this task after it was redelivered.")
+                return lost("Never picked up: the agent did not report on this task after it was redelivered.")
 
-            # ``dispatched_at`` set = the Assign verifiably left for the agent. It may have been
-            # received and be running with its reports lost — physical work is never sent twice.
-            if task.dispatched_at is not None and self._effect_of(task) == enums.EffectsChoices.IRREVERSIBLE.value:
-                return finalize(enums.TaskEventKind.CRITICAL, "Never picked up: physical-effect work is not redelivered.")
-
+            # Never picked up means never STARTED, which an agent reports before it does
+            # anything else: sending it again is safe, whatever the implementation's effects.
             assign_message = self._build_redispatch_assign_sync(task.pk)
             if assign_message is None:
-                return finalize(enums.TaskEventKind.CRITICAL, "Never picked up, and the Assign could not be rebuilt for redelivery.")
+                return lost("Never picked up, and the Assign could not be rebuilt for redelivery.")
 
             task.dispatched_at = timezone.now()
             task.dispatch_attempts += 1
@@ -489,12 +452,12 @@ class ReconcileMixin:
         return acted
 
     async def expire_disconnected_tasks(self, limit: int = 200) -> int:
-        """Finalize work whose fate stayed unknown past ``DISCONNECTED_EXPIRY``.
+        """End work that waited past ``DISCONNECTED_EXPIRY`` on an agent that never came back.
 
-        Two kinds of row wait on an agent that may never return: ``DISCONNECTED`` tasks
-        (recoverable — a returning agent may still report the real outcome) and undelivered
-        ``QUEUED`` tasks of an agent that is no longer live. Both stay open for the expiry
-        window, then become CRITICAL so no caller waits forever. 0 disables. Returns the count.
+        Undelivered ``QUEUED`` tasks of an agent that is no longer live stay open for the
+        expiry window (the agent may return and pick them up), then end LOST with
+        ``started=False``: nothing ran. ``DISCONNECTED`` rows are no longer written; the ones
+        written before LOST existed end LOST too. 0 disables. Returns the count.
         """
         expiry = disconnected_expiry_seconds()
         if expiry <= 0:
@@ -510,10 +473,11 @@ class ReconcileMixin:
             .values_list("pk", flat=True)[:limit]
         ]
         for pk in disconnected:
-            if await self._finalize_terminal(
-                pk,
-                enums.TaskEventKind.CRITICAL,
-                "Agent disconnected and the task's fate stayed unknown — expired.",
+            task = await models.Task.objects.select_related("implementation").aget(pk=pk)
+            if await self._finalize_lost(
+                task,
+                "Its agent disconnected and never came back; how it ended is unknown.",
+                started=True,
                 only_if=lambda t: t.latest_event_kind == enums.TaskEventKind.DISCONNECTED,
                 skip_locked=True,
             ):
@@ -529,10 +493,11 @@ class ReconcileMixin:
             .values_list("pk", flat=True)[:limit]
         ]
         for pk in undelivered:
-            if await self._finalize_terminal(
-                pk,
-                enums.TaskEventKind.CRITICAL,
-                "The agent never came back to pick this task up — expired.",
+            task = await models.Task.objects.select_related("implementation").aget(pk=pk)
+            if await self._finalize_lost(
+                task,
+                "The agent never came back to pick this task up.",
+                started=False,
                 only_if=lambda t: t.picked_up_at is None and t.latest_event_kind == enums.TaskEventKind.QUEUED and not _is_waiting(t) and (t.dispatched_at or t.created_at) < cutoff,
                 skip_locked=True,
             ):

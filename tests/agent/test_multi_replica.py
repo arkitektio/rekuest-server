@@ -387,7 +387,7 @@ class TestReaperIsSafeFromEveryBackend:
         await asyncio.gather(*(run_sweeps() for _ in range(4)))
 
         kinds = [e.kind async for e in TaskEvent.objects.filter(task_id=task.pk)]
-        assert kinds.count(enums.TaskEventKind.DISCONNECTED) == 1
+        assert kinds.count(enums.TaskEventKind.LOST) == 1
 
 
 class TestControlDeadlineIsOnByDefault:
@@ -427,12 +427,12 @@ class TestClockSkewGate:
 
         monkeypatch.setattr(clock, "measure_skew", lambda: clock.max_skew_seconds() * 4)
         await reaper.run_sweeps()
-        assert (await Task.objects.aget(pk=task.pk)).latest_event_kind != enums.TaskEventKind.DISCONNECTED
+        assert (await Task.objects.aget(pk=task.pk)).latest_event_kind != enums.TaskEventKind.LOST
 
         # A correctly-clocked backend still acts on it — the deadline lives in the DB.
         monkeypatch.setattr(clock, "measure_skew", lambda: 0.0)
         await reaper.run_sweeps()
-        assert (await Task.objects.aget(pk=task.pk)).latest_event_kind == enums.TaskEventKind.DISCONNECTED
+        assert (await Task.objects.aget(pk=task.pk)).latest_event_kind == enums.TaskEventKind.LOST
 
     @pytest.mark.asyncio
     async def test_an_unmeasurable_skew_never_blocks_work(self, monkeypatch):

@@ -128,7 +128,7 @@ class TestReconcileUsesTheOneLivenessPredicate:
         await backend.reconcile_orphaned_executor_work(agent_id)
 
         kinds = [e.kind async for e in TaskEvent.objects.filter(task_id=task.pk)]
-        assert enums.TaskEventKind.DISCONNECTED in kinds
+        assert enums.TaskEventKind.LOST in kinds
 
     async def test_live_agent_is_still_a_no_op(self):
         # The other direction: a genuinely live agent's work must never be failed — that is the
@@ -198,7 +198,7 @@ class TestSweepRevocationIsFinal:
         await _expire_lease(agent_id)
 
         assert await backend.reconcile_stale_agents() == 1
-        assert enums.TaskEventKind.DISCONNECTED in [e.kind async for e in TaskEvent.objects.filter(task_id=task.pk)]
+        assert enums.TaskEventKind.LOST in [e.kind async for e in TaskEvent.objects.filter(task_id=task.pk)]
 
         # The late heartbeat from the resumed worker.
         assert await backend.renew_agent_lease(agent_id, claim.epoch) is False
@@ -309,7 +309,7 @@ class TestSweepIsIdempotentAcrossWorkers:
 
         assert sum(healed) == 1, f"expected exactly one worker to heal the agent, got {sum(healed)}"
         kinds = [e.kind async for e in TaskEvent.objects.filter(task_id=task.pk)]
-        assert kinds.count(enums.TaskEventKind.DISCONNECTED) == 1
+        assert kinds.count(enums.TaskEventKind.LOST) == 1
 
     async def test_repeated_sweeps_do_not_pile_up_events(self, settings):
         # The re-entrancy guarantee the reaper depends on: it re-runs every stale window
@@ -327,6 +327,6 @@ class TestSweepIsIdempotentAcrossWorkers:
         await backend.reconcile_orphaned_executor_work(agent_id)  # the direct trigger, again
 
         kinds = [e.kind async for e in TaskEvent.objects.filter(task_id=task.pk)]
-        assert kinds.count(enums.TaskEventKind.DISCONNECTED) == 1
+        assert kinds.count(enums.TaskEventKind.LOST) == 1
         refreshed = await Task.objects.aget(pk=task.pk)
-        assert refreshed.latest_event_kind == enums.TaskEventKind.DISCONNECTED
+        assert refreshed.latest_event_kind == enums.TaskEventKind.LOST

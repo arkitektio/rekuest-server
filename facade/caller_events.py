@@ -30,6 +30,7 @@ class EventLike(Protocol):
     progress: Optional[int]
     returns: Optional[dict]
     level: Optional[str]
+    value: Optional[object]
 
 
 def _base_kwargs(event: EventLike) -> dict:
@@ -62,6 +63,15 @@ def build_execution_event(event: EventLike) -> Optional[messages.ExecutionEventM
         return messages.FailedEvent(**base, error=event.message)
     if kind == Kind.CRITICAL.value:
         return messages.CriticalEvent(**base, error=event.message)
+    if kind == Kind.LOST.value:
+        details = event.value if isinstance(event.value, dict) else {}
+        return messages.LostEvent(
+            **base,
+            started=bool(details.get("started", True)),
+            last_progress=details.get("last_progress"),
+            effects=details.get("effects"),
+            reason=details.get("reason") or event.message,
+        )
     if kind == Kind.DISCONNECTED.value:
         return messages.DisconnectedEvent(**base, message=event.message)
     if kind == Kind.COMPLETED.value:

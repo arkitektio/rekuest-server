@@ -28,6 +28,8 @@ class TaskEventChoices(TextChoices):
     DELEGATE = "DELEGATE", "Delegate (Task was delegated to another Task)"
     FAILED = "FAILED"
     CRITICAL = "CRITICAL"
+    LOST = "LOST", "Lost (its agent died while it ran; its fate is unknown)"
+    LATE_REPORT = "LATE_REPORT", "Late report (the agent reported an outcome after the task was lost)"
     DISCONNECTED = "DISCONNECTED"
 
     YIELD = (
@@ -97,3 +99,7 @@ class TaskEventKind(str, Enum):
     RESUMED = "RESUMED"
     FAILED = "FAILED"
     CRITICAL = "CRITICAL"
+    # Its agent died while it ran: not failed, fate unknown. Whoever called decides.
+    LOST = "LOST"
+    # What the agent reported after the task was lost: kept, but it does not replace LOST.
+    LATE_REPORT = "LATE_REPORT"

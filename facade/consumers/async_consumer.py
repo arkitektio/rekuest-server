@@ -32,6 +32,7 @@ class _PayloadEventLike:
         self.progress = payload.get("progress")
         self.returns = payload.get("returns")
         self.level = payload.get("level")
+        self.value = payload.get("value")
 
 
 class _ProbeEventLike:
@@ -48,6 +49,7 @@ class _ProbeEventLike:
         self.progress = payload.get("progress")
         self.returns = payload.get("returns")
         self.level = payload.get("level")
+        self.value = payload.get("value")
 
 
 class AgentConsumer(AsyncWebsocketConsumer):

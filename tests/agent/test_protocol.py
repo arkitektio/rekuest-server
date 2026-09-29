@@ -77,14 +77,14 @@ class TestAgentProtocol:
 
     async def test_disconnect_marks_unimplemented_task(self, agent_ws):
         # Regression (B1): an unfinished task owned directly by the agent but with a
-        # null implementation must still get a DISCONNECTED event on disconnect. The handler
+        # null implementation must still get an event on disconnect (now LOST). The handler
         # previously filtered by ``implementation__agent`` and silently skipped these rows.
         session = await open_agent(agent_ws, "disconnect-unimpl-agent")
         task = await build_unimplemented_task_for_agent(session.agent_pk, "disc-unimpl")
 
         await session.disconnect()
 
-        events = [e async for e in TaskEvent.objects.filter(task_id=task.pk, kind=enums.TaskEventKind.DISCONNECTED)]
+        events = [e async for e in TaskEvent.objects.filter(task_id=task.pk, kind=enums.TaskEventKind.LOST)]
         assert len(events) == 1
 
     async def test_register_for_uncreated_agent_creates_it(self, agent_ws):

@@ -122,6 +122,8 @@ class TaskEventPayload(BaseModel):
     progress: Optional[int] = None
     returns: Optional[Any] = None
     level: Optional[str] = None
+    # EFFECT: the value taken; LOST: what is known (started, last progress, effects).
+    value: Optional[Any] = None
     created_at: datetime.datetime
 
     @classmethod
@@ -134,6 +136,7 @@ class TaskEventPayload(BaseModel):
             progress=e.progress,
             returns=e.returns,
             level=_kind_value(e.level) if e.level else None,
+            value=e.value,
             created_at=e.created_at,
         )
 
