@@ -4991,6 +4991,11 @@ type Task {
   """
   parentStep: Int
 
+  """
+  What the parent calls this child; null for roots and for keyless agents.
+  """
+  callKey: String
+
   """Action assigned."""
   action: Action!
 
@@ -5141,8 +5146,13 @@ type TaskEvent {
   """
   step: Int
 
-  """EFFECT events: NOW, RANDOM or SLEEP."""
+  """EFFECT events: NOW, RANDOM, SLEEP or RECORD."""
   effect: String
+
+  """
+  EFFECT events: what the task calls this value; a replay matches values by key.
+  """
+  key: String
 
   """
   EFFECT events: the value the task took (NOW: epoch seconds, RANDOM: hex, SLEEP: deadline).

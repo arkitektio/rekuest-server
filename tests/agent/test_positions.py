@@ -314,6 +314,81 @@ class TestTaskHistory:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
+class TestReissuedCalls:
+    """A workflow that resumes re-issues the calls it made before: each must find its child,
+    and learn how that child is doing, without the child running again."""
+
+    async def _restart(self, agent_ws, session):
+        await session.disconnect()
+        restarted = AgentSession(await agent_ws(), agent=session.agent)
+        await restarted.register(token=TEST_TOKEN, force=True, session_id="proc-2")
+        return restarted
+
+    async def test_a_child_call_is_found_again_by_its_key_at_another_step(self, agent_ws):
+        """Concurrent calls reserve steps in no fixed order: the key is what stays the same."""
+        session = await open_agent(agent_ws, "key-call", session_id="proc-1")
+        impl = await build_implementation_for_agent(session.agent.pk, "key-call")
+        parent = await build_task("key-call-parent")
+
+        await session.send(messages.AssignRequest(call_key="segment#1", parent_step=3, implementation=str(impl.pk), parent=str(parent.pk), args={"x": 1}))
+        first = await session.receive(messages.AssignResponse)
+        restarted = await self._restart(agent_ws, session)
+
+        await restarted.send(messages.AssignRequest(call_key="segment#1", parent_step=7, implementation=str(impl.pk), parent=str(parent.pk), args={"x": 1}))
+        second = await restarted.receive(messages.AssignResponse)
+        assert (second.task, second.created) == (first.task, False)
+        await restarted.disconnect()
+
+        child = await models.Task.objects.aget(pk=first.task)
+        assert (child.call_key, child.parent_step) == ("segment#1", 3)
+
+    async def test_a_reissued_call_to_a_finished_child_gets_its_result(self, agent_ws):
+        session = await open_agent(agent_ws, "done-call", session_id="proc-1")
+        impl = await build_implementation_for_agent(session.agent.pk, "done-call")
+        parent = await build_task("done-call-parent")
+
+        await session.send(messages.AssignRequest(call_key="double#1", implementation=str(impl.pk), parent=str(parent.pk), args={"x": 3}))
+        child = (await session.receive(messages.AssignResponse)).task
+        # The child runs (here on the caller's own agent) and finishes before the restart.
+        await session.send(messages.Yield(task=child, returns={"return0": 6}))
+        await session.send(messages.Completed(task=child))
+        await session.receive(messages.CompletedEvent)
+        restarted = await self._restart(agent_ws, session)
+
+        await restarted.send(messages.AssignRequest(call_key="double#1", implementation=str(impl.pk), parent=str(parent.pk), args={"x": 3}))
+        response = await restarted.receive(messages.AssignResponse)
+        assert (response.task, response.created) == (child, False)
+        assert (await restarted.receive(messages.YieldEvent)).returns == {"return0": 6}
+        assert (await restarted.receive(messages.CompletedEvent)).task == child
+        await restarted.disconnect()
+
+    async def test_a_reissued_call_to_a_running_child_gets_its_events_so_far_then_live(self, agent_ws):
+        session = await open_agent(agent_ws, "run-call", session_id="proc-1")
+        # The child runs on another agent, which is alive through the caller's restart.
+        executor = await sync_to_async(_seed_throwaway_agent_graph)("run-call-executor")
+        await models.Agent.objects.filter(pk=executor.pk).aupdate(connected=True, last_seen=timezone.now())
+        impl = await build_implementation_for_agent(executor.pk, "run-call")
+        parent = await build_task("run-call-parent")
+        backend = ModelPersistBackend()
+
+        await session.send(messages.AssignRequest(call_key="slow#1", implementation=str(impl.pk), parent=str(parent.pk), args={}))
+        response = await session.receive(messages.AssignResponse)
+        assert response.error is None, response.error
+        child = response.task
+        await backend.on_agent_progress(executor.pk, messages.Progress(task=child, progress=30))
+        restarted = await self._restart(agent_ws, session)
+
+        await restarted.send(messages.AssignRequest(call_key="slow#1", implementation=str(impl.pk), parent=str(parent.pk), args={}))
+        assert (await restarted.receive(messages.AssignResponse)).created is False
+        assert (await restarted.receive(messages.ProgressEvent)).progress == 30  # replayed
+
+        await backend.on_agent_done(executor.pk, messages.Completed(task=child))
+        assert (await restarted.receive(messages.CompletedEvent)).task == child  # live
+        await restarted.disconnect()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
 class TestOutcomeAfterRestart:
     """After a restart the agent resends its previous session's unacked frames — by then the new
     session's registration has already orphaned that session's in-flight work."""

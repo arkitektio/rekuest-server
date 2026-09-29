@@ -47,6 +47,12 @@ class Task(models.Model):
         blank=True,
         help_text="The parent's step this child took (the AssignRequest's parent_step). A task's history is its events and patches by step, plus its children by parent_step. NULL for roots and for children of agents without numbering.",
     )
+    call_key = models.CharField(
+        max_length=1000,
+        null=True,
+        blank=True,
+        help_text="What the parent calls this child: its own key, or one derived from the action, args and occurrence. A call re-issued with the same key finds this child, even at another step (concurrent calls reserve steps in no fixed order).",
+    )
     dependency = models.CharField(
         max_length=1000,
         null=True,
@@ -241,6 +247,9 @@ class Task(models.Model):
             # step, fresh reference) must find the child it already created, not run it again.
             # NULL parent_step (everything but numbered child calls) stays distinct.
             models.UniqueConstraint(fields=["parent", "parent_step"], name="task_unique_step_per_parent"),
+            # One child per key of a parent: the same, for concurrent calls, whose steps differ
+            # from one run to the next. NULL call_key (roots, keyless agents) stays distinct.
+            models.UniqueConstraint(fields=["parent", "call_key"], name="task_unique_call_key_per_parent"),
         ]
         indexes = [
             # The org-scoped ``tasks`` list. The org restriction lives on Agent (see
@@ -362,7 +371,13 @@ class TaskEvent(models.Model):
         max_length=20,
         null=True,
         blank=True,
-        help_text="EFFECT events: what the task took from outside itself (NOW, RANDOM, SLEEP).",
+        help_text="EFFECT events: what the task took from outside itself (NOW, RANDOM, SLEEP, RECORD).",
+    )
+    key = models.CharField(
+        max_length=1000,
+        null=True,
+        blank=True,
+        help_text="EFFECT events: what the task calls this value (its own key, or the effect kind and occurrence). A replay matches values by key.",
     )
     value = models.JSONField(
         null=True,

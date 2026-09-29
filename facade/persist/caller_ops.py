@@ -92,6 +92,7 @@ class CallerOpsMixin:
             interface=message.interface,
             parent=message.parent,
             parent_step=message.parent_step,
+            call_key=message.call_key,
             dependency=message.dependency,
             method=message.method,
             resolution=message.resolution,

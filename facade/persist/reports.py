@@ -255,7 +255,7 @@ class AgentReportMixin:
 
     async def on_agent_effect(self, agent_id: int, message: messages.Effect) -> None:
         """A value the task took from outside itself, kept at its step for a later replay."""
-        await self._record_event(agent_id, message.task, enums.TaskEventKind.EFFECT, effect=message.effect, value=message.value, **position_stamp(message))
+        await self._record_event(agent_id, message.task, enums.TaskEventKind.EFFECT, effect=message.effect, value=message.value, key=message.key, **position_stamp(message))
 
     async def _arm_progress_lease(self, task_id: str) -> None:
         """(Re)arm the silent-physical-op lease for a physical task, if enabled.

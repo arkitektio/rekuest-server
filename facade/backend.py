@@ -414,10 +414,16 @@ class RedisControllBackend:
     def _existing_assign(caller: models.Caller, input: inputs.AssignInputModel, reference: str | None) -> models.Task | None:
         """The task an earlier delivery of this very assign created, if any.
 
-        A child call with a step is the same call as any other with that ``(parent,
-        parent_step)``, whatever its reference: re-issued after the agent restarted, it carries a
-        fresh one. Everything else is the same call only with the same ``(caller, reference)``.
+        A child call with a key is the same call as any other with that ``(parent, call_key)``,
+        and one with a step the same as any other with that ``(parent, parent_step)``, whatever
+        its reference: re-issued after the agent restarted, it carries a fresh one. The key comes
+        first, because concurrent calls reserve steps in no fixed order. Everything else is the
+        same call only with the same ``(caller, reference)``.
         """
+        if input.parent is not None and input.call_key is not None:
+            by_key = models.Task.objects.filter(parent_id=input.parent, call_key=input.call_key).first()
+            if by_key is not None:
+                return by_key
         if input.parent is not None and input.parent_step is not None:
             by_step = models.Task.objects.filter(parent_id=input.parent, parent_step=input.parent_step).first()
             if by_step is not None:
@@ -559,6 +565,7 @@ class RedisControllBackend:
                     reference=reference,
                     parent_id=input.parent,
                     parent_step=input.parent_step if input.parent else None,
+                    call_key=input.call_key if input.parent else None,
                     root_id=root_id,
                     agent=agent,
                     acted_on=acted_on,
@@ -718,6 +725,7 @@ class RedisControllBackend:
             reference=reference,
             parent_id=input.parent,
             parent_step=input.parent_step if input.parent else None,
+            call_key=input.call_key if input.parent else None,
             root_id=root_id,
             agent=higher.agent,
             acted_on=acted_on_from_args(input.args, higher.action),

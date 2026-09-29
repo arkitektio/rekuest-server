@@ -37,7 +37,7 @@ from channels.db import database_sync_to_async
 from django.conf import settings
 from pydantic import BaseModel, Field
 
-from facade import codes, messages, models, registration
+from facade import caller_events, codes, messages, models, registration
 from facade.consumers.agent_queue import AgentQueue
 from facade.message_router import UnknownAgentMessage, log_refusal, route_from_agent_message
 from facade.persist.positions import is_numbered
@@ -208,9 +208,27 @@ class RegisteredSession:
 
         if reply is not None:
             await self.send_to_agent_message(reply)
+            if isinstance(reply, messages.AssignResponse) and not reply.created and reply.task is not None:
+                await self.replay_child_events(reply.task)
 
         if is_numbered(message):
             await self.on_numbered_handled(message)  # type: ignore[arg-type]
+
+    async def replay_child_events(self, task_id: str) -> None:
+        """Send the events a child already has to the caller that just asked for it again.
+
+        A call re-issued after the caller restarted (a workflow resuming) finds the child it
+        made before (``created=False``). That child may have finished long ago, and its events
+        went to the previous process, which is gone: without them, the call would wait for
+        events that never come. So its events so far follow the response, as the same mirrors,
+        with the same ``seq``. Live ones keep coming through the caller group; the caller drops
+        what it already has by ``seq``.
+        """
+        events = await database_sync_to_async(list)(models.TaskEvent.objects.filter(task_id=task_id).order_by("id"))
+        for event in events:
+            mirror = caller_events.build_execution_event(event)
+            if mirror is not None:
+                await self.send_to_agent_message(mirror)
 
     async def on_numbered_handled(self, message: messages.JournalFields) -> None:
         """Count a handled numbered frame toward the next JOURNAL_ACK, and ack when it is due.

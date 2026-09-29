@@ -89,6 +89,10 @@ class AssignInputModel(BaseModel):
         default=None,
         description="The parent's step this child takes (agent-socket assigns of numbering agents). Idempotent on (parent, parent_step). Not exposed on the GraphQL assign, which creates roots only.",
     )
+    call_key: str | None = Field(
+        default=None,
+        description="What the parent calls this child. Idempotent on (parent, call_key), checked before (parent, parent_step). Agent-socket assigns only.",
+    )
     capture: bool | None = Field(default=None, description="Whether to capture the task.")
     dependencies: list[ResolvedDependencyInputModel] | None = Field(
         default=None,

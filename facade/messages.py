@@ -440,6 +440,7 @@ class Effect(FromAgentEvent):
     task: str
     effect: EffectKindLiteral
     value: Any = None
+    key: Optional[str] = None
 
 
 class Completed(FromAgentEvent):
@@ -715,6 +716,7 @@ class AssignRequest(Message):
     type: Literal[FromAgentMessageType.ASSIGN_REQUEST] = FromAgentMessageType.ASSIGN_REQUEST
     reference: Optional[str] = Field(default=None, description="Caller-supplied idempotency key, stable across resends of the same logical request; idempotent on (caller, reference). The caller's own: the server never derives it. Minted by the server when omitted.")
     parent_step: Optional[int] = Field(default=None, description="The parent's step this call takes (numbering agents). With it, the request is idempotent on (parent, parent_step): a call re-issued after a restart returns the same child, whatever its reference. Not ``task_step``: that is the numbered frames' own stamp.")
+    call_key: Optional[str] = Field(default=None, description="What the parent calls this child: its own key, or one derived from the action, args and occurrence. Idempotent on (parent, call_key), checked first: concurrent calls reserve steps in no fixed order, keys stay the same.")
     args: Dict[str, ShallowJSONSerializable] = Field(default_factory=dict, description="The args of the task (ports → values).")
     action: Optional[str] = Field(default=None, description="The action ID to assign to.")
     action_hash: Optional[str] = Field(default=None, description="The action hash to assign to.")
@@ -743,7 +745,7 @@ class AssignResponse(Message):
     request: str = Field(description="The id of the AssignRequest this result answers.")
     reference: str = Field(description="The task's reference: the request's, or the one the server minted when the request had none.")
     task: Optional[str] = Field(default=None, description="The durable task id, or None when error is set.")
-    created: bool = Field(default=True, description="False when an existing task was returned (a duplicate reference, or a (parent, parent_step) already taken).")
+    created: bool = Field(default=True, description="False when an existing task was returned (a duplicate reference, or a (parent, call_key) / (parent, parent_step) already taken). Its events so far follow, as mirrors.")
     error: Optional[str] = Field(default=None, description="A human-readable error if the assign was rejected (e.g. a parentless root assign).")
 
 
