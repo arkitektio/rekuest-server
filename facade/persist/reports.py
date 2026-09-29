@@ -189,7 +189,9 @@ class AgentReportMixin:
         # A suspended op stops reporting progress — don't let the silent-physical-op lease reap
         # it: clearing the stamp takes it out of ``reconcile_silent_physical_ops`` until the
         # next Progress re-arms it.
-        await self._on_nonterminal_confirm(agent_id, message.task, enums.TaskEventKind.PAUSED, extra={"last_progress_at": None}, stamp=position_stamp(message))
+        # A task that paused itself (task.hold) says why, and what a person deciding may want to know.
+        stamp = {**position_stamp(message), **({"message": message.message} if message.message else {}), **({"value": message.details} if message.details else {})}
+        await self._on_nonterminal_confirm(agent_id, message.task, enums.TaskEventKind.PAUSED, extra={"last_progress_at": None}, stamp=stamp)
 
     async def on_agent_resumed(self, agent_id: int, message: messages.Resumed) -> None:
         await self._on_nonterminal_confirm(agent_id, message.task, enums.TaskEventKind.RESUMED, stamp=position_stamp(message))

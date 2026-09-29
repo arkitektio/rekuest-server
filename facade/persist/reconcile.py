@@ -137,12 +137,12 @@ class ReconcileMixin:
         return healed
 
     def _build_redispatch_assign_sync(self, task_id: int) -> "messages.Assign | None":
-        """Rebuild the Assign message for an idempotent task's re-dispatch, or None.
+        """Rebuild the Assign message for a task sent again, or None.
 
-        Sync (run via ``database_sync_to_async``): token minting walks lazy FK chains.
-        Returns None when the task lacks the identity needed to re-mint (no caller/
-        implementation) or when a strict provenance policy refuses — the caller then falls
-        back to the DISCONNECTED fate-unknown path.
+        A workflow's Assign carries its journal (``resume``): what it recorded before, which
+        its resumed run replays. Sync (run via ``database_sync_to_async``): token minting walks
+        lazy FK chains. Returns None when the task lacks the identity needed to re-mint (no
+        caller/implementation) or when a strict provenance policy refuses.
         """
         from facade.caller_context import CallerContext
         from facade.provenance import mint_token_for_task
@@ -175,7 +175,22 @@ class ReconcileMixin:
             parent=str(task.parent_id) if task.parent_id else None,
             root=str(task.root_id) if task.root_id else None,
             token=token,
+            resume=self._journal_sync(task) if task.implementation.execution == enums.ExecutionChoices.WORKFLOW.value else None,
         )
+
+    @staticmethod
+    def _journal_sync(task: models.Task) -> "messages.Journal":
+        """What a workflow recorded: its effects by key, and the last step it took."""
+        events = models.TaskEvent.objects.filter(task=task)
+        last_event_step = events.aggregate(last=Max("step"))["last"] or 0
+        last_call_step = models.Task.objects.filter(parent=task).aggregate(last=Max("parent_step"))["last"] or 0
+        effects = [
+            messages.RecordedEffect(key=key, effect=effect, value=value)
+            for key, effect, value in events.filter(kind=enums.TaskEventKind.EFFECT.value, key__isnull=False)
+            .order_by("id")
+            .values_list("key", "effect", "value")
+        ]
+        return messages.Journal(last_step=max(last_event_step, last_call_step), effects=effects)
 
     async def _fail_and_cascade_inflight(self, tasks: List[models.Task]) -> None:
         """End orphaned in-flight work LOST: its agent is gone, and with it any way of knowing
@@ -194,7 +209,41 @@ class ReconcileMixin:
             if task.latest_event_kind == enums.TaskEventKind.QUEUED and task.picked_up_at is None:
                 continue  # undelivered, not orphaned (callers that pre-filter never get here)
 
+            if await database_sync_to_async(self._is_workflow_sync)(task.pk) and await self._aresume_workflow(task):
+                continue
             await self._finalize_lost(task, "Its agent died while it ran; how it ended is unknown.", started=True)
+
+    @staticmethod
+    def _is_workflow_sync(task_id: int) -> bool:
+        return models.Task.objects.filter(pk=task_id, implementation__execution=enums.ExecutionChoices.WORKFLOW.value).exists()
+
+    async def _aresume_workflow(self, task: models.Task) -> bool:
+        """Send a workflow whose agent died again, with its journal, to be resumed.
+
+        Resumed only by the code it ran: if the implementation's code hash changed since the
+        task was dispatched, replaying the journal onto other code could take another path,
+        so it ends LOST instead. Returns whether it was handled (resumed, or lost for that).
+        """
+        pinned, current = await database_sync_to_async(
+            lambda: models.Task.objects.filter(pk=task.pk).values_list("code_hash", "implementation__code_hash").first()
+        )()
+        if pinned != current:
+            await self._finalize_lost(task, "Its agent died, and the workflow's code changed since this run started, so it cannot be resumed.", started=True)
+            return True
+
+        assign_message = await database_sync_to_async(self._build_redispatch_assign_sync)(task.pk)
+        if assign_message is None:
+            return False
+        won = await self._claim(
+            task.pk,
+            to_kind=enums.TaskEventKind.QUEUED,
+            skip_if_kind=enums.TaskEventKind.QUEUED,
+            extra={"picked_up_at": None, "dispatched_at": timezone.now(), "dispatch_attempts": 1},
+            event={"message": "Its agent died: the workflow is sent again, to resume from what it recorded."},
+        )
+        if won:
+            await self._dispatch(task.pk, task.agent_id, assign_message)
+        return True
 
     async def _dispatch(self, task_id: int, agent_id: int, assign_message: "messages.Assign") -> bool:
         """Hand an Assign to the agent's transport; on failure record that it never left.

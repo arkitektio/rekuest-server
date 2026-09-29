@@ -47,6 +47,12 @@ class Task(models.Model):
         blank=True,
         help_text="The parent's step this child took (the AssignRequest's parent_step). A task's history is its events and patches by step, plus its children by parent_step. NULL for roots and for children of agents without numbering.",
     )
+    code_hash = models.CharField(
+        max_length=128,
+        null=True,
+        blank=True,
+        help_text="The implementation's code hash when the task was dispatched. A workflow is only resumed while its implementation still has this hash.",
+    )
     call_key = models.CharField(
         max_length=1000,
         null=True,

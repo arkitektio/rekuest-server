@@ -432,6 +432,27 @@ class RedisControllBackend:
             return models.Task.objects.filter(caller=caller, reference=reference).first()
         return None
 
+    @staticmethod
+    def _check_it_is_the_same_call(existing: models.Task, input: inputs.AssignInputModel) -> None:
+        """A call key found again must name the call it named before.
+
+        A resumed workflow re-issues its calls: under the same key it must call the same
+        thing. If it names something else, its code took another path, and handing it the
+        child of a different call would be wrong.
+        """
+        if input.call_key is None or existing.call_key != input.call_key:
+            return
+        differs = (
+            (input.action is not None and str(existing.action_id) != str(input.action))
+            or (input.implementation is not None and str(existing.implementation_id) != str(input.implementation))
+            or (input.dependency is not None and (existing.dependency, existing.dependency_method) != (input.dependency, input.method))
+        )
+        if differs:
+            raise ValueError(
+                f"Nondeterministic workflow: call {input.call_key!r} of task {input.parent} was made to "
+                f"action {existing.action_id} before, and names something else now."
+            )
+
     @classmethod
     def _lost_reference_race(cls, caller: models.Caller, input: inputs.AssignInputModel, reference: str) -> models.Task | None:
         """The task another backend created for this very assign a moment ago.
@@ -495,6 +516,7 @@ class RedisControllBackend:
         # provided one dedupes. Placed before target resolution: a hit skips it all.
         existing = self._existing_assign(caller, input, input.reference)
         if existing is not None:
+            self._check_it_is_the_same_call(existing, input)
             return existing, False
 
         if input.dependency:
@@ -572,6 +594,7 @@ class RedisControllBackend:
                     capture=input.capture if input.capture is not None else False,
                     step=bool(input.step),
                     implementation=implementation,
+                    code_hash=implementation.code_hash if implementation is not None else None,
                     dependency=input.dependency,
                     dependency_method=input.method,
                     resolution=resolution,
@@ -752,6 +775,7 @@ class RedisControllBackend:
             acted_on=acted_on_from_args(lower_args, lower_action),
             capture=False,
             implementation=lower_impl,
+            code_hash=lower_impl.code_hash,
             step=bool(input.step),
             is_done=False,
             latest_event_kind=enums.TaskEventKind.QUEUED,

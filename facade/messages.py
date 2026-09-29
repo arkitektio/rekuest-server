@@ -232,6 +232,32 @@ class Assign(Message):
         default=None,
         description="An opaque, signed provenance token attesting who caused this task and with which inputs. The agent forwards it untouched to downstream services; it does not validate it. None when the implementation opts out of provenance (needs_token=False).",
     )
+    resume: Optional["Journal"] = Field(
+        default=None,
+        description="Set when a workflow's agent died and the task is sent again to be resumed: what it recorded so far.",
+    )
+
+
+class RecordedEffect(BaseModel):
+    """A value a workflow recorded, which its resumed run gets back by ``key``."""
+
+    key: str
+    effect: str
+    value: Any = None
+
+
+class Journal(BaseModel):
+    """What a workflow recorded before its agent died, handed back so the resume can replay it.
+
+    Its calls are not listed: re-issued with the same call key, each finds its child again,
+    and the child's events so far follow the answer.
+    """
+
+    last_step: int = 0
+    effects: List[RecordedEffect] = Field(default_factory=list)
+
+
+Assign.model_rebuild()
 
 
 class Bounce(Message):
@@ -366,6 +392,8 @@ class Paused(FromAgentEvent):
 
     type: Literal[FromAgentMessageType.PAUSED] = FromAgentMessageType.PAUSED
     task: str
+    message: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
 
 
 class Resumed(FromAgentEvent):
@@ -425,7 +453,7 @@ class Yield(FromAgentEvent):
     returns: Optional[Dict[str, Any]] = None
 
 
-EffectKindLiteral = Literal["NOW", "RANDOM", "SLEEP"]
+EffectKindLiteral = Literal["NOW", "RANDOM", "SLEEP", "RECORD", "HOLD"]
 
 
 class Effect(FromAgentEvent):

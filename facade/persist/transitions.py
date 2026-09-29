@@ -221,6 +221,8 @@ class TaskTransitionMixin:
             .first()
         )
         effects = models.Task.objects.filter(pk=task_id).values_list("implementation__effects", flat=True).first()
+        # A workflow sent again to be resumed is "not picked up" again, but it did start once.
+        started = started or models.TaskEvent.objects.filter(task_id=task_id, kind=enums.TaskEventKind.STARTED.value).exists()
         return {
             "started": started,
             "last_progress": last_progress,
