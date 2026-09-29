@@ -71,6 +71,7 @@ class ToAgentMessageType(str, Enum):
     EVENT_ACK = "EVENT_ACK"
     ASSIGN_RESPONSE = "ASSIGN_RESPONSE"
     PROBE_RESPONSE = "PROBE_RESPONSE"
+    STATE_REVISION_RESPONSE = "STATE_REVISION_RESPONSE"
     # Replies to the agent's shelving requests.
     SHELVED = "SHELVED"
     UNSHELVED = "UNSHELVED"
@@ -126,6 +127,7 @@ class FromAgentMessageType(str, Enum):
     SESSION_INIT = "SESSION_INIT"
     ASSIGN_REQUEST = "ASSIGN_REQUEST"
     PROBE_REQUEST = "PROBE_REQUEST"
+    STATE_REVISION_REQUEST = "STATE_REVISION_REQUEST"
     # Shelving: what the agent holds in memory.
     SHELVE = "SHELVE"
     UNSHELVE = "UNSHELVE"
@@ -808,6 +810,33 @@ class ProbeResponse(Message):
     error: Optional[str] = Field(default=None, description="A human-readable error if the probe was refused (allow_probe not declared, cap exceeded, …).")
 
 
+class StateRevisionRequest(Message):
+    """A workflow's guard asking about a state it depends on (``task.guard``).
+
+    Without ``since``: the state's revision now, which the guard records. With ``since``
+    (the recorded one, on a resumed run): whether anything other than the workflow's own
+    calls changed the guarded ``paths`` since, or the state was set up again.
+    """
+
+    type: Literal[FromAgentMessageType.STATE_REVISION_REQUEST] = FromAgentMessageType.STATE_REVISION_REQUEST
+    parent: str = Field(description="The workflow task whose dependency the state is.")
+    dependency: str = Field(description="The dependency's key (the workflow's parameter).")
+    state: str = Field(description="The state's slot on the dependency (the protocol's attribute).")
+    since: Optional[Dict[str, Any]] = Field(default=None, description="A revision recorded before: {session, global_rev}.")
+    paths: List[str] = Field(default_factory=list, description="The paths the guard cares about (all of the state when empty).")
+
+
+class StateRevisionResponse(Message):
+    """The answer to a ``StateRevisionRequest``."""
+
+    type: Literal[ToAgentMessageType.STATE_REVISION_RESPONSE] = ToAgentMessageType.STATE_REVISION_RESPONSE
+    request: str = Field(description="The id of the request this answers.")
+    revision: Optional[Dict[str, Any]] = Field(default=None, description="The state's revision now: {session, global_rev}.")
+    changed: Optional[bool] = Field(default=None, description="With since: whether it changed, by anything but the workflow's own calls.")
+    detail: Optional[str] = Field(default=None, description="What changed it, when it changed.")
+    error: Optional[str] = Field(default=None, description="Why the request was refused.")
+
+
 class ControlRequest(Message):
     """Base for a caller's lifecycle-control request over the socket (cancel/interrupt/…).
 
@@ -1094,6 +1123,7 @@ ToAgentMessage = Union[
     JournalAck,
     AssignResponse,
     ProbeResponse,
+    StateRevisionResponse,
     ControlResponse,
     Shelved,
     Unshelved,
@@ -1118,4 +1148,4 @@ ToAgentMessage = Union[
     CriticalEvent,
     LostEvent,
 ]
-FromAgentMessage = Union[Critical, Log, Progress, Started, Completed, Failed, Yield, Register, HeartbeatEvent, Resumed, Paused, Cancelled, Interrupted, StatePatch, StateSnapshot, Lock, Unlock, SessionInit, AssignRequest, ProbeRequest, CancelRequest, InterruptRequest, PauseRequest, ResumeRequest, Shelve, Unshelve, Effect]
+FromAgentMessage = Union[Critical, Log, Progress, Started, Completed, Failed, Yield, Register, HeartbeatEvent, Resumed, Paused, Cancelled, Interrupted, StatePatch, StateSnapshot, Lock, Unlock, SessionInit, AssignRequest, ProbeRequest, StateRevisionRequest, CancelRequest, InterruptRequest, PauseRequest, ResumeRequest, Shelve, Unshelve, Effect]

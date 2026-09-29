@@ -177,6 +177,17 @@ async def _route(
             # The task's own reference: the request's, or the one the server minted without it.
             return messages.AssignResponse(request=message.id, reference=task.reference, task=str(task.pk), created=created)
 
+        case messages.StateRevisionRequest():
+            # A workflow's guard. A refusal NACKs rather than tearing down the transport.
+            from facade.guards import state_revision_sync
+
+            try:
+                revision, changed, detail = await database_sync_to_async(state_revision_sync)(agent_id, message)
+            except Exception as e:
+                log_refusal("StateRevisionRequest", e)
+                return messages.StateRevisionResponse(request=message.id, error=str(e))
+            return messages.StateRevisionResponse(request=message.id, revision=revision, changed=changed, detail=detail)
+
         case messages.ProbeRequest():
             # An agent firing a probe under its own identity. Refusals (allow_probe not
             # declared, inflight cap, unknown target) NACK rather than propagate — they
