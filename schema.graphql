@@ -1427,7 +1427,9 @@ input ClientOrder @oneOf {
 
 """The input for collecting a shelved item in a drawer."""
 input CollectInput {
-  """The drawer ID to collect"""
+  """
+  The drawers to collect: each an ID or a resource ID (as agent-minted drawers are referenced), within the caller's organization
+  """
   drawers: [ID!]!
 }
 
@@ -2764,6 +2766,11 @@ type MemoryDrawer {
   identifier: String!
   description: String
   createdAt: DateTime!
+
+  """
+  Whether the agent minted this drawer's reference: it is addressed by resourceId rather than by id.
+  """
+  agentMinted: Boolean!
 
   """Get the latest value stored in this drawer."""
   label: String!
@@ -4944,6 +4951,11 @@ type Task {
   """Parent task that triggered this one."""
   parent: Task
 
+  """
+  The parent's step this child took; null for roots and for children of agents without numbering.
+  """
+  parentStep: Int
+
   """Action assigned."""
   action: Action!
 
@@ -5079,6 +5091,29 @@ type TaskEvent {
   """If this event was delegated, the task it was delegated to."""
   delegatedTo: Task
 
+  """
+  The session position (pos) of the report that wrote this event; null for server-written events and agents without numbering.
+  """
+  agentPos: Int
+
+  """
+  When the agent recorded the report; null for server-written events and agents without numbering.
+  """
+  agentTs: DateTime
+
+  """
+  The report's step within its task; a task's history in step order. Null for server-written events.
+  """
+  step: Int
+
+  """EFFECT events: NOW, RANDOM or SLEEP."""
+  effect: String
+
+  """
+  EFFECT events: the value the task took (NOW: epoch seconds, RANDOM: hex, SLEEP: deadline).
+  """
+  value: AnyDefault
+
   """Log level of the event (LOG events; INFO when unset)."""
   level: LogLevel!
 
@@ -5123,6 +5158,7 @@ enum TaskEventKind {
   YIELD
   COMPLETED
   LOG
+  EFFECT
   CANCELLING
   CANCELLED
   INTERRUPTING
@@ -5137,6 +5173,8 @@ enum TaskEventKind {
 
 input TaskEventOrder @oneOf {
   createdAt: Ordering
+  agentPos: Ordering
+  step: Ordering
 }
 
 """Numeric/aggregatable fields of Task"""
@@ -5553,7 +5591,9 @@ input UnblockInput {
 }
 
 input UnshelveMemoryDrawerInput {
-  """The resource ID of the drawer."""
+  """
+  The drawer: its resource ID (as agent-minted drawers are referenced) or its ID.
+  """
   id: String!
 }
 

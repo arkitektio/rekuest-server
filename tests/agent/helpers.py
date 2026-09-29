@@ -60,9 +60,9 @@ class AgentSession:
                 return message_cls.model_validate(frame)
         raise AssertionError(f"did not receive a {message_cls.__name__} ({target}) frame")
 
-    async def register(self, *, token: str = TEST_TOKEN, force: bool = False) -> messages.Init:
+    async def register(self, *, token: str = TEST_TOKEN, force: bool = False, session_id: Optional[str] = None) -> messages.Init:
         """Happy-path Register → parsed ``Init`` (also stored on ``.init``)."""
-        await self.send(messages.Register(token=token, force=force))
+        await self.send(messages.Register(token=token, force=force, session_id=session_id))
         self.init = await self.receive(messages.Init)
         return self.init
 
@@ -81,7 +81,7 @@ async def connect_agent(agent_ws) -> AgentSession:
     return AgentSession(await agent_ws())
 
 
-async def open_agent(agent_ws, name: str, *, token: str = TEST_TOKEN, register: bool = True, **seed_kwargs) -> AgentSession:
+async def open_agent(agent_ws, name: str, *, token: str = TEST_TOKEN, register: bool = True, session_id: Optional[str] = None, **seed_kwargs) -> AgentSession:
     """Seed the agent, connect, (optionally) register; return a session with ``.agent`` set.
 
     ``token`` selects the identity (a different static token → a different Agent), enabling
@@ -90,7 +90,7 @@ async def open_agent(agent_ws, name: str, *, token: str = TEST_TOKEN, register: 
     agent = await seed_agent(name, token=token, **seed_kwargs)
     session = AgentSession(await agent_ws(), agent=agent)
     if register:
-        await session.register(token=token)
+        await session.register(token=token, session_id=session_id)
     return session
 
 

@@ -88,7 +88,7 @@ class FakeBackend:
         self.calls.append(("caller_assign", agent_id, message))
         if self.caller_assign_error is not None:
             raise self.caller_assign_error
-        return SimpleNamespace(pk="new-ass-1"), True  # stands in for the created Task
+        return SimpleNamespace(pk="new-ass-1", reference=message.reference), True  # stands in for the created Task
 
     async def on_caller_cancel(self, agent_id, message, *, connection_id=None, session_id=None):
         self.calls.append(("caller_cancel", agent_id, message))

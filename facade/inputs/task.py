@@ -85,6 +85,10 @@ class AssignInputModel(BaseModel):
         default=None,
         description="The parent ID of the task. This is used to identify the task in the system.",
     )
+    parent_step: int | None = Field(
+        default=None,
+        description="The parent's step this child takes (agent-socket assigns of numbering agents). Idempotent on (parent, parent_step). Not exposed on the GraphQL assign, which creates roots only.",
+    )
     capture: bool | None = Field(default=None, description="Whether to capture the task.")
     dependencies: list[ResolvedDependencyInputModel] | None = Field(
         default=None,
@@ -151,7 +155,7 @@ class CollectInputModel(BaseModel):
         drawers: List of drawer IDs to collect from
     """
 
-    drawers: list[str] = Field(description="The drawer ID to collect")
+    drawers: list[str] = Field(description="The drawers to collect: each an ID or a resource ID (as agent-minted drawers are referenced), within the caller's organization")
 
 
 @pydantic.input(

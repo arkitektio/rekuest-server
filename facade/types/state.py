@@ -104,5 +104,3 @@ class Snapshot:
     @classmethod
     def get_queryset(cls, queryset, info, **kwargs):
         return build_prescoped_queryset(info, queryset, field="agent__organization")
-
-

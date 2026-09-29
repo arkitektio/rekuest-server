@@ -93,6 +93,8 @@ class TaskFilter:
 @strawberry_django.order_type(models.TaskEvent)
 class TaskEventOrder:
     created_at: auto
+    agent_pos: auto
+    step: auto
 
 
 @strawberry_django.filter_type(models.TaskEvent, description="A way to filter task events")

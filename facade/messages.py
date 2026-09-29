@@ -97,6 +97,8 @@ class ToAgentMessageType(str, Enum):
     CRITICAL_EVENT = "CRITICAL_EVENT"
     # Ack for a caller's lifecycle-control request (cancel/interrupt/pause/resume).
     CONTROL_RESPONSE = "CONTROL_RESPONSE"
+    # Cumulative ack of the agent journal: "persisted up to pos" (see ``JournalAck``).
+    JOURNAL_ACK = "JOURNAL_ACK"
 
 
 class FromAgentMessageType(str, Enum):
@@ -131,6 +133,9 @@ class FromAgentMessageType(str, Enum):
     INTERRUPT_REQUEST = "INTERRUPT_REQUEST"
     PAUSE_REQUEST = "PAUSE_REQUEST"
     RESUME_REQUEST = "RESUME_REQUEST"
+    # A value a task took from outside itself (the clock, randomness, a sleep deadline), recorded
+    # at its task step so a later replay can return it instead of taking a new one.
+    EFFECT = "EFFECT"
 
 
 class Message(BaseModel):
@@ -141,7 +146,35 @@ class Message(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
 
-class FromAgentEvent(Message):
+class JournalFields(BaseModel):
+    """The position fields a numbering agent stamps on every numbered frame.
+
+    Mixed into the numbered FromAgent messages only (task reports, state patches/snapshots, the
+    session init, locks, shelving) — never into ``Register``, which forbids extras. All optional:
+    an agent without numbering, and every probe frame, sends none of them and is handled as
+    before. ``(agent, journal_session, pos)`` is the frame's durable key; the session's
+    ``projected_pos`` watermark makes a resend a no-op (see ``docs/design/journal.md``).
+    """
+
+    pos: Optional[int] = Field(
+        default=None,
+        description="The frame's position in the agent journal (1, 2, 3, … per journal session, no gaps). None for agents without a journal.",
+    )
+    journal_session: Optional[str] = Field(
+        default=None,
+        description="The agent session the journal position belongs to.",
+    )
+    agent_ts: Optional[float] = Field(
+        default=None,
+        description="When the agent recorded the entry, as epoch seconds.",
+    )
+    task_step: Optional[int] = Field(
+        default=None,
+        description="For frames of a task: the frame's step within that task (1, 2, 3, … over everything the task did, child calls included). Not called ``step``: ``ASSIGN`` already has a ``step`` flag.",
+    )
+
+
+class FromAgentEvent(JournalFields, Message):
     """Base for agent→backend reporting events that participate in the ack/resume stream.
 
     ``seq`` is a monotonic, per-connection stream sequence used only for at-least-once
@@ -391,6 +424,23 @@ class Yield(FromAgentEvent):
     returns: Optional[Dict[str, Any]] = None
 
 
+EffectKindLiteral = Literal["NOW", "RANDOM", "SLEEP"]
+
+
+class Effect(FromAgentEvent):
+    """A value the task took from outside itself, recorded at its task step.
+
+    ``NOW``: epoch seconds (float). ``RANDOM``: the bytes, hex. ``SLEEP``: the deadline, epoch
+    seconds (float). Stored as an ``EFFECT`` TaskEvent; a later replay returns it instead of
+    taking a new one. Never answered.
+    """
+
+    type: Literal[FromAgentMessageType.EFFECT] = FromAgentMessageType.EFFECT
+    task: str
+    effect: EffectKindLiteral
+    value: Any = None
+
+
 class Completed(FromAgentEvent):
     """A completed report
 
@@ -435,7 +485,7 @@ class HeartbeatEvent(Message):
     type: Literal[FromAgentMessageType.HEARTBEAT_ANSWER] = FromAgentMessageType.HEARTBEAT_ANSWER
 
 
-class SessionInit(Message):
+class SessionInit(JournalFields, Message):
     """A session init message
 
     A session init message is sent when the agent starts and wants to
@@ -448,7 +498,7 @@ class SessionInit(Message):
     states: Dict[str, Any] = Field(description="A dictionary containing the initial state snapshots, where the key is the state name and the value is the state snapshot")
 
 
-class StatePatch(Message):
+class StatePatch(JournalFields, Message):
     """A state patch message
 
     A state patch is sent when the agent wants to send a granular state modification
@@ -470,7 +520,7 @@ class StatePatch(Message):
     )
 
 
-class StateSnapshot(Message):
+class StateSnapshot(JournalFields, Message):
     """A state snapshot message
 
     A state snapshot is sent when the agent wants to send a full state snapshot
@@ -483,7 +533,7 @@ class StateSnapshot(Message):
     snapshots: Dict[str, Any] = Field(description="A dictionary containing the state snapshots, where the key is the state name and the value is the state snapshot")
 
 
-class Lock(Message):
+class Lock(JournalFields, Message):
     """A lock message
 
     Sent when the agent wants to acquire a distributed lock on the rekuest backend.
@@ -494,7 +544,7 @@ class Lock(Message):
     task: str
 
 
-class Unlock(Message):
+class Unlock(JournalFields, Message):
     """An unlock message
 
     Sent when the agent wants to release a distributed lock on the rekuest backend.
@@ -502,6 +552,7 @@ class Unlock(Message):
 
     type: Literal[FromAgentMessageType.UNLOCK] = FromAgentMessageType.UNLOCK
     key: str
+    task: Optional[str] = Field(default=None, description="The task that held the lock (numbered agents)")
 
 
 class AssignInquiry(BaseModel):
@@ -585,6 +636,10 @@ class Init(Message):
         default_factory=list,
         description="Non-fatal findings of the registration the Register carried (unknown catalog operations and the like). A hard finding refuses the connection instead: ProtocolError + close(AGENT_REGISTRATION_REJECTED).",
     )
+    journal: bool = Field(
+        default=True,
+        description="Always true. For agents released before the report contract: they number frames but retire them on JOURNAL_ACK only when INIT says so, and this server sends no EVENT_ACK to numbering agents. Current agents ignore it.",
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -596,8 +651,14 @@ class Init(Message):
 # --------------------------------------------------------------------------- #
 
 
-class Shelve(Message):
-    """Record that the agent holds a value in memory: the socket twin of ``shelveInMemoryDrawer``."""
+class Shelve(JournalFields, Message):
+    """Record that the agent holds a value in memory: the socket twin of ``shelveInMemoryDrawer``.
+
+    Numbered (it carries ``pos``), the agent minted ``resource_id`` and uses it as the reference:
+    the backend upserts the drawer on ``(agent's shelve, resource_id)``, marks it agent-minted and
+    replies nothing (``JOURNAL_ACK`` covers it). Without ``pos`` it is the old request/reply: the
+    backend answers ``Shelved`` with the drawer's pk.
+    """
 
     type: Literal[FromAgentMessageType.SHELVE] = FromAgentMessageType.SHELVE
     ref: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Client-minted correlation id, echoed on Shelved.")
@@ -605,6 +666,7 @@ class Shelve(Message):
     resource_id: str
     label: Optional[str] = None
     description: Optional[str] = None
+    task: Optional[str] = Field(default=None, description="The task that shelved the value, if a task did")
 
 
 class Shelved(Message):
@@ -616,8 +678,12 @@ class Shelved(Message):
     error: Optional[str] = None
 
 
-class Unshelve(Message):
-    """The agent dropped a drawer (answering ``Collect``, or on its own): the twin of ``unshelveMemoryDrawer``."""
+class Unshelve(JournalFields, Message):
+    """The agent dropped a drawer (answering ``Collect``, or on its own): the twin of ``unshelveMemoryDrawer``.
+
+    Numbered, ``drawer`` is the agent-minted ``resource_id`` (a pk is still accepted) and nothing
+    is replied. Without ``pos``, ``drawer`` is the pk and ``Unshelved`` answers.
+    """
 
     type: Literal[FromAgentMessageType.UNSHELVE] = FromAgentMessageType.UNSHELVE
     ref: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Client-minted correlation id, echoed on Unshelved.")
@@ -630,6 +696,8 @@ class Unshelved(Message):
     type: Literal[ToAgentMessageType.UNSHELVED] = ToAgentMessageType.UNSHELVED
     ref: str
     error: Optional[str] = None
+
+
 
 
 class AssignRequest(Message):
@@ -648,7 +716,8 @@ class AssignRequest(Message):
     """
 
     type: Literal[FromAgentMessageType.ASSIGN_REQUEST] = FromAgentMessageType.ASSIGN_REQUEST
-    reference: str = Field(description="Caller-supplied idempotency key. Stable across resends of the same logical request.")
+    reference: Optional[str] = Field(default=None, description="Caller-supplied idempotency key, stable across resends of the same logical request; idempotent on (caller, reference). The caller's own: the server never derives it. Minted by the server when omitted.")
+    parent_step: Optional[int] = Field(default=None, description="The parent's step this call takes (numbering agents). With it, the request is idempotent on (parent, parent_step): a call re-issued after a restart returns the same child, whatever its reference. Not ``task_step``: that is the numbered frames' own stamp.")
     args: Dict[str, ShallowJSONSerializable] = Field(default_factory=dict, description="The args of the task (ports → values).")
     action: Optional[str] = Field(default=None, description="The action ID to assign to.")
     action_hash: Optional[str] = Field(default=None, description="The action hash to assign to.")
@@ -675,9 +744,9 @@ class AssignResponse(Message):
 
     type: Literal[ToAgentMessageType.ASSIGN_RESPONSE] = ToAgentMessageType.ASSIGN_RESPONSE
     request: str = Field(description="The id of the AssignRequest this result answers.")
-    reference: str = Field(description="The idempotency key echoed from the request.")
+    reference: str = Field(description="The task's reference: the request's, or the one the server minted when the request had none.")
     task: Optional[str] = Field(default=None, description="The durable task id, or None when error is set.")
-    created: bool = Field(default=True, description="False when an existing task was returned for a duplicate reference.")
+    created: bool = Field(default=True, description="False when an existing task was returned (a duplicate reference, or a (parent, parent_step) already taken).")
     error: Optional[str] = Field(default=None, description="A human-readable error if the assign was rejected (e.g. a parentless root assign).")
 
 
@@ -784,6 +853,20 @@ class EventAck(Message):
     event: str = Field(description="The id of the FromAgentEvent being acknowledged.")
     task: Optional[str] = Field(default=None, description="The task the acked event belonged to, for convenience.")
     seq: Optional[int] = Field(default=None, description="The stream sequence acknowledged, if the event carried one.")
+
+
+class JournalAck(Message):
+    """Backend → agent cumulative acknowledgement of the agent journal.
+
+    "Everything of ``journal_session`` up to ``pos`` is projected." Sent only on a connection
+    that has delivered at least one ``pos``-carrying frame: an agent that predates the journal
+    parses the ToAgent union closed and would reject the unknown type. Debounced (a batch or a
+    short delay), and sent immediately after a terminal report.
+    """
+
+    type: Literal[ToAgentMessageType.JOURNAL_ACK] = ToAgentMessageType.JOURNAL_ACK
+    journal_session: str = Field(description="The agent session the position belongs to.")
+    pos: int = Field(description="The session's projected position: every frame up to it is handled.")
 
 
 class ExecutionEvent(Message):
@@ -965,6 +1048,7 @@ ToAgentMessage = Union[
     Bounce,
     Kick,
     EventAck,
+    JournalAck,
     AssignResponse,
     ProbeResponse,
     ControlResponse,
@@ -990,4 +1074,4 @@ ToAgentMessage = Union[
     FailedEvent,
     CriticalEvent,
 ]
-FromAgentMessage = Union[Critical, Log, Progress, Started, Completed, Failed, Yield, Register, HeartbeatEvent, Resumed, Paused, Cancelled, Interrupted, StatePatch, StateSnapshot, Lock, Unlock, SessionInit, AssignRequest, ProbeRequest, CancelRequest, InterruptRequest, PauseRequest, ResumeRequest, Shelve, Unshelve]
+FromAgentMessage = Union[Critical, Log, Progress, Started, Completed, Failed, Yield, Register, HeartbeatEvent, Resumed, Paused, Cancelled, Interrupted, StatePatch, StateSnapshot, Lock, Unlock, SessionInit, AssignRequest, ProbeRequest, CancelRequest, InterruptRequest, PauseRequest, ResumeRequest, Shelve, Unshelve, Effect]

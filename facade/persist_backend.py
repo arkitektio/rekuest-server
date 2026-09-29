@@ -17,6 +17,7 @@ whose rowcount is the answer.
 """
 
 from facade.persist.caller_ops import CallerOpsMixin
+from facade.persist.positions import AgentPositionMixin
 from facade.persist.leases import AgentLeaseMixin
 from facade.persist.reconcile import ReconcileMixin
 from facade.persist.registration import AgentRegistrationMixin
@@ -33,6 +34,7 @@ class ModelPersistBackend(
     CallerOpsMixin,  # work an agent originates over its own socket
     AgentStateMixin,  # state patches, snapshots, sessions, lock reports
     AgentRegistrationMixin,  # what the agent declares and what it holds in memory
+    AgentPositionMixin,  # session positions: numbered frames handled once, acked cumulatively
 ):
     """Satisfies :class:`facade.ports.PersistBackend`, plus the reconcile surface the reaper drives.
 

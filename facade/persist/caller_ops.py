@@ -52,9 +52,10 @@ class CallerOpsMixin:
     ) -> Tuple[models.Task, bool]:
         """Assign *dependent* work requested by an agent over the socket.
 
-        Idempotent on ``(caller, reference)`` and durable-before-return: a resend of the same
-        ``reference`` returns the existing task with ``created=False`` rather than creating a
-        duplicate. Raises ``PermissionError`` for a parentless (root) assign — roots must trace
+        Idempotent on ``(parent, parent_step)`` when the request carries a step (a numbering agent's
+        child call, re-issued after a restart with whatever reference), else on
+        ``(caller, reference)``; durable-before-return: a resend returns the existing task with
+        ``created=False`` rather than creating a duplicate. Raises ``PermissionError`` for a parentless (root) assign — roots must trace
         to an accountable human, so they originate solely from the GraphQL ``assign`` mutation
         (see the human-root invariant in ``facade.provenance``). Runs the sync postman backend
         off the event loop.
@@ -76,11 +77,6 @@ class CallerOpsMixin:
 
         agent, caller = self._agent_and_caller_sync(agent_id)
 
-        # Idempotency: a resend of the same reference returns the existing task.
-        existing = models.Task.objects.filter(caller=caller, reference=message.reference).first()
-        if existing is not None:
-            return existing, False
-
         if message.parent is None:
             raise PermissionError("An agent may only assign dependent work: 'parent' is required. Root tasks originate from the GraphQL assign mutation, where the initiator is an accountable human.")
 
@@ -95,6 +91,7 @@ class CallerOpsMixin:
             agent=message.agent,
             interface=message.interface,
             parent=message.parent,
+            parent_step=message.parent_step,
             dependency=message.dependency,
             method=message.method,
             resolution=message.resolution,

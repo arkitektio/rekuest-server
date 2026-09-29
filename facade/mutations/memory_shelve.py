@@ -37,10 +37,13 @@ def shelve_in_memory_drawer(info: Info, input: ShelveInMemoryDrawerInput) -> typ
 
 @strawberry.input
 class UnshelveMemoryDrawerInput:
-    id: str = strawberry.field(description="The resource ID of the drawer.")
+    id: str = strawberry.field(description="The drawer: its resource ID (as agent-minted drawers are referenced) or its ID.")
 
 
 def unshelve_memory_drawer(info: Info, input: UnshelveMemoryDrawerInput) -> strawberry.ID:
-    """Drop a drawer from the caller's agent's shelve (the GraphQL twin of ``Unshelve``)."""
-    registration.unshelve(_agent_of(info), input.id)
+    """Drop a drawer from the caller's agent's shelve (the GraphQL twin of ``Unshelve``).
+
+    ``id`` is looked up as a resource ID on the caller's agent's shelve first, then as a pk.
+    """
+    registration.unshelve(_agent_of(info), input.id, by_resource_id=True)
     return input.id

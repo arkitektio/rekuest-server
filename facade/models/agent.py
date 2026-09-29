@@ -225,6 +225,10 @@ class MemoryDrawer(models.Model):
     )
     label = models.CharField(max_length=1000, null=True)
     description = models.TextField(null=True)
+    agent_minted = models.BooleanField(
+        default=False,
+        help_text="The agent minted this drawer's reference (a numbered SHELVE): the agent addresses it by resource_id, and COLLECT names it by resource_id. False for drawers of older agents, which reference the pk.",
+    )
 
     class Meta:
         constraints = [

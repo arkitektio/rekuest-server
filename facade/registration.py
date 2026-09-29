@@ -20,9 +20,10 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterable
 
 from django.db import transaction
+from django.db.models import Q, QuerySet
 
 from facade import models, unique
 from rekuest_core.objects.models import DiagnosticModel
@@ -241,11 +242,20 @@ def implement_agent(client: "Client", user: "User", organization: "Organization"
     return agent, diagnostics
 
 
-def shelve(agent: models.Agent, *, identifier: str, resource_id: str, label: str | None = None, description: str | None = None) -> models.MemoryDrawer:
+def shelve(
+    agent: models.Agent,
+    *,
+    identifier: str,
+    resource_id: str,
+    label: str | None = None,
+    description: str | None = None,
+    agent_minted: bool = False,
+) -> models.MemoryDrawer:
     """Record that ``agent`` holds ``resource_id`` (an ``identifier``) in memory.
 
     Upserts the drawer on the agent's shelve, keyed by ``resource_id``; the shelve exists
-    since :func:`ensure_agent`.
+    since :func:`ensure_agent`. ``agent_minted`` (a numbered SHELVE) marks a drawer
+    the agent references by ``resource_id``; it is never unset by a later plain upsert.
     """
     memory_shelve, _ = models.MemoryShelve.objects.get_or_create(
         agent=agent,
@@ -256,24 +266,52 @@ def shelve(agent: models.Agent, *, identifier: str, resource_id: str, label: str
         ),
     )
 
+    defaults: dict = dict(label=label, description=description, identifier=identifier)
+    if agent_minted:
+        defaults["agent_minted"] = True
     drawer, _ = models.MemoryDrawer.objects.update_or_create(
         shelve=memory_shelve,
         resource_id=resource_id,
-        defaults=dict(
-            label=label,
-            description=description,
-            identifier=identifier,
-        ),
+        defaults=defaults,
     )
     return drawer
 
 
-def unshelve(agent: models.Agent, drawer_id: str) -> None:
+def _numeric(ids: "Iterable[str]") -> list[int]:
+    """The ids that can be primary keys (a resource id like a uuid hex cannot be)."""
+    return [int(i) for i in ids if str(i).isdigit()]
+
+
+def resolve_drawers(queryset: "QuerySet[models.MemoryDrawer]", ids: "Iterable[str]") -> "QuerySet[models.MemoryDrawer]":
+    """The drawers of ``queryset`` that ``ids`` name, by resource id (agent-minted) or by pk (older agents)."""
+    names = [str(i) for i in ids]
+    return queryset.filter(Q(resource_id__in=names) | Q(id__in=_numeric(names)))
+
+
+def collect_reference(drawer: models.MemoryDrawer) -> str:
+    """How the holding agent names ``drawer`` in a ``Collect``: the id it minted, else the pk."""
+    if drawer.agent_minted and drawer.resource_id:
+        return drawer.resource_id
+    return str(drawer.pk)
+
+
+def unshelve(agent: models.Agent, drawer_id: str, *, by_resource_id: bool = False) -> None:
     """Drop the drawer ``drawer_id`` from ``agent``'s shelve.
+
+    ``drawer_id`` is the drawer's pk. With ``by_resource_id`` (a numbered UNSHELVE, the GraphQL
+    mutation) it is first looked up as a ``resource_id`` on the agent's own shelve, falling back
+    to the pk, so agent-minted and older drawers are both addressable.
 
     Raises:
         ValueError: If there is no such drawer, or it sits on another agent's shelve.
     """
+    if by_resource_id:
+        own = models.MemoryDrawer.objects.filter(shelve__agent=agent, resource_id=drawer_id).first()
+        if own is not None:
+            own.delete()
+            return
+    if not str(drawer_id).isdigit():
+        raise ValueError(f"Unknown drawer {drawer_id!r}")
     try:
         drawer = models.MemoryDrawer.objects.select_related("shelve").get(id=drawer_id)
     except (models.MemoryDrawer.DoesNotExist, ValueError):

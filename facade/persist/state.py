@@ -7,8 +7,11 @@ doing, not a grant: the server never hands out a lock.
 
 import logging
 
+from django.db import IntegrityError
 
 from facade import models, messages
+from facade.persist.positions import position_stamp
+from facade.probes.ids import is_probe_id
 
 logger = logging.getLogger(__name__)
 
@@ -19,18 +22,33 @@ class AgentStateMixin:
 
         state = await models.State.objects.aget(agent_id=agent_id, interface=message.state_name)
         session, _ = await models.Session.objects.aget_or_create(agent_id=agent_id, session_id=message.session_id)
+        # The changing task, when it is one of this agent's tasks. A probe (``p-`` id) has no row,
+        # and a stranger's id must not be linked: the patch is still the state's history, so it
+        # is kept without the link rather than refused.
+        task_id = message.task_id
+        if task_id is not None and (is_probe_id(task_id) or not str(task_id).isdigit() or not await models.Task.objects.filter(pk=task_id, agent_id=agent_id).aexists()):
+            task_id = None
 
-        await models.Patch.objects.acreate(
-            state=state,
-            agent_id=agent_id,
-            session=session,
-            interface=message.state_name,
-            op=message.op,
-            path=message.path,
-            value=message.value,
-            task_id=message.task_id,
-            global_rev=message.global_rev,
-        )
+        try:
+            await models.Patch.objects.acreate(
+                state=state,
+                agent_id=agent_id,
+                session=session,
+                interface=message.state_name,
+                op=message.op,
+                path=message.path,
+                value=message.value,
+                old_value=message.old_value,
+                task_id=task_id,
+                global_rev=message.global_rev,
+                **position_stamp(message),
+            )
+        except IntegrityError as e:
+            if "patch_unique_rev_per_session_state" not in str(e):
+                raise
+            # One patch per (session, global_rev, state): this revision is already recorded, so
+            # the frame is a resend. Applying it twice is what corrupted reconstruction before.
+            logger.info("Dropping a duplicate patch for state %s at revision %s (session %s)", message.state_name, message.global_rev, message.session_id)
 
     async def on_agent_state_snapshot(self, agent_id: int, message: messages.StateSnapshot) -> None:
         logger.debug("Snapshot from agent %s", agent_id)

@@ -39,6 +39,7 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 migration_0007 = importlib.import_module("facade.migrations.0007_task_reference_unique_revision")
 migration_0008 = importlib.import_module("facade.migrations.0008_multi_replica_constraints")
+migration_0015 = importlib.import_module("facade.migrations.0015_agent_positions")
 
 
 @contextlib.contextmanager
@@ -167,6 +168,36 @@ class TestSessionDedupe:
             assert Session.objects.get(pk=keeper.pk).active is True
 
         assert constraint_exists("facade_session", "session_unique_id_per_agent")
+
+
+class TestPatchDedupe:
+    def test_the_first_received_patch_survives(self):
+        """A second row for one (session, global_rev, state) is a re-sent patch that reconstruction
+        applied twice. Rows without a session are not duplicates of each other."""
+        agent = _seed_throwaway_agent_graph("dd-patch")
+        state = _build_state_for_agent(agent.pk, "dd-patch", "dd-patch")
+        other_state = _build_state_for_agent(agent.pk, "dd-patch-2", "dd-patch-2")
+        session = Session.objects.create(agent=agent, session_id="S1")
+
+        with without_constraint(Patch, "patch_unique_rev_per_session_state") as editor:
+
+            def patch(state, rev, value, session=session):
+                return Patch.objects.create(state=state, agent=agent, interface=state.interface, session=session, op="replace", path="/x", value=value, global_rev=rev)
+
+            first = patch(state, 1, "first")
+            resend = patch(state, 1, "resend")
+            next_rev = patch(state, 2, "next")
+            same_rev_other_state = patch(other_state, 1, "other")
+            orphan_one = patch(state, 1, "orphan", session=None)
+            orphan_two = patch(state, 1, "orphan", session=None)
+
+            migration_0015.dedupe_patches(real_apps, editor)
+
+            survivors = set(Patch.objects.filter(agent=agent).values_list("pk", flat=True))
+            assert resend.pk not in survivors
+            assert {first.pk, next_rev.pk, same_rev_other_state.pk, orphan_one.pk, orphan_two.pk} <= survivors
+
+        assert constraint_exists("facade_patch", "patch_unique_rev_per_session_state")
 
 
 class TestMemoryDrawerDedupe:

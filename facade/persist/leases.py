@@ -18,7 +18,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from facade import liveness, models, enums
+from facade import liveness, models, enums, registration
 from facade.probes.persist import probe_event_backend
 from facade.deadlines import (
     grace_seconds,
@@ -26,6 +26,19 @@ from facade.deadlines import (
 from facade.ports import LeaseClaim
 
 logger = logging.getLogger(__name__)
+
+
+def same_process(prior_session: Optional[str], session_id: Optional[str]) -> bool:
+    """Whether a registration comes from the process that held the lease before: both sessions
+    known and equal. A reconnect of a surviving process reclaims its in-flight work and keeps
+    its memory drawers."""
+    return prior_session is not None and session_id is not None and prior_session == session_id
+
+
+def fresh_process(prior_session: Optional[str], session_id: Optional[str]) -> bool:
+    """Whether a registration provably comes from a NEW process (both sessions known and
+    different): the prior in-flight work is orphaned and fails-and-cascades."""
+    return prior_session is not None and session_id is not None and prior_session != session_id
 
 
 class AgentLeaseMixin:
@@ -129,6 +142,13 @@ class AgentLeaseMixin:
             agent.active_session_id = session_id
             agent.save(update_fields=["lease_epoch", "connected", "last_seen", "active_connection_id", "active_session_id"])
 
+            # The memory shelf lives in the agent process: unless this is the same process
+            # reconnecting, whatever it shelved is gone, and so are the references to it. A
+            # same-session reconnect keeps its drawers (the agent references them by
+            # the id it minted, across reconnects). Without session info, clear, as always.
+            if not same_process(prior_session, session_id):
+                registration.clear_drawers(agent)
+
         return True, agent.lease_epoch, prior_session, displaced_incumbent
 
     async def on_agent_connected(self, agent_id: int, connection_id: str | None = None, session_id: str | None = None, force: bool = False) -> LeaseClaim:
@@ -154,7 +174,7 @@ class AgentLeaseMixin:
 
         # A different session means a FRESH process took over (the old one died): the prior
         # in-flight work is orphaned and must fail-and-cascade rather than be reclaimed.
-        if prior_session is not None and session_id is not None and prior_session != session_id:
+        if fresh_process(prior_session, session_id):
             await self._fail_and_cascade_inflight(in_flight)
             return LeaseClaim(claimed=True, epoch=epoch, tasks=[], displaced_incumbent=displaced_incumbent)
 

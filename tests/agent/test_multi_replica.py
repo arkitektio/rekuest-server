@@ -138,9 +138,9 @@ class TestAssignIsIdempotentAcrossBackends:
         recoveries = []
         real_recover = type(controll_backend)._lost_reference_race
 
-        def counting_recover(caller, reference):
+        def counting_recover(caller, input, reference):
             recoveries.append(reference)
-            return real_recover(caller, reference)
+            return real_recover(caller, input, reference)
 
         monkeypatch.setattr(type(controll_backend), "_lost_reference_race", staticmethod(counting_recover))
 

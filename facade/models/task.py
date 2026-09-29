@@ -42,6 +42,11 @@ class Task(models.Model):
         default=uuid.uuid4,
         help_text="The Unique identifier of this Task considering its parent",
     )
+    parent_step = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        help_text="The parent's step this child took (the AssignRequest's parent_step). A task's history is its events and patches by step, plus its children by parent_step. NULL for roots and for children of agents without numbering.",
+    )
     dependency = models.CharField(
         max_length=1000,
         null=True,
@@ -232,6 +237,10 @@ class Task(models.Model):
             # NULL callers are distinct in Postgres, so caller-less rows are unaffected. The
             # constraint's own index serves the dedupe lookup.
             models.UniqueConstraint(fields=["caller", "reference"], name="task_unique_reference_per_caller"),
+            # One child per step of a parent: a call re-issued after a restart (same parent, same
+            # step, fresh reference) must find the child it already created, not run it again.
+            # NULL parent_step (everything but numbered child calls) stays distinct.
+            models.UniqueConstraint(fields=["parent", "parent_step"], name="task_unique_step_per_parent"),
         ]
         indexes = [
             # The org-scoped ``tasks`` list. The org restriction lives on Agent (see
@@ -333,6 +342,32 @@ class TaskEvent(models.Model):
         help_text="The log level (LOG events)",
         null=True,
         blank=True,
+    )
+    agent_pos = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        help_text="The session position (pos) of the report that wrote this event. NULL for server-written events and for agents without numbering.",
+    )
+    agent_ts = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the agent recorded the report (the frame's agent_ts). NULL for server-written events and for agents without numbering.",
+    )
+    step = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        help_text="The report's step within its task (the frame's task_step). A task's history is its events, patches and child tasks (parent_step) in step order. NULL for server-written events.",
+    )
+    effect = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        help_text="EFFECT events: what the task took from outside itself (NOW, RANDOM, SLEEP).",
+    )
+    value = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="EFFECT events: the value taken (NOW: epoch seconds, RANDOM: hex, SLEEP: the deadline in epoch seconds), which a replay returns instead of taking a new one.",
     )
 
 

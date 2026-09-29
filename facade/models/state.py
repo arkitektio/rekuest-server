@@ -85,6 +85,15 @@ class Session(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, help_text="The time this session was created")
     updated_at = models.DateTimeField(auto_now=True, help_text="The time this session was last updated")
     active = models.BooleanField(default=True, help_text="Is this session active?")
+    projected_pos = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Every numbered frame of this session up to this position is handled: a resend at or below it is skipped, and JOURNAL_ACK claims it (docs/design/journal.md).",
+    )
+    claimed_pos = models.PositiveBigIntegerField(
+        default=0,
+        help_text="The position a backend is projecting right now (claimed_pos = projected_pos + 1 while one is in flight, else equal). Another backend waits for it, or takes it over once claimed_at is stale.",
+    )
+    claimed_at = models.DateTimeField(null=True, blank=True, help_text="When claimed_pos was claimed")
 
     class Meta:
         constraints = [
@@ -109,6 +118,18 @@ class Patch(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True, help_text="The time this patch was created")
     global_rev = models.IntegerField(help_text="The current revision of the state in the global context (e.g. considering all patches that have been applied to this state)")
     task = models.ForeignKey("Task", on_delete=models.CASCADE, null=True, blank=True, help_text="The task that caused this patch (e.g. to be able to track changes by task)", related_name="patches")
+    old_value = models.JSONField(null=True, blank=True, help_text="The value the patch replaced, when the agent reported it (debugging and tracing only; never used to reconstruct state)")
+    agent_pos = models.PositiveBigIntegerField(null=True, blank=True, help_text="The session position (pos) of the frame that carried this patch. NULL for agents without numbering.")
+    agent_ts = models.DateTimeField(null=True, blank=True, help_text="When the agent recorded the patch (the frame's agent_ts). NULL for agents without numbering.")
+    step = models.PositiveBigIntegerField(null=True, blank=True, help_text="The changing task's step (the frame's task_step). NULL for agents without numbering and patches outside a task.")
+
+    class Meta:
+        constraints = [
+            # One patch per revision of a state in a session: ``global_rev`` is bumped once per
+            # patch by the agent, so a second row is a resend. Without it a resent patch was
+            # applied twice on reconstruction. NULL sessions stay distinct in Postgres.
+            models.UniqueConstraint(fields=["session", "global_rev", "state"], name="patch_unique_rev_per_session_state"),
+        ]
 
 
 class Snapshot(models.Model):

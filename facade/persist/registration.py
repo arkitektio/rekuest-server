@@ -45,6 +45,7 @@ class AgentRegistrationMixin:
     @classmethod
     def _shelve_sync(cls, agent_id: int, message: messages.Shelve) -> models.MemoryDrawer:
         from facade import registration
+        from facade.persist.positions import is_numbered
 
         agent = cls._agent_with_identity_sync(agent_id)
         return registration.shelve(
@@ -53,13 +54,17 @@ class AgentRegistrationMixin:
             resource_id=message.resource_id,
             label=message.label,
             description=message.description,
+            # A numbered SHELVE: the agent minted resource_id and references it.
+            agent_minted=is_numbered(message),
         )
 
     @classmethod
     def _unshelve_sync(cls, agent_id: int, message: messages.Unshelve) -> None:
         from facade import registration
+        from facade.persist.positions import is_numbered
 
-        registration.unshelve(cls._agent_with_identity_sync(agent_id), message.drawer)
+        # Numbered, ``drawer`` is the agent-minted resource_id (a pk still works); otherwise a pk.
+        registration.unshelve(cls._agent_with_identity_sync(agent_id), message.drawer, by_resource_id=is_numbered(message))
 
     async def on_agent_implement(self, agent_id: int, register: messages.Register) -> tuple[models.Agent, list[DiagnosticModel]]:
         """Reconcile the declaration a ``Register`` carries, atomically; the agent and its diagnostics."""

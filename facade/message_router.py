@@ -18,8 +18,10 @@ from typing import Optional
 
 from channels.db import database_sync_to_async
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
+from django.db import IntegrityError
 
 from facade import messages
+from facade.persist.positions import Position, is_numbered
 from facade.probes.ids import is_probe_id
 from facade.probes.persist import probe_event_backend
 from facade.ports import PersistBackend
@@ -103,7 +105,45 @@ async def route_from_agent_message(
 
     Raises :class:`UnknownAgentMessage` for messages it does not handle (e.g. a second
     Register) so the transport can close the socket / return a 4xx.
+
+    A **numbered** frame (``pos`` + ``journal_session``, see ``docs/design/journal.md``) is
+    handled once per session position: a resend at or below the session's ``projected_pos`` is
+    skipped, anything else is claimed, projected and confirmed. It is never answered with an
+    ``EventAck``: the cumulative ``JOURNAL_ACK`` covers it. A refusal (unknown state, another
+    agent's task, a duplicate patch revision) is logged and counts as handled — the agent retains
+    numbered frames until acked, so a frame that raised on every delivery would be re-sent on
+    every reconnect and hold the watermark back forever. Anything else (the database is down)
+    releases the claim and propagates, so the resend projects it.
+
+    A frame without ``pos`` is routed exactly as before.
     """
+    if not is_numbered(message):
+        return await _route(backend, agent_id, message, connection_id=connection_id, session_id=session_id)
+
+    if await backend.claim_position(agent_id, message) is Position.DUPLICATE:  # type: ignore[arg-type]
+        logger.debug("Resend %s/%s skipped", message.journal_session, message.pos)  # type: ignore[union-attr]
+        return None
+    try:
+        reply = await _route(backend, agent_id, message, connection_id=connection_id, session_id=session_id)
+    except (*_REFUSALS, IntegrityError) as e:
+        log_refusal(f"Numbered {type(message).__name__}", e)
+        reply = None
+    except BaseException:
+        await backend.release_position(agent_id, message)  # type: ignore[arg-type]
+        raise
+    await backend.confirm_position(agent_id, message)  # type: ignore[arg-type]
+    return None if isinstance(reply, messages.EventAck) else reply
+
+
+async def _route(
+    backend: PersistBackend,
+    agent_id: int,
+    message: messages.FromAgentMessage,
+    *,
+    connection_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+) -> Optional[messages.ToAgentMessage]:
+    """The projection: dispatch a FromAgent message to its handler and return the optional reply."""
     # Probes share the agent wire protocol: agents report on a probe exactly as on
     # a task, distinguished only by the id prefix — those reports go to the redis-backed
     # probe handlers and must never reach the DB backend (integer PK lookups would raise).
@@ -119,7 +159,7 @@ async def route_from_agent_message(
             if is_probe_id(message.parent or ""):
                 return messages.AssignResponse(
                     request=message.id,
-                    reference=message.reference,
+                    reference=message.reference or "",
                     task=None,
                     created=False,
                     error="A probe cannot parent dependent work — assign a task instead.",
@@ -133,8 +173,9 @@ async def route_from_agent_message(
                 )
             except Exception as e:
                 log_refusal("AssignRequest", e)
-                return messages.AssignResponse(request=message.id, reference=message.reference, task=None, created=False, error=str(e))
-            return messages.AssignResponse(request=message.id, reference=message.reference, task=str(task.pk), created=created)
+                return messages.AssignResponse(request=message.id, reference=message.reference or "", task=None, created=False, error=str(e))
+            # The task's own reference: the request's, or the one the server minted without it.
+            return messages.AssignResponse(request=message.id, reference=task.reference, task=str(task.pk), created=created)
 
         case messages.ProbeRequest():
             # An agent firing a probe under its own identity. Refusals (allow_probe not
@@ -215,9 +256,27 @@ async def route_from_agent_message(
         case messages.Unlock():
             await backend.on_agent_unlock(agent_id, message)
             return None
+        case messages.Effect():
+            await backend.on_agent_effect(agent_id, message)
+            return None
 
-        # Shelving: request/reply, a failure answers with ``error`` and never tears down
-        # the transport.
+        # Shelving, numbered: the agent minted the reference (``resource_id``) and never waits
+        # for an answer, so nothing is replied — JOURNAL_ACK covers the entry. A refusal
+        # propagates to ``route_from_agent_message``, which logs it and marks it handled.
+        case messages.Shelve() if is_numbered(message):
+            if session_id is not None and message.journal_session != session_id:
+                # An earlier process's unacked SHELVE, resent after a restart: its value died
+                # with that process, and its drawers were cleared when this session registered.
+                logger.info("Numbered SHELVE of session %s ignored (the agent is now session %s)", message.journal_session, session_id)
+                return None
+            await backend.on_agent_shelve(agent_id, message)
+            return None
+        case messages.Unshelve() if is_numbered(message):
+            await backend.on_agent_unshelve(agent_id, message)
+            return None
+
+        # Shelving without numbering: request/reply, a failure answers with ``error`` and never
+        # tears down the transport.
         case messages.Shelve():
             try:
                 drawer = await backend.on_agent_shelve(agent_id, message)
@@ -289,5 +348,7 @@ async def _route_probe_message(agent_id: int, message: messages.FromAgentMessage
         case messages.Lock():
             logger.warning("Lock %s requested by probe %s — ignored (probes cannot hold locks)", message.key, message.task)
             return None
+        case messages.Effect():
+            return None  # a probe has no history to replay
         case _:
             raise UnknownAgentMessage(type(message).__name__)

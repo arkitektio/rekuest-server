@@ -46,7 +46,7 @@ sequenceDiagram
     AG->>AC: WebSocket connect
     AC->>P: build protocol (connection_id)
     AG->>P: Register{token, force, session_id, name, hash, implementations, states, locks, bloks}
-    P->>AU: authenticate(token) → ensure Agent (+ memory shelve, drawers cleared)
+    P->>AU: authenticate(token) → ensure Agent (+ memory shelve)
     alt agent.blocked
         P-->>AG: close(AGENT_IS_BLOCKED)
     end
@@ -109,8 +109,9 @@ full agent — which would claim the write-lease and displace the real executor.
 `facade.registration.ensure_agent`: `Agent.get_or_create` keyed on that triple (a new agent takes
 `app`/`release` from the client's release and is named after the client until its first
 `Implement` names it), a
-`MemoryShelve.get_or_create` beside it, and every stale `MemoryDrawer` deleted — a process that
-just registered holds nothing in memory. The socket is therefore the agent's complete control
+`MemoryShelve.get_or_create` beside it. Every stale `MemoryDrawer` is deleted when the lease is
+claimed, unless `session_id` is the one the previous connection registered with: a new process
+holds nothing in memory, while a reconnect of the same process keeps its drawers. The socket is therefore the agent's complete control
 plane: no GraphQL call precedes it (guarded by `test_register_for_uncreated_agent_creates_it`
 and `tests/agent/test_registration.py`). The `ensureAgent` / `implementAgent` mutations remain for
 dashboards and for a HookAgent's bootstrap (`kind`, `hook_url`, `hook_url_secret`) — they run the
@@ -162,6 +163,12 @@ Shelving is a request/reply pair: `Shelve{ref, identifier, resource_id, label, d
 rather than closing. `Collect{drawers}` remains the server's outbound request to drop drawers,
 which the agent answers with `Unshelve`. Both are twins of the GraphQL `shelveInMemoryDrawer` /
 `unshelveMemoryDrawer` mutations.
+
+A journal-capable agent (journal v2, see `journal.md`) mints the id itself: a *journaled* `Shelve`
+(one carrying `pos`) upserts the drawer on `(shelve, resource_id)` with `agent_minted = true` and is
+not answered (`JOURNAL_ACK` covers it), and a journaled `Unshelve` names the drawer by that
+`resource_id` (a pk still works). `Collect` names agent-minted drawers by `resource_id` and the rest
+by pk; the GraphQL `collect` and `unshelveMemoryDrawer` accept either form.
 
 All outbound frames funnel through a single `_send` guarded by an `asyncio.Lock`, because the
 heartbeat loop, the listen loop, and `receive` can all try to send concurrently on the same event
@@ -362,8 +369,9 @@ inquiries (`AssignInquiry`), and the shelving replies `Shelved` / `Unshelved`. (
 | `StatePatch` | `on_agent_state_patch` | append a `Patch` |
 | `StateSnapshot` | `on_agent_state_snapshot` | write `Snapshot`s |
 | `SessionInit` | `on_agent_session_init` | initialize a `Session` |
-| `Shelve` | `on_agent_shelve` | upsert a `MemoryDrawer` on the agent's shelve; replies `Shelved{ref, drawer}` / `{ref, error}` |
-| `Unshelve` | `on_agent_unshelve` | drop the drawer if it is the agent's; replies `Unshelved{ref}` / `{ref, error}` |
+| `Shelve` | `on_agent_shelve` | upsert a `MemoryDrawer` on the agent's shelve; replies `Shelved{ref, drawer}` / `{ref, error}` (journaled: agent-minted, no reply) |
+| `Unshelve` | `on_agent_unshelve` | drop the drawer if it is the agent's; replies `Unshelved{ref}` / `{ref, error}` (journaled: by `resource_id`, no reply) |
+| `Assigned` / `Call` / `CallResult` / `Now` / `Random` / `Sleep` | — | journal-only (`ASSIGN`, `CALL`, …): stored in the journal, never projected or answered; refused without `pos` |
 
 The four lifecycle **confirmation events** are the executor's half of the two-phase controls: the
 server forwards a `Cancel` / `Interrupt` / `Pause` / `Resume`, and the executing agent reports the

@@ -25,7 +25,7 @@ import asyncio
 import json
 import logging
 import uuid
-from typing import Awaitable, Callable, Optional
+from typing import Awaitable, Callable, Dict, Optional
 
 from authentikate.expand import (
     aexpand_client_from_token,
@@ -40,6 +40,7 @@ from pydantic import BaseModel, Field
 from facade import codes, messages, models, registration
 from facade.consumers.agent_queue import AgentQueue
 from facade.message_router import UnknownAgentMessage, log_refusal, route_from_agent_message
+from facade.persist.positions import is_numbered
 from facade.persist_backend import persist_backend
 from facade.ports import PersistBackend
 
@@ -48,6 +49,14 @@ logger = logging.getLogger(__name__)
 # How often a registered connection re-joins its channel-layer groups (must stay well below the
 # layer's ``group_expiry``).
 GROUP_REFRESH_SECONDS = 3600.0
+
+# JOURNAL_ACK debounce: acknowledge after this many newly persisted entries, or this long after
+# the first unacknowledged one — whichever comes first. A terminal report is acked at once.
+JOURNAL_ACK_EVERY = 50
+JOURNAL_ACK_DELAY_SECONDS = 0.2
+
+_TERMINAL_REPORTS = (messages.Completed, messages.Failed, messages.Critical, messages.Cancelled, messages.Interrupted)
+
 
 SendCallable = Callable[[str], Awaitable[None]]
 CloseCallable = Callable[[int], Awaitable[None]]
@@ -90,9 +99,10 @@ async def default_authenticator(register: messages.Register) -> "models.Agent":
 
     Ensure semantics, the socket twin of the ``ensureAgent`` mutation: the agent row (app and
     release from the token's client; named after the client until its first ``Implement``
-    names it), its memory shelve, and the drawers of any previous process forgotten -- a
-    process that just registered holds nothing in memory. Runs off the event loop: the
-    client's release/app is a lazy FK chain.
+    names it) and its memory shelve. The drawers of a previous process are forgotten when the
+    lease is claimed, and only when the session changed (``on_agent_connected``): a reconnect
+    of the same process keeps them. Runs off the event loop: the client's release/app is a lazy
+    FK chain.
     """
     token = await authenticate_token_or_none(register.token)
     if not token:
@@ -103,9 +113,7 @@ async def default_authenticator(register: messages.Register) -> "models.Agent":
     organization = await aexpand_organization_from_token(token)
 
     def ensure() -> "models.Agent":
-        agent = registration.ensure_agent(client, user, organization)
-        registration.clear_drawers(agent)
-        return agent
+        return registration.ensure_agent(client, user, organization)
 
     return await database_sync_to_async(ensure)()
 
@@ -166,6 +174,13 @@ class RegisteredSession:
         self.listen_task: Optional[asyncio.Task] = None
         self.heartbeat_task: Optional[asyncio.Task] = None
 
+        # Numbered frames not yet acked, per session. Empty until the agent sends a
+        # ``pos``-carrying frame, and while it is empty no JOURNAL_ACK is ever sent: an agent
+        # without numbering parses the ToAgent union closed and would reject the unknown type.
+        self.unacked: Dict[str, int] = {}
+        self.journal_ack_task: Optional[asyncio.Task] = None
+        self._journal_ack_lock = asyncio.Lock()
+
     async def dispatch(self, message: messages.FromAgentMessage) -> None:
         """Route a validated, post-registration message to its handler.
 
@@ -193,6 +208,49 @@ class RegisteredSession:
 
         if reply is not None:
             await self.send_to_agent_message(reply)
+
+        if is_numbered(message):
+            await self.on_numbered_handled(message)  # type: ignore[arg-type]
+
+    async def on_numbered_handled(self, message: messages.JournalFields) -> None:
+        """Count a handled numbered frame toward the next JOURNAL_ACK, and ack when it is due.
+
+        Reached only after the router returned: the frame is projected (or was a resend of one
+        that already was), so the session's watermark covers it.
+        """
+        journal_session = message.journal_session
+        if journal_session is None:
+            return
+        self.unacked[journal_session] = self.unacked.get(journal_session, 0) + 1
+        if isinstance(message, _TERMINAL_REPORTS) or self.unacked[journal_session] >= JOURNAL_ACK_EVERY:
+            await self.flush_journal_acks()
+        elif self.journal_ack_task is None or self.journal_ack_task.done():
+            self.journal_ack_task = asyncio.create_task(self._delayed_journal_ack())
+
+    async def _delayed_journal_ack(self) -> None:
+        try:
+            await asyncio.sleep(JOURNAL_ACK_DELAY_SECONDS)
+            await self.flush_journal_acks()
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            logger.error("Agent %s: sending a JOURNAL_ACK failed", self.agent.pk, exc_info=True)
+
+    async def flush_journal_acks(self) -> None:
+        """Send one cumulative JOURNAL_ACK per session with handled frames: its watermark.
+
+        The watermark is read from the session row, not counted here: another connection (the
+        agent reconnected while this one was still working) may have moved it further.
+        """
+        async with self._journal_ack_lock:
+            for journal_session, count in list(self.unacked.items()):
+                if count == 0:
+                    continue
+                self.unacked[journal_session] = 0
+                pos = await self.backend.projected_position(self.agent.pk, journal_session)
+                if pos == 0:
+                    continue
+                await self.send_to_agent_message(messages.JournalAck(journal_session=journal_session, pos=pos))
 
     async def on_agent_heartbeat(self) -> None:
         """Renew the agent's write-lease and resolve the pending heartbeat future.
@@ -388,7 +446,7 @@ class RegisteredSession:
 
     async def shutdown(self) -> None:
         """Cancel loops and drive the disconnect cascade for this session."""
-        for task in (self.listen_task, self.heartbeat_task):
+        for task in (self.listen_task, self.heartbeat_task, self.journal_ack_task):
             if task is None:
                 continue
             task.cancel()

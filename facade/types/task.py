@@ -26,6 +26,7 @@ class Task:
     resolution: Optional["Resolution"] = strawberry.field(description="Resolution used to resolve dependencies for this task.")
     root: Optional["Task"] = strawberry.field(description="Root task in the creation chain.")
     parent: Optional["Task"] = strawberry.field(description="Parent task that triggered this one.")
+    parent_step: int | None = strawberry_django.field(description="The parent's step this child took; null for roots and for children of agents without numbering.")
     action: "Action" = strawberry.field(description="Action assigned.")
     capture: bool = strawberry.field(description="Indicates if the task is being captured for logging or debugging.")
     implementation: Optional["Implementation"] = strawberry.field(description="Implementation assigned to execute. Null until the task is mapped to one.")
@@ -87,6 +88,11 @@ class TaskEvent:
     progress: int | None = strawberry_django.field(description="Progress percentage.")
     created_at: strawberry.auto = strawberry_django.field(description="Time when event was created.")
     delegated_to: Optional["Task"] = strawberry_django.field(description="If this event was delegated, the task it was delegated to.")
+    agent_pos: int | None = strawberry_django.field(description="The session position (pos) of the report that wrote this event; null for server-written events and agents without numbering.")
+    agent_ts: datetime.datetime | None = strawberry_django.field(description="When the agent recorded the report; null for server-written events and agents without numbering.")
+    step: int | None = strawberry_django.field(description="The report's step within its task; a task's history in step order. Null for server-written events.")
+    effect: str | None = strawberry_django.field(description="EFFECT events: NOW, RANDOM or SLEEP.")
+    value: rscalars.AnyDefault | None = strawberry_django.field(description="EFFECT events: the value the task took (NOW: epoch seconds, RANDOM: hex, SLEEP: deadline).")
 
     @strawberry_django.field(description="Log level of the event (LOG events; INFO when unset).")
     def level(self) -> enums.LogLevel:

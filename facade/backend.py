@@ -14,6 +14,7 @@ from facade.consumers.async_consumer import AgentConsumer
 from facade.deadlines import control_deadline_seconds
 from facade.higher_order import build_lower_args, build_lower_dependencies
 from facade.provenance import mint_token_for_task
+from facade import registration
 from facade.types.base import scoped_get
 from facade.provenance.canonical import args_hash
 from kante.types import Info
@@ -410,14 +411,31 @@ class RedisControllBackend:
         return self.assign_with_status(principal, input)[0]
 
     @staticmethod
-    def _lost_reference_race(caller: models.Caller, reference: str) -> models.Task | None:
-        """The task another backend created for this very ``(caller, reference)`` a moment ago.
+    def _existing_assign(caller: models.Caller, input: inputs.AssignInputModel, reference: str | None) -> models.Task | None:
+        """The task an earlier delivery of this very assign created, if any.
 
-        Called after an ``IntegrityError`` on the insert: ``task_unique_reference_per_caller``
-        fired because a concurrent retry of the same assign — on this or another backend — won.
-        ``None`` means the error was about something else, and must propagate.
+        A child call with a step is the same call as any other with that ``(parent,
+        parent_step)``, whatever its reference: re-issued after the agent restarted, it carries a
+        fresh one. Everything else is the same call only with the same ``(caller, reference)``.
         """
-        return models.Task.objects.filter(caller=caller, reference=reference).first()
+        if input.parent is not None and input.parent_step is not None:
+            by_step = models.Task.objects.filter(parent_id=input.parent, parent_step=input.parent_step).first()
+            if by_step is not None:
+                return by_step
+        if reference is not None:
+            return models.Task.objects.filter(caller=caller, reference=reference).first()
+        return None
+
+    @classmethod
+    def _lost_reference_race(cls, caller: models.Caller, input: inputs.AssignInputModel, reference: str) -> models.Task | None:
+        """The task another backend created for this very assign a moment ago.
+
+        Called after an ``IntegrityError`` on the insert: ``task_unique_reference_per_caller`` or
+        ``task_unique_step_per_parent`` fired because a concurrent retry of the same assign — on
+        this or another backend — won. ``None`` means the error was about something else, and
+        must propagate.
+        """
+        return cls._existing_assign(caller, input, reference)
 
     def assign_with_status(
         self,
@@ -465,14 +483,13 @@ class RedisControllBackend:
 
         caller = get_caller_for_context(ctx)
 
-        # Idempotency on the caller-supplied reference: a resend returns the existing task
-        # (no re-broadcast, no new events) — mirroring the agent-socket path's dedupe in
-        # ``_caller_assign_sync``. Server-generated references are fresh per call, so only a
-        # provided reference dedupes. Placed before target resolution: a hit skips it all.
-        if input.reference is not None:
-            existing = models.Task.objects.filter(caller=caller, reference=input.reference).first()
-            if existing is not None:
-                return existing, False
+        # Idempotency: a resend returns the existing task (no re-broadcast, no new events). A
+        # child call with a step dedupes on (parent, parent_step), anything else on the
+        # caller-supplied reference; server-generated references are fresh per call, so only a
+        # provided one dedupes. Placed before target resolution: a hit skips it all.
+        existing = self._existing_assign(caller, input, input.reference)
+        if existing is not None:
+            return existing, False
 
         if input.dependency:
             action, implementation, agent, dependency_dict = resolve_dependency_target(
@@ -541,6 +558,7 @@ class RedisControllBackend:
                     args_hash=args_hash(input.args or {}),
                     reference=reference,
                     parent_id=input.parent,
+                    parent_step=input.parent_step if input.parent else None,
                     root_id=root_id,
                     agent=agent,
                     acted_on=acted_on,
@@ -573,7 +591,7 @@ class RedisControllBackend:
                 # refuses the token must refuse the assign now, not strand a row until it is due.
                 token = mint_token_for_task(task, ctx)
         except IntegrityError:
-            winner = self._lost_reference_race(caller, reference)
+            winner = self._lost_reference_race(caller, input, reference)
             if winner is None:
                 raise
             return winner, False
@@ -662,7 +680,7 @@ class RedisControllBackend:
             with transaction.atomic():
                 higher_task, lower_task, token = self._create_higher_order_pair(ctx, input, higher, caller, root_id, reference, higher_dependencies, lower_impl, lower_action, lower_agent, lower_args, lower_dependencies)
         except IntegrityError:
-            winner = self._lost_reference_race(caller, reference)
+            winner = self._lost_reference_race(caller, input, reference)
             if winner is None:
                 raise
             return winner, False
@@ -699,6 +717,7 @@ class RedisControllBackend:
             args_hash=args_hash(input.args or {}),
             reference=reference,
             parent_id=input.parent,
+            parent_step=input.parent_step if input.parent else None,
             root_id=root_id,
             agent=higher.agent,
             acted_on=acted_on_from_args(input.args, higher.action),
@@ -791,22 +810,27 @@ class RedisControllBackend:
         return agent
 
     def collect(self, info: Info, input: inputs.CollectInputModel) -> list[str]:
-        agents = {}
+        """Tell each holding agent to drop the named drawers.
 
-        drawers = models.MemoryDrawer.objects.filter(id__in=input.drawers).prefetch_related("shelve__agent").all()
+        A drawer is named by its pk or its resource id, and only the caller's organization's
+        drawers are resolved. Each agent is told the reference it uses: the resource id it
+        minted (numbered agents), or the pk (older agents).
+        """
+        agents: dict[int, set[str]] = {}
+
+        in_org = models.MemoryDrawer.objects.filter(shelve__organization=info.context.request.organization)
+        drawers = registration.resolve_drawers(in_org, input.drawers).select_related("shelve")
 
         for drawer in drawers:
-            if drawer.shelve.agent.pk not in agents:
-                agents[drawer.shelve.agent.pk] = set()
-            agents[drawer.shelve.agent.pk].add(str(drawer.pk))
+            agents.setdefault(drawer.shelve.agent_id, set()).add(registration.collect_reference(drawer))
 
-        for agent_id, drawers in agents.items():
+        for agent_id, references in agents.items():
             agent = models.Agent.objects.get(id=agent_id)
-            logger.debug("Collecting %s drawer(s) from agent %s", len(drawers), agent_id)
+            logger.debug("Collecting %s drawer(s) from agent %s", len(references), agent_id)
             AgentConsumer.broadcast(
                 agent,
                 message=messages.Collect(
-                    drawers=list(drawers),
+                    drawers=sorted(references),
                 ),
             )
 

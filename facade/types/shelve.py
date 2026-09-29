@@ -32,6 +32,7 @@ class MemoryDrawer:
     identifier: str
     description: str | None
     created_at: datetime.datetime
+    agent_minted: bool = strawberry_django.field(description="Whether the agent minted this drawer's reference: it is addressed by resourceId rather than by id.")
 
     @strawberry_django.field(description="Get the latest value stored in this drawer.")
     def label(self) -> str:

@@ -36,6 +36,7 @@ class TaskEventChoices(TextChoices):
     )  # One yield can be interpreted as a return
     COMPLETED = "COMPLETED", "Completed (Agent finished the Task)"
     LOG = "LOG", "Log (Agent logged a message)"
+    EFFECT = "EFFECT", "Effect (the task took a value from outside itself: the clock, randomness, a sleep deadline)"
 
 
 class TaskInstructChoices(TextChoices):
@@ -84,6 +85,8 @@ class TaskEventKind(str, Enum):
 
     # Log Events
     LOG = "LOG"
+    # A value the task took from outside itself, recorded for replay
+    EFFECT = "EFFECT"
     CANCELLING = "CANCELLING"
     CANCELLED = "CANCELLED"
     INTERRUPTING = "INTERRUPTING"
