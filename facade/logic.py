@@ -108,59 +108,71 @@ def get_latest_state(
     forward_patch_count: int = 0,
     backward_patch_count: int = 0,
 ) -> dict:
-    states_data = {}
-    max_current_revision = 0
+    """Materialize an agent's states within ONE session, at ``global_revision`` or the latest.
 
+    ``global_rev`` numbers the patches of a session (it restarts with every agent process), so
+    every read here is scoped to the session and ordered by ``global_rev``: the anchor is the
+    newest snapshot at or before the target revision, and the patches after it are applied in
+    revision order. Ordering by receive timestamp, or mixing sessions, applied a previous
+    process's patches (or re-sent ones) on top of the wrong base.
+    """
     if not session_id:
         t = models.Session.objects.filter(agent=agent).order_by("-created_at").first()
     else:
         t = models.Session.objects.get(agent=agent, session_id=session_id)
 
+    if t is None:
+        return {"states": {}, "global_revision": 0, "forward_patches": [], "backward_patches": [], "session_id": None, "timestamp": None}
+
+    states_data = {}
+    max_current_revision = 0
+    latest_timestamp = t.created_at
+
     qs = models.State.objects.filter(agent=agent)
     if state_id:
         qs = qs.filter(id=state_id)
 
-    latest_timestamp = t.created_at
-
     for state in qs:
         snapshot_qs = models.Snapshot.objects.filter(state=state, agent=agent, session=t)
         if global_revision is not None:
-            snapshot_qs = snapshot_qs.filter(global_rev__lte=global_revision).order_by("-global_rev")
-        else:
-            snapshot_qs = snapshot_qs.order_by("-timestamp")
-
-        snapshot = snapshot_qs.first()
+            snapshot_qs = snapshot_qs.filter(global_rev__lte=global_revision)
+        snapshot = snapshot_qs.order_by("-global_rev", "-id").first()
         if not snapshot:
             raise ValueError(f"No snapshot found for state {state_id or state.pk}")
 
-        base_value = snapshot.value if snapshot else {}
-        start_time = snapshot.timestamp if snapshot else None
-
-        patches_qs = models.Patch.objects.filter(state=state, agent=agent)
-        if start_time:
-            patches_qs = patches_qs.filter(timestamp__gt=start_time)
-
+        patches_qs = models.Patch.objects.filter(state=state, session=t, global_rev__gt=snapshot.global_rev)
         if global_revision is not None:
             patches_qs = patches_qs.filter(global_rev__lte=global_revision)
 
-        patches = patches_qs.order_by("timestamp")
+        current_value = snapshot.value
+        current_global_revision = snapshot.global_rev
+        if snapshot.timestamp > latest_timestamp:
+            latest_timestamp = snapshot.timestamp
 
-        current_value = base_value
-        current_global_revision = snapshot.global_rev if snapshot else 0
-
-        for patch in patches:
+        for patch in patches_qs.order_by("global_rev", "id"):
+            # Handle 'remove' operations which shouldn't have a 'value' key
+            patch_doc = {"op": patch.op, "path": patch.path}
+            if patch.op != "remove":
+                patch_doc["value"] = patch.value
             try:
-                # Handle 'remove' operations which shouldn't have a 'value' key
-                patch_doc = {"op": patch.op, "path": patch.path}
-                if patch.op != "remove":
-                    patch_doc["value"] = patch.value
-
-                p = jsonpatch.JsonPatch([patch_doc])
-                current_value = p.apply(current_value)
-                current_global_revision = patch.global_rev
+                current_value = jsonpatch.JsonPatch([patch_doc]).apply(current_value)
+            except (jsonpatch.JsonPatchException, jsonpatch.JsonPointerException, KeyError, IndexError, TypeError) as e:
+                # A patch that does not apply means the recorded history is broken (a lost or
+                # out-of-order patch). Skip it so the rest of the state still materializes, but
+                # say so: silently swallowing this is how corrupted states went unnoticed.
+                logger.warning(
+                    "State %s (agent %s, session %s): patch %s at revision %s does not apply: %s",
+                    state.interface,
+                    agent.pk,
+                    t.session_id,
+                    patch.pk,
+                    patch.global_rev,
+                    e,
+                )
+                continue
+            current_global_revision = patch.global_rev
+            if patch.timestamp > latest_timestamp:
                 latest_timestamp = patch.timestamp
-            except Exception as e:
-                pass
 
         # Track the highest global revision across all states we process
         if current_global_revision > max_current_revision:
@@ -168,21 +180,19 @@ def get_latest_state(
 
         states_data[state.interface] = current_value
 
-    # Fetch n-patches forward at the global agent level (not scoped to state)
+    # Use the requested target revision if provided, otherwise the max we just calculated
+    reference_rev = global_revision if global_revision is not None else max_current_revision
+
+    # Fetch n-patches forward at the agent level (not scoped to state, but to the session:
+    # revisions of different sessions are unrelated)
     forward_patches = []
     if forward_patch_count > 0:
-        # Use the requested target revision if provided, otherwise the max we just calculated
-        reference_rev = global_revision if global_revision is not None else max_current_revision
+        forward_patches = list(models.Patch.objects.filter(agent=agent, session=t, global_rev__gt=reference_rev).order_by("global_rev")[:forward_patch_count])
 
-        forward_patches = list(models.Patch.objects.filter(agent=agent, global_rev__gt=reference_rev).order_by("global_rev")[:forward_patch_count])
-
-    # Fetch n-patches backward at the global agent level (not scoped to state)
+    # Fetch n-patches backward at the agent level
     backward_patches = []
     if backward_patch_count > 0:
-        # Use the requested target revision if provided, otherwise the max we just calculated
-        reference_rev = global_revision if global_revision is not None else max_current_revision
-
-        backward_patches = list(models.Patch.objects.filter(agent=agent, global_rev__lte=reference_rev).order_by("-global_rev")[:backward_patch_count][::-1])  # Reverse to maintain chronological order
+        backward_patches = list(models.Patch.objects.filter(agent=agent, session=t, global_rev__lte=reference_rev).order_by("-global_rev")[:backward_patch_count][::-1])  # Reverse to maintain chronological order
 
     # Return a structured payload since patches are now an agent-level property
-    return {"states": states_data, "global_revision": max_current_revision, "forward_patches": forward_patches, "backward_patches": backward_patches, "session_id": t.session_id if t else None, "timestamp": latest_timestamp}
+    return {"states": states_data, "global_revision": max_current_revision, "forward_patches": forward_patches, "backward_patches": backward_patches, "session_id": t.session_id, "timestamp": latest_timestamp}

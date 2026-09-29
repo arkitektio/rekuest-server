@@ -285,7 +285,9 @@ def checkout(
             raise ObjectDoesNotExist(f"No patches found for state {state} before timestamp {timestamp}")
 
         target_global_rev = latest_patch.global_rev
-        target_session = latest_patch.session.pk
+        # The session *identifier*: get_latest_state looks the session up by ``session_id``, and
+        # passing the row pk here resolved to no session (or a stranger's) for every timestamp.
+        target_session = latest_patch.session.session_id if latest_patch.session else None
     else:
         target_global_rev = global_revision
         target_session = session_id
@@ -303,7 +305,10 @@ def checkout(
         raise ObjectDoesNotExist(f"No state found for {state}")
 
     state_data = result_payload["states"][state_inst.interface]
-    current_global_rev = state_data.get("global_revision")
+    # The revision lives on the payload, not inside the state's value (which is the user's
+    # document and never has a ``global_revision`` key). Scoped to this one state above, so the
+    # payload's maximum is this state's revision.
+    current_global_rev = result_payload.get("global_revision")
 
     # Forward patches are now fetched by get_latest_state at the global agent level
     forward_patches = result_payload.get("forward_patches", [])
@@ -350,7 +355,7 @@ def checkout_agent(
             raise ObjectDoesNotExist(f"No patches found for state {agent} before timestamp {timestamp}")
 
         target_global_rev = latest_patch.global_rev
-        target_session = latest_patch.session.session_id
+        target_session = latest_patch.session.session_id if latest_patch.session else None
     else:
         target_global_rev = global_revision
         target_session = session_id
