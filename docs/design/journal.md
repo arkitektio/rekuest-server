@@ -93,8 +93,10 @@ value instead of taking a new one.
 | `RANDOM` | the bytes as hex | `task.random(n)` |
 | `SLEEP` | the deadline, in epoch seconds (float) | `task.sleep(seconds)`, which records the deadline and then sleeps until it |
 
-For now the helpers only record. When a replay engine exists, each one will first look up the
-recorded value at its step.
+Each carries a `key` (by default its kind and occurrence, `NOW:1`); EFFECT events are unique per
+`(task, key)`. A resumed workflow looks each key up first and gets the recorded value back (see
+[workflows.md](workflows.md)). `RECORD` (`task.record`) and `HOLD` (a hold a person resumed) are
+effects too.
 
 ## Delivery, dedup and acks
 
@@ -125,11 +127,12 @@ recorded value at its step.
 
 - Once `INIT` is received, the new process first sends the **earlier sessions'** unacked frames,
   in `(session created, pos)` order, each with its own `journal_session`. Then it sends its own.
-- **The agent's outcome wins.** When the new session registers, the server has already orphaned the
-  earlier session's in-flight tasks (`CRITICAL` for physical effects, re-queued for idempotent
-  ones, `DISCONNECTED` for the rest). A terminal report from an earlier session **replaces** an
-  outcome the server wrote itself (a terminal `TaskEvent` without `agent_pos`). It never replaces
-  one the agent reported. The parent is told only while it is not yet done.
+- When the new session registers, the server has already handled the earlier session's in-flight
+  tasks: a plain task ends `LOST`, a workflow is resumed (see [workflows.md](workflows.md)).
+- **LOST is final.** A terminal report arriving after it (from an earlier session, or this one after
+  a partition longer than the grace window) is kept as a `LATE_REPORT` event beside it. For any
+  other outcome the server wrote itself (a terminal `TaskEvent` without `agent_pos`), a terminal
+  report from an earlier session still **replaces** it; it never replaces one the agent reported.
 - The server records no non-terminal report (`LOG`, `PROGRESS`, `YIELD`, `EFFECT`, …) on a task
   that is already done.
 - A `SHELVE` from an earlier session is ignored: the value died with that process.

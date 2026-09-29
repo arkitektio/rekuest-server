@@ -166,30 +166,29 @@ stateDiagram-v2
 
     STARTED --> FAILED
     STARTED --> CRITICAL
-    STARTED --> DISCONNECTED
-    QUEUED --> CRITICAL: never picked up / expired
-    DISCONNECTED --> STARTED: the agent came back and reported
-    DISCONNECTED --> CRITICAL: expired
+    STARTED --> LOST: its agent died (plain)
+    STARTED --> QUEUED: its agent died (workflow, resumed)
+    QUEUED --> LOST: never picked up / expired
 
     COMPLETED --> [*]
     CANCELLED --> [*]
     INTERRUPTED --> [*]
     FAILED --> [*]
     CRITICAL --> [*]
+    LOST --> [*]
 ```
 
 - `QUEUED` → `STARTED` is the path to a running task; `LOG` and `PROGRESS` are non-terminal
   annotations along the way and do not move `latest_event_kind` (see the note above).
 - `YIELD` carries returns — a `FUNCTION` yields once, a `GENERATOR` many times.
-- Terminal kinds: `COMPLETED`, `CANCELLED`, `INTERRUPTED`, `FAILED`, `CRITICAL`.
+- Terminal kinds: `COMPLETED`, `CANCELLED`, `INTERRUPTED`, `FAILED`, `CRITICAL`, `LOST`.
 - `BOUND`, `DELEGATE` and `UNASSIGN` exist in `TaskEventKind` but no server code writes them; they
   are retained for historical rows and protocol symmetry, and `DELEGATE`/`BOUND` are still *read* by
   the caller-event mirrors. Do not expect them in a new task's history.
-- `DISCONNECTED` (the agent dropped mid-task; "fate unknown") is **not** terminal by itself: the
-  task stays open (`is_done=False`) so a returning agent can still report the real outcome — any
-  report reclaims it to `STARTED`, a terminal report finalizes it. If nothing is heard within
-  `disconnected_expiry` the server finalizes it as `CRITICAL`. No state is open-ended: see
-  *Deadlines* below.
+- `LOST` (its agent died while it ran; how it ended is unknown) is terminal, and final: a later
+  report from the agent is kept as `LATE_REPORT`. A workflow is resumed instead (see
+  [workflows.md](workflows.md)). `DISCONNECTED` is no longer written; rows from before end `LOST`
+  on expiry.
 
 ## Instructing a running task
 
@@ -205,8 +204,8 @@ the `step` flag of an assign; there is no `STEP` instruct kind and no `step` mut
 ## Disconnect handling
 
 When an agent drops, `on_agent_disconnected` (guarded by `active_connection_id`, see
-[agent-protocol.md](agent-protocol.md)) marks every still-running task **owned by that agent**
-(`agent_id=…, is_done=False`) with a `DISCONNECTED` event. The filter is on the **direct `agent`
+[agent-protocol.md](agent-protocol.md)) waits out the grace window; then every still-running task
+**owned by that agent** (`agent_id=…, is_done=False`) ends `LOST`, and every workflow is resumed. The filter is on the **direct `agent`
 FK** deliberately — a task may have a null/reassigned `implementation`, so filtering through
 `implementation__agent` would silently skip work the agent actually owns.
 
@@ -223,10 +222,10 @@ claims, one winner).
 
 | waiting on | deadline starts at | setting | outcome |
 |---|---|---|---|
-| a live agent to report on a dispatched task | `Task.dispatched_at` | `pickup_deadline` | redelivered once, then `CRITICAL` |
-| a disconnected agent to come back (grace) | `Agent.last_seen` | `grace_default` | retry axis: `CRITICAL` / re-`QUEUED` / `DISCONNECTED` |
-| a `DISCONNECTED` task's real outcome | last `TaskEvent` | `disconnected_expiry` | `CRITICAL` |
-| undelivered work of an agent that is gone | `Task.dispatched_at` | `disconnected_expiry` | `CRITICAL` |
+| a live agent to report on a dispatched task | `Task.dispatched_at` | `pickup_deadline` | redelivered once, then `LOST` (`started: false`) |
+| a disconnected agent to come back (grace) | `Agent.last_seen` | `grace_default` | `LOST`, or a workflow resumed |
+| a pre-LOST `DISCONNECTED` row's outcome | last `TaskEvent` | `disconnected_expiry` | `LOST` |
+| undelivered work of an agent that is gone | `Task.dispatched_at` | `disconnected_expiry` | `LOST` |
 | a cancel to be confirmed | `Task.interrupt_at` | `auto_interrupt` / `control_deadline` | escalated to interrupt |
 | an interrupt to be confirmed | `Task.interrupt_at` | `control_deadline` | `INTERRUPTED` |
 | a physical op's next progress | `Task.last_progress_at` | `progress_lease` | `CRITICAL` |

@@ -406,3 +406,18 @@ never does. Every path where the *server* decides the connection is finished the
 Without it, a connection the server has just declared dead keeps popping Assigns off the redis
 queue and acking them — the exact behaviour the liveness model exists to prevent. Cancelling twice
 is safe, so `shutdown` still cancels unconditionally when it does run.
+
+## Workflows (resume, holds, guards)
+
+See [workflows.md](workflows.md). On the wire:
+
+- `ASSIGN` may carry `resume: {last_step, effects: [{key, effect, value}]}`: a workflow sent again
+  after its agent died. The agent replays those effects by key and numbers new reports after
+  `last_step`.
+- `EFFECT` carries `key`; kinds `RECORD` and `HOLD` join `NOW`, `RANDOM`, `SLEEP`.
+- `ASSIGN_REQUEST` carries `call_key`; a refused one answers `Nondeterministic workflow: …` when the
+  key names another call than before.
+- `PAUSED` from the agent (a hold) may carry `message` and `details`.
+- `STATE_REVISION_REQUEST {parent, dependency, state, since?, paths}` → `STATE_REVISION_RESPONSE
+  {request, revision, changed?, detail?, error?}`: a workflow's guard.
+

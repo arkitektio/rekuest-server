@@ -75,7 +75,10 @@ tasks (fields mirror `facade/inputs.AssignInputModel`):
   either to correlate the reply with your request **before** any task events arrive (those are
   keyed only by `task` id).
 - `task` is the durable id you will key all subsequent mirrors on.
-- `created=false` means a duplicate `reference` returned the existing task.
+- `created=false` means a duplicate returned the existing task: the same `reference`, or the same
+  `(parent, call_key)` / `(parent, parent_step)` for a child call. The child's events so far follow
+  the response, as mirrors with their own `seq` (live ones may overlap; drop duplicates by `seq`), so
+  a call re-issued by a resumed workflow gets a finished child's result.
 - A bad request **NACKs** (`task=null`, `error` set — e.g. a missing `parent`) — it
   **never tears down the socket**, which would kill the agent's other work.
 
@@ -131,7 +134,7 @@ Every `TaskEvent` for a task you assigned is streamed back as an `…Event` mess
 | dispatch / progress | `BoundEvent`, `QueuedEvent`, `StartedEvent`, `ProgressEvent`, `DelegateEvent`, `LogEvent`, `YieldEvent` |
 | cancel / interrupt | `CancellingEvent` → `CancelledEvent`, `InterruptingEvent` → `InterruptedEvent` |
 | pause / resume | `PausingEvent` → `PausedEvent`, `ResumingEvent` → `ResumedEvent` |
-| terminal | `CompletedEvent`, `FailedEvent`, `CriticalEvent`, `DisconnectedEvent` |
+| terminal | `CompletedEvent`, `FailedEvent`, `CriticalEvent`, `LostEvent` (`started`, `last_progress`, `effects`, `reason`: see [workflows.md](workflows.md)) |
 
 Every mirror carries (`ExecutionEvent` base):
 
