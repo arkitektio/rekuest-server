@@ -13,8 +13,7 @@ class EffectsChoices(TextChoices):
     """What running an implementation again would do (persisted on ``Implementation.effects``).
 
     Purely informational: it is shown to whoever decides about a lost task, and never
-    decides what the server does, with one exception: the progress lease watches
-    IRREVERSIBLE work.
+    decides what the server does.
     """
 
     NONE = "NONE", "None (changes nothing)"

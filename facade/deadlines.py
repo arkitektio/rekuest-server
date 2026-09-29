@@ -3,7 +3,7 @@
 On a disconnect the failure/cascade is delayed by a grace window so a brief blip can
 reclaim same-session in-flight work before it fires. That window — like every other deadline
 here — is *not* a timer: the moment it starts is a DB column (``Agent.last_seen``,
-``Task.dispatched_at``, ``Task.interrupt_at``, ``Task.last_progress_at``) and the periodic
+``Task.dispatched_at``, ``Task.interrupt_at``) and the periodic
 sweep in :mod:`facade.reaper` acts once it has elapsed. Nothing is held in process memory,
 so a backend can die at any instant, and any other backend picks the deadline up.
 """
@@ -27,11 +27,6 @@ def grace_seconds() -> float:
     A float, so sub-second windows (e.g. in tests) are not truncated to 0.
     """
     return float(_cfg().get("DEFAULT", 0))
-
-
-def progress_lease_seconds() -> float:
-    """The progress-lease window (seconds); 0 disables the lease."""
-    return float(_cfg().get("PROGRESS_LEASE", 0))
 
 
 def sweep_interval_seconds() -> float:

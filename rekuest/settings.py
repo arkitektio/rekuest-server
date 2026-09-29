@@ -67,10 +67,6 @@ AGENT_HEARTBEAT_NOT_RESPONDED_CODE = 3001
 # (strict). Consumed by the reclaim/grace backend via ``facade.deadlines.grace_seconds``.
 REKUEST_GRACE = {
     "DEFAULT": conf.rekuest.grace_default,
-    # Progress lease (seconds): an IRREVERSIBLE task that has reported progress but then
-    # goes silent this long — while its agent is still connected (wedged-but-alive) — is
-    # failed as terminal. 0 disables the lease (default).
-    "PROGRESS_LEASE": conf.rekuest.progress_lease,
     # None of these windows is a timer: each starts at a DB column and is enforced by the
     # reaper (``facade.reaper``, its own process: ``manage.py reaper``), every SWEEP_INTERVAL
     # seconds, on whichever reaper gets there first. See ``facade.deadlines`` for the accessors.

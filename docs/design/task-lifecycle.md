@@ -106,7 +106,7 @@ The agent streams events back over its socket; `ModelPersistBackend` handles eac
 | Agent message | Persisted as | Side effects |
 | --- | --- | --- |
 | `Started` | `TaskEvent(STARTED)` | moves `latest_event_kind` off `QUEUED` |
-| `Progress` | `TaskEvent(PROGRESS, progress, message)` | re-arms the progress lease (`IRREVERSIBLE` work) |
+| `Progress` | `TaskEvent(PROGRESS, progress, message)` | |
 | `Log` | `TaskEvent(LOG, message, level)` | — |
 | `Yield` | `TaskEvent(YIELD, returns)` | unfold to higher-order wrapper |
 | `Paused` / `Resumed` | `TaskEvent(PAUSED/RESUMED)` | confirms a pause/resume instruct |
@@ -226,7 +226,6 @@ claims, one winner).
 | undelivered work of an agent that is gone | `Task.dispatched_at` | `disconnected_expiry` | `LOST` |
 | a cancel to be confirmed | `Task.interrupt_at` | `auto_interrupt` / `control_deadline` | escalated to interrupt |
 | an interrupt to be confirmed | `Task.interrupt_at` | `control_deadline` | `INTERRUPTED` |
-| an `IRREVERSIBLE` task's next progress | `Task.last_progress_at` | `progress_lease` | `CRITICAL` |
 
 ## Idempotency is a database guarantee
 

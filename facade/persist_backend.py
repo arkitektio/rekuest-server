@@ -4,7 +4,7 @@ The implementation lives in :mod:`facade.persist`, one module per responsibility
 composition, and the import site everything else already uses.
 
 **Stateless by construction.** This object holds no state. Every deadline it enforces starts at a
-DB column (``Agent.last_seen``, ``Task.dispatched_at`` / ``interrupt_at`` / ``last_progress_at``)
+DB column (``Agent.last_seen``, ``Task.dispatched_at`` / ``interrupt_at``)
 and is acted on by a pure, idempotent sweep driven by :mod:`facade.reaper` inside every backend
 process. A backend can therefore die at any instant without losing a pending action, and any number
 of backends may run concurrently: each task and agent transition is a row-locked claim with exactly

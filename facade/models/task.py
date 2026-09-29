@@ -213,11 +213,6 @@ class Task(models.Model):
         blank=True,
         help_text="Deadline after which an unconfirmed cancel is escalated to an interrupt (auto_interrupt / control deadline).",
     )
-    last_progress_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Last Progress report of a physical-effect task — only stamped while the progress lease is enabled.",
-    )
 
     def __str__(self):
         return f"{self.latest_event_kind} for {self.action_id}"
@@ -233,7 +228,7 @@ class Task(models.Model):
         every task write is made — it used to be frozen at creation time.
 
         ``.update()`` sites bypass this on purpose: they touch only bookkeeping columns
-        (``dispatched_at``, ``picked_up_at``, ``interrupt_at``, ``last_progress_at``) that no
+        (``dispatched_at``, ``picked_up_at``, ``interrupt_at``) that no
         change feed carries.
         """
         if not self._state.adding:

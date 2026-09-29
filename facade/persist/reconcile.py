@@ -1,7 +1,7 @@
 """The sweeps: every deadline the server enforces, acted on from any backend.
 
 None of these is a timer. Each starts at a database column — ``Agent.last_seen``,
-``Task.dispatched_at``, ``interrupt_at``, ``last_progress_at`` — so a backend can be killed
+``Task.dispatched_at``, ``interrupt_at`` — so a backend can be killed
 mid-window without losing a pending decision, and any number of backends may sweep concurrently.
 :mod:`facade.reaper` is what drives them.
 
@@ -26,7 +26,6 @@ from facade.deadlines import (
     disconnected_expiry_seconds,
     grace_seconds,
     pickup_deadline_seconds,
-    progress_lease_seconds,
 )
 
 logger = logging.getLogger(__name__)
@@ -305,37 +304,6 @@ class ReconcileMixin:
                     logger.error("Escalating task %s to an interrupt failed", task_id, exc_info=True)
             # Any other instruct (a resume after the cancel, …) superseded the deadline: dropped.
         return handled
-
-    async def reconcile_silent_physical_op(self, task_id: str | int, *, cutoff=None) -> bool:
-        """Fail a physical task that reported progress then went silent. Claim-based DB op."""
-        return await self._finalize_terminal(
-            int(task_id),
-            enums.TaskEventKind.CRITICAL,
-            "Physical op went silent past its progress lease — terminal, not retried.",
-            # Re-checked under the lock: a Progress that landed since the scan re-armed the lease.
-            only_if=(lambda t: t.last_progress_at is not None and t.last_progress_at < cutoff) if cutoff is not None else None,
-            skip_locked=cutoff is not None,
-        )
-
-    async def reconcile_silent_physical_ops(self, limit: int = 200) -> int:
-        """Fail physical tasks whose last Progress is older than the progress lease."""
-        lease = progress_lease_seconds()
-        if lease <= 0:
-            return 0
-        cutoff = timezone.now() - timedelta(seconds=lease)
-        silent = [
-            pk
-            async for pk in models.Task.objects.filter(
-                is_done=False,
-                last_progress_at__lt=cutoff,
-                implementation__effects=enums.EffectsChoices.IRREVERSIBLE.value,
-            ).values_list("pk", flat=True)[:limit]
-        ]
-        failed = 0
-        for pk in silent:
-            if await self.reconcile_silent_physical_op(pk, cutoff=cutoff):
-                failed += 1
-        return failed
 
     def _decide_unpicked_sync(self, task_id: int, cutoff) -> Tuple[str, "messages.Assign | None", int | None]:
         """Decide — under the row lock — what happens to one task nobody picked up.

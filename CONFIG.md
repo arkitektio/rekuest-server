@@ -176,7 +176,6 @@ the probe limits. All optional with sensible defaults.
 | Key | Env var | Type | Default | Description |
 |---|---|---|---|---|
 | `grace_default` | `REKUEST__GRACE_DEFAULT` | int | `30` | Default reclaim grace window (seconds) after a disconnect. |
-| `progress_lease` | `REKUEST__PROGRESS_LEASE` | int | `0` | Progress lease (seconds); `0` disables the wedged-task lease. |
 | `hook_signature_mode` | `REKUEST__HOOK_SIGNATURE_MODE` | str | `compat` | HookAgent HTTP signatures. `compat` accepts the timestamped `X-Rekuest-Signature-V1` **or** the legacy body-only `X-Rekuest-Signature`, and sends both. `strict` accepts and sends V1 only — the legacy signature is replayable, so move to `strict` once your HookAgents are updated. |
 | `hook_max_skew` | `REKUEST__HOOK_MAX_SKEW` | int | `300` | Maximum age/clock skew (seconds) for a V1-signed HookAgent request. Also the replay guard's memory: a digest is remembered for twice this. |
 | `trigger_max_depth` | `REKUEST__TRIGGER_MAX_DEPTH` | int | `3` | How many trigger firings may chain (a triggered run creates an object whose signal fires another trigger …) before a signal stops firing. The loop guard. |

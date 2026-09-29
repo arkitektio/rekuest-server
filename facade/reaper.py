@@ -16,7 +16,6 @@ sweep                                 deadline starts at             setting
 ``dispatch_due_tasks``                ``Task.not_before``            (the task's own)
 ``reconcile_unpicked_tasks``          ``Task.dispatched_at``         ``…PICKUP_DEADLINE``
 ``escalate_due_controls``             ``Task.interrupt_at``          ``auto_interrupt`` / ``…CONTROL_DEADLINE``
-``reconcile_silent_physical_ops``     ``Task.last_progress_at``      ``…PROGRESS_LEASE``
 ``expire_disconnected_tasks``         last ``TaskEvent``             ``…DISCONNECTED_EXPIRY``
 ``sweep_terminal_tasks``              ``Task.finished_at``           ``TASK_RETENTION_SECONDS``
 ``reembed_stale`` (embeddings)        ``Action.embedding_model``     ``EMBEDDINGS.MODEL``
@@ -104,7 +103,6 @@ def _sweeps(backend: "ReconcileBackend | None" = None) -> "List[Tuple[str, Calla
         ("due tasks", persist_backend.dispatch_due_tasks),
         ("unpicked tasks", persist_backend.reconcile_unpicked_tasks),
         ("due controls", persist_backend.escalate_due_controls),
-        ("silent physical ops", persist_backend.reconcile_silent_physical_ops),
         ("expired tasks", persist_backend.expire_disconnected_tasks),
     ]
 

@@ -16,9 +16,6 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from facade import models, enums, messages
-from facade.deadlines import (
-    progress_lease_seconds,
-)
 from facade.persist.positions import is_numbered, position_stamp
 from facade.persist.transitions import _TERMINAL_KINDS
 
@@ -174,12 +171,9 @@ class AgentReportMixin:
         await self._claim(x.pk, to_kind=kind, extra=extra, event=dict(stamp or {}))
 
     async def on_agent_paused(self, agent_id: int, message: messages.Paused) -> None:
-        # A suspended op stops reporting progress — don't let the silent-physical-op lease reap
-        # it: clearing the stamp takes it out of ``reconcile_silent_physical_ops`` until the
-        # next Progress re-arms it.
         # A task that paused itself (task.hold) says why, and what a person deciding may want to know.
         stamp = {**position_stamp(message), **({"message": message.message} if message.message else {}), **({"value": message.details} if message.details else {})}
-        await self._on_nonterminal_confirm(agent_id, message.task, enums.TaskEventKind.PAUSED, extra={"last_progress_at": None}, stamp=stamp)
+        await self._on_nonterminal_confirm(agent_id, message.task, enums.TaskEventKind.PAUSED, stamp=stamp)
 
     async def on_agent_resumed(self, agent_id: int, message: messages.Resumed) -> None:
         await self._on_nonterminal_confirm(agent_id, message.task, enums.TaskEventKind.RESUMED, stamp=position_stamp(message))
@@ -240,8 +234,7 @@ class AgentReportMixin:
 
     async def on_agent_progress(self, agent_id: int, message: messages.Progress) -> None:
         logger.debug("Progress for task %s (seq %s)", message.task, getattr(message, "seq", None))
-        if await self._record_event(agent_id, message.task, enums.TaskEventKind.PROGRESS, progress=message.progress, message=message.message, **position_stamp(message)):
-            await self._arm_progress_lease(message.task)
+        await self._record_event(agent_id, message.task, enums.TaskEventKind.PROGRESS, progress=message.progress, message=message.message, **position_stamp(message))
 
     async def on_agent_effect(self, agent_id: int, message: messages.Effect) -> None:
         """A value the task took from outside itself, kept at its step for a later replay."""
@@ -252,16 +245,4 @@ class AgentReportMixin:
         except IntegrityError:
             return  # another backend recorded it first
 
-    async def _arm_progress_lease(self, task_id: str) -> None:
-        """(Re)arm the silent-physical-op lease for a physical task, if enabled.
 
-        Arming is stamping ``last_progress_at``; ``reconcile_silent_physical_ops`` is what
-        fires. One guarded UPDATE — it matches nothing unless the task is open and physical.
-        """
-        if progress_lease_seconds() <= 0:
-            return  # disabled — zero overhead on the progress hot-path
-        await models.Task.objects.filter(
-            id=task_id,
-            is_done=False,
-            implementation__effects=enums.EffectsChoices.IRREVERSIBLE.value,
-        ).aupdate(last_progress_at=timezone.now())
