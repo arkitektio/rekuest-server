@@ -115,8 +115,6 @@ recorded value at its step.
 - **`JOURNAL_ACK {journal_session, pos}`** (server → agent) is cumulative: "projected up to `pos`".
   It is debounced, and sent at once after a terminal report. Once a connection has sent a numbered
   frame, the server stops sending `EVENT_ACK` on it.
-  `INIT` still carries `journal: true`: agents released before this contract read it to switch
-  to acking by `JOURNAL_ACK`.
 - **The agent persists what it retains.** A frame recorded but not yet acked must survive a restart.
   - The Rust agent keeps a local SQLite file with the `journal` and `journal_sync (session_id,
     acked_pos)` tables. `acked_pos` is only ever raised.

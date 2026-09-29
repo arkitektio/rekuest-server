@@ -636,10 +636,6 @@ class Init(Message):
         default_factory=list,
         description="Non-fatal findings of the registration the Register carried (unknown catalog operations and the like). A hard finding refuses the connection instead: ProtocolError + close(AGENT_REGISTRATION_REJECTED).",
     )
-    journal: bool = Field(
-        default=True,
-        description="Always true. For agents released before the report contract: they number frames but retire them on JOURNAL_ACK only when INIT says so, and this server sends no EVENT_ACK to numbering agents. Current agents ignore it.",
-    )
 
 
 # --------------------------------------------------------------------------- #
