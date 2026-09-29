@@ -39,10 +39,11 @@ class TestAutoInterrupt:
         backend = ModelPersistBackend()
         key = str(ass.pk)
 
-        await backend.on_caller_cancel(agent.pk, messages.CancelRequest(task=key, auto_interrupt=0.05))
+        # A window a slow CI runner cannot overshoot between the cancel and the first sweep.
+        await backend.on_caller_cancel(agent.pk, messages.CancelRequest(task=key, auto_interrupt=1.0))
         assert (await Task.objects.aget(pk=ass.pk)).interrupt_at is not None  # CANCELING persisted, deadline armed
         assert await ModelPersistBackend().escalate_due_controls() == 0  # not due yet
-        await asyncio.sleep(0.15)
+        await asyncio.sleep(1.2)
         assert await ModelPersistBackend().escalate_due_controls() == 1  # another backend fires it
 
         kinds = await _kinds(ass.pk)

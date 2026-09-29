@@ -29,8 +29,8 @@ diagram shows the high-level design of Rekuest:
 
 > **📐 Architecture documentation.** For a structured, in-depth explanation of the major elements of
 > the service — the Caller/Agent identity model, the relational action-matching engine, the
-> task lifecycle, the agent WebSocket protocol, the realtime layer, and higher-order
-> implementations — see **[`docs/design/`](./docs/design/README.md)**.
+> task lifecycle, the agent WebSocket protocol, the realtime layer, higher-order
+> implementations, and workflows and what happens when an agent dies — see **[`docs/design/`](./docs/design/README.md)**.
 
 ## Running it: two processes
 

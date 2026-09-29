@@ -104,7 +104,10 @@ Start at the top and follow the flow of a request:
    them.
 8. **[higher-order.md](higher-order.md)** — higher-order implementations (one implementation
    wrapping another) and server-side event unfolding.
-9. **[provenance.md](provenance.md)** — Rekuest as the provenance authority: the signed
+9. **[workflows.md](workflows.md)** — what happens when an agent dies: a plain task ends `LOST`
+   (final; late outcomes kept as `LATE_REPORT`), a `WORKFLOW` is resumed from its journal (keyed
+   calls and effects, code pin, resume cap), plus holds and state guards.
+10. **[provenance.md](provenance.md)** — Rekuest as the provenance authority: the signed
    attestation token minted at dispatch, its claim vocabulary, the human-root invariant, and the
    JWKS endpoint downstream services verify against.
 
