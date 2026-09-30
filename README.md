@@ -7,9 +7,15 @@ The rekuest agent protocol server, in Rust: what agents connect to (`/agi` over 
 
 Every rekuest deployment ran GraphQL, every agent socket and every subscription in one Python
 process. Under UI load, agents' reports and heartbeat answers queued behind GraphQL work until
-agents were kicked (heartbeat 3001). Measured with `conformance/bench`: about 26 concurrent UI
-queries a second cut agent-report throughput about 5×, and a thread per connection did not help
-(the limit is the GIL). agentd takes the whole agent protocol out of that process.
+agents were kicked (heartbeat 3001); a thread per connection did not help (the limit is the GIL).
+agentd takes the whole agent protocol out of that process. Measured with the conformance
+benchmark (one agent streaming a report every 50 ms, two workers querying GraphQL at the rate):
+
+| GraphQL load | Python server | agentd (GraphQL still on Python) |
+|---|---|---|
+| none | 19.5 reports/s, ack lag p50 0.22 s | 19.9 reports/s, p50 0.14 s |
+| 10 queries/s × 2 | 9.2 reports/s, ack lag p50 5.3 s, **kicked (3001)** | 19.4 reports/s, p50 0.13 s |
+| 26 queries/s × 2 | (the agent was already gone) | 19.2 reports/s, p50 0.12 s, no kicks |
 
 ## Shape
 
@@ -55,17 +61,25 @@ A crate appears when its first module is ported; nothing is stubbed ahead of it.
   cd conformance
   uv run pytest                                   # brings up stack/ with dokker (the Python server)
   CONFORMANCE_URL=http://localhost:8080 uv run pytest   # any running target
+  # agentd serves /agi only; GraphQL (for assigning) stays the Python server's:
+  CONFORMANCE_URL=http://127.0.0.1:8480 CONFORMANCE_GRAPHQL_URL=http://localhost:5690/graphql uv run pytest
+  # the liveness benchmark (skipped unless BENCH_SECONDS is set):
+  BENCH_SECONDS=30 BENCH_RATES=0,10,26 BENCH_CONCURRENCY=2 CONFORMANCE_URL=… uv run pytest -s tests/test_zz_bench_liveness.py
   ```
+
+  Registration is also checked row by row against Python's own `implement_agent`
+  (`crates/facade/tests/registration_parity.rs`), and the fan-out payload by payload
+  (`signals_contract.rs`).
 
 ## Phases
 
 | Phase | Scope | Status |
 |---|---|---|
-| 0 | `rekuest-protocol`, this repo, conformance seed, benchmark | in progress |
-| 1 | auth (authentikate), registration (`implement_agent`), lease/heartbeat/queue | |
-| 2 | reports, transitions, positions, state, locks, shelve, fan-out | |
-| 3 | assign, control, guards, probes, caller mirrors, internal API | |
-| 4 | agent sweeps, workflow resume | |
+| 0 | `rekuest-protocol`, this repo, conformance seed, benchmark | done |
+| 1 | auth (authentikate), registration (`implement_agent`), lease/heartbeat/queue | done |
+| 2 | reports, transitions, positions, state, locks, shelve, fan-out | done |
+| 3 | assign, control, guards, probes, caller mirrors, internal API | in progress |
+| 4 | agent sweeps, workflow resume | done (the reaper: `AGENTD_REAPER=0` beside a Python reaper, which shares its tick token) |
 | 5 | HTTP hook agents | |
 | 6 | cutover; the Python agent path is deleted | |
 
