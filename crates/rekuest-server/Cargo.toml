@@ -11,9 +11,6 @@ publish = false
 name = "agentd"
 path = "src/main.rs"
 
-[lib]
-# The Python package this crate takes over, so code reads like it: `rekuest::…`.
-name = "rekuest"
 
 [dependencies]
 facade.workspace = true

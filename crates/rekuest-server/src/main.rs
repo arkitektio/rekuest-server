@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use rekuest::{settings, urls, Configuration};
+use rekuest_server::{settings, urls, Configuration};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]

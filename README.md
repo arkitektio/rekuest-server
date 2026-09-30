@@ -28,14 +28,14 @@ listens on `AGENTD_BIND` (default `0.0.0.0:8080`), under the config's `force_scr
 
 ## Layout: the Python server's packages, in Rust
 
-rekuest's own packages are named `rekuest-server-…`, so it is clear they are the server's and not an
-SDK; the packages every Arkitekt server shares keep their Python names (`authentikate`, `kante`). Each mirrors the Python package whose scope it takes over and keeps its
+`rekuest` is the client (the Python SDK, and arkirust's crate); everything here is the server, so
+rekuest's own packages are named `rekuest-server-…` and import as `rekuest_server…`; the packages every Arkitekt server shares keep their Python names (`authentikate`, `kante`). Each mirrors the Python package whose scope it takes over and keeps its
 name as the library name and its module names,
 so a behaviour has the same path on both sides (`facade/liveness.py` ↔ `facade::liveness`).
 
 | Package (library) | Mirrors | Scope |
 |---|---|---|
-| `rekuest-server` (`rekuest`) | `rekuest/` (the Django project) | `configuration`, `settings`, `urls`; the `agentd` binary |
+| `rekuest-server` (`rekuest_server`) | `rekuest/` (the Django project) | `configuration`, `settings`, `urls`; the `agentd` binary |
 | `rekuest-server-facade` (`facade`) | `facade/` (the app) | the agent protocol: `codes`, `liveness`, `redis_keys`, then `consumers`, `persist`, `registration`, `guards`, `provenance`, `reaper`, … |
 | `rekuest-server-core` (`rekuest_core`) | `rekuest_core/` | the declaration models and their validation (Phase 1) |
 | `authentikate` | `authentikate` 4.1.1 (the version the server pins) | token verification (rsa, rsa_file, jwks_dict, jwks_uri; revocation lists), static tokens, and expansion to user/org/client/membership rows |
