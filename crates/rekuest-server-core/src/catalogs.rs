@@ -44,16 +44,22 @@ pub struct BaseCatalogModel {
 }
 
 fn load() -> Result<BaseCatalogModel, ValidationError> {
-    let catalog: BaseCatalogModel =
-        serde_json::from_str(MANIFEST).map_err(|e| ValidationError(format!("base catalog: {e}")))?;
+    let catalog: BaseCatalogModel = serde_json::from_str(MANIFEST)
+        .map_err(|e| ValidationError(format!("base catalog: {e}")))?;
     if catalog.name != BASE_CATALOG_NAME {
-        return Err(ValidationError(format!("base catalog is named {:?}", catalog.name)));
+        return Err(ValidationError(format!(
+            "base catalog is named {:?}",
+            catalog.name
+        )));
     }
     let mut seen = std::collections::HashSet::new();
     for operation in &catalog.operations {
         operation.validate()?;
         if !seen.insert(operation.name.as_str()) {
-            return Err(ValidationError(format!("base catalog: duplicate name {:?}", operation.name)));
+            return Err(ValidationError(format!(
+                "base catalog: duplicate name {:?}",
+                operation.name
+            )));
         }
     }
     Ok(catalog)

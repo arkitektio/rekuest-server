@@ -26,10 +26,11 @@ use crate::consumers::agent_queue::AgentQueue;
 use crate::consumers::connections::Control;
 use crate::context::Context;
 use crate::message_router;
-use crate::messages::{AgentFrame, FromAgent, Inquiry, ToAgent, ToAgentFrame};
+use crate::messages::{AgentFrame, Diagnostic, FromAgent, Inquiry, ToAgent, ToAgentFrame};
 use crate::persist::{caller_ops, leases};
 use crate::persist::{positions, reports};
 use crate::registration;
+use rekuest_core::inputs::ImplementAgentInputModel;
 
 /// What the writer task sends: a frame, or the close that ends the connection.
 enum Outbound {
@@ -237,11 +238,25 @@ async fn register(
         return Err(Refused::close(codes::AGENT_IS_BLOCKED_CODE));
     }
 
+    // Registering is implementing: a declaration whose hash the agent does not hold yet is
+    // reconciled in one transaction before the lease is claimed, so a refused one strands no
+    // lease. Its non-fatal findings ride back on INIT.
+    let mut hash = hash;
+    let mut diagnostics = vec![];
     if declaration.declares() && declaration.hash.as_deref() != Some(hash.as_str()) {
-        return Err(Refused::explained(
-            codes::AGENT_REGISTRATION_REJECTED_CODE,
-            "Registration refused: this server does not reconcile declarations yet",
-        ));
+        let implemented = implement(ctx, agent, declaration).await?;
+        hash = implemented.hash;
+        diagnostics = implemented
+            .diagnostics
+            .into_iter()
+            .map(|d| Diagnostic {
+                level: Some(d.level.to_owned()),
+                code: d.code.to_owned(),
+                message: d.message,
+                path: d.path,
+            })
+            .collect();
+        implemented.on_commit.publish(ctx).await;
     }
 
     let caller = caller_ops::get_or_create_caller_id(&ctx.db, agent)
@@ -278,7 +293,7 @@ async fn register(
             })
             .collect(),
         hash: Some(hash).filter(|hash| !hash.is_empty()),
-        diagnostics: vec![],
+        diagnostics,
     });
     Ok(Registered {
         agent,
@@ -286,6 +301,40 @@ async fn register(
         epoch,
         session_id,
     })
+}
+
+/// Reconcile a `REGISTER`'s declaration (`on_agent_implement`). A declaration the models refuse
+/// is a frame that does not match the schema (3003, as Python's parse of `Register` refuses it);
+/// a refused registration is a `ProtocolError` and 4006.
+async fn implement(
+    ctx: &Context,
+    agent: i64,
+    declaration: &crate::messages::RegisterDeclaration,
+) -> Result<registration::Implemented, Refused> {
+    let schema = |e: &dyn std::fmt::Display| {
+        Refused::explained(
+            codes::FROM_AGENT_MESSAGE_DOES_NOT_MATCH_SCHEMA_CODE,
+            e.to_string(),
+        )
+    };
+    let mut payload: ImplementAgentInputModel = serde_json::to_value(declaration)
+        .and_then(serde_json::from_value)
+        .map_err(|e| schema(&e))?;
+    payload.validate().map_err(|e| schema(&e.0))?;
+
+    let rejected = |e: &dyn std::fmt::Display| {
+        tracing::warn!(agent, "registration refused: {e}");
+        Refused::explained(
+            codes::AGENT_REGISTRATION_REJECTED_CODE,
+            format!("Registration refused: {e}"),
+        )
+    };
+    let mut tx = ctx.db.begin().await.map_err(|e| rejected(&e))?;
+    let implemented = registration::implement_agent(&mut tx, agent, &payload)
+        .await
+        .map_err(|e| rejected(&e))?;
+    tx.commit().await.map_err(|e| rejected(&e))?;
+    Ok(implemented)
 }
 
 /// The pending heartbeat: resolved by the read loop when the answer arrives.

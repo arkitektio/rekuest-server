@@ -1,7 +1,9 @@
 //! Hashes and scope of what an agent declares (`facade/unique.py`).
 
 use rekuest_core::enums::{ActionScope, PortKind};
-use rekuest_core::inputs::{ArgPortInputModel, DefinitionInputModel, ReturnPortInputModel, StateDefinitionInputModel};
+use rekuest_core::inputs::{
+    ArgPortInputModel, DefinitionInputModel, ReturnPortInputModel, StateDefinitionInputModel,
+};
 use rekuest_core::pyjson::dumps;
 use serde_json::Value;
 use sha2::{Digest, Sha256};

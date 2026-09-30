@@ -371,3 +371,48 @@ pub async fn action_saved(ctx: &Context, id: i64, created: bool) {
         Err(e) => tracing::error!(id, "action fan-out failed: {e}"),
     }
 }
+
+/// A `post_save` / `post_delete` a transaction's writes fired, published once it commits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Signal {
+    AgentSaved { id: i64, created: bool },
+    ActionSaved { id: i64, created: bool },
+    ImplementationSaved { id: i64, created: bool },
+    ImplementationDeleted { id: i64, agent_id: i64 },
+    StateSaved { id: i64 },
+}
+
+/// The signals of one transaction, in the order Django would have fired them (`on_commit`).
+/// A repeat of the same signal is dropped: Django fires one per `save()`, and a registration
+/// saves an action several times over, each fan-out telling the feeds the same thing.
+#[derive(Debug, Default)]
+pub struct OnCommit(Vec<Signal>);
+
+impl OnCommit {
+    pub fn push(&mut self, signal: Signal) {
+        if !self.0.contains(&signal) {
+            self.0.push(signal);
+        }
+    }
+
+    pub fn signals(&self) -> &[Signal] {
+        &self.0
+    }
+
+    /// Publish, after the commit.
+    pub async fn publish(self, ctx: &Context) {
+        for signal in self.0 {
+            match signal {
+                Signal::AgentSaved { id, created } => agent_saved(ctx, id, created).await,
+                Signal::ActionSaved { id, created } => action_saved(ctx, id, created).await,
+                Signal::ImplementationSaved { id, created } => {
+                    implementation_saved(ctx, id, created).await
+                }
+                Signal::ImplementationDeleted { id, agent_id } => {
+                    implementation_deleted(ctx, id, agent_id).await
+                }
+                Signal::StateSaved { id } => state_saved(ctx, id).await,
+            }
+        }
+    }
+}

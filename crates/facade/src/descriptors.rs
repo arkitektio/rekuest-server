@@ -13,9 +13,15 @@ use serde_json::Value;
 fn normalize_jsonpath_key(key: &str) -> Result<String, String> {
     let raw = key.strip_prefix("$.").unwrap_or(key);
     if raw.is_empty() {
-        return Err(format!("Invalid descriptor key for JSONPath compilation: {}", rekuest_core::pyjson::repr_str(key)));
+        return Err(format!(
+            "Invalid descriptor key for JSONPath compilation: {}",
+            rekuest_core::pyjson::repr_str(key)
+        ));
     }
-    Ok(format!("$.{}", dumps(&Value::String(raw.to_owned()), false)))
+    Ok(format!(
+        "$.{}",
+        dumps(&Value::String(raw.to_owned()), false)
+    ))
 }
 
 /// One descriptor as one JSONPath predicate (`_compile_descriptor_condition`).
@@ -60,12 +66,17 @@ fn compile_condition(descriptor: &DescriptorConstraint) -> Result<String, String
 }
 
 /// A port's descriptors as one JSONPath string, AND-ed; none → `None` (stored NULL).
-pub fn compile_descriptors_to_jsonpath(descriptors: Option<&[DescriptorConstraint]>) -> Result<Option<String>, String> {
+pub fn compile_descriptors_to_jsonpath(
+    descriptors: Option<&[DescriptorConstraint]>,
+) -> Result<Option<String>, String> {
     let descriptors = descriptors.unwrap_or_default();
     if descriptors.is_empty() {
         return Ok(None);
     }
-    let parts = descriptors.iter().map(compile_condition).collect::<Result<Vec<_>, _>>()?;
+    let parts = descriptors
+        .iter()
+        .map(compile_condition)
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(Some(parts.join(" && ")))
 }
 
@@ -75,7 +86,11 @@ mod tests {
     use serde_json::json;
 
     fn descriptor(key: &str, operator: DescriptorOperator, value: Value) -> DescriptorConstraint {
-        DescriptorConstraint { key: key.into(), operator, value: Some(value).filter(|v| !v.is_null()) }
+        DescriptorConstraint {
+            key: key.into(),
+            operator,
+            value: Some(value).filter(|v| !v.is_null()),
+        }
     }
 
     #[test]
@@ -91,7 +106,12 @@ mod tests {
             Some(r#"($."axes" == "c" || $."axes" == "t") && $."@mikro/n" >= 2 && exists($."x")"#)
         );
         // The model allows EXISTS without a value; compiling it does not, as in Python.
-        assert!(compile_descriptors_to_jsonpath(Some(&[descriptor("x", DescriptorOperator::EXISTS, Value::Null)])).is_err());
+        assert!(compile_descriptors_to_jsonpath(Some(&[descriptor(
+            "x",
+            DescriptorOperator::EXISTS,
+            Value::Null
+        )]))
+        .is_err());
         assert_eq!(compile_descriptors_to_jsonpath(Some(&[])).unwrap(), None);
     }
 }
