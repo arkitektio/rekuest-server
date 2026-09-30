@@ -43,6 +43,10 @@
 //! | `collect` | `{"principal", "drawers": [id, …]}` | `{"drawers"}` |
 //! | `probe` | `{"principal", "input": ProbeInput}` | the probe's state, with `id` |
 //! | `probe/cancel`, `probe/pause`, `probe/resume` | `{"principal", "probe"}` | the probe's state, with `id` |
+//! | `agent/ensure` | `{"principal", "name"?, "description"?, "kind"?, "hook_url"?, "hook_url_secret"?, "clear_drawers"?}` (a present null clears) | `{"agent"}` |
+//! | `agent/implement` | `{"principal", "input": ImplementAgentInput}` | `{"agent", "diagnostics"}` |
+//! | `drawer/shelve` | `{"principal", "identifier", "resource_id", "label"?, "description"?}` | `{"drawer"}` |
+//! | `drawer/unshelve` | `{"principal", "id"}` (a resource id, else a drawer id) | `{"drawer"}` |
 //! | `higher-order/create` | `{"principal", "input": {"lower", "interface", "definition", "config"?, "dependencies"?}}` | `{"implementation", "diagnostics"}` |
 //!
 //! `AssignInput` is `AssignInputModel`'s JSON (`action`, `action_hash`, `implementation`,
@@ -89,6 +93,10 @@ pub fn routes() -> Router<Shared> {
         .route("/internal/probe/pause", post(probe_pause))
         .route("/internal/probe/resume", post(probe_resume))
         .route("/internal/higher-order/create", post(create_higher_order))
+        .route("/internal/agent/ensure", post(ensure_agent))
+        .route("/internal/agent/implement", post(implement_agent))
+        .route("/internal/drawer/shelve", post(shelve))
+        .route("/internal/drawer/unshelve", post(unshelve))
 }
 
 /// A refusal, as JSON.
@@ -168,6 +176,17 @@ impl Principal {
                 "The principal has no organization".into(),
             )),
         }
+    }
+
+    /// `(client, user, organization)`: whose agent an agent route acts on.
+    fn identity(&self) -> Result<(i64, i64, i64), Refusal> {
+        let (Some(user), Some(client)) = (&self.user, &self.client) else {
+            return Err(Refusal(
+                StatusCode::BAD_REQUEST,
+                "The principal needs a user and a client".into(),
+            ));
+        };
+        Ok((client.get()?, user.get()?, self.organization()?))
     }
 
     async fn context(&self, state: &Shared) -> Result<CallerContext, Refusal> {
@@ -441,3 +460,92 @@ internal!(
         })))
     }
 );
+
+#[derive(Debug, Deserialize)]
+struct EnsureAgentRequest {
+    principal: Principal,
+    #[serde(flatten)]
+    input: facade::mutations::agent::EnsureAgentInput,
+}
+
+internal!(ensure_agent, EnsureAgentRequest, |state, request| {
+    let (client, user, organization) = request.principal.identity()?;
+    let agent =
+        facade::mutations::agent::ensure(&state.facade, client, user, organization, &request.input)
+            .await?;
+    Ok(Json(json!({"agent": agent.to_string()})))
+});
+
+#[derive(Debug, Deserialize)]
+struct ImplementAgentRequest {
+    principal: Principal,
+    input: rekuest_core::inputs::ImplementAgentInputModel,
+}
+
+internal!(implement_agent, ImplementAgentRequest, |state, request| {
+    let (client, user, organization) = request.principal.identity()?;
+    let mut input = request.input;
+    input
+        .validate()
+        .map_err(|e| Refusal(StatusCode::BAD_REQUEST, e.0))?;
+    let (agent, diagnostics) =
+        facade::mutations::agent::implement(&state.facade, client, user, organization, &input)
+            .await?;
+    Ok(Json(
+        json!({"agent": agent.to_string(), "diagnostics": diagnostics}),
+    ))
+});
+
+#[derive(Debug, Deserialize)]
+struct ShelveRequest {
+    principal: Principal,
+    identifier: String,
+    resource_id: String,
+    #[serde(default)]
+    label: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+}
+
+internal!(shelve, ShelveRequest, |state, request| {
+    let (client, user, organization) = request.principal.identity()?;
+    let db = &state.facade.db;
+    let agent = facade::registration::ensure_agent(db, client, user, organization)
+        .await
+        .map_err(BackendError::Database)?;
+    let drawer = facade::registration::shelve(
+        db,
+        agent,
+        &request.identifier,
+        &request.resource_id,
+        request.label.as_deref(),
+        request.description.as_deref(),
+        false,
+    )
+    .await
+    .map_err(BackendError::Database)?;
+    Ok(Json(json!({"drawer": drawer.to_string()})))
+});
+
+#[derive(Debug, Deserialize)]
+struct UnshelveRequest {
+    principal: Principal,
+    id: String,
+}
+
+internal!(unshelve, UnshelveRequest, |state, request| {
+    let (client, user, organization) = request.principal.identity()?;
+    let db = &state.facade.db;
+    let agent = facade::registration::ensure_agent(db, client, user, organization)
+        .await
+        .map_err(BackendError::Database)?;
+    facade::registration::unshelve(db, agent, &request.id, true)
+        .await
+        .map_err(|e| match e {
+            facade::registration::UnshelveError::Database(e) => {
+                Refusal::from(BackendError::Database(e))
+            }
+            refused => Refusal(StatusCode::BAD_REQUEST, refused.to_string()),
+        })?;
+    Ok(Json(json!({"drawer": request.id})))
+});

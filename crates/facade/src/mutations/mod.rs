@@ -1,6 +1,7 @@
 //! The writes behind registration (`facade/mutations/`): only the parts the agent protocol
 //! needs; the GraphQL mutations themselves stay in Python.
 
+pub mod agent;
 pub mod blok;
 pub mod higher_order;
 pub mod implementation;

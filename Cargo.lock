@@ -1588,6 +1588,7 @@ dependencies = [
  "kante",
  "redis",
  "rekuest-protocol",
+ "rekuest-server-core",
  "rekuest-server-facade",
  "serde",
  "serde_json",
