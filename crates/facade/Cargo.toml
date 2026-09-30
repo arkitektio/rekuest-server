@@ -13,4 +13,15 @@ name = "facade"
 
 [dependencies]
 rekuest-protocol.workspace = true
+authentikate.workspace = true
 chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+redis.workspace = true
+tokio.workspace = true
+axum.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+anyhow.workspace = true
+futures = "0.3"

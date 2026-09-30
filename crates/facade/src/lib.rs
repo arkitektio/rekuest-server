@@ -5,6 +5,14 @@
 //! the agent protocol lives here; GraphQL and subscriptions stay in Python.
 
 pub mod codes;
+pub mod consumers;
+pub mod context;
 pub mod liveness;
+pub mod message_router;
+pub mod messages;
+pub mod persist;
 pub mod redis_keys;
+pub mod registration;
 pub mod settings;
+
+pub use context::Context;

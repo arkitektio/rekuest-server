@@ -1,6 +1,9 @@
-# The conformance stack's database, published, for agentd's database tests. The rekuest
-# service is started so the Python server migrates the schema: agentd never migrates.
+# The conformance stack's database and redis, published, for agentd's tests. The rekuest service
+# is started so the Python server migrates the schema: agentd never migrates.
 services:
   db:
     ports:
       - "${AGENTD_TEST_DB_PORT:-5694}:5432"
+  redis:
+    ports:
+      - "${AGENTD_TEST_REDIS_PORT:-5695}:6379"

@@ -19,18 +19,26 @@ async fn main() -> anyhow::Result<()> {
         .connect(&configuration.postgres.url())
         .await
         .context("connecting to postgres")?;
-    let redis = redis::aio::ConnectionManager::new(
-        redis::Client::open(configuration.redis.url()).context("redis url")?,
-    )
-    .await
-    .context("connecting to redis")?;
+    let redis_client = redis::Client::open(configuration.redis.url()).context("redis url")?;
+    let redis = redis::aio::ConnectionManager::new(redis_client.clone())
+        .await
+        .context("connecting to redis")?;
 
-    let settings = settings::from_configuration(&configuration);
-    let state = Arc::new(urls::AppState {
-        configuration,
-        settings,
+    let authentikate = authentikate::AuthentikateSettings::prepare(
+        &configuration.authentikate,
+        configuration.django.debug,
+    )?;
+    let facade = facade::Context {
         db,
         redis,
+        redis_client,
+        settings: Arc::new(settings::from_configuration(&configuration)),
+        verifier: Arc::new(authentikate::Verifier::new(authentikate)),
+        connections: facade::consumers::connections::Connections::default(),
+    };
+    let state = Arc::new(urls::AppState {
+        configuration,
+        facade,
     });
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     tracing::info!("agentd listening on {bind}");

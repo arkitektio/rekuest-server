@@ -1544,6 +1544,7 @@ name = "rekuest-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "authentikate",
  "axum",
  "chrono",
  "redis",
@@ -1564,8 +1565,19 @@ dependencies = [
 name = "rekuest-server-facade"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "authentikate",
+ "axum",
  "chrono",
+ "futures",
+ "redis",
  "rekuest-protocol",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
