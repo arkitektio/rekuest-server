@@ -783,6 +783,32 @@ pub async fn create_implementation(
 
     sync_dependencies(conn, implementation, &input.dependencies).await?;
 
+    // The locks it takes while it runs: the agent's declared locks, by key. A key the agent does
+    // not declare is not a lock the server can show; the runtime enforces them regardless.
+    let keys = input.locks.clone().unwrap_or_default();
+    let locks: Vec<i64> =
+        sqlx::query_scalar("SELECT id FROM facade_lock WHERE agent_id = $1 AND key = ANY($2)")
+            .bind(agent.id)
+            .bind(&keys)
+            .fetch_all(&mut *conn)
+            .await?;
+    if locks.len() < keys.len() {
+        tracing::warn!(
+            implementation,
+            "implementation {} requires locks its agent does not declare",
+            input.interface
+        );
+    }
+    set_m2m(
+        conn,
+        "facade_implementation_required_locks",
+        "implementation_id",
+        "lock_id",
+        implementation,
+        &locks,
+    )
+    .await?;
+
     if let Some(manipulates) = input.manipulates.as_ref().filter(|m| !m.is_empty()) {
         let states: Vec<i64> = sqlx::query_scalar(
             "SELECT id FROM facade_state WHERE agent_id = $1 AND interface = ANY($2)",

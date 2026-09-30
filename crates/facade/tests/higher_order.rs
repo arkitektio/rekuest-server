@@ -214,3 +214,76 @@ async fn wrappers_that_cannot_work_are_refused() {
         format!("Interface echo is already implemented on this agent by something other than a wrapper of implementation {lower}")
     );
 }
+
+/// The locks an implementation declares become its required locks (the agent's, by key; a key
+/// the agent does not declare is skipped), and Lock/Unlock set and clear who holds one.
+#[tokio::test]
+async fn required_locks_are_the_agents_and_their_holder_is_tracked() {
+    let Some(ctx) = context().await else { return };
+    let (agent, _) = runner(&ctx, &format!("locks-{}", uuid::Uuid::new_v4().simple())).await;
+    let payload: rekuest_core::inputs::ImplementAgentInputModel = serde_json::from_value(json!({
+        "hash": "locks",
+        "locks": [{"key": "stage", "definition": {"key": "stage", "description": "the stage"}}],
+        "implementations": [{
+            "interface": "move",
+            "locks": ["stage", "undeclared"],
+            "definition": {"key": "move", "name": "Move", "kind": "FUNCTION"},
+        }],
+    }))
+    .unwrap();
+    let mut tx = ctx.db.begin().await.unwrap();
+    facade::registration::implement_agent(&mut tx, agent, &payload)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    let required: Vec<String> = sqlx::query_scalar(
+        "SELECT l.key FROM facade_implementation_required_locks r
+           JOIN facade_lock l ON l.id = r.lock_id JOIN facade_implementation i ON i.id = r.implementation_id
+          WHERE i.agent_id = $1 AND i.interface = 'move'",
+    )
+    .bind(agent)
+    .fetch_all(&ctx.db)
+    .await
+    .unwrap();
+    assert_eq!(required, vec!["stage"]);
+
+    let (implementation, action): (i64, i64) =
+        sqlx::query_as("SELECT id, action_id FROM facade_implementation WHERE agent_id = $1 AND interface = 'move'")
+            .bind(agent)
+            .fetch_one(&ctx.db)
+            .await
+            .unwrap();
+    let task: i64 = sqlx::query_scalar(
+        "INSERT INTO facade_task (acted_on, ephemeral, hooks, reference, resumes, capture, is_higher_order_child,
+                                  latest_event_kind, latest_instruct_kind, statusmessage, is_done, created_at,
+                                  updated_at, revision, step, dispatch_attempts, trigger_depth, action_id, agent_id,
+                                  implementation_id)
+         VALUES ('{}', false, '[]', $4, 0, false, false, 'STARTED', 'ASSIGN', '', false, now(), now(), 0, false, 1, 0, $2, $1, $3)
+         RETURNING id",
+    )
+    .bind(agent)
+    .bind(action)
+    .bind(implementation)
+    .bind(uuid::Uuid::new_v4().to_string())
+    .fetch_one(&ctx.db)
+    .await
+    .unwrap();
+    let holder = || async {
+        sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT hold_by_id FROM facade_lock WHERE agent_id = $1 AND key = 'stage'",
+        )
+        .bind(agent)
+        .fetch_one(&ctx.db)
+        .await
+        .unwrap()
+    };
+    facade::persist::state::on_agent_lock(&ctx, agent, "stage", &task.to_string())
+        .await
+        .unwrap();
+    assert_eq!(holder().await, Some(task));
+    facade::persist::state::on_agent_unlock(&ctx, agent, "stage")
+        .await
+        .unwrap();
+    assert_eq!(holder().await, None);
+}

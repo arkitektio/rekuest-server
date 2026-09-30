@@ -158,16 +158,22 @@ pub async fn on_agent_lock(ctx: &Context, agent: i64, key: &str, task: &str) -> 
     .bind(task_id)
     .execute(&ctx.db)
     .await?;
+    // The agent's feed carries its locks: who holds what is visible the moment it changes.
+    crate::signals::agent_saved(ctx, agent, false).await;
     Ok(())
 }
 
 /// Release: clear the holder, a no-op if the lock is absent or already free (`on_agent_unlock`).
 pub async fn on_agent_unlock(ctx: &Context, agent: i64, key: &str) -> PersistResult<()> {
-    sqlx::query("UPDATE facade_lock SET hold_by_id = NULL WHERE agent_id = $1 AND key = $2")
+    let released = sqlx::query("UPDATE facade_lock SET hold_by_id = NULL, updated_at = now() WHERE agent_id = $1 AND key = $2 AND hold_by_id IS NOT NULL")
         .bind(agent)
         .bind(key)
         .execute(&ctx.db)
-        .await?;
+        .await?
+        .rows_affected();
+    if released > 0 {
+        crate::signals::agent_saved(ctx, agent, false).await;
+    }
     Ok(())
 }
 
