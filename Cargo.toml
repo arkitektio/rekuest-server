@@ -9,9 +9,10 @@ license = "MIT"
 repository = "https://github.com/arkitektio/rekuest-agentd"
 
 [workspace.dependencies]
-# The wire types, shared with the agents (arkirust). A path until 0.2 is on crates.io.
-rekuest-protocol = { path = "../arkirust/crates/rekuest-protocol", version = "0.2.0" }
+# The wire types, shared with the agents (arkirust).
+rekuest-protocol = "0.2.0"
 facade = { path = "crates/facade" }
+authentikate = { path = "crates/authentikate" }
 anyhow = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time", "signal", "net"] }
@@ -25,3 +26,9 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
+jsonwebtoken = "9"
+base64 = "0.22"
+sha2 = "0.10"
+hex = "0.4"
+rand = "0.9"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

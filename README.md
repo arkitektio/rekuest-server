@@ -36,7 +36,7 @@ so a behaviour has the same path on both sides (`facade/liveness.py` ↔ `facade
 | `rekuest` | `rekuest/` (the Django project) | `configuration`, `settings`, `urls`; the `agentd` binary |
 | `facade` | `facade/` (the app) | the agent protocol: `codes`, `liveness`, `redis_keys`, then `consumers`, `persist`, `registration`, `guards`, `provenance`, `reaper`, … |
 | `rekuest-core` | `rekuest_core/` | the declaration models and their validation (Phase 1) |
-| `authentikate` | `authentikate` | token validation and user/org/client expansion (Phase 1) |
+| `authentikate` | `authentikate` 4.1.1 (the version the server pins) | token verification (rsa, rsa_file, jwks_dict, jwks_uri; revocation lists), static tokens, and expansion to user/org/client/membership rows |
 | `kante` | `kante` | the channels_redis-compatible channel layer (Phase 2) |
 
 A crate appears when its first module is ported; nothing is stubbed ahead of it.
@@ -70,6 +70,8 @@ A crate appears when its first module is ported; nothing is stubbed ahead of it.
 ## Development
 
 ```bash
+eval "$(scripts/test-db.sh)"   # a Postgres the Python server migrated (database tests skip without it)
 cargo test
 cargo clippy --all-targets -- -D warnings
+scripts/test-db.sh down
 ```

@@ -1,0 +1,6 @@
+# The conformance stack's database, published, for agentd's database tests. The rekuest
+# service is started so the Python server migrates the schema: agentd never migrates.
+services:
+  db:
+    ports:
+      - "${AGENTD_TEST_DB_PORT:-5694}:5432"
