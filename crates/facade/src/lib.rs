@@ -9,13 +9,16 @@ pub mod channels;
 pub mod codes;
 pub mod consumers;
 pub mod context;
+pub mod descriptors;
 pub mod liveness;
 pub mod message_router;
 pub mod messages;
 pub mod persist;
 pub mod redis_keys;
 pub mod registration;
+pub mod registration_lock;
 pub mod settings;
 pub mod signals;
+pub mod unique;
 
 pub use context::Context;
