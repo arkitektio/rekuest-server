@@ -3,6 +3,7 @@
 pub mod caller_ops;
 pub mod leases;
 pub mod positions;
+pub mod reconcile;
 pub mod reports;
 pub mod state;
 pub mod transitions;

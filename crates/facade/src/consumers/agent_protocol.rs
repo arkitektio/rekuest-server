@@ -27,7 +27,7 @@ use crate::consumers::connections::Control;
 use crate::context::Context;
 use crate::message_router;
 use crate::messages::{AgentFrame, FromAgent, Inquiry, ToAgent, ToAgentFrame};
-use crate::persist::{caller_ops, leases};
+use crate::persist::{caller_ops, leases, reconcile};
 use crate::persist::{positions, reports};
 use crate::registration;
 
@@ -267,6 +267,14 @@ async fn register(
     if claim.displaced_incumbent {
         ctx.connections.kick_others(agent, connection_id);
     }
+    // A fresh process took over: its predecessor's in-flight work is orphaned. It ends LOST (a
+    // workflow is sent again, into the queue the drain is about to deliver) before `INIT`.
+    if let Err(e) = reconcile::fail_and_cascade_inflight(ctx, &claim.orphaned).await {
+        tracing::error!(
+            agent,
+            "failing the orphaned work of a previous process failed: {e}"
+        );
+    }
 
     sender.send(ToAgent::Init {
         agent: agent.to_string(),
@@ -456,14 +464,21 @@ async fn flush_journal_acks(
     }
 }
 
-/// The lease is released if it is still ours (`on_agent_disconnected`). What was in flight is
-/// the reconcile sweep's, after the grace window.
+/// The lease is released if it is still ours (`on_agent_disconnected`). Its probes fail at
+/// once; its in-flight work waits out the grace window, which is the reconcile sweep's, or with
+/// no grace is failed right here.
 async fn on_agent_disconnected(
     ctx: &Context,
     agent: i64,
     connection_id: &str,
 ) -> Result<(), sqlx::Error> {
-    leases::release_lease(&ctx.db, agent, connection_id).await?;
+    if !leases::release_lease(&ctx.db, agent, connection_id).await? {
+        return Ok(()); // displaced: the new owner is authoritative
+    }
+    reconcile::fail_probes_for_agent(ctx, agent).await;
+    if ctx.settings.grace.is_zero() {
+        reconcile::reconcile_orphaned_executor_work(ctx, agent).await?;
+    }
     Ok(())
 }
 

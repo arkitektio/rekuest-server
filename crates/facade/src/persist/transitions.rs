@@ -40,11 +40,28 @@ pub struct TaskRow {
     pub picked_up_at: Option<DateTime<Utc>>,
     pub dispatched_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
+    pub latest_instruct_kind: String,
+    pub not_before: Option<DateTime<Utc>>,
+    pub dispatch_attempts: i16,
+    pub interrupt_at: Option<DateTime<Utc>>,
+}
+
+impl TaskRow {
+    /// A delayed task nobody has handed over yet (`_is_waiting`): waiting, not undelivered.
+    pub fn is_waiting(&self) -> bool {
+        self.not_before.is_some() && self.dispatch_attempts == 0
+    }
+
+    /// When its pickup clock started: its last dispatch, or its creation if it never left.
+    pub fn pickup_clock(&self) -> DateTime<Utc> {
+        self.dispatched_at.unwrap_or(self.created_at)
+    }
 }
 
 pub const TASK_ROW: &str =
     "id, agent_id, is_done, latest_event_kind, is_higher_order_child, parent_id, \
-     implementation_id, picked_up_at, dispatched_at, created_at";
+     implementation_id, picked_up_at, dispatched_at, created_at, latest_instruct_kind, \
+     not_before, dispatch_attempts, interrupt_at";
 
 /// The fields of a `TaskEvent` besides its task and kind; all optional, as on the model.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -145,6 +162,9 @@ pub struct Claim<'a> {
     pub event: Option<NewEvent>,
     /// Step over a row another backend holds instead of waiting for it (sweeps).
     pub skip_locked: bool,
+    /// More columns to set with the transition (`extra`), as a SQL `SET` list; `$2` in it is
+    /// the application clock's now, the clock every deadline is measured by.
+    pub extra: Option<&'a str>,
 }
 
 impl<'a> Claim<'a> {
@@ -156,6 +176,7 @@ impl<'a> Claim<'a> {
             only_if: None,
             event: Some(NewEvent::default()),
             skip_locked: false,
+            extra: None,
         }
     }
 }
@@ -190,6 +211,13 @@ pub async fn claim(ctx: &Context, task: i64, claim: Claim<'_>) -> Result<bool, s
         return Ok(false);
     }
     update_task_kind(&mut tx, task, claim.to_kind, claim.mark_done).await?;
+    if let Some(extra) = claim.extra {
+        sqlx::query(&format!("UPDATE facade_task SET {extra} WHERE id = $1"))
+            .bind(task)
+            .bind(Utc::now())
+            .execute(&mut *tx)
+            .await?;
+    }
     let event = match &claim.event {
         Some(event) => Some(insert_event(&mut *tx, task, claim.to_kind, event).await?),
         None => None,
@@ -286,6 +314,17 @@ pub async fn unfold_to_higher_order(
     Ok(())
 }
 
+/// How [`finalize_terminal`] may lose its claim, and what else it sets (its keyword arguments).
+#[derive(Default)]
+pub struct Guard<'a> {
+    /// Lose the claim unless this holds for the locked row.
+    pub only_if: Option<&'a (dyn Fn(&TaskRow) -> bool + Sync)>,
+    /// More columns to set, as in [`Claim::extra`].
+    pub extra: Option<&'a str>,
+    /// Step over a row another backend holds (sweeps).
+    pub skip_locked: bool,
+}
+
 /// Finalize a task the SERVER decided is over, and project it onto any wrapper
 /// (`_finalize_terminal`). Returns whether we won.
 pub async fn finalize_terminal(
@@ -294,16 +333,16 @@ pub async fn finalize_terminal(
     kind: &str,
     message: &str,
     value: Option<Value>,
-    only_if: Option<&(dyn Fn(&TaskRow) -> bool + Sync)>,
-    skip_locked: bool,
+    guard: Guard<'_>,
 ) -> Result<bool, sqlx::Error> {
     let won = claim(
         ctx,
         task,
         Claim {
             mark_done: true,
-            only_if,
-            skip_locked,
+            only_if: guard.only_if,
+            extra: guard.extra,
+            skip_locked: guard.skip_locked,
             event: Some(NewEvent {
                 message: Some(message.to_owned()),
                 value,
@@ -371,8 +410,11 @@ pub async fn finalize_lost(
         "LOST",
         reason,
         Some(details),
-        only_if,
-        skip_locked,
+        Guard {
+            only_if,
+            extra: None,
+            skip_locked,
+        },
     )
     .await
 }

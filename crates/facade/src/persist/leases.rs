@@ -8,9 +8,11 @@
 use chrono::Utc;
 use sqlx::PgPool;
 
-use crate::liveness::agent_is_live;
+use crate::context::Context;
+use crate::liveness::{agent_is_live, agent_is_stale};
 use crate::registration::clear_drawers;
 use crate::settings::Settings;
+use crate::signals;
 
 /// Whether a registration comes from the process that held the lease before: both sessions
 /// known and equal. That process keeps its in-flight work and its memory drawers.
@@ -32,6 +34,9 @@ pub struct LeaseClaim {
     pub epoch: Option<i64>,
     /// Tasks the agent may still hold: asked about in `INIT` (same process reconnecting).
     pub inquiries: Vec<i64>,
+    /// In-flight work a previous process orphaned (a fresh process took over): for
+    /// [`crate::persist::reconcile::fail_and_cascade_inflight`], once the lease is ours.
+    pub orphaned: Vec<i64>,
     /// A previous connection existed and should be told to stop.
     pub displaced_incumbent: bool,
     pub prior_session: Option<String>,
@@ -98,6 +103,7 @@ async fn claim_lease(
         claimed: true,
         epoch: Some(epoch),
         inquiries: vec![],
+        orphaned: vec![],
         displaced_incumbent: connected,
         prior_session,
     })
@@ -113,8 +119,9 @@ pub const IN_FLIGHT: &str = "t.is_done = false
 /// Claim the lease for a connecting agent (`on_agent_connected`).
 ///
 /// Work it never picked up restarts its pickup clock. A same-session reconnect is asked about
-/// its in-flight tasks (`inquiries`); a fresh process's in-flight work is orphaned, which the
-/// reconcile path handles.
+/// its in-flight tasks (`inquiries`); a fresh process's in-flight work is orphaned (`orphaned`),
+/// and the caller fails and cascades it. Not through `reconcile_orphaned_executor_work`: the
+/// agent is live again, which is exactly what makes that one step aside.
 pub async fn on_agent_connected(
     db: &PgPool,
     settings: &Settings,
@@ -145,13 +152,7 @@ pub async fn on_agent_connected(
     .await?;
 
     if fresh_process(claim.prior_session.as_deref(), session_id) {
-        if !in_flight.is_empty() {
-            tracing::warn!(
-                agent,
-                count = in_flight.len(),
-                "a fresh process took over; its predecessor's in-flight work is left to the reconcile sweep"
-            );
-        }
+        claim.orphaned = in_flight;
     } else {
         claim.inquiries = in_flight;
     }
@@ -182,6 +183,38 @@ pub async fn release_lease(
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
+    Ok(true)
+}
+
+/// Revoke one stuck-connected agent's lease under its row lock (`_revoke_lease_sync`). Returns
+/// whether we won.
+///
+/// Re-checks staleness under the lock, so this is also the claim that makes the stale sweep
+/// multi-worker safe: the first backend flips `connected`, the others find a row that is no
+/// longer stale and back off. A reconnect that landed between the scan and the lock lands here
+/// too. Bumping `lease_epoch` fences the wedged connection: if its worker ever resumes, its
+/// renewal matches no row and it closes instead of resurrecting the agent. `last_seen` and
+/// `active_connection_id` are left alone: the first is the true last contact the orphan cutoff
+/// depends on, and clearing the second could let the wedged socket's disconnect pass the guard.
+pub async fn revoke_lease(ctx: &Context, agent: i64) -> Result<bool, sqlx::Error> {
+    let mut tx = ctx.db.begin().await?;
+    let (connected, last_seen): (bool, Option<chrono::DateTime<Utc>>) =
+        sqlx::query_as("SELECT connected, last_seen FROM facade_agent WHERE id = $1 FOR UPDATE")
+            .bind(agent)
+            .fetch_one(&mut *tx)
+            .await?;
+    if !agent_is_stale(&ctx.settings, connected, last_seen, Utc::now()) {
+        tx.rollback().await?;
+        return Ok(false); // healed or reconnected while we waited for the lock
+    }
+    sqlx::query(
+        "UPDATE facade_agent SET connected = false, lease_epoch = lease_epoch + 1 WHERE id = $1",
+    )
+    .bind(agent)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    signals::agent_saved(ctx, agent, false).await;
     Ok(true)
 }
 
