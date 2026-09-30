@@ -101,6 +101,21 @@ pub struct ChildTaskEvent {
     pub update: Option<TaskChangePayload>,
 }
 
+/// `ProbeEventBroadcast`: a probe's event, payload-carrying (a probe has no rows to re-fetch).
+/// `seq` is the per-probe redis counter: the order and dedup key of the probe's stream.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ProbeEventBroadcast {
+    pub probe: String,
+    pub kind: String,
+    pub seq: i64,
+    pub message: Option<String>,
+    pub level: Option<String>,
+    pub progress: Option<i64>,
+    pub returns: Option<Value>,
+    #[serde(serialize_with = "datetime")]
+    pub created_at: DateTime<Utc>,
+}
+
 /// `AgentEvent`, `ImplementationEvent` and `ActionEvent`: the id of the row that changed.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct CrudEvent {

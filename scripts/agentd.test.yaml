@@ -181,6 +181,54 @@ authentikate:
       client_app: conf_20
       client_release: v0.0.1
       client_id: conf_20
+    conf_21:
+      sub: 121
+      iss: lok
+      active_org: conformance
+      client_device: conf_21_device
+      client_app: conf_21
+      client_release: v0.0.1
+      client_id: conf_21
+    conf_22:
+      sub: 122
+      iss: lok
+      active_org: conformance
+      client_device: conf_22_device
+      client_app: conf_22
+      client_release: v0.0.1
+      client_id: conf_22
+    conf_23:
+      sub: 123
+      iss: lok
+      active_org: conformance
+      client_device: conf_23_device
+      client_app: conf_23
+      client_release: v0.0.1
+      client_id: conf_23
+    conf_24:
+      sub: 124
+      iss: lok
+      active_org: conformance
+      client_device: conf_24_device
+      client_app: conf_24
+      client_release: v0.0.1
+      client_id: conf_24
+    conf_25:
+      sub: 125
+      iss: lok
+      active_org: conformance
+      client_device: conf_25_device
+      client_app: conf_25
+      client_release: v0.0.1
+      client_id: conf_25
+    conf_26:
+      sub: 126
+      iss: lok
+      active_org: conformance
+      client_device: conf_26_device
+      client_app: conf_26
+      client_release: v0.0.1
+      client_id: conf_26
     test:
       sub: 1
       iss: lok

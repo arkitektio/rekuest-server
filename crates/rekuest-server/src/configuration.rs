@@ -107,6 +107,15 @@ pub struct RekuestBlock {
     pub hook_signature_mode: String,
     #[serde(default = "d300")]
     pub hook_max_skew: u64,
+    /// What this rekuest signs as, and what service tokens to it must be for.
+    #[serde(default = "rekuest_identifier")]
+    pub identifier: String,
+    #[serde(default = "d3600")]
+    pub probe_ttl: u64,
+    #[serde(default = "d300")]
+    pub probe_linger: u64,
+    #[serde(default = "d32")]
+    pub probe_max_inflight: i64,
 }
 
 impl Default for RekuestBlock {
@@ -129,6 +138,12 @@ fn d300() -> u64 {
 }
 fn d3600() -> u64 {
     3600
+}
+fn d32() -> i64 {
+    32
+}
+fn rekuest_identifier() -> String {
+    "live.arkitekt.rekuest".into()
 }
 fn compat() -> String {
     "compat".into()
@@ -158,7 +173,7 @@ fn issuer() -> String {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct InstanceBlock {
-    /// Ed25519 private key (PKCS#8 PEM): signs provenance tokens.
+    /// Ed25519 private key (PKCS#8 PEM): signs provenance tokens and verifies service tokens.
     pub private_key: String,
 }
 
@@ -204,5 +219,7 @@ rekuest:
         assert_eq!(config.rekuest.pickup_deadline, 0);
         assert_eq!(config.rekuest.grace_default, 30);
         assert_eq!(config.provenance.issuer, "rekuest");
+        assert_eq!(config.rekuest.identifier, "live.arkitekt.rekuest");
+        assert_eq!(config.rekuest.probe_max_inflight, 32);
     }
 }

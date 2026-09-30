@@ -881,8 +881,17 @@ async fn an_unconfirmed_cancel_escalates_then_the_interrupt_is_finalized() {
     .await
     .unwrap();
     assert_eq!(instructs, 1);
+    // Every frame the control backend queues carries its own id, as Python's do.
+    let frames: Vec<Value> = queued(&ctx, agent)
+        .await
+        .into_iter()
+        .map(|mut frame| {
+            frame.as_object_mut().unwrap().remove("id");
+            frame
+        })
+        .collect();
     assert_eq!(
-        queued(&ctx, agent).await,
+        frames,
         vec![json!({"type": "INTERRUPT", "task": task.to_string()})]
     );
     assert_eq!(kinds(&ctx, not_due).await, vec!["STARTED"], "not due yet");

@@ -10,15 +10,18 @@
 //! handled, or a frame refused on every delivery would hold the watermark back forever. Anything
 //! else releases the claim and fails, so the resend projects it again.
 //!
-//! Not routed here yet: the agent's requests (`ASSIGN_REQUEST`, the `CANCEL`/`INTERRUPT`/`PAUSE`/
-//! `RESUME` requests, `PROBE_REQUEST`, `STATE_REVISION_REQUEST`) are Phase 3, and frames of a
-//! probe (`p-` task ids), which Python keeps in redis only, arrive with the probes in Phase 3.
-//! Both are logged.
+//! The agent's requests (`ASSIGN_REQUEST`, `STATE_REVISION_REQUEST`, `PROBE_REQUEST` and the
+//! `CANCEL`/`INTERRUPT`/`PAUSE`/`RESUME` requests) are answered, never fatal: a refusal of any
+//! kind is the reply's `error`. Frames whose task is a probe (`p-…`) go to the redis-held probe
+//! handlers (`_route_probe_message`), never to the database.
 
+use crate::backend::{BackendError, Control};
 use crate::context::Context;
+use crate::guards;
 use crate::messages::{is_probe_task, AgentFrame, FromAgent, ToAgent};
 use crate::persist::positions::{self, is_numbered, Position};
-use crate::persist::{reports, state, PersistError};
+use crate::persist::{caller_ops, reports, state, PersistError};
+use crate::probes;
 use crate::registration;
 
 /// A frame the router could not handle: the transport closes, as the Python consumer does when
@@ -29,6 +32,8 @@ pub enum RouteError {
     Refused(String),
     #[error("routing failed: {0}")]
     Database(#[from] sqlx::Error),
+    #[error("routing failed: {0}")]
+    Redis(#[from] redis::RedisError),
 }
 
 /// The durable-report acknowledgement, so the agent can stop retaining it (`_ack`).
@@ -78,6 +83,19 @@ pub async fn route(
     }
 }
 
+/// The task a frame names as Python reads it (`getattr(message, "task")`): a `STATE_PATCH`'s
+/// changing task is its `task_id`, which does not count.
+fn named_task<D>(message: &FromAgent<D>) -> Option<&str> {
+    match message {
+        FromAgent::StatePatch { .. } => None,
+        FromAgent::CancelRequest { task, .. }
+        | FromAgent::InterruptRequest { task }
+        | FromAgent::PauseRequest { task }
+        | FromAgent::ResumeRequest { task, .. } => Some(task),
+        message => message.task(),
+    }
+}
+
 /// The projection: dispatch a frame to its handler and return the reply (`_route`).
 async fn project(
     ctx: &Context,
@@ -86,27 +104,115 @@ async fn project(
     session_id: Option<&str>,
 ) -> Result<Option<ToAgent>, RouteError> {
     let kind = frame_kind(frame);
-    if frame.message.task().is_some_and(is_probe_task) {
-        tracing::warn!(agent, kind, "a probe's frame: probes arrive with Phase 3");
-        return Ok(None);
+    if named_task(&frame.message).is_some_and(is_probe_task) {
+        return route_probe(ctx, agent, frame, &kind).await;
     }
     let handled = match &frame.message {
         FromAgent::Shelve { .. } | FromAgent::Unshelve { .. } => {
             return shelving(ctx, agent, frame, session_id).await
         }
-        FromAgent::AssignRequest { .. }
-        | FromAgent::ProbeRequest { .. }
-        | FromAgent::StateRevisionRequest { .. }
-        | FromAgent::CancelRequest { .. }
-        | FromAgent::InterruptRequest { .. }
-        | FromAgent::PauseRequest { .. }
-        | FromAgent::ResumeRequest { .. } => {
-            tracing::warn!(
+        FromAgent::AssignRequest { .. } => {
+            return Ok(Some(assign_request(ctx, agent, frame).await))
+        }
+        FromAgent::StateRevisionRequest {
+            parent,
+            dependency,
+            state,
+            since,
+            paths,
+        } => {
+            let answer = guards::state_revision(
+                &ctx.db,
                 agent,
-                kind,
-                "an agent request: requests arrive with Phase 3"
-            );
-            return Ok(None);
+                parent,
+                dependency,
+                state,
+                since.as_ref(),
+                paths,
+            )
+            .await;
+            return Ok(Some(match answer {
+                Ok(revision) => ToAgent::StateRevisionResponse {
+                    request: frame.id.clone(),
+                    revision: Some(revision.revision),
+                    changed: revision.changed,
+                    detail: revision.detail,
+                    error: None,
+                },
+                Err(e) => {
+                    log_request_refusal("StateRevisionRequest", &e);
+                    ToAgent::StateRevisionResponse {
+                        request: frame.id.clone(),
+                        revision: None,
+                        changed: None,
+                        detail: None,
+                        error: Some(e.to_string()),
+                    }
+                }
+            }));
+        }
+        FromAgent::ProbeRequest {
+            reference,
+            args,
+            action,
+            action_hash,
+            implementation,
+        } => {
+            let input = probes::backend::ProbeInput {
+                action: action.clone(),
+                action_hash: action_hash.clone(),
+                implementation: implementation.clone(),
+                args: args.clone(),
+                reference: reference.clone(),
+            };
+            return Ok(Some(
+                match probes::backend::probe_for_agent(ctx, agent, &input).await {
+                    Ok(state) => ToAgent::ProbeResponse {
+                        request: frame.id.clone(),
+                        probe: state.get("id").cloned(),
+                        error: None,
+                    },
+                    Err(e) => {
+                        log_request_refusal("ProbeRequest", &e);
+                        ToAgent::ProbeResponse {
+                            request: frame.id.clone(),
+                            probe: None,
+                            error: Some(e.to_string()),
+                        }
+                    }
+                },
+            ));
+        }
+        FromAgent::CancelRequest {
+            task,
+            auto_interrupt,
+        } => {
+            let result = caller_ops::on_caller_cancel(ctx, agent, task, *auto_interrupt).await;
+            return Ok(Some(control_response(frame, task, result)));
+        }
+        FromAgent::InterruptRequest { task } => {
+            let result = caller_ops::caller_control(ctx, agent, task, Control::Interrupt).await;
+            return Ok(Some(control_response(frame, task, result)));
+        }
+        FromAgent::PauseRequest { task } => {
+            let result = caller_ops::caller_control(ctx, agent, task, Control::Pause).await;
+            return Ok(Some(control_response(frame, task, result)));
+        }
+        FromAgent::ResumeRequest { task, step } => {
+            let result =
+                caller_ops::caller_control(ctx, agent, task, Control::Resume { step: *step }).await;
+            return Ok(Some(control_response(frame, task, result)));
+        }
+        FromAgent::StatePatch {
+            task_id: Some(task_id),
+            ..
+        } if is_probe_task(task_id) => {
+            // `Patch.task` is a real foreign key: keep the patch, drop the probe's link.
+            let mut unlinked = frame.clone();
+            if let FromAgent::StatePatch { task_id, .. } = &mut unlinked.message {
+                *task_id = None;
+            }
+            state::on_state(ctx, agent, &unlinked).await.map(|_| None)
         }
         FromAgent::StatePatch { .. }
         | FromAgent::StateSnapshot { .. }
@@ -126,6 +232,161 @@ async fn project(
         Err(PersistError::Refused(reason)) => Err(RouteError::Refused(format!("{kind}: {reason}"))),
         Err(PersistError::Database(e)) => Err(RouteError::Database(e)),
     }
+}
+
+fn log_request_refusal(what: &str, e: &BackendError) {
+    match e {
+        BackendError::Refused(reason) | BackendError::Forbidden(reason) => {
+            tracing::info!("{what} refused: {reason}")
+        }
+        BackendError::Database(e) => tracing::error!("{what} failed: {e}"),
+    }
+}
+
+/// An agent assigning dependent work: a bad request answers with `error`, never tearing the
+/// transport down.
+async fn assign_request(ctx: &Context, agent: i64, frame: &AgentFrame) -> ToAgent {
+    let FromAgent::AssignRequest {
+        reference, parent, ..
+    } = &frame.message
+    else {
+        unreachable!("routed as an ASSIGN_REQUEST");
+    };
+    let refused = |error: String| ToAgent::AssignResponse {
+        request: frame.id.clone(),
+        reference: reference.clone().unwrap_or_default(),
+        task: None,
+        created: false,
+        error: Some(error),
+    };
+    if parent.as_deref().is_some_and(is_probe_task) {
+        return refused("A probe cannot parent dependent work — assign a task instead.".into());
+    }
+    let assigned = match caller_ops::assign_input(&frame.message).expect("an ASSIGN_REQUEST") {
+        Ok(input) => caller_ops::on_caller_assign(ctx, agent, &input).await,
+        Err(e) => Err(e),
+    };
+    match assigned {
+        // The task's own reference: the request's, or the one the server minted.
+        Ok(assigned) => ToAgent::AssignResponse {
+            request: frame.id.clone(),
+            reference: assigned.reference,
+            task: Some(assigned.task.to_string()),
+            created: assigned.created,
+            error: None,
+        },
+        Err(e) => {
+            log_request_refusal("AssignRequest", &e);
+            refused(e.to_string())
+        }
+    }
+}
+
+/// A caller control request's answer (`_control`): accepted, or refused with why.
+fn control_response(frame: &AgentFrame, task: &str, result: Result<i64, BackendError>) -> ToAgent {
+    match result {
+        Ok(task) => ToAgent::ControlResponse {
+            request: frame.id.clone(),
+            task: Some(task.to_string()),
+            accepted: true,
+            error: None,
+        },
+        Err(e) => {
+            log_request_refusal("Caller control request", &e);
+            ToAgent::ControlResponse {
+                request: frame.id.clone(),
+                task: Some(task.to_owned()),
+                accepted: false,
+                error: Some(e.to_string()),
+            }
+        }
+    }
+}
+
+/// A frame of a probe (`_route_probe_message`): lifecycle and terminals are acked (the store
+/// dedups the resends), the stream events are fire-and-forget. What a probe cannot do is refused
+/// without tearing down the transport: control from an agent answers `accepted=false`, a lock
+/// is ignored.
+async fn route_probe(
+    ctx: &Context,
+    agent: i64,
+    frame: &AgentFrame,
+    kind: &str,
+) -> Result<Option<ToAgent>, RouteError> {
+    use probes::persist::{nonterminal, terminal, ProbeEvent};
+    let none = ProbeEvent::default;
+    match &frame.message {
+        FromAgent::Started { task } => nonterminal(ctx, task, "STARTED", none()).await?,
+        FromAgent::Paused { task, .. } => nonterminal(ctx, task, "PAUSED", none()).await?,
+        FromAgent::Resumed { task } => nonterminal(ctx, task, "RESUMED", none()).await?,
+        FromAgent::Cancelled { task } => terminal(ctx, task, "CANCELLED", None).await?,
+        FromAgent::Interrupted { task } => terminal(ctx, task, "INTERRUPTED", None).await?,
+        FromAgent::Completed { task } => terminal(ctx, task, "COMPLETED", None).await?,
+        FromAgent::Failed { task, error } => terminal(ctx, task, "FAILED", Some(error)).await?,
+        FromAgent::Critical { task, error } => terminal(ctx, task, "CRITICAL", Some(error)).await?,
+        FromAgent::Yield { task, returns } => {
+            let event = ProbeEvent {
+                returns: Some(serde_json::Value::Object(returns.clone())),
+                ..none()
+            };
+            nonterminal(ctx, task, "YIELD", event).await?;
+            return Ok(None);
+        }
+        FromAgent::Log {
+            task,
+            message,
+            level,
+        } => {
+            let event = ProbeEvent {
+                message: Some(message.clone()),
+                level: serde_json::to_value(level)
+                    .ok()
+                    .and_then(|l| l.as_str().map(str::to_owned)),
+                ..none()
+            };
+            nonterminal(ctx, task, "LOG", event).await?;
+            return Ok(None);
+        }
+        FromAgent::Progress {
+            task,
+            progress,
+            message,
+        } => {
+            let event = ProbeEvent {
+                progress: progress.map(i64::from),
+                message: message.clone(),
+                ..none()
+            };
+            nonterminal(ctx, task, "PROGRESS", event).await?;
+            return Ok(None);
+        }
+        FromAgent::CancelRequest { task, .. }
+        | FromAgent::InterruptRequest { task }
+        | FromAgent::PauseRequest { task }
+        | FromAgent::ResumeRequest { task, .. } => return Ok(Some(ToAgent::ControlResponse {
+            request: frame.id.clone(),
+            task: Some(task.clone()),
+            accepted: false,
+            error: Some(
+                "Probes are controlled by their caller via GraphQL, not from an agent connection."
+                    .into(),
+            ),
+        })),
+        FromAgent::Lock { key, task } => {
+            tracing::warn!(
+                agent,
+                "Lock {key} requested by probe {task} — ignored (probes cannot hold locks)"
+            );
+            return Ok(None);
+        }
+        FromAgent::Effect { .. } => return Ok(None),
+        _ => {
+            return Err(RouteError::Refused(format!(
+                "{kind}: not a message a probe sends"
+            )))
+        }
+    }
+    Ok(Some(ack(frame)))
 }
 
 /// Lifecycle confirmations and terminals are acked; the stream events are fire-and-forget.

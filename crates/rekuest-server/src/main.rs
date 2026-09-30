@@ -42,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
         db,
         redis,
         redis_client,
-        settings: Arc::new(settings::from_configuration(&configuration)),
+        settings: Arc::new(settings::from_configuration(&configuration)?),
         verifier: Arc::new(authentikate::Verifier::new(authentikate)),
         channel_layer,
         connections: facade::consumers::connections::Connections::default(),

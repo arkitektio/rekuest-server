@@ -207,6 +207,7 @@ async fn task_event_created_inner(ctx: &Context, event_id: i64) -> Result<(), sq
     let Some(caller) = caller else {
         return Ok(());
     };
+    tracing::debug!(event_id, caller, "task event fan-out");
     let mut groups = vec![format!("task_caller_{caller}")];
     if root.is_none() {
         let organization = caller_organization(ctx, caller).await?;

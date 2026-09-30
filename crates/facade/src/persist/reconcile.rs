@@ -15,6 +15,7 @@ use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
 use sqlx::types::Json;
 
+use crate::caller_context::CallerContext;
 use crate::consumers::agent_queue;
 use crate::context::Context;
 use crate::liveness::agent_is_live;
@@ -23,6 +24,7 @@ use crate::persist::leases::{self, IN_FLIGHT};
 use crate::persist::transitions::{
     self, insert_event, update_task_kind, Claim, Guard, NewEvent, TaskRow, TASK_ROW,
 };
+use crate::provenance::{mint_token_for_task, MintTask};
 use crate::signals;
 
 /// The pickup watchdog's budget: the original dispatch plus ONE redelivery. Failed handoffs
@@ -59,26 +61,65 @@ fn ago(now: DateTime<Utc>, window: std::time::Duration) -> DateTime<Utc> {
     now - chrono::Duration::from_std(window).unwrap_or(chrono::Duration::MAX)
 }
 
-/// The provenance token of an Assign the server sends again (`mint_token_for_task`).
-///
-/// **The provenance seam.** The Python server mints a fresh token for every redelivered or
-/// resumed Assign from the task's caller, and a strict provenance policy may refuse (then the
-/// Assign "could not be rebuilt"). Provenance is not in this crate: until it is, redelivered
-/// Assigns go out without a token, as they do for an implementation with `needs_token=false`.
-/// The merge with the provenance port replaces this body; `Err` is the policy's refusal.
-pub async fn redispatch_token(_ctx: &Context, _task: i64) -> Result<Option<String>, String> {
-    Ok(None)
+/// The provenance token of an Assign the server sends again (`mint_token_for_task` from the
+/// task's caller, as `_build_assign` does). `Err` is a refusal (a strict policy, no key): the
+/// Assign cannot be rebuilt. A task without a caller identity goes without a token; whether it
+/// can be sent at all is decided where its Assign is built.
+pub async fn redispatch_token(ctx: &Context, task: i64) -> Result<Option<String>, String> {
+    #[derive(sqlx::FromRow)]
+    struct Source {
+        parent_id: Option<i64>,
+        implementation_id: Option<i64>,
+        agent_id: Option<i64>,
+        args: Option<Json<Map<String, Value>>>,
+        user_id: Option<i64>,
+        client_id: Option<i64>,
+        organization_id: Option<i64>,
+    }
+    let mut conn = ctx.db.acquire().await.map_err(|e| e.to_string())?;
+    let source: Source = sqlx::query_as(
+        "SELECT t.parent_id, t.implementation_id, t.agent_id, t.args, c.user_id, c.client_id, c.organization_id
+           FROM facade_task t LEFT JOIN facade_caller c ON c.id = t.caller_id WHERE t.id = $1",
+    )
+    .bind(task)
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(|e| e.to_string())?;
+    let (Some(implementation_id), Some(agent_id), Some(user), Some(client), Some(organization)) = (
+        source.implementation_id,
+        source.agent_id,
+        source.user_id,
+        source.client_id,
+        source.organization_id,
+    ) else {
+        return Ok(None);
+    };
+    let caller = CallerContext::load(&mut *conn, user, client, Some(organization), vec![])
+        .await
+        .map_err(|e| e.to_string())?;
+    let args = source.args.map(|Json(args)| args).unwrap_or_default();
+    let minted = MintTask {
+        id: task.to_string(),
+        parent_id: source.parent_id,
+        implementation_id,
+        agent_id,
+        args: &args,
+    };
+    mint_token_for_task(&mut conn, &ctx.settings, &minted, &caller)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Fail the live probes of an agent that is gone (`probe_event_backend.fail_all_for_agent`).
-///
-/// **The probe seam.** Probes are hover-grade calls kept in the Python server's redis probe
-/// store, not in the task tables; this crate does not own that store yet, so there is nothing
-/// here to fail. Called at every point the Python server fails them (a revoked lease, a
-/// released one), so wiring the store in is this one body. Returns the number failed.
-pub async fn fail_probes_for_agent(_ctx: &Context, agent: i64) -> usize {
-    tracing::debug!(agent, "no probe store in this server: no probes to fail");
-    0
+/// Returns the number failed.
+pub async fn fail_probes_for_agent(ctx: &Context, agent: i64) -> usize {
+    match crate::probes::persist::fail_all_for_agent(ctx, agent).await {
+        Ok(failed) => failed,
+        Err(e) => {
+            tracing::error!(agent, "failing the probes of a gone agent failed: {e}");
+            0
+        }
+    }
 }
 
 /// What the Assign of a task sent again is built from.
@@ -493,16 +534,12 @@ pub async fn escalate_due_controls(ctx: &Context, limit: i64) -> Result<usize, s
     Ok(handled)
 }
 
-/// A cancel's deadline passed unconfirmed: interrupt the task instead
-/// (`_escalate_to_interrupt`, through `controll_backend.interrupt`). A no-op once it is terminal.
-///
-/// The interrupt request of the control backend, which this crate does not have yet: for the
-/// task and every still-open descendant, under its row lock, the INTERRUPT instruct, a re-armed
-/// control deadline (so an interrupt nobody confirms is finalized in turn), the INTERRUPTING
-/// event (which, like every control request, leaves `latest_event_kind` alone) and the
-/// `TaskInstruct` audit row; then, after the commit, the `Interrupt` frame. A
-/// delayed task never handed over is settled INTERRUPTED instead: nobody has it to wind down.
-pub async fn escalate_to_interrupt(ctx: &Context, task: i64) -> Result<(), sqlx::Error> {
+/// A cancel's deadline passed unconfirmed: interrupt the task instead (`_escalate_to_interrupt`,
+/// through the control backend's interrupt). A no-op once it is terminal.
+pub async fn escalate_to_interrupt(
+    ctx: &Context,
+    task: i64,
+) -> Result<(), crate::backend::BackendError> {
     let done: Option<bool> = sqlx::query_scalar("SELECT is_done FROM facade_task WHERE id = $1")
         .bind(task)
         .fetch_optional(&ctx.db)
@@ -510,100 +547,9 @@ pub async fn escalate_to_interrupt(ctx: &Context, task: i64) -> Result<(), sqlx:
     if done != Some(false) {
         return Ok(()); // the cancel confirmed (or the task ended otherwise) before the deadline
     }
-    let mut targets = vec![task];
-    targets.extend(
-        sqlx::query_scalar::<_, i64>(
-            "SELECT id FROM facade_task WHERE root_id = $1 AND is_done = false ORDER BY id",
-        )
-        .bind(task)
-        .fetch_all(&ctx.db)
-        .await?,
-    );
-    let now = Utc::now();
-    let interrupt_at = (!ctx.settings.control_deadline.is_zero()).then(|| {
-        now + chrono::Duration::from_std(ctx.settings.control_deadline).unwrap_or_default()
-    });
-
-    for target in targets {
-        let mut tx = ctx.db.begin().await?;
-        let row: Option<TaskRow> = sqlx::query_as(&format!(
-            "SELECT {TASK_ROW} FROM facade_task WHERE id = $1 FOR UPDATE"
-        ))
-        .bind(target)
-        .fetch_optional(&mut *tx)
-        .await?;
-        let Some(row) = row.filter(|row| !row.is_done) else {
-            continue;
-        };
-        let delayed = row.is_waiting() && row.picked_up_at.is_none();
-        let (kind, done, message) = if delayed {
-            (
-                "INTERRUPTED",
-                true,
-                Some("Settled before it was due — never dispatched.".to_owned()),
-            )
-        } else {
-            ("INTERRUPTING", false, None)
-        };
-        sqlx::query(
-            "UPDATE facade_task SET latest_instruct_kind = 'INTERRUPT', interrupt_at = $2
-              WHERE id = $1",
-        )
-        .bind(target)
-        .bind(if delayed { None } else { interrupt_at })
-        .execute(&mut *tx)
-        .await?;
-        if delayed {
-            update_task_kind(&mut tx, target, kind, done).await?;
-        } else {
-            // A request, not an outcome: the -ING event is written, `latest_event_kind` stays
-            // what the agent last reported (an unpicked task still reads QUEUED).
-            sqlx::query(
-                "UPDATE facade_task SET revision = revision + 1, updated_at = now() WHERE id = $1",
-            )
-            .bind(target)
-            .execute(&mut *tx)
-            .await?;
-        }
-        let event = insert_event(
-            &mut *tx,
-            target,
-            kind,
-            &NewEvent {
-                message,
-                ..NewEvent::default()
-            },
-        )
-        .await?;
-        sqlx::query(
-            "INSERT INTO facade_taskinstruct (task_id, kind, created_at) VALUES ($1, 'INTERRUPT', now())",
-        )
-        .bind(target)
-        .execute(&mut *tx)
-        .await?;
-        tx.commit().await?;
-        signals::task_saved(ctx, target, false).await;
-        signals::task_event_created(ctx, event).await;
-        if !delayed
-            && !deliver(
-                ctx,
-                row.agent_id,
-                &ToAgent::Interrupt {
-                    task: target.to_string(),
-                },
-            )
-            .await
-        {
-            // The INTERRUPTING row is the durable record; an unreachable executor is what the
-            // control deadline is for.
-            tracing::error!(
-                task = target,
-                agent = row.agent_id,
-                "could not deliver the interrupt"
-            );
-        }
-    }
-    Ok(())
+    crate::backend::interrupt(ctx, &task.to_string(), None)
+        .await
+        .map(|_| ())
 }
 
 /// What the pickup watchdog decided for one task (`_decide_unpicked_sync`).

@@ -652,9 +652,12 @@ pub async fn create_implementation(
     // The provenance audience: declared, or derived once from the stored ports.
     let audience = match &input.provenance_audience {
         Some(declared) => Some(dump(declared)),
-        None => Some(audience::derive_from_action(&action.args, &action.returns))
-            .filter(|a| !a.is_empty())
-            .map(|a| dump(&a)),
+        None => Some(audience::derive_from_action(
+            action.args.as_array().map_or(&[][..], Vec::as_slice),
+            action.returns.as_array().map_or(&[][..], Vec::as_slice),
+        ))
+        .filter(|a| !a.is_empty())
+        .map(|a| dump(&a)),
     };
     let params = Value::Object(input.params.clone().unwrap_or_default());
 
