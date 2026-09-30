@@ -1,0 +1,19 @@
+[project]
+name = "rekuest-conformance"
+version = "0.1.0"
+description = "Black-box conformance suite for the rekuest agent protocol: every implementation must pass it"
+requires-python = ">=3.12"
+dependencies = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "websockets>=15",
+    "httpx>=0.27",
+    "dokker>=2.8",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]
+markers = ["slow: waits out a protocol timer (heartbeats)"]

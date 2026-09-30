@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    # rekuest-protocol is a path dependency (../arkirust) until 0.2 is on crates.io, so both
+    # repositories are checked out side by side.
+    defaults:
+      run:
+        working-directory: rekuest-agentd
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: rekuest-agentd
+      - uses: actions/checkout@v4
+        with:
+          repository: arkitektio/arkirust
+          path: arkirust
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - working-directory: conformance
+        run: uv sync && uv run pytest -m "not slow"

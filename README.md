@@ -1,0 +1,60 @@
+# rekuest-agentd
+
+The rekuest agent protocol server, in Rust: what agents connect to (`/agi` over websocket,
+`/agi/http/{id}` for hook agents).
+
+## Why
+
+Every rekuest deployment ran GraphQL, every agent socket and every subscription in one Python
+process. Under UI load, agents' reports and heartbeat answers queued behind GraphQL work until
+agents were kicked (heartbeat 3001). Measured with `conformance/bench`: about 26 concurrent UI
+queries a second cut agent-report throughput about 5×, and a thread per connection did not help
+(the limit is the GIL). agentd takes the whole agent protocol out of that process.
+
+## Shape
+
+```
+agents ──ws /agi─────┐
+hook agents ─http────┤
+                     ▼
+            rekuest-agentd (this repo, N replicas)
+                     │ internal API
+   rekuest (Python) ─┘  GraphQL and subscriptions; calls agentd to assign/control
+   Postgres (Django's schema: never migrated here) · Redis (agent queues, channels_redis groups)
+```
+
+agentd reads the rekuest server's own `config.yaml` (`AGENTD_CONFIG`, default `config.yaml`) and
+listens on `AGENTD_BIND` (default `0.0.0.0:8080`), under the config's `force_script_name`.
+
+## The contract
+
+- **Wire:** [`rekuest-protocol`](https://github.com/arkitektio/arkirust/tree/main/crates/rekuest-protocol),
+  checked against every frame the Python server knows (`agent_wire_examples.json`, generated
+  by the server).
+- **Behaviour:** `conformance/`, a black-box pytest suite of real sockets. It must be green
+  against the Python server first, then against agentd:
+
+  ```bash
+  cd conformance
+  uv run pytest                                   # brings up stack/ with dokker (the Python server)
+  CONFORMANCE_URL=http://localhost:8080 uv run pytest   # any running target
+  ```
+
+## Phases
+
+| Phase | Scope | Status |
+|---|---|---|
+| 0 | `rekuest-protocol`, this repo, conformance seed, benchmark | in progress |
+| 1 | auth (authentikate), registration (`implement_agent`), lease/heartbeat/queue | |
+| 2 | reports, transitions, positions, state, locks, shelve, fan-out | |
+| 3 | assign, control, guards, probes, caller mirrors, internal API | |
+| 4 | agent sweeps, workflow resume | |
+| 5 | HTTP hook agents | |
+| 6 | cutover; the Python agent path is deleted | |
+
+## Development
+
+```bash
+cargo test
+cargo clippy --all-targets -- -D warnings
+```

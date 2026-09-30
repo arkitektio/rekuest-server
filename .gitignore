@@ -1,0 +1,4 @@
+target/
+conformance/.venv/
+conformance/stack/docker-compose.local.yml
+__pycache__/
