@@ -13,6 +13,7 @@ repository = "https://github.com/arkitektio/rekuest-agentd"
 rekuest-protocol = "0.2.0"
 facade = { path = "crates/facade", package = "rekuest-server-facade" }
 authentikate = { path = "crates/authentikate" }
+rekuest-core = { path = "crates/rekuest-server-core", package = "rekuest-server-core" }
 anyhow = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time", "signal", "net"] }

@@ -1,0 +1,17 @@
+[package]
+name = "rekuest-server-core"
+description = "The declaration models and their validation (the Rust twin of the Python server's `rekuest_core/`)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+# The Python package this crate takes over, so code reads like it: `rekuest_core::…`.
+name = "rekuest_core"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

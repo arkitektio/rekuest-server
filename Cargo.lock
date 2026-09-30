@@ -1562,6 +1562,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rekuest-server-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "rekuest-server-facade"
 version = "0.1.0"
 dependencies = [
