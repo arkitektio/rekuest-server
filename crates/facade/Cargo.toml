@@ -14,6 +14,7 @@ name = "facade"
 [dependencies]
 rekuest-protocol.workspace = true
 authentikate.workspace = true
+kante.workspace = true
 chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -25,3 +26,6 @@ tracing.workspace = true
 uuid.workspace = true
 anyhow.workspace = true
 futures = "0.3"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["process"] }
