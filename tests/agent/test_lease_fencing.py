@@ -235,6 +235,19 @@ class TestClaimIsAtomic:
         assert rejected.epoch is None
         assert rejected.tasks == []
 
+    async def test_the_same_process_reconnecting_displaces_its_own_live_connection(self):
+        """A reconnect the server has not noticed the drop for yet: same session, no force."""
+        task = await build_task("claim-same-session")
+        backend = ModelPersistBackend()
+        agent_id = str(task.agent_id)
+
+        old = await backend.on_agent_connected(agent_id, "c1", session_id="S1")
+        again = await backend.on_agent_connected(agent_id, "c2", session_id="S1")
+
+        assert again.claimed and again.epoch > old.epoch
+        assert again.displaced_incumbent is True
+        assert await backend.renew_agent_lease(agent_id, old.epoch) is False  # the old one is fenced
+
     async def test_stale_incumbent_is_displaced_without_force(self):
         # Pinned behaviour (see test_conflict.test_stale_incumbent_reconnects_without_force):
         # a dead connection must never wedge the agent behind a ``--force`` reconnect.
@@ -279,7 +292,9 @@ class TestClaimIsAtomic:
                 connection.ensure_connection()
                 Agent.objects.filter(pk=agent_id).exists()
                 start.wait()
-                return backend._claim_lease_sync(agent_id, f"c{i}", "S0", False)
+                # Six processes (six sessions): one process never races itself, and a
+                # same-session claim deliberately displaces its own previous connection.
+                return backend._claim_lease_sync(agent_id, f"c{i}", f"S{i + 1}", False)
             finally:
                 connection.close()
 

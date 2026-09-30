@@ -123,12 +123,17 @@ class AgentLeaseMixin:
         expired (crashed worker, lost in-memory timers) — is displaced without ``force``, so a
         dead connection never wedges the agent behind a ``--force`` reconnect.
 
+        Neither does a live incumbent of the SAME session: a process holds one connection at a
+        time, so that incumbent is this process's previous connection, which the client already
+        gave up on (a drop it noticed before the server did, or a heartbeat kick whose close
+        has not been processed yet). Refusing it would kill the process on its own reconnect.
+
         Bumping ``lease_epoch`` is what fences the previous owner: its next heartbeat renewal
         compare-and-sets against an epoch that no longer exists, matches no row, and it closes.
         """
         with transaction.atomic():
             agent = models.Agent.objects.select_for_update().get(id=agent_id)
-            if liveness.agent_is_live(agent.connected, agent.last_seen) and not force:
+            if liveness.agent_is_live(agent.connected, agent.last_seen) and not force and not same_process(agent.active_session_id, session_id):
                 return False, None, agent.active_session_id, False
 
             prior_session = agent.active_session_id

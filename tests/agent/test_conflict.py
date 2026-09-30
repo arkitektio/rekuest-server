@@ -35,6 +35,20 @@ class TestAgentConnectionConflict:
         agent = await Agent.objects.aget(pk=incumbent.agent_pk)
         assert agent.connected is True
 
+    async def test_the_same_process_reconnects_without_force(self, agent_ws):
+        # The client noticed a drop (or was kicked for a missed heartbeat) before the server
+        # processed the close: its old connection still looks live. Same session = same
+        # process, so the reconnect takes over instead of being refused with 4004.
+        incumbent = await open_agent(agent_ws, "same-session-agent", session_id="S1")
+
+        again = await connect_agent(agent_ws)
+        init = await again.register(force=False, session_id="S1")
+
+        assert init.agent == incumbent.init.agent
+        await incumbent.expect_close(AGENT_REPLACED_CODE)
+        agent = await Agent.objects.aget(pk=incumbent.agent_pk)
+        assert agent.connected is True and agent.active_session_id == "S1"
+
     async def test_force_connection_kicks_incumbent(self, agent_ws):
         incumbent = await open_agent(agent_ws, "dup-agent")
 
