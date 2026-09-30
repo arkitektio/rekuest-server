@@ -27,11 +27,16 @@ RECEIVE_TIMEOUT = 10.0
 
 
 class Target:
-    """Where the protocol is served: its websocket and HTTP bases."""
+    """Where the protocol is served: its websocket and HTTP bases, and the GraphQL API.
 
-    def __init__(self, http: str) -> None:
+    GraphQL stays the Python server's, so a target serving only ``/agi`` (agentd) names it
+    separately: ``CONFORMANCE_GRAPHQL_URL``, by default the same base.
+    """
+
+    def __init__(self, http: str, graphql: str | None = None) -> None:
         self.http = http.rstrip("/")
         self.ws = self.http.replace("http://", "ws://").replace("https://", "wss://")
+        self.graphql = (graphql or f"{self.http}/graphql").rstrip("/")
 
     @property
     def agi(self) -> str:
@@ -42,7 +47,7 @@ class Target:
 async def target() -> AsyncIterator[Target]:
     url = os.environ.get("CONFORMANCE_URL")
     if url:
-        yield Target(url)
+        yield Target(url, os.environ.get("CONFORMANCE_GRAPHQL_URL"))
         return
 
     from dokker import testing
@@ -139,3 +144,57 @@ async def http(target: Target) -> AsyncIterator[httpx.AsyncClient]:
 
 def session_id() -> str:
     return f"conformance-{uuid.uuid4().hex[:12]}"
+
+
+# What an agent with one action (``echo(x: int) -> int``) declares, as the Python client builds it.
+ECHO_DECLARATION: dict[str, Any] = {
+    "name": "conformance",
+    "states": [],
+    "locks": [],
+    "bloks": [],
+    "implementations": [
+        {
+            "definition": {
+                "description": "Echo", "collections": [], "key": "echo", "version": "1", "name": "Echo",
+                "stateful": False, "pure": False, "idempotent": False, "allow_probe": False, "catalogs": [],
+                "port_groups": [],
+                "args": [{"key": "x", "kind": "INT", "nullable": False, "effects": [], "validators": []}],
+                "returns": [{"key": "return0", "kind": "INT", "nullable": False, "effects": []}],
+                "kind": "FUNCTION", "is_test_for": [], "is_dev": False,
+            },
+            "dependencies": [], "tracks": [], "interface": "echo", "locks": [], "optimistics": [],
+            "manipulates": [], "needs_token": True, "effects": "UNKNOWN", "execution": "PLAIN",
+        }
+    ],
+}
+
+
+class GraphQL:
+    """The Python server's GraphQL API, as one static token."""
+
+    def __init__(self, client: httpx.AsyncClient, url: str, token: str) -> None:
+        self.client, self.url, self.token = client, url, token
+
+    async def __call__(self, query: str, **variables: Any) -> dict[str, Any]:
+        response = await self.client.post(self.url, json={"query": query, "variables": variables}, headers={"Authorization": f"Bearer {self.token}"})
+        body = response.json()
+        assert not body.get("errors"), body["errors"]
+        return body["data"]
+
+    async def assign(self, agent: str, interface: str, args: dict[str, Any]) -> str:
+        data = await self(
+            "mutation ($input: AssignInput!) { assign(input: $input) { id } }",
+            input={"agent": agent, "interface": interface, "args": args, "capture": False, "reference": str(uuid.uuid4())},
+        )
+        return data["assign"]["id"]
+
+    async def task(self, task: str) -> dict[str, Any]:
+        data = await self("query ($id: ID!) { task(id: $id) { latestEventKind events { kind agentPos } } }", id=task)
+        return data["task"]
+
+
+@pytest_asyncio.fixture
+async def graphql(target: Target) -> AsyncIterator[Any]:
+    """``graphql(token)``: the GraphQL API as that static token."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        yield lambda token: GraphQL(client, target.graphql, token)
