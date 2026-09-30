@@ -1,11 +1,15 @@
 [package]
-name = "authentikate"
+name = "rekuest-server-authentikate"
 description = "Token authentication and expansion (mirrors the Python `authentikate` package, 4.1.1)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
+
+[lib]
+# The Python package this crate takes over, so code reads like it: `authentikate::…`.
+name = "authentikate"
 
 [dependencies]
 serde.workspace = true

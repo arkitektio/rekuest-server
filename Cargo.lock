@@ -68,27 +68,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
-name = "authentikate"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "hex",
- "jsonwebtoken",
- "rand 0.9.5",
- "reqwest",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "sqlx",
- "thiserror",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -439,14 +418,6 @@ checksum = "5a23add41df1562121a9393cb065eab5146a1242410f23a644851e90cfd669d2"
 dependencies = [
  "parking",
  "pin-project-lite",
-]
-
-[[package]]
-name = "facade"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "rekuest-protocol",
 ]
 
 [[package]]
@@ -1535,15 +1506,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
-name = "rekuest"
+name = "rekuest-protocol"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "025be4c568f0f90b39b6e640615f5c815c969b17ee6e233080409da43629572c"
+dependencies = [
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "uuid",
+]
+
+[[package]]
+name = "rekuest-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
  "chrono",
- "facade",
  "redis",
  "rekuest-protocol",
+ "rekuest-server-facade",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -1556,16 +1540,32 @@ dependencies = [
 ]
 
 [[package]]
-name = "rekuest-protocol"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "025be4c568f0f90b39b6e640615f5c815c969b17ee6e233080409da43629572c"
+name = "rekuest-server-authentikate"
+version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "chrono",
  "hex",
+ "jsonwebtoken",
+ "rand 0.9.5",
+ "reqwest",
  "serde",
  "serde_json",
+ "serde_yaml",
  "sha2",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tracing",
  "uuid",
+]
+
+[[package]]
+name = "rekuest-server-facade"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "rekuest-protocol",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 [package]
-name = "rekuest"
+name = "rekuest-server"
 description = "The project (mirrors the Python server's `rekuest/`): configuration, settings, routes, and the agentd binary"
 version.workspace = true
 edition.workspace = true
@@ -10,6 +10,10 @@ publish = false
 [[bin]]
 name = "agentd"
 path = "src/main.rs"
+
+[lib]
+# The Python package this crate takes over, so code reads like it: `rekuest::…`.
+name = "rekuest"
 
 [dependencies]
 facade.workspace = true
