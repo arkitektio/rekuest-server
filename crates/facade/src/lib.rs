@@ -14,5 +14,6 @@ pub mod persist;
 pub mod redis_keys;
 pub mod registration;
 pub mod settings;
+pub mod signals;
 
 pub use context::Context;
