@@ -566,9 +566,6 @@ input AgentDependencyInput {
   The prefered amount of instances for the agent. This is used to identify the demand in the system.
   """
   preferedInstances: Int = null
-
-  """The policy used to pick which instance of the agent to assign to."""
-  assignPolicy: AssignPolicy! = BALANCED
 }
 
 """A way to filter agents"""
@@ -881,14 +878,6 @@ input AssignInput {
   Hold the task back until then: it is persisted now but only dispatched once due. A time in the past (or none) dispatches immediately.
   """
   notBefore: DateTime = null
-}
-
-enum AssignPolicy {
-  AUTOMATIC
-  BALANCED
-  ROUND_ROBIN
-  LEAST_BUSY
-  FASTEST_RESPONSE
 }
 
 interface AssignWidget {

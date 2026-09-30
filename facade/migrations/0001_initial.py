@@ -734,22 +734,22 @@ class Migration(migrations.Migration):
                     "assign_policy",
                     models.CharField(
                         choices=[
-                            (rekuest_core.enums.AssignPolicy["AUTOMATIC"], "AUTOMATIC"),
-                            (rekuest_core.enums.AssignPolicy["BALANCED"], "BALANCED"),
+                            ("AUTOMATIC", "AUTOMATIC"),
+                            ("BALANCED", "BALANCED"),
                             (
-                                rekuest_core.enums.AssignPolicy["ROUND_ROBIN"],
+                                "ROUND_ROBIN",
                                 "ROUND_ROBIN",
                             ),
                             (
-                                rekuest_core.enums.AssignPolicy["LEAST_BUSY"],
+                                "LEAST_BUSY",
                                 "LEAST_BUSY",
                             ),
                             (
-                                rekuest_core.enums.AssignPolicy["FASTEST_RESPONSE"],
+                                "FASTEST_RESPONSE",
                                 "FASTEST_RESPONSE",
                             ),
                         ],
-                        default=rekuest_core.enums.AssignPolicy["AUTOMATIC"],
+                        default="AUTOMATIC",
                         help_text="The assign policy for this dependency",
                         max_length=1000,
                     ),
@@ -1199,22 +1199,22 @@ class Migration(migrations.Migration):
                     "assign_policy",
                     models.CharField(
                         choices=[
-                            (rekuest_core.enums.AssignPolicy["AUTOMATIC"], "AUTOMATIC"),
-                            (rekuest_core.enums.AssignPolicy["BALANCED"], "BALANCED"),
+                            ("AUTOMATIC", "AUTOMATIC"),
+                            ("BALANCED", "BALANCED"),
                             (
-                                rekuest_core.enums.AssignPolicy["ROUND_ROBIN"],
+                                "ROUND_ROBIN",
                                 "ROUND_ROBIN",
                             ),
                             (
-                                rekuest_core.enums.AssignPolicy["LEAST_BUSY"],
+                                "LEAST_BUSY",
                                 "LEAST_BUSY",
                             ),
                             (
-                                rekuest_core.enums.AssignPolicy["FASTEST_RESPONSE"],
+                                "FASTEST_RESPONSE",
                                 "FASTEST_RESPONSE",
                             ),
                         ],
-                        default=rekuest_core.enums.AssignPolicy["AUTOMATIC"],
+                        default="AUTOMATIC",
                         help_text="The assign policy for this dependency",
                         max_length=1000,
                     ),

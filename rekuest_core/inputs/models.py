@@ -764,7 +764,6 @@ class AgentDependencyInputModel(BaseModel):
     min_viable_instances: int | None = Field(default=None, description="The minimum amount of viable instances for the agent. This is used to identify the demand in the system.")
     max_viable_instances: int | None = Field(default=None, description="The maximum amount of viable instances for the agent. This is used to identify the demand in the system.")
     prefered_instances: int | None = Field(default=None, description="The prefered amount of instances for the agent. This is used to identify the demand in the system.")
-    assign_policy: enums.AssignPolicy = Field(default=enums.AssignPolicy.BALANCED, description="The policy used to pick which instance of the agent to assign to.")
 
 
 class TestTargetInputModel(BaseModel):

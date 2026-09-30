@@ -11,7 +11,6 @@ from .agent import (
     AgentKind,
     AgentStatus,
 )
-from rekuest_core.enums import AssignPolicy
 from .task import (
     TaskEventChoices,
     TaskEventKind,
@@ -43,7 +42,6 @@ __all__ = [
     "TaskEventKind",
     "TaskInstructChoices",
     "TaskInstructKind",
-    "AssignPolicy",
     # log
     "LogLevel",
     "LogLevelChoices",

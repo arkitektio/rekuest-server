@@ -399,7 +399,6 @@ class AgentDependencyInput:
     max_viable_instances: int | None = None
     mutually_exclusive_keys: list[str] | None = None
     prefered_instances: int | None = None
-    assign_policy: enums.AssignPolicy = enums.AssignPolicy.BALANCED
 
 
 @pydantic.input(

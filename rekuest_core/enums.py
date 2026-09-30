@@ -114,15 +114,6 @@ ProvidesOperator = DescriptorOperator
 
 
 @strawberry.enum
-class AssignPolicy(str, Enum):
-    AUTOMATIC = "AUTOMATIC"
-    BALANCED = "BALANCED"
-    ROUND_ROBIN = "ROUND_ROBIN"
-    LEAST_BUSY = "LEAST_BUSY"
-    FASTEST_RESPONSE = "FASTEST_RESPONSE"
-
-
-@strawberry.enum
 class OptionKey(str, Enum):
     LABEL = "LABEL"
     DESCRIPTION = "DESCRIPTION"

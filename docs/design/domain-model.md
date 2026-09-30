@@ -86,8 +86,8 @@ agent can run this action, via this `interface`". Key fields: `action`, `agent`,
 `manipulates` (M2M to `State`), and the higher-order pair `higher_order_for` /
 `higher_order_config` (see [higher-order.md](higher-order.md)).
 
-**`Dependency`** declares what an implementation *needs* to run (other actions/states), with an
-`assign_policy`, `app_filter`/`version_filter`, viability counts (`min`/`max`/`prefered_instances`)
+**`Dependency`** declares what an implementation *needs* to run (other actions/states), with
+`app_filter`/`version_filter`, viability counts (`min`/`max`/`prefered_instances`)
 and an `auto_resolvable` flag.
 
 **`Resolution` + `ResolvedDependency`** are a **binding tree**: a `Resolution` configures an
