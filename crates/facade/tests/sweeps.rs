@@ -856,6 +856,11 @@ async fn an_unconfirmed_cancel_escalates_then_the_interrupt_is_finalized() {
     reconcile::escalate_due_controls(&ctx, LIMIT).await.unwrap();
 
     assert_eq!(kinds(&ctx, task).await, vec!["STARTED", "INTERRUPTING"]);
+    assert_eq!(
+        state(&ctx, task).await,
+        ("STARTED".into(), false),
+        "a request moves no kind"
+    );
     let (instruct, rearmed): (String, bool) = sqlx::query_as(
         "SELECT latest_instruct_kind, interrupt_at > now() FROM facade_task WHERE id = $1",
     )
@@ -1106,4 +1111,41 @@ async fn the_tick_token_lets_one_reaper_sweep_per_tick() {
 
     let skew = clock::check_skew(&ctx.db).await.expect("measurable");
     assert!(skew.abs() < clock::max_skew_seconds(&ctx.settings));
+}
+
+#[tokio::test]
+async fn an_escalated_cancel_of_unpicked_work_is_settled_by_the_watchdog() {
+    let _serial = serial().await;
+    let Some(ctx) = context(settings()).await else {
+        return;
+    };
+    let (agent, action) = agent(&ctx).await;
+    seen(&ctx, agent, true, 1).await;
+    let task = task(&ctx, agent, action).await;
+    sqlx::query(
+        "UPDATE facade_task SET latest_instruct_kind = 'CANCEL',
+                interrupt_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(task)
+    .execute(&ctx.db)
+    .await
+    .unwrap();
+
+    reconcile::escalate_due_controls(&ctx, LIMIT).await.unwrap();
+    assert_eq!(
+        state(&ctx, task).await,
+        ("QUEUED".into(), false),
+        "still undelivered"
+    );
+
+    // Nobody ever picked it up: the watchdog honours the interrupt instead of redelivering.
+    backdate(&ctx, task, 10).await;
+    reconcile::reconcile_unpicked_tasks(&ctx, LIMIT)
+        .await
+        .unwrap();
+    assert_eq!(state(&ctx, task).await, ("INTERRUPTED".into(), true));
+    assert_eq!(
+        event(&ctx, task, "INTERRUPTED").await.0.as_deref(),
+        Some("Interrupted before any agent picked the task up.")
+    );
 }

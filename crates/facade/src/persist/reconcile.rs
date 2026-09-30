@@ -499,9 +499,17 @@ pub async fn escalate_due_controls(ctx: &Context, limit: i64) -> Result<usize, s
 /// The interrupt request of the control backend, which this crate does not have yet: for the
 /// task and every still-open descendant, under its row lock, the INTERRUPT instruct, a re-armed
 /// control deadline (so an interrupt nobody confirms is finalized in turn), the INTERRUPTING
-/// event and the `TaskInstruct` audit row; then, after the commit, the `Interrupt` frame. A
+/// event (which, like every control request, leaves `latest_event_kind` alone) and the
+/// `TaskInstruct` audit row; then, after the commit, the `Interrupt` frame. A
 /// delayed task never handed over is settled INTERRUPTED instead: nobody has it to wind down.
 pub async fn escalate_to_interrupt(ctx: &Context, task: i64) -> Result<(), sqlx::Error> {
+    let done: Option<bool> = sqlx::query_scalar("SELECT is_done FROM facade_task WHERE id = $1")
+        .bind(task)
+        .fetch_optional(&ctx.db)
+        .await?;
+    if done != Some(false) {
+        return Ok(()); // the cancel confirmed (or the task ended otherwise) before the deadline
+    }
     let mut targets = vec![task];
     targets.extend(
         sqlx::query_scalar::<_, i64>(
@@ -545,7 +553,18 @@ pub async fn escalate_to_interrupt(ctx: &Context, task: i64) -> Result<(), sqlx:
         .bind(if delayed { None } else { interrupt_at })
         .execute(&mut *tx)
         .await?;
-        update_task_kind(&mut tx, target, kind, done).await?;
+        if delayed {
+            update_task_kind(&mut tx, target, kind, done).await?;
+        } else {
+            // A request, not an outcome: the -ING event is written, `latest_event_kind` stays
+            // what the agent last reported (an unpicked task still reads QUEUED).
+            sqlx::query(
+                "UPDATE facade_task SET revision = revision + 1, updated_at = now() WHERE id = $1",
+            )
+            .bind(target)
+            .execute(&mut *tx)
+            .await?;
+        }
         let event = insert_event(
             &mut *tx,
             target,
