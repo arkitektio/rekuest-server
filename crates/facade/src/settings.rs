@@ -45,6 +45,22 @@ pub struct Settings {
     pub probe_linger: Duration,
     /// `PROBE_MAX_INFLIGHT_PER_CALLER`.
     pub probe_max_inflight: i64,
+    /// `HOOK_SIGNATURE_MODE`: `compat` accepts and sends the legacy body-only signature beside
+    /// V1, `strict` only V1.
+    pub hook_signature_strict: bool,
+    /// `HOOK_MAX_SKEW`: how far a V1 signature's timestamp may be from now, either way.
+    pub hook_max_skew: i64,
+    /// `SERVICE_AGENTS`: this hub's services, whose agents sign with their instance keys.
+    pub service_agents: Vec<ServiceAgent>,
+    /// The hub's trust bundle (`INSTANCE["TRUST_JWKS_URI"]` / `["TRUST_JWKS"]`).
+    pub trust_bundle: Arc<crate::service_trust::TrustBundle>,
+}
+
+/// One entry of `SERVICE_AGENTS`, as far as trust needs it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ServiceAgent {
+    pub service: String,
+    pub identifier: Option<String>,
 }
 
 /// `settings.PROVENANCE`, less the key (which is [`Settings::instance_key`]).
@@ -91,6 +107,10 @@ impl Default for Settings {
             probe_ttl: Duration::from_secs(3600),
             probe_linger: Duration::from_secs(300),
             probe_max_inflight: 32,
+            hook_signature_strict: false,
+            hook_max_skew: 300,
+            service_agents: vec![],
+            trust_bundle: Arc::default(),
         }
     }
 }

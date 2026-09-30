@@ -116,6 +116,18 @@ pub struct RekuestBlock {
     pub probe_linger: u64,
     #[serde(default = "d32")]
     pub probe_max_inflight: i64,
+    /// This hub's services, provisioned by the Python server as HookAgents.
+    #[serde(default)]
+    pub service_agents: Vec<ServiceAgentBlock>,
+}
+
+/// One of this hub's services, reached as a HookAgent (`ServiceAgentSettings`).
+#[derive(Debug, Clone, Deserialize)]
+pub struct ServiceAgentBlock {
+    pub service: String,
+    pub hook_url: String,
+    #[serde(default)]
+    pub identifier: Option<String>,
 }
 
 impl Default for RekuestBlock {
@@ -175,6 +187,18 @@ fn issuer() -> String {
 pub struct InstanceBlock {
     /// Ed25519 private key (PKCS#8 PEM): signs provenance tokens and verifies service tokens.
     pub private_key: String,
+    /// The hub's trust bundle.
+    #[serde(default)]
+    pub trust: TrustBlock,
+}
+
+/// Where the hub's instance public keys come from: the coord's bundle, or inline (`TrustBlock`).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct TrustBlock {
+    #[serde(default)]
+    pub jwks_uri: Option<String>,
+    #[serde(default)]
+    pub jwks: Option<serde_json::Value>,
 }
 
 impl Configuration {

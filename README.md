@@ -63,6 +63,8 @@ A crate appears when its first module is ported; nothing is stubbed ahead of it.
   CONFORMANCE_URL=http://localhost:8080 uv run pytest   # any running target
   # agentd serves /agi only; GraphQL (for assigning) stays the Python server's:
   CONFORMANCE_URL=http://127.0.0.1:8480 CONFORMANCE_GRAPHQL_URL=http://localhost:5690/graphql uv run pytest
+  # hook scenarios: the servers POST to a receiver in the test process; name an address they reach
+  CONFORMANCE_HOOK_HOST=172.23.0.1 CONFORMANCE_URL=… uv run pytest tests/test_hooks.py
   # the liveness benchmark (skipped unless BENCH_SECONDS is set):
   BENCH_SECONDS=30 BENCH_RATES=0,10,26 BENCH_CONCURRENCY=2 CONFORMANCE_URL=… uv run pytest -s tests/test_zz_bench_liveness.py
   ```
@@ -78,9 +80,9 @@ A crate appears when its first module is ported; nothing is stubbed ahead of it.
 | 0 | `rekuest-protocol`, this repo, conformance seed, benchmark | done |
 | 1 | auth (authentikate), registration (`implement_agent`), lease/heartbeat/queue | done |
 | 2 | reports, transitions, positions, state, locks, shelve, fan-out | done |
-| 3 | assign, control, guards, probes, caller mirrors, internal API | in progress |
+| 3 | assign, control, guards, probes, caller mirrors, internal API | done |
 | 4 | agent sweeps, workflow resume | done (the reaper: `AGENTD_REAPER=0` beside a Python reaper, which shares its tick token) |
-| 5 | HTTP hook agents | |
+| 5 | HTTP hook agents (intake, signed delivery, caller mirrors, service-agent trust) | done |
 | 6 | cutover; the Python agent path is deleted | |
 
 ## Development

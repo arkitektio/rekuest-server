@@ -18,6 +18,8 @@ pub mod deletion;
 pub mod descriptors;
 pub mod guards;
 pub mod higher_order;
+pub mod hooks;
+pub mod http_intake;
 pub mod inference;
 pub mod liveness;
 pub mod message_router;

@@ -37,7 +37,7 @@ pub enum RouteError {
 }
 
 /// The durable-report acknowledgement, so the agent can stop retaining it (`_ack`).
-fn ack(frame: &AgentFrame) -> ToAgent {
+pub fn ack(frame: &AgentFrame) -> ToAgent {
     ToAgent::EventAck {
         event: Some(frame.id.clone()),
         task: frame.message.task().map(str::to_owned),

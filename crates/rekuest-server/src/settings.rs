@@ -4,7 +4,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use facade::provenance::keys::InstanceKey;
-use facade::settings::{ProvenanceSettings, Settings};
+use facade::service_trust::TrustBundle;
+use facade::settings::{ProvenanceSettings, ServiceAgent, Settings};
 
 use crate::Configuration;
 
@@ -47,5 +48,24 @@ pub fn from_configuration(configuration: &Configuration) -> anyhow::Result<Setti
         probe_ttl: Duration::from_secs(rekuest.probe_ttl),
         probe_linger: Duration::from_secs(rekuest.probe_linger),
         probe_max_inflight: rekuest.probe_max_inflight,
+        hook_signature_strict: rekuest.hook_signature_mode.eq_ignore_ascii_case("strict"),
+        hook_max_skew: rekuest.hook_max_skew as i64,
+        service_agents: rekuest
+            .service_agents
+            .iter()
+            .map(|entry| ServiceAgent {
+                service: entry.service.clone(),
+                identifier: entry.identifier.clone(),
+            })
+            .collect(),
+        trust_bundle: Arc::new(configuration.instance.as_ref().map_or_else(
+            TrustBundle::default,
+            |instance| {
+                TrustBundle::new(
+                    instance.trust.jwks_uri.clone(),
+                    instance.trust.jwks.as_ref(),
+                )
+            },
+        )),
     })
 }

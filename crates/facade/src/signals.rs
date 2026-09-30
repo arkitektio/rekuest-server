@@ -214,6 +214,7 @@ async fn task_event_created_inner(ctx: &Context, event_id: i64) -> Result<(), sq
         groups.push(format!("root_tasks_caller_{caller}"));
         groups.push(format!("root_tasks_org_{organization}"));
     }
+    let mirrored = crate::caller_events::EventLike::from(&payload);
     publish(
         ctx,
         channels::TASK_EVENT,
@@ -224,6 +225,7 @@ async fn task_event_created_inner(ctx: &Context, event_id: i64) -> Result<(), sq
         groups,
     )
     .await;
+    crate::transport::deliver_caller_event_to_webhook(ctx, caller, &mirrored).await;
     Ok(())
 }
 
