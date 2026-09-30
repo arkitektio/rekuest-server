@@ -34,7 +34,6 @@ class TestResult:
     case: "TestCase" = strawberry_django.field(description="Associated test case.")
     passed: bool = strawberry_django.field(description="True if test passed.")
     created_at: datetime.datetime = strawberry_django.field(description="When the test was executed.")
-    updated_at: datetime.datetime = strawberry_django.field(description="When the test result was last updated.")
 
     @classmethod
     def get_queryset(cls, queryset, info, **kwargs):

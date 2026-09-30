@@ -55,7 +55,7 @@ class Shortcut:
     description: str | None = strawberry_django.field(description="Optional description.")
     action: "Action" = strawberry_django.field(description="The associated action.")
     implementation: Optional["Implementation"] = strawberry_django.field(description="Implementation of the action.")
-    toolboxes: list["Toolbox"] = strawberry_django.field(description="Toolboxes that contain this shortcut.")
+    toolbox: "Toolbox" = strawberry_django.field(description="The toolbox this shortcut belongs to.")
     saved_args: rscalars.AnyDefault = strawberry_django.field(description="Saved arguments for the shortcut.")
     allow_quick: bool = strawberry_django.field(description="Allow quick execution without modification.")
     use_returns: bool = strawberry_django.field(description="If true, shortcut uses return values.")

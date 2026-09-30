@@ -14,8 +14,11 @@ from facade import models
 
 @strawberry_django.order_type(models.Session)
 class SessionOrder:
-    started_at: auto
-    ended_at: auto
+    @strawberry_django.order_field(description="When the session started.")
+    def started_at(self, info: Info, queryset, value: strawberry_django.Ordering, prefix: str):
+        if not value:
+            return queryset, []
+        return queryset, [value.resolve(f"{prefix}created_at")]
 
 
 @strawberry_django.filter_type(models.Session, description="A way to filter sessions")

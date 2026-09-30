@@ -96,7 +96,8 @@ def auto_resolve(info: Info, implementation: models.Implementation, resolution: 
                         visited_implementations.add(impl.id)
 
                     count += 1
-                if count >= dependency.prefered_instances:
+                # No preference means no limit: every viable instance is resolved.
+                if dependency.prefered_instances is not None and count >= dependency.prefered_instances:
                     break
 
 

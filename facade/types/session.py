@@ -6,6 +6,7 @@ import datetime
 
 import kante
 import strawberry
+import strawberry_django
 
 from facade import filters, models
 from facade.types.base import build_prescoped_queryset
@@ -39,8 +40,7 @@ class SessionBoundary:
 class Session:
     id: strawberry.ID
     agent: Agent
-    started_at: datetime.datetime
-    ended_at: datetime.datetime | None
+    started_at: datetime.datetime = strawberry_django.field(field_name="created_at", description="When the session started.")
     snapshots: list[Snapshot]
     patches: list[Patch]
 
