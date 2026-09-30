@@ -8,18 +8,17 @@ replicas, so a slow sweep cannot stall requests and scaling the web tier does no
 ====================================  =============================  ==========================
 sweep                                 deadline starts at             setting
 ====================================  =============================  ==========================
-``reconcile_stale_agents``            ``Agent.last_seen``            ``AGENT_STALE_AFTER``
-``reconcile_disconnected_agents``     ``Agent.last_seen``            ``REKUEST_GRACE.DEFAULT``
 ``provision_service_agents``          ``rekuest.service_agents``     every 5 min (manifest re-read)
 ``refill_schedules``                  open run of a ``Schedule``     the schedule's own
 ``fire_triggers``                     unprocessed ``Signal``         (as soon as it arrives)
-``dispatch_due_tasks``                ``Task.not_before``            (the task's own)
-``reconcile_unpicked_tasks``          ``Task.dispatched_at``         ``…PICKUP_DEADLINE``
-``escalate_due_controls``             ``Task.interrupt_at``          ``auto_interrupt`` / ``…CONTROL_DEADLINE``
-``expire_disconnected_tasks``         last ``TaskEvent``             ``…DISCONNECTED_EXPIRY``
 ``sweep_terminal_tasks``              ``Task.finished_at``           ``TASK_RETENTION_SECONDS``
 ``reembed_stale`` (embeddings)        ``Action.embedding_model``     ``EMBEDDINGS.MODEL``
 ====================================  =============================  ==========================
+
+The agent sweeps (stale and disconnected agents, due tasks, redelivery, control escalation,
+expiry, workflow resume) are agentd's: they dispatch and write task state, which agentd owns, and
+every agentd replica runs them. This loop keeps only what is not the agent protocol; the runs it
+creates go through agentd's internal API.
 
 The last row is not a deadline but the same discipline: an action whose vector was produced by
 another embedding model (or none) is a DB fact, and the row-locked batch re-embed here is what
@@ -83,27 +82,18 @@ def _beat(heartbeat: "Path | None") -> None:
 
 
 def _sweeps(backend: "ReconcileBackend | None" = None) -> "List[Tuple[str, Callable[[], Awaitable[int]]]]":
-    """The ordered sweep steps. Agents before tasks: healing a stuck-connected agent is what
-    makes its work visible to the task sweeps of the same tick.
+    """The ordered sweep steps.
 
     Typed against :class:`facade.ports.ReconcileBackend` rather than the concrete singleton, so
     what the loop needs from the backend is stated rather than implied.
     """
     persist_backend = backend if backend is not None else _default_backend
     return [
-        ("stale agents", persist_backend.reconcile_stale_agents),
-        ("disconnected agents", persist_backend.reconcile_disconnected_agents),
-        # Before the due-task dispatch: a run whose slot already passed (a reaper that was down)
-        # is created and handed over in the same tick.
         # Before the schedules: a freshly provisioned service's default schedules get their
         # first run in the same tick.
         ("service agents", persist_backend.provision_service_agents),
         ("schedules", persist_backend.refill_schedules),
         ("triggers", persist_backend.fire_triggers),
-        ("due tasks", persist_backend.dispatch_due_tasks),
-        ("unpicked tasks", persist_backend.reconcile_unpicked_tasks),
-        ("due controls", persist_backend.escalate_due_controls),
-        ("expired tasks", persist_backend.expire_disconnected_tasks),
     ]
 
 
@@ -145,7 +135,9 @@ def _take_tick_token(interval: float) -> bool:
         from facade.consumers.agent_queue import _sync_pool
 
         connection = redis.Redis(connection_pool=_sync_pool(settings.AGENT_REDIS_HOST, settings.AGENT_REDIS_PORT))
-        return bool(connection.set(redis_keys.key("reaper", "tick"), _PROCESS_ID, nx=True, px=max(1, int(interval * 800))))
+        # Not agentd's ``reaper:tick``: the two loops sweep different things and must not skip
+        # each other's ticks.
+        return bool(connection.set(redis_keys.key("scheduler", "tick"), _PROCESS_ID, nx=True, px=max(1, int(interval * 800))))
     except Exception:
         logger.debug("Reaper tick token unavailable; sweeping anyway.", exc_info=True)
         return True
