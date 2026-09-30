@@ -412,7 +412,9 @@ pub async fn implement_agent(
         on_commit.push(Signal::StateSaved { id });
     }
 
-    // Reap what the agent no longer declares; implementations still running tasks are kept.
+    // Reap what the agent no longer declares; implementations still running tasks are kept, and
+    // so are the wrappers deployed onto it (`createHigherOrderImplementation`), which it never
+    // declares.
     let stale_states: Vec<i64> = sqlx::query_scalar(
         "SELECT id FROM facade_state WHERE agent_id = $1 AND NOT (id = ANY($2))",
     )
@@ -423,7 +425,8 @@ pub async fn implement_agent(
     delete_states(conn, &stale_states).await?;
     let stale: Vec<(i64, bool)> = sqlx::query_as(
         "SELECT i.id, EXISTS (SELECT 1 FROM facade_task t WHERE t.implementation_id = i.id AND NOT t.is_done)
-           FROM facade_implementation i WHERE i.agent_id = $1 AND NOT (i.id = ANY($2)) ORDER BY i.id",
+           FROM facade_implementation i
+          WHERE i.agent_id = $1 AND NOT (i.id = ANY($2)) AND i.higher_order_for_id IS NULL ORDER BY i.id",
     )
     .bind(agent)
     .bind(&created_implementations)

@@ -43,6 +43,7 @@
 //! | `collect` | `{"principal", "drawers": [id, …]}` | `{"drawers"}` |
 //! | `probe` | `{"principal", "input": ProbeInput}` | the probe's state, with `id` |
 //! | `probe/cancel`, `probe/pause`, `probe/resume` | `{"principal", "probe"}` | the probe's state, with `id` |
+//! | `higher-order/create` | `{"principal", "input": {"lower", "interface", "definition", "config"?, "dependencies"?}}` | `{"implementation", "diagnostics"}` |
 //!
 //! `AssignInput` is `AssignInputModel`'s JSON (`action`, `action_hash`, `implementation`,
 //! `agent` + `interface`, `dependency` + `method`, `args`, `reference`, `parent`, `parent_step`,
@@ -87,6 +88,7 @@ pub fn routes() -> Router<Shared> {
         .route("/internal/probe/cancel", post(probe_cancel))
         .route("/internal/probe/pause", post(probe_pause))
         .route("/internal/probe/resume", post(probe_resume))
+        .route("/internal/higher-order/create", post(create_higher_order))
 }
 
 /// A refusal, as JSON.
@@ -107,6 +109,17 @@ impl From<BackendError> for Refusal {
                 tracing::error!("internal API: {e}");
                 Refusal(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
             }
+        }
+    }
+}
+
+impl From<facade::mutations::Refusal> for Refusal {
+    fn from(e: facade::mutations::Refusal) -> Self {
+        match e {
+            facade::mutations::Refusal::Invalid(message) => {
+                Refusal(StatusCode::BAD_REQUEST, message)
+            }
+            facade::mutations::Refusal::Db(e) => BackendError::Database(e).into(),
         }
     }
 }
@@ -404,3 +417,27 @@ internal!(probe_pause, ProbeControlRequest, |state, request| {
 internal!(probe_resume, ProbeControlRequest, |state, request| {
     probe_control(&state, &request, ProbeControl::Resume).await
 });
+
+#[derive(Debug, Deserialize)]
+struct CreateHigherOrderRequest {
+    principal: Principal,
+    input: facade::mutations::higher_order::CreateHigherOrderInput,
+}
+
+internal!(
+    create_higher_order,
+    CreateHigherOrderRequest,
+    |state, request| {
+        let organization = request.principal.organization()?;
+        let created = facade::mutations::higher_order::create_higher_order_implementation(
+            &state.facade,
+            organization,
+            request.input,
+        )
+        .await?;
+        Ok(Json(json!({
+            "implementation": created.implementation.to_string(),
+            "diagnostics": created.diagnostics,
+        })))
+    }
+);

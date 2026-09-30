@@ -2,6 +2,7 @@
 //! needs; the GraphQL mutations themselves stay in Python.
 
 pub mod blok;
+pub mod higher_order;
 pub mod implementation;
 
 use crate::deletion::DeleteError;

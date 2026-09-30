@@ -97,6 +97,72 @@ pub fn build_lower_dependencies(
     Ok(lower)
 }
 
+/// The wrapper's declared dependencies the `dependency_map` sources `from: caller`
+/// (`required_lower_dependency_sources`).
+fn caller_sources(config: &Value) -> Vec<&str> {
+    config
+        .get("dependency_map")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flat_map(|map| map.values())
+        .filter(|spec| spec.get("from").and_then(Value::as_str) == Some("caller"))
+        .filter_map(|spec| spec.get("key").and_then(Value::as_str))
+        .collect()
+}
+
+/// Every lower dependency slot is satisfiable and every caller source is declared
+/// (`validate_dependency_coverage`).
+pub fn validate_dependency_coverage(
+    config: &Value,
+    lower_dependency_keys: &[String],
+    declared: &[String],
+) -> Result<(), String> {
+    for key in caller_sources(config) {
+        if !declared.iter().any(|d| d == key) {
+            return Err(format!(
+                "Higher-order dependency map references undeclared dependency '{key}'. Declare it on the wrapper so the caller knows to pass it."
+            ));
+        }
+    }
+    let map = config
+        .get("dependency_map")
+        .and_then(Value::as_object)
+        .filter(|m| !m.is_empty());
+    for lower in lower_dependency_keys {
+        match map {
+            None if !declared.contains(lower) => {
+                return Err(format!(
+                    "Lower dependency '{lower}' has no mapping and no matching declared dependency on the wrapper."
+                ))
+            }
+            Some(map) if !map.contains_key(lower) => {
+                return Err(format!("Lower dependency '{lower}' is neither bound nor mapped to a declared dependency."))
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// No wrapping a wrapper, and the kinds must agree (`validate_higher_order_pairing`).
+pub fn validate_higher_order_pairing(
+    higher_kind: &str,
+    lower_kind: &str,
+    lower_is_higher_order: bool,
+) -> Result<(), String> {
+    if lower_is_higher_order {
+        return Err(
+            "Nested higher-order implementations are not supported yet — wrap a concrete implementation, not another wrapper.".into(),
+        );
+    }
+    if higher_kind != lower_kind {
+        return Err(format!(
+            "Higher-order kind mismatch: wrapper is {higher_kind} but the wrapped action is {lower_kind}; they must agree."
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -147,5 +213,35 @@ mod tests {
             build_lower_dependencies(&bad, &resolved).unwrap_err(),
             "Higher-order dependency map entry for 'x' must set 'from' to 'bound' or 'caller'"
         );
+    }
+
+    #[test]
+    fn creation_checks_speak_like_python() {
+        let lower = vec!["db".to_owned()];
+        assert!(validate_dependency_coverage(&json!({}), &lower, &["db".to_owned()]).is_ok());
+        assert_eq!(
+            validate_dependency_coverage(&json!({}), &lower, &[]).unwrap_err(),
+            "Lower dependency 'db' has no mapping and no matching declared dependency on the wrapper."
+        );
+        let mapped = json!({"dependency_map": {"db": {"from": "caller", "key": "store"}}});
+        assert_eq!(
+            validate_dependency_coverage(&mapped, &lower, &[]).unwrap_err(),
+            "Higher-order dependency map references undeclared dependency 'store'. Declare it on the wrapper so the caller knows to pass it."
+        );
+        assert!(validate_dependency_coverage(&mapped, &lower, &["store".to_owned()]).is_ok());
+        let bound = json!({"dependency_map": {"other": {"from": "bound", "value": 1}}});
+        assert_eq!(
+            validate_dependency_coverage(&bound, &lower, &[]).unwrap_err(),
+            "Lower dependency 'db' is neither bound nor mapped to a declared dependency."
+        );
+        assert!(validate_higher_order_pairing("FUNCTION", "FUNCTION", false).is_ok());
+        assert!(
+            validate_higher_order_pairing("FUNCTION", "GENERATOR", false)
+                .unwrap_err()
+                .starts_with("Higher-order kind mismatch")
+        );
+        assert!(validate_higher_order_pairing("FUNCTION", "FUNCTION", true)
+            .unwrap_err()
+            .starts_with("Nested higher-order"));
     }
 }
