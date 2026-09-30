@@ -6,6 +6,7 @@
 
 pub mod channel_events;
 pub mod channels;
+pub mod clock;
 pub mod codes;
 pub mod consumers;
 pub mod context;
@@ -13,6 +14,7 @@ pub mod liveness;
 pub mod message_router;
 pub mod messages;
 pub mod persist;
+pub mod reaper;
 pub mod redis_keys;
 pub mod registration;
 pub mod settings;
