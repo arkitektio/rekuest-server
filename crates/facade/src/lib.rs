@@ -4,6 +4,8 @@
 //! [`liveness`], …), so a behaviour can be looked up on either side by the same path. Only
 //! the agent protocol lives here; GraphQL and subscriptions stay in Python.
 
+pub mod channel_events;
+pub mod channels;
 pub mod codes;
 pub mod consumers;
 pub mod context;
@@ -14,5 +16,6 @@ pub mod persist;
 pub mod redis_keys;
 pub mod registration;
 pub mod settings;
+pub mod signals;
 
 pub use context::Context;

@@ -39,7 +39,7 @@ so a behaviour has the same path on both sides (`facade/liveness.py` ↔ `facade
 | `rekuest-server-facade` (`facade`) | `facade/` (the app) | the agent protocol: `codes`, `liveness`, `redis_keys`, then `consumers`, `persist`, `registration`, `guards`, `provenance`, `reaper`, … |
 | `rekuest-server-core` (`rekuest_core`) | `rekuest_core/` | the declaration models and their validation (Phase 1) |
 | `authentikate` | `authentikate` 4.1.1 (the version the server pins) | token verification (rsa, rsa_file, jwks_dict, jwks_uri; revocation lists), static tokens, and expansion to user/org/client/membership rows |
-| `kante` | `kante` | the channels_redis-compatible channel layer (Phase 2) |
+| `kante` | `kante` (on channels_redis 4.3.0) | the channel layer, wire-compatible with Python's: groups, sends, receives; the change fan-out (`facade::signals`) runs on it |
 
 A crate appears when its first module is ported; nothing is stubbed ahead of it.
 

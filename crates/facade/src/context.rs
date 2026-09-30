@@ -19,5 +19,7 @@ pub struct Context {
     pub redis_client: redis::Client,
     pub settings: Arc<Settings>,
     pub verifier: Arc<Verifier>,
+    /// The channels_redis layer the Python server's feeds and the agent sockets share.
+    pub channel_layer: kante::ChannelLayer,
     pub connections: Connections,
 }

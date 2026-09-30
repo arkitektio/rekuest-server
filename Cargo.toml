@@ -13,6 +13,7 @@ repository = "https://github.com/arkitektio/rekuest-agentd"
 rekuest-protocol = "0.2.0"
 facade = { path = "crates/facade", package = "rekuest-server-facade" }
 authentikate = { path = "crates/authentikate" }
+kante = { path = "crates/kante" }
 anyhow = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time", "signal", "net"] }
@@ -31,4 +32,5 @@ base64 = "0.22"
 sha2 = "0.10"
 hex = "0.4"
 rand = "0.9"
+rmp-serde = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

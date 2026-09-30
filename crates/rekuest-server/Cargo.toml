@@ -15,6 +15,7 @@ path = "src/main.rs"
 [dependencies]
 facade.workspace = true
 authentikate.workspace = true
+kante.workspace = true
 rekuest-protocol.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true

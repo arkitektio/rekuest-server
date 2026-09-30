@@ -28,12 +28,23 @@ async fn main() -> anyhow::Result<()> {
         &configuration.authentikate,
         configuration.django.debug,
     )?;
+    let channel_layer = kante::ChannelLayer::new(
+        redis_client.clone(),
+        kante::ChannelLayerConfig {
+            prefix: configuration.redis.channel_prefix.clone(),
+            capacity: configuration.redis.channel_capacity,
+            ..kante::ChannelLayerConfig::default()
+        },
+    )
+    .await
+    .context("connecting the channel layer")?;
     let facade = facade::Context {
         db,
         redis,
         redis_client,
         settings: Arc::new(settings::from_configuration(&configuration)),
         verifier: Arc::new(authentikate::Verifier::new(authentikate)),
+        channel_layer,
         connections: facade::consumers::connections::Connections::default(),
     };
     let state = Arc::new(urls::AppState {
