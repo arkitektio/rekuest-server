@@ -684,7 +684,7 @@ class RedisControllBackend:
         config = higher.higher_order_config or {}
 
         # A higher-order implementation is bound to the agent that owns its lower
-        # implementation (enforced at link time in ``set_higher_order``), so the wrapped
+        # implementation (enforced when it is created, by agentd's ``internal/higher-order/create``), so the wrapped
         # impl and its agent are deterministic — no cross-agent resolution needed.
         lower_impl = higher.higher_order_for
         lower_action = lower_impl.action

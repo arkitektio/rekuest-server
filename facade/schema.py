@@ -190,7 +190,7 @@ class Query:
 
 @strawberry.type(description="Root mutation type for executing write operations on the API.")
 class Mutation:
-    create_implementation = mutation(resolver=mutations.create_implementation, description="Create a new implementation entry.")
+    create_higher_order_implementation = mutation(resolver=mutations.create_higher_order_implementation, description="Deploy a higher-order implementation: a wrapper onto the agent of the implementation it wraps, linked to it.")
     ack = mutation(resolver=mutations.ack, description="Acknowledge a task.")
     bounce = mutation(resolver=mutations.bounce, description="Bounce an agent so it reconnects.")
     kick = mutation(resolver=mutations.kick, description="Kick an agent to force disconnect. It will fail and not reconnect.")
@@ -214,7 +214,6 @@ class Mutation:
     block = mutation(resolver=mutations.block, description="Block an agent from connecting.")
     unblock = mutation(resolver=mutations.unblock, description="Unblock a previously blocked agent.")
     delete_implementation = mutation(resolver=mutations.delete_implementation, description="Delete a registered implementation.")
-    set_higher_order = mutation(resolver=mutations.set_higher_order, description="Mark an implementation as a higher-order wrapper of a lower implementation, with a projection config.")
     ensure_agent = mutation(resolver=mutations.ensure_agent, description="Ensure agent record exists or is up to date.")
     create_test_case = mutation(resolver=mutations.create_test_case, description="Create a new test case.")
     create_test_result = mutation(resolver=mutations.create_test_result, description="Create a test result record.")

@@ -36,22 +36,26 @@ class PortDemandInput:
     )
 
 
-class CreateImplementationInputModel(BaseModel):
-    """Base model for creating an implementation.
+class CreateHigherOrderImplementationInputModel(BaseModel):
+    """A wrapper to deploy onto the agent of the implementation it wraps."""
 
-    Attributes:
-        implementation: Implementation configuration data
-    """
-
-    implementation: rimodels.ImplementationInputModel = Field(description="The implementation to create. This is used to identify the implementation in the system.")
+    lower: str = Field(description="The implementation to wrap; its agent hosts the wrapper.")
+    interface: str = Field(description="The wrapper's interface, unique on that agent (e.g. 'flow:123').")
+    definition: rimodels.DefinitionInputModel = Field(description="The wrapper's typed contract, derived by the caller.")
+    config: dict | None = Field(default=None, description="Projection config: bound params + arg/dependency/return maps (see Implementation.higher_order_config).")
+    dependencies: list[rimodels.AgentDependencyInputModel] | None = Field(default=None, description="Dependencies the wrapper declares, for a dependency_map sourcing 'from: caller'.")
 
 
 @pydantic.input(
-    CreateImplementationInputModel,
-    description="The input for creating a implementation.",
+    CreateHigherOrderImplementationInputModel,
+    description="Deploy a higher-order implementation: a wrapper onto the agent of the implementation it wraps.",
 )
-class CreateImplementationInput:
-    implementation: ritypes.ImplementationInput
+class CreateHigherOrderImplementationInput:
+    lower: strawberry.ID
+    interface: str
+    definition: ritypes.DefinitionInput
+    config: rscalars.AnyDefault | None = None
+    dependencies: list[ritypes.AgentDependencyInput] | None = None
 
 
 class DeleteImplementationInputModel(BaseModel):

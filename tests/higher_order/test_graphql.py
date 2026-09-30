@@ -1,17 +1,30 @@
-"""GraphQL surface for higher-order implementations: the setHigherOrder mutation + exposure."""
+"""GraphQL surface for higher-order implementations.
 
+``createHigherOrderImplementation`` is served by agentd (``internal/higher-order/create``):
+the checks and the writes are judged there (rekuest-agentd ``tests/higher_order.rs``). Here:
+that the mutation hands the request over and answers with the row agentd created, that
+agentd's refusals reach GraphQL as they are, and that re-registering an agent keeps the
+wrappers deployed onto it.
+"""
+
+import json
+from collections.abc import Callable
+
+import httpx
 import pytest
 from asgiref.sync import sync_to_async
+from authentikate.models import App, Release
 from kante.context import HttpContext
 
+from facade import agentd, registration
 from facade.models import Action, Implementation
+from facade.mutations.agent import ImplementAgentInputModel
 from facade.schema import schema
-
 from tests.factories import create_agent_for_registry, create_registry_bundle
 
-SET_HIGHER_ORDER = """
-    mutation SetHO($input: SetHigherOrderInput!) {
-        setHigherOrder(input: $input) {
+CREATE = """
+    mutation Create($input: CreateHigherOrderImplementationInput!) {
+        createHigherOrderImplementation(input: $input) {
             id
             higherOrderConfig
             higherOrderFor { id }
@@ -19,8 +32,10 @@ SET_HIGHER_ORDER = """
     }
 """
 
+DEFINITION = {"key": "flow_123", "version": "1", "name": "A flow", "kind": "FUNCTION", "args": [{"key": "x", "kind": "INT", "nullable": False}]}
 
-def _build_impls(prefix, lower_kind="FUNCTION", higher_kind="FUNCTION"):
+
+def _build_impls(prefix: str, lower_kind: str = "FUNCTION", higher_kind: str = "FUNCTION") -> tuple[str, str]:
     user, _, org, registry = create_registry_bundle(prefix)
     agent = create_agent_for_registry(registry=registry, user=user, organization=org, prefix=prefix)
 
@@ -54,92 +69,107 @@ def _build_impls(prefix, lower_kind="FUNCTION", higher_kind="FUNCTION"):
 build_impls = sync_to_async(_build_impls)
 
 
-def _build_cross_agent_impls(prefix):
-    """Build a wrapper and a lower impl on two DIFFERENT agents (different registries)."""
-    h_user, _, h_org, h_registry = create_registry_bundle(f"{prefix}-h")
-    h_agent = create_agent_for_registry(registry=h_registry, user=h_user, organization=h_org, prefix=f"{prefix}-h")
-    higher_action = Action.objects.create(
-        app=h_agent.app,
-        key=f"{prefix}-h",
-        version="1.0.0",
-        name="h",
-        description="h",
-        hash=f"{prefix}-h-hash",
-        organization=h_org,
-        kind="FUNCTION",
-    )
-    higher = Implementation.objects.create(release=h_agent.release, interface=f"{prefix}_h", action=higher_action, agent=h_agent)
-
-    l_user, _, l_org, l_registry = create_registry_bundle(f"{prefix}-l")
-    l_agent = create_agent_for_registry(registry=l_registry, user=l_user, organization=l_org, prefix=f"{prefix}-l")
-    lower_action = Action.objects.create(
-        app=l_agent.app,
-        key=f"{prefix}-l",
-        version="1.0.0",
-        name="l",
-        description="l",
-        hash=f"{prefix}-l-hash",
-        organization=l_org,
-        kind="FUNCTION",
-    )
-    lower = Implementation.objects.create(release=l_agent.release, interface=f"{prefix}_l", action=lower_action, agent=l_agent)
-
-    return str(higher.id), str(lower.id)
+def _link(higher_id: str, lower_id: str) -> None:
+    Implementation.objects.filter(pk=higher_id).update(higher_order_for_id=lower_id, higher_order_config={"args_key": "args"})
 
 
-build_cross_agent_impls = sync_to_async(_build_cross_agent_impls)
+link = sync_to_async(_link)
+
+
+@pytest.fixture
+def agentd_answers(monkeypatch: pytest.MonkeyPatch, settings: object) -> Callable[..., list[dict]]:
+    """agentd answered by ``handler``; the JSON bodies it received."""
+    settings.AGENTD_URL = "http://agentd:8080/rekuest"
+    seen: list[dict] = []
+
+    def install(handler: Callable[[httpx.Request], httpx.Response]) -> list[dict]:
+        def record(request: httpx.Request) -> httpx.Response:
+            seen.append(json.loads(request.content))
+            return handler(request)
+
+        monkeypatch.setattr(agentd, "_client", httpx.Client(transport=httpx.MockTransport(record)))
+        return seen
+
+    return install
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-class TestSetHigherOrder:
-    async def test_link_round_trips(self, authenticated_context: HttpContext):
+class TestCreateHigherOrderImplementation:
+    """The mutation hands over to agentd."""
+
+    async def test_the_request_goes_to_agentd_and_the_wrapper_comes_back(self, authenticated_context: HttpContext, agentd_answers: Callable[..., list[dict]]) -> None:
+        """The request agentd receives, and the row the mutation answers with."""
         higher_id, lower_id = await build_impls("ho-ok")
+        await link(higher_id, lower_id)  # what agentd would have written
+        seen = agentd_answers(lambda request: httpx.Response(200, json={"implementation": higher_id, "diagnostics": []}))
 
         result = await schema.execute(
-            SET_HIGHER_ORDER,
+            CREATE,
             context_value=authenticated_context,
-            variable_values={"input": {"implementation": higher_id, "lowerImplementation": lower_id, "config": {"args_key": "args"}}},
+            variable_values={"input": {"lower": lower_id, "interface": "flow:123", "definition": DEFINITION, "config": {"args_key": "args"}}},
         )
 
-        assert result.data is not None, f"Errors: {result.errors}"
-        payload = result.data["setHigherOrder"]
-        assert payload["id"] == higher_id
-        assert payload["higherOrderFor"]["id"] == lower_id
-        assert payload["higherOrderConfig"] == {"args_key": "args"}
+        assert result.errors is None, result.errors
+        payload = result.data["createHigherOrderImplementation"]
+        assert payload == {"id": higher_id, "higherOrderConfig": {"args_key": "args"}, "higherOrderFor": {"id": lower_id}}
+        (body,) = seen
+        assert body["input"]["lower"] == lower_id and body["input"]["interface"] == "flow:123"
+        assert body["input"]["definition"]["key"] == "flow_123"
+        assert body["input"]["config"] == {"args_key": "args"}
+        assert body["principal"]["organization"] is not None
 
-    async def test_self_wrap_is_rejected(self, authenticated_context: HttpContext):
-        higher_id, _ = await build_impls("ho-self")
+    async def test_a_refusal_reaches_graphql_as_agentd_worded_it(self, authenticated_context: HttpContext, agentd_answers: Callable[..., list[dict]]) -> None:
+        """agentd's message is the GraphQL error."""
+        agentd_answers(lambda request: httpx.Response(400, json={"error": "An implementation cannot wrap itself"}))
 
         result = await schema.execute(
-            SET_HIGHER_ORDER,
+            CREATE,
             context_value=authenticated_context,
-            variable_values={"input": {"implementation": higher_id, "lowerImplementation": higher_id}},
+            variable_values={"input": {"lower": "1", "interface": "flow:1", "definition": DEFINITION}},
         )
 
-        assert result.errors is not None
+        assert result.errors is not None and result.errors[0].message == "An implementation cannot wrap itself"
 
-    async def test_kind_mismatch_is_rejected(self, authenticated_context: HttpContext):
-        # FUNCTION wrapper over a GENERATOR lower → rejected at link time.
-        higher_id, lower_id = await build_impls("ho-kind", lower_kind="GENERATOR", higher_kind="FUNCTION")
+    async def test_without_agentd_it_says_so(self, authenticated_context: HttpContext, settings: object) -> None:
+        """No agentd configured: a clear error, no in-process fallback."""
+        settings.AGENTD_URL = None
 
         result = await schema.execute(
-            SET_HIGHER_ORDER,
+            CREATE,
             context_value=authenticated_context,
-            variable_values={"input": {"implementation": higher_id, "lowerImplementation": lower_id}},
+            variable_values={"input": {"lower": "1", "interface": "flow:1", "definition": DEFINITION}},
         )
 
-        assert result.errors is not None
+        assert result.errors is not None and "agentd" in result.errors[0].message
 
-    async def test_cross_agent_link_is_rejected(self, authenticated_context: HttpContext):
-        # Wrapper and lower on different agents → rejected: a wrapper must be co-located
-        # with the lower implementation it wraps.
-        higher_id, lower_id = await build_cross_agent_impls("ho-xagent")
 
-        result = await schema.execute(
-            SET_HIGHER_ORDER,
-            context_value=authenticated_context,
-            variable_values={"input": {"implementation": higher_id, "lowerImplementation": lower_id}},
-        )
+def _declare(prefix: str, hash: str, interfaces: list[str]) -> ImplementAgentInputModel:
+    return ImplementAgentInputModel(
+        hash=hash,
+        implementations=[{"interface": i, "definition": {"key": f"{prefix}-{i}", "version": "1", "name": i, "kind": "FUNCTION"}} for i in interfaces],
+    )
 
-        assert result.errors is not None
+
+def _reregister(prefix: str) -> tuple[bool, bool]:
+    """(the wrapper survived, the undeclared plain implementation was reaped)."""
+    user, client, org, _ = create_registry_bundle(prefix)
+    client.release = Release.objects.create(app=App.objects.create(identifier=f"{prefix}-app"), version="1.0.0")
+    client.save()
+    agent, _ = registration.implement_agent(client, user, org, _declare(prefix, "h1", ["lower", "plain"]))
+    lower = Implementation.objects.get(agent=agent, interface="lower")
+    wrapper_action = Action.objects.create(app=agent.app, key=f"{prefix}-w", version="1", name="w", description="w", hash=f"{prefix}-w-hash", organization=org, kind="FUNCTION")
+    wrapper = Implementation.objects.create(release=agent.release, interface="flow:1", action=wrapper_action, agent=agent, higher_order_for=lower)
+
+    registration.implement_agent(client, user, org, _declare(prefix, "h2", ["lower"]))
+
+    return Implementation.objects.filter(pk=wrapper.pk).exists(), not Implementation.objects.filter(agent=agent, interface="plain").exists()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_reregistering_an_agent_keeps_the_wrappers_deployed_onto_it() -> None:
+    """Re-registration reaps what the agent stopped declaring, but never a deployed wrapper."""
+    kept, reaped = await sync_to_async(_reregister)("ho-keep")
+    assert kept, "a wrapper is never declared by the agent it is deployed onto: re-registering must keep it"
+    assert reaped, "an implementation the agent stopped declaring still goes"

@@ -12,7 +12,6 @@ from kante.types import Info
 from rekuest_core.inputs.models import DefinitionInputModel, ImplementationInputModel
 from rekuest_core import scalars as rscalars
 from authentikate.vars import get_user, get_client
-from facade.higher_order import validate_dependency_coverage, validate_higher_order_pairing
 from facade.provenance import audience as provenance_audience
 import typing as t
 from facade.catalog_validation import catalogs_for_definition, dump_diagnostics, iter_definition_calls, iter_definition_widgets, validate_calls_against_catalogs, validate_widgets_against_catalogs
@@ -323,7 +322,7 @@ def _create_implementation(
     batch prefetches: ``implement_agent`` passes them so a reconnecting agent with N
     implementations does two lookups total instead of 2·N. Rows created here are inserted
     back into the maps so duplicate keys within one batch resolve like sequential lookups
-    would. ``None`` (the default, used by ``create_implementation``) keeps the per-row
+    would. ``None`` (the default, for a single direct call) keeps the per-row
     lookup path.
     """
     definition = input.definition
@@ -437,67 +436,24 @@ def _create_implementation(
     return implementation
 
 
-def create_implementation(info: Info, input: inputs.CreateImplementationInput) -> types.Implementation:
-    # Same serialization as ``implement_agent``: this path writes the very same org-shared rows.
-    lock_organization(info.context.request.organization)
-    agent, _ = models.Agent.objects.update_or_create(
-        client=info.context.request.client,
-        user=info.context.request.user,
-        organization=info.context.request.organization,
-        defaults=dict(
-            name=f"{info.context.request.client.client_id}",
-            release=info.context.request.client.release,
-            app=info.context.request.client.release.app,
-        ),
-    )
+def create_higher_order_implementation(info: Info, input: inputs.CreateHigherOrderImplementationInput) -> types.Implementation:
+    """Deploy a wrapper onto the agent of the implementation it wraps, linked to it.
 
-    # Same conversion as implement_agent: the port validators live on the pydantic models.
-    return _create_implementation(input.to_pydantic().implementation, agent)
-
-
-@strawberry.input(description="Mark an existing implementation as a higher-order wrapper of a lower implementation.")
-class SetHigherOrderInput:
-    implementation: strawberry.ID = strawberry.field(description="The wrapper implementation to mark as higher-order.")
-    lower_implementation: strawberry.ID = strawberry.field(description="The lower implementation it wraps.")
-    config: rscalars.AnyDefault | None = strawberry.field(default=None, description="Projection config: bound params + arg/dependency/return maps (see Implementation.higher_order_config).")
-
-
-def set_higher_order(info: Info, input: SetHigherOrderInput) -> types.Implementation:
-    """Link a wrapper implementation to the lower implementation it wraps, with a projection config.
-
-    Validates the pairing up front: no self-wrap, no nested wrappers, the action kinds must agree,
-    and every lower dependency slot must be covered by a bound dep or one of the wrapper's *declared*
-    dependencies (so the caller knows what to pass).
+    Served by agentd (``internal/higher-order/create``), which registers the wrapper as a
+    declared implementation is registered and checks that it can work: same organization, no
+    self-wrap, no nesting, matching kinds, every lower dependency covered. A wrapper deployed
+    again under its interface is updated in place; an agent re-registering keeps it.
     """
-    higher = models.Implementation.objects.get(id=input.implementation)
-    lower = models.Implementation.objects.get(id=input.lower_implementation)
+    from facade import agentd
 
-    if higher.pk == lower.pk:
-        raise ValueError("An implementation cannot wrap itself")
-
-    # A higher-order implementation is always bound to the agent that owns the lower
-    # implementation it wraps — the wrapper is virtual and its child runs on that agent.
-    # Cross-agent wrapping is not supported: register the wrapper on the lower's agent.
-    if higher.agent_id != lower.agent_id:
-        raise ValueError("A higher-order implementation must be on the same agent as the lower implementation it wraps. Register the wrapper on the lower implementation's agent.")
-
-    config = input.config or {}
-
-    validate_higher_order_pairing(
-        higher.action.kind,
-        lower.action.kind,
-        lower_is_higher_order=lower.higher_order_for_id is not None,
+    if not agentd.enabled():
+        raise ValueError("createHigherOrderImplementation is served by agentd: set rekuest.agentd_url")
+    model = input.to_pydantic()
+    answer = agentd.call(
+        "higher-order/create",
+        {"principal": agentd._principal(info), "input": model.model_dump(mode="json", exclude_none=True)},
     )
-    validate_dependency_coverage(
-        config,
-        lower_dependency_keys=[d.key for d in lower.dependencies.all()],
-        declared_h_dependency_keys=[d.key for d in higher.dependencies.all()],
-    )
-
-    higher.higher_order_for = lower
-    higher.higher_order_config = config
-    higher.save()
-    return higher
+    return models.Implementation.objects.get(pk=answer["implementation"])
 
 
 def delete_implementation(info: Info, input: inputs.DeleteImplementationInput) -> str:

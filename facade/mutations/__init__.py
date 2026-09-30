@@ -1,4 +1,4 @@
-from .implementation import create_implementation, delete_implementation, pin_implementation, set_higher_order
+from .implementation import create_higher_order_implementation, delete_implementation, pin_implementation
 from .postman import assign, pause, resume, ack, cancel, interrupt, collect, bounce, kick, block, unblock
 from .probe import probe, cancel_probe, pause_probe, resume_probe
 from .test import create_test_case, create_test_result
@@ -26,7 +26,7 @@ __all__ = [
     "update_schedule",
     "delete_schedule",
     "trigger_schedule",
-    "create_implementation",
+    "create_higher_order_implementation",
     "delete_threed_model",
     "create_threed_model",
     "delete_materialized_blok",
@@ -61,7 +61,6 @@ __all__ = [
     "update_threed_model",
     "delete_threed_model",
     "pin_implementation",
-    "set_higher_order",
     "block",
     "create_shortcut",
     "delete_shortcut",

@@ -77,8 +77,8 @@ from .dependency import (
     UpdateResolutionInputModel,
 )
 from .implementation import (
-    CreateImplementationInput,
-    CreateImplementationInputModel,
+    CreateHigherOrderImplementationInput,
+    CreateHigherOrderImplementationInputModel,
     DeleteImplementationInput,
     DeleteImplementationInputModel,
     PortDemandInput,
@@ -190,8 +190,8 @@ __all__ = [
     "UpdateResolutionInput",
     "UpdateResolutionInputModel",
     # implementation
-    "CreateImplementationInput",
-    "CreateImplementationInputModel",
+    "CreateHigherOrderImplementationInput",
+    "CreateHigherOrderImplementationInputModel",
     "DeleteImplementationInput",
     "DeleteImplementationInputModel",
     "PortDemandInput",

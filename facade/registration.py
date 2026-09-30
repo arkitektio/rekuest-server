@@ -199,7 +199,8 @@ def implement_agent(client: "Client", user: "User", organization: "Organization"
     # ``Task.implementation`` is SET_NULL, so reaping an idle implementation preserves its history.
     models.State.objects.filter(agent=agent).exclude(id__in=created_states_id).delete()
 
-    stale_implementations = models.Implementation.objects.filter(agent=agent).exclude(id__in=created_implementations_id)
+    # Wrappers deployed onto the agent (createHigherOrderImplementation) are never declared by it.
+    stale_implementations = models.Implementation.objects.filter(agent=agent, higher_order_for__isnull=True).exclude(id__in=created_implementations_id)
     live = stale_implementations.filter(tasks__is_done=False).distinct()
     live_ids = list(live.values_list("id", flat=True))
     if live_ids:

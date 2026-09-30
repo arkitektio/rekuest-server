@@ -1559,12 +1559,28 @@ input CreateDashboardInput {
   bloks: [String!]! = []
 }
 
-"""The input for creating a implementation."""
-input CreateImplementationInput {
+"""
+Deploy a higher-order implementation: a wrapper onto the agent of the implementation it wraps.
+"""
+input CreateHigherOrderImplementationInput {
+  """The implementation to wrap; its agent hosts the wrapper."""
+  lower: ID!
+
+  """The wrapper's interface, unique on that agent (e.g. 'flow:123')."""
+  interface: String!
+
+  """The wrapper's typed contract, derived by the caller."""
+  definition: DefinitionInput!
+
   """
-  The implementation to create. This is used to identify the implementation in the system.
+  Projection config: bound params + arg/dependency/return maps (see Implementation.higher_order_config).
   """
-  implementation: ImplementationInput!
+  config: AnyDefault = null
+
+  """
+  Dependencies the wrapper declares, for a dependency_map sourcing 'from: caller'.
+  """
+  dependencies: [AgentDependencyInput!] = null
 }
 
 """The input for creating a placement."""
@@ -2871,8 +2887,10 @@ type MessageEffect implements Effect {
 
 """Root mutation type for executing write operations on the API."""
 type Mutation {
-  """Create a new implementation entry."""
-  createImplementation(input: CreateImplementationInput!): Implementation! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+  """
+  Deploy a higher-order implementation: a wrapper onto the agent of the implementation it wraps, linked to it.
+  """
+  createHigherOrderImplementation(input: CreateHigherOrderImplementationInput!): Implementation! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """Acknowledge a task."""
   ack(input: AckInput!): Task! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
@@ -2956,11 +2974,6 @@ type Mutation {
 
   """Delete a registered implementation."""
   deleteImplementation(input: DeleteImplementationInput!): String! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
-
-  """
-  Mark an implementation as a higher-order wrapper of a lower implementation, with a projection config.
-  """
-  setHigherOrder(input: SetHigherOrderInput!): Implementation! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """Ensure agent record exists or is up to date."""
   ensureAgent(input: AgentInput!): Agent! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
@@ -4319,22 +4332,6 @@ input SessionFilter {
 input SessionOrder @oneOf {
   startedAt: Ordering
   endedAt: Ordering
-}
-
-"""
-Mark an existing implementation as a higher-order wrapper of a lower implementation.
-"""
-input SetHigherOrderInput {
-  """The wrapper implementation to mark as higher-order."""
-  implementation: ID!
-
-  """The lower implementation it wraps."""
-  lowerImplementation: ID!
-
-  """
-  Projection config: bound params + arg/dependency/return maps (see Implementation.higher_order_config).
-  """
-  config: AnyDefault = null
 }
 
 input ShelveInMemoryDrawerInput {
