@@ -16,8 +16,7 @@ from django.conf import settings as django_settings
 from django.test import Client as HttpClient
 from django.utils import timezone
 
-from facade import enums, hooks, models, service_agents
-from facade.persist_backend import ModelPersistBackend
+from facade import enums, models, service_agents
 from rekuest_service import Service, trust
 from tests.hook_urls import housekeeping
 

@@ -29,29 +29,30 @@ diagram shows the high-level design of Rekuest:
 
 > **📐 Architecture documentation.** For a structured, in-depth explanation of the major elements of
 > the service — the Caller/Agent identity model, the relational action-matching engine, the
-> task lifecycle, the agent WebSocket protocol, the realtime layer, higher-order
-> implementations, and workflows and what happens when an agent dies — see **[`docs/design/`](./docs/design/README.md)**.
+> realtime layer and higher-order implementations — see **[`docs/design/`](./docs/design/README.md)**.
+> The agent protocol, the task lifecycle and workflows are documented with their implementation,
+> in [rekuest-agentd](https://github.com/arkitektio/rekuest-agentd/tree/main/docs).
 
-## Running it: two processes
+## Running it: three processes
 
-A rekuest deployment is **two processes from the same image**:
+A rekuest deployment is **two processes from this image, plus agentd**:
 
 | process | command | role |
 |---|---|---|
-| web (any number of replicas) | `bash run.sh` (daphne) | GraphQL, agent sockets, webhook intake. Never sweeps. |
-| reaper (one is enough) | `bash run-reaper.sh` → `python manage.py reaper` | Every deadline, schedule and delayed task fires from this loop. Healthcheck: `python manage.py reaper --check`. |
+| web (any number of replicas) | `bash run.sh` (daphne) | GraphQL and its subscriptions. Everything that writes task state or registrations goes to agentd. |
+| scheduler (one is enough) | `bash run-reaper.sh` → `python manage.py reaper` | Service-agent provisioning, schedules, triggers, embeddings, retention. Healthcheck: `python manage.py reaper --check`. |
+| [agentd](https://github.com/arkitektio/rekuest-agentd) (any number of replicas) | the `rekuest-agentd` image, same `config.yaml` | The agent protocol: `/agi` sockets, HookAgent and signal intakes, assign/control, registration, the agent sweeps. Set `rekuest.agentd_url` so this server reaches its internal API. |
 
 > [!IMPORTANT]
-> The reaper used to run inside every web process. It no longer does: **a deployment without a
-> reaper process fires no deadlines, schedules or delayed tasks** (they are rows, so nothing is
-> lost — it all catches up on the reaper's first tick). The reaper holds no state and may run
-> more than once side by side.
+> Route `/<script name>/agi*` to agentd, not to the web replicas: the agent protocol is only served
+> there. The scheduler holds no state and may run more than once side by side; while none runs,
+> schedules and triggers are late, never lost.
 
 ## Developmental Notices
 
-Transport is Redis: agent commands travel through a per-agent Redis list (chosen over the Channels
-layer so a message pushed while an agent is briefly offline survives its reconnect), and GraphQL
-subscriptions fan out through `channels_redis`. There is no RabbitMQ and no Kafka. To learn more
+Transport is Redis: agent commands travel through a per-agent Redis list that agentd drains (chosen
+over the Channels layer so a message pushed while an agent is briefly offline survives its
+reconnect), and GraphQL subscriptions fan out through `channels_redis`, which agentd speaks too. There is no RabbitMQ and no Kafka. To learn more
 about this design decision, please refer to the
 [Why Not?](https://arkitekt.live/docs/design/why-not) section.
 

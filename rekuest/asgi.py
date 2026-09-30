@@ -19,19 +19,10 @@ django_asgi_app = get_asgi_application()
 
 from facade.schema import schema  # noqa: E402
 from kante.router import router  # noqa: E402
-from facade.consumers.async_consumer import AgentConsumer  # noqa: E402
-from kante.path import re_dynamicpath  # noqa: E402
-
-
-websocket_urlpatterns = [
-    re_dynamicpath(r"agi", AgentConsumer.as_asgi()),
-]
-
-# Every deadline, schedule and delayed task is swept by the reaper, which runs in its own
-# process (``python manage.py reaper`` — the ``rekuest-reaper`` container), never in here.
+# The agent protocol (``/agi``: sockets, HookAgent intake, signals) is agentd's; this serves
+# GraphQL and its subscriptions only.
 application = router(
     django_asgi_app=django_asgi_app,
     schema=schema,
-    additional_websocket_urlpatterns=websocket_urlpatterns,
     schema_path="schema",
 )

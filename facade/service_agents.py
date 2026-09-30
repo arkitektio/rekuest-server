@@ -6,7 +6,7 @@ Each entry of ``rekuest.service_agents`` becomes:
   ``service_agents_organization`` — minted here, because lok has no service identity to offer;
 * its **actions**, read from the service's signed manifest (``GET <hook_url>/manifest``,
   served by the vendored ``rekuest_service`` package) and registered through the ordinary
-  :func:`facade.registration.implement_agent`, so they are real actions like any agent's;
+  agentd's registration, so they are real actions like any agent's;
 * one **schedule** per action that declares a default interval or cron line, owned by the
   scheduler identity. Its runs are ephemeral: housekeeping, not history.
 
@@ -28,7 +28,7 @@ import httpx
 from authentikate.models import App, Client, Membership, Organization, Release, User
 from django.conf import settings
 
-from facade import agentd, enums, hooks, models, schedules
+from facade import agentd, enums, models, schedules
 from facade.caller_context import CallerContext
 
 logger = logging.getLogger(__name__)
@@ -76,7 +76,7 @@ def fetch_manifest(agent: models.Agent) -> dict[str, Any]:
     entry = service_trust.entry_for_agent(agent)
     if entry is None:
         raise ValueError(f"Agent {agent.pk} is not one of rekuest.service_agents")
-    headers = {hooks.AGENT_HEADER: str(agent.pk), "Authorization": service_trust.sign_to(entry, "GET", url, b"")}
+    headers = {"X-Rekuest-Agent": str(agent.pk), "Authorization": service_trust.sign_to(entry, "GET", url, b"")}
     response = httpx.get(url, headers=headers, timeout=_TIMEOUT)
     response.raise_for_status()
     manifest = response.json()

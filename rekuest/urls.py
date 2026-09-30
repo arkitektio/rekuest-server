@@ -38,23 +38,16 @@ def jwks_view(request: HttpRequest) -> JsonResponse:
     return response
 
 
-from facade.http_intake import hook_intake  # noqa: E402  (apps are ready when the URLconf loads)
-from facade.signals_intake import signal_intake  # noqa: E402
 
 urlpatterns = [
     dynamicpath("admin/", admin.site.urls),
     dynamicpath(".well-known/jwks.json", csrf_exempt(jwks_view), name="provenance_jwks"),
-    re_dynamicpath(r"agi/http/(?P<agent_id>[^/]+)$", csrf_exempt(hook_intake), name="hook_intake"),
-    re_dynamicpath(r"agi/signal/(?P<service>[^/]+)$", csrf_exempt(signal_intake), name="signal_intake"),
     dynamicpath(
         "ht",
         csrf_exempt(
             HealthCheckView.as_view(
                 checks=[
                     "health_check.Database",
-                    # A backend whose clock has drifted must be taken out of rotation: it would
-                    # revoke healthy agents' leases in a loop. See ``facade.clock``.
-                    "facade.clock.ClockSkewHealthCheck",
                 ]
             )
         ),

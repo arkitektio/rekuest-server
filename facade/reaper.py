@@ -34,7 +34,7 @@ Consequences, all deliberate:
   reaper picks it up. A deadline fires at most ``SWEEP_INTERVAL`` late — the price of having
   no timers.
 * **Any number of reapers may run concurrently.** Correctness never depends on who sweeps:
-  every transition is a row-locked claim with one winner (``persist_backend``), and sweeps
+  every refill and firing is a row-locked claim with one winner, and sweeps
   step over rows another reaper holds (``skip_locked``). The redis tick token below merely
   keeps N reapers from all scanning the same rows in the same second; if redis is
   unreachable it is skipped and everyone sweeps — wasteful, still correct.
@@ -55,10 +55,8 @@ from channels.db import database_sync_to_async
 from django.conf import settings
 from embeddings.healer import reembed_stale
 
-from facade import clock, models, redis_keys
+from facade import models, redis_keys, schedules, service_agents, triggers
 from facade.deadlines import sweep_interval_seconds
-from facade.persist_backend import persist_backend as _default_backend
-from facade.ports import ReconcileBackend
 from facade.retention import sweep_terminal_tasks
 
 logger = logging.getLogger(__name__)
@@ -81,39 +79,18 @@ def _beat(heartbeat: "Path | None") -> None:
         logger.debug("Could not touch the reaper heartbeat %s", heartbeat, exc_info=True)
 
 
-def _sweeps(backend: "ReconcileBackend | None" = None) -> "List[Tuple[str, Callable[[], Awaitable[int]]]]":
-    """The ordered sweep steps.
-
-    Typed against :class:`facade.ports.ReconcileBackend` rather than the concrete singleton, so
-    what the loop needs from the backend is stated rather than implied.
-    """
-    persist_backend = backend if backend is not None else _default_backend
+def _sweeps() -> "List[Tuple[str, Callable[[], Awaitable[int]]]]":
+    """The ordered sweep steps. Service agents first: a freshly provisioned service's default
+    schedules get their first run in the same tick."""
     return [
-        # Before the schedules: a freshly provisioned service's default schedules get their
-        # first run in the same tick.
-        ("service agents", persist_backend.provision_service_agents),
-        ("schedules", persist_backend.refill_schedules),
-        ("triggers", persist_backend.fire_triggers),
+        ("service agents", database_sync_to_async(service_agents.provision_all)),
+        ("schedules", database_sync_to_async(schedules.refill_schedules_sync)),
+        ("triggers", database_sync_to_async(triggers.fire_triggers_sync)),
     ]
 
 
 async def run_sweeps() -> None:
-    """One full pass. Every step is isolated: one failing sweep never starves the others.
-
-    A backend whose clock has drifted does not sweep at all. Every sweep here decides whether
-    some *other* backend's agent is dead by comparing timestamps, so a skewed clock does not
-    produce a late decision but a wrong one — it revokes healthy agents in a loop (see
-    :mod:`facade.clock`). Skipping is safe: the deadlines are in the database and any
-    correctly-clocked backend will act on them.
-    """
-    skew = await database_sync_to_async(clock.check_skew)()
-    if skew is not None and abs(skew) > clock.max_skew_seconds():
-        logger.error(
-            "Clock is %.1fs off the database (limit %.1fs) — skipping the sweeps. Check NTP on this host.",
-            skew,
-            clock.max_skew_seconds(),
-        )
-        return
+    """One full pass. Every step is isolated: one failing sweep never starves the others."""
     for name, sweep in _sweeps():
         try:
             acted = await sweep()
@@ -132,9 +109,7 @@ def _take_tick_token(interval: float) -> bool:
     others skip. The holder dying costs at most one interval. Any redis problem → sweep anyway.
     """
     try:
-        from facade.consumers.agent_queue import _sync_pool
-
-        connection = redis.Redis(connection_pool=_sync_pool(settings.AGENT_REDIS_HOST, settings.AGENT_REDIS_PORT))
+        connection = redis.Redis(host=settings.AGENT_REDIS_HOST, port=settings.AGENT_REDIS_PORT)
         # Not agentd's ``reaper:tick``: the two loops sweep different things and must not skip
         # each other's ticks.
         return bool(connection.set(redis_keys.key("scheduler", "tick"), _PROCESS_ID, nx=True, px=max(1, int(interval * 800))))

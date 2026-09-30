@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from facade import managers
-from facade.mutations.implementation import rebuild_relational_ports
+from tests.registered import rebuild_relational_ports
 from rekuest_core.enums import PortKind
 from rekuest_core.inputs.models import DefinitionInputModel
 

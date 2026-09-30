@@ -154,5 +154,5 @@ If you encounter `registry` in old branches, migrations, or external schema snap
 ## Where this shows up next
 
 - The full model graph and constraints: [domain-model.md](domain-model.md).
-- How a Caller's `assign` becomes routed work: [task-lifecycle.md](task-lifecycle.md).
-- How an Agent authenticates and connects: [agent-protocol.md](agent-protocol.md).
+- How a Caller's `assign` becomes routed work: [task-lifecycle.md](https://github.com/arkitektio/rekuest-agentd/blob/main/docs/task-lifecycle.md).
+- How an Agent authenticates and connects: [agent-protocol.md](https://github.com/arkitektio/rekuest-agentd/blob/main/docs/agent-protocol.md).

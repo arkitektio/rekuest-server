@@ -15,7 +15,7 @@ from rekuest_core.inputs.models import ImplementationInputModel, StateDependency
 
 from facade import models
 from facade.logic import auto_resolve
-from facade.mutations.implementation import _create_implementation
+from tests.registered import create_implementation as _create_implementation
 
 from tests.factories import create_agent_for_registry, create_registry_bundle
 
@@ -132,25 +132,6 @@ def test_auto_resolve_raises_when_no_state_definition_matches(setup):
         auto_resolve(setup.info, main_impl, resolution)
 
 
-def test_state_registration_defaults_identity_fields(db):
-    """States registered without explicit key/app get the defaults: key = interface,
-    app_identifier = the agent's app identifier; explicit values win."""
-    from facade.registration import _register_state
-    from rekuest_core.inputs.models import StateImplementationInputModel
-
-    user, _, org, caller = create_registry_bundle("statereg")
-    agent = create_agent_for_registry(caller, user, org, "statereg")
-
-    definition = {"name": "Counter", "ports": [{"key": "count", "kind": "INT", "nullable": False}]}
-
-    defaulted = _register_state(agent, StateImplementationInputModel.model_validate({"interface": "counter", "definition": definition}))
-    assert defaulted.key == "counter"
-    assert defaulted.app_identifier == "statereg-app"
-
-    explicit = _register_state(agent, StateImplementationInputModel.model_validate({"interface": "counter_impl", "key": "counter", "app": "imagej", "definition": definition}))
-    assert explicit.interface == "counter_impl"
-    assert explicit.key == "counter"
-    assert explicit.app_identifier == "imagej"
 
 
 def test_state_demand_by_key_only_selects_matching_agent(setup):

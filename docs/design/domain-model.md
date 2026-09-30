@@ -115,7 +115,7 @@ task run, tracking it from assignment to completion. The fields that matter most
 | `ephemeral` | Legacy column (excluded from replay offers). Zero-persistence work is an ephemeral *Probe* (`facade/probes/`), not a Task. |
 
 **`TaskEvent`** is the immutable per-transition log entry the agent (or server) appends:
-`kind` (see the lifecycle in [task-lifecycle.md](task-lifecycle.md)), optional
+`kind` (see the lifecycle in [task-lifecycle.md](https://github.com/arkitektio/rekuest-agentd/blob/main/docs/task-lifecycle.md)), optional
 `returns` (for `YIELD`), `progress`, `message`, `level`, and `delegated_to` (used by higher-order
 unfolding).
 

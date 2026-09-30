@@ -8,6 +8,12 @@ workflow (see [`../DEVELOPMENT.md`](../DEVELOPMENT.md)).
 > These documents describe the code as it stands today. Where a name recently changed (e.g.
 > `Registry` → `Caller`), a short historical note is included so older code still reads sensibly.
 
+> **The agent protocol lives in [rekuest-agentd](https://github.com/arkitektio/rekuest-agentd)** (Rust):
+> agent sockets, the HookAgent and signal intakes, registration, assign and control, the task state
+> machine, the agent sweeps and workflow resume. This server keeps GraphQL, subscriptions, the
+> catalogue CRUD and the scheduler loop, and calls agentd's internal API for everything that writes
+> task state or registrations. The protocol documents moved there with it.
+
 ## What is Rekuest?
 
 Rekuest is the broker at the centre of the [Arkitekt](https://arkitekt.live) ecosystem. It is a
@@ -93,21 +99,21 @@ Start at the top and follow the flow of a request:
    choices it carries, how defaults and assignment values are checked, and which widgets fit.
 4. **[action-matching.md](action-matching.md)** — how an Action's `provides`/`requires`
    descriptors compile to JSONPath and how the relational port engine finds matching actions.
-4. **[task-lifecycle.md](task-lifecycle.md)** — `assign`, the
+4. **[task-lifecycle.md](https://github.com/arkitektio/rekuest-agentd/blob/main/docs/task-lifecycle.md)** — `assign`, the
    Task event state machine, and how results flow back to the caller.
-5. **[agent-protocol.md](agent-protocol.md)** — the WebSocket wire protocol: register, authenticate,
+5. **[agent-protocol.md](https://github.com/arkitektio/rekuest-agentd/blob/main/docs/agent-protocol.md)** — the WebSocket wire protocol: register, authenticate,
    the liveness lease and its fencing token, task delivery, and connection takeover.
-6. **[caller-protocol.md](caller-protocol.md)** — sub-assignment on the same socket: how an agent
+6. **[caller-protocol.md](https://github.com/arkitektio/rekuest-agentd/blob/main/docs/caller-protocol.md)** — sub-assignment on the same socket: how an agent
    assigns *dependent* work (`AssignRequest`), controls its lifecycle
    (cancel/interrupt/pause/resume), and observes results (`…Event` mirrors); plus the HTTP intake.
 7. **[realtime.md](realtime.md)** — channels, signals, topic keys, and how subscriptions consume
    them.
 8. **[higher-order.md](higher-order.md)** — higher-order implementations (one implementation
    wrapping another) and server-side event unfolding.
-9. **[workflows.md](workflows.md)** — what happens when an agent dies: a plain task ends `LOST`
+9. **[workflows.md](https://github.com/arkitektio/rekuest-agentd/blob/main/docs/workflows.md)** — what happens when an agent dies: a plain task ends `LOST`
    (final; late outcomes kept as `LATE_REPORT`), a `WORKFLOW` is resumed from its journal (keyed
    calls and effects, code pin, resume cap), plus holds and state guards.
-10. **[provenance.md](provenance.md)** — Rekuest as the provenance authority: the signed
+10. **[provenance.md](https://github.com/arkitektio/rekuest-agentd/blob/main/docs/provenance.md)** — Rekuest as the provenance authority: the signed
    attestation token minted at dispatch, its claim vocabulary, the human-root invariant, and the
    JWKS endpoint downstream services verify against.
 

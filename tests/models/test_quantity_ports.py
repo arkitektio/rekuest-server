@@ -191,7 +191,7 @@ class TestRoundTrip:
 @pytest.mark.django_db
 def test_quantity_definition_persists_and_rehydrates():
     """Full write→read flow: definition model_dump into Action JSON, rebuild relational rows, hydrate back."""
-    from facade.mutations.implementation import rebuild_relational_ports
+    from tests.registered import rebuild_relational_ports
     from tests.factories import create_action_for_organization, create_registry_bundle
 
     definition = DefinitionInputModel.model_validate(

@@ -8,7 +8,7 @@ each listed under its service's identifier. A service can therefore only speak a
 only rekuest can speak as rekuest.
 
 Third-party HookAgents (registered through ``ensureAgent`` with a ``hook_url_secret``) keep the
-HMAC scheme in :mod:`facade.hooks`; only the hub's own services use keys.
+HMAC scheme (agentd's ``hooks``); only the hub's own services use keys.
 """
 
 from __future__ import annotations

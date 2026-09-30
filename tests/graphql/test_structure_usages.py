@@ -13,7 +13,7 @@ from authentikate.models import App, Release
 from rekuest_core.inputs.models import ImplementationInputModel
 
 from facade import models
-from facade.mutations.implementation import _create_implementation
+from tests.registered import create_implementation as _create_implementation
 from facade.schema import schema
 
 USAGES_QUERY = """

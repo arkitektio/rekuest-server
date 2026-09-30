@@ -20,8 +20,6 @@ from kante.context import HttpContext, UniversalRequest
 from strawberry.http.temporal_response import TemporalResponse
 from dokker import local, testing
 
-from channels.testing import WebsocketCommunicator
-from facade.consumers.async_consumer import AgentConsumer
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -147,44 +145,6 @@ def authenticated_context(db, backend_stack):
     return HttpContext(request=request, response=TemporalResponse(), headers={"Authorization": "Bearer test"}, type="http")
 
 
-@pytest.fixture(scope="function")
-def agent_ws_redis(backend_stack):
-    """Start each agent test from a clean redis queue.
-
-    The consumer now reads its redis endpoint from ``settings.AGENT_REDIS_HOST`` /
-    ``AGENT_REDIS_PORT`` (overridden to the published ``localhost:6666`` port in
-    ``settings_test``), so no factory monkeypatching is needed — we just flush the
-    DB so broadcasts from a previous test can't leak.
-    """
-    client = sync_redis.Redis(host=settings.AGENT_REDIS_HOST, port=settings.AGENT_REDIS_PORT)
-    client.flushdb()
-    client.close()
-    yield
-
-
-@pytest_asyncio.fixture(scope="function")
-async def agent_ws(agent_ws_redis):
-    """Factory yielding connected ``WebsocketCommunicator``s, each disconnected on teardown.
-
-    Disconnecting is mandatory: a registered agent spawns two long-lived background
-    tasks (``listen_for_tasks`` and ``heartbeat``) that are only cancelled in
-    ``disconnect``. Leaking them pollutes the async DB connections across tests.
-    """
-    created = []
-
-    async def _connect():
-        communicator = WebsocketCommunicator(AgentConsumer.as_asgi(), "/agi")
-        connected, _ = await communicator.connect()
-        assert connected, "WebsocketCommunicator failed to connect to AgentConsumer"
-        created.append(communicator)
-        return communicator
-
-    yield _connect
-
-    for communicator in created:
-        await communicator.disconnect()
-
-
 @pytest.fixture
 def fake_agentd(monkeypatch, settings):
     """agentd's internal API answered in-process (``tests/agentd_fake.py``)."""
@@ -192,4 +152,6 @@ def fake_agentd(monkeypatch, settings):
     from tests import agentd_fake
 
     settings.AGENTD_URL = "http://agentd.test/rekuest"
+    agentd_fake.calls.clear()
     monkeypatch.setattr(agentd, "call", agentd_fake.call)
+    return agentd_fake

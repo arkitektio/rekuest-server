@@ -35,7 +35,6 @@ DEBUG = conf.django.debug
 ALLOWED_HOSTS = conf.django.hosts
 
 AGENT_HEARTBEAT_INTERVAL = 10
-AGENT_HEARTBEAT_RESPONSE_TIMEOUT = 5
 
 # Seconds without a heartbeat after which a ``connected`` agent is presumed dead. The single
 # window unifying every liveness decision (reconnect gate, availability query, GraphQL
@@ -49,9 +48,6 @@ AGENT_REDIS_PORT = conf.redis.port
 # Namespace of every first-party redis key — see ``facade.redis_keys``.
 REDIS_KEY_PREFIX = conf.redis.key_prefix
 
-# HookAgent HTTP signatures — see ``facade.hooks``.
-HOOK_SIGNATURE_MODE = conf.rekuest.hook_signature_mode
-HOOK_MAX_SKEW = conf.rekuest.hook_max_skew
 # This hub's services, provisioned as HookAgents by the reaper (``facade.service_agents``).
 SERVICE_AGENTS = [agent.model_dump() for agent in conf.rekuest.service_agents]
 SERVICE_AGENTS_ORGANIZATION = conf.rekuest.service_agents_organization
@@ -59,8 +55,6 @@ SERVICE_AGENTS_ORGANIZATION = conf.rekuest.service_agents_organization
 TRIGGER_MAX_DEPTH = conf.rekuest.trigger_max_depth
 SIGNAL_RETENTION_SECONDS = conf.rekuest.signal_retention
 
-
-AGENT_HEARTBEAT_NOT_RESPONDED_CODE = 3001
 
 # Reclaim grace window (seconds). On a disconnect the failure/cascade is delayed this long so
 # a brief blip can reclaim same-session in-flight work before it fires. 0 means no grace

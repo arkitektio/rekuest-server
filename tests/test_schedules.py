@@ -13,15 +13,15 @@ from asgiref.sync import async_to_sync, sync_to_async
 from django.db import connection
 from django.utils import timezone
 
-from facade import enums, inputs, messages, models, schedules
+from facade import enums, inputs, models, schedules
 from facade.backend import controll_backend, get_caller_for_context
 from facade.caller_context import CallerContext
-from facade.persist_backend import ModelPersistBackend
 from facade.schema import schema
 
-from tests.agent.helpers import open_agent
 from tests.factories import TEST_TOKEN, build_implementation_for_agent, build_webhook_agent
 from tests.graphql.test_cross_tenant_isolation import OTHER_TOKEN, tenant_context
+
+pytestmark = pytest.mark.usefixtures("fake_agentd")
 
 UTC = datetime.timezone.utc
 
@@ -75,7 +75,7 @@ async def _hook_schedule(prefix: str, **overrides) -> models.Schedule:
 
 
 async def _refill() -> int:
-    return await ModelPersistBackend().refill_schedules()
+    return await sync_to_async(schedules.refill_schedules_sync)()
 
 
 async def _open_runs(schedule: models.Schedule) -> list[models.Task]:
@@ -163,7 +163,7 @@ class TestRefill:
         def run() -> None:
             try:
                 barrier.wait()
-                results.append(async_to_sync(ModelPersistBackend().refill_schedules)())
+                results.append(schedules.refill_schedules_sync())
             finally:
                 connection.close()
 
@@ -180,19 +180,16 @@ class TestRefill:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 class TestTrigger:
-    async def test_run_now_moves_the_waiting_run_and_it_is_dispatched(self, agent_ws):
-        session = await open_agent(agent_ws, "sch-trigger")
-        impl = await build_implementation_for_agent(session.agent.pk, "sch-trigger")
-        schedule = await _schedule_for(session.agent.pk, impl.pk, interval_seconds=3600)
+    async def test_run_now_moves_the_waiting_run_and_refuses_while_it_executes(self):
+        schedule = await _hook_schedule("sch-trigger", interval_seconds=3600)
         await _refill()
         (waiting,) = await _open_runs(schedule)
 
         moved = await sync_to_async(schedules.trigger)(schedule)
         assert moved.pk == waiting.pk and moved.not_before <= timezone.now()
 
-        assert await ModelPersistBackend().dispatch_due_tasks() == 1
-        assert (await session.receive(messages.Assign)).task == str(waiting.pk)
-
+        # agentd dispatched it (the due-task sweep is agentd's): now it is executing.
+        await models.Task.objects.filter(pk=waiting.pk).aupdate(dispatch_attempts=1)
         with pytest.raises(ValueError, match="already executing"):
             await sync_to_async(schedules.trigger)(schedule)
 

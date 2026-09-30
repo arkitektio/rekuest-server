@@ -4,7 +4,7 @@
 the checks and the writes are judged there (rekuest-agentd ``tests/higher_order.rs``). Here:
 that the mutation hands the request over and answers with the row agentd created, that
 agentd's refusals reach GraphQL as they are, and that re-registering an agent keeps the
-wrappers deployed onto it.
+wrappers deployed onto it: agentd's (tests/higher_order.rs), where registration lives.
 """
 
 import json
@@ -16,7 +16,7 @@ from asgiref.sync import sync_to_async
 from authentikate.models import App, Release
 from kante.context import HttpContext
 
-from facade import agentd, registration
+from facade import agentd
 from facade.models import Action, Implementation
 from facade.mutations.agent import ImplementAgentInputModel
 from facade.schema import schema
@@ -142,34 +142,3 @@ class TestCreateHigherOrderImplementation:
         )
 
         assert result.errors is not None and "agentd" in result.errors[0].message
-
-
-def _declare(prefix: str, hash: str, interfaces: list[str]) -> ImplementAgentInputModel:
-    return ImplementAgentInputModel(
-        hash=hash,
-        implementations=[{"interface": i, "definition": {"key": f"{prefix}-{i}", "version": "1", "name": i, "kind": "FUNCTION"}} for i in interfaces],
-    )
-
-
-def _reregister(prefix: str) -> tuple[bool, bool]:
-    """(the wrapper survived, the undeclared plain implementation was reaped)."""
-    user, client, org, _ = create_registry_bundle(prefix)
-    client.release = Release.objects.create(app=App.objects.create(identifier=f"{prefix}-app"), version="1.0.0")
-    client.save()
-    agent, _ = registration.implement_agent(client, user, org, _declare(prefix, "h1", ["lower", "plain"]))
-    lower = Implementation.objects.get(agent=agent, interface="lower")
-    wrapper_action = Action.objects.create(app=agent.app, key=f"{prefix}-w", version="1", name="w", description="w", hash=f"{prefix}-w-hash", organization=org, kind="FUNCTION")
-    wrapper = Implementation.objects.create(release=agent.release, interface="flow:1", action=wrapper_action, agent=agent, higher_order_for=lower)
-
-    registration.implement_agent(client, user, org, _declare(prefix, "h2", ["lower"]))
-
-    return Implementation.objects.filter(pk=wrapper.pk).exists(), not Implementation.objects.filter(agent=agent, interface="plain").exists()
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-async def test_reregistering_an_agent_keeps_the_wrappers_deployed_onto_it() -> None:
-    """Re-registration reaps what the agent stopped declaring, but never a deployed wrapper."""
-    kept, reaped = await sync_to_async(_reregister)("ho-keep")
-    assert kept, "a wrapper is never declared by the agent it is deployed onto: re-registering must keep it"
-    assert reaped, "an implementation the agent stopped declaring still goes"

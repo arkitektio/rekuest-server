@@ -1,9 +1,8 @@
 """The control backend, served by agentd (the agent protocol in Rust, ``rekuest-agentd``).
 
-When ``rekuest.agentd_url`` is configured, every assign, control, agent operation and probe the
-GraphQL mutations, schedules and triggers make goes to agentd's internal API instead of the
-in-process backends: agentd owns the agent sockets, so it is the one place that writes task
-state and dispatches. The request is signed with this instance's key as a service token from
+Every assign, control, agent operation, probe, registration and drawer the GraphQL mutations,
+schedules, triggers and the hub-service provisioning make goes to agentd's internal API: agentd
+owns the agent sockets and is the one writer of task state, agents and their declarations. The request is signed with this instance's key as a service token from
 rekuest to itself (agentd reads the same ``config.yaml``, so it holds the same key); the JSON
 contract is documented at the top of ``rekuest-agentd/crates/rekuest-server/src/internal.rs``.
 
@@ -11,8 +10,7 @@ agentd answers the in-process backends' refusals with their messages: ``400`` is
 ``ValueError``, ``403`` their ``PermissionError``; either is raised as such here, so GraphQL
 reports it exactly as before.
 
-The in-process backends (:mod:`facade.backend`, :mod:`facade.probes.backend`) remain only for a
-server without agentd; they are deleted once agentd is required.
+``rekuest.agentd_url`` is required: without agentd there is nothing to serve these.
 """
 
 from __future__ import annotations
@@ -38,11 +36,6 @@ class AgentdUnavailable(RuntimeError):
     """agentd did not answer, or refused the request itself (not the operation)."""
 
 
-def enabled() -> bool:
-    """Whether this server hands assigns and controls to agentd."""
-    return bool(getattr(settings, "AGENTD_URL", None))
-
-
 def _principal(value: "CallerContext | models.Caller | Any") -> Dict[str, Any]:
     """The requesting identity as agentd's ``principal``: primary keys and roles."""
     if isinstance(value, models.Caller):
@@ -61,7 +54,10 @@ def call(op: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     from facade.service_trust import rekuest_identifier
     from rekuest_service import trust
 
-    url = f"{settings.AGENTD_URL.rstrip('/')}/internal/{op}"
+    base = getattr(settings, "AGENTD_URL", None)
+    if not base:
+        raise AgentdUnavailable("rekuest.agentd_url is not configured: agentd serves this")
+    url = f"{base.rstrip('/')}/internal/{op}"
     body = json.dumps(payload).encode("utf-8")
     identity = rekuest_identifier()
     authorization = trust.sign("POST", urlparse(url).path, body, issuer=identity, audience=identity)
@@ -91,7 +87,7 @@ def _dump(model: Any) -> Dict[str, Any]:
 
 
 class AgentdControllBackend:
-    """:class:`facade.backend.RedisControllBackend`'s surface, served by agentd."""
+    """Assigns, controls and agent operations, in agentd."""
 
     def assign(self, principal: Any, input: Any) -> models.Task:
         """The task for ``input``."""
@@ -170,7 +166,7 @@ class AgentdControllBackend:
 
 
 class AgentdProbeBackend:
-    """:class:`facade.probes.backend.ProbeBackend`'s GraphQL surface, served by agentd."""
+    """Probes and their controls, in agentd."""
 
     def probe(self, principal: Any, input: Any) -> Dict[str, str]:
         """Create and dispatch a probe; its state, with ``id``."""

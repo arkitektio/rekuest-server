@@ -80,7 +80,7 @@ clash):
 ## Projecting dependencies inward — `build_lower_dependencies`
 
 `build_lower_dependencies(config, resolved_h_dependencies)` takes the wrapper's *resolved* dependency
-dict (an explicit, stored contract — see [task-lifecycle.md](task-lifecycle.md)) and
+dict (an explicit, stored contract — see [task-lifecycle.md](https://github.com/arkitektio/rekuest-agentd/blob/main/docs/task-lifecycle.md)) and
 projects it onto `L`'s dependency slots:
 
 - **Empty `dependency_map`** → pass-through by matching key.

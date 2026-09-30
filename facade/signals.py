@@ -1,7 +1,7 @@
 from django.db import transaction
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from facade import models, channels, channel_events, transport
+from facade import models, channels, channel_events
 
 import logging
 
@@ -54,9 +54,6 @@ def broadcast_agent_update(agent: models.Agent, created: bool = False) -> None:
 def agent_post_save(sender, instance: models.Agent = None, created=None, **kwargs):
     if instance:
         broadcast_agent_update(instance, created=bool(created))
-        # The writing backend sees its own routing change at once (other backends within the
-        # cache's few-second TTL) — see ``facade.transport``.
-        transport.forget_agent_routing(instance)
 
 
 @receiver(post_delete, sender=models.Agent)
@@ -102,14 +99,6 @@ def task_post_save(sender, instance: models.Task = None, created=None, **kwargs)
         _broadcast_on_commit(channels.child_task_channel, event, list(topics))
 
 
-@receiver(post_save, sender=models.TaskEvent)
-def task_event_post_save(sender, instance: models.TaskEvent = None, created=None, **kwargs):
-    logger.debug("Task event %s (%s) for task %s", instance.pk, instance.kind, instance.task_id)
-    # One typed publisher fans the persisted event out to its caller (channel layer for the
-    # GraphQL subscription + live WS forward, and a webhook POST for a HookAgent caller).
-    transaction.on_commit(lambda instance=instance: transport.publish_task_event(instance))
-
-
 @receiver(post_save, sender=models.Implementation)
 def implementation_post_save(sender, instance: models.Implementation = None, created=None, **kwargs):
     # Two audiences: the per-implementation detail feed (implementation_change) and the
@@ -127,13 +116,3 @@ def implementation_post_del(sender, instance: models.Implementation = None, **kw
             channel_events.ImplementationEvent(delete=instance.id),
             [f"implementation_{instance.id}", f"implementations_agent_{instance.agent_id}"],
         )
-
-
-@receiver(post_save, sender=models.Patch)
-def patch_post_save(sender, instance: models.Patch = None, created=None, **kwargs):
-    if created:
-        topics = [f"patches_state_{instance.state_id}"]
-        if instance.agent_id:
-            topics.append(f"patches_agent_{instance.agent_id}")
-
-        _broadcast_on_commit(channels.patch_channel, channel_events.PatchEvent.from_patch(instance), topics)
