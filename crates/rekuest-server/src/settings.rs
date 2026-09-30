@@ -1,8 +1,10 @@
 //! The settings the app reads, derived from the configuration (`rekuest/settings.py`).
 
+use std::sync::Arc;
 use std::time::Duration;
 
-use facade::settings::Settings;
+use facade::provenance::keys::InstanceKey;
+use facade::settings::{ProvenanceSettings, Settings};
 
 use crate::Configuration;
 
@@ -11,11 +13,34 @@ use crate::Configuration;
 const AGENT_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
 const AGENT_HEARTBEAT_RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
 
-pub fn from_configuration(configuration: &Configuration) -> Settings {
-    Settings {
+/// The settings, or why the configuration cannot give them (an unreadable instance key: the
+/// Python server refuses to start without one too).
+pub fn from_configuration(configuration: &Configuration) -> anyhow::Result<Settings> {
+    let instance_key = configuration
+        .instance
+        .as_ref()
+        .map(|instance| InstanceKey::from_pem(&instance.private_key))
+        .transpose()
+        .map_err(|e| anyhow::anyhow!("instance.private_key: {e}"))?
+        .map(Arc::new);
+    let rekuest = &configuration.rekuest;
+    let provenance = &configuration.provenance;
+    Ok(Settings {
         redis_key_prefix: configuration.redis.key_prefix.clone(),
         agent_heartbeat_interval: AGENT_HEARTBEAT_INTERVAL,
         agent_heartbeat_response_timeout: AGENT_HEARTBEAT_RESPONSE_TIMEOUT,
         agent_stale_after: AGENT_HEARTBEAT_INTERVAL * 3,
-    }
+        control_deadline: Duration::from_secs(rekuest.control_deadline),
+        provenance: ProvenanceSettings {
+            issuer: provenance.issuer.clone(),
+            token_ttl: Duration::from_secs(provenance.token_ttl_seconds),
+            human_roles: provenance.human_roles.clone(),
+            strict: provenance.strict,
+        },
+        instance_key,
+        rekuest_identifier: rekuest.identifier.clone(),
+        probe_ttl: Duration::from_secs(rekuest.probe_ttl),
+        probe_linger: Duration::from_secs(rekuest.probe_linger),
+        probe_max_inflight: rekuest.probe_max_inflight,
+    })
 }

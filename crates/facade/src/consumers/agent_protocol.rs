@@ -7,7 +7,9 @@
 //! * the **read loop**, which answers heartbeats itself and hands every other frame, in order, to
 //! * the **worker**, which routes them (persistence, replies);
 //! * the **heartbeat**, which pings, waits for the answer and renews the lease; and
-//! * the **drain**, which delivers the agent's queue, fenced by the lease on every frame.
+//! * the **drain**, which delivers the agent's queue, fenced by the lease on every frame; and
+//! * the **mirror**, which forwards the events of work this agent assigned (its caller group,
+//!   `task_caller_{caller}`, joined before `INIT` and re-joined hourly) as `…_EVENT` frames.
 //!
 //! Unlike the Python server, a heartbeat answer never waits behind the reports the agent sent
 //! before it: liveness means "the agent answers", not "our backlog is short".
@@ -21,6 +23,8 @@ use futures::{SinkExt, StreamExt};
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 
+use crate::caller_events::{build_execution_event, EventLike};
+use crate::channels;
 use crate::codes;
 use crate::consumers::agent_queue::AgentQueue;
 use crate::consumers::connections::Control;
@@ -29,6 +33,7 @@ use crate::message_router;
 use crate::messages::{AgentFrame, FromAgent, Inquiry, ToAgent, ToAgentFrame};
 use crate::persist::{caller_ops, leases};
 use crate::persist::{positions, reports};
+use crate::probes;
 use crate::registration;
 
 /// What the writer task sends: a frame, or the close that ends the connection.
@@ -91,6 +96,37 @@ pub struct Registered {
     pub caller: i64,
     pub epoch: i64,
     pub session_id: Option<String>,
+    /// This connection's channel in the caller group, and what arrives on it.
+    pub mirror: Mirror,
+}
+
+/// The caller group's channel of one connection (`register_caller`).
+pub struct Mirror {
+    pub channel: String,
+    pub inbox: mpsc::UnboundedReceiver<Value>,
+}
+
+/// Channel-layer group membership expires (`group_expiry`, a day); sockets live longer. Joining
+/// is idempotent, so it is repeated well inside the window (`GROUP_REFRESH_SECONDS`).
+pub const GROUP_REFRESH: Duration = Duration::from_secs(3600);
+
+/// The group carrying the events of work a caller originated (`_caller_group`).
+pub fn caller_group(caller: i64) -> String {
+    format!("task_caller_{caller}")
+}
+
+/// Join the caller group on a fresh channel of this process (`register_caller`).
+async fn join_caller_group(ctx: &Context, caller: i64) -> Result<Mirror, kante::KanteError> {
+    let (channel, inbox) = ctx.channel_layer.subscribe("specific").await?;
+    if let Err(e) = ctx
+        .channel_layer
+        .group_add(&caller_group(caller), &channel)
+        .await
+    {
+        ctx.channel_layer.unsubscribe(&channel);
+        return Err(e);
+    }
+    Ok(Mirror { channel, inbox })
 }
 
 /// Serve one agent socket from its first frame to its close.
@@ -268,6 +304,17 @@ async fn register(
         ctx.connections.kick_others(agent, connection_id);
     }
 
+    // Before INIT: an agent assigns dependent work, and the first event of it must find us.
+    let mirror = match join_caller_group(ctx, caller).await {
+        Ok(mirror) => mirror,
+        Err(e) => {
+            if let Err(e) = leases::release_lease(&ctx.db, agent, connection_id).await {
+                tracing::error!(agent, "releasing the lease failed: {e}");
+            }
+            return Err(refuse(&e));
+        }
+    };
+
     sender.send(ToAgent::Init {
         agent: agent.to_string(),
         inquiries: claim
@@ -285,6 +332,7 @@ async fn register(
         caller,
         epoch,
         session_id,
+        mirror,
     })
 }
 
@@ -311,6 +359,13 @@ async fn run_session(
         sender.clone(),
         waiter.clone(),
         drain.abort_handle(),
+    ));
+    let mirror_channel = registered.mirror.channel.clone();
+    let mirror = tokio::spawn(mirror(
+        ctx.clone(),
+        registered.caller,
+        registered.mirror,
+        sender.clone(),
     ));
     let (work_tx, work_rx) = mpsc::unbounded_channel::<AgentFrame>();
     let worker = tokio::spawn(work(
@@ -365,8 +420,10 @@ async fn run_session(
     // Stop executing first, then tear down: the drain must not deliver another frame.
     drain.abort();
     heartbeat.abort();
+    mirror.abort();
     drop(work_tx);
     let _ = worker.await;
+    leave_caller_group(ctx, registered.caller, &mirror_channel).await;
     ctx.connections.leave(agent, connection_id);
     if let Err(e) = on_agent_disconnected(ctx, agent, connection_id).await {
         tracing::error!(agent, "releasing the lease failed: {e}");
@@ -407,7 +464,20 @@ async fn work(
             return;
         };
         match message_router::route(&ctx, agent, &frame, session_id.as_deref()).await {
-            Ok(Some(reply)) => sender.send(reply),
+            Ok(Some(reply)) => {
+                let replay = match &reply {
+                    ToAgent::AssignResponse {
+                        created: false,
+                        task: Some(task),
+                        ..
+                    } => Some(task.clone()),
+                    _ => None,
+                };
+                sender.send(reply);
+                if let Some(task) = replay {
+                    replay_child_events(&ctx, &task, &sender).await;
+                }
+            }
             Ok(None) => {}
             Err(e) => {
                 tracing::error!(agent, "error handling agent message: {e}");
@@ -456,15 +526,117 @@ async fn flush_journal_acks(
     }
 }
 
-/// The lease is released if it is still ours (`on_agent_disconnected`). What was in flight is
-/// the reconcile sweep's, after the grace window.
+/// The lease is released if it is still ours (`on_agent_disconnected`); then its probes fail at
+/// once (hover-grade work has no grace window). Tasks in flight are the reconcile sweep's, after
+/// the grace window.
 async fn on_agent_disconnected(
     ctx: &Context,
     agent: i64,
     connection_id: &str,
 ) -> Result<(), sqlx::Error> {
-    leases::release_lease(&ctx.db, agent, connection_id).await?;
+    if !leases::release_lease(&ctx.db, agent, connection_id).await? {
+        return Ok(());
+    }
+    if let Err(e) = probes::persist::fail_all_for_agent(ctx, agent).await {
+        tracing::error!(
+            agent,
+            "failing the probes of a disconnected agent failed: {e}"
+        );
+    }
     Ok(())
+}
+
+/// Send the events a child already has to the caller that asked for it again
+/// (`replay_child_events`): a workflow resuming finds the child it made before
+/// (`created = false`), whose events went to the previous process. They follow the response as
+/// the same mirrors, with the same `seq`; the caller drops what it already has.
+async fn replay_child_events(ctx: &Context, task: &str, sender: &Sender) {
+    let Ok(task_id) = task.parse::<i64>() else {
+        return;
+    };
+    let events: Vec<EventRow> = match sqlx::query_as(
+        "SELECT id, kind, message, progress, returns, level, value FROM facade_taskevent
+          WHERE task_id = $1 ORDER BY id",
+    )
+    .bind(task_id)
+    .fetch_all(&ctx.db)
+    .await
+    {
+        Ok(events) => events,
+        Err(e) => {
+            tracing::error!(task, "replaying a child's events failed: {e}");
+            return;
+        }
+    };
+    for row in events {
+        let event = EventLike {
+            id: row.id as u64,
+            task: task.to_owned(),
+            kind: row.kind,
+            message: row.message,
+            progress: row.progress.map(i64::from),
+            returns: row.returns,
+            level: row.level,
+            value: row.value,
+        };
+        if let Some(mirror) = build_execution_event(&event) {
+            sender.send(mirror);
+        }
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct EventRow {
+    id: i64,
+    kind: String,
+    message: Option<String>,
+    progress: Option<i32>,
+    returns: Option<Value>,
+    level: Option<String>,
+    value: Option<Value>,
+}
+
+/// Forward what arrives in the caller group (`channel_TaskEventCreatedEvent`,
+/// `channel_probe_event_broadcast`), and re-join it hourly. Only a task event's `event` branch is
+/// forwarded: a `create` is covered by the `ASSIGN_RESPONSE`. Best effort, like every mirror.
+async fn mirror(ctx: Context, caller: i64, mirror: Mirror, sender: Sender) {
+    let Mirror { channel, mut inbox } = mirror;
+    let mut refresh =
+        tokio::time::interval_at(tokio::time::Instant::now() + GROUP_REFRESH, GROUP_REFRESH);
+    loop {
+        tokio::select! {
+            message = inbox.recv() => {
+                let Some(message) = message else { return };
+                let event = if let Some(payload) = kante::channel::payload_of(&message, channels::TASK_EVENT) {
+                    payload.get("event").filter(|e| !e.is_null()).and_then(EventLike::from_payload)
+                } else if let Some(payload) = kante::channel::payload_of(&message, channels::PROBE_EVENT) {
+                    EventLike::from_probe_payload(payload)
+                } else {
+                    None
+                };
+                if let Some(mirror) = event.as_ref().and_then(build_execution_event) {
+                    sender.send(mirror);
+                }
+            }
+            _ = refresh.tick() => {
+                if let Err(e) = ctx.channel_layer.group_add(&caller_group(caller), &channel).await {
+                    tracing::error!(caller, "refreshing the caller group failed: {e}");
+                }
+            }
+        }
+    }
+}
+
+/// Leave the caller group on disconnect.
+async fn leave_caller_group(ctx: &Context, caller: i64, channel: &str) {
+    if let Err(e) = ctx
+        .channel_layer
+        .group_discard(&caller_group(caller), channel)
+        .await
+    {
+        tracing::warn!(caller, "leaving the caller group failed: {e}");
+    }
+    ctx.channel_layer.unsubscribe(channel);
 }
 
 /// Ping, wait for the answer, renew the lease. No answer: close `HEARTBEAT_NOT_RESPONDED`; a

@@ -2,7 +2,10 @@
 //!
 //! The `rekuest` crate builds this from the configuration, as `rekuest/settings.py` does.
 
+use std::sync::Arc;
 use std::time::Duration;
+
+use crate::provenance::keys::InstanceKey;
 
 #[derive(Debug, Clone)]
 pub struct Settings {
@@ -14,10 +17,50 @@ pub struct Settings {
     pub agent_heartbeat_response_timeout: Duration,
     /// `AGENT_STALE_AFTER`: without a heartbeat this long, a `connected` agent is presumed dead.
     pub agent_stale_after: Duration,
+    /// `REKUEST_GRACE["CONTROL_DEADLINE"]`: how long a cancel may stay unconfirmed before it
+    /// escalates to an interrupt (and an interrupt before it is finalized); zero disables.
+    pub control_deadline: Duration,
+    /// `PROVENANCE`: how provenance tokens are minted.
+    pub provenance: ProvenanceSettings,
+    /// `INSTANCE["PRIVATE_KEY"]`: this instance's Ed25519 key. Signs provenance tokens and
+    /// verifies the internal API's service tokens. `None` only where nothing is minted (tests).
+    pub instance_key: Option<Arc<InstanceKey>>,
+    /// `REKUEST_IDENTIFIER`: what this rekuest signs as, and what service tokens are for.
+    pub rekuest_identifier: String,
+    /// `PROBE_TTL_SECONDS`: a live probe's redis state expires this long after its last write.
+    pub probe_ttl: Duration,
+    /// `PROBE_LINGER_SECONDS`: how long a finished probe's state stays for late subscribers.
+    pub probe_linger: Duration,
+    /// `PROBE_MAX_INFLIGHT_PER_CALLER`.
+    pub probe_max_inflight: i64,
+}
+
+/// `settings.PROVENANCE`, less the key (which is [`Settings::instance_key`]).
+#[derive(Debug, Clone)]
+pub struct ProvenanceSettings {
+    /// `ISSUER`: the token's `iss`.
+    pub issuer: String,
+    /// `TOKEN_TTL_SECONDS`.
+    pub token_ttl: Duration,
+    /// `HUMAN_ROLES`: the roles that mark an accountable human; empty disables the check.
+    pub human_roles: Vec<String>,
+    /// `STRICT`: refuse the assign (rather than skip the token) when the root is no human.
+    pub strict: bool,
+}
+
+impl Default for ProvenanceSettings {
+    fn default() -> Self {
+        Self {
+            issuer: "rekuest".into(),
+            token_ttl: Duration::from_secs(3600),
+            human_roles: vec![],
+            strict: false,
+        }
+    }
 }
 
 impl Default for Settings {
-    /// The Python server's defaults (`rekuest/settings.py`).
+    /// The Python server's defaults (`rekuest/settings.py`, `rekuest/configuration.py`).
     fn default() -> Self {
         let interval = Duration::from_secs(10);
         Self {
@@ -25,6 +68,13 @@ impl Default for Settings {
             agent_heartbeat_interval: interval,
             agent_heartbeat_response_timeout: Duration::from_secs(5),
             agent_stale_after: interval * 3,
+            control_deadline: Duration::from_secs(60),
+            provenance: ProvenanceSettings::default(),
+            instance_key: None,
+            rekuest_identifier: "live.arkitekt.rekuest".into(),
+            probe_ttl: Duration::from_secs(3600),
+            probe_linger: Duration::from_secs(300),
+            probe_max_inflight: 32,
         }
     }
 }

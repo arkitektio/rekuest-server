@@ -1,6 +1,6 @@
-//! The routes (`rekuest/urls.py` and `asgi.py`): health and the agent socket; the hook intake
-//! and the internal API as their phases land. Everything is served under the configuration's
-//! `force_script_name`, as Django serves it.
+//! The routes (`rekuest/urls.py` and `asgi.py`): health, the agent socket, and the internal API
+//! (`/internal/…`, [`crate::internal`]); the hook intake as its phase lands. Everything is served
+//! under the configuration's `force_script_name`, as Django serves it.
 
 use std::sync::Arc;
 
@@ -31,7 +31,8 @@ pub fn router(state: Shared) -> Router {
         .to_owned();
     let routes = Router::new()
         .route("/ht", get(health))
-        .route("/agi", get(agent_socket));
+        .route("/agi", get(agent_socket))
+        .merge(crate::internal::routes());
     let routes = if prefix.is_empty() {
         routes
     } else {
