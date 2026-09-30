@@ -1,6 +1,6 @@
 [package]
-name = "rekuest-server-authentikate"
-description = "Token authentication and expansion (mirrors the Python `authentikate` package, 4.1.1)"
+name = "arkitekt-server-authentikate"
+description = "Token authentication and expansion for Arkitekt servers (mirrors the Python `authentikate` package, 4.1.1): not rekuest-specific"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -12,7 +12,7 @@ repository = "https://github.com/arkitektio/rekuest-agentd"
 # The wire types, shared with the agents (arkirust).
 rekuest-protocol = "0.2.0"
 facade = { path = "crates/facade", package = "rekuest-server-facade" }
-authentikate = { path = "crates/authentikate", package = "rekuest-server-authentikate" }
+authentikate = { path = "crates/authentikate", package = "arkitekt-server-authentikate" }
 anyhow = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time", "signal", "net"] }

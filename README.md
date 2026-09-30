@@ -28,8 +28,10 @@ listens on `AGENTD_BIND` (default `0.0.0.0:8080`), under the config's `force_scr
 
 ## Layout: the Python server's packages, in Rust
 
-Every package is named `rekuest-server-…`: these are the server's, not an SDK. Each mirrors the
-Python package whose scope it takes over and keeps its name as the library name and its module names,
+Every package name says it is server code, not an SDK: `rekuest-server-…` for rekuest's own,
+`arkitekt-server-…` for the packages every Arkitekt server shares (`authentikate`, `kante`), which
+other servers could reuse. Each mirrors the Python package whose scope it takes over and keeps its
+name as the library name and its module names,
 so a behaviour has the same path on both sides (`facade/liveness.py` ↔ `facade::liveness`).
 
 | Package (library) | Mirrors | Scope |
@@ -37,8 +39,8 @@ so a behaviour has the same path on both sides (`facade/liveness.py` ↔ `facade
 | `rekuest-server` (`rekuest`) | `rekuest/` (the Django project) | `configuration`, `settings`, `urls`; the `agentd` binary |
 | `rekuest-server-facade` (`facade`) | `facade/` (the app) | the agent protocol: `codes`, `liveness`, `redis_keys`, then `consumers`, `persist`, `registration`, `guards`, `provenance`, `reaper`, … |
 | `rekuest-server-core` (`rekuest_core`) | `rekuest_core/` | the declaration models and their validation (Phase 1) |
-| `rekuest-server-authentikate` (`authentikate`) | `authentikate` 4.1.1 (the version the server pins) | token verification (rsa, rsa_file, jwks_dict, jwks_uri; revocation lists), static tokens, and expansion to user/org/client/membership rows |
-| `rekuest-server-kante` (`kante`) | `kante` | the channels_redis-compatible channel layer (Phase 2) |
+| `arkitekt-server-authentikate` (`authentikate`) | `authentikate` 4.1.1 (the version the server pins) | token verification (rsa, rsa_file, jwks_dict, jwks_uri; revocation lists), static tokens, and expansion to user/org/client/membership rows |
+| `arkitekt-server-kante` (`kante`) | `kante` | the channels_redis-compatible channel layer (Phase 2) |
 
 A crate appears when its first module is ported; nothing is stubbed ahead of it.
 
