@@ -10,5 +10,6 @@ pub mod canonical;
 pub mod keys;
 pub mod mint;
 pub mod principal;
+pub mod verify;
 
 pub use mint::{mint_token_for_task, MintError, MintTask};

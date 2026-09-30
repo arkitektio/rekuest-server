@@ -35,6 +35,7 @@ pub mod registration;
 pub mod registration_lock;
 pub mod service_trust;
 pub mod settings;
+pub mod signal_intake;
 pub mod signals;
 pub mod transport;
 pub mod unique;

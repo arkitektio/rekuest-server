@@ -1,5 +1,5 @@
 //! The routes (`rekuest/urls.py` and `asgi.py`): health, the agent socket, and the internal API
-//! (`/internal/…`, [`crate::internal`]) and the HookAgent intake (`/agi/http/{agent}`). Everything is served
+//! (`/internal/…`, [`crate::internal`]) the HookAgent intake (`/agi/http/{agent}`) and hub services' signals (`/agi/signal/{service}`). Everything is served
 //! under the configuration's `force_script_name`, as Django serves it.
 
 use std::sync::Arc;
@@ -34,6 +34,7 @@ pub fn router(state: Shared) -> Router {
         .route("/ht", get(health))
         .route("/agi", get(agent_socket))
         .route("/agi/http/{agent_id}", post(hook_intake))
+        .route("/agi/signal/{service}", post(signal_intake))
         .merge(crate::internal::routes());
     let routes = if prefix.is_empty() {
         routes
@@ -61,6 +62,21 @@ async fn hook_intake(
 ) -> Response {
     let (status, body) =
         facade::http_intake::hook_intake(&state.facade, &agent_id, uri.path(), &headers, &body)
+            .await;
+    let status = StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    (status, Json(body)).into_response()
+}
+
+/// A hub service's signal (`re_dynamicpath(r"agi/signal/(?P<service>[^/]+)$", signal_intake)`).
+async fn signal_intake(
+    State(state): State<Shared>,
+    Path(service): Path<String>,
+    OriginalUri(uri): OriginalUri,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let (status, body) =
+        facade::signal_intake::signal_intake(&state.facade, &service, uri.path(), &headers, &body)
             .await;
     let status = StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     (status, Json(body)).into_response()

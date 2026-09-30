@@ -88,13 +88,17 @@ async fn authenticate(
     (false, None)
 }
 
-fn replay_key(ctx: &Context, agent: i64, digest: &str) -> String {
+fn replay_key(ctx: &Context, agent: &(dyn std::fmt::Display + Sync), digest: &str) -> String {
     redis_keys::key(&ctx.settings, &[&"hook-replay", &agent, &digest])
 }
 
 /// Claim this exact request once; false when it was seen before. The key outlives the skew
 /// window on both sides, the whole time a replay could still pass the signature (`_claim_request`).
-async fn claim_request(ctx: &Context, agent: i64, digest: &str) -> redis::RedisResult<bool> {
+pub(crate) async fn claim_request(
+    ctx: &Context,
+    agent: &(dyn std::fmt::Display + Sync),
+    digest: &str,
+) -> redis::RedisResult<bool> {
     let mut redis = ctx.redis.clone();
     let set: Option<String> = redis::cmd("SET")
         .arg(replay_key(ctx, agent, digest))
@@ -107,14 +111,18 @@ async fn claim_request(ctx: &Context, agent: i64, digest: &str) -> redis::RedisR
     Ok(set.is_some())
 }
 
-async fn release_request(ctx: &Context, agent: i64, digest: &str) {
+pub(crate) async fn release_request(
+    ctx: &Context,
+    agent: &(dyn std::fmt::Display + Sync),
+    digest: &str,
+) {
     let mut redis = ctx.redis.clone();
     if let Err(e) = redis::cmd("DEL")
         .arg(replay_key(ctx, agent, digest))
         .query_async::<i64>(&mut redis)
         .await
     {
-        tracing::error!(agent, "Could not release a hook replay claim: {e}");
+        tracing::error!("Could not release a hook replay claim for {agent}: {e}");
     }
 }
 
@@ -212,7 +220,7 @@ pub async fn hook_intake(
     }
 
     if let Some(digest) = &digest {
-        match claim_request(ctx, agent.id, digest).await {
+        match claim_request(ctx, &agent.id, digest).await {
             Ok(true) => {}
             Ok(false) => {
                 tracing::info!("HookAgent {} replayed a request", agent.id);
@@ -235,7 +243,7 @@ pub async fn hook_intake(
             tracing::info!("Hook intake refused: {e}");
             // The request never took effect: the sender's retry must not count as a replay.
             if let Some(digest) = &digest {
-                release_request(ctx, agent.id, digest).await;
+                release_request(ctx, &agent.id, digest).await;
             }
             let message = match e {
                 RouteError::Refused(reason) => reason,

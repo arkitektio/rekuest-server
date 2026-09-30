@@ -372,6 +372,14 @@ pub fn entry_for_client<'a>(settings: &'a Settings, client_id: &str) -> Option<&
         .find(|entry| entry.service == service)
 }
 
+/// The `SERVICE_AGENTS` entry named `service` (`entry_for`).
+pub fn entry_for_service<'a>(settings: &'a Settings, service: &str) -> Option<&'a ServiceAgent> {
+    settings
+        .service_agents
+        .iter()
+        .find(|entry| entry.service == service)
+}
+
 /// The `Authorization` of a request from rekuest to a service (`sign_to`).
 pub fn sign_to(
     settings: &Settings,
