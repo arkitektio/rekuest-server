@@ -6,12 +6,8 @@
 //! probe ids `p-<hex>` (`ids.py`), so every router branches on a prefix.
 
 pub mod backend;
+pub mod ids;
 pub mod persist;
 pub mod store;
 
-pub use crate::messages::{is_probe_task as is_probe_id, PROBE_PREFIX};
-
-/// A fresh probe id (`new_probe_id`).
-pub fn new_probe_id() -> String {
-    format!("{PROBE_PREFIX}{}", uuid::Uuid::new_v4().simple())
-}
+pub use ids::{is_probe_id, new_probe_id};

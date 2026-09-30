@@ -7,6 +7,7 @@
 use serde_json::Value;
 
 use crate::channel_events::TaskEventPayload;
+use crate::channels;
 use crate::messages::{ExecutionEvent, LogLevel, ToAgent};
 
 /// What [`build_execution_event`] reads (`EventLike`): a persisted event, the payload of one
@@ -165,6 +166,20 @@ pub fn build_execution_event(event: &EventLike) -> Option<ToAgent> {
     })
 }
 
+/// The mirror of a message off the caller group (`channel_TaskEventCreatedEvent`,
+/// `channel_probe_event_broadcast`). Only a task event's `event` branch is forwarded: a `create`
+/// is covered by the `ASSIGN_RESPONSE`, and forwarding it too would race it.
+pub fn mirror_of_channel_message(message: &Value) -> Option<ToAgent> {
+    let event = if let Some(payload) = kante::channel::payload_of(message, channels::TASK_EVENT) {
+        EventLike::from_payload(payload.get("event").filter(|e| !e.is_null())?)
+    } else if let Some(payload) = kante::channel::payload_of(message, channels::PROBE_EVENT) {
+        EventLike::from_probe_payload(payload)
+    } else {
+        None
+    }?;
+    build_execution_event(&event)
+}
+
 /// Python truthiness of a JSON value.
 fn is_truthy(value: &Value) -> bool {
     match value {
@@ -209,6 +224,29 @@ mod tests {
         let payload = json!({"probe": "p-1", "kind": "COMPLETED", "seq": 3, "message": null});
         let event = EventLike::from_probe_payload(&payload).unwrap();
         assert_eq!((event.id, event.task.as_str()), (3, "p-1"));
+    }
+
+    #[test]
+    fn only_the_event_branch_of_a_channel_message_is_mirrored() {
+        let event = json!({"type": "channel.TaskEventCreatedEvent", "message": {"create": null, "event": {
+            "id": "9", "task": "4", "kind": "STARTED", "message": null, "progress": null,
+            "returns": null, "level": null, "value": null, "created_at": "2026-09-30T09:44:08Z",
+        }}});
+        assert_eq!(
+            serde_json::to_value(mirror_of_channel_message(&event).unwrap()).unwrap(),
+            json!({"type": "STARTED_EVENT", "task": "4", "event": "9", "seq": 9})
+        );
+        let create = json!({"type": "channel.TaskEventCreatedEvent", "message": {"event": null, "create": {"id": "4"}}});
+        assert!(mirror_of_channel_message(&create).is_none());
+        let probe = json!({"type": "channel.probe_event_broadcast", "message": {
+            "probe": "p-1", "kind": "PROGRESS", "seq": 2, "progress": 50, "message": null,
+        }});
+        assert_eq!(
+            serde_json::to_value(mirror_of_channel_message(&probe).unwrap()).unwrap(),
+            json!({"type": "PROGRESS_EVENT", "task": "p-1", "event": "2", "seq": 2, "progress": 50})
+        );
+        let other = json!({"type": "channel.child_task_feed", "message": {}});
+        assert!(mirror_of_channel_message(&other).is_none());
     }
 
     #[test]

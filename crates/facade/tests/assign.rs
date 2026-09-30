@@ -9,6 +9,8 @@ use authentikate::base_models::StaticToken;
 use chrono::{DateTime, Utc};
 use facade::backend::{self, AssignInput, AssignOrigin, BackendError, Control};
 use facade::caller_context::CallerContext;
+use facade::caller_events::mirror_of_channel_message;
+use facade::consumers::agent_protocol::child_mirrors;
 use facade::consumers::connections::Connections;
 use facade::message_router::route;
 use facade::messages::{AgentFrame, ToAgent};
@@ -472,10 +474,41 @@ async fn an_assign_request_answers_and_a_resend_is_not_created_again() {
     assert_eq!(frames.last().unwrap()["task"], task);
     assert_eq!(frames.last().unwrap()["parent"], parent.to_string());
 
+    // The executor reports; the caller, restarted, asks for the same child again.
+    for kind in ["STARTED", "COMPLETED"] {
+        route(
+            &ctx,
+            executor,
+            &frame(json!({"type": kind, "task": task})),
+            None,
+        )
+        .await
+        .unwrap();
+    }
     let reply = route(&ctx, caller, &frame(request), None).await.unwrap();
     assert!(
         matches!(&reply, Some(ToAgent::AssignResponse { task: Some(t), created: false, .. }) if *t == task),
         "{reply:?}"
+    );
+    // What follows the answer: the child's events so far, as the mirrors the live ones were.
+    let ids: Vec<i64> =
+        sqlx::query_scalar("SELECT id FROM facade_taskevent WHERE task_id = $1 ORDER BY id")
+            .bind(task.parse::<i64>().unwrap())
+            .fetch_all(&ctx.db)
+            .await
+            .unwrap();
+    let replayed: Vec<Value> = child_mirrors(&ctx, &task)
+        .await
+        .unwrap()
+        .iter()
+        .map(|m| serde_json::to_value(m).unwrap())
+        .collect();
+    assert_eq!(
+        replayed,
+        vec![
+            json!({"type": "STARTED_EVENT", "task": task, "event": ids[0].to_string(), "seq": ids[0]}),
+            json!({"type": "COMPLETED_EVENT", "task": task, "event": ids[1].to_string(), "seq": ids[1]}),
+        ]
     );
 }
 
@@ -532,6 +565,16 @@ async fn only_the_caller_controls_and_the_deadlines_are_columns() {
         })
     );
 
+    // The caller's socket sits in its caller group: subscribe as it does.
+    let caller_id = facade::persist::caller_ops::get_or_create_caller_id(&ctx.db, caller)
+        .await
+        .unwrap();
+    let (channel, mut inbox) = ctx.channel_layer.subscribe("specific").await.unwrap();
+    ctx.channel_layer
+        .group_add(&format!("task_caller_{caller_id}"), &channel)
+        .await
+        .unwrap();
+
     // Its caller: CANCELLING, the instruct row, a deadline of auto_interrupt, the frame sent.
     let before = Utc::now();
     let reply = route(
@@ -558,6 +601,26 @@ async fn only_the_caller_controls_and_the_deadlines_are_columns() {
         events(&ctx, child_id).await,
         vec![("CANCELLING".into(), None)]
     );
+    // ... and mirrored to the caller as CANCELLING_EVENT, `seq` the event's id.
+    let event_id: i64 = sqlx::query_scalar("SELECT id FROM facade_taskevent WHERE task_id = $1")
+        .bind(child_id)
+        .fetch_one(&ctx.db)
+        .await
+        .unwrap();
+    let mirror = loop {
+        let message = tokio::time::timeout(std::time::Duration::from_secs(5), inbox.recv())
+            .await
+            .expect("the event reaches the caller group")
+            .unwrap();
+        if let Some(mirror) = mirror_of_channel_message(&message) {
+            break mirror;
+        }
+    };
+    assert_eq!(
+        serde_json::to_value(&mirror).unwrap(),
+        json!({"type": "CANCELLING_EVENT", "task": child, "event": event_id.to_string(), "seq": event_id})
+    );
+    ctx.channel_layer.unsubscribe(&channel);
     let caller_row: i64 = sqlx::query_scalar("SELECT caller_id FROM facade_task WHERE id = $1")
         .bind(child_id)
         .fetch_one(&ctx.db)

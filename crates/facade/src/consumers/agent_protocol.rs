@@ -23,8 +23,7 @@ use futures::{SinkExt, StreamExt};
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::caller_events::{build_execution_event, EventLike};
-use crate::channels;
+use crate::caller_events::{build_execution_event, mirror_of_channel_message, EventLike};
 use crate::codes;
 use crate::consumers::agent_queue::AgentQueue;
 use crate::consumers::connections::Control;
@@ -551,38 +550,39 @@ async fn on_agent_disconnected(
 /// (`created = false`), whose events went to the previous process. They follow the response as
 /// the same mirrors, with the same `seq`; the caller drops what it already has.
 async fn replay_child_events(ctx: &Context, task: &str, sender: &Sender) {
+    match child_mirrors(ctx, task).await {
+        Ok(mirrors) => mirrors.into_iter().for_each(|mirror| sender.send(mirror)),
+        Err(e) => tracing::error!(task, "replaying a child's events failed: {e}"),
+    }
+}
+
+/// The mirrors of every event a task has so far, in order.
+pub async fn child_mirrors(ctx: &Context, task: &str) -> Result<Vec<ToAgent>, sqlx::Error> {
     let Ok(task_id) = task.parse::<i64>() else {
-        return;
+        return Ok(vec![]);
     };
-    let events: Vec<EventRow> = match sqlx::query_as(
+    let events: Vec<EventRow> = sqlx::query_as(
         "SELECT id, kind, message, progress, returns, level, value FROM facade_taskevent
           WHERE task_id = $1 ORDER BY id",
     )
     .bind(task_id)
     .fetch_all(&ctx.db)
-    .await
-    {
-        Ok(events) => events,
-        Err(e) => {
-            tracing::error!(task, "replaying a child's events failed: {e}");
-            return;
-        }
-    };
-    for row in events {
-        let event = EventLike {
-            id: row.id as u64,
-            task: task.to_owned(),
-            kind: row.kind,
-            message: row.message,
-            progress: row.progress.map(i64::from),
-            returns: row.returns,
-            level: row.level,
-            value: row.value,
-        };
-        if let Some(mirror) = build_execution_event(&event) {
-            sender.send(mirror);
-        }
-    }
+    .await?;
+    Ok(events
+        .into_iter()
+        .filter_map(|row| {
+            build_execution_event(&EventLike {
+                id: row.id as u64,
+                task: task.to_owned(),
+                kind: row.kind,
+                message: row.message,
+                progress: row.progress.map(i64::from),
+                returns: row.returns,
+                level: row.level,
+                value: row.value,
+            })
+        })
+        .collect())
 }
 
 #[derive(sqlx::FromRow)]
@@ -607,14 +607,7 @@ async fn mirror(ctx: Context, caller: i64, mirror: Mirror, sender: Sender) {
         tokio::select! {
             message = inbox.recv() => {
                 let Some(message) = message else { return };
-                let event = if let Some(payload) = kante::channel::payload_of(&message, channels::TASK_EVENT) {
-                    payload.get("event").filter(|e| !e.is_null()).and_then(EventLike::from_payload)
-                } else if let Some(payload) = kante::channel::payload_of(&message, channels::PROBE_EVENT) {
-                    EventLike::from_probe_payload(payload)
-                } else {
-                    None
-                };
-                if let Some(mirror) = event.as_ref().and_then(build_execution_event) {
+                if let Some(mirror) = mirror_of_channel_message(&message) {
                     sender.send(mirror);
                 }
             }
