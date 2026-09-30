@@ -27,6 +27,10 @@ class TestCaseFilter:
 class TestResultFilter:
     passed: Optional[bool]
 
+    @filter_field(description="Results whose test case's name contains this")
+    def search(self, info: Info, queryset, value: str, prefix: str):
+        return queryset.filter(**{f"{prefix}case__name__icontains": value}), Q()
+
     @filter_field(description="Results of this test case")
     def case(self, info: Info, queryset, value: strawberry.ID, prefix: str):
         return queryset.filter(**{f"{prefix}case_id": value}), Q()

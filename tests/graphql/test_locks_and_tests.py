@@ -54,7 +54,7 @@ async def test_a_lock_shows_its_holder_and_who_requires_it(authenticated_context
 
 CREATE_CASE = """
     mutation ($action: ID!, $tester: ID!) {
-        createTestCase(input: {action: $action, tester: $tester, isBenchmark: true}) { id isBenchmark }
+        createTestCase(input: {action: $action, tester: $tester, isBenchmark: true, name: "Latency budget"}) { id isBenchmark }
     }
 """
 CREATE_RESULT = """
@@ -64,6 +64,9 @@ CREATE_RESULT = """
 """
 RESULTS = """
     query ($action: ID!) { testResults(filters: {action: $action}) { passed result } }
+"""
+SEARCH = """
+    query ($search: String!) { testResults(filters: {search: $search}) { result } }
 """
 
 
@@ -98,3 +101,9 @@ async def test_test_cases_stay_in_their_organization_and_results_keep_their_payl
     listed = await schema.execute(RESULTS, context_value=authenticated_context, variable_values={"action": str(action.pk)})
     assert listed.errors is None, listed.errors
     assert listed.data["testResults"] == [{"passed": True, "result": {"ms": 12}}]
+
+    found = await schema.execute(SEARCH, context_value=authenticated_context, variable_values={"search": "latency"})
+    missed = await schema.execute(SEARCH, context_value=authenticated_context, variable_values={"search": "throughput"})
+    assert found.errors is None and missed.errors is None, (found.errors, missed.errors)
+    assert found.data["testResults"] == [{"result": {"ms": 12}}]
+    assert missed.data["testResults"] == []

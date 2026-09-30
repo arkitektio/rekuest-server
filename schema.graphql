@@ -5322,6 +5322,9 @@ input TestResultFilter {
   NOT: TestResultFilter
   DISTINCT: Boolean
 
+  """Results whose test case's name contains this"""
+  search: String
+
   """Results of this test case"""
   case: ID
 
