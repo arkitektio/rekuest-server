@@ -88,7 +88,7 @@ def refill_one(schedule_id: int) -> bool:
     now = timezone.now()
     with transaction.atomic():
         schedule = (
-            models.Schedule.objects.select_for_update(skip_locked=True, of=("self",))
+            models.Schedule.objects.select_for_update(skip_locked=True, of=("self",), no_key=True)
             .select_related("caller__user", "caller__client", "caller__organization")
             .filter(pk=schedule_id, enabled=True)
             .first()
@@ -176,7 +176,7 @@ def trigger(schedule: models.Schedule) -> models.Task:
     from facade.backend import controll_backend
 
     with transaction.atomic():
-        locked = models.Schedule.objects.select_for_update(of=("self",)).select_related("caller__user", "caller__client", "caller__organization").get(pk=schedule.pk)
+        locked = models.Schedule.objects.select_for_update(of=("self",), no_key=True).select_related("caller__user", "caller__client", "caller__organization").get(pk=schedule.pk)
         open_run = _open_run(locked)
         if open_run is not None:
             run = models.Task.objects.select_for_update(of=("self",)).get(pk=open_run.pk)

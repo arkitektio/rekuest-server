@@ -112,7 +112,7 @@ def fire_one(signal_id: int) -> int:
 
     with transaction.atomic():
         signal = (
-            models.Signal.objects.select_for_update(skip_locked=True, of=("self",))
+            models.Signal.objects.select_for_update(skip_locked=True, of=("self",), no_key=True)
             .select_related("causing_task", "organization")
             .filter(pk=signal_id, processed_at__isnull=True)
             .first()

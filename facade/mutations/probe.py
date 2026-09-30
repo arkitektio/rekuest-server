@@ -5,7 +5,7 @@ import logging
 import strawberry
 
 from facade import inputs, types
-from facade.probes.backend import probe_backend
+from facade.probes.backend import graphql_probe_backend as probe_backend
 from kante.types import Info
 
 logger = logging.getLogger(__name__)

@@ -870,4 +870,12 @@ class RedisControllBackend:
         return input.drawers
 
 
-controll_backend = RedisControllBackend()
+
+def _select_backend() -> "RedisControllBackend":
+    """agentd's internal API when ``rekuest.agentd_url`` is set: agentd owns the agent sockets."""
+    from facade import agentd
+
+    return agentd.AgentdControllBackend() if agentd.enabled() else RedisControllBackend()  # type: ignore[return-value]
+
+
+controll_backend = _select_backend()

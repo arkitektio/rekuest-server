@@ -214,3 +214,14 @@ class ProbeBackend:
 
 
 probe_backend = ProbeBackend()
+
+
+def _select_graphql_backend() -> "ProbeBackend":
+    """What the GraphQL probe mutations use: agentd's internal API when ``rekuest.agentd_url`` is
+    set. The socket path keeps :data:`probe_backend` (``probe_for_agent``) until it is deleted."""
+    from facade import agentd
+
+    return agentd.AgentdProbeBackend() if agentd.enabled() else probe_backend  # type: ignore[return-value]
+
+
+graphql_probe_backend = _select_graphql_backend()

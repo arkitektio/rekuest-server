@@ -139,6 +139,7 @@ INSTANCE = {
     "TRUST_JWKS": conf.instance.trust.jwks,
 }
 REKUEST_IDENTIFIER = conf.rekuest.identifier
+AGENTD_URL = conf.rekuest.agentd_url
 
 PROVENANCE = {
     "ISSUER": conf.provenance.issuer,
