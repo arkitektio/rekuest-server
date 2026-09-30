@@ -1,12 +1,16 @@
-//! Registration, against Python's own `implement_agent` on the same declarations.
+//! Registration, against what the Python server's own `implement_agent` wrote for the same
+//! declarations.
 //!
-//! Two fresh agents of one organization (different apps, so their actions never meet): Python
-//! registers one, Rust the other, step by step through the same sequence of declarations: the
-//! apps of `rekuest-server-core`'s fixture, each replacing the last (every reap path), then
-//! synthetic steps for bloks, locks, states, descriptors, catalogs and an interface moving to
-//! another action. After every step both agents' rows, normalized, must be identical, and both
-//! sides must have accepted or refused alike. Needs `AGENTD_TEST_DATABASE_URL` and the test
-//! stack's server container (`scripts/test-db.sh`); skipped without them.
+//! A fresh agent is registered step by step through a sequence of declarations: the apps of
+//! `rekuest-server-core`'s fixture, each replacing the last (every reap path), then synthetic
+//! steps for bloks, locks, states, descriptors, catalogs and an interface moving to another
+//! action. After every step its rows, normalized, and whether it was accepted or refused must be
+//! what the Python server produced: `fixtures/registration_parity.json`, recorded from it before
+//! its registration was deleted (`PARITY_RECORD=1` records again, against a Python server that
+//! still has `facade.registration` running as the test stack's container).
+//!
+//! Where agentd deliberately writes more than Python did (a dependency's `optional` and
+//! `description`), those columns are masked. Needs `AGENTD_TEST_DATABASE_URL`; skipped without.
 
 use authentikate::base_models::StaticToken;
 use serde_json::{json, Value};
@@ -34,6 +38,40 @@ print("RESULT " + json.dumps(out))
 enum Outcome {
     Accepted(Value),
     Refused(String),
+}
+
+impl Outcome {
+    fn to_json(&self) -> Value {
+        match self {
+            Outcome::Accepted(diagnostics) => json!({"accepted": diagnostics}),
+            Outcome::Refused(message) => json!({"refused": message}),
+        }
+    }
+
+    fn from_json(value: &Value) -> Self {
+        match value.get("refused").and_then(Value::as_str) {
+            Some(message) => Outcome::Refused(message.to_owned()),
+            None => Outcome::Accepted(value["accepted"].clone()),
+        }
+    }
+}
+
+/// Drop the columns agentd writes and the Python server never did (a dependency's `optional`
+/// and `description`), from every implementation's dependencies.
+fn mask(mut rows: Value) -> Value {
+    for implementation in rows["implementations"].as_array_mut().into_iter().flatten() {
+        for dependency in implementation["dependencies"]
+            .as_array_mut()
+            .into_iter()
+            .flatten()
+        {
+            if let Some(dependency) = dependency.as_object_mut() {
+                dependency.remove("optional");
+                dependency.remove("description");
+            }
+        }
+    }
+    rows
 }
 
 async fn python_implement(agent: i64, payload: &Value) -> Outcome {
@@ -368,10 +406,35 @@ async fn registration_writes_what_python_writes() {
             .map(|(name, payload)| (name.to_owned(), payload)),
     );
 
+    let fixture_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/registration_parity.json");
+    let recording = std::env::var("PARITY_RECORD").is_ok();
+    let recorded: Vec<Value> = if recording {
+        vec![]
+    } else {
+        serde_json::from_str(&std::fs::read_to_string(&fixture_path).expect("the recorded fixture"))
+            .unwrap()
+    };
+    let mut recording_out = vec![];
+
     let mut failures = vec![];
-    for (name, payload) in &steps {
-        let expected = python_implement(python, &for_side(payload, "py")).await;
+    for (index, (name, payload)) in steps.iter().enumerate() {
+        let (expected, expected_rows) = if recording {
+            let outcome = python_implement(python, &for_side(payload, "py")).await;
+            let rows = mask(snapshot(&db, python, "py").await);
+            recording_out.push(json!({"step": name, "outcome": outcome.to_json(), "rows": rows}));
+            (outcome, rows)
+        } else {
+            let step = &recorded[index];
+            assert_eq!(
+                step["step"].as_str(),
+                Some(name.as_str()),
+                "the fixture's steps are these steps"
+            );
+            (Outcome::from_json(&step["outcome"]), step["rows"].clone())
+        };
         let got = rust_implement(&db, rust, &for_side(payload, "rs")).await;
+        let got_rows = mask(snapshot(&db, rust, "rs").await);
         eprintln!(
             "{name}: {}",
             match &got {
@@ -381,10 +444,6 @@ async fn registration_writes_what_python_writes() {
                 ),
                 Outcome::Refused(e) => format!("refused: {e}"),
             }
-        );
-        let (expected_rows, got_rows) = (
-            snapshot(&db, python, "py").await,
-            snapshot(&db, rust, "rs").await,
         );
         match (&expected, &got) {
             (Outcome::Refused(_), Outcome::Refused(_))
@@ -405,6 +464,18 @@ async fn registration_writes_what_python_writes() {
                 differences.join("\n  ")
             ));
         }
+    }
+    if recording {
+        std::fs::write(
+            &fixture_path,
+            serde_json::to_string_pretty(&recording_out).unwrap() + "\n",
+        )
+        .unwrap();
+        eprintln!(
+            "recorded {} steps into {}",
+            recording_out.len(),
+            fixture_path.display()
+        );
     }
     assert!(
         failures.is_empty(),

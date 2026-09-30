@@ -448,12 +448,13 @@ struct DependencyRow {
     action_demands: Value,
     auto_resolvable: bool,
     app_filter: Option<String>,
+    version_filter: Option<String>,
     min_viable_instances: Option<i32>,
     max_viable_instances: Option<i32>,
 }
 
 /// The full set of available agents matching one dependency, by id
-/// (`_resolve_dependency_agents`).
+/// (`_resolve_dependency_agents`): its app, and its version when it pins one (`*` or none is any).
 async fn resolve_dependency_agents(
     ctx: &Context,
     dependency: &DependencyRow,
@@ -463,11 +464,15 @@ async fn resolve_dependency_agents(
     let by_app = || async {
         sqlx::query_scalar::<_, i64>(&format!(
             "SELECT a.id FROM facade_agent a JOIN authentikate_app app ON app.id = a.app_id
-              WHERE app.identifier = $2 AND a.organization_id = $3 AND {AVAILABLE} ORDER BY a.id"
+                    JOIN authentikate_release r ON r.id = a.release_id
+              WHERE app.identifier = $2 AND a.organization_id = $3 AND {AVAILABLE}
+                AND ($4::varchar IS NULL OR $4 IN ('', '*') OR r.version = $4)
+              ORDER BY a.id"
         ))
         .bind(live_cutoff(ctx))
         .bind(&dependency.app_filter)
         .bind(caller.organization)
+        .bind(&dependency.version_filter)
         .fetch_all(&ctx.db)
         .await
     };
@@ -585,7 +590,7 @@ async fn build_dependency_dict(
     overwrites: &[ResolvedDependencyInput],
 ) -> BackendResult<Map<String, Value>> {
     let dependencies: Vec<DependencyRow> = sqlx::query_as(
-        "SELECT key, action_demands, auto_resolvable, app_filter, min_viable_instances,
+        "SELECT key, action_demands, auto_resolvable, app_filter, version_filter, min_viable_instances,
                 max_viable_instances
            FROM facade_dependency WHERE implementation_id = $1 ORDER BY id",
     )

@@ -477,8 +477,8 @@ async fn resolve_test_targets(
 }
 
 /// Upsert the implementation's declared dependencies by `(implementation, key)` (`_sync_dependencies`).
-/// A new row takes the model defaults for what the declaration does not write (`optional`,
-/// `assign_policy`, `description`), as Django's `update_or_create` does.
+/// Every field the declaration carries is written (`optional` and `description` were once
+/// dropped); `assign_policy` keeps its model default, unread.
 async fn sync_dependencies(
     conn: &mut PgConnection,
     implementation: i64,
@@ -489,7 +489,8 @@ async fn sync_dependencies(
         let state_demands = dump(&dependency.state_dependencies.clone().unwrap_or_default());
         let updated = sqlx::query(
             "UPDATE facade_dependency SET action_demands = $3, state_demands = $4, app_filter = $5, version_filter = $6,
-                    min_viable_instances = $7, max_viable_instances = $8, prefered_instances = $9, auto_resolvable = $10
+                    min_viable_instances = $7, max_viable_instances = $8, prefered_instances = $9, auto_resolvable = $10,
+                    optional = $11, description = $12
               WHERE id = (SELECT id FROM facade_dependency WHERE implementation_id = $1 AND key = $2 ORDER BY id LIMIT 1)",
         )
         .bind(implementation)
@@ -502,14 +503,16 @@ async fn sync_dependencies(
         .bind(dependency.max_viable_instances)
         .bind(dependency.prefered_instances)
         .bind(dependency.auto_resolvable)
+        .bind(dependency.optional)
+        .bind(&dependency.description)
         .execute(&mut *conn)
         .await?;
         if updated.rows_affected() == 0 {
             sqlx::query(
                 "INSERT INTO facade_dependency
                      (created_at, key, action_demands, state_demands, auto_resolvable, app_filter, version_filter, optional,
-                      min_viable_instances, max_viable_instances, prefered_instances, assign_policy, implementation_id)
-                 VALUES (now(), $2, $3, $4, $10, $5, $6, false, $7, $8, $9, 'AUTOMATIC', $1)",
+                      description, min_viable_instances, max_viable_instances, prefered_instances, assign_policy, implementation_id)
+                 VALUES (now(), $2, $3, $4, $10, $5, $6, $11, $12, $7, $8, $9, 'AUTOMATIC', $1)",
             )
             .bind(implementation)
             .bind(&dependency.key)
@@ -521,6 +524,8 @@ async fn sync_dependencies(
             .bind(dependency.max_viable_instances)
             .bind(dependency.prefered_instances)
             .bind(dependency.auto_resolvable)
+            .bind(dependency.optional)
+            .bind(&dependency.description)
             .execute(&mut *conn)
             .await?;
         }

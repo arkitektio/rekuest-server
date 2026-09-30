@@ -6,9 +6,12 @@
 //! joserfc, and both tokens must decode to the same header and the same claims but for `iat`,
 //! `exp` and `jti`, `ahs` included, over args that exercise the canonical encoding.
 //!
-//! Needs `AGENTD_TEST_DATABASE_URL`, `AGENTD_TEST_REDIS_URL`, the Python server's source
-//! (`AGENTD_TEST_REKUEST_SOURCE`, default the lab mount) and a Python with its dependencies
-//! (`AGENTD_TEST_PYTHON`, default the workflows worktree's venv). Nothing is written to the source.
+//! The Python server no longer mints (agentd does), so its mint is a frozen oracle: point
+//! `AGENTD_TEST_REKUEST_SOURCE` at a checkout that still has `facade/provenance/mint.py` (the
+//! rekuest server at `87a5f58` or earlier, e.g. `git worktree add <dir> 87a5f58`). Also needs
+//! `AGENTD_TEST_DATABASE_URL`, `AGENTD_TEST_REDIS_URL` and a Python with the server's dependencies
+//! (`AGENTD_TEST_PYTHON`, default the workflows worktree's venv). Skipped, saying so, without them.
+//! Nothing is written to the source.
 
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -100,9 +103,16 @@ fn python() -> Option<(String, String)> {
     let python = std::env::var("AGENTD_TEST_PYTHON").unwrap_or_else(|_| {
         "/home/jhnnsrs/Code/worktrees/rekuest-server-workflows/.venv/bin/python".into()
     });
-    let source = std::env::var("AGENTD_TEST_REKUEST_SOURCE")
-        .unwrap_or_else(|_| "/home/jhnnsrs/Code/deployments/next/mounts/rekuest".into());
-    (std::path::Path::new(&python).exists() && std::path::Path::new(&source).exists())
+    let source = std::env::var("AGENTD_TEST_REKUEST_SOURCE").ok()?;
+    if !std::path::Path::new(&source)
+        .join("facade/provenance/mint.py")
+        .exists()
+    {
+        eprintln!("skipped: {source} has no facade/provenance/mint.py (the Python mint is a frozen oracle; see the module docs)");
+        return None;
+    }
+    std::path::Path::new(&python)
+        .exists()
         .then_some((python, source))
 }
 
