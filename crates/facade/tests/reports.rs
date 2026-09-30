@@ -85,11 +85,11 @@ async fn agent(ctx: &Context) -> (i64, i64) {
 /// An open task of `agent`, QUEUED and dispatched, as `assign` leaves it.
 async fn task(ctx: &Context, agent: i64, action: i64) -> i64 {
     sqlx::query_scalar(
-        "INSERT INTO facade_task (acted_on, ephemeral, hooks, reference, resumes, capture, is_higher_order_child,
-                                  latest_event_kind, latest_instruct_kind, statusmessage, is_done, created_at,
+        "INSERT INTO facade_task (acted_on, ephemeral, reference, resumes, capture, is_higher_order_child,
+                                  latest_event_kind, latest_instruct_kind, is_done, created_at,
                                   updated_at, revision, step, dispatch_attempts, trigger_depth, action_id, agent_id,
                                   dispatched_at)
-         VALUES ('{}', false, '[]', $3, 0, false, false, 'QUEUED', 'ASSIGN', '', false, now(), now(), 0, false, 1, 0,
+         VALUES ('{}', false, $3, 0, false, false, 'QUEUED', 'ASSIGN', false, now(), now(), 0, false, 1, 0,
                  $2, $1, now())
          RETURNING id",
     )
@@ -452,8 +452,8 @@ async fn patches_link_own_tasks_and_drop_duplicate_revisions() {
         "WITH d AS (
             INSERT INTO facade_statedefinition (name, hash, ports, description, organization_id)
             SELECT 'plate', $2, '[]', 'A state definition', organization_id FROM facade_agent WHERE id = $1 RETURNING id)
-         INSERT INTO facade_state (interface, value, created_at, updated_at, retention_policy, agent_id, definition_id)
-         SELECT 'plate', '{}', now(), now(), 'KEEP', $1, d.id FROM d",
+         INSERT INTO facade_state (interface, created_at, updated_at, agent_id, definition_id)
+         SELECT 'plate', now(), now(), $1, d.id FROM d",
     )
     .bind(agent)
     .bind(uuid::Uuid::new_v4().to_string())

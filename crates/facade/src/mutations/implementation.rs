@@ -25,7 +25,6 @@ use crate::unique::infer_action_scope;
 pub struct AgentIdentity {
     pub id: i64,
     pub app: i64,
-    pub release: i64,
     pub user: i64,
     pub organization: i64,
 }
@@ -59,8 +58,6 @@ pub struct ImplementationRow {
     pub id: i64,
     pub interface: String,
     pub action_id: i64,
-    pub name: String,
-    pub policy: Value,
     pub higher_order_config: Value,
     pub higher_order_for_id: Option<i64>,
     pub tracks: Value,
@@ -95,7 +92,7 @@ impl Prefetch {
         .fetch_all(&mut *conn)
         .await?;
         let implementations: Vec<ImplementationRow> = sqlx::query_as(
-            "SELECT id, interface, action_id, name, policy, higher_order_config, higher_order_for_id, tracks, created_at
+            "SELECT id, interface, action_id, higher_order_config, higher_order_for_id, tracks, created_at
                FROM facade_implementation WHERE agent_id = $1",
         )
         .bind(agent.id)
@@ -477,8 +474,8 @@ async fn resolve_test_targets(
 }
 
 /// Upsert the implementation's declared dependencies by `(implementation, key)` (`_sync_dependencies`).
-/// Every field the declaration carries is written (`optional` and `description` were once
-/// dropped); `assign_policy` keeps its model default, unread.
+/// Every field the declaration carries is written, except `assign_policy`: nothing picks agents by
+/// it, so it is not stored.
 async fn sync_dependencies(
     conn: &mut PgConnection,
     implementation: i64,
@@ -511,8 +508,8 @@ async fn sync_dependencies(
             sqlx::query(
                 "INSERT INTO facade_dependency
                      (created_at, key, action_demands, state_demands, auto_resolvable, app_filter, version_filter, optional,
-                      description, min_viable_instances, max_viable_instances, prefered_instances, assign_policy, implementation_id)
-                 VALUES (now(), $2, $3, $4, $10, $5, $6, $11, $12, $7, $8, $9, 'AUTOMATIC', $1)",
+                      description, min_viable_instances, max_viable_instances, prefered_instances, implementation_id)
+                 VALUES (now(), $2, $3, $4, $10, $5, $6, $11, $12, $7, $8, $9, $1)",
             )
             .bind(implementation)
             .bind(&dependency.key)
@@ -693,15 +690,13 @@ pub async fn create_implementation(
             if recreate {
                 sqlx::query(
                     "INSERT INTO facade_implementation
-                         (id, interface, name, policy, higher_order_config, params, created_at, updated_at, tracks, diagnostics,
+                         (id, interface, higher_order_config, params, created_at, updated_at, tracks, diagnostics,
                           needs_token, provenance_audience, effects, execution, code_hash, action_id, agent_id,
-                          higher_order_for_id, release_id)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, now(), $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)",
+                          higher_order_for_id)
+                     VALUES ($1, $2, $3, $4, $5, now(), $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
                 )
                 .bind(existing.id)
                 .bind(&existing.interface)
-                .bind(&existing.name)
-                .bind(&existing.policy)
                 .bind(&existing.higher_order_config)
                 .bind(&params)
                 .bind(existing.created_at)
@@ -716,20 +711,18 @@ pub async fn create_implementation(
                 .bind(agent.id)
                 // Nulled by the cascade only if it pointed at a row that went with the action.
                 .bind(existing.higher_order_for_id)
-                .bind(agent.release)
                 .execute(&mut *conn)
                 .await?;
             } else {
                 sqlx::query(
-                    "UPDATE facade_implementation SET action_id = $2, params = $3, release_id = $4, needs_token = $5,
-                            provenance_audience = $6, effects = $7, execution = $8, code_hash = $9, diagnostics = $10,
+                    "UPDATE facade_implementation SET action_id = $2, params = $3, needs_token = $4,
+                            provenance_audience = $5, effects = $6, execution = $7, code_hash = $8, diagnostics = $9,
                             updated_at = now()
                       WHERE id = $1",
                 )
                 .bind(existing.id)
                 .bind(action.id)
                 .bind(&params)
-                .bind(agent.release)
                 .bind(input.needs_token)
                 .bind(&audience)
                 .bind(input.effects.value())
@@ -751,10 +744,10 @@ pub async fn create_implementation(
         None => {
             let row: ImplementationRow = sqlx::query_as(
                 "INSERT INTO facade_implementation
-                     (interface, name, policy, higher_order_config, params, created_at, updated_at, tracks, diagnostics,
-                      needs_token, provenance_audience, effects, execution, code_hash, action_id, agent_id, release_id)
-                 VALUES ($1, 'Unnamed', '{}', '{}', $2, now(), now(), '[]', $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                 RETURNING id, interface, action_id, name, policy, higher_order_config, higher_order_for_id, tracks, created_at",
+                     (interface, higher_order_config, params, created_at, updated_at, tracks, diagnostics,
+                      needs_token, provenance_audience, effects, execution, code_hash, action_id, agent_id)
+                 VALUES ($1, '{}', $2, now(), now(), '[]', $3, $4, $5, $6, $7, $8, $9, $10)
+                 RETURNING id, interface, action_id, higher_order_config, higher_order_for_id, tracks, created_at",
             )
             .bind(&input.interface)
             .bind(&params)
@@ -766,7 +759,6 @@ pub async fn create_implementation(
             .bind(&input.code_hash)
             .bind(action.id)
             .bind(agent.id)
-            .bind(agent.release)
             .fetch_one(&mut *conn)
             .await?;
             let id = row.id;

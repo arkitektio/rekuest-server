@@ -16,7 +16,6 @@
       "states": [],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "count",
             "args": [
@@ -134,7 +133,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "fb7124b3b3baa33a130c194e3aab41b4a96865408e1a57c8f7b83d95516c4134",
@@ -149,7 +147,6 @@
           "provenance_audience": null
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "stream_words",
             "args": [
@@ -267,7 +264,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "92c1a49328d70d4ee052feac82a050357611cf50e7980646a168cc3bf8976cd0",
@@ -301,7 +297,6 @@
       "states": [],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "count_and_words",
             "args": [
@@ -419,7 +414,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "70b0a07505523e8fad72e39486261ca731a71b97c3c991ec64e6814d5c6ec802",
@@ -434,7 +428,6 @@
               "min_viable_instances": 1,
               "app_filter": "testo",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [],
               "action_demands": [
                 {
@@ -554,7 +547,6 @@
           "provenance_audience": null
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "shout_words",
             "args": [
@@ -672,7 +664,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "ae7149ff33bbe8b085faa8e058a4013fb0b6f3d3af0e76f88364d1ff467a65c1",
@@ -687,7 +678,6 @@
               "min_viable_instances": 1,
               "app_filter": "testo",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [],
               "action_demands": [
                 {
@@ -826,7 +816,6 @@
       "states": [],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "emphasize",
             "args": [
@@ -974,7 +963,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "3d05ed16046ab19d783e868df94097239cc39f34fda2e5d14857c6ace9cda1b7",
@@ -989,7 +977,6 @@
           "provenance_audience": null
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "initials",
             "args": [
@@ -1107,7 +1094,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "0063dd347cfe968d2ef58597299d04ff2d4e2816c82971b7772f7b8e2a368222",
@@ -1122,7 +1108,6 @@
           "provenance_audience": null
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "shout",
             "args": [
@@ -1240,7 +1225,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "569d204df3d340c5302f25925a65b09d1f3c9c974b10dfbc59d84a55e08f5912",
@@ -1255,7 +1239,6 @@
           "provenance_audience": null
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "title_case",
             "args": [
@@ -1343,7 +1326,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "c1b10cc8de2166015137d181b0b4503f66f58e8bad8e967db17d37da40b1fb10",
@@ -1358,7 +1340,6 @@
           "provenance_audience": null
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "to_upper",
             "args": [
@@ -1446,7 +1427,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "241b5ebe6fe97a8be53be58fdaba7b72ffd95d170a02730c5da0cd6e97dcda98",
@@ -1480,7 +1460,6 @@
       "states": [],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "chunk",
             "args": [
@@ -1628,7 +1607,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "da8471f6f941adfba8f857dc2b78b759a6259bf24f27e3207341bb75b788c75c",
@@ -1643,7 +1621,6 @@
           "provenance_audience": null
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "interleave",
             "args": [
@@ -1791,7 +1768,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "7f8fa9b1770c972921118e09a878d18f17197b2c384b4312be1c33eac442cd65",
@@ -1806,7 +1782,6 @@
           "provenance_audience": null
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "repeat",
             "args": [
@@ -1954,7 +1929,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "61b45e26786c1bbd3e731725f9125ec317dbfbd7e36b81eee6156b854f640c42",
@@ -1969,7 +1943,6 @@
           "provenance_audience": null
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "reverse",
             "args": [
@@ -2057,7 +2030,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "c811675408730ad34d2751a297e77f9eba8bfce22e6498632320ac6d70db7e4b",
@@ -2072,7 +2044,6 @@
           "provenance_audience": null
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "rotate",
             "args": [
@@ -2190,7 +2161,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "476da6e02ee9f05ab0914b0d36e6a4011e566a49dc70a4cf62745ab78b3b24a2",
@@ -2205,7 +2175,6 @@
           "provenance_audience": null
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "slow_reverse",
             "args": [
@@ -2323,7 +2292,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "e54ff9a2e594cdedb0161c3f93b083a4364e0b59893cbc2d4f682da6c8411d13",
@@ -2357,7 +2325,6 @@
       "states": [
         {
           "key": "PipelineState",
-          "value": {},
           "interface": "PipelineState",
           "definition": {
             "hash": "1999af845d98f0c61a8bcc1b64acb5d2c2e6bb0780103e59fc5a8a3425ae05b0",
@@ -2430,13 +2397,11 @@
             ],
             "description": "A state definition"
           },
-          "app_identifier": "<agent app>",
-          "retention_policy": "KEEP_ALL"
+          "app_identifier": "<agent app>"
         }
       ],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "compose_poster",
             "args": [
@@ -2644,7 +2609,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "bddd9be1a464aacea7e058146466999fec1b2cea720aeb4bb1006662c1676175",
@@ -2659,7 +2623,6 @@
               "min_viable_instances": 1,
               "app_filter": "triple-reverse",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [],
               "action_demands": [
                 {
@@ -3010,7 +2973,6 @@
               "min_viable_instances": 1,
               "app_filter": "triple-upper",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [],
               "action_demands": [
                 {
@@ -3279,7 +3241,6 @@
           "provenance_audience": null
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "ladder",
             "args": [
@@ -3457,7 +3418,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "d2328c1fd9780f3ce7abf90a2d5ed1d5c6717db02c2b45165a17c975fb4e431b",
@@ -3472,7 +3432,6 @@
               "min_viable_instances": 1,
               "app_filter": "triple-reverse",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [],
               "action_demands": [
                 {
@@ -3823,7 +3782,6 @@
               "min_viable_instances": 1,
               "app_filter": "triple-upper",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [],
               "action_demands": [
                 {
@@ -4092,7 +4050,6 @@
           "provenance_audience": null
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "parallel_variants",
             "args": [
@@ -4210,7 +4167,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "cd89463b004da5343608bf4d93f8f95831137e19dc03fba2b158afa52485c174",
@@ -4225,7 +4181,6 @@
               "min_viable_instances": 1,
               "app_filter": "triple-reverse",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [],
               "action_demands": [
                 {
@@ -4576,7 +4531,6 @@
               "min_viable_instances": 1,
               "app_filter": "triple-upper",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [],
               "action_demands": [
                 {
@@ -4845,7 +4799,6 @@
           "provenance_audience": null
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "sloganize",
             "args": [
@@ -4933,7 +4886,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "d1f78f3a64f1b67b3d57ec20a53eec44378772452a29da4656a67b388b7707fd",
@@ -4948,7 +4900,6 @@
               "min_viable_instances": 1,
               "app_filter": "triple-reverse",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [],
               "action_demands": [
                 {
@@ -5299,7 +5250,6 @@
               "min_viable_instances": 1,
               "app_filter": "triple-upper",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [],
               "action_demands": [
                 {
@@ -5587,7 +5537,6 @@
       "states": [],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "denoise",
             "args": [
@@ -5717,7 +5666,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "5b2f3d68e5724f9cdfd12cc31c74cedfd81d6cdd86ad36eba688cb46b7580fbd",
@@ -5753,7 +5701,6 @@
       "states": [],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "detect_spikes",
             "args": [
@@ -5953,7 +5900,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "d16301dc7903d06358d0bcb95ce13a9317397a00b08e6d6b9a8b6ed9de2dfbe1",
@@ -5989,7 +5935,6 @@
       "states": [],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "greet",
             "args": [
@@ -6107,7 +6052,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "458b7b3e3cda62eccbcc535a5be24d572f7ecb88df08bc0b59eacf0a8b59a8a1",
@@ -6141,7 +6085,6 @@
       "states": [],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "count_objects",
             "args": [
@@ -6229,7 +6172,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "feda67b2293240b9fa9a8e949fb22a4d251a5497009b9d10d16109bb0e3ad04d",
@@ -6246,7 +6188,6 @@
           ]
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "read_tiff",
             "args": [
@@ -6334,7 +6275,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "62c21bebd3a4d2d2e006402fdf53da9d981e5d19cf93fe84a011bbedeef4f96d",
@@ -6351,7 +6291,6 @@
           ]
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "segment",
             "args": [
@@ -6469,7 +6408,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "3250b184157516040643227b5e5a8e6502cbb4ddf22d5c2bff13e3fa28f84631",
@@ -6486,7 +6424,6 @@
           ]
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "write_demo_tiff",
             "args": [],
@@ -6543,7 +6480,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "ec3423661780162b097b57aac4095b610574582071c5aa70bd8130e29f8767b6",
@@ -6577,7 +6513,6 @@
       "states": [],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "count_objects",
             "args": [
@@ -6665,7 +6600,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "feda67b2293240b9fa9a8e949fb22a4d251a5497009b9d10d16109bb0e3ad04d",
@@ -6682,7 +6616,6 @@
           ]
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "read_tiff",
             "args": [
@@ -6770,7 +6703,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "62c21bebd3a4d2d2e006402fdf53da9d981e5d19cf93fe84a011bbedeef4f96d",
@@ -6787,7 +6719,6 @@
           ]
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "segment",
             "args": [
@@ -6905,7 +6836,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "3250b184157516040643227b5e5a8e6502cbb4ddf22d5c2bff13e3fa28f84631",
@@ -6922,7 +6852,6 @@
           ]
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "write_demo_tiff",
             "args": [],
@@ -6979,7 +6908,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "ec3423661780162b097b57aac4095b610574582071c5aa70bd8130e29f8767b6",
@@ -7013,7 +6941,6 @@
       "states": [
         {
           "key": "StagePosition",
-          "value": {},
           "interface": "StagePosition",
           "definition": {
             "hash": "b2811846de367921f2565799a2350797b3fef412b5dc073e234edd2800ee5c22",
@@ -7086,13 +7013,11 @@
             ],
             "description": "A state definition"
           },
-          "app_identifier": "<agent app>",
-          "retention_policy": "KEEP_ALL"
+          "app_identifier": "<agent app>"
         }
       ],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "move_to",
             "args": [
@@ -7240,7 +7165,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "3f7730d24b9f14bf990629079fc46e19432041bf448ba1aa880b87fd3929efe6",
@@ -7274,7 +7198,6 @@
       "states": [],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "list_images",
             "args": [],
@@ -7360,7 +7283,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "d636a46dabbe4f1ed9325b47bee0dc32d7a9b3c1cf1266a2e04e26e80278a651",
@@ -7375,7 +7297,6 @@
           "provenance_audience": null
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "physical_size",
             "args": [
@@ -7463,7 +7384,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "a32bd0d29f05b4e74969290aa99791464c2b54d87bcff481b6d55e726d2493c7",
@@ -7497,7 +7417,6 @@
       "states": [],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "count_cells",
             "args": [
@@ -7596,7 +7515,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "NONE",
           "code_hash": "cde018bdd916f1e7b7af876d6551773436425719845bdf8af9d90ba0ea49f830",
@@ -7613,7 +7531,6 @@
           ]
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "segment",
             "args": [
@@ -7718,7 +7635,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "61d0150e063e745348d39f1a6eb00ebab2ec5449337fef50c7977dad417d9aca",
@@ -7754,7 +7670,6 @@
       "states": [
         {
           "key": "plate",
-          "value": {},
           "interface": "plate",
           "definition": {
             "hash": "1336622b4647e16b1d2758ca7af38bb8ba011e4bd1602579d0a9ded6572ba7f4",
@@ -7812,13 +7727,11 @@
             ],
             "description": "A state definition"
           },
-          "app_identifier": "<agent app>",
-          "retention_policy": "KEEP_ALL"
+          "app_identifier": "<agent app>"
         }
       ],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "dispense",
             "args": [
@@ -7936,7 +7849,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "IRREVERSIBLE",
           "code_hash": "ffe9af9aa7f59d87385c036dda5d8e2f77d4c277d5c26fb5e8bc3d02fe41735c",
@@ -7951,7 +7863,6 @@
           "provenance_audience": null
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "load_plate",
             "args": [
@@ -8039,7 +7950,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "IRREVERSIBLE",
           "code_hash": "2a132dde69fd7b47052e40205540786d0f2afdf3c137433dca111f3d83840ad7",
@@ -8054,7 +7964,6 @@
           "provenance_audience": null
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "read_absorbance",
             "args": [
@@ -8142,7 +8051,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "NONE",
           "code_hash": "9ba1f2cce6d90850730d09d3e435bec43cd63bb4611e8ec6b36111eaef191686",
@@ -8176,7 +8084,6 @@
       "states": [],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "stain_and_measure",
             "args": [
@@ -8305,7 +8212,6 @@
             "return_count": 1
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": "bd73a73c7599449e5bacb2980a4fd025a09229a67cfd75c14319ddbe13999ca2",
@@ -8320,7 +8226,6 @@
               "min_viable_instances": 1,
               "app_filter": "liquid-handler",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [
                 {
                   "key": "plate",
@@ -8475,7 +8380,6 @@
               "min_viable_instances": 1,
               "app_filter": "segmentation",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [],
               "action_demands": [
                 {
@@ -8619,7 +8523,6 @@
       "bloks": [
         {
           "blok": {
-            "uri": null,
             "name": "panel-<side>",
             "catalog": "default",
             "components": [
@@ -8676,12 +8579,10 @@
                 "optional": false,
                 "app_filter": null,
                 "description": "the camera",
-                "assign_policy": "BALANCED",
                 "state_demands": [],
                 "action_demands": [],
                 "version_filter": null,
                 "auto_resolvable": false,
-                "prefered_instances": null,
                 "max_viable_instances": null,
                 "min_viable_instances": null
               },
@@ -8690,12 +8591,10 @@
                 "optional": true,
                 "app_filter": "stage-app",
                 "description": null,
-                "assign_policy": "ROUND_ROBIN",
                 "state_demands": [],
                 "action_demands": [],
                 "version_filter": null,
                 "auto_resolvable": false,
-                "prefered_instances": null,
                 "max_viable_instances": null,
                 "min_viable_instances": null
               }
@@ -8727,7 +8626,6 @@
       "states": [
         {
           "key": "position",
-          "value": {},
           "interface": "position",
           "definition": {
             "hash": "784868a2a2eab48620915c07df0d6e50967882d8bee4138186eb672e670a4547",
@@ -8768,13 +8666,11 @@
             ],
             "description": "A state definition"
           },
-          "app_identifier": "<agent app>",
-          "retention_policy": "KEEP_ALL"
+          "app_identifier": "<agent app>"
         }
       ],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "segment",
             "args": [
@@ -8995,7 +8891,6 @@
           "params": {
             "gpu": true
           },
-          "policy": {},
           "tracks": [
             {
               "label": null,
@@ -9038,7 +8933,6 @@
               "min_viable_instances": 1,
               "app_filter": "stage-app",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [],
               "action_demands": [
                 {
@@ -9061,7 +8955,6 @@
           ]
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "segment_test",
             "args": [],
@@ -9090,7 +8983,6 @@
             "return_count": 0
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": null,
@@ -9149,7 +9041,6 @@
       "bloks": [
         {
           "blok": {
-            "uri": null,
             "name": "panel-<side>",
             "catalog": "default",
             "components": [
@@ -9206,12 +9097,10 @@
                 "optional": true,
                 "app_filter": "stage-app",
                 "description": null,
-                "assign_policy": "ROUND_ROBIN",
                 "state_demands": [],
                 "action_demands": [],
                 "version_filter": null,
                 "auto_resolvable": false,
-                "prefered_instances": null,
                 "max_viable_instances": null,
                 "min_viable_instances": null
               }
@@ -9243,7 +9132,6 @@
       "states": [
         {
           "key": "position",
-          "value": {},
           "interface": "position",
           "definition": {
             "hash": "784868a2a2eab48620915c07df0d6e50967882d8bee4138186eb672e670a4547",
@@ -9284,13 +9172,11 @@
             ],
             "description": "A state definition"
           },
-          "app_identifier": "<agent app>",
-          "retention_policy": "KEEP_ALL"
+          "app_identifier": "<agent app>"
         }
       ],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "segment",
             "args": [
@@ -9511,7 +9397,6 @@
           "params": {
             "gpu": true
           },
-          "policy": {},
           "tracks": [
             {
               "label": null,
@@ -9556,7 +9441,6 @@
               "min_viable_instances": 1,
               "app_filter": "stage-app",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [],
               "action_demands": [
                 {
@@ -9579,7 +9463,6 @@
           ]
         },
         {
-          "name": "Unnamed",
           "action": {
             "key": "segment_test",
             "args": [],
@@ -9608,7 +9491,6 @@
             "return_count": 0
           },
           "params": {},
-          "policy": {},
           "tracks": [],
           "effects": "UNKNOWN",
           "code_hash": null,
@@ -9667,7 +9549,6 @@
       "bloks": [
         {
           "blok": {
-            "uri": null,
             "name": "panel-<side>",
             "catalog": "default",
             "components": [
@@ -9724,12 +9605,10 @@
                 "optional": false,
                 "app_filter": null,
                 "description": "the camera",
-                "assign_policy": "BALANCED",
                 "state_demands": [],
                 "action_demands": [],
                 "version_filter": null,
                 "auto_resolvable": false,
-                "prefered_instances": null,
                 "max_viable_instances": null,
                 "min_viable_instances": null
               }
@@ -9761,7 +9640,6 @@
       "states": [],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "segment_v2",
             "args": [
@@ -9982,7 +9860,6 @@
           "params": {
             "gpu": true
           },
-          "policy": {},
           "tracks": [
             {
               "label": null,
@@ -10025,7 +9902,6 @@
               "min_viable_instances": 1,
               "app_filter": "stage-app",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [],
               "action_demands": [
                 {
@@ -10065,7 +9941,6 @@
       "bloks": [
         {
           "blok": {
-            "uri": null,
             "name": "panel-<side>",
             "catalog": "default",
             "components": [
@@ -10122,12 +9997,10 @@
                 "optional": false,
                 "app_filter": null,
                 "description": "the camera",
-                "assign_policy": "BALANCED",
                 "state_demands": [],
                 "action_demands": [],
                 "version_filter": null,
                 "auto_resolvable": false,
-                "prefered_instances": null,
                 "max_viable_instances": null,
                 "min_viable_instances": null
               }
@@ -10159,7 +10032,6 @@
       "states": [],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "segment_v2",
             "args": [
@@ -10380,7 +10252,6 @@
           "params": {
             "gpu": true
           },
-          "policy": {},
           "tracks": [
             {
               "label": null,
@@ -10423,7 +10294,6 @@
               "min_viable_instances": 1,
               "app_filter": "stage-app",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [],
               "action_demands": [
                 {
@@ -10463,7 +10333,6 @@
       "bloks": [
         {
           "blok": {
-            "uri": null,
             "name": "panel-<side>",
             "catalog": "default",
             "components": [
@@ -10520,12 +10389,10 @@
                 "optional": false,
                 "app_filter": null,
                 "description": "the camera",
-                "assign_policy": "BALANCED",
                 "state_demands": [],
                 "action_demands": [],
                 "version_filter": null,
                 "auto_resolvable": false,
-                "prefered_instances": null,
                 "max_viable_instances": null,
                 "min_viable_instances": null
               }
@@ -10557,7 +10424,6 @@
       "states": [],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "segment_v2",
             "args": [
@@ -10778,7 +10644,6 @@
           "params": {
             "gpu": true
           },
-          "policy": {},
           "tracks": [
             {
               "label": null,
@@ -10821,7 +10686,6 @@
               "min_viable_instances": 1,
               "app_filter": "stage-app",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [],
               "action_demands": [
                 {
@@ -10861,7 +10725,6 @@
       "bloks": [
         {
           "blok": {
-            "uri": null,
             "name": "panel-<side>",
             "catalog": "default",
             "components": [
@@ -10918,12 +10781,10 @@
                 "optional": false,
                 "app_filter": null,
                 "description": "the camera",
-                "assign_policy": "BALANCED",
                 "state_demands": [],
                 "action_demands": [],
                 "version_filter": null,
                 "auto_resolvable": false,
-                "prefered_instances": null,
                 "max_viable_instances": null,
                 "min_viable_instances": null
               }
@@ -10955,7 +10816,6 @@
       "states": [],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "segment_v2",
             "args": [
@@ -11176,7 +11036,6 @@
           "params": {
             "gpu": true
           },
-          "policy": {},
           "tracks": [
             {
               "label": null,
@@ -11219,7 +11078,6 @@
               "min_viable_instances": 1,
               "app_filter": "stage-app",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [],
               "action_demands": [
                 {
@@ -11259,7 +11117,6 @@
       "bloks": [
         {
           "blok": {
-            "uri": null,
             "name": "panel-<side>",
             "catalog": "default",
             "components": [
@@ -11316,12 +11173,10 @@
                 "optional": false,
                 "app_filter": null,
                 "description": "the camera",
-                "assign_policy": "BALANCED",
                 "state_demands": [],
                 "action_demands": [],
                 "version_filter": null,
                 "auto_resolvable": false,
-                "prefered_instances": null,
                 "max_viable_instances": null,
                 "min_viable_instances": null
               }
@@ -11353,7 +11208,6 @@
       "states": [],
       "implementations": [
         {
-          "name": "Unnamed",
           "action": {
             "key": "segment_v2",
             "args": [
@@ -11574,7 +11428,6 @@
           "params": {
             "gpu": true
           },
-          "policy": {},
           "tracks": [
             {
               "label": null,
@@ -11617,7 +11470,6 @@
               "min_viable_instances": 1,
               "app_filter": "stage-app",
               "max_viable_instances": null,
-              "assign_policy": "AUTOMATIC",
               "state_demands": [],
               "action_demands": [
                 {
@@ -11657,7 +11509,6 @@
       "bloks": [
         {
           "blok": {
-            "uri": null,
             "name": "panel-<side>",
             "catalog": "default",
             "components": [
@@ -11714,12 +11565,10 @@
                 "optional": false,
                 "app_filter": null,
                 "description": "the camera",
-                "assign_policy": "BALANCED",
                 "state_demands": [],
                 "action_demands": [],
                 "version_filter": null,
                 "auto_resolvable": false,
-                "prefered_instances": null,
                 "max_viable_instances": null,
                 "min_viable_instances": null
               }

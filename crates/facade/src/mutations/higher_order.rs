@@ -53,7 +53,6 @@ struct Lower {
     kind: String,
     organization_id: i64,
     app_id: i64,
-    release_id: i64,
     user_id: i64,
 }
 
@@ -85,7 +84,7 @@ pub async fn create_higher_order_implementation(
 
     let lower: Option<Lower> = sqlx::query_as(
         "SELECT i.id, i.agent_id, i.interface, i.higher_order_for_id, a.kind,
-                ag.organization_id, ag.app_id, ag.release_id, ag.user_id
+                ag.organization_id, ag.app_id, ag.user_id
            FROM facade_implementation i
            JOIN facade_action a ON a.id = i.action_id
            JOIN facade_agent ag ON ag.id = i.agent_id
@@ -142,7 +141,6 @@ pub async fn create_higher_order_implementation(
     let identity = AgentIdentity {
         id: lower.agent_id,
         app: lower.app_id,
-        release: lower.release_id,
         user: lower.user_id,
         organization: lower.organization_id,
     };

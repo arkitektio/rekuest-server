@@ -119,11 +119,11 @@ async fn agent(ctx: &Context) -> (i64, i64) {
 /// The agent's implementation of the action, run as `execution`, at `code_hash`.
 async fn implementation(ctx: &Context, agent: i64, action: i64, execution: &str) -> i64 {
     sqlx::query_scalar(
-        "INSERT INTO facade_implementation (interface, name, policy, higher_order_config, params, created_at,
+        "INSERT INTO facade_implementation (interface, higher_order_config, params, created_at,
                                             updated_at, tracks, diagnostics, needs_token, effects, execution,
-                                            code_hash, action_id, agent_id, release_id)
-         SELECT 'do_it', 'do_it', '{}', '{}', '{}', now(), now(), '[]', '[]', false, 'UNKNOWN', $3, 'h1',
-                $2, a.id, a.release_id FROM facade_agent a WHERE a.id = $1
+                                            code_hash, action_id, agent_id)
+         SELECT 'do_it', '{}', '{}', now(), now(), '[]', '[]', false, 'UNKNOWN', $3, 'h1',
+                $2, a.id FROM facade_agent a WHERE a.id = $1
          RETURNING id",
     )
     .bind(agent)
@@ -138,11 +138,11 @@ async fn implementation(ctx: &Context, agent: i64, action: i64, execution: &str)
 /// implementation: its Assign cannot be rebuilt.
 async fn task(ctx: &Context, agent: i64, action: i64) -> i64 {
     sqlx::query_scalar(
-        "INSERT INTO facade_task (acted_on, ephemeral, hooks, reference, resumes, capture, is_higher_order_child,
-                                  latest_event_kind, latest_instruct_kind, statusmessage, is_done, created_at,
+        "INSERT INTO facade_task (acted_on, ephemeral, reference, resumes, capture, is_higher_order_child,
+                                  latest_event_kind, latest_instruct_kind, is_done, created_at,
                                   updated_at, revision, step, dispatch_attempts, trigger_depth, action_id, agent_id,
                                   dispatched_at, args)
-         VALUES ('{}', false, '[]', $3, 0, false, false, 'QUEUED', 'ASSIGN', '', false, now(), now(), 0, false, 1, 0,
+         VALUES ('{}', false, $3, 0, false, false, 'QUEUED', 'ASSIGN', false, now(), now(), 0, false, 1, 0,
                  $2, $1, now(), '{\"x\": 1}')
          RETURNING id",
     )

@@ -189,13 +189,13 @@ pub async fn delete_implementations(
     .await?;
     exec(
         conn,
-        "DELETE FROM facade_implementation_pinned_by WHERE implementation_id = ANY($1)",
+        "DELETE FROM facade_implementation_manipulates WHERE implementation_id = ANY($1)",
         implementations,
     )
     .await?;
     exec(
         conn,
-        "DELETE FROM facade_implementation_manipulates WHERE implementation_id = ANY($1)",
+        "DELETE FROM facade_implementation_required_locks WHERE implementation_id = ANY($1)",
         implementations,
     )
     .await?;
@@ -289,12 +289,6 @@ pub async fn delete_actions(
     )
     .await?;
     exec(conn, "DELETE FROM facade_action_is_test_for WHERE from_action_id = ANY($1) OR to_action_id = ANY($1)", actions).await?;
-    exec(
-        conn,
-        "DELETE FROM facade_action_pinned_by WHERE action_id = ANY($1)",
-        actions,
-    )
-    .await?;
     exec(
         conn,
         "DELETE FROM facade_action_collections WHERE action_id = ANY($1)",

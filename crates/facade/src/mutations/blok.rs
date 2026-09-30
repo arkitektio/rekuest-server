@@ -23,15 +23,14 @@ pub async fn sync_blok_dependencies(
         let id: i64 = sqlx::query_scalar(
             "INSERT INTO facade_blokdependency
                  (created_at, key, action_demands, state_demands, app_filter, version_filter, optional, description,
-                  auto_resolvable, min_viable_instances, max_viable_instances, prefered_instances, assign_policy, blok_id)
-             VALUES (now(), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $1)
+                  auto_resolvable, min_viable_instances, max_viable_instances, blok_id)
+             VALUES (now(), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $1)
              ON CONFLICT (blok_id, key) DO UPDATE SET
                  action_demands = excluded.action_demands, state_demands = excluded.state_demands,
                  app_filter = excluded.app_filter, version_filter = excluded.version_filter,
                  optional = excluded.optional, description = excluded.description,
                  auto_resolvable = excluded.auto_resolvable, min_viable_instances = excluded.min_viable_instances,
-                 max_viable_instances = excluded.max_viable_instances, prefered_instances = excluded.prefered_instances,
-                 assign_policy = excluded.assign_policy
+                 max_viable_instances = excluded.max_viable_instances
              RETURNING id",
         )
         .bind(blok)
@@ -45,8 +44,6 @@ pub async fn sync_blok_dependencies(
         .bind(declared.auto_resolvable)
         .bind(declared.min_viable_instances)
         .bind(declared.max_viable_instances)
-        .bind(declared.prefered_instances)
-        .bind(declared.assign_policy.value())
         .fetch_one(&mut *conn)
         .await?;
         synced.push((id, declared.key.clone()));

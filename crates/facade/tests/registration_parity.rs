@@ -170,7 +170,7 @@ SELECT jsonb_build_object(
                                       'name_is_client', name = (SELECT client_id FROM authentikate_client WHERE id = ag.client_id),
                                       'name', name) FROM ag),
   'implementations', coalesce((SELECT jsonb_agg(jsonb_build_object(
-      'interface', i.interface, 'name', i.name, 'policy', i.policy, 'higher_order_config', i.higher_order_config,
+      'interface', i.interface, 'higher_order_config', i.higher_order_config,
       'higher_order', i.higher_order_for_id IS NOT NULL, 'params', i.params, 'tracks', i.tracks,
       'diagnostics', i.diagnostics, 'needs_token', i.needs_token, 'provenance_audience', i.provenance_audience,
       'effects', i.effects, 'execution', i.execution, 'code_hash', i.code_hash,
@@ -200,7 +200,6 @@ SELECT jsonb_build_object(
       'interface', s.interface, 'key', s.key,
       'app_identifier', CASE WHEN s.app_identifier = (SELECT identifier FROM authentikate_app WHERE id = (SELECT app_id FROM ag))
                              THEN '<agent app>' ELSE s.app_identifier END,
-      'value', s.value, 'retention_policy', s.retention_policy,
       'definition', (SELECT to_jsonb(sd) - 'id' - 'organization_id' FROM facade_statedefinition sd WHERE sd.id = s.definition_id)
     ) ORDER BY s.interface) FROM facade_state s WHERE s.agent_id = $1), '[]'),
   'locks', coalesce((SELECT jsonb_agg(jsonb_build_object('key', l.key, 'description', l.description, 'held', l.hold_by_id IS NOT NULL)
@@ -209,7 +208,7 @@ SELECT jsonb_build_object(
       'name', replace(m.name, $2, '<side>'), 'description', m.description,
       'blok', (SELECT jsonb_build_object(
           'name', replace(b.name, $2, '<side>'), 'description', b.description, 'components', b.components,
-          'demo_state', b.demo_state, 'diagnostics', b.diagnostics, 'uri', b.uri,
+          'demo_state', b.demo_state, 'diagnostics', b.diagnostics,
           'catalog', (SELECT name FROM facade_uicatalog WHERE id = b.catalog_id),
           'dependencies', (SELECT coalesce(jsonb_agg(to_jsonb(d) - 'id' - 'created_at' - 'blok_id' ORDER BY d.key), '[]')
                              FROM facade_blokdependency d WHERE d.blok_id = b.id))

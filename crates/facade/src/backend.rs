@@ -766,7 +766,6 @@ struct NewTask {
     dependency_method: Option<String>,
     resolution: Option<i64>,
     is_higher_order_child: bool,
-    hooks: Value,
     dependencies: Value,
     caller: i64,
     dispatched_at: Option<DateTime<Utc>>,
@@ -800,7 +799,6 @@ impl NewTask {
             dependency_method: None,
             resolution: None,
             is_higher_order_child: false,
-            hooks: json!([]),
             dependencies: Value::Null,
             caller,
             dispatched_at: None,
@@ -820,12 +818,12 @@ impl NewTask {
                 (action_id, args, args_hash, reference, parent_id, parent_step, call_key, root_id,
                  agent_id, acted_on, capture, step, implementation_id, code_hash, dependency,
                  dependency_method, resolution_id, is_higher_order_child, is_done,
-                 latest_event_kind, latest_instruct_kind, statusmessage, hooks, dependencies,
+                 latest_event_kind, latest_instruct_kind, dependencies,
                  caller_id, dispatched_at, dispatch_attempts, not_before, schedule_id, ephemeral,
                  signal_id, trigger_id, trigger_depth, resumes, revision, created_at, updated_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
-                     false, 'QUEUED', 'ASSIGN', '', $19, $20, $21, $22, $23, $24, $25, $26, $27, $28,
-                     $29, 0, 1, now(), now())
+                     false, 'QUEUED', 'ASSIGN', $19, $20, $21, $22, $23, $24, $25, $26, $27, $28,
+                     0, 1, now(), now())
              RETURNING id",
         )
         .bind(self.action)
@@ -846,7 +844,6 @@ impl NewTask {
         .bind(&self.dependency_method)
         .bind(self.resolution)
         .bind(self.is_higher_order_child)
-        .bind(sqlx::types::Json(&self.hooks))
         .bind(sqlx::types::Json(&self.dependencies))
         .bind(self.caller)
         .bind(self.dispatched_at)
@@ -1043,7 +1040,6 @@ pub async fn assign_with_status(
         dependency: input.dependency.clone(),
         dependency_method: input.method.clone(),
         resolution,
-        hooks: serde_json::to_value(&hooks).expect("hooks serialize"),
         dependencies: dependency_dict.unwrap_or(Value::Null),
         dispatched_at: (!delayed).then(Utc::now),
         dispatch_attempts: if delayed { 0 } else { 1 },
@@ -1222,8 +1218,6 @@ async fn assign_higher_order(
         root,
         acted_on: acted_on_from_args(&input.args, &higher_action.args),
         capture: input.capture.unwrap_or(false),
-        hooks: serde_json::to_value(input.hooks.clone().unwrap_or_default())
-            .expect("hooks serialize"),
         dependencies: Value::Object(higher_dependencies),
         ..NewTask::new(
             higher.action_id,

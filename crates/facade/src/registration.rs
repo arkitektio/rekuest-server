@@ -18,11 +18,10 @@ pub async fn ensure_agent(
               WHERE c.id = $1
          )
          INSERT INTO facade_agent
-             (installed_at, hash, name, health_check_interval, \"unique\", lease_epoch, on_instance,
-              kind, latest_event, connected, blocked, app_id, release_id, client_id, user_id,
-              organization_id)
-         SELECT now(), '', client.client_id, 300, gen_random_uuid()::text, 0, 'all',
-                'WEBSOCKET', 'DISCONNECT', false, false, client.app_id, client.release_id, $1, $2, $3
+             (installed_at, hash, name, lease_epoch, kind, connected, blocked, app_id, release_id,
+              client_id, user_id, organization_id)
+         SELECT now(), '', client.client_id, 0, 'WEBSOCKET', false, false, client.app_id,
+                client.release_id, $1, $2, $3
            FROM client
          ON CONFLICT (client_id, user_id, organization_id) DO UPDATE SET name = facade_agent.name
          RETURNING id, name",
@@ -211,8 +210,8 @@ async fn register_state(
     .fetch_one(&mut *conn)
     .await?;
     sqlx::query_scalar(
-        "INSERT INTO facade_state (interface, key, app_identifier, value, created_at, updated_at, retention_policy, agent_id, definition_id)
-         VALUES ($1, $2, $3, '{}', now(), now(), 'KEEP_ALL', $4, $5)
+        "INSERT INTO facade_state (interface, key, app_identifier, created_at, updated_at, agent_id, definition_id)
+         VALUES ($1, $2, $3, now(), now(), $4, $5)
          ON CONFLICT (interface, agent_id) DO UPDATE SET definition_id = excluded.definition_id, key = excluded.key,
                                                         app_identifier = excluded.app_identifier, updated_at = now()
          RETURNING id",
@@ -338,7 +337,6 @@ pub async fn implement_agent(
     let identity = AgentIdentity {
         id: agent,
         app,
-        release,
         user,
         organization,
     };

@@ -89,10 +89,10 @@ async fn task_in(ctx: &Context, org: &str) -> i64 {
     .await
     .unwrap();
     sqlx::query_scalar(
-        "INSERT INTO facade_task (acted_on, ephemeral, hooks, reference, resumes, capture, is_higher_order_child,
-                                  latest_event_kind, latest_instruct_kind, statusmessage, is_done, created_at,
+        "INSERT INTO facade_task (acted_on, ephemeral, reference, resumes, capture, is_higher_order_child,
+                                  latest_event_kind, latest_instruct_kind, is_done, created_at,
                                   updated_at, revision, step, dispatch_attempts, trigger_depth, action_id, agent_id)
-         VALUES ('{}', false, '[]', $3, 0, false, false, 'QUEUED', 'ASSIGN', '', false, now(), now(), 0, false, 0, 0, $2, $1)
+         VALUES ('{}', false, $3, 0, false, false, 'QUEUED', 'ASSIGN', false, now(), now(), 0, false, 0, 0, $2, $1)
          RETURNING id",
     )
     .bind(agent)
@@ -141,7 +141,8 @@ async fn post(
 }
 
 fn signal(org: &str, id: &str, provenance: Option<String>) -> Value {
-    json!({"id": id, "kind": "CREATED", "identifier": "@bank/account", "object": "17", "organization": org,
+    // Signal ids are unique per service across organizations: scope them to this run's org.
+    json!({"id": format!("{org}-{id}"), "kind": "CREATED", "identifier": "@bank/account", "object": "17", "organization": org,
            "descriptors": {"currency": "EUR"}, "provenance": provenance})
 }
 

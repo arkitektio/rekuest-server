@@ -255,11 +255,11 @@ async fn required_locks_are_the_agents_and_their_holder_is_tracked() {
             .await
             .unwrap();
     let task: i64 = sqlx::query_scalar(
-        "INSERT INTO facade_task (acted_on, ephemeral, hooks, reference, resumes, capture, is_higher_order_child,
-                                  latest_event_kind, latest_instruct_kind, statusmessage, is_done, created_at,
+        "INSERT INTO facade_task (acted_on, ephemeral, reference, resumes, capture, is_higher_order_child,
+                                  latest_event_kind, latest_instruct_kind, is_done, created_at,
                                   updated_at, revision, step, dispatch_attempts, trigger_depth, action_id, agent_id,
                                   implementation_id)
-         VALUES ('{}', false, '[]', $4, 0, false, false, 'STARTED', 'ASSIGN', '', false, now(), now(), 0, false, 1, 0, $2, $1, $3)
+         VALUES ('{}', false, $4, 0, false, false, 'STARTED', 'ASSIGN', false, now(), now(), 0, false, 1, 0, $2, $1, $3)
          RETURNING id",
     )
     .bind(agent)

@@ -155,11 +155,11 @@ async fn the_rust_token_is_the_python_token() {
              SELECT now(), '', 'anything', '1', false, false, false, false, 'FUNCTION', '[]', 'Anything', '',
                     'GLOBAL', false, $2, '[]', '[]', 0, 0, app_id, organization_id FROM facade_agent WHERE id = $1
              RETURNING id)
-         INSERT INTO facade_implementation (interface, name, policy, higher_order_config, params, created_at,
+         INSERT INTO facade_implementation (interface, higher_order_config, params, created_at,
                                             updated_at, tracks, diagnostics, needs_token, provenance_audience,
-                                            effects, execution, action_id, agent_id, release_id)
-         SELECT 'anything', 'anything', '{}', '{}', '{}', now(), now(), '[]', '[]', true, '[\"mikro\", \"kabinet\"]',
-                'UNKNOWN', 'PLAIN', a.id, ag.id, ag.release_id FROM a, facade_agent ag WHERE ag.id = $1
+                                            effects, execution, action_id, agent_id)
+         SELECT 'anything', '{}', '{}', now(), now(), '[]', '[]', true, '[\"mikro\", \"kabinet\"]',
+                'UNKNOWN', 'PLAIN', a.id, ag.id FROM a, facade_agent ag WHERE ag.id = $1
          RETURNING id",
     )
     .bind(agent)

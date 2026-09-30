@@ -113,11 +113,11 @@ async fn action(ctx: &Context, agent: i64, allow_probe: bool) -> (i64, i64) {
     .await
     .unwrap();
     let implementation: i64 = sqlx::query_scalar(
-        "INSERT INTO facade_implementation (interface, name, policy, higher_order_config, params, created_at,
+        "INSERT INTO facade_implementation (interface, higher_order_config, params, created_at,
                                             updated_at, tracks, diagnostics, needs_token, provenance_audience,
-                                            effects, execution, action_id, agent_id, release_id)
-         SELECT 'echo', 'echo', '{}', '{}', '{}', now(), now(), '[]', '[]', true, '[\"mikro\"]', 'UNKNOWN', 'PLAIN',
-                $2, a.id, a.release_id FROM facade_agent a WHERE a.id = $1
+                                            effects, execution, action_id, agent_id)
+         SELECT 'echo', '{}', '{}', now(), now(), '[]', '[]', true, '[\"mikro\"]', 'UNKNOWN', 'PLAIN',
+                $2, a.id FROM facade_agent a WHERE a.id = $1
          RETURNING id",
     )
     .bind(agent)
@@ -757,8 +757,8 @@ async fn a_guard_sees_changes_but_not_its_own() {
     sqlx::query(
         "WITH d AS (INSERT INTO facade_statedefinition (name, hash, ports, description, organization_id)
                     SELECT 'plate', $2, '[]', '', organization_id FROM facade_agent WHERE id = $1 RETURNING id)
-         INSERT INTO facade_state (interface, key, value, created_at, updated_at, retention_policy, agent_id, definition_id)
-         SELECT 'plate', 'plate', '{}', now(), now(), 'KEEP', $1, d.id FROM d",
+         INSERT INTO facade_state (interface, key, created_at, updated_at, agent_id, definition_id)
+         SELECT 'plate', 'plate', now(), now(), $1, d.id FROM d",
     )
     .bind(owner)
     .bind(uuid::Uuid::new_v4().to_string())

@@ -57,7 +57,6 @@ pub struct TaskChangePayload {
     pub is_done: bool,
     pub latest_event_kind: String,
     pub latest_instruct_kind: String,
-    pub status_message: Option<String>,
     pub action: String,
     pub implementation: Option<String>,
     pub agent: Option<String>,

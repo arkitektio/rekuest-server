@@ -35,7 +35,6 @@ struct TaskRow {
     is_done: bool,
     latest_event_kind: String,
     latest_instruct_kind: String,
-    statusmessage: String,
     action_id: i64,
     implementation_id: Option<i64>,
     agent_id: i64,
@@ -57,7 +56,6 @@ impl TaskRow {
             is_done: self.is_done,
             latest_event_kind: self.latest_event_kind.clone(),
             latest_instruct_kind: self.latest_instruct_kind.clone(),
-            status_message: Some(self.statusmessage.clone()).filter(|m| !m.is_empty()),
             action: self.action_id.to_string(),
             implementation: self.implementation_id.map(|id| id.to_string()),
             agent: Some(self.agent_id.to_string()),
@@ -89,7 +87,7 @@ pub async fn task_saved(ctx: &Context, task_id: i64, created: bool) {
 
 async fn task_saved_inner(ctx: &Context, task_id: i64, created: bool) -> Result<(), sqlx::Error> {
     let task: TaskRow = sqlx::query_as(
-        "SELECT id, reference, is_done, latest_event_kind, latest_instruct_kind, statusmessage,
+        "SELECT id, reference, is_done, latest_event_kind, latest_instruct_kind,
                 action_id, implementation_id, agent_id, root_id, parent_id, caller_id,
                 created_at, updated_at, finished_at, revision
            FROM facade_task WHERE id = $1",
