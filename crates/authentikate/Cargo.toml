@@ -1,15 +1,12 @@
 [package]
-name = "arkitekt-server-authentikate"
-description = "Token authentication and expansion for Arkitekt servers (mirrors the Python `authentikate` package, 4.1.1): not rekuest-specific"
+name = "authentikate"
+description = "Token authentication and expansion for Arkitekt servers (the Rust twin of the Python `authentikate` package, 4.1.1)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
 
-[lib]
-# The Python package this crate takes over, so code reads like it: `authentikate::…`.
-name = "authentikate"
 
 [dependencies]
 serde.workspace = true
