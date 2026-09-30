@@ -6,6 +6,7 @@ import datetime
 
 import strawberry
 import strawberry_django
+from rekuest_core import scalars as rscalars
 
 from facade import filters, models
 from facade.types.base import build_prescoped_queryset
@@ -33,6 +34,7 @@ class TestResult:
     tester: "Implementation" = strawberry_django.field(description="Implementation running the test.")
     case: "TestCase" = strawberry_django.field(description="Associated test case.")
     passed: bool = strawberry_django.field(description="True if test passed.")
+    result: rscalars.AnyDefault | None = strawberry_django.field(description="What the test produced, as JSON.")
     created_at: datetime.datetime = strawberry_django.field(description="When the test was executed.")
 
     @classmethod

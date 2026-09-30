@@ -23,6 +23,7 @@ class Implementation:
     agent: "Agent" = strawberry_django.field(description="Agent running this implementation.")
     action: "Action" = strawberry_django.field(description="The action this implements.")
     params: rscalars.AnyDefault = strawberry_django.field(description="Arbitrary parameters for the implementation.")
+    locks: list["Lock"] = strawberry_django.field(field_name="required_locks", description="The agent's locks this implementation takes while it runs.")
     resolutions: list["Resolution"] = strawberry_django.field(description="The resolved dependencies")
     dependencies: list["Dependency"] = strawberry_django.field(description="Dependencies required by this action.")
     manipulates: list["State"] = strawberry.field(description="States that this implementation manipulates.")

@@ -411,6 +411,9 @@ type Agent {
   """Implementations the agent can run."""
   implementations(filters: ImplementationFilter, ordering: [ImplementationOrder!]! = [], pagination: OffsetPaginationInput): [Implementation!]!
 
+  """The agent's locks, and which task holds each."""
+  locks: [Lock!]!
+
   """Agent's associated memory shelve."""
   memoryShelve: MemoryShelve
 
@@ -1707,19 +1710,33 @@ input CreateSpaceInput {
   placements: [PlacementInput!] = null
 }
 
+"""Declare that one action tests another."""
 input CreateTestCaseInput {
+  """The action under test."""
   action: ID!
+
+  """The action that performs the test."""
   tester: ID!
   description: String = null
   name: String = null
+
+  """Measures performance rather than correctness."""
+  isBenchmark: Boolean! = false
 }
 
+"""Record one run of a test case."""
 input CreateTestResultInput {
   case: ID!
+
+  """The implementation that ran the test."""
   tester: ID!
+
+  """The implementation under test."""
   implementation: ID!
   passed: Boolean!
-  result: String = null
+
+  """What the test produced, as JSON."""
+  result: AnyDefault = null
 }
 
 """The input for creating a 3D model."""
@@ -1732,6 +1749,12 @@ input CreateThreeDModelInput {
 
   """The media store file for the 3D model."""
   media: MediaLike!
+
+  """How the agent's state maps onto the model's properties."""
+  transferFunction: String = null
+
+  """The agent this model shows: whose state the transfer function reads."""
+  dependency: AgentDependencyInput = null
 }
 
 """The input for creating a toolbox."""
@@ -2382,6 +2405,9 @@ type Implementation {
   """Arbitrary parameters for the implementation."""
   params: AnyDefault!
 
+  """The agent's locks this implementation takes while it runs."""
+  locks: [Lock!]!
+
   """The resolved dependencies"""
   resolutions(filters: ResolutionFilter, pagination: OffsetPaginationInput): [Resolution!]!
 
@@ -2651,6 +2677,32 @@ input KickInput {
 
   """The reason for kicking the agent."""
   reason: String = null
+}
+
+"""
+A resource of an agent that one of its tasks holds at a time: the agent takes it while an implementation that requires it runs.
+"""
+type Lock {
+  """Unique ID of the lock."""
+  id: ID!
+
+  """The lock's key, unique within its agent."""
+  key: String!
+
+  """What the lock guards."""
+  description: String
+
+  """The agent the lock belongs to."""
+  agent: Agent!
+
+  """The task holding the lock right now, if any."""
+  heldBy: Task
+
+  """The implementations that take this lock while they run."""
+  requiredBy(filters: ImplementationFilter, ordering: [ImplementationOrder!]! = [], pagination: OffsetPaginationInput): [Implementation!]!
+
+  """When the lock was last taken, released or redeclared."""
+  updatedAt: DateTime!
 }
 
 """Which locks does the agent provide in general"""
@@ -4301,8 +4353,9 @@ A session representing a continuous interaction of an agent with the system.
 type Session @key(fields: "id", resolvable: true) {
   id: ID!
   agent: Agent!
+
+  """When the session started."""
   startedAt: DateTime!
-  endedAt: DateTime
   snapshots: [Snapshot!]!
   patches: [Patch!]!
 }
@@ -4330,8 +4383,8 @@ input SessionFilter {
 }
 
 input SessionOrder @oneOf {
+  """When the session started."""
   startedAt: Ordering
-  endedAt: Ordering
 }
 
 input ShelveInMemoryDrawerInput {
@@ -4371,8 +4424,8 @@ type Shortcut {
   """Implementation of the action."""
   implementation: Implementation
 
-  """Toolboxes that contain this shortcut."""
-  toolboxes(filters: ToolboxFilter, ordering: [ToolboxOrder!]! = [], pagination: OffsetPaginationInput): [Toolbox!]!
+  """The toolbox this shortcut belongs to."""
+  toolbox: Toolbox!
 
   """Saved arguments for the shortcut."""
   savedArgs: AnyDefault!
@@ -4968,6 +5021,9 @@ type Task {
   """Arguments used in the task."""
   args: AnyDefault!
 
+  """The locks this task holds right now."""
+  heldLocks: [Lock!]!
+
   """Canonical sha256 of the assign args — the replay-discovery key."""
   argsHash: String
 
@@ -5397,20 +5453,29 @@ type TestResult {
   """True if test passed."""
   passed: Boolean!
 
+  """What the test produced, as JSON."""
+  result: AnyDefault
+
   """When the test was executed."""
   createdAt: DateTime!
-
-  """When the test result was last updated."""
-  updatedAt: DateTime!
 }
 
 """A way to filter test results"""
 input TestResultFilter {
-  name: StrFilterLookup
+  passed: Boolean
   AND: TestResultFilter
   OR: TestResultFilter
   NOT: TestResultFilter
   DISTINCT: Boolean
+
+  """Results of this test case"""
+  case: ID
+
+  """Results of the test cases of this action"""
+  action: ID
+
+  """Results for this implementation under test"""
+  implementation: ID
   ids: [ID!]
 }
 
@@ -5441,7 +5506,11 @@ type ThreeDModel {
   name: String!
   description: String
   transferFunction: String
-  dependency: Agent!
+
+  """
+  The agent this model shows (an agent-dependency declaration), as stored.
+  """
+  dependency: AnyDefault
   file: MediaStore!
   createdAt: DateTime!
   updatedAt: DateTime!
@@ -5794,6 +5863,12 @@ input UpdateThreeDModelInput {
 
   """The new media store file ID for the 3D model."""
   media: ID = null
+
+  """How the agent's state maps onto the model's properties."""
+  transferFunction: String = null
+
+  """The agent this model shows."""
+  dependency: AgentDependencyInput = null
 }
 
 """Change a trigger. Omitted fields stay as they are."""

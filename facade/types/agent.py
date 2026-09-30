@@ -27,6 +27,21 @@ class HardwareRecord:
         return build_prescoped_queryset(info, queryset, field="agent__organization")
 
 
+@strawberry_django.type(models.Lock, description="A resource of an agent that one of its tasks holds at a time: the agent takes it while an implementation that requires it runs.")
+class Lock:
+    id: strawberry.ID = strawberry_django.field(description="Unique ID of the lock.")
+    key: str = strawberry_django.field(description="The lock's key, unique within its agent.")
+    description: str | None = strawberry_django.field(description="What the lock guards.")
+    agent: "Agent" = strawberry_django.field(description="The agent the lock belongs to.")
+    held_by: Optional["Task"] = strawberry_django.field(field_name="hold_by", description="The task holding the lock right now, if any.")
+    required_by: list["Implementation"] = strawberry_django.field(description="The implementations that take this lock while they run.")
+    updated_at: datetime.datetime = strawberry_django.field(description="When the lock was last taken, released or redeclared.")
+
+    @classmethod
+    def get_queryset(cls, queryset, info, **kwargs):
+        return build_prescoped_queryset(info, queryset, field="agent__organization")
+
+
 @strawberry_django.type(models.Agent, filters=filters.AgentFilter, ordering=filters.AgentOrder, pagination=True, description="Represents a compute agent that can execute implementations.")
 class Agent:
     id: strawberry.ID = strawberry_django.field(description="Unique ID of the agent.")
@@ -41,6 +56,7 @@ class Agent:
         return self.client.device
 
     implementations: list["Implementation"] = strawberry_django.field(description="Implementations the agent can run.")
+    locks: list["Lock"] = strawberry_django.field(description="The agent's locks, and which task holds each.")
     memory_shelve: Optional["MemoryShelve"] = strawberry_django.field(description="Agent's associated memory shelve.")
     last_seen: datetime.datetime | None = strawberry_django.field(description="Last timestamp this agent was seen.")
     connected: bool = strawberry_django.field(description="Is the agent currently connected.")

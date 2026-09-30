@@ -3,6 +3,8 @@
 import strawberry
 from datalayer import scalars as dscalars
 from pydantic import BaseModel, Field
+from rekuest_core.inputs import models as rimodels
+from rekuest_core.inputs import types as ritypes
 from strawberry.experimental import pydantic
 
 
@@ -10,6 +12,8 @@ class CreateThreeDModelInputModel(BaseModel):
     name: str = Field(description="The name of the 3D model.")
     description: str | None = Field(default=None, description="A description of the 3D model.")
     media: str = Field(description="The media store file for the 3D model.")
+    transfer_function: str | None = Field(default=None, description="How the agent's state maps onto the model's properties.")
+    dependency: rimodels.AgentDependencyInputModel | None = Field(default=None, description="The agent this model shows: whose state the transfer function reads.")
 
 
 @pydantic.input(CreateThreeDModelInputModel, description="The input for creating a 3D model.")
@@ -17,6 +21,8 @@ class CreateThreeDModelInput:
     name: str
     description: str | None = None
     media: dscalars.MediaLike
+    transfer_function: str | None = None
+    dependency: ritypes.AgentDependencyInput | None = None
 
 
 class UpdateThreeDModelInputModel(BaseModel):
@@ -24,6 +30,8 @@ class UpdateThreeDModelInputModel(BaseModel):
     name: str | None = Field(default=None, description="The new name of the 3D model.")
     description: str | None = Field(default=None, description="The new description of the 3D model.")
     media: str | None = Field(default=None, description="The new media store file ID for the 3D model.")
+    transfer_function: str | None = Field(default=None, description="How the agent's state maps onto the model's properties.")
+    dependency: rimodels.AgentDependencyInputModel | None = Field(default=None, description="The agent this model shows.")
 
 
 @pydantic.input(UpdateThreeDModelInputModel, description="The input for updating a 3D model.")
@@ -32,6 +40,8 @@ class UpdateThreeDModelInput:
     name: str | None = None
     description: str | None = None
     media: strawberry.ID | None = None
+    transfer_function: str | None = None
+    dependency: ritypes.AgentDependencyInput | None = None
 
 
 class PlacementInputModel(BaseModel):

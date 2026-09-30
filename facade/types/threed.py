@@ -6,6 +6,7 @@ import datetime
 
 import strawberry
 import strawberry_django
+from rekuest_core import scalars as rscalars
 from datalayer import types as dtypes
 
 from facade import filters, models, scalars
@@ -24,7 +25,7 @@ class ThreeDModel:
     name: str
     description: str | None
     transfer_function: str | None
-    dependency: Agent
+    dependency: rscalars.AnyDefault | None = strawberry_django.field(description="The agent this model shows (an agent-dependency declaration), as stored.")
     file: dtypes.MediaStore
     created_at: datetime.datetime
     updated_at: datetime.datetime

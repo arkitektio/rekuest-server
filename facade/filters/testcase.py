@@ -25,7 +25,19 @@ class TestCaseFilter:
 
 @strawberry_django.filter_type(models.TestResult, description="A way to filter test results")
 class TestResultFilter:
-    name: Optional[FilterLookup[str]]
+    passed: Optional[bool]
+
+    @filter_field(description="Results of this test case")
+    def case(self, info: Info, queryset, value: strawberry.ID, prefix: str):
+        return queryset.filter(**{f"{prefix}case_id": value}), Q()
+
+    @filter_field(description="Results of the test cases of this action")
+    def action(self, info: Info, queryset, value: strawberry.ID, prefix: str):
+        return queryset.filter(**{f"{prefix}case__action_id": value}), Q()
+
+    @filter_field(description="Results for this implementation under test")
+    def implementation(self, info: Info, queryset, value: strawberry.ID, prefix: str):
+        return queryset.filter(**{f"{prefix}implementation_id": value}), Q()
 
     @filter_field
     def ids(self, info: Info, queryset, value: list[strawberry.ID], prefix: str):
