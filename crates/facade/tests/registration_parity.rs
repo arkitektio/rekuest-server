@@ -277,7 +277,7 @@ fn synthetic_steps() -> Vec<(&'static str, Value)> {
              "children": [{"id": "leaf", "component": "Text", "props": [{"key": "text", "static_value": "hi"}]}]}],
             "dependencies": deps, "demo_state": {"x": 1}})
     };
-    let stage_dep = json!({"key": "stage", "app": "stage-app", "optional": true, "assign_policy": "ROUND_ROBIN"});
+    let stage_dep = json!({"key": "stage", "app": "stage-app", "optional": true});
     let camera_dep = json!({"key": "camera", "description": "the camera"});
 
     // An interface moving to another action: the old action keeps no implementation and goes.

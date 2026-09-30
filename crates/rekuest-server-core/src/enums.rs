@@ -61,10 +61,6 @@ wire_enum!(
     DescriptorOperator { MATCHES, EXISTS, LTE, GTE, EQUALS, CONTAINS, NOT_EQUALS, IN, NOT_IN }
 );
 wire_enum!(
-    /// How a demand picks among its candidates.
-    AssignPolicy { AUTOMATIC, BALANCED, ROUND_ROBIN, LEAST_BUSY, FASTEST_RESPONSE }
-);
-wire_enum!(
     /// The part of a state entry a state accessor reads.
     OptionKey { LABEL, DESCRIPTION, LOGO, VALUE }
 );

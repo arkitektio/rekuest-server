@@ -84,3 +84,14 @@ fn every_declaration_is_judged_as_python_judges_it() {
         failures.join("\n")
     );
 }
+
+/// Released clients still send `assign_policy` on every agent dependency; nothing reads it any
+/// more, but their registrations must keep parsing.
+#[test]
+fn a_dependency_from_a_released_client_still_parses() {
+    let dependency: rekuest_core::inputs::AgentDependencyInputModel = serde_json::from_value(
+        serde_json::json!({"key": "stage", "optional": true, "assign_policy": "BALANCED"}),
+    )
+    .expect("the legacy field is ignored");
+    assert_eq!(dependency.key, "stage");
+}

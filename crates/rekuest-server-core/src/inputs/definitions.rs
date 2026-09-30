@@ -17,7 +17,7 @@ use super::ports::{
 };
 use super::{min_length, ValidationError};
 use crate::enums::{
-    ActionKind, AssignPolicy, CatalogValueKind, Effects, Execution, PortKind, WindowFunction,
+    ActionKind, CatalogValueKind, Effects, Execution, PortKind, WindowFunction,
 };
 use crate::pyjson::{dumps, repr_str};
 
@@ -159,10 +159,6 @@ pub struct StateDependencyInputModel {
     pub allow_inactive: bool,
 }
 
-fn balanced() -> AssignPolicy {
-    AssignPolicy::BALANCED
-}
-
 /// An agent an implementation or blok depends on (`AgentDependencyInputModel`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentDependencyInputModel {
@@ -191,8 +187,6 @@ pub struct AgentDependencyInputModel {
     pub max_viable_instances: Option<i64>,
     #[serde(default)]
     pub prefered_instances: Option<i64>,
-    #[serde(default = "balanced")]
-    pub assign_policy: AssignPolicy,
 }
 
 /// The action(s) a test action tests (`TestTargetInputModel`).

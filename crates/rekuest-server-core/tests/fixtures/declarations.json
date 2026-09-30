@@ -573,8 +573,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       }
      ],
      "tracks": [],
@@ -784,8 +783,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       }
      ],
      "tracks": [],
@@ -1005,8 +1003,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       }
      ],
      "tracks": [],
@@ -1216,8 +1213,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       }
      ],
      "tracks": [],
@@ -3658,8 +3654,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       },
       {
        "key": "reverse",
@@ -4013,8 +4008,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       }
      ],
      "tracks": [],
@@ -4427,8 +4421,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       },
       {
        "key": "reverse",
@@ -4782,8 +4775,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       }
      ],
      "tracks": [],
@@ -5144,8 +5136,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       },
       {
        "key": "reverse",
@@ -5499,8 +5490,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       }
      ],
      "tracks": [],
@@ -5895,8 +5885,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       },
       {
        "key": "reverse",
@@ -6250,8 +6239,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       }
      ],
      "tracks": [],
@@ -6677,8 +6665,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       },
       {
        "key": "reverse",
@@ -7032,8 +7019,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       }
      ],
      "tracks": [],
@@ -7446,8 +7432,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       },
       {
        "key": "reverse",
@@ -7801,8 +7786,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       }
      ],
      "tracks": [],
@@ -8163,8 +8147,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       },
       {
        "key": "reverse",
@@ -8518,8 +8501,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       }
      ],
      "tracks": [],
@@ -8914,8 +8896,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       },
       {
        "key": "reverse",
@@ -9269,8 +9250,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       }
      ],
      "tracks": [],
@@ -12626,8 +12606,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       },
       {
        "key": "handler",
@@ -12785,8 +12764,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       }
      ],
      "tracks": [],
@@ -12997,8 +12975,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       },
       {
        "key": "handler",
@@ -13156,8 +13133,7 @@
        "mutually_exclusive_keys": null,
        "min_viable_instances": 1,
        "max_viable_instances": null,
-       "prefered_instances": null,
-       "assign_policy": "BALANCED"
+       "prefered_instances": null
       }
      ],
      "tracks": [],
