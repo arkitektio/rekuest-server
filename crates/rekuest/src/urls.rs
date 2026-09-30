@@ -1,15 +1,19 @@
-//! The HTTP surface: health now; the agent socket, hook intake and internal API as the phases land.
+//! The routes (`rekuest/urls.py` and `asgi.py`): health now; the agent socket, the hook
+//! intake and the internal API as the phases land.
 
 use std::sync::Arc;
 
 use axum::{extract::State, http::StatusCode, routing::get, Router};
 use sqlx::PgPool;
 
-use crate::Config;
+use facade::settings::Settings;
+
+use crate::Configuration;
 
 /// What every handler shares.
 pub struct AppState {
-    pub config: Config,
+    pub configuration: Configuration,
+    pub settings: Settings,
     pub db: PgPool,
     pub redis: redis::aio::ConnectionManager,
 }
@@ -18,7 +22,7 @@ pub type Shared = Arc<AppState>;
 
 pub fn router(state: Shared) -> Router {
     let prefix = state
-        .config
+        .configuration
         .django
         .force_script_name
         .trim_matches('/')

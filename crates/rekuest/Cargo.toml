@@ -1,6 +1,6 @@
 [package]
-name = "rekuest-agentd"
-description = "The rekuest agent protocol server: what agents connect to"
+name = "rekuest"
+description = "The project (mirrors the Python server's `rekuest/`): configuration, settings, routes, and the agentd binary"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,6 +12,7 @@ name = "agentd"
 path = "src/main.rs"
 
 [dependencies]
+facade.workspace = true
 rekuest-protocol.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true

@@ -383,6 +383,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "facade"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "rekuest-protocol",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1306,12 +1314,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
-name = "rekuest-agentd"
+name = "rekuest"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
  "chrono",
+ "facade",
  "redis",
  "rekuest-protocol",
  "serde",

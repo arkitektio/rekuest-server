@@ -1,4 +1,4 @@
-//! The rekuest server's `config.yaml`, read by agentd too.
+//! The rekuest server's `config.yaml` (`rekuest/configuration.py`), read by agentd too.
 //!
 //! One file configures both processes: the Python server (GraphQL, subscriptions) and agentd
 //! (the agent protocol). agentd reads only the blocks it needs; everything else in the file is
@@ -10,7 +10,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct Config {
+pub struct Configuration {
     #[serde(default)]
     pub django: DjangoBlock,
     pub postgres: PostgresBlock,
@@ -162,7 +162,7 @@ pub struct InstanceBlock {
     pub private_key: String,
 }
 
-impl Config {
+impl Configuration {
     pub fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let path = path.as_ref();
         let text = std::fs::read_to_string(path)
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn reads_the_servers_config_and_ignores_the_rest() {
-        let config: Config = serde_yaml::from_str(
+        let config: Configuration = serde_yaml::from_str(
             r#"
 django:
   secret_key: s

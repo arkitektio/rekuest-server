@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["agentd"]
+members = ["crates/*"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,6 +11,7 @@ repository = "https://github.com/arkitektio/rekuest-agentd"
 [workspace.dependencies]
 # The wire types, shared with the agents (arkirust). A path until 0.2 is on crates.io.
 rekuest-protocol = { path = "../arkirust/crates/rekuest-protocol", version = "0.2.0" }
+facade = { path = "crates/facade" }
 anyhow = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time", "signal", "net"] }

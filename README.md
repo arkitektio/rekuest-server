@@ -26,6 +26,21 @@ hook agents ─http────┤
 agentd reads the rekuest server's own `config.yaml` (`AGENTD_CONFIG`, default `config.yaml`) and
 listens on `AGENTD_BIND` (default `0.0.0.0:8080`), under the config's `force_script_name`.
 
+## Layout: the Python server's packages, in Rust
+
+Each crate mirrors the Python package whose scope it takes over, and keeps its module names,
+so a behaviour has the same path on both sides (`facade/liveness.py` ↔ `facade::liveness`).
+
+| Crate | Mirrors | Scope |
+|---|---|---|
+| `rekuest` | `rekuest/` (the Django project) | `configuration`, `settings`, `urls`; the `agentd` binary |
+| `facade` | `facade/` (the app) | the agent protocol: `codes`, `liveness`, `redis_keys`, then `consumers`, `persist`, `registration`, `guards`, `provenance`, `reaper`, … |
+| `rekuest-core` | `rekuest_core/` | the declaration models and their validation (Phase 1) |
+| `authentikate` | `authentikate` | token validation and user/org/client expansion (Phase 1) |
+| `kante` | `kante` | the channels_redis-compatible channel layer (Phase 2) |
+
+A crate appears when its first module is ported; nothing is stubbed ahead of it.
+
 ## The contract
 
 - **Wire:** [`rekuest-protocol`](https://github.com/arkitektio/arkirust/tree/main/crates/rekuest-protocol),

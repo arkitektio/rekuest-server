@@ -1,0 +1,12 @@
+[package]
+name = "facade"
+description = "The agent-protocol app (mirrors the Python server's `facade/`, module for module)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+rekuest-protocol.workspace = true
+chrono.workspace = true
