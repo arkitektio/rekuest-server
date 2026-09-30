@@ -7,6 +7,7 @@
 pub mod catalog_validation;
 pub mod channel_events;
 pub mod channels;
+pub mod clock;
 pub mod codes;
 pub mod consumers;
 pub mod context;
@@ -20,6 +21,7 @@ pub mod mutations;
 pub mod persist;
 pub mod protocol;
 pub mod provenance;
+pub mod reaper;
 pub mod redis_keys;
 pub mod registration;
 pub mod registration_lock;
