@@ -49,6 +49,12 @@ so a behaviour has the same path on both sides (`facade/liveness.py` ↔ `facade
 
 A crate appears when its first module is ported; nothing is stubbed ahead of it.
 
+## Design documents
+
+The protocol's design documents live in [`docs/`](docs/): [agent protocol](docs/agent-protocol.md),
+[caller protocol](docs/caller-protocol.md), [task lifecycle](docs/task-lifecycle.md),
+[journal](docs/journal.md), [workflows](docs/workflows.md), [provenance](docs/provenance.md).
+
 ## The contract
 
 - **Wire:** [`rekuest-protocol`](https://github.com/arkitektio/arkirust/tree/main/crates/rekuest-protocol),
@@ -83,7 +89,7 @@ A crate appears when its first module is ported; nothing is stubbed ahead of it.
 | 3 | assign, control, guards, probes, caller mirrors, internal API | done |
 | 4 | agent sweeps, workflow resume | done (the reaper: `AGENTD_REAPER=0` beside a Python reaper, which shares its tick token) |
 | 5 | HTTP hook agents (intake, signed delivery, caller mirrors, service-agent trust) | done |
-| 6 | cutover; the Python agent path is deleted | |
+| 6 | cutover; the Python agent path is deleted | done (lab): agentd is the only writer of task state and registrations; the Python server keeps GraphQL, subscriptions, CRUD and the scheduler loop |
 
 ## Development
 
