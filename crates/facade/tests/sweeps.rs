@@ -662,6 +662,66 @@ async fn an_undeliverable_webhook_task_is_retried_once_then_lost() {
     assert_eq!(state(&ctx, task).await, ("LOST".into(), true));
 }
 
+#[tokio::test]
+async fn a_webhook_agents_redelivery_is_posted_to_its_hook() {
+    let _serial = serial().await;
+    let Some(ctx) = context(settings()).await else {
+        return;
+    };
+    // The hook: every body POSTed to it.
+    let (sent, mut received) = tokio::sync::mpsc::unbounded_channel::<String>();
+    let app = axum::Router::new().route(
+        "/hook",
+        axum::routing::post(move |body: String| {
+            let sent = sent.clone();
+            async move {
+                sent.send(body).ok();
+                axum::http::StatusCode::OK
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let hook = format!("http://{}/hook", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.ok() });
+
+    let (agent, action) = agent(&ctx).await;
+    sqlx::query("UPDATE facade_agent SET kind = 'WEBHOOK', hook_url = $2, hook_url_secret = 's3cret' WHERE id = $1")
+        .bind(agent)
+        .bind(&hook)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    let implementation = implementation(&ctx, agent, action, "PLAIN").await;
+    let task = assignable(&ctx, agent, action, implementation).await;
+    backdate(&ctx, task, 10).await;
+
+    reconcile::reconcile_unpicked_tasks(&ctx, LIMIT)
+        .await
+        .unwrap();
+
+    // The hook also hears the caller's event mirror; the Assign is among what it got.
+    let assign = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let frame: Value = serde_json::from_str(&received.recv().await.unwrap()).unwrap();
+            if frame["type"] == "ASSIGN" {
+                return frame;
+            }
+        }
+    })
+    .await
+    .expect("the Assign was posted to the hook");
+    assert_eq!(assign["task"], task.to_string());
+    assert!(assign["id"].is_string(), "the frame is enveloped like a live assign");
+    let (attempts, dispatched): (i16, bool) = sqlx::query_as(
+        "SELECT dispatch_attempts, dispatched_at IS NOT NULL FROM facade_task WHERE id = $1",
+    )
+    .bind(task)
+    .fetch_one(&ctx.db)
+    .await
+    .unwrap();
+    assert_eq!((attempts, dispatched), (2, true), "a delivered handoff counts as dispatched");
+}
+
 // -- expiry (test_pickup_watchdog.py TestExpiry) -----------------------------------------------
 
 #[tokio::test]

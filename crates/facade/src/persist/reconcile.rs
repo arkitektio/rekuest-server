@@ -16,7 +16,6 @@ use serde_json::{Map, Value};
 use sqlx::types::Json;
 
 use crate::caller_context::CallerContext;
-use crate::consumers::agent_queue;
 use crate::context::Context;
 use crate::liveness::agent_is_live;
 use crate::messages::{Assign, Journal, RecordedEffect, ToAgent};
@@ -26,6 +25,7 @@ use crate::persist::transitions::{
 };
 use crate::provenance::{mint_token_for_task, MintTask};
 use crate::signals;
+use crate::transport;
 
 /// The pickup watchdog's budget: the original dispatch plus ONE redelivery. Failed handoffs
 /// (redis down, a webhook that is not delivered) count, or a broken transport never fails.
@@ -242,54 +242,12 @@ pub async fn journal(ctx: &Context, task: i64) -> Result<Journal, sqlx::Error> {
     })
 }
 
-/// Hand a frame to an agent's transport. A websocket agent's goes into its redis queue (which
-/// holds it while the agent is away). Webhook delivery is not in this server yet: a webhook
-/// agent's frame counts as a failed handoff, which the pickup watchdog retries and then ends.
-async fn deliver(ctx: &Context, agent: i64, frame: &ToAgent) -> bool {
-    let kind: Result<Option<String>, _> =
-        sqlx::query_scalar("SELECT kind FROM facade_agent WHERE id = $1")
-            .bind(agent)
-            .fetch_optional(&ctx.db)
-            .await;
-    match kind {
-        Ok(Some(kind)) if kind == "WEBSOCKET" => {}
-        Ok(Some(kind)) => {
-            tracing::error!(
-                agent,
-                kind,
-                "no transport for this agent kind in this server"
-            );
-            return false;
-        }
-        Ok(None) => return false,
-        Err(e) => {
-            tracing::error!(agent, "looking up the agent's transport failed: {e}");
-            return false;
-        }
-    }
-    let body = match serde_json::to_string(frame) {
-        Ok(body) => body,
-        Err(e) => {
-            tracing::error!(agent, "serializing a frame failed: {e}");
-            return false;
-        }
-    };
-    let mut redis = ctx.redis.clone();
-    match agent_queue::push(&mut redis, &ctx.settings, agent, &body, false).await {
-        Ok(()) => true,
-        Err(e) => {
-            tracing::error!(agent, "queueing a frame failed: {e}");
-            false
-        }
-    }
-}
-
 /// Hand an Assign to the agent's transport; on failure, record that it never left (`_dispatch`).
 ///
 /// `dispatched_at` means "successfully handed over at". A failed handoff resets it to NULL so
 /// the pickup watchdog retries it, and NULL proves the agent cannot have the task.
 async fn dispatch(ctx: &Context, task: i64, agent: i64, assign: Assign) -> bool {
-    if deliver(ctx, agent, &ToAgent::Assign(Box::new(assign))).await {
+    if transport::broadcast(ctx, agent, ToAgent::Assign(Box::new(assign)), false).await {
         return true;
     }
     tracing::error!(task, agent, "dispatching the task failed");
