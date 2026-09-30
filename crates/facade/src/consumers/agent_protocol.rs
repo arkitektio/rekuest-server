@@ -12,6 +12,7 @@
 //! Unlike the Python server, a heartbeat answer never waits behind the reports the agent sent
 //! before it: liveness means "the agent answers", not "our backlog is short".
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -25,8 +26,9 @@ use crate::consumers::agent_queue::AgentQueue;
 use crate::consumers::connections::Control;
 use crate::context::Context;
 use crate::message_router;
-use crate::messages::{AgentFrame, AgentMessage, FromAgent, Inquiry, ToAgent, ToAgentFrame};
+use crate::messages::{AgentFrame, FromAgent, Inquiry, ToAgent, ToAgentFrame};
 use crate::persist::{caller_ops, leases};
+use crate::persist::{positions, reports};
 use crate::registration;
 
 /// What the writer task sends: a frame, or the close that ends the connection.
@@ -159,13 +161,13 @@ async fn first_frame(
             }
         }
     };
-    let message = parse(&frame)?;
+    let frame = parse(&frame)?;
     let FromAgent::Register {
         token,
         force,
         session_id,
         declaration,
-    } = message
+    } = frame.message
     else {
         return Err(Refused::close(
             codes::FROM_AGENT_MESSAGE_DOES_NOT_MATCH_SCHEMA_CODE,
@@ -184,17 +186,15 @@ async fn first_frame(
 }
 
 /// Parse a frame, refusing what is not JSON (3002) or not a frame (3003, with the reason).
-fn parse(text: &str) -> Result<AgentMessage, Refused> {
+fn parse(text: &str) -> Result<AgentFrame, Refused> {
     let value: Value = serde_json::from_str(text)
         .map_err(|_| Refused::close(codes::FROM_AGENT_MESSAGE_IS_NOT_VALID_JSON_CODE))?;
-    serde_json::from_value::<AgentFrame>(value)
-        .map(|envelope| envelope.message)
-        .map_err(|e| {
-            Refused::explained(
-                codes::FROM_AGENT_MESSAGE_DOES_NOT_MATCH_SCHEMA_CODE,
-                e.to_string(),
-            )
-        })
+    serde_json::from_value::<AgentFrame>(value).map_err(|e| {
+        Refused::explained(
+            codes::FROM_AGENT_MESSAGE_DOES_NOT_MATCH_SCHEMA_CODE,
+            e.to_string(),
+        )
+    })
 }
 
 /// Authenticate, gate and claim, in the Python order (`on_register`): token → blocked →
@@ -312,16 +312,14 @@ async fn run_session(
         waiter.clone(),
         drain.abort_handle(),
     ));
-    let (work_tx, mut work_rx) = mpsc::unbounded_channel::<AgentMessage>();
-    let worker = {
-        let ctx = ctx.clone();
-        let sender = sender.clone();
-        tokio::spawn(async move {
-            while let Some(message) = work_rx.recv().await {
-                message_router::route(&ctx, agent, message, &sender).await;
-            }
-        })
-    };
+    let (work_tx, work_rx) = mpsc::unbounded_channel::<AgentFrame>();
+    let worker = tokio::spawn(work(
+        ctx.clone(),
+        agent,
+        registered.session_id.clone(),
+        sender.clone(),
+        work_rx,
+    ));
 
     loop {
         tokio::select! {
@@ -335,18 +333,18 @@ async fn run_session(
                     }
                     _ => break,
                 };
-                match parse(&text) {
-                    Ok(FromAgent::HeartbeatAnswer {}) => {
+                match parse(&text).map(|frame| (matches!(frame.message, FromAgent::HeartbeatAnswer {}), frame)) {
+                    Ok((true, _)) => {
                         match waiter.lock().expect("heartbeat lock").take() {
                             Some(answered) => { let _ = answered.send(()); }
                             None => tracing::warn!(agent, "received a heartbeat answer nobody waited for"),
                         }
                     }
-                    Ok(FromAgent::Register { .. }) => {
+                    Ok((false, frame)) if matches!(frame.message, FromAgent::Register { .. }) => {
                         sender.close(codes::FROM_AGENT_MESSAGE_DOES_NOT_MATCH_SCHEMA_CODE);
                         break;
                     }
-                    Ok(message) => { let _ = work_tx.send(message); }
+                    Ok((false, frame)) => { let _ = work_tx.send(frame); }
                     Err(refused) => {
                         if let Some(error) = refused.error {
                             sender.send(ToAgent::ProtocolError { error });
@@ -372,6 +370,89 @@ async fn run_session(
     ctx.connections.leave(agent, connection_id);
     if let Err(e) = on_agent_disconnected(ctx, agent, connection_id).await {
         tracing::error!(agent, "releasing the lease failed: {e}");
+    }
+}
+
+/// JOURNAL_ACK debounce: acknowledge after this many newly persisted entries, or this long after
+/// the first unacknowledged one, whichever comes first. A terminal report is acked at once.
+pub const JOURNAL_ACK_EVERY: u32 = 50;
+pub const JOURNAL_ACK_DELAY: Duration = Duration::from_millis(200);
+
+/// Route the agent's frames in order, send their replies, and acknowledge the numbered ones
+/// (`dispatch`, `on_numbered_handled`). A frame the router fails on closes the connection, as
+/// the Python consumer does.
+async fn work(
+    ctx: Context,
+    agent: i64,
+    session_id: Option<String>,
+    sender: Sender,
+    mut frames: mpsc::UnboundedReceiver<AgentFrame>,
+) {
+    let mut unacked: HashMap<String, u32> = HashMap::new();
+    let mut deadline: Option<tokio::time::Instant> = None;
+    loop {
+        let next = match deadline {
+            Some(at) => tokio::select! {
+                frame = frames.recv() => frame,
+                _ = tokio::time::sleep_until(at) => {
+                    deadline = None;
+                    flush_journal_acks(&ctx, agent, &sender, &mut unacked).await;
+                    continue;
+                }
+            },
+            None => frames.recv().await,
+        };
+        let Some(frame) = next else {
+            flush_journal_acks(&ctx, agent, &sender, &mut unacked).await;
+            return;
+        };
+        match message_router::route(&ctx, agent, &frame, session_id.as_deref()).await {
+            Ok(Some(reply)) => sender.send(reply),
+            Ok(None) => {}
+            Err(e) => {
+                tracing::error!(agent, "error handling agent message: {e}");
+                sender.close(codes::FROM_AGENT_MESSAGE_DOES_NOT_MATCH_SCHEMA_CODE);
+                return;
+            }
+        }
+        if !positions::is_numbered(&frame) {
+            continue;
+        }
+        let Some(journal_session) = frame.journal_session.clone() else {
+            continue;
+        };
+        let count = unacked.entry(journal_session).or_default();
+        *count += 1;
+        if frame.message.is_terminal() || *count >= JOURNAL_ACK_EVERY {
+            deadline = None;
+            flush_journal_acks(&ctx, agent, &sender, &mut unacked).await;
+        } else if deadline.is_none() {
+            deadline = Some(tokio::time::Instant::now() + JOURNAL_ACK_DELAY);
+        }
+    }
+}
+
+/// One cumulative JOURNAL_ACK per session with handled frames: its watermark, read from the
+/// session row, since another connection may have moved it further (`flush_journal_acks`).
+async fn flush_journal_acks(
+    ctx: &Context,
+    agent: i64,
+    sender: &Sender,
+    unacked: &mut HashMap<String, u32>,
+) {
+    for (journal_session, count) in unacked.iter_mut() {
+        if *count == 0 {
+            continue;
+        }
+        *count = 0;
+        match positions::projected_position(&ctx.db, agent, journal_session).await {
+            Ok(0) => {}
+            Ok(pos) => sender.send(ToAgent::JournalAck {
+                journal_session: journal_session.clone(),
+                pos: pos as u64,
+            }),
+            Err(e) => tracing::error!(agent, "sending a JOURNAL_ACK failed: {e}"),
+        }
     }
 }
 
@@ -428,7 +509,8 @@ async fn heartbeat(
     }
 }
 
-/// Whether a queued frame is an `ASSIGN` for a task the server already closed.
+/// Whether a queued frame is an `ASSIGN` for a task the server already closed (`_is_stale_assign`).
+/// Probe Assigns carry no task row and are never fenced; anything unparseable is delivered.
 async fn is_stale_assign(ctx: &Context, frame: &str) -> bool {
     if !frame.contains("\"ASSIGN\"") {
         return false;
@@ -441,23 +523,12 @@ async fn is_stale_assign(ctx: &Context, frame: &str) -> bool {
     {
         return false;
     }
-    let Some(task) = raw.get("task").and_then(|t| {
-        t.as_str()
-            .map(str::to_owned)
-            .or_else(|| t.as_i64().map(|i| i.to_string()))
-    }) else {
-        return false;
+    let task = match raw.get("task") {
+        Some(Value::String(task)) => task.clone(),
+        Some(Value::Number(task)) => task.to_string(),
+        _ => return false,
     };
-    let Ok(task) = task.parse::<i64>() else {
-        return false;
-    };
-    matches!(
-        sqlx::query_scalar::<_, bool>("SELECT is_done FROM facade_task WHERE id = $1")
-            .bind(task)
-            .fetch_optional(&ctx.db)
-            .await,
-        Ok(Some(true))
-    )
+    !reports::is_task_open(ctx, &task).await
 }
 
 /// Deliver the agent's queue (`listen_for_tasks`): recover what a previous holder popped but
