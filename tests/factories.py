@@ -163,7 +163,6 @@ def _build_task(prefix, *, effects="UNKNOWN", idempotent=False, pure=False, pare
         pure=pure,
     )
     implementation = Implementation.objects.create(
-        release=release,
         interface=f"{prefix}-iface",
         action=action,
         agent=agent,
@@ -235,7 +234,6 @@ def _build_task_for_agent_caller(agent_pk, prefix, parent=None, root=None):
         organization=agent.organization,
     )
     implementation = Implementation.objects.create(
-        release=release,
         interface=f"{prefix}-iface",
         action=action,
         agent=agent,
@@ -292,7 +290,6 @@ def _build_implementation_for_agent(agent_pk, prefix, needs_token=True, allow_pr
         allow_probe=allow_probe,
     )
     return Implementation.objects.create(
-        release=agent.release,
         interface=f"{prefix}-iface",
         action=action,
         agent=agent,
@@ -325,7 +322,7 @@ def _build_state_for_agent(agent_pk, interface, prefix):
         description=f"{prefix} state def",
         organization=agent.organization,
     )
-    return State.objects.create(definition=definition, interface=interface, agent_id=agent_pk, value={})
+    return State.objects.create(definition=definition, interface=interface, agent_id=agent_pk)
 
 
 def _build_webhook_agent(prefix, secret="s3cr3t", hook_url="https://hook.example/in"):

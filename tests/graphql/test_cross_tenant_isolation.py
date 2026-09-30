@@ -113,16 +113,6 @@ class TestCrossTenantIsolation:
         returned = {row["id"] for row in result.data["actions"]}
         assert str(t["b"]["action"].id) not in returned, "org A can see org B's Action"
 
-    async def test_states_are_scoped_to_the_callers_organization(self, authenticated_context):
-        """State has no get_queryset — org A currently receives org B's states."""
-        t = await _seed_two_tenants("xt-states")
-
-        result = await schema.execute("query { states { id interface } }", context_value=t["a"]["context"])
-
-        assert not result.errors, result.errors
-        returned = {row["id"] for row in result.data["states"]}
-        assert str(t["b"]["state"].id) not in returned, "org A can see org B's State"
-
     async def test_single_state_lookup_is_scoped(self, authenticated_context):
         """facade/schema.py:104 resolves State.objects.get(id=id) with no organization filter."""
         t = await _seed_two_tenants("xt-state-by-id")

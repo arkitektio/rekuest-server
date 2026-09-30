@@ -123,7 +123,7 @@ def call(op: str, payload: Dict[str, Any]) -> Dict[str, Any]:
                 version=definition.get("version", "1"),
                 defaults={"name": definition["name"], "hash": f"fake-{definition['key']}", "kind": definition.get("kind", "FUNCTION"), "description": definition.get("description") or ""},
             )
-            models.Implementation.objects.update_or_create(agent=agent, interface=implementation["interface"], defaults={"action": action, "release": agent.release, "needs_token": implementation.get("needs_token", True)})
+            models.Implementation.objects.update_or_create(agent=agent, interface=implementation["interface"], defaults={"action": action, "needs_token": implementation.get("needs_token", True)})
         if declaration.get("name"):
             agent.name = declaration["name"]
             agent.save(update_fields=["name"])

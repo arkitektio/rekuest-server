@@ -75,10 +75,6 @@ class Action:
     def port_groups(self) -> list[rtypes.PortGroup]:
         return [rmodels.PortGroupModel(**i) for i in self.port_groups]
 
-    @strawberry_django.field(description="Check if the current user has pinned this action.")
-    def pinned(self, info: Info) -> bool:
-        user = info.context.request.user
-        return self.pinned_by.filter(id=user.id).exists()
 
     @classmethod
     def get_queryset(cls, queryset, info, **kwargs):

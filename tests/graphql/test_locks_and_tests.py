@@ -22,7 +22,7 @@ def _agent_in(context: HttpContext, prefix: str) -> models.Agent:
 def _locked(context: HttpContext) -> tuple[models.Agent, models.Task]:
     agent = _agent_in(context, "locks")
     action = create_action_for_organization(agent.organization, "locks-action")
-    implementation = models.Implementation.objects.create(agent=agent, action=action, interface="move", release=agent.release)
+    implementation = models.Implementation.objects.create(agent=agent, action=action, interface="move")
     lock = models.Lock.objects.create(agent=agent, key="stage", description="the stage")
     implementation.required_locks.add(lock)
     task = models.Task.objects.create(action=action, implementation=implementation, agent=agent, args={}, latest_event_kind="STARTED", latest_instruct_kind="ASSIGN")
@@ -77,7 +77,7 @@ async def test_test_cases_stay_in_their_organization_and_results_keep_their_payl
         agent = _agent_in(authenticated_context, "cases")
         action = create_action_for_organization(agent.organization, "cases-target")
         tester = create_action_for_organization(agent.organization, "cases-tester")
-        implementation = models.Implementation.objects.create(agent=agent, action=action, interface="run", release=agent.release)
+        implementation = models.Implementation.objects.create(agent=agent, action=action, interface="run")
         _, _, other_org, _ = create_registry_bundle("cases-other")
         foreign = create_action_for_organization(other_org, "cases-foreign")
         return action, tester, implementation, foreign

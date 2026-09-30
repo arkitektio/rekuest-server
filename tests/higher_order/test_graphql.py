@@ -13,12 +13,10 @@ from collections.abc import Callable
 import httpx
 import pytest
 from asgiref.sync import sync_to_async
-from authentikate.models import App, Release
 from kante.context import HttpContext
 
 from facade import agentd
 from facade.models import Action, Implementation
-from facade.mutations.agent import ImplementAgentInputModel
 from facade.schema import schema
 from tests.factories import create_agent_for_registry, create_registry_bundle
 
@@ -49,7 +47,7 @@ def _build_impls(prefix: str, lower_kind: str = "FUNCTION", higher_kind: str = "
         organization=org,
         kind=lower_kind,
     )
-    lower = Implementation.objects.create(release=agent.release, interface=f"{prefix}_l", action=lower_action, agent=agent)
+    lower = Implementation.objects.create(interface=f"{prefix}_l", action=lower_action, agent=agent)
 
     higher_action = Action.objects.create(
         app=agent.app,
@@ -61,7 +59,7 @@ def _build_impls(prefix: str, lower_kind: str = "FUNCTION", higher_kind: str = "
         organization=org,
         kind=higher_kind,
     )
-    higher = Implementation.objects.create(release=agent.release, interface=f"{prefix}_h", action=higher_action, agent=agent)
+    higher = Implementation.objects.create(interface=f"{prefix}_h", action=higher_action, agent=agent)
 
     return str(higher.id), str(lower.id)
 

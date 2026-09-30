@@ -49,17 +49,12 @@ class Agent(models.Model):
     release = models.ForeignKey(Release, on_delete=models.CASCADE, related_name="agents", help_text="The release this agent belongs to (agents are part of a release and are NOT associated only with an app)")
     name = models.CharField(max_length=2000, help_text="This providers Name", default="Nana")
     description = models.TextField(null=True, blank=True, help_text="A description for the Agent")
-    health_check_interval = models.IntegerField(
-        default=60 * 5,
-        help_text="How often should this agent be checked for its health. Defaults to 5 mins",
-    )
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
         help_text="The user this Agent belongs to",
     )
     installed_at = models.DateTimeField(auto_created=True, auto_now_add=True)
-    unique = models.CharField(max_length=1000, default=uuid.uuid4, help_text="The Channel we are listening to")
     active_connection_id = models.CharField(
         max_length=1000,
         null=True,
@@ -83,11 +78,6 @@ class Agent(models.Model):
             "*process* identity, which must stay equal across a reclaiming reconnect)."
         ),
     )
-    on_instance = models.CharField(
-        max_length=1000,
-        help_text="The Instance this Agent is running on",
-        default="all",
-    )
     kind = models.CharField(
         max_length=1000,
         choices=[(tag, tag.value) for tag in enums.AgentKind],
@@ -96,12 +86,6 @@ class Agent(models.Model):
     )
     hook_url = models.CharField(max_length=1000, help_text="The webhook URL for this Agent (only if webhook)", null=True, blank=True)
     hook_url_secret = models.CharField(max_length=1000, help_text="The webhook URL secret for this Agent (only if webhook)", null=True, blank=True)
-    latest_event = TextChoicesField(
-        max_length=1000,
-        choices_enum=enums.AgentEventChoices,
-        default=enums.AgentEventChoices.DISCONNECT,
-        help_text="The Status of this Agent",
-    )
     connected = models.BooleanField(default=False, help_text="Is this Agent connected to the backend")
     last_seen = models.DateTimeField(help_text="The last time this Agent was seen", null=True)
     pinned_by = models.ManyToManyField(
@@ -243,15 +227,3 @@ class MemoryDrawer(models.Model):
         ]
 
 
-class HardwareRecord(models.Model):
-    agent = models.ForeignKey(
-        Agent,
-        on_delete=models.CASCADE,
-        help_text="The associated agent for this HardwareRecord",
-        related_name="hardware_records",
-    )
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    cpu_count = models.IntegerField(default=0)
-    cpu_vendor_name = models.CharField(max_length=1000, default="Unknown")
-    cpu_frequency = models.FloatField(default=0)

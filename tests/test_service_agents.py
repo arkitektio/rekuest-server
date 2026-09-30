@@ -8,13 +8,11 @@ rekuest-agentd's conformance suite.
 
 import threading
 import time
-from datetime import timedelta
 from urllib.parse import urlparse
 
 import pytest
 from django.conf import settings as django_settings
 from django.test import Client as HttpClient
-from django.utils import timezone
 
 from facade import enums, models, service_agents
 from rekuest_service import Service, trust

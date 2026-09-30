@@ -85,7 +85,6 @@ def create_implementation(input: ImplementationInputModel, agent: models.Agent) 
         interface=input.interface,
         defaults=dict(
             action=action,
-            release=agent.release,
             params=input.params or {},
             needs_token=input.needs_token,
             effects=getattr(input.effects, "value", input.effects),

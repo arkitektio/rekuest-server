@@ -29,7 +29,6 @@ class TestAgentModels:
         assert agent.client == client
         assert agent.user == user
         assert agent.organization == org
-        assert agent.unique is not None  # Should have auto-generated UUID
 
     def test_agent_default_values(self):
         """Test Agent model default values."""
@@ -43,8 +42,6 @@ class TestAgentModels:
         )
 
         assert agent.name == "Nana"  # Default name
-        assert agent.health_check_interval == 300  # 5 minutes in seconds
-        assert agent.on_instance == "all"
 
     def test_agent_str_representation(self):
         """Test Agent model string representation."""

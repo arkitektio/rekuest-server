@@ -70,12 +70,6 @@ class Dependency(models.Model):
         null=True,
         help_text="The prefered instance count for this dependency",
     )
-    assign_policy = models.CharField(
-        max_length=1000,
-        choices=[(tag, tag.value) for tag in enums.AssignPolicy],
-        default=enums.AssignPolicy.AUTOMATIC,
-        help_text="The assign policy for this dependency",
-    )
 
     def get_action_dependencies(self):
         return [ActionDependencyInputModel(**demand) for demand in self.action_demands]
@@ -88,7 +82,6 @@ class Resolution(models.Model):
     resolved_at = models.DateTimeField(auto_created=True, auto_now_add=True)
     # Preset Logic
     name = models.CharField(max_length=200, null=True, blank=True, help_text="If set, this is a named preset (e.g. 'Standard Zeiss Config')")
-    is_template = models.BooleanField(default=False, help_text="If True, this resolution appears in search results for other users to reuse.")
 
     implementation = models.ForeignKey("Implementation", on_delete=models.CASCADE, related_name="resolutions", help_text="The specific Implementation that this tree is configuring dependencies for.")
     creator = models.ForeignKey(
@@ -128,7 +121,6 @@ class ResolvedDependency(models.Model):
 class Implementation(models.Model):
     """A Implementation is a conceptual implementation of A Action. It represents its implementation as well as its performance"""
 
-    release = models.ForeignKey(Release, on_delete=models.CASCADE, related_name="implementations", help_text="The release this implementation belongs to (implementations are part of a release and are NOT associated only with an app)")
     interface = models.CharField(max_length=1000, help_text="Interface (think Function)")
     action = models.ForeignKey(
         "Action",
@@ -141,22 +133,6 @@ class Implementation(models.Model):
         on_delete=models.CASCADE,
         help_text="The associated agent for this Implementation",
         related_name="implementations",
-    )
-    name = models.CharField(
-        max_length=1000,
-        default="Unnamed",
-        help_text="A name for this Implementation",
-    )
-    pinned_by = models.ManyToManyField(
-        get_user_model(),
-        related_name="pinned_implementations",
-        blank=True,
-        help_text="The users that pinned this Agent",
-    )
-    policy = models.JSONField(
-        max_length=2000,
-        default=dict,
-        help_text="The attached policy for this implementation",
     )
     higher_order_for = models.ForeignKey(
         "self",

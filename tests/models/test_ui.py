@@ -44,7 +44,6 @@ class TestUIModels:
         dashboard = Dashboard.objects.create(name="Test Dashboard", organization=_org())
 
         assert dashboard.name == "Test Dashboard"
-        assert dashboard.ui_tree is None  # Default null
 
     def test_blok_name_unique_per_organization(self):
         """The (organization, name) pair every write path upserts on is enforced by the database."""

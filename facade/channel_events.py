@@ -70,7 +70,6 @@ class TaskChangePayload(BaseModel):
     is_done: bool = False
     latest_event_kind: str
     latest_instruct_kind: str
-    status_message: Optional[str] = None
     action: str
     implementation: Optional[str] = None
     agent: Optional[str] = None
@@ -94,7 +93,6 @@ class TaskChangePayload(BaseModel):
             is_done=t.is_done,
             latest_event_kind=_kind_value(t.latest_event_kind),
             latest_instruct_kind=_kind_value(t.latest_instruct_kind),
-            status_message=t.statusmessage or None,
             action=str(t.action_id),
             implementation=str(t.implementation_id) if t.implementation_id else None,
             agent=str(t.agent_id) if t.agent_id else None,

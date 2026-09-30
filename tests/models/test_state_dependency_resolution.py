@@ -77,7 +77,7 @@ def setup(db):
         description="counter",
         ports=[{"key": "count", "kind": "INT", "identifier": None, "nullable": False, "children": []}],
     )
-    models.State.objects.create(definition=counter_definition, interface="counter", key="counter", app_identifier="statedep-stateful-app", agent=agent_with_state, value={"count": 0})
+    models.State.objects.create(definition=counter_definition, interface="counter", key="counter", app_identifier="statedep-stateful-app", agent=agent_with_state)
 
     main_impl = _create_implementation(_orchestrator_input(), orchestrator_agent)
     info = SimpleNamespace(context=SimpleNamespace(request=SimpleNamespace(organization=org, user=user)))

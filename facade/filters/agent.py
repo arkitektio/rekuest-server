@@ -1,4 +1,4 @@
-"""Filters and orders for agents, hardware and implementation-agents."""
+"""Filters and orders for agents and implementation-agents."""
 
 from __future__ import annotations
 
@@ -121,17 +121,6 @@ class AgentFilter:
 @strawberry_django.order_type(models.Agent)
 class AgentOrder:
     last_seen: auto
-
-
-@strawberry_django.filter_type(models.HardwareRecord)
-class HardwareRecordFilter:
-    @filter_field
-    def ids(self, info: Info, queryset, value: list[strawberry.ID], prefix: str):
-        return queryset.filter(**{f"{prefix}id__in": value}), Q()
-
-    @filter_field
-    def cpu_vendor_name(self, info: Info, queryset, value: str, prefix: str):
-        return queryset.filter(**{f"{prefix}cpu_vendor_name__contains": value}), Q()
 
 
 @strawberry_django.filter_type(models.Agent)

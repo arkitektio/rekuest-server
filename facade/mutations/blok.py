@@ -40,8 +40,6 @@ def _sync_blok_dependencies(blok: models.Blok, dependencies: Iterable[rimodels.A
                 auto_resolvable=declared.auto_resolvable,
                 min_viable_instances=declared.min_viable_instances,
                 max_viable_instances=declared.max_viable_instances,
-                prefered_instances=declared.prefered_instances,
-                assign_policy=declared.assign_policy,
             ),
         )
         synced.append(dep)

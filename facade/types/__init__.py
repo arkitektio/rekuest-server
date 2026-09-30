@@ -34,7 +34,7 @@ from . import (
     toolbox,
 )
 from .action import Action, ActionStats, ActionStatsResolver
-from .agent import Agent, HardwareRecord, Lock
+from .agent import Agent, Lock
 from .schedule import Schedule
 from .trigger import Signal, SignalDeclaration, Trigger
 from .task import (
@@ -121,7 +121,6 @@ __all__ = [
     "AgentMapping",
     "ResolvedAgentDependency",
     "Implementation",
-    "HardwareRecord",
     "Lock",
     "Agent",
     "MemoryShelve",

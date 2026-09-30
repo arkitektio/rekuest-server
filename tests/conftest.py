@@ -4,11 +4,9 @@ import time
 import boto3
 import psycopg
 import pytest
-import pytest_asyncio
-import redis as sync_redis
 from moto import mock_aws
 
-from authentikate.models import Client, Organization, User, Membership
+from authentikate.models import Membership
 from authentikate.expand import (
     aexpand_client_from_token,
     aexpand_organization_from_token,
@@ -18,7 +16,7 @@ from authentikate.utils import authenticate_token_or_none
 from django.conf import settings
 from kante.context import HttpContext, UniversalRequest
 from strawberry.http.temporal_response import TemporalResponse
-from dokker import local, testing
+from dokker import testing
 
 
 

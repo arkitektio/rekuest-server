@@ -12,7 +12,6 @@ class AgentChange:
     id: strawberry.ID
     name: str
     kind: enums.AgentKind
-    latest_event: enums.AgentEventKind
     connected: bool
     blocked: bool
     last_seen: datetime.datetime | None
@@ -28,7 +27,6 @@ class AgentChange:
             id=strawberry.ID(str(a.id)),
             name=a.name,
             kind=enums.AgentKind(a.kind),
-            latest_event=enums.AgentEventKind(a.latest_event),
             connected=a.connected,
             blocked=a.blocked,
             last_seen=a.last_seen,

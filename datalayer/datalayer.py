@@ -3,7 +3,6 @@ import logging
 import uuid
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Optional, TypeVar, cast
-from urllib.parse import urlparse, parse_qs
 
 import boto3
 from botocore.config import Config
@@ -216,53 +215,6 @@ class Datalayer:
         requested = expires_in or self.config.session_duration_seconds
         return min(max(requested, MIN_SESSION_DURATION_SECONDS), MAX_SESSION_DURATION_SECONDS)
 
-    def get_zarr_metadata(self, store: "models.ZarrStore") -> base_models.ZarrMetadata:
-        """Retrieve structured metadata for a Zarr store.
-
-        Args:
-            store: Zarr store whose object prefix should be inspected.
-
-        Returns:
-            Parsed Zarr metadata for the discovered array.
-
-        Raises:
-            FileNotFoundError: If the Zarr v3 metadata file is missing.
-            ValueError: If the discovered metadata is malformed.
-        """
-        path = store.path or self.build_store_path("zarr", store.key)
-        bucket_name, prefix = self._parse_s3_path(path)
-        metadata_key = prefix.rstrip("/") + "/zarr.json"
-
-        logger.debug("Fetching Zarr metadata from %s/%s", bucket_name, metadata_key)
-        try:
-            zarr_file = self._s3.get_object(Bucket=bucket_name, Key=metadata_key)
-        except Exception as exc:
-            raise FileNotFoundError(f"Could not find Zarr v3 metadata for store {store.pk or store.key}.") from exc
-
-        metadata = json.loads(zarr_file["Body"].read().decode("utf-8"))
-        if metadata.get("zarr_format") == 2:
-            raise ValueError("Zarr v2 is not supported. Only Zarr v3 stores are supported.")
-        if metadata.get("node_type") != "array":
-            raise ValueError("Only Zarr v3 ARRAY stores are supported. You may be trying to load metadata for a Zarr group or a non-Zarr object.")
-
-        shape = metadata.get("shape")
-        chunk_shape = metadata.get("chunk_grid", {}).get("configuration", {}).get("chunk_shape")
-        if shape is None or chunk_shape is None:
-            raise ValueError("Malformed zarr.json metadata: missing shape or chunk shape.")
-
-        return base_models.ZarrMetadata(
-            zarr_format=metadata["zarr_format"],
-            node_type=metadata["node_type"],
-            shape=shape,
-            data_type=metadata.get("data_type"),
-            chunk_grid=metadata.get("chunk_grid"),
-            chunk_key_encoding=metadata.get("chunk_key_encoding"),
-            fill_value=metadata.get("fill_value"),
-            codecs=metadata.get("codecs") or [],
-            attributes=metadata.get("attributes"),
-            storage_transformers=metadata.get("storage_transformers"),
-            dimension_names=metadata.get("dimension_names"),
-        )
 
     def _object_resources(self, bucket_key: str, object_path: str) -> tuple[str, list[str], bool]:
         """Resolve S3 resources covered by a grant.
@@ -557,115 +509,6 @@ class Datalayer:
             store=str(store.pk),
         )
 
-    def generate_bigfile_upload_grant(self, input: base_models.RequestBigFileUploadInput) -> base_models.BigFileUploadGrant:
-        """Create a big file store and upload grant."""
-        from datalayer import models
-
-        conf = self.get_bucket_config("bigfile")
-        key = self._new_key()
-        store = models.BigFileStore.objects.create(
-            path=self.build_store_path("bigfile", key),
-            key=key,
-            bucket="bigfile",
-            original_file_name=input.original_file_name,
-            content_type=input.content_type,
-        )
-
-        ttl = self._session_duration()
-
-        access_key, secret_key, session_token = self._issue_temporary_credentials("bigfile", store.key, "upload", ttl)
-        full_key = self.build_object_key("bigfile", store.key)
-
-        return base_models.BigFileUploadGrant(
-            access_key=access_key,
-            secret_key=secret_key,
-            session_token=session_token,
-            bucket=conf.bucket,
-            region=self.config.region,
-            key=full_key,
-            path=self.build_store_path("bigfile", store.key),
-            expires_in=ttl,
-            datalayer="bigfile",
-            max_bytes=input.file_size or conf.default_max_bytes,
-            original_file_name=store.original_file_name,
-            upload_file_name=store.get_upload_file_name(),
-            upload_content_type=store.content_type,
-            upload_form_field="file",
-            store=str(store.pk),
-        )
-
-    def generate_zarr_upload_grant(self, input: base_models.RequestZarrUploadInput) -> base_models.ZarrUploadGrant:
-        """Create a Zarr store and upload grant."""
-        from datalayer import models
-
-        conf = self.get_bucket_config("zarr")
-        key = self._new_key()
-        store = models.ZarrStore.objects.create(
-            path=self.build_store_path("zarr", key),
-            key=key,
-            bucket="zarr",
-            shape=input.shape,
-            chunks=input.chunks,
-            version=input.version,
-        )
-
-        ttl = self._session_duration()
-        access_key, secret_key, session_token = self._issue_temporary_credentials("zarr", store.key, "upload", ttl)
-        full_key = self.build_object_key("zarr", store.key)
-
-        return base_models.ZarrUploadGrant(
-            access_key=access_key,
-            secret_key=secret_key,
-            session_token=session_token,
-            bucket=conf.bucket,
-            region=self.config.region,
-            key=full_key,
-            path=self.build_store_path("zarr", store.key),
-            expires_in=ttl,
-            datalayer="zarr",
-            max_bytes=conf.default_max_bytes,
-            original_file_name=store.original_file_name,
-            upload_file_name=store.get_upload_file_name(),
-            upload_content_type=store.content_type,
-            upload_form_field="file",
-            store=str(store.pk),
-        )
-
-    def generate_parquet_upload_grant(self, input: base_models.RequestParquetUploadInput) -> base_models.ParquetUploadGrant:
-        """Create a parquet store and upload grant."""
-        from datalayer import models
-
-        conf = self.get_bucket_config("parquet")
-        key = self._new_key()
-        store = models.ParquetStore.objects.create(
-            path=self.build_store_path("parquet", key),
-            key=key,
-            bucket="parquet",
-            original_file_name=input.original_file_name,
-            content_type=input.content_type,
-        )
-
-        ttl = self._session_duration()
-        access_key, secret_key, session_token = self._issue_temporary_credentials("parquet", store.key, "upload", ttl)
-        full_key = self.build_object_key("parquet", store.key)
-
-        return base_models.ParquetUploadGrant(
-            access_key=access_key,
-            secret_key=secret_key,
-            session_token=session_token,
-            bucket=conf.bucket,
-            region=self.config.region,
-            key=full_key,
-            path=self.build_store_path("parquet", store.key),
-            expires_in=ttl,
-            datalayer="parquet",
-            max_bytes=conf.default_max_bytes,
-            original_file_name=store.original_file_name,
-            upload_file_name=store.get_upload_file_name(),
-            upload_content_type=store.content_type,
-            upload_form_field="file",
-            store=str(store.pk),
-        )
 
     def _finish_store_upload(self, model_class: type[StoreModel], store_id: str, valid: bool) -> StoreModel:
         """Finalize a created store after upload completion.
@@ -699,44 +542,6 @@ class Datalayer:
 
         return self._finish_store_upload(models.MediaStore, input.store_id, input.valid)
 
-    def finish_bigfile_upload(self, input: base_models.FinishBigFileUploadInput) -> "models.BigFileStore":
-        """Mark a big file upload as complete.
-
-        Args:
-            input: Completion payload for the big file store.
-
-        Returns:
-            The finalized big file store.
-        """
-        from datalayer import models
-
-        return self._finish_store_upload(models.BigFileStore, input.store_id, input.valid)
-
-    def finish_zarr_upload(self, input: base_models.FinishZarrUploadInput) -> "models.ZarrStore":
-        """Mark a Zarr upload as complete.
-
-        Args:
-            input: Completion payload for the Zarr store.
-
-        Returns:
-            The finalized Zarr store.
-        """
-        from datalayer import models
-
-        return self._finish_store_upload(models.ZarrStore, input.store_id, input.valid)
-
-    def finish_parquet_upload(self, input: base_models.FinishParquetUploadInput) -> "models.ParquetStore":
-        """Mark a parquet upload as complete.
-
-        Args:
-            input: Completion payload for the parquet store.
-
-        Returns:
-            The finalized parquet store.
-        """
-        from datalayer import models
-
-        return self._finish_store_upload(models.ParquetStore, input.store_id, input.valid)
 
     def get_object_size(self, bucket_name: str, object_key: str) -> int:
         """Get the size of an object in bytes.
@@ -831,41 +636,6 @@ class Datalayer:
             store=str(store_id) if store_id is not None else None,
         )
 
-    def generate_bigfile_access_grant(
-        self,
-        store: "models.BigFileStore",
-        *,
-        expires_in: int | None = None,
-    ) -> base_models.BigFileAccessGrant:
-        """Build a big file read access grant.
-
-        Args:
-            store: Big file store to grant access to.
-            expires_in: Optional credential lifetime override in seconds.
-
-        Returns:
-            Temporary credentials scoped to reading the big file object.
-        """
-        object_path = store.key
-        store_id = str(store.pk) if store.pk is not None else None
-        conf = self.get_bucket_config("bigfile")
-        ttl = self._session_duration(expires_in)
-        access_key, secret_key, session_token = self._issue_temporary_credentials("bigfile", object_path, "read", ttl)
-        full_key = self.build_object_key("bigfile", object_path)
-        return base_models.BigFileAccessGrant(
-            access_key=access_key,
-            secret_key=secret_key,
-            session_token=session_token,
-            bucket=conf.bucket,
-            region=self.config.region,
-            key=full_key,
-            path=self.build_store_path("bigfile", object_path),
-            action="read",
-            expires_in=ttl,
-            datalayer="bigfile",
-            endpoint=self.config.endpoint_url or "",
-            store=str(store_id) if store_id is not None else None,
-        )
 
     def generate_media_access_grant(
         self,
@@ -934,77 +704,6 @@ class Datalayer:
             endpoint=self.config.endpoint_url or "",
         )
 
-    def generate_zarr_access_grant(
-        self,
-        store: "models.ZarrStore",
-        *,
-        expires_in: int | None = None,
-    ) -> base_models.ZarrAccessGrant:
-        """Build a Zarr read access grant.
-
-        Args:
-            store: Zarr store to grant access to.
-            expires_in: Optional credential lifetime override in seconds.
-
-        Returns:
-            Temporary credentials scoped to reading the Zarr prefix.
-        """
-        object_path = store.key
-        store_id = str(store.pk) if store.pk is not None else None
-        conf = self.get_bucket_config("zarr")
-        ttl = self._session_duration(expires_in)
-        access_key, secret_key, session_token = self._issue_temporary_credentials("zarr", object_path, "read", ttl)
-        full_key = self.build_object_key("zarr", object_path)
-        return base_models.ZarrAccessGrant(
-            access_key=access_key,
-            secret_key=secret_key,
-            session_token=session_token,
-            bucket=conf.bucket,
-            region=self.config.region,
-            key=full_key,
-            path=self.build_store_path("zarr", object_path),
-            action="read",
-            expires_in=ttl,
-            datalayer="zarr",
-            endpoint=self.config.endpoint_url or "",
-            store=str(store_id) if store_id is not None else None,
-        )
-
-    def generate_parquet_access_grant(
-        self,
-        store: "models.ParquetStore",
-        *,
-        expires_in: int | None = None,
-    ) -> base_models.ParquetAccessGrant:
-        """Build a parquet read access grant.
-
-        Args:
-            store: Parquet store to grant access to.
-            expires_in: Optional credential lifetime override in seconds.
-
-        Returns:
-            Temporary credentials scoped to reading the parquet object.
-        """
-        object_path = store.key
-        store_id = str(store.pk) if store.pk is not None else None
-        conf = self.get_bucket_config("parquet")
-        ttl = self._session_duration(expires_in)
-        access_key, secret_key, session_token = self._issue_temporary_credentials("parquet", object_path, "read", ttl)
-        full_key = self.build_object_key("parquet", object_path)
-        return base_models.ParquetAccessGrant(
-            access_key=access_key,
-            secret_key=secret_key,
-            session_token=session_token,
-            bucket=conf.bucket,
-            region=self.config.region,
-            key=full_key,
-            path=self.build_store_path("parquet", object_path),
-            action="read",
-            expires_in=ttl,
-            datalayer="parquet",
-            endpoint=self.config.endpoint_url or "",
-            store=str(store_id) if store_id is not None else None,
-        )
 
     def put_file(
         self,

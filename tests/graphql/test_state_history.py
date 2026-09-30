@@ -34,7 +34,7 @@ def _seed_history(prefix, context):
     definition = models.StateDefinition.objects.create(
         name=f"{prefix} def", hash=f"{prefix}-def-hash", ports=[], description="d", organization=org
     )
-    state = models.State.objects.create(definition=definition, interface=f"{prefix}-iface", agent=agent, value={})
+    state = models.State.objects.create(definition=definition, interface=f"{prefix}-iface", agent=agent)
     session = models.Session.objects.create(agent=agent, session_id=f"{prefix}-session")
 
     models.Snapshot.objects.create(state=state, agent=agent, session=session, value={"count": 0}, global_rev=1)

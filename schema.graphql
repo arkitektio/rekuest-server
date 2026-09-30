@@ -10,10 +10,6 @@ schema @link(url: "https://specs.apollo.dev/federation/v2.11", import: ["@key"])
   subscription: Subscription
 }
 
-input AckInput {
-  task: ID!
-}
-
 """Represents an executable action in the system."""
 type Action {
   """Unique ID of the action."""
@@ -115,9 +111,6 @@ type Action {
 
   """Port groups used in the action for organizing ports."""
   portGroups: [PortGroup!]!
-
-  """Check if the current user has pinned this action."""
-  pinned: Boolean!
 }
 
 """A JSON-serializable argument entry for a multi-agent action trigger."""
@@ -405,9 +398,6 @@ type Agent {
   """The organization this agent belongs to."""
   organization: Organization!
 
-  """Historical records of agent's hardware."""
-  hardwareRecords(filters: HardwareRecordFilter, pagination: OffsetPaginationInput): [HardwareRecord!]!
-
   """Implementations the agent can run."""
   implementations(filters: ImplementationFilter, ordering: [ImplementationOrder!]! = [], pagination: OffsetPaginationInput): [Implementation!]!
 
@@ -472,9 +462,6 @@ type Agent {
   """
   active: Boolean!
 
-  """Retrieve the latest hardware record for this agent."""
-  latestHardwareRecord: HardwareRecord
-
   """Check if this agent is pinned by the current user."""
   pinned: Boolean!
 
@@ -496,7 +483,6 @@ type AgentChange {
   id: ID!
   name: String!
   kind: AgentKind!
-  latestEvent: AgentEventKind!
   connected: Boolean!
   blocked: Boolean!
   lastSeen: DateTime
@@ -583,12 +569,6 @@ input AgentDependencyInput {
 
   """The policy used to pick which instance of the agent to assign to."""
   assignPolicy: AssignPolicy! = BALANCED
-}
-
-"""The event kind of the agentevent"""
-enum AgentEventKind {
-  DISCONNECT
-  CONNECT
 }
 
 """A way to filter agents"""
@@ -1617,29 +1597,6 @@ input CreatePlacementInput {
   materializedBlok: ID = null
 }
 
-"""The input for creating a resolution."""
-input CreateResolutionInput {
-  """
-  The key of the resolution. This is used to identify the resolution in the system.
-  """
-  key: String!
-
-  """
-  The implementation ID of the resolution. This is used to identify the resolution in the system.
-  """
-  implementation: ID!
-
-  """
-  The name of the resolution. This is used to identify the resolution in the system.
-  """
-  name: String!
-
-  """
-  The resolved dependencies of the resolution. This is used to identify the resolution in the system.
-  """
-  resolvedDependencies: [ResolvedDependencyInput!] = null
-}
-
 """
 Create a schedule. Give exactly one of intervalSeconds or cron; pin an agent with agent + interface, or leave both empty to resolve one per run.
 """
@@ -1755,19 +1712,6 @@ input CreateThreeDModelInput {
 
   """The agent this model shows: whose state the transfer function reads."""
   dependency: AgentDependencyInput = null
-}
-
-"""The input for creating a toolbox."""
-input CreateToolboxInput {
-  """
-  The name of the toolbox. This is used to identify the toolbox in the system.
-  """
-  name: String!
-
-  """
-  The description of the toolbox. This can described the toolbox and its purpose.
-  """
-  description: String
 }
 
 """
@@ -2025,12 +1969,6 @@ input DeletePlacementInput {
   id: ID!
 }
 
-"""The input for deleting a resolution."""
-input DeleteResolutionInput {
-  """The ID of the resolution to delete."""
-  id: ID!
-}
-
 """The input for deleting a shortcut."""
 input DeleteShortcutInput {
   """
@@ -2048,14 +1986,6 @@ input DeleteSpaceInput {
 """The input for deleting a 3D model."""
 input DeleteThreeDModelInput {
   """The ID of the 3D model to delete."""
-  id: ID!
-}
-
-"""The input for deleting a toolbox."""
-input DeleteToolboxInput {
-  """
-  The toolbox ID to delete. This is used to identify the toolbox in the system.
-  """
   id: ID!
 }
 
@@ -2285,36 +2215,6 @@ enum Granularity {
   YEAR
 }
 
-"""Represents a record of an agent's hardware configuration."""
-type HardwareRecord {
-  """Unique ID of the hardware record."""
-  id: ID!
-
-  """Number of CPU cores available."""
-  cpuCount: Int!
-
-  """Vendor of the CPU."""
-  cpuVendorName: String!
-
-  """Clock speed of the CPU in GHz."""
-  cpuFrequency: Float!
-
-  """Timestamp when this record was created."""
-  createdAt: DateTime!
-
-  """The agent to which this hardware belongs."""
-  agent: Agent!
-}
-
-input HardwareRecordFilter {
-  AND: HardwareRecordFilter
-  OR: HardwareRecordFilter
-  NOT: HardwareRecordFilter
-  DISTINCT: Boolean
-  ids: [ID!]
-  cpuVendorName: String
-}
-
 type HideEffect implements Effect {
   """
   The full call tree as raw JSON, so deep trees are not truncated by fragment depth.
@@ -2457,9 +2357,6 @@ type Implementation {
 
   """Constructed name for display, combining interface and agent name."""
   name: String!
-
-  """Check if this implementation is pinned by the current user."""
-  pinned: Boolean!
 
   """
   Implementations on this agent whose action is a test for this implementation's action.
@@ -2944,9 +2841,6 @@ type Mutation {
   """
   createHigherOrderImplementation(input: CreateHigherOrderImplementationInput!): Implementation! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
-  """Acknowledge a task."""
-  ack(input: AckInput!): Task! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
-
   """Bounce an agent so it reconnects."""
   bounce(input: BounceInput!): Agent! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
@@ -3054,9 +2948,6 @@ type Mutation {
   """Pin an agent to the user."""
   pinAgent(input: PinInput!): Agent! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
-  """Pin an implementation to the user."""
-  pinImplementation(input: PinInput!): Implementation! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
-
   """Delete an agent record."""
   deleteAgent(input: DeleteAgentInput!): ID! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
@@ -3069,26 +2960,11 @@ type Mutation {
   """Delete a shortcut."""
   deleteShortcut(input: DeleteShortcutInput!): ID! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
-  """Create a new toolbox with shortcuts."""
-  createToolbox(input: CreateToolboxInput!): Toolbox! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
-
-  """Delete a toolbox by ID."""
-  deleteToolbox(input: DeleteToolboxInput!): ID! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
-
   """Delete unreferenced actions from the system."""
   cleanupActions(actionIds: [ID!] = null): Int! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """Automatically resolve dependencies for an implementation."""
   autoResolve(input: AutoResolveInput!): Resolution! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
-
-  """Create a resolution for an implementation."""
-  createResolution(input: CreateResolutionInput!): Resolution! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
-
-  """Update an existing resolution."""
-  updateResolution(input: UpdateResolutionInput!): Resolution! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
-
-  """Delete a resolution by ID."""
-  deleteResolution(input: DeleteResolutionInput!): ID! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """Upload media and return a URL for access"""
   requestMediaUpload(input: RequestMediaUploadInput!): MediaUploadGrant! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
@@ -3681,9 +3557,6 @@ type Query {
   """List all registered clients."""
   clients(filters: ClientFilter, ordering: [ClientOrder!]! = [], pagination: OffsetPaginationInput): [Client!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
-  """List of all hardware records."""
-  hardwareRecords(filters: HardwareRecordFilter, pagination: OffsetPaginationInput): [HardwareRecord!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
-
   """Retrieve all compute agents."""
   agents(filters: AgentFilter, ordering: [AgentOrder!]! = [], pagination: OffsetPaginationInput): [Agent!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
@@ -3711,9 +3584,6 @@ type Query {
   """All dashboards."""
   dashboards: [Dashboard!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
-  """All states from agents."""
-  states: [State!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
-
   """List of UI Blok."""
   bloks: [Blok!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
@@ -3727,9 +3597,6 @@ type Query {
   UI catalogs registered in the caller's organization: the components and operations UI apps can render and evaluate.
   """
   uiCatalogs: [UICatalog!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
-
-  """Available state schemas."""
-  stateDefinitions: [StateDefinition!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """All memory shelves."""
   memoryShelves(filters: MemoryShelveFilter, ordering: [MemoryShelveOrder!]! = [], pagination: OffsetPaginationInput): [MemoryShelve!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
@@ -3903,17 +3770,11 @@ type Query {
   """Get a UI catalog by ID."""
   uiCatalog(id: ID!): UICatalog! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
-  """Retrieve a state definition by ID."""
-  stateDefinition(id: ID!): StateDefinition! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
-
   """Get toolbox by ID."""
   toolbox(id: ID!): Toolbox! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """Retrieve shortcut by ID."""
   shortcut(id: ID!): Shortcut! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
-
-  """Get hardware record by ID."""
-  hardwareRecord(id: ID!): HardwareRecord! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """Get dashboard by ID."""
   dashboard(id: ID!): Dashboard! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
@@ -4965,9 +4826,6 @@ type StructurePackage {
 
 """Root subscription type for real-time event streams from the system."""
 type Subscription {
-  """Subscribe to notifications when new actions are created."""
-  newActions: Action! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
-
   """Subscribe to root tasks created by this client (caller-scoped)."""
   mytasks: TaskChangeEvent! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
@@ -4985,9 +4843,6 @@ type Subscription {
 
   """Subscribe to updates of state values and patches."""
   stateUpdateEvents(stateId: ID!): State! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
-
-  """Subscribe to latest patches for specific agents or states."""
-  latestPatches(state: ID = null, agent: ID = null): Patch! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """Watch a state: yields the current snapshot then streams patches."""
   watchState(stateId: ID = null, agentId: ID = null, interface: String = null): StateSnapshotEventStatePatchEvent! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
@@ -5137,7 +4992,6 @@ type TaskChange {
   isDone: Boolean!
   latestEventKind: TaskEventKind!
   latestInstructKind: TaskInstructKind!
-  statusMessage: String
   action: ID!
   implementation: ID
   agent: ID
@@ -5805,24 +5659,6 @@ input UpdatePlacementInput {
 
   """The ID of the placement to update."""
   id: ID!
-}
-
-"""The input for creating a resolution."""
-input UpdateResolutionInput {
-  """
-  The ID of the resolution. This is used to identify the resolution in the system.
-  """
-  id: ID!
-
-  """
-  The name of the resolution. This is used to identify the resolution in the system.
-  """
-  name: String!
-
-  """
-  The resolved dependencies of the resolution. All other fields will be replaced.
-  """
-  resolvedDependencies: [ResolvedDependencyInput!] = null
 }
 
 """

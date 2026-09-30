@@ -5,7 +5,6 @@ from __future__ import annotations
 import strawberry
 import strawberry_django
 from django.db.models import Q
-from strawberry import auto
 from strawberry.types import Info
 from strawberry_django.fields.filter_order import filter_field
 

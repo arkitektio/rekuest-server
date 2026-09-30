@@ -42,12 +42,6 @@ class Action(EmbeddedDescriptionMixin, models.Model):
         default=False,
         help_text="Is this function stateful. e.g does it inherently depend on or change state (think physical devices)?",
     )
-    pinned_by = models.ManyToManyField(
-        get_user_model(),
-        related_name="pinned_actions",
-        blank=True,
-        help_text="The users that pinned this Actions",
-    )
     kind = TextChoicesField(
         max_length=1000,
         choices_enum=enums.ActionKindChoices,

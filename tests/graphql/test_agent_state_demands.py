@@ -45,7 +45,7 @@ def _seed_agents(context):
         client = Client.objects.create(client_id=f"asd-{name}-client")
         agent = models.Agent.objects.create(name=name, app=app, release=release, user=request.user, client=client, organization=org, hash=f"asd-{name}-hash")
         if with_state:
-            models.State.objects.create(definition=counter_definition, interface="counter", agent=agent, value={"count": 0})
+            models.State.objects.create(definition=counter_definition, interface="counter", agent=agent)
         agents[name] = agent
     return agents
 

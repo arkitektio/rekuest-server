@@ -33,10 +33,6 @@ class Task(models.Model):
         default=False,
         help_text="Is this Task ephemeral (e.g. should it be deleted after its done or should it be kept for future reference)",
     )
-    hooks = models.JSONField(
-        default=list,
-        help_text="hooks that are tight to the lifecycle of this task",
-    )
     reference = models.CharField(
         max_length=1000,
         default=uuid.uuid4,
@@ -133,11 +129,6 @@ class Task(models.Model):
         max_length=1000,
         choices_enum=enums.TaskInstructChoices,
         help_text="The latest Instruct of this Provision (transitioned by events)",
-    )
-    statusmessage = models.CharField(
-        max_length=1000,
-        help_text="Clear Text status of the Provision as for now",
-        blank=True,
     )
     is_done = models.BooleanField(
         default=False,
@@ -426,25 +417,3 @@ class TaskInstruct(models.Model):
     )
 
 
-class AgentEvent(models.Model):
-    created_at = models.DateTimeField(auto_now_add=True)
-    agent = models.ForeignKey(
-        "Agent",
-        help_text="The agent",
-        related_name="events",
-        on_delete=models.CASCADE,
-    )
-    message = models.CharField(max_length=2000, null=True, blank=True)
-    # Status Field
-    kind = TextChoicesField(
-        max_length=1000,
-        choices_enum=enums.AgentEventChoices,
-        help_text="The event kind",
-    )
-    level = TextChoicesField(
-        max_length=1000,
-        choices_enum=enums.LogLevelChoices,
-        help_text="The event level",
-        null=True,
-        blank=True,
-    )

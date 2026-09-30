@@ -5,7 +5,6 @@ from facade import models
 
 
 admin.site.register(models.Action)
-admin.site.register(models.HardwareRecord)
 admin.site.register(models.Implementation)
 admin.site.register(models.Caller)
 admin.site.register(models.TaskEvent)

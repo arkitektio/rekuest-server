@@ -33,13 +33,3 @@ def delete_implementation(info: Info, input: inputs.DeleteImplementationInput) -
     return input.implementation
 
 
-def pin_implementation(info: Info, input: inputs.PinInput) -> types.Implementation:
-    user = info.context.request.user
-
-    agent = models.Implementation.objects.get(id=input.id)
-    if input.pin:
-        agent.pinned_by.add(user)
-    else:
-        agent.pinned_by.remove(user)
-    agent.save()
-    return agent

@@ -1,3 +1,4 @@
+from facade.types.base import scoped_get
 from kante.types import Info
 import strawberry
 from facade import types, models, inputs
@@ -8,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 def create_shortcut(info: Info, input: inputs.CreateShortcutInput) -> types.Shortcut:
     toolbox = (
-        models.Toolbox.objects.get(id=input.toolbox)
+        scoped_get(models.Toolbox, info, input.toolbox)
         if input.toolbox
         else models.Toolbox.objects.get_or_create(
             name="default",

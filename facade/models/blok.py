@@ -13,7 +13,6 @@ class Dashboard(models.Model):
         help_text="The organization this Dashboard belongs to. Access is scoped to it.",
     )
     name = models.CharField(max_length=2000)
-    ui_tree = models.JSONField(null=True, blank=True)
 
 
 class Blok(models.Model):
@@ -38,7 +37,6 @@ class Blok(models.Model):
         help_text="The catalog this Blok belongs to",
     )
     components = models.JSONField(help_text="The UI schema for this Blok", default=list)
-    uri = models.CharField(max_length=1000, help_text="The URI for this Blok (e.g. if it should be rendered as an iframe)", null=True, blank=True)
     demo_state = models.JSONField(help_text="The initial state for this Blok (to display in the ui a fake version)", default=dict)
     diagnostics = models.JSONField(default=list, help_text="Non-fatal registration findings (rekuest_core Diagnostic), e.g. manifest util calls naming operations that neither the base catalog nor this blok's catalog provides. Replaced on every write.")
 
@@ -105,16 +103,6 @@ class BlokDependency(models.Model):
         help_text="The maximal viable instance count for this dependency",
     )
 
-    prefered_instances = models.IntegerField(
-        null=True,
-        help_text="The prefered instance count for this dependency",
-    )
-    assign_policy = models.CharField(
-        max_length=1000,
-        choices=[(tag, tag.value) for tag in enums.AssignPolicy],
-        default=enums.AssignPolicy.AUTOMATIC,
-        help_text="The assign policy for this dependency",
-    )
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["blok", "key"], name="unique_dependency_key_per_blok")]
@@ -162,7 +150,6 @@ class DashboardPlacement(models.Model):
     blok = models.ForeignKey(MaterializedBlok, on_delete=models.CASCADE, related_name="dashboard_placements")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    position = models.JSONField(help_text="The position of this Blok in the Dashboard (e.g. x and y coordinates)", null=True, blank=True)
 
 
 class BlokAgentMapping(models.Model):

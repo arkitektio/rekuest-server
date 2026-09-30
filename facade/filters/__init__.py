@@ -26,7 +26,6 @@ from .action import ActionFilter, ActionOrder
 from .agent import (
     AgentFilter,
     AgentOrder,
-    HardwareRecordFilter,
     ImplementationAgentFilter,
 )
 from .task import (
@@ -92,7 +91,6 @@ __all__ = [
     "ClientFilter",
     "AgentFilter",
     "AgentOrder",
-    "HardwareRecordFilter",
     "ImplementationAgentFilter",
     "MemoryShelveFilter",
     "MemoryShelveOrder",

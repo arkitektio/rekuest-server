@@ -15,7 +15,6 @@ class TaskChange:
     is_done: bool
     latest_event_kind: enums.TaskEventKind
     latest_instruct_kind: enums.TaskInstructKind
-    status_message: str | None
     action: strawberry.ID
     implementation: strawberry.ID | None
     agent: strawberry.ID | None
@@ -34,7 +33,6 @@ class TaskChange:
             is_done=t.is_done,
             latest_event_kind=enums.TaskEventKind(t.latest_event_kind),
             latest_instruct_kind=enums.TaskInstructKind(t.latest_instruct_kind),
-            status_message=t.statusmessage or None,
             action=strawberry.ID(str(t.action_id)),
             implementation=strawberry.ID(str(t.implementation_id)) if t.implementation_id else None,
             agent=strawberry.ID(str(t.agent_id)) if t.agent_id else None,
@@ -54,7 +52,6 @@ class TaskChange:
             is_done=p.is_done,
             latest_event_kind=enums.TaskEventKind(p.latest_event_kind),
             latest_instruct_kind=enums.TaskInstructKind(p.latest_instruct_kind),
-            status_message=p.status_message,
             action=strawberry.ID(p.action),
             implementation=strawberry.ID(p.implementation) if p.implementation else None,
             agent=strawberry.ID(p.agent) if p.agent else None,

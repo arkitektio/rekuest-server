@@ -58,15 +58,8 @@ class State(models.Model):
         help_text="The identifier of the app providing this state (defaults to the owning agent's app identifier at registration)",
     )
     agent = models.ForeignKey("Agent", on_delete=models.CASCADE, related_name="states")
-    value = models.JSONField(default=dict, help_text=" The current value of this state")
     created_at = models.DateTimeField(auto_now_add=True, help_text="Date this State was first ever written to")
     updated_at = models.DateTimeField(auto_now=True, help_text="Date this State was last updated")
-    retention_policy = models.CharField(
-        max_length=1000,
-        choices=[(tag, tag.value) for tag in enums.RetentionPolicyChoices],
-        default=enums.RetentionPolicyChoices.KEEP_ALL,
-        help_text="The retention policy for this state (e.g. how many patches and snapshots should we keep for this state?)",
-    )
 
     class Meta:
         constraints = [
@@ -84,7 +77,6 @@ class Session(models.Model):
     session_id = models.CharField(max_length=1000, help_text="The unique identifier for this session")
     created_at = models.DateTimeField(auto_now_add=True, help_text="The time this session was created")
     updated_at = models.DateTimeField(auto_now=True, help_text="The time this session was last updated")
-    active = models.BooleanField(default=True, help_text="Is this session active?")
     projected_pos = models.PositiveBigIntegerField(
         default=0,
         help_text="Every numbered frame of this session up to this position is handled: a resend at or below it is skipped, and JOURNAL_ACK claims it (docs/design/journal.md).",

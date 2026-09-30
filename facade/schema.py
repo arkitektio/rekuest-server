@@ -36,7 +36,6 @@ def subscription(**kwargs) -> strawberry.subscription:
 @strawberry.type(description="Root query type for fetching entities in the system.")
 class Query:
     clients: list[types.Client] = field(description="List all registered clients.")
-    hardware_records: list[types.HardwareRecord] = field(description="List of all hardware records.")
     agents: list[types.Agent] = field(description="Retrieve all compute agents.")
     actions: list[types.Action] = field(description="List of all available actions.")
     protocols: list[types.Protocol] = field(description="Retrieve protocols grouping actions.")
@@ -57,13 +56,11 @@ class Query:
     checkout = field(resolver=queries.checkout, description="Materialize the latest state for a specific agent")
     checkout_agent = field(resolver=queries.checkout_agent, description="Materialize the latest states for a specific agent")
     dashboards: list[types.Dashboard] = field(description="All dashboards.")
-    states: list[types.State] = field(description="All states from agents.")
     bloks: list[types.Blok] = field(description="List of UI Blok.")
     resolutions: list[types.Resolution] = field(description="All resolutions.")
     materialized_bloks: list[types.MaterializedBlok] = field(description="List of UI Blok.")
     ui_catalogs: list[types.UICatalog] = field(description="UI catalogs registered in the caller's organization: the components and operations UI apps can render and evaluate.")
     base_catalog = field(resolver=types.dashboard.base_catalog, description="The built-in base catalog every definition and blok is validated against before any registered UI catalog (virtual: shipped with the server, not registered).")
-    state_definitions: list[types.StateDefinition] = field(description="Available state schemas.")
     memory_shelves: list[types.MemoryShelve] = field(description="All memory shelves.")
     memory_drawers: list[types.MemoryDrawer] = field(description="All memory drawers.")
     structures = field(resolver=types.structure.list_structures, description="All structures referenced by the org's action ports (derived, not registered).")
@@ -132,9 +129,6 @@ class Query:
     def ui_catalog(self, info: Info, id: strawberry.ID) -> types.UICatalog:
         return cast(types.UICatalog, scoped_get(models.UICatalog, info, id, field="organization"))
 
-    @field(description="Retrieve a state definition by ID.")
-    def state_definition(self, info: Info, id: strawberry.ID) -> types.StateDefinition:
-        return cast(types.StateDefinition, scoped_get(models.StateDefinition, info, id, field="organization"))
 
     @field(description="Get toolbox by ID.")
     def toolbox(self, info: Info, id: strawberry.ID) -> types.Toolbox:
@@ -144,9 +138,6 @@ class Query:
     def shortcut(self, info: Info, id: strawberry.ID) -> types.Shortcut:
         return cast(types.Shortcut, scoped_get(models.Shortcut, info, id, field="toolbox__organization"))
 
-    @field(description="Get hardware record by ID.")
-    def hardware_record(self, info: Info, id: strawberry.ID) -> types.HardwareRecord:
-        return cast(types.HardwareRecord, scoped_get(models.HardwareRecord, info, id, field="agent__organization"))
 
     @field(description="Get dashboard by ID.")
     def dashboard(self, info: Info, id: strawberry.ID) -> types.Dashboard:
@@ -191,7 +182,6 @@ class Query:
 @strawberry.type(description="Root mutation type for executing write operations on the API.")
 class Mutation:
     create_higher_order_implementation = mutation(resolver=mutations.create_higher_order_implementation, description="Deploy a higher-order implementation: a wrapper onto the agent of the implementation it wraps, linked to it.")
-    ack = mutation(resolver=mutations.ack, description="Acknowledge a task.")
     bounce = mutation(resolver=mutations.bounce, description="Bounce an agent so it reconnects.")
     kick = mutation(resolver=mutations.kick, description="Kick an agent to force disconnect. It will fail and not reconnect.")
     assign = mutation(resolver=mutations.assign, description="Assign a task to an agent.")
@@ -223,18 +213,12 @@ class Mutation:
     create_blok = mutation(resolver=mutations.create_blok, description="Create a user interface panel.")
     materialize_blok = mutation(resolver=mutations.materialize_blok, description="Materialize a UI blok into a concrete instance on a dashboard.")
     pin_agent = mutation(resolver=mutations.pin_agent, description="Pin an agent to the user.")
-    pin_implementation = mutation(resolver=mutations.pin_implementation, description="Pin an implementation to the user.")
     delete_agent = mutation(resolver=mutations.delete_agent, description="Delete an agent record.")
     update_agent = mutation(resolver=mutations.update_agent, description="Update properties of an agent such as its name.")
     create_shortcut = mutation(resolver=mutations.create_shortcut, description="Create a shortcut to an action.")
     delete_shortcut = mutation(resolver=mutations.delete_shortcut, description="Delete a shortcut.")
-    create_toolbox = mutation(resolver=mutations.create_toolbox, description="Create a new toolbox with shortcuts.")
-    delete_toolbox = mutation(resolver=mutations.delete_toolbox, description="Delete a toolbox by ID.")
     cleanup_actions = mutation(resolver=mutations.cleanup_actions, description="Delete unreferenced actions from the system.")
     auto_resolve = mutation(resolver=mutations.auto_resolve, description="Automatically resolve dependencies for an implementation.")
-    create_resolution = mutation(resolver=mutations.create_resolution, description="Create a resolution for an implementation.")
-    update_resolution = mutation(resolver=mutations.update_resolution, description="Update an existing resolution.")
-    delete_resolution = mutation(resolver=mutations.delete_resolution, description="Delete a resolution by ID.")
 
     # Datalayer. These use the local ``mutation()`` wrapper, not ``kante.django_mutation``:
     # the latter is plain ``strawberry_django.mutation`` and so skips ``AuthExtension``, which
@@ -283,14 +267,12 @@ class Mutation:
 
 @strawberry.type(description="Root subscription type for real-time event streams from the system.")
 class Subscription:
-    new_actions = subscription(resolver=subscriptions.new_actions, description="Subscribe to notifications when new actions are created.")
     mytasks = subscription(resolver=subscriptions.mytasks, description="Subscribe to root tasks created by this client (caller-scoped).")
     tasks = subscription(resolver=subscriptions.tasks, description="Subscribe to root task changes across the whole organization.")
     agents = subscription(resolver=subscriptions.agents, description="Subscribe to updates on agent connections and statuses.")
     implementation_change = subscription(resolver=subscriptions.implementation_change, description="Subscribe to changes in implementations.")
     implementations = subscription(resolver=subscriptions.implementations, description="Subscribe to creation or updates of implementations.")
     state_update_events = subscription(resolver=subscriptions.state_update_events, description="Subscribe to updates of state values and patches.")
-    latest_patches = subscription(resolver=subscriptions.latest_patches, description="Subscribe to latest patches for specific agents or states.")
     watch_state = subscription(resolver=subscriptions.watch_state, description="Watch a state: yields the current snapshot then streams patches.")
     watch_agent = subscription(resolver=subscriptions.watch_agent, description="Watch an agent: yields snapshots for all states then streams patches.")
     child_tasks = subscription(resolver=subscriptions.child_tasks, description="Subscribe to all descendant task changes of a task.")

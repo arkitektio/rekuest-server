@@ -9,7 +9,7 @@ import threading
 from datetime import timedelta
 
 import pytest
-from asgiref.sync import async_to_sync, sync_to_async
+from asgiref.sync import sync_to_async
 from django.db import connection
 from django.utils import timezone
 

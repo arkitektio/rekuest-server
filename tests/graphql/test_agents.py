@@ -64,26 +64,6 @@ class TestGraphQLAgents:
         assert result.errors is not None
         assert len(result.errors) > 0
 
-    async def test_hardware_records_query(self, authenticated_context: HttpContext):
-        """Test fetching hardware records via GraphQL query."""
-        query = """
-            query GetHardwareRecords {
-                hardwareRecords {
-                    id
-                    cpuCount
-                    cpuVendorName
-                    cpuFrequency
-                    createdAt
-                }
-            }
-        """
-
-        result = await schema.execute(query, context_value=authenticated_context)
-
-        assert result.data is not None
-        assert "hardwareRecords" in result.data
-        assert isinstance(result.data["hardwareRecords"], list)
-
     async def test_ensure_agent_mutation_with_name(self, authenticated_context: HttpContext):
         """Test creating an agent with custom name via ensureAgent mutation."""
         result = await schema.execute(ENSURE_AGENT, context_value=authenticated_context, variable_values={"input": {"name": "Custom Test Agent"}})

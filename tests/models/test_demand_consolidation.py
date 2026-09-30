@@ -203,7 +203,7 @@ def test_agent_must_satisfy_every_demand(catalog):
         ("both-2", agent_both, catalog.a3),
         ("partial-1", agent_partial, catalog.a1),
     ]:
-        models.Implementation.objects.create(release=agent.release, interface=f"{prefix}-iface", action=action, agent=agent, needs_token=False)
+        models.Implementation.objects.create(interface=f"{prefix}-iface", action=action, agent=agent, needs_token=False)
 
     demands = [action_demand(arg_matches=ARGS_XA), action_demand(return_matches=RETURNS_XB)]
     per_demand_ids = managers.get_action_ids_by_action_demands(demands, organization_id=catalog.org.id)

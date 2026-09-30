@@ -1,4 +1,4 @@
-"""Agent, hardware record and agent event types."""
+"""Agent and lock types."""
 
 from __future__ import annotations
 
@@ -11,20 +11,6 @@ from kante.types import Info
 
 from facade import enums, filters, liveness, models
 from facade.types.base import build_prescoped_queryset
-
-
-@strawberry_django.type(models.HardwareRecord, filters=filters.HardwareRecordFilter, pagination=True, description="Represents a record of an agent's hardware configuration.")
-class HardwareRecord:
-    id: strawberry.ID = strawberry_django.field(description="Unique ID of the hardware record.")
-    cpu_count: int = strawberry_django.field(description="Number of CPU cores available.")
-    cpu_vendor_name: str = strawberry_django.field(description="Vendor of the CPU.")
-    cpu_frequency: float = strawberry_django.field(description="Clock speed of the CPU in GHz.")
-    created_at: datetime.datetime = strawberry_django.field(description="Timestamp when this record was created.")
-    agent: "Agent" = strawberry_django.field(description="The agent to which this hardware belongs.")
-
-    @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
-        return build_prescoped_queryset(info, queryset, field="agent__organization")
 
 
 @strawberry_django.type(models.Lock, description="A resource of an agent that one of its tasks holds at a time: the agent takes it while an implementation that requires it runs.")
@@ -49,7 +35,6 @@ class Agent:
     client: "Client" = strawberry_django.field(description="The client (app instance) this agent runs as.")
     user: "User" = strawberry_django.field(description="The user this agent belongs to.")
     organization: "Organization" = strawberry_django.field(description="The organization this agent belongs to.")
-    hardware_records: list[HardwareRecord] = strawberry_django.field(description="Historical records of agent's hardware.")
 
     @strawberry_django.field(description="Device associated with the agent, via its client (if any).")
     def device(self, info: Info) -> Device | None:
@@ -81,9 +66,6 @@ class Agent:
     def active(self) -> bool:
         return liveness.agent_is_live(self.connected, self.last_seen)
 
-    @strawberry_django.field(description="Retrieve the latest hardware record for this agent.")
-    def latest_hardware_record(self) -> HardwareRecord | None:
-        return self.hardware_records.order_by("-created_at").first()
 
     @strawberry_django.field(description="Check if this agent is pinned by the current user.")
     def pinned(self, info: Info) -> bool:
