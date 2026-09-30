@@ -27,9 +27,9 @@ from typing import Any
 import httpx
 from authentikate.models import App, Client, Membership, Organization, Release, User
 from django.conf import settings
-from django.db import transaction
 
-from facade import enums, hooks, models, registration, schedules
+from facade import agentd, enums, hooks, models, schedules
+from facade.caller_context import CallerContext
 
 logger = logging.getLogger(__name__)
 
@@ -114,20 +114,19 @@ def provision(entry: dict[str, Any]) -> models.Agent:
     service = entry["service"]
     user, client = _identity(f"service-{service}", organization)
 
-    with transaction.atomic():
-        agent = registration.ensure_agent(client, user, organization, name=service)
-        # No secret: requests both ways are signed with instance keys (facade.service_trust).
-        wanted = {"kind": enums.AgentKind.WEBHOOK.value, "hook_url": entry["hook_url"], "hook_url_secret": None}
-        changed = [field for field, value in wanted.items() if getattr(agent, field) != value]
-        for field in changed:
-            setattr(agent, field, wanted[field])
-        if changed:
-            agent.save(update_fields=changed)
+    principal = agentd._principal(CallerContext(user=user, client=client, organization=organization))
+    # No secret: requests both ways are signed with instance keys (facade.service_trust).
+    ensured = agentd.call(
+        "agent/ensure",
+        {"principal": principal, "name": service, "kind": enums.AgentKind.WEBHOOK.value, "hook_url": entry["hook_url"], "hook_url_secret": None},
+    )
+    agent = models.Agent.objects.select_related("client").get(pk=ensured["agent"])
 
     manifest = fetch_manifest(agent)
     actions = manifest["actions"]
     implementations, payload_model = _implementations(actions)
-    registration.implement_agent(client, user, organization, payload_model(name=service, description=f"The {service} service of this hub.", implementations=implementations))
+    payload = payload_model(name=service, description=f"The {service} service of this hub.", implementations=implementations)
+    agentd.call("agent/implement", {"principal": principal, "input": payload.model_dump(mode="json", exclude_none=True)})
     _sync_schedules(agent, actions)
     _sync_signals(agent, manifest["signals"])
     return agent

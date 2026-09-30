@@ -1,8 +1,9 @@
-"""Service agents end to end: provisioning from a manifest, a scheduled run over real HTTP.
+"""Service agents: provisioning from a manifest (its schedules and signal declarations), and the
+vendored ``rekuest_service`` side (its hook endpoint and declaration API).
 
-The live server serves rekuest AND the vendored ``rekuest_service`` endpoint (``tests.hook_urls``),
-so one scheduled run travels the whole way: refill → due → Assign POSTed (signed) to the
-service → Started / Yield / Completed POSTed (signed) back to the intake. Real postgres + redis.
+The agent row and its implementations are agentd's (``fake_agentd`` stands in for it); a run
+travelling the whole way — Assign to the service, reports back — is agentd's path too, judged by
+rekuest-agentd's conformance suite.
 """
 
 import threading
@@ -19,6 +20,8 @@ from facade import enums, hooks, models, service_agents
 from facade.persist_backend import ModelPersistBackend
 from rekuest_service import Service, trust
 from tests.hook_urls import housekeeping
+
+pytestmark = pytest.mark.usefixtures("fake_agentd")
 
 ran = threading.Event()
 
@@ -81,25 +84,6 @@ class TestServiceAgents:
         assert service_agents.provision_all(force=True) == 1
         assert models.Agent.objects.filter(name="housekeeping").count() == 1
         assert models.Schedule.objects.get(pk=schedule.pk).agent_id == agent.pk
-
-    def test_a_scheduled_run_travels_the_whole_way(self, hub):
-        from asgiref.sync import async_to_sync
-
-        service_agents.provision_all(force=True)
-        backend = ModelPersistBackend()
-        assert async_to_sync(backend.refill_schedules)() == 1
-        run = models.Task.objects.get(schedule__interface="tidy_up", is_done=False)
-        assert run.ephemeral is True
-        models.Task.objects.filter(pk=run.pk).update(not_before=timezone.now() - timedelta(seconds=1))
-
-        assert async_to_sync(backend.dispatch_due_tasks)() == 1
-        finished = _wait_done(run.pk)
-
-        assert ran.is_set()
-        assert finished.latest_event_kind == enums.TaskEventKind.COMPLETED
-        assert finished.picked_up_at is not None  # Started came first
-        yielded = models.TaskEvent.objects.get(task=finished, kind=enums.TaskEventKind.YIELD)
-        assert yielded.returns == {"acted": 3}
 
     def test_a_dropped_signal_declaration_is_removed(self, hub):
         service_agents.provision_all(force=True)

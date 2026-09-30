@@ -13,6 +13,8 @@ from facade.schema import schema
 
 from tests.graphql_ops import CREATE_BLOK, CREATE_DASHBOARD, DELETE_AGENT, ENSURE_AGENT, GET_AGENT, GET_AGENTS
 
+pytestmark = pytest.mark.usefixtures("fake_agentd")
+
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio

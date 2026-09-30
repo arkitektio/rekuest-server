@@ -183,3 +183,13 @@ async def agent_ws(agent_ws_redis):
 
     for communicator in created:
         await communicator.disconnect()
+
+
+@pytest.fixture
+def fake_agentd(monkeypatch, settings):
+    """agentd's internal API answered in-process (``tests/agentd_fake.py``)."""
+    from facade import agentd
+    from tests import agentd_fake
+
+    settings.AGENTD_URL = "http://agentd.test/rekuest"
+    monkeypatch.setattr(agentd, "call", agentd_fake.call)

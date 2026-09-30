@@ -1,14 +1,14 @@
-from django.db import transaction
-from kante.types import Info
-import strawberry
-from facade import types, models, inputs, enums, signals
-from rekuest_core.inputs.types import BlokImplementationInput, ImplementationInput, LockImplementationInput, StateImplementationInput
-from rekuest_core.inputs.models import BlokImplementationInputModel, ImplementationInputModel, StateImplementationInputModel, LockImplementationInputModel
 import logging
-from facade import registration
-from pydantic import BaseModel, Field
+
 import kante
+import strawberry
+from kante.types import Info
+from pydantic import BaseModel, Field
+
+from facade import agentd, enums, inputs, models, signals, types
 from facade.types.base import scoped_get
+from rekuest_core.inputs.models import BlokImplementationInputModel, ImplementationInputModel, LockImplementationInputModel, StateImplementationInputModel
+from rekuest_core.inputs.types import BlokImplementationInput, ImplementationInput, LockImplementationInput, StateImplementationInput
 
 logger = logging.getLogger(__name__)
 
@@ -43,59 +43,25 @@ class DeleteAgentInput:
 
 
 def ensure_agent(info: Info, input: AgentInput) -> types.Agent:
-    """Create (or find) the caller's agent and forget what a previous process shelved.
+    """Create (or find) the caller's agent, configure its transport, forget what it had shelved.
 
-    The socket ``Register`` does the same through :func:`facade.registration.ensure_agent`;
-    this mutation remains for dashboards and for a HookAgent's bootstrap (``kind``,
-    ``hook_url``, ``hook_url_secret``), which cannot register over a socket it does not have.
+    Served by agentd (``internal/agent/ensure``), which owns agent rows. For dashboards and a
+    HookAgent's bootstrap (``kind``, ``hook_url``, ``hook_url_secret``), which has no socket to
+    register over; an agent turning WEBHOOK has its socket queue abandoned there.
     """
-    request = info.context.request
-    agent = registration.ensure_agent(request.client, request.user, request.organization, name=input.name)
-    registration.clear_drawers(agent)
-
-    # Configure the transport (idempotent): a HookAgent declares its kind + endpoint here.
-    updated_fields = []
-    became_webhook = False
+    payload: dict = {"principal": agentd._principal(info), "clear_drawers": True}
+    if input.name is not None:
+        payload["name"] = input.name
     if input.description is not None:
-        agent.description = input.description
-        updated_fields.append("description")
+        payload["description"] = input.description
     if input.kind is not None:
-        new_kind = getattr(input.kind, "value", input.kind)
-        became_webhook = new_kind == enums.AgentKind.WEBHOOK.value and agent.kind != new_kind
-        agent.kind = new_kind
-        updated_fields.append("kind")
+        payload["kind"] = getattr(input.kind, "value", input.kind)
     if input.hook_url is not None:
-        agent.hook_url = input.hook_url
-        updated_fields.append("hook_url")
+        payload["hook_url"] = input.hook_url
     if input.hook_url_secret is not None:
-        agent.hook_url_secret = input.hook_url_secret
-        updated_fields.append("hook_url_secret")
-    if updated_fields:
-        agent.save(update_fields=updated_fields)
-    if became_webhook:
-        transaction.on_commit(lambda: _abandon_socket_queue(agent.pk))
-
-    return agent
-
-
-def _abandon_socket_queue(agent_pk: int) -> None:
-    """An agent left the websocket transport: what was queued for its socket is now unreachable.
-
-    No connection will ever drain those redis lists again, so drop them and mark the agent's
-    not-yet-picked-up tasks as "never dispatched" — the pickup watchdog then redelivers their
-    Assigns over the webhook. (Queued control frames are covered by the control deadline.)
-    The raw frames are deliberately not re-POSTed: their order is gone and their tokens may be stale.
-    """
-    from facade.consumers.agent_queue import RedisAgentQueue
-
-    try:
-        dropped = RedisAgentQueue.from_settings().drop(str(agent_pk))
-    except Exception:
-        logger.error("Could not drop the socket queue of agent %s", agent_pk, exc_info=True)
-        dropped = 0
-    models.Task.objects.filter(agent_id=agent_pk, is_done=False, picked_up_at__isnull=True).update(dispatched_at=None)
-    if dropped:
-        logger.warning("Agent %s became a HookAgent: dropped %s frame(s) queued for its socket", agent_pk, dropped)
+        payload["hook_url_secret"] = input.hook_url_secret
+    answer = agentd.call("agent/ensure", payload)
+    return models.Agent.objects.get(pk=answer["agent"])
 
 
 class ImplementAgentInputModel(BaseModel):
@@ -124,14 +90,14 @@ class ImplementAgentInput:
 
 
 def implement_agent(info: Info, input: ImplementAgentInput) -> types.Agent:
-    """Reconcile an agent's declared implementations/states/locks/bloks in one transaction.
+    """Reconcile the caller's agent's declared implementations/states/locks/bloks, atomically.
 
-    The body is :func:`facade.registration.implement_agent`, shared with the socket
-    ``Implement`` message; it is atomic, so either the whole declared set lands or none of it.
+    Served by agentd (``internal/agent/implement``): the same reconciliation a socket agent's
+    REGISTER runs, so either the whole declared set lands or none of it.
     """
-    request = info.context.request
-    agent, _ = registration.implement_agent(request.client, request.user, request.organization, input.to_pydantic())
-    return agent
+    model = input.to_pydantic()
+    answer = agentd.call("agent/implement", {"principal": agentd._principal(info), "input": model.model_dump(mode="json", exclude_none=True)})
+    return models.Agent.objects.get(pk=answer["agent"])
 
 
 def pin_agent(info: Info, input: inputs.PinInput) -> types.Agent:

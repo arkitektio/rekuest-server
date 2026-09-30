@@ -9,6 +9,8 @@ from facade.schema import schema
 
 from tests.graphql_ops import DELETE_AGENT, ENSURE_AGENT, GET_AGENT, GET_AGENTS
 
+pytestmark = pytest.mark.usefixtures("fake_agentd")
+
 #: ``ENSURE_AGENT`` selects only id/name/connected, and is shared with tests that predate this
 #: field. A local operation rather than a widened shared one, so those keep asserting what they
 #: were written to assert.

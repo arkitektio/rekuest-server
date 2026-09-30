@@ -1,7 +1,7 @@
 import strawberry
 from kante.types import Info
 
-from facade import models, registration, types
+from facade import agentd, models, types
 from rekuest_core import scalars as rscalars
 
 
@@ -19,20 +19,15 @@ class ShelveInMemoryDrawerInput:
     )
 
 
-def _agent_of(info: Info) -> models.Agent:
-    request = info.context.request
-    return registration.ensure_agent(request.client, request.user, request.organization)
-
-
 def shelve_in_memory_drawer(info: Info, input: ShelveInMemoryDrawerInput) -> types.MemoryDrawer:
-    """Record a value the caller's agent holds in memory (the GraphQL twin of ``Shelve``)."""
-    return registration.shelve(
-        _agent_of(info),
-        identifier=input.identifier,
-        resource_id=input.resource_id,
-        label=input.label,
-        description=input.description,
-    )
+    """Record a value the caller's agent holds in memory (the GraphQL twin of ``Shelve``), in agentd."""
+    payload = {"principal": agentd._principal(info), "identifier": input.identifier, "resource_id": input.resource_id}
+    if input.label is not None:
+        payload["label"] = input.label
+    if input.description is not None:
+        payload["description"] = input.description
+    answer = agentd.call("drawer/shelve", payload)
+    return models.MemoryDrawer.objects.get(pk=answer["drawer"])
 
 
 @strawberry.input
@@ -41,9 +36,9 @@ class UnshelveMemoryDrawerInput:
 
 
 def unshelve_memory_drawer(info: Info, input: UnshelveMemoryDrawerInput) -> strawberry.ID:
-    """Drop a drawer from the caller's agent's shelve (the GraphQL twin of ``Unshelve``).
+    """Drop a drawer from the caller's agent's shelve (the GraphQL twin of ``Unshelve``), in agentd.
 
     ``id`` is looked up as a resource ID on the caller's agent's shelve first, then as a pk.
     """
-    registration.unshelve(_agent_of(info), input.id, by_resource_id=True)
+    agentd.call("drawer/unshelve", {"principal": agentd._principal(info), "id": input.id})
     return input.id
