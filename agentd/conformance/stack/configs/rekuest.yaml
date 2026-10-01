@@ -1,0 +1,358 @@
+django:
+  admin:
+    email: admin@admin.com
+    password: admin
+    username: admin
+  debug: true
+  hosts:
+    - "*"
+  secret_key: 9be5ca4df71514f00a8f22719f788ad8
+authentikate:
+  # This service's identifier, matched against the token's `aud` claim. Required
+  # since the backend bump. The static_tokens below never have their audience
+  # checked (they are pasted into this config by hand), so this only has to be
+  # honest, not permissive.
+  audience: rekuest
+  issuers:
+    - kind: rsa
+      iss: lok
+      kid: lok-key-1
+      public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDXx/g7dyiwmfIQvkBKvUAM+KBuL1KdvZfZMlYhbyrz9Auk2xao1gLYiQJ183joiXadUreL4BugUrasQVdR9JvBWXOBeqm2FD5Ehf9VvqXdzCOQ7/fUXkb9N8sqmz5YitQuheKGDh0weNmVcfdsCGU38sACEvFQg+5dv1tqLbm7EllT+vogntDVX16DmvpvFEX4HYHpT8qM/xuqSB6yQ8+wBuQd3K7WTFgUrUqQx6zFrSMUbSArPrrY5Z0GJAeDAHKp4+V+um4mSHpYM2nBJ5pn80wYpsf97KIL9P+UJzjb/indB8dCqpPkAk3HogBhj67Tp5JoqCMoaXHFU3tiYQCp
+  static_tokens:
+    # One per conformance scenario: a token is one agent, and scenarios must not share a lease.
+    conf_1:
+      sub: 101
+      iss: lok
+      active_org: conformance
+      client_device: conf_1_device
+      client_app: conf_1
+      client_release: v0.0.1
+      client_id: conf_1
+    conf_2:
+      sub: 102
+      iss: lok
+      active_org: conformance
+      client_device: conf_2_device
+      client_app: conf_2
+      client_release: v0.0.1
+      client_id: conf_2
+    conf_3:
+      sub: 103
+      iss: lok
+      active_org: conformance
+      client_device: conf_3_device
+      client_app: conf_3
+      client_release: v0.0.1
+      client_id: conf_3
+    conf_4:
+      sub: 104
+      iss: lok
+      active_org: conformance
+      client_device: conf_4_device
+      client_app: conf_4
+      client_release: v0.0.1
+      client_id: conf_4
+    conf_5:
+      sub: 105
+      iss: lok
+      active_org: conformance
+      client_device: conf_5_device
+      client_app: conf_5
+      client_release: v0.0.1
+      client_id: conf_5
+    conf_6:
+      sub: 106
+      iss: lok
+      active_org: conformance
+      client_device: conf_6_device
+      client_app: conf_6
+      client_release: v0.0.1
+      client_id: conf_6
+    conf_7:
+      sub: 107
+      iss: lok
+      active_org: conformance
+      client_device: conf_7_device
+      client_app: conf_7
+      client_release: v0.0.1
+      client_id: conf_7
+    conf_8:
+      sub: 108
+      iss: lok
+      active_org: conformance
+      client_device: conf_8_device
+      client_app: conf_8
+      client_release: v0.0.1
+      client_id: conf_8
+    conf_9:
+      sub: 109
+      iss: lok
+      active_org: conformance
+      client_device: conf_9_device
+      client_app: conf_9
+      client_release: v0.0.1
+      client_id: conf_9
+    conf_10:
+      sub: 110
+      iss: lok
+      active_org: conformance
+      client_device: conf_10_device
+      client_app: conf_10
+      client_release: v0.0.1
+      client_id: conf_10
+    conf_11:
+      sub: 111
+      iss: lok
+      active_org: conformance
+      client_device: conf_11_device
+      client_app: conf_11
+      client_release: v0.0.1
+      client_id: conf_11
+    conf_12:
+      sub: 112
+      iss: lok
+      active_org: conformance
+      client_device: conf_12_device
+      client_app: conf_12
+      client_release: v0.0.1
+      client_id: conf_12
+    conf_13:
+      sub: 113
+      iss: lok
+      active_org: conformance
+      client_device: conf_13_device
+      client_app: conf_13
+      client_release: v0.0.1
+      client_id: conf_13
+    conf_14:
+      sub: 114
+      iss: lok
+      active_org: conformance
+      client_device: conf_14_device
+      client_app: conf_14
+      client_release: v0.0.1
+      client_id: conf_14
+    conf_15:
+      sub: 115
+      iss: lok
+      active_org: conformance
+      client_device: conf_15_device
+      client_app: conf_15
+      client_release: v0.0.1
+      client_id: conf_15
+    conf_16:
+      sub: 116
+      iss: lok
+      active_org: conformance
+      client_device: conf_16_device
+      client_app: conf_16
+      client_release: v0.0.1
+      client_id: conf_16
+    conf_17:
+      sub: 117
+      iss: lok
+      active_org: conformance
+      client_device: conf_17_device
+      client_app: conf_17
+      client_release: v0.0.1
+      client_id: conf_17
+    conf_18:
+      sub: 118
+      iss: lok
+      active_org: conformance
+      client_device: conf_18_device
+      client_app: conf_18
+      client_release: v0.0.1
+      client_id: conf_18
+    conf_19:
+      sub: 119
+      iss: lok
+      active_org: conformance
+      client_device: conf_19_device
+      client_app: conf_19
+      client_release: v0.0.1
+      client_id: conf_19
+    conf_20:
+      sub: 120
+      iss: lok
+      active_org: conformance
+      client_device: conf_20_device
+      client_app: conf_20
+      client_release: v0.0.1
+      client_id: conf_20
+    conf_21:
+      sub: 121
+      iss: lok
+      active_org: conformance
+      client_device: conf_21_device
+      client_app: conf_21
+      client_release: v0.0.1
+      client_id: conf_21
+    conf_22:
+      sub: 122
+      iss: lok
+      active_org: conformance
+      client_device: conf_22_device
+      client_app: conf_22
+      client_release: v0.0.1
+      client_id: conf_22
+    conf_23:
+      sub: 123
+      iss: lok
+      active_org: conformance
+      client_device: conf_23_device
+      client_app: conf_23
+      client_release: v0.0.1
+      client_id: conf_23
+    conf_24:
+      sub: 124
+      iss: lok
+      active_org: conformance
+      client_device: conf_24_device
+      client_app: conf_24
+      client_release: v0.0.1
+      client_id: conf_24
+    conf_25:
+      sub: 125
+      iss: lok
+      active_org: conformance
+      client_device: conf_25_device
+      client_app: conf_25
+      client_release: v0.0.1
+      client_id: conf_25
+    conf_26:
+      sub: 126
+      iss: lok
+      active_org: conformance
+      client_device: conf_26_device
+      client_app: conf_26
+      client_release: v0.0.1
+      client_id: conf_26
+    conf_27:
+      sub: 127
+      iss: lok
+      active_org: conformance
+      client_device: conf_27_device
+      client_app: conf_27
+      client_release: v0.0.1
+      client_id: conf_27
+    conf_28:
+      sub: 128
+      iss: lok
+      active_org: conformance
+      client_device: conf_28_device
+      client_app: conf_28
+      client_release: v0.0.1
+      client_id: conf_28
+    conf_29:
+      sub: 129
+      iss: lok
+      active_org: conformance
+      client_device: conf_29_device
+      client_app: conf_29
+      client_release: v0.0.1
+      client_id: conf_29
+    conf_30:
+      sub: 130
+      iss: lok
+      active_org: conformance
+      client_device: conf_30_device
+      client_app: conf_30
+      client_release: v0.0.1
+      client_id: conf_30
+    test:
+      sub: 1
+      iss: lok
+      active_org: test
+      client_device: ffff
+      client_app: test
+      client_release: v0.0.1
+      client_id: test
+    atest_token:
+      sub: 2
+      iss: lok
+      active_org: test
+      client_device: atest_device
+      client_app: atest
+      client_release: v0.0.1
+      client_id: atest
+    btest_token:
+      sub: 3
+      iss: lok
+      active_org: test
+      client_device: btest_device
+      client_app: btest
+      client_release: v0.0.1
+      client_id: btest
+    workflow_token:
+      sub: 4
+      iss: lok
+      active_org: test
+      client_device: workflow_device
+      client_app: workflow
+      client_release: v0.0.1
+      client_id: workflow
+    standalone_token:
+      sub: 5
+      iss: lok
+      active_org: test
+      client_device: standalone_device
+      client_app: standalone
+      client_release: v0.0.1
+      client_id: standalone
+    # The durable workflow test's agent, killed and restarted mid-task. Its own app so
+    # that no other test's agent competes for its lease.
+    durable_token:
+      sub: 6
+      iss: lok
+      active_org: test
+      client_device: durable_device
+      client_app: durable
+      client_release: v0.0.1
+      client_id: durable
+lok:
+  issuer: lok
+  key_type: RS256
+  public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDXx/g7dyiwmfIQvkBKvUAM+KBuL1KdvZfZMlYhbyrz9Auk2xao1gLYiQJ183joiXadUreL4BugUrasQVdR9JvBWXOBeqm2FD5Ehf9VvqXdzCOQ7/fUXkb9N8sqmz5YitQuheKGDh0weNmVcfdsCGU38sACEvFQg+5dv1tqLbm7EllT+vogntDVX16DmvpvFEX4HYHpT8qM/xuqSB6yQ8+wBuQd3K7WTFgUrUqQx6zFrSMUbSArPrrY5Z0GJAeDAHKp4+V+um4mSHpYM2nBJ5pn80wYpsf97KIL9P+UJzjb/indB8dCqpPkAk3HogBhj67Tp5JoqCMoaXHFU3tiYQCp
+redis:
+  host: redis
+  port: 6379
+datalayer:
+  access_key: mikro_access_key
+  secret_key: mikro_secret_key
+  host: rustfs
+  port: 9000
+  protocol: http
+  media:
+    bucket: media
+postgres:
+  db_name: rekuest
+  engine: django.db.backends.postgresql
+  host: db
+  password: hello_django
+  port: 5432
+  username: hello_django
+provenance:
+  issuer: rekuest
+  kid: rekuest-prov-1
+  token_ttl_seconds: 3600
+  human_roles: []
+  strict: false
+  private_key: |
+    -----BEGIN PRIVATE KEY-----
+    MC4CAQAwBQYDK2VwBCIEILK+rl9gVEjfKGiye+mLLjfEUGIdoP0WPC8lMZS3NYK2
+    -----END PRIVATE KEY-----
+  public_key: |
+    -----BEGIN PUBLIC KEY-----
+    MCowBQYDK2VwAyEA6lDpKZJ0ManLzreBg43+fZPoPP5lHOVk2E23pFDzNck=
+    -----END PUBLIC KEY-----
+# Since rekuest server 4: this instance's key (signs provenance tokens and service
+# requests) and the hub trust bundle. The test key is the provenance pair above.
+instance:
+  private_key: |
+    -----BEGIN PRIVATE KEY-----
+    MC4CAQAwBQYDK2VwBCIEILK+rl9gVEjfKGiye+mLLjfEUGIdoP0WPC8lMZS3NYK2
+    -----END PRIVATE KEY-----
+scopes:
+  rekuest_agent: Act as an agent
+  rekuest_call: Call other apps with rekuest

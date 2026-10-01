@@ -1,0 +1,38 @@
+[package]
+name = "rekuest-server"
+description = "The project (mirrors the Python server's `rekuest/`): configuration, settings, routes, and the agentd binary"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "agentd"
+path = "src/main.rs"
+
+
+[dependencies]
+facade.workspace = true
+rekuest-core.workspace = true
+authentikate.workspace = true
+kante.workspace = true
+rekuest-protocol.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+sqlx.workspace = true
+redis.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+authentikate.workspace = true

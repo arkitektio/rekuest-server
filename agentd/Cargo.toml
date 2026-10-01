@@ -1,0 +1,40 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/arkitektio/rekuest-agentd"
+
+[workspace.dependencies]
+# The wire types, shared with the agents (arkirust).
+rekuest-protocol = "0.2.0"
+facade = { path = "crates/facade", package = "rekuest-server-facade" }
+authentikate = { path = "crates/authentikate" }
+rekuest-core = { path = "crates/rekuest-server-core", package = "rekuest-server-core" }
+kante = { path = "crates/kante" }
+anyhow = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time", "signal", "net"] }
+axum = { version = "0.8", features = ["ws"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+serde_yaml = "0.9"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "macros", "json", "chrono", "uuid"] }
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+jsonwebtoken = "9"
+base64 = "0.22"
+sha2 = "0.10"
+hex = "0.4"
+rand = "0.9"
+rmp-serde = "1"
+hmac = "0.12"
+regex = "1"
+ring = "0.17"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
