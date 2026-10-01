@@ -1,4 +1,4 @@
-//! Django's delete collector, for the rows a registration removes.
+//! Django's delete collector, for the rows a registration or a delete removes.
 //!
 //! Every foreign key in the schema is `NO ACTION DEFERRABLE INITIALLY DEFERRED`: Django emulates
 //! `on_delete` in Python, walking the relations before it deletes. Rust bypasses that, so the
@@ -356,4 +356,69 @@ pub async fn delete_blok_dependencies(
         dependencies,
     )
     .await
+}
+
+/// An agent and everything below it. CASCADE: its tasks, implementations, states, sessions,
+/// patches and snapshots, locks, shelve and drawers, schedules and triggers, signal
+/// declarations, the bloks it declared with their mappings and placements, and its pins.
+/// SET_NULL: the tasks its schedules and triggers fired. Refused like an implementation delete
+/// while another agent's resolution still depends on one of its implementations (PROTECT).
+pub async fn delete_agent(
+    conn: &mut PgConnection,
+    agent: i64,
+) -> Result<Vec<DeletedImplementation>, DeleteError> {
+    let agent = [agent];
+    let tasks = ids(
+        conn,
+        "SELECT id FROM facade_task WHERE agent_id = ANY($1)",
+        &agent,
+    )
+    .await?;
+    delete_tasks(conn, &tasks).await?;
+    let implementations = ids(
+        conn,
+        "SELECT id FROM facade_implementation WHERE agent_id = ANY($1)",
+        &agent,
+    )
+    .await?;
+    let deleted = delete_implementations(conn, &implementations).await?;
+    let states = ids(
+        conn,
+        "SELECT id FROM facade_state WHERE agent_id = ANY($1)",
+        &agent,
+    )
+    .await?;
+    delete_states(conn, &states).await?;
+    for statement in [
+        "DELETE FROM facade_patch WHERE agent_id = ANY($1)
+            OR session_id IN (SELECT id FROM facade_session WHERE agent_id = ANY($1))",
+        "DELETE FROM facade_snapshot WHERE agent_id = ANY($1)
+            OR session_id IN (SELECT id FROM facade_session WHERE agent_id = ANY($1))",
+        "DELETE FROM facade_session WHERE agent_id = ANY($1)",
+        "DELETE FROM facade_implementation_required_locks
+          WHERE lock_id IN (SELECT id FROM facade_lock WHERE agent_id = ANY($1))",
+        "DELETE FROM facade_lock WHERE agent_id = ANY($1)",
+        "DELETE FROM facade_memorydrawer
+          WHERE shelve_id IN (SELECT id FROM facade_memoryshelve WHERE agent_id = ANY($1))",
+        "DELETE FROM facade_memoryshelve WHERE agent_id = ANY($1)",
+        "UPDATE facade_task SET schedule_id = NULL
+          WHERE schedule_id IN (SELECT id FROM facade_schedule WHERE agent_id = ANY($1))",
+        "DELETE FROM facade_schedule WHERE agent_id = ANY($1)",
+        "UPDATE facade_task SET trigger_id = NULL
+          WHERE trigger_id IN (SELECT id FROM facade_trigger WHERE agent_id = ANY($1))",
+        "DELETE FROM facade_trigger WHERE agent_id = ANY($1)",
+        "DELETE FROM facade_signaldeclaration WHERE agent_id = ANY($1)",
+        "DELETE FROM facade_dashboardplacement
+          WHERE blok_id IN (SELECT id FROM facade_materializedblok WHERE declared_by_id = ANY($1))",
+        "DELETE FROM facade_placement WHERE agent_id = ANY($1)
+            OR blok_id IN (SELECT id FROM facade_materializedblok WHERE declared_by_id = ANY($1))",
+        "DELETE FROM facade_blokagentmapping WHERE agent_id = ANY($1)
+            OR materialized_blok_id IN (SELECT id FROM facade_materializedblok WHERE declared_by_id = ANY($1))",
+        "DELETE FROM facade_materializedblok WHERE declared_by_id = ANY($1)",
+        "DELETE FROM facade_agent_pinned_by WHERE agent_id = ANY($1)",
+        "DELETE FROM facade_agent WHERE id = ANY($1)",
+    ] {
+        exec(conn, statement, &agent).await?;
+    }
+    Ok(deleted)
 }

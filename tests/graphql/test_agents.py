@@ -147,7 +147,24 @@ class TestGraphQLAgents:
         assert result.data is not None, f"Errors: {result.errors}"
         assert result.data["ensureAgent"]["description"] is None
 
-    async def test_delete_agent_mutation(self, authenticated_context: HttpContext):
+    async def test_a_rename_is_the_users_and_leaves_the_declared_name(self, authenticated_context: HttpContext):
+        """updateAgent names the agent for its users; the declared name, which registration rewrites, stays the agent's."""
+        created = await schema.execute(ENSURE_AGENT, context_value=authenticated_context, variable_values={"input": {"name": "microscope:1.0"}})
+        agent_id = created.data["ensureAgent"]["id"]
+        rename = "mutation ($input: UpdateAgentInput!) { updateAgent(input: $input) { name declaredName } }"
+
+        renamed = await schema.execute(rename, context_value=authenticated_context, variable_values={"input": {"id": agent_id, "name": "Room 4 scope"}})
+        assert renamed.errors is None, renamed.errors
+        assert renamed.data["updateAgent"] == {"name": "Room 4 scope", "declaredName": "microscope:1.0"}
+        # What a registration does: it rewrites the declared name and nothing else.
+        await sync_to_async(Agent.objects.filter(pk=agent_id).update)(name="microscope:1.1")
+        listed = await schema.execute('query { agents(filters: {search: "room 4"}) { id name declaredName } }', context_value=authenticated_context)
+        assert listed.data["agents"] == [{"id": agent_id, "name": "Room 4 scope", "declaredName": "microscope:1.1"}]
+
+        taken_back = await schema.execute(rename, context_value=authenticated_context, variable_values={"input": {"id": agent_id, "name": " "}})
+        assert taken_back.data["updateAgent"] == {"name": "microscope:1.1", "declaredName": "microscope:1.1"}
+
+    async def test_delete_agent_mutation(self, authenticated_context: HttpContext, fake_agentd):
         """Test deleting an agent via mutation."""
         # First create an agent
         create_result = await schema.execute(ENSURE_AGENT, context_value=authenticated_context, variable_values={"input": {"name": "Agent To Delete"}})
@@ -160,6 +177,9 @@ class TestGraphQLAgents:
 
         assert delete_result.data is not None
         assert delete_result.data["deleteAgent"] == agent_id
+        # agentd owns the rows: the server asks it, with who is asking.
+        (deleted,) = [payload for op, payload in fake_agentd.calls if op == "agent/delete"]
+        assert deleted["agent"] == agent_id and deleted["principal"]["organization"] is not None
 
         # Verify agent is deleted by trying to query it
         query_result = await schema.execute(GET_AGENT, context_value=authenticated_context, variable_values={"id": agent_id})

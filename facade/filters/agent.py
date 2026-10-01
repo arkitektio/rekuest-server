@@ -43,7 +43,7 @@ class AgentFilter:
     def search(self, info: Info, queryset, value: str, prefix: str):
         if value == "":
             return queryset, Q()
-        return queryset.filter(**{f"{prefix}name__icontains": value}), Q()
+        return queryset.filter(Q(**{f"{prefix}name__icontains": value}) | Q(**{f"{prefix}display_name__icontains": value})), Q()
 
     @filter_field
     def dependency(self, info: Info, queryset, value: strawberry.ID, prefix: str):

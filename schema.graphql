@@ -413,8 +413,8 @@ type Agent {
   """Is the agent currently connected."""
   connected: Boolean!
 
-  """Agent name."""
-  name: String!
+  """The name the agent declares for itself, whatever a user calls it."""
+  declaredName: String!
 
   """
   What this agent is, in a sentence. Client-declared at registration; null for an agent that never declared one.
@@ -453,6 +453,11 @@ type Agent {
 
   """Device associated with the agent, via its client (if any)."""
   device: Device
+
+  """
+  Agent name: the one a user gave it (updateAgent), else the one it declares.
+  """
+  name: String!
 
   """Fetch a specific implementation by interface."""
   implementation(interface: String!): Implementation

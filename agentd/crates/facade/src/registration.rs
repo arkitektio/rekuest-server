@@ -346,8 +346,9 @@ pub async fn implement_agent(
         .clone()
         .filter(|h| !h.is_empty())
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    // A register without a description keeps the agent's; `name` resets to the client id, as
-    // in Python (which also undoes an `updateAgent` rename).
+    // A register without a description keeps the agent's. `name` is the declared name (the
+    // client id when none is declared); a user's rename lives in `display_name`, which no
+    // registration writes.
     sqlx::query(
         "UPDATE facade_agent SET name = $2, app_id = $3, release_id = $4, hash = $5, description = coalesce($6, description)
           WHERE id = $1",

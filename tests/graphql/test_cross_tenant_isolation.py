@@ -125,7 +125,7 @@ class TestCrossTenantIsolation:
 
         assert result.errors or result.data.get("state") is None, "org A fetched org B's State by id"
 
-    async def test_an_implementation_of_another_organization_cannot_be_deleted(self, authenticated_context):
+    async def test_an_implementation_of_another_organization_cannot_be_deleted(self, authenticated_context, fake_agentd):
         """deleteImplementation fetched by bare id: org A could delete org B's implementation."""
         from facade.models import Implementation
 
@@ -141,3 +141,5 @@ class TestCrossTenantIsolation:
         assert await sync_to_async(Implementation.objects.filter(pk=theirs.pk).exists)()
         assert not allowed.errors, allowed.errors
         assert not await sync_to_async(Implementation.objects.filter(pk=mine.pk).exists)()
+        # The server refuses before agentd is asked: only the caller's own delete reaches it.
+        assert [payload["implementation"] for op, payload in fake_agentd.calls if op == "implementation/delete"] == [str(mine.pk)]

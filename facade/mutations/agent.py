@@ -113,14 +113,16 @@ def pin_agent(info: Info, input: inputs.PinInput) -> types.Agent:
 
 
 def update_agent(info: Info, input: inputs.UpdateAgentInput) -> types.Agent:
+    """Rename an agent for its users. The declared name is the agent's own and stays; an empty name takes the rename back."""
     agent = scoped_get(models.Agent, info, input.id)
     if input.name is not None:
-        agent.name = input.name
-    agent.save(update_fields=["name"])
+        agent.display_name = input.name.strip() or None
+        agent.save(update_fields=["display_name"])
     return agent
 
 
 def delete_agent(info: Info, input: DeleteAgentInput) -> strawberry.ID:
+    """Delete an agent with everything below it. agentd owns the rows: it kicks a connected agent and cascades."""
     agent = scoped_get(models.Agent, info, input.id)
-    agent.delete()
+    agentd.call("agent/delete", {"principal": agentd._principal(info), "agent": str(agent.pk)})
     return input.id

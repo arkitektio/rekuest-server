@@ -45,7 +45,11 @@ class Agent:
     memory_shelve: Optional["MemoryShelve"] = strawberry_django.field(description="Agent's associated memory shelve.")
     last_seen: datetime.datetime | None = strawberry_django.field(description="Last timestamp this agent was seen.")
     connected: bool = strawberry_django.field(description="Is the agent currently connected.")
-    name: str = strawberry_django.field(description="Agent name.")
+    @strawberry_django.field(description="Agent name: the one a user gave it (updateAgent), else the one it declares.", only=["name", "display_name"])
+    def name(self) -> str:
+        return self.display_name or self.name
+
+    declared_name: str = strawberry_django.field(field_name="name", description="The name the agent declares for itself, whatever a user calls it.")
     description: str | None = strawberry_django.field(description="What this agent is, in a sentence. Client-declared at registration; null for an agent that never declared one.")
     states: list["State"] = strawberry_django.field(description="Current and historical states associated with the agent.")
     kind: enums.AgentKind = strawberry_django.field(description="Kind of the agent.")

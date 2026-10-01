@@ -248,6 +248,17 @@ pub async fn agent_saved(ctx: &Context, agent_id: i64, created: bool) {
     }
 }
 
+/// An agent was deleted (`agent_post_delete`). The row is gone, so its organization is passed in.
+pub async fn agent_deleted(ctx: &Context, agent_id: i64, organization: i64) {
+    publish(
+        ctx,
+        channels::AGENT_UPDATED,
+        &CrudEvent::deleted(agent_id),
+        vec![format!("agents_for_{organization}")],
+    )
+    .await;
+}
+
 #[derive(sqlx::FromRow)]
 struct PatchRow {
     id: i64,
@@ -377,6 +388,7 @@ pub async fn action_saved(ctx: &Context, id: i64, created: bool) {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Signal {
     AgentSaved { id: i64, created: bool },
+    AgentDeleted { id: i64, organization: i64 },
     ActionSaved { id: i64, created: bool },
     ImplementationSaved { id: i64, created: bool },
     ImplementationDeleted { id: i64, agent_id: i64 },
@@ -405,6 +417,9 @@ impl OnCommit {
         for signal in self.0 {
             match signal {
                 Signal::AgentSaved { id, created } => agent_saved(ctx, id, created).await,
+                Signal::AgentDeleted { id, organization } => {
+                    agent_deleted(ctx, id, organization).await
+                }
                 Signal::ActionSaved { id, created } => action_saved(ctx, id, created).await,
                 Signal::ImplementationSaved { id, created } => {
                     implementation_saved(ctx, id, created).await

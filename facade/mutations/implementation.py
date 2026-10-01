@@ -2,7 +2,7 @@ import logging
 
 from kante.types import Info
 
-from facade import inputs, models, types
+from facade import agentd, inputs, models, types
 from facade.types.base import scoped_get
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,6 @@ def create_higher_order_implementation(info: Info, input: inputs.CreateHigherOrd
     self-wrap, no nesting, matching kinds, every lower dependency covered. A wrapper deployed
     again under its interface is updated in place; an agent re-registering keeps it.
     """
-    from facade import agentd
 
     model = input.to_pydantic()
     answer = agentd.call(
@@ -27,10 +26,9 @@ def create_higher_order_implementation(info: Info, input: inputs.CreateHigherOrd
 
 
 def delete_implementation(info: Info, input: inputs.DeleteImplementationInput) -> str:
+    """Delete an implementation. agentd owns the rows and their cascade; both sides scope it to the caller's organization."""
     implementation = scoped_get(models.Implementation, info, input.implementation, field="agent__organization")
-
-    implementation.delete()
-
+    agentd.call("implementation/delete", {"principal": agentd._principal(info), "implementation": str(implementation.pk)})
     return input.implementation
 
 

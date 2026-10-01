@@ -111,6 +111,12 @@ def call(op: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         if payload.get("clear_drawers"):
             models.MemoryDrawer.objects.filter(shelve__agent=agent).delete()
         return {"agent": str(agent.pk)}
+    if op == "agent/delete":
+        models.Agent.objects.get(pk=payload["agent"], organization_id=payload["principal"]["organization"]).delete()
+        return {"agent": str(payload["agent"])}
+    if op == "implementation/delete":
+        models.Implementation.objects.get(pk=payload["implementation"], agent__organization_id=payload["principal"]["organization"]).delete()
+        return {"implementation": str(payload["implementation"])}
     if op == "agent/implement":
         agent = _ensure(payload["principal"])
         declaration = payload["input"]

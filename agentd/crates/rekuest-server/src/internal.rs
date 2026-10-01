@@ -45,6 +45,8 @@
 //! | `probe/cancel`, `probe/pause`, `probe/resume` | `{"principal", "probe"}` | the probe's state, with `id` |
 //! | `agent/ensure` | `{"principal", "name"?, "description"?, "kind"?, "hook_url"?, "hook_url_secret"?, "clear_drawers"?}` (a present null clears) | `{"agent"}` |
 //! | `agent/implement` | `{"principal", "input": ImplementAgentInput}` | `{"agent", "diagnostics"}` |
+//! | `agent/delete` | `{"principal", "agent"}` (kicks it, deletes it with everything below it) | `{"agent"}` |
+//! | `implementation/delete` | `{"principal", "implementation"}` | `{"implementation"}` |
 //! | `drawer/shelve` | `{"principal", "identifier", "resource_id", "label"?, "description"?}` | `{"drawer"}` |
 //! | `drawer/unshelve` | `{"principal", "id"}` (a resource id, else a drawer id) | `{"drawer"}` |
 //! | `higher-order/create` | `{"principal", "input": {"lower", "interface", "definition", "config"?, "dependencies"?}}` | `{"implementation", "diagnostics"}` |
@@ -95,6 +97,8 @@ pub fn routes() -> Router<Shared> {
         .route("/internal/higher-order/create", post(create_higher_order))
         .route("/internal/agent/ensure", post(ensure_agent))
         .route("/internal/agent/implement", post(implement_agent))
+        .route("/internal/agent/delete", post(delete_agent))
+        .route("/internal/implementation/delete", post(delete_implementation))
         .route("/internal/drawer/shelve", post(shelve))
         .route("/internal/drawer/unshelve", post(unshelve))
 }
@@ -388,6 +392,30 @@ internal!(unblock, AgentRequest, |state, request| {
     let organization = request.principal.organization()?;
     let agent = backend::unblock(&state.facade, organization, &request.agent.text()).await?;
     Ok(Json(json!({"agent": agent.to_string()})))
+});
+
+internal!(delete_agent, AgentRequest, |state, request| {
+    let organization = request.principal.organization()?;
+    let agent =
+        facade::removal::delete_agent(&state.facade, organization, &request.agent.text()).await?;
+    Ok(Json(json!({"agent": agent.to_string()})))
+});
+
+#[derive(Debug, Deserialize)]
+struct ImplementationRequest {
+    principal: Principal,
+    implementation: Id,
+}
+
+internal!(delete_implementation, ImplementationRequest, |state, request| {
+    let organization = request.principal.organization()?;
+    let implementation = facade::removal::delete_implementation(
+        &state.facade,
+        organization,
+        &request.implementation.text(),
+    )
+    .await?;
+    Ok(Json(json!({"implementation": implementation.to_string()})))
 });
 
 #[derive(Debug, Deserialize)]

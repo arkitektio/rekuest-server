@@ -261,6 +261,22 @@ authentikate:
       client_app: conf_30
       client_release: v0.0.1
       client_id: conf_30
+    conf_31:
+      sub: 131
+      iss: lok
+      active_org: conformance
+      client_device: conf_31_device
+      client_app: conf_31
+      client_release: v0.0.1
+      client_id: conf_31
+    conf_32:
+      sub: 132
+      iss: lok
+      active_org: conformance
+      client_device: conf_32_device
+      client_app: conf_32
+      client_release: v0.0.1
+      client_id: conf_32
     test:
       sub: 1
       iss: lok
