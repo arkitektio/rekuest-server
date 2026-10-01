@@ -24,8 +24,9 @@ three independent entities:
 The triple is expanded in two places, depending on transport:
 
 - **HTTP GraphQL** — the request context already exposes `info.context.request.{client,user,organization}`.
-- **WebSocket** — `default_authenticator` (`facade/consumers/agent_protocol.py`) calls
-  `aexpand_{user,client,organization}_from_token` to derive the same triple from the agent's token.
+- **WebSocket** — agentd's `register` (`agentd/crates/facade/src/consumers/agent_protocol.rs`)
+  verifies the agent's token and expands it into the same triple
+  (`authentikate::expand::expand_token_context`, `agentd/crates/authentikate/src/expand.rs`).
 
 Both paths converge on the same identity space, which is what lets a frontend caller and an agent
 runtime that belong to the same app/user/org line up correctly.
@@ -53,14 +54,13 @@ A `Caller` is **`get_or_create`d on every request that needs to record who is as
 `get_caller_for_context` (`facade/backend.py`):
 
 ```python
-def get_caller_for_context(info: Info) -> models.Caller:
-    caller, _ = models.Caller.objects.get_or_create(
-        client=info.context.request.client,
-        user=info.context.request.user,
-        organization=info.context.request.organization,
-    )
-    return caller
+def get_caller_for_context(ctx: CallerContext) -> models.Caller:
+    return models.Caller.objects.get_or_create(user=ctx.user, client=ctx.client, organization=ctx.organization)[0]
 ```
+
+agentd has the same function for the work it records (`get_caller_for_context` in
+`agentd/crates/facade/src/backend.rs`): the server sends the request's identity as the
+`principal` of an internal call, and agentd stamps the Caller on the task.
 
 The Caller's roles:
 
@@ -83,16 +83,18 @@ make it a provider, and a pile of connection/liveness state:
 | Field group | Fields | Why |
 | --- | --- | --- |
 | Identity | `client`, `user`, `organization` | The same triple, owned directly. |
-| Runtime | `app`, `release`, `device`, `hash` | What code/where it runs; `hash` detects definition changes. |
-| Connection | `connected`, `last_seen`, `active_connection_id`, `unique`, `kind`, `hook_url` | Live WebSocket/webhook state. |
-| Lifecycle | `latest_event` (CONNECT/DISCONNECT), `health_check_interval`, `blocked` | Health + admin control. |
+| Runtime | `app`, `release`, `hash` | What code runs; `hash` detects definition changes. |
+| Naming | `name`, `display_name`, `description` | `name` is what the agent declares at registration; `display_name` is what a user called it, and wins. |
+| Connection | `connected`, `last_seen`, `active_connection_id`, `active_session_id`, `lease_epoch` | The executor lease. Written only by agentd. |
+| Transport | `kind`, `hook_url`, `hook_url_secret` | `WEBSOCKET`, or `WEBHOOK` with where and how to reach it. |
+| Admin | `blocked`, `pinned_by` | A blocked agent is refused at registration. |
 
 ```python
 class Agent(models.Model):
     client = models.ForeignKey(Client, related_name="agents", ...)
     user = models.ForeignKey(User, ...)
     organization = models.ForeignKey(Organization, ...)
-    # ... app / release / device / connection state ...
+    # ... app / release / naming / lease / transport ...
 
     class Meta:
         constraints = [
@@ -101,20 +103,20 @@ class Agent(models.Model):
                 name="one_agent_per_client_user_organization",
             )
         ]
-
-    @property
-    def is_active(self):
-        return self.connected and self.last_seen > timezone.now() - timedelta(minutes=5)
 ```
+
+Whether an agent is live is `connected` **and** a heartbeat within the stale window (30 s). The
+GraphQL `active` field reads it through `facade/liveness.py`; agentd decides with the same
+predicate (`agentd/crates/facade/src/liveness.rs`).
 
 There is exactly **one Agent per `(client, user, organization)`** — the provider complement of the
 Caller constraint. An Agent owns `Implementation`s (the actions it can run), `State`s, `Lock`s and
 the `Task`s routed to it.
 
 > **Note on creation:** the WebSocket `Register` creates the Agent for the token's identity when
-> none exists (`facade.registration.ensure_agent`, shared with the `ensureAgent` mutation): the
-> `app`/`release` come from the token's client. Nothing has to happen over GraphQL before an agent
-> connects (guarded by `test_register_for_uncreated_agent_creates_it`).
+> none exists (`ensure_agent` in `agentd/crates/facade/src/registration.rs`): the `app`/`release`
+> come from the token's client. The `ensureAgent` mutation reaches the same code through the
+> internal API (`agent/ensure`). Nothing has to happen over GraphQL before an agent connects.
 
 ## Why two models and not one
 
@@ -154,5 +156,5 @@ If you encounter `registry` in old branches, migrations, or external schema snap
 ## Where this shows up next
 
 - The full model graph and constraints: [domain-model.md](domain-model.md).
-- How a Caller's `assign` becomes routed work: [task-lifecycle.md](https://github.com/arkitektio/rekuest-agentd/blob/main/docs/task-lifecycle.md).
-- How an Agent authenticates and connects: [agent-protocol.md](https://github.com/arkitektio/rekuest-agentd/blob/main/docs/agent-protocol.md).
+- How a Caller's `assign` becomes routed work: [task-lifecycle.md](../../agentd/docs/task-lifecycle.md).
+- How an Agent authenticates and connects: [agent-protocol.md](../../agentd/docs/agent-protocol.md).

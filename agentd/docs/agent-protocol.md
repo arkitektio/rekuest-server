@@ -1,17 +1,18 @@
 # Agent Protocol: the WebSocket wire protocol
 
-> Moved here from the Python rekuest server with the agent protocol. Code references name the
-> Python modules they were written against; agentd's modules keep those names
-> (`facade/persist/transitions.py` ↔ `crates/facade/src/persist/transitions.rs`).
+> Code references are to agentd's `facade` crate, `agentd/crates/facade/src/`, unless a path
+> says otherwise.
 
-Agents connect to Rekuest over a WebSocket at `/agi` and hold a long-lived, stateful conversation:
-register, prove identity, receive work, stream results, answer heartbeats. This document describes
-that protocol, the **humble-object** design that makes it testable, the single-live-connection
+Agents connect to Rekuest over a WebSocket at `/agi`, served by agentd, and hold a long-lived,
+stateful conversation: register, prove identity, receive work, stream results, answer heartbeats.
+This document describes that protocol, how one connection is served, the single-live-connection
 guarantee, and the at-least-once delivery queue.
 
-Key files: `facade/consumers/agent_protocol.py` (the protocol), `async_consumer.py` (the Channels
-adapter), `agent_queue.py` (the delivery queue), `facade/persist_backend.py` (the backend port),
-`facade/messages.py` (the message catalogue).
+Key files: `consumers/agent_protocol.rs` (the conversation), `consumers/agent_queue.rs` (the
+delivery queue), `consumers/connections.rs` (this process's live connections), `persist/` (what
+the protocol persists: `leases.rs`, `reports.rs`, `state.rs`, `transitions.rs`, `reconcile.rs`),
+`message_router.rs` (where a registered agent's frames go), `messages.rs` (the frames; the wire
+types are the `rekuest-protocol` crate's).
 
 > **Everyone on `/agi` is an agent.** There are no connection modes and no capability layer: any
 > token that authenticates connects as an agent, executes work, and holds that agent's write-lease.
@@ -21,19 +22,25 @@ adapter), `agent_queue.py` (the delivery queue), `facade/persist_backend.py` (th
 > accountable human, so they come only from the GraphQL `assign` mutation (see the human-root
 > invariant in [provenance.md](provenance.md)).
 
-## The humble-object design
+## How one connection is served
 
-The conversation logic lives in `AgentProtocol` — a **plain object with injected dependencies that
-knows nothing about Django Channels or WebSockets**. The transport (`send`, `close`), the message
-`queue`, the `backend` port (`persist_backend`), the `authenticator`, and the group hooks
-(`register_connection`, `kick_others`) are all injected. Because every collaborator is injected, the
-whole protocol/lifecycle/heartbeat behaviour is unit-testable with fakes — no docker, no DB, no
-monkeypatching.
+`serve` (`consumers/agent_protocol.rs`) takes one socket from its first frame to its close. A
+writer task owns the socket's sending half and is fed by a channel (`Sender`), so frames from
+different tasks never interleave on the wire.
 
-`AgentConsumer` (`async_consumer.py`) is the thin Channels adapter: on `connect` it accepts the
-socket, mints a `connection_id`, and builds an `AgentProtocol` whose `send`/`close` close over the
-WebSocket and whose `queue` is a `RedisAgentQueue`. `receive` forwards frames to the protocol;
-`disconnect` calls `protocol.shutdown()`.
+Before `REGISTER`, `first_frame` parses and gates: the first frame must be a `REGISTER` whose
+token authenticates, whose agent is not blocked and whose lease it wins (`register`). After it,
+`run_session` runs side by side:
+
+- the **read loop**, which answers heartbeats itself and hands every other frame, in order, to
+- the **worker** (`work`), which routes them (`message_router::route`: persistence, replies);
+- the **heartbeat**, which pings, waits for the answer and renews the lease;
+- the **drain**, which delivers the agent's queue, fenced by the lease on every frame; and
+- the **mirror**, which forwards the events of work this agent assigned (its caller group,
+  `task_caller_{caller}`) as `…_EVENT` frames.
+
+A heartbeat answer never waits behind the reports the agent sent before it: liveness means "the
+agent answers", not "the backlog is short".
 
 ## Connect → register → run
 
@@ -41,60 +48,60 @@ WebSocket and whose `queue` is a `RedisAgentQueue`. `receive` forwards frames to
 sequenceDiagram
     autonumber
     participant AG as Agent
-    participant AC as AgentConsumer (transport)
-    participant P as AgentProtocol
-    participant AU as default_authenticator
-    participant PB as persist_backend
+    participant S as serve (socket, writer)
+    participant P as register / run_session
+    participant AU as authentikate
+    participant PB as registration + persist::leases
     participant Q as Redis agent queue
 
-    AG->>AC: WebSocket connect
-    AC->>P: build protocol (connection_id)
+    AG->>S: WebSocket connect
+    S->>P: first_frame (connection_id)
     AG->>P: Register{token, force, session_id, name, hash, implementations, states, locks, bloks}
-    P->>AU: authenticate(token) → ensure Agent (+ memory shelve)
+    P->>AU: authenticate_token, expand_token_context
+    P->>PB: ensure_agent (+ memory shelve)
     alt agent.blocked
         P-->>AG: close(AGENT_IS_BLOCKED)
     end
     opt declaration carried and hash differs from the stored one
-        P->>PB: on_agent_implement (one atomic registration)
+        P->>PB: implement_agent (one atomic registration)
         alt refused (catalog mismatch, ownership conflict)
             P-->>AG: ProtocolError + close(AGENT_REGISTRATION_REJECTED)
         end
     end
-    P->>AC: register_connection(agent.pk) (join group)
-    P->>PB: on_agent_connected(agent.pk, connection_id, force)
+    P->>PB: on_agent_connected(agent, connection_id, session_id, force)
     note over PB: gate + claim under one row lock
     alt live incumbent && !force
-        PB-->>P: LeaseClaim{claimed=False}
+        PB-->>P: LeaseClaim{claimed=false}
         P-->>AG: ProtocolError + close(AGENT_ALREADY_CONNECTED)
     else claimed
-        PB-->>P: LeaseClaim{epoch, tasks, displaced_incumbent}
+        PB-->>P: LeaseClaim{epoch, inquiries, orphaned, displaced_incumbent}
     end
     opt displaced_incumbent
-        P->>AC: kick_others() (best-effort; the epoch bump already fenced them)
+        P->>P: connections.kick_others() (best-effort; the epoch bump already fenced them)
     end
     P-->>AG: Init{agent, hash, diagnostics, inquiries=[AssignInquiry...]}
-    par background loops
-        P->>Q: listen_for_tasks: pop → send → ack
+    par session tasks
+        P->>Q: drain: pop → send → ack
         P-->>AG: heartbeat: periodic Heartbeat
     end
     loop while connected
-        AG->>P: HeartbeatEvent / YieldEvent / DoneEvent / StatePatch ...
-        P->>PB: dispatch(message)
-        opt HeartbeatEvent
-            P->>PB: renew_agent_lease(agent.pk, epoch)
-            PB-->>P: rowcount 0 → close(AGENT_REPLACED)
+        AG->>P: HeartbeatAnswer / Yield / Completed / StatePatch ...
+        P->>PB: message_router::route(frame)
+        opt after each answered Heartbeat
+            P->>PB: renew_agent_lease(agent, epoch)
+            PB-->>P: no row matched → close(AGENT_REPLACED)
         end
     end
-    AG->>AC: WebSocket disconnect
-    AC->>P: shutdown() → on_agent_disconnected(connection_id)
+    AG->>S: WebSocket disconnect
+    P->>PB: on_agent_disconnected → release_lease(connection_id)
 ```
 
 ### First frame must be `Register`
 
-`receive` enforces that the first validated frame is a `messages.Register`; anything else closes the
-socket. Frames are parsed and validated through a discriminated-union pydantic model
-(`FromAgentPayload`), so malformed JSON or schema-mismatched frames are rejected with a specific
-close code (`codes.py`).
+`first_frame` enforces that the first frame is a `REGISTER`; anything else closes the socket.
+Frames are parsed into `AgentFrame` (`messages.rs`, the `rekuest-protocol` types), so text that
+is not JSON or a frame that does not match the schema is rejected with a specific close code
+(`codes.rs`: 3002, 3003).
 
 `Register` carries `token` (identity), `force` (take over an existing connection), `session_id`
 (the per-process reclaim signal: same id on reconnect ⇒ the process survived, reclaim its in-flight
@@ -103,36 +110,34 @@ work; a different id ⇒ a fresh process, fail-and-cascade) and the agent's **de
 `ImplementAgentInput`. Registering *is* implementing (see the lifecycle below); a `Register`
 without a declaration only ensures the agent exists.
 
-Unlike every other message, `Register` **rejects unknown fields**. It used to carry a `mode`, and a
-client still sending `mode: "OBSERVER"` must be told to update rather than be silently admitted as a
-full agent — which would claim the write-lease and displace the real executor.
-
 ### Authentication — ensure semantics
 
-`default_authenticator` expands the register token into `(client, user, organization)` and calls
-`facade.registration.ensure_agent`: `Agent.get_or_create` keyed on that triple (a new agent takes
-`app`/`release` from the client's release and is named after the client until its first
-`Implement` names it), a
-`MemoryShelve.get_or_create` beside it. Every stale `MemoryDrawer` is deleted when the lease is
-claimed, unless `session_id` is the one the previous connection registered with: a new process
-holds nothing in memory, while a reconnect of the same process keeps its drawers. The socket is therefore the agent's complete control
-plane: no GraphQL call precedes it (guarded by `test_register_for_uncreated_agent_creates_it`
-and `tests/agent/test_registration.py`). The `ensureAgent` / `implementAgent` mutations remain for
-dashboards and for a HookAgent's bootstrap (`kind`, `hook_url`, `hook_url_secret`) — they run the
-same functions. The authenticator is injected, so deployments can swap it.
+`register` verifies the token (`authentikate::authenticate_token`), expands it into
+`(client, user, organization)` (`authentikate::expand::expand_token_context`) and calls
+`registration::ensure_agent`: the agent keyed on that triple is created if it does not exist (a
+new agent takes `app`/`release` from the client's release and is named after the client until its
+first declaration names it), with a `MemoryShelve` beside it. Every stale `MemoryDrawer` is
+deleted when the lease is claimed, unless `session_id` is the one the previous connection
+registered with: a new process holds nothing in memory, while a reconnect of the same process
+keeps its drawers. The socket is therefore the agent's complete control plane: no GraphQL call
+precedes it (covered by `conformance/tests/test_registration.py`). The `ensureAgent` /
+`implementAgent` mutations remain for dashboards and for a HookAgent's bootstrap (`kind`,
+`hook_url`, `hook_url_secret`); the server forwards them to agentd's internal API
+(`agent/ensure`, `agent/implement`), which runs the same functions (`mutations/agent.rs`).
 
-A `blocked` agent is closed immediately after authentication.
+A token that does not authenticate closes the socket with 3003. A `blocked` agent is closed
+immediately after authentication (`AGENT_IS_BLOCKED`, 4003).
 
 ### Init + background loops
 
 On successful register the protocol sends an `Init` carrying the agent id, the definition `hash`
 the backend now holds for it (`null` when it was never implemented), the `diagnostics` of the
-registration the `Register` carried, and an `AssignInquiry` per pending task (work that was
-queued/unfinished while it was away — returned by `on_agent_connected`). It then spawns two
-background tasks:
+registration the `Register` carried, and an `AssignInquiry` per in-flight task the same process
+may still hold (returned by `on_agent_connected`). `run_session` then spawns the session's tasks:
 
-- **`listen_for_tasks`** — relays queued work to the agent (see delivery below).
+- **`drain`** — relays queued work to the agent (see delivery below).
 - **`heartbeat`** — liveness (see below).
+- **`mirror`** and the **worker** — see "How one connection is served" above.
 
 ### Registration lifecycle — registering is implementing
 
@@ -145,7 +150,7 @@ Register{token, force, session_id, name, hash, implementations, states, locks, b
 ```
 
 The declaration a `Register` carries is the socket twin of the `implementAgent` mutation and runs
-the same function (`facade.registration.implement_agent`): one atomic reconciliation under the
+the same function (`implement_agent` in `registration.rs`): one atomic reconciliation under the
 organization lock — locks, actions + implementations, state definitions + states upserted,
 undeclared ones reaped, bloks materialized. It runs *before* the lease is claimed, so a refused
 registration strands no lease. When `Register.hash` equals the hash the backend already holds
@@ -155,8 +160,8 @@ ensures the agent exists. Its `State` rows are what the state stream (`SessionIn
 `Init.diagnostics` carries the non-fatal findings (unknown catalog operations and the like); a
 catalog mismatch or an ownership conflict aborts the whole registration and refuses the
 connection — the agent is told why in a `ProtocolError` and closed with
-`AGENT_REGISTRATION_REJECTED`. A `Register` that fails *schema* validation (or carries fields a
-backend does not know — `Register` is strict) closes like any other malformed frame.
+`AGENT_REGISTRATION_REJECTED` (4006). A `Register` whose declaration fails *schema* validation
+closes like any other malformed frame (3003).
 
 The registration runs inline in the handshake; it is sub-second, and no heartbeat is pending
 before `Init`.
@@ -174,14 +179,14 @@ not answered (`JOURNAL_ACK` covers it), and a journaled `Unshelve` names the dra
 `resource_id` (a pk still works). `Collect` names agent-minted drawers by `resource_id` and the rest
 by pk; the GraphQL `collect` and `unshelveMemoryDrawer` accept either form.
 
-All outbound frames funnel through a single `_send` guarded by an `asyncio.Lock`, because the
-heartbeat loop, the listen loop, and `receive` can all try to send concurrently on the same event
-loop; without serialization their frames could interleave on the wire. `close` deliberately stays
-outside the lock (and is never called while it is held) to avoid deadlock.
+All outbound frames go through the connection's `Sender` to one writer task, because the
+heartbeat, the drain, the mirror and the worker can all send at the same time; without that
+their frames could interleave on the wire. A close is sent the same way and ends the writer.
 
 ## Liveness: the read predicate
 
-An agent is live iff `connected AND last_seen > now − AGENT_STALE_AFTER` (`facade.liveness`). The
+An agent is live iff `connected AND last_seen > now − stale window` (`liveness.rs`; the window is
+30 s, three heartbeat intervals). The
 asymmetry between the two halves is deliberate and is why the predicate needs no repair:
 
 - `connected = False` is a **definitive negative** — somebody observed a clean close, or the sweep
@@ -211,73 +216,71 @@ cannot revoke without naming a successor. With an integer, revoke is `+1`.
 ## Single live connection per agent
 
 Only one connection may own an agent at a time. The gate and the claim happen **together**, inside
-one `select_for_update` transaction in `on_agent_connected` — splitting them (gate on an instance
-loaded during authentication, write afterwards) let two concurrent registrations both observe the
-same stale incumbent, both pass, and both be handed the in-flight work as `Init` inquiries.
+one `SELECT … FOR UPDATE` transaction in `on_agent_connected` (`persist/leases.rs`) — with the
+two split (gate on a row read during authentication, write afterwards), two concurrent
+registrations could both observe the same stale incumbent, both pass, and both be handed the
+in-flight work as `Init` inquiries.
 
-1. The new connection **joins the group first** (so it can later be kicked), then calls
-   `on_agent_connected(..., force=...)`, which returns a `LeaseClaim`.
-2. The claim is refused (`claimed = False` → `AGENT_ALREADY_CONNECTED`) only when the incumbent is
-   *provably live* and `force` was not set. A **stale** incumbent — `connected` stuck True with an
-   expired lease — is displaced **without** `force`, so a dead connection never wedges the agent
-   behind a `--force` reconnect.
-3. On success the claim bumps `lease_epoch` and returns it; `kick_others()` then `group_send`s the
-   displacement (`agent_displace` → close with `AGENT_REPLACED`, skipping the initiator).
+1. The new connection calls `on_agent_connected(…, force)`, which returns a `LeaseClaim`.
+2. The claim is refused (`claimed = false` → `AGENT_ALREADY_CONNECTED`, 4004) only when the
+   incumbent is *provably live*, `force` was not set, and it is not the same process's previous
+   connection (same `session_id`). A **stale** incumbent — `connected` stuck true with an expired
+   lease — is displaced **without** `force`, so a dead connection never wedges the agent behind
+   a `--force` reconnect.
+3. On success the claim bumps `lease_epoch` and returns it; `connections.kick_others()` then
+   tells every other connection of that agent **in this process** to stop (`Control::Displace` →
+   close with `AGENT_REPLACED`, 4005).
 
-`kick_others` is now an **optimization, not a correctness dependency**. It is a best-effort
-channel-layer fanout: if it is dropped, or the incumbent's worker is partitioned, the epoch bump
-still fences that connection at its next heartbeat. The displaced connection's
-`on_agent_disconnected` remains guarded on `active_connection_id`, so a departing stale connection
-cannot clobber the live one's state.
+`kick_others` is an **optimization, not a correctness dependency**. It reaches only connections
+in the same agentd process (`consumers/connections.rs`). A connection on another replica, or one
+whose worker is wedged, is fenced by the epoch bump: its next delivery or renewal finds the epoch
+moved and it closes. The displaced connection's `on_agent_disconnected` is guarded on
+`active_connection_id`, so a departing stale connection cannot clobber the live one's state.
 
 ## Heartbeats and the write-lease
 
-`heartbeat` loops: sleep `AGENT_HEARTBEAT_INTERVAL`, arm a fresh future, send `Heartbeat`, then
-`wait_for` the answer within `AGENT_HEARTBEAT_RESPONSE_TIMEOUT`. A timeout closes the socket
-(`HEARTBEAT_NOT_RESPONDED`) — which is what already handles half-open sockets, so the residual
-causes of a stuck `connected` are displacement and hard worker death, not hung TCP.
+`heartbeat` loops: sleep the heartbeat interval (10 s), arm a waiter, send `Heartbeat`, then wait
+for the answer within the response timeout (5 s). A timeout closes the socket
+(`HEARTBEAT_NOT_RESPONDED`, 3001) — which is what handles half-open sockets, so the residual
+causes of a stuck `connected` are displacement and hard worker death, not hung TCP. Both values
+are constants (`agentd/crates/rekuest-server/src/settings.rs`), not configuration.
 
-When the agent answers, `on_agent_heartbeat` resolves the future **before** the DB write — the
-write is a round-trip, and doing it first could push resolution past the timeout and wrongly close
-a connection that actually answered. It then renews the lease:
+The read loop resolves the waiter itself, as soon as the `HeartbeatAnswer` is read: the answer
+does not queue behind the reports the worker is still persisting. The heartbeat task then renews
+the lease (`renew_agent_lease`, `persist/leases.rs`):
 
-```python
-rows = Agent.objects.filter(id=agent_id, lease_epoch=my_epoch).update(last_seen=now())
-if rows == 0:
-    close(AGENT_REPLACED)   # displaced or revoked — this connection may no longer execute
+```sql
+UPDATE facade_agent SET last_seen = $now WHERE id = $agent AND lease_epoch = $my_epoch
+-- no row matched: close(AGENT_REPLACED), this connection may no longer execute
 ```
 
-Three properties of that one statement:
+Two properties of that one statement:
 
 - **The rowcount is the answer.** No read-then-write, so no window to lose.
-- **A fenced connection terminates itself.** It has lost the right to execute work, so it must stop
+- **A fenced connection terminates itself.** It has lost the right to execute work, so it stops
   draining the queue rather than keep running against a lease it no longer holds.
-- **Only executors renew.** Observers and callers share the executor's `Agent` row (identity is
-  `client`/`user`/`organization`), so their `lease_epoch` is `None` and their heartbeat stays purely
-  transport-level. Otherwise an open dashboard would keep `last_seen` fresh — forging executor
-  liveness for an agent with no executor attached, and blinding the stale sweep for as long as it
-  stayed open.
 
-The heartbeat also no longer writes `connected`. That flag belongs to the transitions; re-asserting
-it every beat is what let a stalled worker resurrect itself *after* the sweep had already failed
-its in-flight work.
+The heartbeat never writes `connected`. That flag belongs to the transitions; re-asserting it
+every beat would let a stalled worker resurrect itself *after* the sweep had already failed its
+in-flight work.
 
 ### The write rule
 
-| | Path | Mechanism | Fires `agent_post_save`? |
-| --- | --- | --- | --- |
-| **Transition** | claim (connect), release (disconnect), revoke (sweep) | `select_for_update` + `save()` | yes — the agent feeds must see it |
-| **Renewal** | heartbeat | lock-free compare-and-set, `update()` | no — nothing observable changed |
+| | Path | Mechanism |
+| --- | --- | --- |
+| **Transition** | claim (connect), release (disconnect), revoke (sweep) | a row lock (`SELECT … FOR UPDATE`), then the update |
+| **Renewal** | heartbeat | lock-free compare-and-set on `lease_epoch` |
 
-Keeping renewal out of the signal path also removes an org-wide `AgentChange` broadcast that
-previously fired every `AGENT_HEARTBEAT_INTERVAL` for every connected agent.
+Renewal publishes nothing: no org-wide `AgentChange` is broadcast per heartbeat. A revoke
+publishes the agent's change to the GraphQL agent feeds (`signals::agent_saved`).
 
 ## The stale sweep
 
-`reconcile_stale_agents` (driven by the `reaper` loop — its own process, `manage.py reaper`)
-finds agents that are stuck-connected past the stale window and revokes them: `connected = False`
-plus an epoch bump, under a row lock that re-checks staleness. That lock is also the **claim** —
-production may run several reapers side by side, so only the one that actually flips a row goes on to `reconcile_orphaned_executor_work`. The task transitions inside
+`reconcile_stale_agents` (`persist/reconcile.rs`, driven by the sweep loop in `reaper.rs`, which
+runs inside every agentd replica) finds agents that are stuck-connected past the stale window and
+revokes them: `connected = false` plus an epoch bump, under a row lock that re-checks staleness
+(`revoke_lease`). That lock is also the **claim** — several replicas sweep side by side, so only
+the one that actually flips a row goes on to `reconcile_orphaned_executor_work`. The task transitions inside
 that reconcile are claimed by the same rowcount discipline, so concurrent sweeps produce exactly
 one terminal `TaskEvent` per task rather than one each.
 
@@ -285,48 +288,50 @@ Revocation is edge-triggered and cannot be made stateless: "executor died → tr
 an exactly-once side effect that no derived predicate performs. What the fencing token buys is that
 the sweep's decision **sticks** — a resumed worker's late heartbeat matches no row.
 
+The stale sweep is the first of the sweeps a tick runs. The others (disconnected agents,
+schedules, triggers, due tasks, unpicked tasks, due controls, expired tasks, retention) are
+listed in [task-lifecycle.md](task-lifecycle.md).
+
 ## Task delivery — the agent queue (at-least-once)
 
-The backend→agent path is a hand-rolled Redis queue (`agent_queue.py`), **not** the Channels layer,
-on purpose: a message pushed while the agent is briefly offline persists in Redis and survives
-reconnect, whereas a `group_send` to an empty group would be dropped.
+The path to a socket agent is a Redis list per agent (`consumers/agent_queue.rs`), **not** the
+channel layer, on purpose: a message pushed while the agent is briefly offline persists in Redis
+and survives the reconnect, whereas a group send to an empty group would be dropped.
 
-- **Producer:** `AgentConsumer.broadcast(agent_id, message)` (called from backend/signal code)
-  pushes the serialized message with `lpush` onto `{prefix}:agent:{agent_id}:queue`, reusing a pooled sync Redis
-  connection. Every key this service writes is built by `facade/redis_keys.py` under
-  `redis.key_prefix` (default `rekuest`): Redis is shared infrastructure, and a bare `42_my_queue`
-  is one integer away from another deployment's agent 42 receiving this one's Assigns. Frames left
-  under the old un-namespaced keys by a previous release are adopted once per connection
-  (`_adopt_legacy_lists`), oldest first, so nothing already queued is stranded.
-- **Consumer:** `listen_for_tasks` calls `queue.pop`, which uses `blmove` to atomically move the
-  message into a per-agent processing list `{prefix}:agent:{agent_id}:processing` (it stays there), then the
-  protocol **delivers first, then `ack`s** (`lrem` from the processing list).
+- **Producer:** `transport::deliver_to_agent` (`transport.rs`) is the one place that knows how to
+  reach an agent. For a WEBSOCKET agent it pushes the serialized frame onto
+  `{prefix}:agent:{agent_id}:queue` (`agent_queue::push`: `LPUSH`; priority frames `RPUSH`). A
+  WEBHOOK agent gets a signed POST instead (`hooks.rs`). Every key is built by `redis_keys.rs`
+  under `redis.key_prefix` (default `rekuest`): Redis is shared infrastructure, and a bare
+  `42_my_queue` is one integer away from another deployment's agent 42 receiving this one's
+  Assigns.
+- **Consumer:** `drain` calls `queue.pop`, which uses `BLMOVE` to atomically move the frame into
+  a per-agent processing list `{prefix}:agent:{agent_id}:processing` (it stays there), then
+  **delivers first, then `ack`s** (`LREM` from the processing list).
 
 The send-then-ack ordering gives **at-least-once** semantics: a crash between `pop` and `ack` leaves
-the message in the processing list, and the next connection that wins the agent's lease **recovers
-it** — `queue.recover` moves everything still in `{prefix}:agent:{agent_id}:processing` back to the head of the
-queue (oldest first) before it starts popping. The queue is an abstract port (`AgentQueue`) with a
-`RedisAgentQueue` for real deployments and an `InMemoryAgentQueue` for unit tests.
+the frame in the processing list, and the next connection that wins the agent's lease **recovers
+it** — `queue.recover` moves everything still in `{prefix}:agent:{agent_id}:processing` back to the
+head of the queue (oldest first) before it starts popping.
 
 The drain loop is the *only* way work reaches an agent, while liveness is decided by the heartbeat
 loop next to it — so it must never stop on its own, or the agent keeps looking alive, keeps being
 selected, and receives nothing:
 
 - a **queue failure** (redis restart, a half-dead connection — pops block for a finite
-  `POP_BLOCK_SECONDS`, never forever) is survived: drop the connection, back off, recover, continue;
+  `POP_BLOCK_SECONDS`, never forever) is survived: reopen the queue, back off, recover, continue;
 - a **socket write failure** closes the connection (`AGENT_TRANSPORT_FAILED_CODE`, 3005) with the
   frame left in the processing list, so the agent reconnects and the frame is recovered;
-- a **displaced** connection stops draining the moment it is told (`agent_displace`), not at its
-  next heartbeat — until then it would compete for the new connection's Assigns;
+- a **displaced** connection stops draining the moment it is told (`Control::Displace`), not at
+  its next heartbeat — until then it would compete for the new connection's Assigns;
 - an Assign whose task the server has **already finalized** (the *delivery-time fence*,
-  `is_task_open`) is acked and dropped instead of delivered.
+  `is_stale_assign` → `reports::is_task_open`) is acked and dropped instead of delivered.
 
 At-least-once means an agent can see the same task id twice; agents dedupe an Assign by task id.
 
 Two connections can briefly contend for one agent's queue, because the displacement hint
-(`agent.displace`) rides the channel layer and the channel layer drops messages when a process's
-receive queue is full. So ownership is not taken on trust: `listen_for_tasks` asks
-`holds_lease(agent, epoch)` — one primary-key lookup — immediately before every `_send`. A
+reaches only connections in the same process. So ownership is not taken on trust: the drain asks
+`holds_lease(agent, epoch)` — one primary-key lookup — immediately before every send. A
 connection that has been fenced hands the frame back with `queue.requeue` (atomic: `LREM` from
 in-flight, `RPUSH` to the head, so a concurrent `recover` by the new holder cannot duplicate it)
 and closes itself. That narrows the window from one heartbeat interval to a single frame; it
@@ -348,68 +353,70 @@ restarted instead.
 
 ## Message catalogue
 
-Messages are split by direction (`facade/messages.py`):
+Messages are split by direction (`messages.rs`, re-exporting the `rekuest-protocol` types):
 
-**Server → agent (`ToAgentMessage`)** — `Init`, `Assign`, the lifecycle control messages `Cancel` /
+**Server → agent (`ToAgent`)** — `Init`, `Assign`, the lifecycle control messages `Cancel` /
 `Interrupt` / `Pause` / `Resume`, `Collect`, `Bounce`, `Kick`, `Heartbeat`, `ProtocolError`,
-inquiries (`AssignInquiry`), and the shelving replies `Shelved` / `Unshelved`. (The caller-bound `…Event` mirrors and the `AssignResponse`/`ControlResponse` acks also ride
-`ToAgentMessage` but are addressed to callers — see [caller-protocol.md](caller-protocol.md).)
+inquiries (`AssignInquiry`), and the shelving replies `Shelved` / `Unshelved`. (The caller-bound
+`…Event` mirrors and the `AssignResponse`/`ControlResponse` replies are `ToAgent` frames too, but
+are addressed to the agent as a caller — see [caller-protocol.md](caller-protocol.md).)
 
-**Agent → server (`FromAgentMessage`)**, dispatched (via the shared
-`facade/message_router.py:route_from_agent_message`) to the backend:
+**Agent → server (`FromAgent`)**, routed by `message_router::route`. The same router serves the
+socket and the HookAgent HTTP intake:
 
-| Message | Handler | Effect |
+| Message | Handled by | Effect |
 | --- | --- | --- |
-| `HeartbeatEvent` | `on_agent_heartbeat` | liveness ack |
-| `Progress` | `on_agent_progress` | `TaskEvent(PROGRESS)` |
-| `Log` | `on_agent_log` | `TaskEvent(LOG)` |
-| `Yield` | `on_agent_yield` | `TaskEvent(YIELD, returns)` + higher-order unfold |
-| `Completed` | `on_agent_done` | terminal: `is_done`, `finished_at` |
-| `Cancelled` | `on_agent_cancelled` | terminal — confirms a `Cancel` (→ `CANCELLED`) |
-| `Interrupted` | `on_agent_interrupted` | terminal — confirms an `Interrupt` (→ `INTERRUPTED`) |
-| `Paused` | `on_agent_paused` | non-terminal — confirms a `Pause` (→ `PAUSED`) |
-| `Resumed` | `on_agent_resumed` | non-terminal — confirms a `Resume` (→ `RESUMED`) |
-| `Failed` / `Critical` | `on_agent_error` / `on_agent_critical` | terminal with message |
-| `StatePatch` | `on_agent_state_patch` | append a `Patch` |
-| `StateSnapshot` | `on_agent_state_snapshot` | write `Snapshot`s |
-| `SessionInit` | `on_agent_session_init` | initialize a `Session` |
-| `Shelve` | `on_agent_shelve` | upsert a `MemoryDrawer` on the agent's shelve; replies `Shelved{ref, drawer}` / `{ref, error}` (journaled: agent-minted, no reply) |
-| `Unshelve` | `on_agent_unshelve` | drop the drawer if it is the agent's; replies `Unshelved{ref}` / `{ref, error}` (journaled: by `resource_id`, no reply) |
-| `Assigned` / `Call` / `CallResult` / `Now` / `Random` / `Sleep` | — | journal-only (`ASSIGN`, `CALL`, …): stored in the journal, never projected or answered; refused without `pos` |
+| `HeartbeatAnswer` | the read loop | resolves the pending heartbeat; the heartbeat task renews the lease |
+| `Started` / `Progress` / `Log` | `persist::reports::on_report` | `TaskEvent(STARTED / PROGRESS / LOG)` |
+| `Yield` | `persist::reports::on_report` | `TaskEvent(YIELD, returns)` + higher-order unfold |
+| `Completed` | `persist::reports::on_report` | terminal: `is_done`, `finished_at` |
+| `Cancelled` | `persist::reports::on_report` | terminal — confirms a `Cancel` (→ `CANCELLED`) |
+| `Interrupted` | `persist::reports::on_report` | terminal — confirms an `Interrupt` (→ `INTERRUPTED`) |
+| `Paused` | `persist::reports::on_report` | non-terminal — confirms a `Pause` (→ `PAUSED`) |
+| `Resumed` | `persist::reports::on_report` | non-terminal — confirms a `Resume` (→ `RESUMED`) |
+| `Failed` / `Critical` | `persist::reports::on_report` | terminal with message |
+| `StatePatch` / `StateSnapshot` / `SessionInit` / `Lock` / `Unlock` | `persist::state::on_state` | append a `Patch`, write `Snapshot`s, initialize a `Session`, record the lock report |
+| `Shelve` | `registration::shelve` | upsert a `MemoryDrawer` on the agent's shelve; replies `Shelved{ref, drawer}` / `{ref, error}` (journaled: agent-minted, no reply) |
+| `Unshelve` | `registration::unshelve` | drop the drawer if it is the agent's; replies `Unshelved{ref}` / `{ref, error}` (journaled: by `resource_id`, no reply) |
+| `Effect` | `persist::reports::on_report` | `TaskEvent(EFFECT)`: a value the task took from outside, kept for replay (see [journal.md](journal.md)) |
+
+Frames whose task is a probe (`p-…`) go to the redis-held probe handlers (`probes/`), never to
+the database.
 
 The four lifecycle **confirmation events** are the executor's half of the two-phase controls: the
 server forwards a `Cancel` / `Interrupt` / `Pause` / `Resume`, and the executing agent reports the
 matching event above when it has acted (terminal for cancel/interrupt, non-terminal for
 pause/resume). Each terminal/confirmation report is acked with an `EventAck` so the agent can stop
 retaining it. The router also handles the sub-assignment requests (`AssignRequest`,
-`Cancel/Interrupt/Pause/ResumeRequest`) — see [caller-protocol.md](caller-protocol.md).
+`Cancel/Interrupt/Pause/ResumeRequest`, `StateRevisionRequest`, `ProbeRequest`) through
+`persist::caller_ops` — see [caller-protocol.md](caller-protocol.md).
 
-The declaration a `Register` carries is reconciled by `on_agent_implement` from the handshake
-itself (see the registration lifecycle above), not through the router.
+The declaration a `Register` carries is reconciled from the handshake itself (see the
+registration lifecycle above), not through the router.
 
-A second `Register` after registration is a protocol violation — it must not re-run `on_register`
-(that would orphan the first listen/heartbeat pair); it falls through to the catch-all and closes.
+A second `Register` after registration is a protocol violation: the read loop closes the
+connection (3003).
 
 ## Shutdown
 
-`AgentProtocol.shutdown` (called from the consumer's `disconnect`) cancels the listen and heartbeat
-tasks, calls `on_agent_disconnected(agent.pk, connection_id)` (which no-ops if displaced), and closes
-the queue connection. The persisted disconnect marks the agent offline; after the grace window its
-still-running tasks end `LOST` (workflows are resumed) — see [task-lifecycle.md](task-lifecycle.md).
+When the socket closes, `run_session` stops executing first and then tears down: it aborts the
+drain, the heartbeat and the mirror, lets the worker finish the frames it already has, leaves
+the caller group, and calls `on_agent_disconnected(agent, connection_id)`. That releases the
+lease only if it is still this connection's (a displaced one releases nothing) and fails the
+agent's probes at once. The released lease marks the agent offline; after the grace window its
+still-running tasks end `LOST` (workflows are resumed) — see
+[task-lifecycle.md](task-lifecycle.md).
 
-### Server-initiated closes must stop the drain themselves
+### Server-initiated closes stop the drain themselves
 
-`close()` only sends the close frame. **Channels does not invoke `disconnect()` for a
-server-initiated close**, so `shutdown` may not run until the peer acknowledges — or at all, if it
-never does. Every path where the *server* decides the connection is finished therefore calls
-`RegisteredSession.stop_executing()` first, which cancels `listen_for_tasks` immediately:
+Every path where the *server* decides the connection is finished aborts the drain before it
+sends the close frame:
 
-- the fenced-lease path (`AGENT_REPLACED`), and
+- the fenced-lease path (`AGENT_REPLACED`), from the heartbeat's renewal or a displacement, and
 - the unanswered-heartbeat path (`HEARTBEAT_NOT_RESPONDED`).
 
-Without it, a connection the server has just declared dead keeps popping Assigns off the redis
-queue and acking them — the exact behaviour the liveness model exists to prevent. Cancelling twice
-is safe, so `shutdown` still cancels unconditionally when it does run.
+Otherwise a connection the server has just declared dead could keep popping Assigns off the
+redis queue and acking them — the exact behaviour the liveness model exists to prevent.
 
 ## Workflows (resume, holds, guards)
 

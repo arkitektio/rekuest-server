@@ -8,16 +8,19 @@ workflow (see [`../DEVELOPMENT.md`](../DEVELOPMENT.md)).
 > These documents describe the code as it stands today. Where a name recently changed (e.g.
 > `Registry` → `Caller`), a short historical note is included so older code still reads sensibly.
 
-> **The agent protocol lives in [rekuest-agentd](https://github.com/arkitektio/rekuest-agentd)** (Rust):
-> agent sockets, the HookAgent and signal intakes, registration, assign and control, the task state
-> machine, the agent sweeps and workflow resume. This server keeps GraphQL, subscriptions, the
-> catalogue CRUD and the scheduler loop, and calls agentd's internal API for everything that writes
-> task state or registrations. The protocol documents moved there with it.
+> **Two programs.** The rekuest server (Python/Django, the repository root) serves GraphQL, owns
+> the schema and its migrations, and runs a small background loop. **agentd** (Rust,
+> [`agentd/`](../../agentd/README.md)) owns the whole agent protocol: agent sockets, the HookAgent
+> and signal intakes, registration, assign and control, the task state machine, every sweep
+> (deadlines, schedules, triggers, retention) and workflow resume. The server calls agentd's
+> internal API for everything that writes task state or registrations. The protocol documents are
+> in [`agentd/docs/`](../../agentd/docs/).
 
 ## What is Rekuest?
 
 Rekuest is the broker at the centre of the [Arkitekt](https://arkitekt.live) ecosystem. It is a
-**GraphQL + WebSocket facade** that mediates between two kinds of participants:
+**GraphQL API (the server) and an agent WebSocket (agentd)** that together mediate between two
+kinds of participants:
 
 - **Callers** — users and frontend apps that *request* work ("run this action with these args").
 - **Agents** — connected runtimes that *provide* implementations and actually *execute* the work.
@@ -25,7 +28,7 @@ Rekuest is the broker at the centre of the [Arkitekt](https://arkitekt.live) eco
 A caller never talks to an agent directly. A **user** issues an `assign` over GraphQL — the only way
 to originate a **root** task, because roots must trace to an accountable human. An **agent** may
 assign *dependent* work beneath a task it is running, over the same `/agi` WebSocket it registered on
-(`AssignRequest`) or via an HMAC-signed HTTP POST for server-to-server agents. Rekuest resolves which implementation/agent should run it, records an `Task`, pushes
+(`AssignRequest`) or via an HMAC-signed HTTP POST for server-to-server agents. Rekuest resolves which implementation/agent should run it, records a `Task`, pushes
 the work to the agent over a WebSocket, persists the events the agent streams back, and re-broadcasts
 them to the caller — over a GraphQL subscription **or** as `…Event` mirrors on the same socket.
 Rekuest owns the **catalogue** (which actions exist, who can run them, with what data types) and the
@@ -38,49 +41,88 @@ flowchart LR
         AG["App runtime<br/>(Agent)"]
     end
 
-    subgraph Rekuest
+    subgraph Server["rekuest server (Python)"]
         direction TB
-        GQL["GraphQL HTTP<br/>(kante + strawberry)"]
-        WS["WebSocket /agi<br/>(AgentConsumer)"]
-        BE["Backend orchestration<br/>(backend.py / persist_backend.py)"]
+        GQL["GraphQL HTTP + subscriptions<br/>(kante + strawberry)"]
+        CL["facade/agentd.py<br/>(internal API client)"]
         SIG["Signals + channels<br/>(realtime fan-out)"]
+    end
+
+    subgraph Agentd["agentd (Rust)"]
+        direction TB
+        WS["WebSocket /agi<br/>HookAgent + signal intakes"]
+        BE["Assign, control, persistence<br/>(facade::backend, facade::persist)"]
+        SW["Sweeps<br/>(facade::reaper)"]
     end
 
     PG[("PostgreSQL<br/>catalogue + log")]
     RD[("Redis<br/>channel layer + agent queue")]
 
-    FE -- "queries / mutations" --> GQL
-    FE -- "subscriptions" --> GQL
+    FE -- "queries / mutations / subscriptions" --> GQL
     AG -- "register / events" --> WS
-    GQL --> BE
+    GQL --> CL
+    CL -- "POST /internal/op" --> BE
     WS --> BE
+    SW --> BE
+    GQL --> PG
     BE --> PG
     BE -- "push work" --> RD
     RD -- "deliver" --> WS
-    BE --> SIG
+    BE -- "task + agent changes" --> RD
     SIG --> RD
     RD --> GQL
 ```
 
 ## How the service boots
 
-`rekuest/asgi.py` assembles one ASGI application via kante's `router`:
+**The server.** `rekuest/asgi.py` assembles one ASGI application via kante's `router`: GraphQL
+over HTTP and its subscriptions over WebSocket, served from `facade.schema.schema` (a
+`kante.Schema` with `Query` / `Mutation` / `Subscription` roots). There is no agent route.
+`run.sh` migrates the database, then starts daphne. A second process from the same image,
+`python manage.py reaper` (`facade/reaper.py`), provisions this hub's services as HookAgents
+(`facade/service_agents.py`) and re-embeds actions whose embedding is stale
+(`embeddings/healer.py`).
 
-- **HTTP GraphQL** is served from `facade.schema.schema` (a `kante.Schema` with `Query` /
-  `Mutation` / `Subscription` roots) at the `schema` path.
-- **WebSockets** are routed by `re_dynamicpath(r"agi", AgentConsumer.as_asgi())` — every agent
-  connection lands on `facade.consumers.async_consumer.AgentConsumer`.
+**agentd.** The `agentd` binary (`agentd/crates/rekuest-server/src/main.rs`) reads the same
+`config.yaml`, waits until the database has the migrations it was written against
+(`agentd/schema-migrations.txt`), and then serves, under the same script-name prefix as the
+server (`agentd/crates/rekuest-server/src/urls.rs`):
 
-Configuration is loaded from `config.yaml` via OmegaConf in `rekuest/settings.py`. The settings
-that shape runtime behaviour the most:
-
-| Setting | Role |
+| Route | What it is |
 | --- | --- |
-| `AGENT_HEARTBEAT_INTERVAL` | How often the server pings a connected agent. |
-| `AGENT_HEARTBEAT_RESPONSE_TIMEOUT` | How long the agent has to answer a ping before it is closed. |
-| `AGENT_STALE_AFTER` | Lease window: how long without a heartbeat before a `connected` agent is presumed dead. Defaults to `3 × AGENT_HEARTBEAT_INTERVAL`. |
-| `AGENT_REDIS_HOST` / `AGENT_REDIS_PORT` | Redis used by the hand-rolled agent message queue. |
-| Channel layer (`channels_redis`) | Redis backing the realtime subscription fan-out. |
+| `GET /agi` | the agent WebSocket |
+| `POST /agi/http/{agent_id}` | the HookAgent HTTP intake |
+| `POST /agi/signal/{service}` | a hub service's signal |
+| `POST /internal/<op>` | the internal API the server calls (`facade/agentd.py`) |
+| `GET /ht` | health: Postgres and Redis answer |
+
+It also runs the sweeps (`agentd/crates/facade/src/reaper.rs`) inside the same process: stale
+and disconnected agents, schedules, triggers, due tasks, unpicked tasks, control escalation,
+expiry, and retention.
+
+**Between the two.** A gateway routes `<prefix>/agi*` to agentd and everything else to the
+server. A mutation that assigns, controls, registers or deletes calls
+`POST <rekuest.agentd_url>/internal/<op>`, signed with the instance key (a service token whose
+issuer and audience are both `rekuest.identifier`). agentd publishes task and agent changes on
+the same `channels_redis` layer the server's subscriptions listen on.
+
+Configuration is a typed pydantic-settings schema (`rekuest/configuration.py`) loaded from
+`config.yaml`, with environment overrides; see [`CONFIG.md`](../../CONFIG.md). The values that
+shape runtime behaviour the most:
+
+| Setting | Read by | Role |
+| --- | --- | --- |
+| `rekuest.agentd_url` | server | Where the server reaches agentd's internal API. |
+| `instance.private_key` | both | Signs internal requests and provenance tokens. |
+| `rekuest.grace_default`, `pickup_deadline`, `disconnected_expiry`, `control_deadline` | agentd | The deadlines the sweeps enforce. |
+| `rekuest.sweep_interval` | both | How often agentd's sweeps and the server's background loop tick. |
+| `redis.key_prefix` | both | Namespace of the agent queues and every other redis key. |
+| `redis.channel_prefix` | both | The `channels_redis` layer behind the realtime fan-out. |
+
+The heartbeat is not configuration: agentd pings an agent every 10 s, waits 5 s for the answer,
+and presumes a `connected` agent dead after 30 s without one
+(`agentd/crates/rekuest-server/src/settings.rs`). The server's `Agent.active` field reads
+liveness with the same window (`facade/liveness.py`).
 
 Persistence is PostgreSQL — the relational port-matching engine relies on Postgres-specific
 features (`jsonb_path_match`, JSONPath), so Postgres is required in any environment that exercises
@@ -99,21 +141,21 @@ Start at the top and follow the flow of a request:
    choices it carries, how defaults and assignment values are checked, and which widgets fit.
 4. **[action-matching.md](action-matching.md)** — how an Action's `provides`/`requires`
    descriptors compile to JSONPath and how the relational port engine finds matching actions.
-4. **[task-lifecycle.md](https://github.com/arkitektio/rekuest-agentd/blob/main/docs/task-lifecycle.md)** — `assign`, the
+4. **[task-lifecycle.md](../../agentd/docs/task-lifecycle.md)** — `assign`, the
    Task event state machine, and how results flow back to the caller.
-5. **[agent-protocol.md](https://github.com/arkitektio/rekuest-agentd/blob/main/docs/agent-protocol.md)** — the WebSocket wire protocol: register, authenticate,
+5. **[agent-protocol.md](../../agentd/docs/agent-protocol.md)** — the WebSocket wire protocol: register, authenticate,
    the liveness lease and its fencing token, task delivery, and connection takeover.
-6. **[caller-protocol.md](https://github.com/arkitektio/rekuest-agentd/blob/main/docs/caller-protocol.md)** — sub-assignment on the same socket: how an agent
+6. **[caller-protocol.md](../../agentd/docs/caller-protocol.md)** — sub-assignment on the same socket: how an agent
    assigns *dependent* work (`AssignRequest`), controls its lifecycle
    (cancel/interrupt/pause/resume), and observes results (`…Event` mirrors); plus the HTTP intake.
 7. **[realtime.md](realtime.md)** — channels, signals, topic keys, and how subscriptions consume
    them.
 8. **[higher-order.md](higher-order.md)** — higher-order implementations (one implementation
    wrapping another) and server-side event unfolding.
-9. **[workflows.md](https://github.com/arkitektio/rekuest-agentd/blob/main/docs/workflows.md)** — what happens when an agent dies: a plain task ends `LOST`
+9. **[workflows.md](../../agentd/docs/workflows.md)** — what happens when an agent dies: a plain task ends `LOST`
    (final; late outcomes kept as `LATE_REPORT`), a `WORKFLOW` is resumed from its journal (keyed
    calls and effects, code pin, resume cap), plus holds and state guards.
-10. **[provenance.md](https://github.com/arkitektio/rekuest-agentd/blob/main/docs/provenance.md)** — Rekuest as the provenance authority: the signed
+10. **[provenance.md](../../agentd/docs/provenance.md)** — Rekuest as the provenance authority: the signed
    attestation token minted at dispatch, its claim vocabulary, the human-root invariant, and the
    JWKS endpoint downstream services verify against.
 

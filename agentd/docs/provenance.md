@@ -1,8 +1,7 @@
 # Provenance: the attestation token
 
-> Moved here from the Python rekuest server with the agent protocol. Code references name the
-> Python modules they were written against; agentd's modules keep those names
-> (`facade/persist/transitions.py` ↔ `crates/facade/src/persist/transitions.rs`).
+> Code references are to agentd's `facade` crate, `agentd/crates/facade/src/`, unless a path
+> says otherwise. agentd mints the tokens; the rekuest server publishes the verifying key.
 
 Rekuest is the broker in the loop at the start of **every** assignment and sub-assignment. That
 position lets it act as a second authority, orthogonal to the one that authorises writes: the
@@ -15,7 +14,7 @@ This document explains the trust model, the lineage invariant, and the token voc
 the **issuing** side only (what Rekuest emits). Verification, single-use enforcement, actor-binding
 and the provenance store live downstream (in Mikro / koherent) and are deliberately out of scope.
 
-> Read [identity.md](identity.md) first — the token is built almost entirely from the
+> Read [identity.md](../../docs/design/identity.md) first — the token is built almost entirely from the
 > `(client, user, organization)` triple and the `Task` lineage described there.
 
 ## Why a separate token
@@ -64,8 +63,8 @@ This is the guarantee the whole scheme leans on: **every artifact, however deep 
 traces back to an accountable human at the root.**
 
 Rekuest enforces it at mint time, using its broker position and the existing `Task.parent`
-lineage (the regular `assign` path does not populate `Task.root`, so the root is found by
-**walking the `parent` chain** to the task that has no parent):
+lineage (the root is found by **walking the `parent` chain** to the task that has no parent,
+`resolve_root` in `provenance/mint.rs`):
 
 - **Top-level assignment** (no parent): the initiator must be a human. Rekuest classifies the
   current request principal from its roles (see *Human classification* below). The token sets
@@ -88,10 +87,10 @@ predicate over roles**, read from whichever source is available at mint time:
 - the persisted **`Membership.roles`** (the roles a user holds in an organization, captured at login)
   when only a stored `Caller` is available — i.e. when classifying the root of a sub-assignment.
 
-`PROVENANCE.human_roles` lists the role(s) that mark an accountable human. If it is **empty**
-(the default), enforcement is off and every principal is treated as human — the invariant is opt-in,
-so dispatch keeps working until an operator declares the policy. `PROVENANCE.strict` then chooses
-between refuse-and-raise and skip-and-log.
+`provenance.human_roles` (in `config.yaml`) lists the role(s) that mark an accountable human. If
+it is **empty** (the default), enforcement is off and every principal is treated as human — the
+invariant is opt-in, so dispatch keeps working until an operator declares the policy.
+`provenance.strict` then chooses between refuse-and-raise and skip-and-log.
 
 ## Token vocabulary
 
@@ -107,12 +106,12 @@ claims use compact three-letter symbols.
 
 | Claim | Meaning | Source |
 | --- | --- | --- |
-| `iss` | the provenance issuer id (`PROVENANCE.issuer`, e.g. `rekuest`) | RFC 7519 |
+| `iss` | the provenance issuer id (`provenance.issuer`, e.g. `rekuest`) | RFC 7519 |
 | `aud` | **list** of target services the token is scoped to (never a wildcard) | RFC 7519 |
 | `sub` | the **immediate** causer of *this* hop (the request principal) | RFC 7519 |
 | `act` | the **actor** the token is issued to — the executing agent (see below) | RFC 8693 |
 | `iat` | issued-at (unix seconds) | RFC 7519 |
-| `exp` | expiry (`iat + PROVENANCE.token_ttl_seconds`) | RFC 7519 |
+| `exp` | expiry (`iat + provenance.token_ttl_seconds`) | RFC 7519 |
 | `jti` | unique per token; the verifier enforces single-use | RFC 7519 |
 
 `act` is an object: `act.sub` is the executing agent's user sub, `act.cid` is the agent's OAuth
@@ -168,12 +167,13 @@ the canonical form so any verifier reproduces the exact bytes before hashing —
 ## Canonicalization (a versioned contract)
 
 `ahs` is the SHA-256 of a **canonical** byte encoding of the args, defined in
-`facade/provenance/canonical.py`. The encoding is a **versioned contract**: a verifier must reproduce
+`provenance/canonical.rs`. The encoding is a **versioned contract**: a verifier must reproduce
 it exactly to recompute the hash, so any change is breaking and bumps `CANONICALIZATION_VERSION`
 (reflected in `aha`).
 
-- **v1:** `json.dumps` with sorted keys, no insignificant whitespace (`separators=(",", ":")`),
-  non-ASCII left as UTF-8, then SHA-256 of the UTF-8 bytes, hex-encoded.
+- **v1:** the bytes Python's `json.dumps` writes with sorted keys, no insignificant whitespace
+  (`separators=(",", ":")`) and non-ASCII left as UTF-8 (floats as `repr(float)`), then SHA-256
+  of the UTF-8 bytes, hex-encoded.
 
 ## Audience resolution
 
@@ -191,33 +191,35 @@ reference no external structure gets an empty `aud` (present, per RFC 8725, but 
 
 ## Keys, signing and the JWKS endpoint
 
-- Rekuest holds an **Ed25519 keypair**, configured in the `provenance` block of `config.yaml`
-  (mirroring how `lok` provides its keys) and loaded into `settings.PROVENANCE`. The private key
-  never leaves Rekuest and is never sent to agents. If no key is configured an ephemeral keypair is
-  generated per process (fine for local/dev and the test suite; **unsuitable for multi-replica
-  production**, where replicas would each sign under a different key — configure a static key there).
-- Tokens are signed with `alg=Ed25519` and the configured `kid` in the JWS header.
-- The verifying key is published at **`/.well-known/jwks.json`** as a standard JWKS document, served
-  with a `Cache-Control: public` header so verifiers fetch-and-cache and verify **offline** — never a
-  synchronous per-use callback into Rekuest.
+- Rekuest holds one **Ed25519 key**, the instance key: `instance.private_key` in `config.yaml`
+  (PKCS#8 PEM). The server and agentd read the same file, so they hold the same key. It is
+  required: agentd refuses to start without the `instance` block, and the server's configuration
+  fails validation. The private key never leaves Rekuest and is never sent to agents.
+- agentd signs tokens with `alg=Ed25519`; the `kid` in the JWS header is the key's RFC 7638
+  thumbprint (`provenance/keys.rs`).
+- The rekuest server publishes the verifying key at **`/.well-known/jwks.json`** as a standard
+  JWKS document, served with a `Cache-Control: public` header so verifiers fetch-and-cache and
+  verify **offline** — never a synchronous per-use callback into Rekuest.
 - **Rotation** (not yet implemented) is designed for: publish overlapping keys and keep a retired
-  public key in the JWKS until every token signed under its `kid` has expired. The keys module is
-  shaped so additional published keys slot in without reworking minting.
+  public key in the JWKS until every token signed under its `kid` has expired.
+
+The same key signs the service tokens of the internal API and of requests to the hub's services.
 
 ## Where this lives in the code
 
 | Concern | Location |
 | --- | --- |
-| Keys + JWKS document | `facade/provenance/keys.py` |
-| Canonical args hash | `facade/provenance/canonical.py` |
-| Human classification | `facade/provenance/principal.py` |
-| Audience derivation (registration) | `facade/provenance/audience.py` |
-| Claim builder + signer | `facade/provenance/mint.py` |
-| Mint at dispatch | `facade/backend.py` (`RedisControllBackend.assign`, both broadcast sites) |
-| Token on the wire | `facade/messages.py` (`Assign.token`) |
+| Key, signing, thumbprint | `provenance/keys.rs` |
+| Canonical args hash | `provenance/canonical.rs` |
+| Human classification | `provenance/principal.rs` |
+| Audience derivation (registration) | `provenance/audience.rs` |
+| Claim builder + signer | `provenance/mint.rs` (`mint_token_for_task`) |
+| Mint at dispatch | `backend.rs` (`assign_with_status`, `assign_higher_order`); a redelivered Assign gets a fresh token (`persist/reconcile.rs`, `redispatch_token`) |
+| Verifying this rekuest's own token (a signal's causing task) | `provenance/verify.rs` |
+| Token on the wire | `Assign.token` (the `rekuest-protocol` crate) |
 | Registration fields | `Implementation.needs_token`, `Implementation.provenance_audience` |
-| JWKS endpoint | `rekuest/urls.py` (`/.well-known/jwks.json`) |
-| Config | `config.yaml` `provenance:` block → `settings.PROVENANCE` |
+| JWKS endpoint | the server: `rekuest/urls.py` (`/.well-known/jwks.json`), `facade/provenance/keys.py` |
+| Config | `config.yaml`: the `provenance:` block (policy) and the `instance:` block (the key) |
 
 ## Out of scope (downstream — Mikro / koherent)
 

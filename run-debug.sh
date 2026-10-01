@@ -9,9 +9,6 @@ python manage.py wait_for_database -s 2
 echo "=> Performing database migrations..."
 python manage.py migrate
 
-# (The `ensureadmin` step that used to follow was never a registered command — it failed
-# silently on every boot. Removed, as in run.sh.)
-
-# Start the first process
+# GraphQL and its subscriptions only: the agent protocol (`/agi`) is served by agentd.
 echo "=> Starting Server"
 python manage.py runserver 0.0.0.0:80

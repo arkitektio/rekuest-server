@@ -4,6 +4,13 @@ This document maps the core data model in `facade/models/`. It is organised arou
 flow — identity → catalogue → provisioning → execution → state — and ends with the uniqueness
 rules that encode most of the business logic.
 
+The Django models here define the schema, and the server's migrations are the only thing that
+changes it. Two programs write the rows: the server through the ORM, and agentd
+([`agentd/`](../../agentd/README.md)) with its own SQL — agents, implementations, tasks, task
+events, states, patches and locks are almost entirely agentd's writes. Because agentd's inserts
+do not pass through Django, every defaulted column carries its default in the database
+(`db_default`, enforced by `tests/models/test_database_defaults.py`).
+
 > Identity (`Caller` / `Agent`) is covered in depth in [identity.md](identity.md); this document
 > shows how the rest of the graph hangs off it.
 
@@ -43,7 +50,7 @@ erDiagram
 | Model | Purpose |
 | --- | --- |
 | `Caller` | The `(client, user, organization)` requestor identity. Owns `Task`. |
-| `Agent` | The provider runtime: same triple + `app`/`release`/`device` + connection state. |
+| `Agent` | The provider runtime: same triple + `app`/`release` + the executor lease and transport (`kind`, `hook_url`). |
 
 See [identity.md](identity.md). The rest of the graph attaches to one of these two.
 
@@ -81,19 +88,21 @@ relational matching engine — that whole story is [action-matching.md](action-m
 ## 3. Provisioning layer — Implementation, Dependency, Resolution
 
 **`Implementation`** (`facade/models/implementation.py`) binds an **Action to an Agent**: "this
-agent can run this action, via this `interface`". Key fields: `action`, `agent`, `release`,
-`interface`, `params` (bound overrides), `dynamic`,
-`manipulates` (M2M to `State`), and the higher-order pair `higher_order_for` /
-`higher_order_config` (see [higher-order.md](higher-order.md)).
+agent can run this action, via this `interface`". Key fields: `action`, `agent`,
+`interface`, `params` (bound overrides), `manipulates` (M2M to `State`), `required_locks`,
+`code_hash`, the provenance pair `needs_token` / `provenance_audience`, and the higher-order pair
+`higher_order_for` / `higher_order_config` (see [higher-order.md](higher-order.md)).
+Implementations are written by agentd: an agent's registration reconciles them, and
+`createHigherOrderImplementation` / `deleteImplementation` reach agentd through its internal API.
 
 **`Dependency`** declares what an implementation *needs* to run (other actions/states), with
-`app_filter`/`version_filter`, viability counts (`min`/`max`/`prefered_instances`)
-and an `auto_resolvable` flag.
+`app_filter`/`version_filter`, viability counts (`min_viable_instances` /
+`max_viable_instances` / `prefered_instances`) and an `auto_resolvable` flag.
 
 **`Resolution` + `ResolvedDependency`** are a **binding tree**: a `Resolution` configures an
 implementation's dependencies, each `ResolvedDependency` picks a concrete `Implementation` to
 satisfy one dependency, and `down_stream_resolution` recurses for that implementation's *own*
-dependencies. Resolutions can be named templates (`is_template`) for reuse.
+dependencies. A resolution can be named for reuse.
 
 ## 4. Execution layer — Task and its events
 
@@ -112,20 +121,27 @@ task run, tracking it from assignment to completion. The fields that matter most
 | `acted_on` (array) | Structures this task modified (provenance). |
 | `latest_event_kind` / `latest_instruct_kind` | Denormalized "current state" for fast reads. |
 | `is_done`, `finished_at` | Terminal markers. |
-| `ephemeral` | Legacy column (excluded from replay offers). Zero-persistence work is an ephemeral *Probe* (`facade/probes/`), not a Task. |
+| `ephemeral` | A run that is housekeeping, not history (the runs of a schedule with `ephemeralRuns`): excluded from replay offers and deleted after `rekuest.ephemeral_task_retention`. Zero-persistence work is a *Probe*, held in redis by agentd, not a Task. |
+| `schedule` / `signal` / `trigger` | What caused the run, when it was not a direct assign. |
+| `not_before`, `dispatched_at`, `picked_up_at`, `interrupt_at` | The columns agentd's sweeps read their deadlines from. |
 
 **`TaskEvent`** is the immutable per-transition log entry the agent (or server) appends:
-`kind` (see the lifecycle in [task-lifecycle.md](https://github.com/arkitektio/rekuest-agentd/blob/main/docs/task-lifecycle.md)), optional
+`kind` (see the lifecycle in [task-lifecycle.md](../../agentd/docs/task-lifecycle.md)), optional
 `returns` (for `YIELD`), `progress`, `message`, `level`, and `delegated_to` (used by higher-order
 unfolding).
 
 **`TaskInstruct`** is a command directed *at* a running task by a `caller`
 (`ASSIGN`, `CANCEL`, `RESUME`, `PAUSE`, `INTERRUPT`, `COLLECT`).
 
-**`AgentEvent`** is the agent-lifecycle analogue (`CONNECT`/`DISCONNECT`), separate from task
-events.
+**`Schedule`** (`facade/models/schedule.py`) is configuration: what to run, when (an interval or a
+five-field cron line read in a time zone), as whom. The server's GraphQL creates and changes the
+rows; agentd plans each enabled schedule's next run as a delayed task.
 
-**`Lock`** (in `agent.py`) is a per-agent mutual-exclusion key, optionally `hold_by` an
+**`Signal`** and **`Trigger`** (`facade/models/signal.py`): a hub service announces that
+something happened to one of its objects (a signal, received by agentd), and a trigger assigns an
+action when a matching signal arrives. The server owns the trigger rows; agentd matches and fires.
+
+**`Lock`** (in `agent.py`) is a per-agent mutual-exclusion key, optionally `hold_by` a
 `Task`.
 
 ## 5. State layer
@@ -133,22 +149,25 @@ events.
 Agents can expose structured, evolving state:
 
 - **`StateDefinition`** — the schema (`name`, `hash`, `ports`) for a kind of state.
-- **`State`** — the current value for one `(interface, agent)` against a `definition`, with a
-  `retention_policy` controlling how much history is kept.
+- **`State`** — the current value for one `(interface, agent)` against a `definition`.
 - **`Patch`** — an incremental JSON-Patch change (`op`/`path`/`value`) with a `global_rev` revision
   counter and the `task` that caused it (causality).
 - **`Snapshot`** — a full-value checkpoint at a `global_rev`.
-- **`Session`** — a session boundary within an agent's state lifecycle.
+- **`Session`** — one agent process (`session_id`, unique per agent): the scope patches are
+  numbered in.
 
 State changes fan out over `patches_state_{id}` / `patches_agent_{id}`; see [realtime.md](realtime.md).
 
 ## 6. Catalogue metadata & extras
 
 Supporting models round out the catalogue: `Collection` / `Protocol` (groupings and behaviour
-contracts on Actions), `Structure` / `Interface` / `Descriptor` / `StructurePackage` (the type
-system ports reference), `Toolbox` / `Shortcut` (saved task configs), `TestCase` / `TestResult`,
-the `Blok` / `Dashboard` UI models, and the agent `Shelve`/`Drawer` storage (`FilesystemShelve`,
-`MemoryShelve`, and their drawers) for inter-task data.
+contracts on Actions), `UICatalog`, `Toolbox` / `Shortcut` (saved task configs), `TestCase` /
+`TestResult`, the `Blok` / `Dashboard` UI models, the 3D models (`ThreeDModel`, `Space`,
+`Placement`), and the agent's in-memory storage for inter-task data (`MemoryShelve` and its
+`MemoryDrawer`s).
+
+Structures, interfaces and structure packages have no table: they are derived from the
+`identifier` column of the port rows (`facade/types/structure.py`).
 
 ## Uniqueness & cardinality (the encoded business rules)
 
@@ -160,8 +179,11 @@ the `Blok` / `Dashboard` UI models, and the agent `Shelve`/`Drawer` storage (`Fi
 | `Implementation` | unique `(action, agent)` | An agent implements an action at most once. |
 | `Implementation` | unique `(interface, agent)` | An agent's interface name is unique to it. |
 | `State` | unique `(interface, agent)` | One state per interface per agent. |
-| `StateDefinition` | unique `hash` | Deduplicated state schemas. |
-| `Structure` / `Interface` / `Descriptor` | unique `(package, key)` | Package-scoped type keys. |
+| `StateDefinition` | unique `(organization, hash)` | Deduplicated state schemas per tenant. |
+| `Session` | unique `(agent, session_id)` | One session row per agent process. |
+| `Patch` | unique `(session, global_rev, state)` | A resent patch is not stored twice. |
+| `Task` | unique `(caller, reference)` | `assign` is idempotent on the caller's reference. |
+| `Task` | unique `(parent, parent_step)` and `(parent, call_key)` | A child call re-issued after a restart finds the same child. |
 | `TestCase` | unique `(action, tester)` | One test per action/tester pair. |
 
 These constraints are not incidental — they are the rules ("an agent can't have two

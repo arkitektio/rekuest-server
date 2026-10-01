@@ -1,8 +1,7 @@
 # Workflows, LOST, and resume
 
-> Moved here from the Python rekuest server with the agent protocol. Code references name the
-> Python modules they were written against; agentd's modules keep those names
-> (`facade/persist/transitions.py` ↔ `crates/facade/src/persist/transitions.rs`).
+> Code references are to agentd's `facade` crate, `agentd/crates/facade/src/`, unless a path
+> says otherwise.
 
 What happens to a task whose agent dies depends on one property of its implementation:
 `Implementation.execution`.
@@ -12,6 +11,8 @@ What happens to a task whose agent dies depends on one property of its implement
 | the agent of a **plain** task | whoever called | the task ends **LOST**; a caller gets `LostEvent` (an agent) or a LOST task event (GraphQL), and decides |
 | the agent of a **workflow** | the server | the workflow is **resumed**: sent again with its journal, it replays what it recorded |
 | a step inside a workflow | the workflow's code | the call raises `AgentLost`; `task.retry` / `task.hold` cover the usual answers |
+
+Here "the server" is agentd: the disconnect handling and the sweeps in `persist/reconcile.rs`.
 
 The server re-runs nothing on its own. The one exception is a task that was never picked up
 (no report, not even `STARTED`, which an agent reports before anything else): it is redelivered.
@@ -78,7 +79,8 @@ again with `resume`:
 - **Code pin.** `Task.code_hash` is the implementation's `code_hash` at dispatch (a hash of its
   source). If it changed, the workflow is not resumed but ends LOST ("code changed"). Only the
   function's own source is hashed: an edit to a helper it calls is not seen.
-- **Resume cap.** `Task.resumes` counts resumes; after `MAX_RESUMES` (3) the task ends LOST.
+- **Resume cap.** `Task.resumes` counts resumes; after `MAX_RESUMES` (3, `persist/reconcile.rs`)
+  the task ends LOST.
 - A resent workflow whose agent never comes back ends LOST with `started: true`.
 
 ## Holds

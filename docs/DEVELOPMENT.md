@@ -8,13 +8,18 @@
 
 This guide will help you set up a development environment for Rekuest Server and understand the codebase structure.
 
+The repository holds two programs: the rekuest server (Python/Django, the repository root) and
+agentd (Rust, `agentd/`), which serves the whole agent protocol. Most of this guide is about the
+server; [Working on agentd](#working-on-agentd) covers the other half.
+
 ## Prerequisites
 
 - Python 3.12 or higher
 - PostgreSQL 13+ (or SQLite for local development)
 - Redis 6.0+
 - Git
-- Docker (optional, for containerized development)
+- Docker (the test suites bring their own Postgres and redis up in containers)
+- A Rust toolchain (stable), only if you work on `agentd/`
 
 ## Development Setup
 
@@ -35,13 +40,12 @@ pip install -e ".[dev]"
 
 ### 2. Environment Configuration
 
-```bash
-# Copy the example environment file
-cp config.yaml.example config.yaml
+The checked-in [`config.yaml`](../config.yaml) holds development values (database `db`, redis
+`redis`, a development instance key). Edit it, or override single values from the environment
+(`POSTGRES__HOST=localhost`, …). Every key is documented in [`CONFIG.md`](../CONFIG.md).
 
-# Edit the configuration file
-# Set up database, Redis, and other settings
-```
+The server needs agentd for anything that touches an agent or a task: set `rekuest.agentd_url`
+(or `REKUEST__AGENTD_URL`) to a running agentd. agentd reads the same file.
 
 ### 3. Database Setup
 
@@ -69,37 +73,72 @@ The server will be available at `http://localhost:8000`
 
 ```
 rekuest-server-next/
-├── config.yaml              # Configuration file
-├── manage.py                 # Django management script
+├── config.yaml              # Configuration file, read by the server and by agentd
+├── docker-compose.yaml      # The pair for local use: db, redis, server, background loop, agentd
+├── manage.py                # Django management script
 ├── pyproject.toml           # Project dependencies and settings
+├── run.sh                   # Web process: migrate, then daphne
+├── run-reaper.sh            # Background loop: python manage.py reaper
 ├── facade/                  # Main application package
 │   ├── models/             # Database models (package: caller, agent, action, …)
 │   ├── schema.py           # GraphQL schema definition (Query/Mutation/Subscription)
 │   ├── types/              # GraphQL types (package)
-│   ├── inputs.py           # GraphQL input types
+│   ├── inputs/             # GraphQL input types (package)
 │   ├── filters/            # Query filters + org/auth scoping
-│   ├── backend.py          # Assign + lifecycle-control orchestration (RedisControllBackend)
-│   ├── persist_backend.py  # Agent-event persistence (ModelPersistBackend)
+│   ├── agentd.py           # Client of agentd's internal API (assign, control, agents, probes)
+│   ├── backend.py          # The control backend the mutations call; delegates to agentd.py
+│   ├── schedules.py        # Schedule calls to agentd (validate, plan, run now)
+│   ├── triggers.py         # What a trigger is checked against when it is written
+│   ├── service_agents.py   # Provisions this hub's services as HookAgents
+│   ├── reaper.py           # The background loop: service agents + stale embeddings
 │   ├── descriptors.py      # requires/provides → JSONPath compiler
 │   ├── managers.py         # Relational port-matching engine
 │   ├── channels.py         # Realtime channels
 │   ├── channel_events.py   # Channel payloads
 │   ├── signals.py          # Model signals → channel broadcasts
-│   ├── consumers/          # WebSocket agent protocol + queue
 │   ├── mutations/          # GraphQL mutations
 │   ├── queries/            # GraphQL queries
 │   ├── subscriptions/      # GraphQL subscriptions
 │   └── migrations/         # Database migrations
 ├── rekuest/                # Django project settings + ASGI entrypoint
+│   ├── configuration.py    # The typed schema of config.yaml
 │   ├── settings.py         # Main settings (loaded from config.yaml)
 │   ├── settings_test.py    # Test settings
-│   ├── asgi.py             # ASGI app: GraphQL HTTP + /agi WebSocket
-│   └── urls.py             # URL routing
+│   ├── asgi.py             # ASGI app: GraphQL (HTTP and subscriptions) only
+│   └── urls.py             # URL routing (admin, JWKS, health)
 ├── rekuest_core/           # Shared core: enums, inputs, scalars, objects
+├── rekuest_service/        # Vendored package the hub's services use to act as HookAgents
+├── embeddings/             # Semantic search: the model, the pgvector column, the healer
 ├── datalayer/              # Secondary app: media/data layer
-├── tests/                  # Test suite
+├── tests/                  # The server's test suite
+├── agentd/                 # agentd (Rust): the agent protocol
+│   ├── crates/             # rekuest-server (the binary), facade, rekuest-server-core, authentikate, kante
+│   ├── conformance/        # Black-box pytest suite against the pair
+│   ├── docs/               # Agent protocol, task lifecycle, journal, workflows, provenance
+│   ├── scripts/test-db.sh  # A Postgres migrated by this checkout, for cargo test
+│   └── schema-migrations.txt  # The migrations agentd's SQL was written against
 └── docs/                   # Documentation (see docs/design/ for architecture)
 ```
+
+### Where the agent path lives
+
+The server has no agent code. `rekuest/asgi.py` serves GraphQL only; there is no `/agi` route.
+The agent websocket, the HookAgent and signal intakes, registration, assign and control, probes
+and every sweep (deadlines, workflow resume, schedules, triggers, retention) are agentd's, under
+`agentd/crates/facade/src/`.
+
+A mutation that touches a task or an agent calls agentd's internal API through
+`facade/agentd.py` (`POST <rekuest.agentd_url>/internal/<op>`, signed with the instance key).
+The route table is at the top of `agentd/crates/rekuest-server/src/internal.rs`.
+
+The server owns the schema. agentd writes the same tables with its own SQL, so two tests guard
+the contract from this side:
+
+- `tests/models/test_database_defaults.py`: every defaulted column has its default in the
+  database (`db_default`), because agentd's inserts do not pass through Django.
+- `tests/test_agentd_contract.py`: `agentd/schema-migrations.txt` names the latest migration of
+  each app agentd depends on. A new migration fails this test until agentd's SQL has been
+  checked against it and the file updated.
 
 ## Architecture Overview
 
@@ -206,6 +245,10 @@ class MyNewType:
 ```
 
 ### Testing
+
+The server's suite does not start agentd. Tests that reach the agent path use the `fake_agentd`
+fixture (`tests/conftest.py`), which answers the internal API in-process from
+`tests/agentd_fake.py`. agentd's real behaviour is tested in `agentd/`.
 
 #### Running Tests
 
@@ -319,12 +362,12 @@ LOGGING = {
 ### Docker Development
 
 ```bash
-# Build development container
-docker build -t rekuest-dev .
-
-# Run with docker-compose
-docker-compose -f docker-compose.dev.yml up
+# The pair from this checkout: db, redis, the server, its background loop and agentd
+docker compose up --build
 ```
+
+GraphQL is at `http://localhost:8234/graphql`, the agent websocket at `ws://localhost:8235/agi`
+(see [`docker-compose.yaml`](../docker-compose.yaml)).
 
 ### Production Considerations
 
@@ -333,6 +376,26 @@ docker-compose -f docker-compose.dev.yml up
 - Set up proper logging and monitoring
 - Use environment variables for secrets
 - Enable HTTPS and security headers
+
+## Working on agentd
+
+agentd is a Cargo workspace under `agentd/`; see [`agentd/README.md`](../agentd/README.md).
+
+```bash
+cd agentd
+eval "$(scripts/test-db.sh)"   # Postgres + redis, migrated by this checkout's server
+cargo test
+cargo clippy --all-targets -- -D warnings
+scripts/test-db.sh down
+
+cd conformance && uv run pytest   # real sockets against both images built from this checkout
+```
+
+Changing a model that agentd reads or writes means changing both sides in one commit: the
+migration, agentd's SQL, and `agentd/schema-migrations.txt`. Changing an input model in
+`rekuest_core/` means regenerating agentd's fixtures
+(`agentd/crates/rekuest-server-core/tests/fixtures/generate_declarations.py`); CI's contract job
+fails when they differ.
 
 ## Contributing Guidelines
 

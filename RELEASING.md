@@ -1,15 +1,41 @@
 # Releasing rekuest-server
 
-`rekuest-server` ships as Docker images (`jhnnsrs/rekuest`), not a PyPI package.
+This repository releases **two Docker images under one version**, not a PyPI
+package:
+
+| Image | Built from | What it is |
+| --- | --- | --- |
+| `jhnnsrs/rekuest` | the repository root (`Dockerfile`) | the rekuest server: GraphQL, migrations, the background loop |
+| `jhnnsrs/rekuest-agentd` | `agentd/` (`agentd/Dockerfile`) | agentd: the agent protocol and every sweep |
+
+Every release pushes both images with the same set of tags. agentd writes the
+schema the server of the same release migrates, so **always run the same
+version of both**.
+
 Versioning is automated by [python-semantic-release][psr] from
 [Conventional Commits][cc] — you never bump the version by hand. A push to a
 release branch runs `.github/workflows/release.yaml`, which:
 
-1. runs the test suite,
-2. computes the next version from the commit history, bumps `pyproject.toml`,
-   updates `CHANGELOG.md`, tags `vX.Y.Z`, and cuts a GitHub Release,
-3. builds the image at the new tag and pushes it under the semver multi-tag
-   regime.
+1. runs the server's test suite (`uv run pytest`),
+2. computes the next version from the commit history, tags `vX.Y.Z`, and cuts
+   a GitHub Release whose notes name both images. The release is tag-only:
+   nothing is committed to the branch, so `pyproject.toml` and `CHANGELOG.md`
+   are not touched,
+3. builds both images at the new tag and pushes them under the semver
+   multi-tag regime.
+
+A commit that only touches `agentd/` releases like any other: the version is
+the repository's, and both images are rebuilt.
+
+The pair is tested on every push and pull request to `main` and `next` by
+`.github/workflows/agentd.yaml`:
+
+- the Rust workspace (`cargo fmt`, `cargo clippy`, `cargo test`) against a
+  database migrated by the checkout's server (`agentd/scripts/test-db.sh`),
+- a contract job that regenerates agentd's fixtures from the server's models
+  and fails if they differ from the committed ones,
+- the conformance suite (`agentd/conformance`, `uv run pytest`) against both
+  images built from the checkout.
 
 ## Commit messages drive the version
 
@@ -30,8 +56,9 @@ a release on their own.
 | `next` | prereleases `X.Y.Z-rc.N` | `X.Y.Z-rc.N` (no moving tags) + moving `:next` |
 | `N.x` (e.g. `1.x`) | maintenance `X.Y.Z` | `X.Y.Z`, `X.Y`, `X` (**no** `latest`) |
 
-`next` also publishes the moving `:next` image (`docker-next.yaml`) that the
-`deployments/next` staging environment tracks. Only `main` ever moves `latest`.
+The tags apply to both images. A release from `next` also moves the `:next`
+tag of both, which the `deployments/next` staging environment tracks. Only
+`main` ever moves `latest`.
 
 ## Day-to-day
 
@@ -71,7 +98,14 @@ fix to `main`/`next` if it also applies there.
 
 ## Deployment pinning
 
-- **Staging** (`deployments/next`) pins `:next` — it rides the rc work. No change.
+- **Pin both images to the same tag.** `jhnnsrs/rekuest:X` beside
+  `jhnnsrs/rekuest-agentd:X`, and pull them together: a moving tag pulled for
+  one image only leaves agentd on another release than the server.
+- **Order on upgrade.** The server migrates on boot. agentd waits at startup
+  until the database has the migrations it was written against
+  (`agentd/schema-migrations.txt`), so bring up the new server first, or both
+  at once.
+- **Staging** (`deployments/next`) pins `:next` — it rides the rc work.
 - **Stable production** should pin the **major** tag (`jhnnsrs/rekuest:1`), not
   `:latest`. It then receives every `1.x` patch automatically but never jumps a
   major on its own; adopting v2 is a deliberate re-pin to `:2`.

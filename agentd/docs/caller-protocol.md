@@ -1,8 +1,7 @@
 # Sub-assignment: assigning & controlling dependent work over the socket
 
-> Moved here from the Python rekuest server with the agent protocol. Code references name the
-> Python modules they were written against; agentd's modules keep those names
-> (`facade/persist/transitions.py` ↔ `crates/facade/src/persist/transitions.rs`).
+> Code references are to agentd's `facade` crate, `agentd/crates/facade/src/`, unless a path
+> says otherwise.
 
 An agent running a task often needs to hand part of the job to another implementation. It does that
 over the **same WebSocket it registered on**: assign a child task, drive its lifecycle
@@ -11,17 +10,17 @@ mirrors. This document is that side of the wire: **what you send, what you get b
 
 > **Roots are not assignable here.** Every socket assign must carry a `parent`. A root task must
 > trace to an accountable human, so roots originate solely from the GraphQL `assign` mutation — see
-> the human-root invariant in [provenance.md](provenance.md). There is no longer a caller/observer
-> connection mode or a capability layer: everyone on `/agi` is an agent.
+> the human-root invariant in [provenance.md](provenance.md). There is no caller/observer
+> connection mode and no capability layer: everyone on `/agi` is an agent.
 
 It is the companion to [agent-protocol.md](agent-protocol.md) (the execution side — same socket,
-same framing, same humble-object design). Read that first for connect/register/heartbeat mechanics;
-this doc only covers sub-assignment.
+same framing). Read that first for connect/register/heartbeat mechanics; this doc only covers
+sub-assignment.
 
-Key files: `facade/messages.py` (the message catalogue),
-`facade/message_router.py` (`route_from_agent_message`, the shared dispatcher),
-`facade/caller_events.py` (the mirror mapping), `facade/http_intake.py`
-(the server-to-server HTTP path).
+Key files: `messages.rs` (the frames; the wire types are the `rekuest-protocol` crate's),
+`message_router.rs` (`route`, the dispatcher the socket and the HTTP intake share),
+`persist/caller_ops.rs` (what an agent does as a caller), `caller_events.rs` (the mirror
+mapping), `http_intake.rs` (the server-to-server HTTP path).
 
 ## 1. Connect & register
 
@@ -37,9 +36,6 @@ The first frame must be a `Register` (anything else closes the socket):
 | `force` | take over the agent's existing live connection (the singleton rule) |
 | `session_id` | the per-process reclaim signal for in-flight work |
 
-`Register` **rejects unknown fields**: it used to carry a `mode`, and a stale client sending one
-must be told to update rather than be silently admitted (see [agent-protocol.md](agent-protocol.md)).
-
 The server replies with `Init{ agent, inquiries }` — `agent` is your Agent id; `inquiries` lists
 work that was left pending while you were away. After `Init` you may start sending assign and
 lifecycle requests.
@@ -47,7 +43,7 @@ lifecycle requests.
 ## 2. Assign dependent work — `AssignRequest`
 
 `AssignRequest` is the socket sibling of the GraphQL `assign` mutation, restricted to *child*
-tasks (fields mirror `facade/inputs.AssignInputModel`):
+tasks (fields mirror the server's `AssignInputModel`):
 
 ```jsonc
 {
@@ -125,13 +121,13 @@ within the window, the backend auto-escalates to an interrupt on the same task. 
 disables escalation — the cancel then stays pending (`CANCELLING`) until the agent confirms or you
 escalate manually by sending a `InterruptRequest`.
 
-**`step`** (on `ResumeRequest`): `step=true` resumes only to the next breakpoint (the equivalent of
-the former standalone "step" instruction); `step=false` runs on freely.
+**`step`** (on `ResumeRequest`): `step=true` resumes only to the next breakpoint; `step=false`
+runs on freely.
 
 ## 4. Observe results — the `…Event` mirror stream
 
 Every `TaskEvent` for a task you assigned is streamed back as an `…Event` message
-(`facade/caller_events.py:build_caller_message` maps each `TaskEventKind` → its mirror class):
+(`build_execution_event` in `caller_events.rs` maps each `TaskEventKind` to its mirror):
 
 | Phase | Mirrors |
 | --- | --- |
@@ -147,7 +143,7 @@ Every mirror carries (`ExecutionEvent` base):
 - `seq` — its monotonic PK (an ordering / gap-detection key).
 
 **Delivery is best-effort.** Mirrors are fanned out over the `task_caller_{caller_id}` channel-layer
-group (see [realtime.md](realtime.md)). On a brief disconnect, events emitted while you were away are
+group (see [realtime.md](../../docs/design/realtime.md)). On a brief disconnect, events emitted while you were away are
 **missed** — the durable source of truth is the persisted `TaskEvent` log, which you can read
 back via GraphQL. Use `seq` to detect gaps.
 
@@ -190,10 +186,12 @@ sequenceDiagram
 ## 5. Server-to-server callers (HTTP intake)
 
 An agent without a persistent socket (a HookAgent / another service) can use the HTTP intake at
-**`POST agi/http/<agent_id>`** (`facade/http_intake.py`, `rekuest/urls.py`). The body is the same
-FromAgent message JSON; it must be HMAC-signed with the agent's `hook_url_secret`. The request is
-verified, parsed (`FromAgentPayload`), and routed through the **same** `route_from_agent_message`
-the socket uses — so `AssignRequest` / `CancelRequest` / … behave identically, and so do
+**`POST /agi/http/{agent_id}`** (`http_intake.rs`; the route is in
+`agentd/crates/rekuest-server/src/urls.rs`). The body is the same FromAgent message JSON; it must
+be HMAC-signed with the agent's `hook_url_secret` (one of this hub's own services signs with its
+instance key instead, `service_trust.rs`). The request is verified, parsed, and routed through
+the **same** `message_router::route` the socket uses — so `AssignRequest` / `CancelRequest` / …
+behave identically, and so do
 `Shelve` / `Unshelve`. The socket `Register` (which also carries the declaration) has no HTTP
 counterpart — the intake needs an existing webhook agent to verify the signature against — so
 `ensureAgent{kind, hook_url, hook_url_secret}` and `implementAgent` remain a HookAgent's bootstrap.
@@ -206,7 +204,7 @@ to its `hook_url`.
 
 Unlike a socket, an HTTP request has no session: it must stand on its own, or a captured one can be
 replayed forever against any replica. So the signature covers a **timestamp and the agent id**, not
-just the body (`facade/hooks.py`):
+just the body (`hooks.rs`):
 
 ```
 X-Rekuest-Signature-V1: t=<unix seconds>,v1=<hex>
@@ -240,12 +238,21 @@ Set it to `strict` once your HookAgents sign V1.
 | `PauseRequest{task}` | `ControlResponse` | `PausingEvent` → `PausedEvent` |
 | `ResumeRequest{task, step?}` | `ControlResponse` | `ResumingEvent` → `ResumedEvent` |
 
+### Signals from hub services
+
+A hub service announces that something happened to one of its objects with
+**`POST /agi/signal/{service}`** (`signal_intake.rs`). The service is one of
+`rekuest.service_agents`; the request carries a service token signed with that service's
+instance key, bound to the path and the body. The signal is stored and answered `202` at once;
+a resend with the same `id` is a no-op. Matching it to triggers and firing them is the
+`triggers` sweep (see [task-lifecycle.md](task-lifecycle.md)).
+
 ## See also
 
 - [agent-protocol.md](agent-protocol.md) — registration, liveness and execution on the same socket.
 - [task-lifecycle.md](task-lifecycle.md) — the Task event state machine.
-- [realtime.md](realtime.md) — the `task_caller_{id}` fan-out the mirrors ride on.
-- [identity.md](identity.md) — the Caller identity and ownership.
+- [realtime.md](../../docs/design/realtime.md) — the `task_caller_{id}` fan-out the mirrors ride on.
+- [identity.md](../../docs/design/identity.md) — the Caller identity and ownership.
 
 ## Probes over the socket
 

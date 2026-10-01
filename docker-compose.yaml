@@ -1,32 +1,68 @@
-version: '3.7'
-
-
+# The pair, built from this checkout, for local use: the rekuest server (GraphQL, migrations),
+# its background loop, and agentd (the agent protocol). All three read ./config.yaml.
+#
+#   docker compose up --build
+#
+#   GraphQL            http://localhost:8234/graphql   (the server)
+#   agent protocol     ws://localhost:8235/agi         (agentd)
+#
+# There is no gateway here, so the two programs are published on two ports. A deployment puts
+# one in front and routes `<script name>/agi*` to agentd and everything else to the server.
 services:
   db:
+    image: jhnnsrs/daten:latest
     environment:
       POSTGRES_MULTIPLE_DATABASES: rekuest_db
       POSTGRES_PASSWORD: postgres
       POSTGRES_USER: fostgres
-    image: jhnnsrs/daten:next
-    labels:
-      - "arkitekt.default.service=db"
-  rekuest-next:
-    build: .
-    ports:
-    - 8234:80
-    labels:
-      - "arkitekt.default.service=kreature"
-      - "traefik.enable=true"
-      - "traefik.http.routers.mikro.entrypoints=mikrosecure"
-      - "traefik.http.routers.mikro.rule=Host(`jhnnsrs-server.hyena-sole.ts.net`)"
-      - "traefik.http.services.mikro.loadbalancer.server.port=8080"
-      - "traefik.http.routers.mikro.tls.certresolver=myresolver"
+
   redis:
     image: redis:latest
-    labels:
-      - "arkitekt.default.service=redis"
-  rabbitmq:
-    command: rabbitmq-server
-    image: jhnnsrs/mister:fancy
-    labels:
-      - "arkitekt.default.service=rabbitmq"
+
+  # The server: migrates the schema on boot, then serves GraphQL and its subscriptions.
+  rekuest:
+    build: .
+    command: bash run.sh
+    depends_on:
+      - db
+      - redis
+    environment:
+      # Where the server reaches agentd's internal API. config.yaml sets no
+      # django.force_script_name, so there is no path prefix.
+      REKUEST__AGENTD_URL: http://agentd:8080
+    ports:
+      - "8234:80"
+    volumes:
+      - ./config.yaml:/workspace/config.yaml:ro
+
+  # The server's background loop: service-agent provisioning and stale embeddings.
+  rekuest-reaper:
+    build: .
+    command: bash run-reaper.sh
+    depends_on:
+      - db
+      - redis
+      - rekuest
+    environment:
+      REKUEST__AGENTD_URL: http://agentd:8080
+    healthcheck:
+      test: ["CMD", "python", "manage.py", "reaper", "--check"]
+      interval: 30s
+      timeout: 20s
+      start_period: 60s
+    volumes:
+      - ./config.yaml:/workspace/config.yaml:ro
+
+  # agentd: the agent websocket, the HookAgent and signal intakes, the internal API and every
+  # sweep. It never migrates: it waits until the server has applied the migrations listed in
+  # agentd/schema-migrations.txt. Its image carries its own HEALTHCHECK (`agentd healthcheck`).
+  agentd:
+    build: ./agentd
+    depends_on:
+      - db
+      - redis
+      - rekuest
+    ports:
+      - "8235:8080"
+    volumes:
+      - ./config.yaml:/workspace/config.yaml:ro

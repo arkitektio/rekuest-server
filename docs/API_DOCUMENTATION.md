@@ -11,19 +11,27 @@ Rekuest is the central broker of the Arkitekt ecosystem. It provides a GraphQL A
 subscriptions) for registering agents, defining actions, routing task execution, and managing agent
 state. See [`design/README.md`](design/README.md) for the end-to-end picture.
 
+This file covers the GraphQL API, which the rekuest server serves. The agent protocol (the `/agi`
+WebSocket, the HookAgent and signal intakes) is served by agentd and documented in
+[`../agentd/docs/`](../agentd/docs/).
+
 ## Architecture
 
-- **GraphQL + WebSocket facade** — a single schema serves HTTP queries/mutations and realtime
-  subscriptions; agents connect over a separate WebSocket at `/agi`.
+- **Two programs.** The rekuest server serves this GraphQL API (HTTP queries and mutations,
+  WebSocket subscriptions) and owns the database schema. agentd serves the agent protocol at
+  `/agi`. A gateway routes `<prefix>/agi*` to agentd and everything else to the server.
+- **Mutations that touch a task or an agent are executed by agentd.** `assign`, `cancel`,
+  `interrupt`, `pause`, `resume`, the probe mutations, `ensureAgent`, `implementAgent`,
+  `deleteAgent`, `deleteImplementation`, `createHigherOrderImplementation`, `bounce`, `kick`,
+  `block`, `unblock`, `collect`, the drawer mutations and the schedule timing calls go through
+  agentd's internal API (`facade/agentd.py`). A refusal comes back as an ordinary GraphQL error;
+  if agentd is unreachable the mutation fails.
 - **PostgreSQL** for persistent storage. The relational port-matching engine uses Postgres-specific
   `jsonb_path_match`/JSONPath, so Postgres is required (SQLite is not sufficient for matching).
-- **Redis** for both the realtime channel layer (subscription fan-out) and the hand-rolled agent
-  delivery queue (work survives an agent being briefly offline).
-- Horizontally scalable: the GraphQL/WS workers are stateless; shared state lives in Postgres and
-  Redis.
-
-> Historical note: older docs mention RabbitMQ. The current implementation routes work through Redis
-> and the Channels layer; there is no hard RabbitMQ dependency.
+- **Redis** for both the realtime channel layer (subscription fan-out) and the per-agent delivery
+  queue agentd drains (work survives an agent being briefly offline).
+- Horizontally scalable: server and agentd replicas are stateless; shared state lives in Postgres
+  and Redis.
 
 ## Core Concepts
 
@@ -36,7 +44,7 @@ Every authenticated request carries a `(client, user, organization)` triple.
 - **Caller** — that triple acting as a **requestor** (who asks for work). Owns tasks; keys the
   realtime topics `root_tasks_caller_{id}` and `task_caller_{id}`. A frontend has a Caller and no Agent.
 - **Agent** — that triple plus an `app`/`release`/`device`, acting as a **provider** (who executes
-  work). Connects over the WebSocket and runs implementations.
+  work). Connects to agentd over the WebSocket and runs implementations.
 
 ### Actions and Implementations
 - **Action** — an abstract, versioned function contract (`app`, `key`, `version`, `hash`, typed
@@ -47,7 +55,7 @@ Every authenticated request carries a `(client, user, organization)` triple.
 ### Tasks
 - **Task** — one task execution: the central log, stamped with the caller, routed to an
   agent, accumulating `TaskEvent`s. See
-  [`design/task-lifecycle.md`](design/task-lifecycle.md).
+  [`../agentd/docs/task-lifecycle.md`](../agentd/docs/task-lifecycle.md).
 
 ### State management
 - **StateDefinition** — the schema for a kind of agent state.
@@ -69,7 +77,6 @@ query Agents {
     name
     connected
     client { clientId }
-    user { username }
     organization { slug }
   }
 }
@@ -99,20 +106,21 @@ query Tasks {
   tasks { id reference latestEventKind isDone }
 }
 
-# State schemas and current state
-query StateDefinitions {
-  stateDefinitions { id name hash ports }
+# Schedules and triggers
+query Schedules {
+  schedules { id }
 }
 ```
 
-State is read with `state_for` / `checkout` / `checkout_agent` and the revision-aware queries
-(`state_at_global_rev`, `snapshots_around_rev`, `forward_events_after_rev`, …). See
+State is read with `stateFor` / `checkout` / `checkoutAgent` and the revision-aware queries
+(`stateAtGlobalRev`, `snapshotsAroundRev`, `forwardEventsAfterRev`, …). See
 [`design/realtime.md`](design/realtime.md) for the snapshot-then-stream model.
 
 ### Mutations
 
 ```graphql
-# Ensure an agent record exists / is up to date (creates the row agents register against)
+# Ensure an agent record exists / is up to date. A socket agent does not need this: its
+# Register creates the row. Dashboards and HookAgents (kind, hookUrl) use it.
 mutation EnsureAgent($input: AgentInput!) {
   ensureAgent(input: $input) { id name }
 }
@@ -130,11 +138,21 @@ mutation Resume($input: ResumeInput!)   { resume(input: $input)   { id } }
 mutation Interrupt($input: InterruptInput!) { interrupt(input: $input) { id } }
 ```
 
-Other notable mutations (see `facade/schema.py` for the full list): `create_implementation`,
-`delete_implementation`, `set_higher_order`, `implement_agent`, `block`/`unblock`, `bounce`/`kick`,
-`pin_agent`/`pin_implementation`, `update_agent`/`delete_agent`, `auto_resolve` and
-`create/update/delete_resolution`, `log_patches`/`log_snapshot`, plus the Blok/Dashboard/Toolbox/3D
-families.
+Other notable mutations (see `facade/schema.py` for the full list):
+
+- **Agents:** `implementAgent` (the GraphQL twin of the declaration a socket `Register`
+  carries), `updateAgent`, `deleteAgent`, `pinAgent`, `block` / `unblock`, `bounce` / `kick`.
+- **Implementations:** `createHigherOrderImplementation`, `deleteImplementation`. An ordinary
+  implementation is not created over GraphQL: an agent declares its implementations when it
+  registers.
+- **Schedules:** `createSchedule`, `updateSchedule`, `deleteSchedule`, `triggerSchedule` (run
+  now). A schedule's `cron` is a five-field line read in its `timezone`; six-field lines and
+  wrapping ranges such as `5-1` are refused.
+- **Triggers:** `createTrigger`, `updateTrigger`, `deleteTrigger`.
+- **Probes:** `probe`, `cancelProbe`, `pauseProbe`, `resumeProbe`.
+- **Drawers:** `shelveInMemoryDrawer`, `unshelveMemoryDrawer`, `collect`.
+- **Resolution:** `autoResolve`.
+- Plus the Blok / Dashboard / Shortcut / test-case / 3D families.
 
 ### Subscriptions
 
@@ -146,7 +164,11 @@ subscription Tasks {
 
 # Agent connection/status changes within the organization
 subscription Agents {
-  agents { create update delete }
+  agents {
+    create { id name connected }
+    update { id name connected }
+    delete
+  }
 }
 
 # Watch a state: current snapshot, then a stream of patches
@@ -155,9 +177,9 @@ subscription WatchState($stateId: ID!) {
 }
 ```
 
-Other streams (SDL names): `newActions`, `mytasks`, `tasks`, `agents`, `childTasks`, `agentTasks`,
-`implementations` / `implementationChange`, `stateUpdateEvents`, `latestPatches`, `watchAgent`,
-`watchState`, `probeEvents`.
+All streams (SDL names): `mytasks`, `tasks`, `agents`, `childTasks`, `agentTasks`,
+`implementations` / `implementationChange`, `stateUpdateEvents`, `watchAgent`, `watchState`,
+`probeEvents`.
 
 ## Authentication
 
@@ -178,8 +200,8 @@ Content-Type: application/json
 { "query": "query { agents { id name } }" }
 ```
 
-Agents authenticate the same way over the WebSocket — the first frame is a `Register` carrying the
-token; see [`design/agent-protocol.md`](design/agent-protocol.md).
+Agents authenticate the same way over agentd's WebSocket — the first frame is a `Register` carrying
+the token; see [`../agentd/docs/agent-protocol.md`](../agentd/docs/agent-protocol.md).
 
 ## Error Handling
 
@@ -208,11 +230,14 @@ required.
 ```bash
 git clone https://github.com/arkitektio/rekuest-server-next.git
 cd rekuest-server-next
-uv sync                      # or: pip install -e ".[dev]"
-cp config.yaml.example config.yaml
+uv sync
 python manage.py migrate
 python manage.py runserver
 ```
+
+`config.yaml` is checked in with development values. Mutations that touch a task or an agent
+need a running agentd and `rekuest.agentd_url` pointing at it; `docker compose up --build` at the
+repository root starts the pair.
 
 ### Testing
 ```bash
@@ -220,6 +245,7 @@ python manage.py runserver
 uv run pytest tests/ --ignore=tests/test_integration.py
 ```
 
+agentd's own suites are in `agentd/` (`cargo test`, and `agentd/conformance`).
 See [`DEVELOPMENT.md`](DEVELOPMENT.md) for the full workflow.
 
 ### GraphQL Playground
@@ -228,12 +254,17 @@ Visit `http://localhost:8000/graphql` to explore the schema and run queries inte
 ## Production Deployment
 
 ### Environment
-- `DATABASE_URL` — PostgreSQL connection
-- `REDIS_URL` / `AGENT_REDIS_HOST` / `AGENT_REDIS_PORT` — Redis for channels + agent queue
-- `SECRET_KEY`, `DEBUG=false`, `ALLOWED_HOSTS`
+
+Both programs are configured by one `config.yaml`, with `SECTION__KEY` environment overrides
+(`POSTGRES__PASSWORD`, `REDIS__HOST`, `DJANGO__DEBUG`, …). See [`../CONFIG.md`](../CONFIG.md).
+`rekuest.agentd_url` and the `instance` block are required.
+
+Images: `jhnnsrs/rekuest` (the server and its background loop) and `jhnnsrs/rekuest-agentd`,
+released under the same version tags. Run the same version of both.
 
 ### Scaling
-- Run multiple stateless GraphQL/WS workers behind a load balancer.
+- Run multiple server replicas (GraphQL) and multiple agentd replicas (`/agi`) behind a gateway
+  that routes `<prefix>/agi*` to agentd.
 - Use PostgreSQL with connection pooling; consider Redis HA for the channel layer and queue.
 
 ## Performance & Security

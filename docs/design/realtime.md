@@ -142,7 +142,7 @@ in [domain-model.md](domain-model.md).
 It is worth restating the split:
 
 - **Agent delivery** (work → agent) uses the **hand-rolled Redis queue** so messages survive an
-  agent being briefly offline ([agent-protocol.md](https://github.com/arkitektio/rekuest-agentd/blob/main/docs/agent-protocol.md)).
+  agent being briefly offline ([agent-protocol.md](../../agentd/docs/agent-protocol.md)).
 - **Realtime fan-out** (observations → callers) uses the **Channels layer** via these channels —
   best-effort pub/sub where a momentarily-absent subscriber simply misses events it can re-query.
 

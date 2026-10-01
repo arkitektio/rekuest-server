@@ -1,14 +1,18 @@
 # Agent reports: order, dedup and task history
 
-> Moved here from the Python rekuest server with the agent protocol. Code references name the
-> Python modules they were written against; agentd's modules keep those names
-> (`facade/persist/transitions.py` ↔ `crates/facade/src/persist/transitions.rs`).
+> Code references are to agentd's `facade` crate, `agentd/crates/facade/src/`, unless a path
+> says otherwise.
 
 This is the contract between the rekuest server and every agent that reports over the agent socket:
 the Rust agent (`rekuest` crate in `arkirust`) and the Python agent (`arkitekt-runtime` for numbering,
-the gate and `Task`; `rekuest` for the wire). The canonical examples of every frame are in
-`tests/fixtures/agent_wire.json`. The server's test suite and both agents' test suites parse that
-file, so a change to the wire changes it, and all three must agree.
+the gate and `Task`; `rekuest` for the wire). On the server's side the contract is agentd's:
+`message_router.rs` and `persist/positions.rs`.
+
+The frames are the types of the `rekuest-protocol` crate, which agentd and the Rust agent share
+and which is tested against its own fixture of example frames
+(`tests/fixtures/agent_wire_examples.json` in that crate). The Python agent packages carry
+canonical examples of the numbered frames in their own `tests/fixtures/agent_wire.json`. A
+change to the wire changes those fixtures.
 
 ## Two scopes
 
@@ -113,7 +117,7 @@ effects too.
   | `pos` | handling |
   |---|---|
   | `≤ projected_pos` | Already handled. Skip it, and ack again. |
-  | `= projected_pos + 1` | **Claim, project, confirm.** The claim is a conditional update of `claimed_pos` that succeeds only while no other backend has one in flight. So when two replicas get the same frame, one projects it and the other waits for the confirm, then skips it. A claim left unconfirmed for 30 s (its backend died mid-projection) is taken over. A projection that fails gives its claim back, so the resend projects it. |
+  | `= projected_pos + 1` | **Claim, project, confirm** (`persist/positions.rs`). The claim is a conditional update of `claimed_pos` that succeeds only while no other replica has one in flight. So when two replicas get the same frame, one projects it and the other waits for the confirm, then skips it. A claim left unconfirmed for 30 s (its replica died mid-projection) is taken over. A projection that fails gives its claim back, so the resend projects it. |
   | `> projected_pos + 1` | The agent no longer holds the frames in between, because it always sends from its lowest unacked position, in order. The gap is logged, and the frame is handled as the next one. |
 
   A frame whose projection is refused (an unknown state, another agent's task) still counts as

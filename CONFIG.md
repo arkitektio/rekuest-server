@@ -3,10 +3,15 @@
 This document explains how the **rekuest** service is configured, then lists every
 configuration value, its environment-variable name, its default, and what it does.
 
+One `config.yaml` configures both programs of a deployment: the rekuest server (Python) and
+agentd (Rust, the agent protocol). Each reads the blocks it needs and ignores the rest.
+
 The single source of truth for the schema is
 [`rekuest/configuration.py`](rekuest/configuration.py); this file documents it for
-humans. If the two ever disagree, the code wins — and you can always print the live,
-resolved configuration with `python manage.py validate_settings` (see below).
+humans. agentd's reading of the same file is
+[`agentd/crates/rekuest-server/src/configuration.rs`](agentd/crates/rekuest-server/src/configuration.rs).
+If the documents and the code ever disagree, the code wins — and you can always print the
+server's live, resolved configuration with `python manage.py validate_settings` (see below).
 
 ---
 
@@ -48,6 +53,24 @@ redis:
   host: redis
   port: 6379
 ```
+
+### One file, two programs
+
+agentd reads the same file. It looks for it at `AGENTD_CONFIG`, then at
+`ARKITEKT_CONFIG_FILE`, then at `config.yaml` in its working directory; the agentd image sets
+`AGENTD_CONFIG=/workspace/config.yaml`, so mount the server's file there.
+
+agentd reads these blocks: `django` (`debug`, `force_script_name`), `postgres`, `redis`,
+`authentikate`, `rekuest`, `provenance` and `instance`. The `instance` block is required: agentd
+refuses to start without it, because the server signs every internal request with the instance
+key and agentd verifies with it.
+
+The environment overrides below apply to agentd too, for keys in those seven blocks
+(`POSTGRES__PASSWORD`, `REKUEST__PICKUP_DEADLINE`, …). A secret given only as an environment
+variable therefore has to be set on both containers.
+
+Two variables are agentd's alone: `AGENTD_BIND` (the listen address, default `0.0.0.0:8080`)
+and `RUST_LOG` (the log filter, default `info`).
 
 ### Environment variables (the `__` rule)
 
@@ -99,12 +122,14 @@ Secret fields are flagged with 🔒. "Required" means there is no default.
 | Key | Env var | Type | Default | Description |
 |---|---|---|---|---|
 | `secret_key` 🔒 | `DJANGO__SECRET_KEY` | str | **required** | Django `SECRET_KEY` for cryptographic signing. |
-| `debug` | `DJANGO__DEBUG` | bool | `false` | Enable Django debug mode. Never enable in production. |
+| `debug` | `DJANGO__DEBUG` | bool | `false` | Enable Django debug mode. Never enable in production. Static tokens (`authentikate.static_tokens`) are accepted only while it is on, by the server and by agentd. |
+| `log_level` | `DJANGO__LOG_LEVEL` | str | `INFO` | Root logger level of the server. The `LOG_LEVEL` environment variable overrides it. |
+| `enable_rich_logging` | `DJANGO__ENABLE_RICH_LOGGING` | bool | `false` | Render the server's console logs with rich. A development convenience. |
 | `hosts` | `DJANGO__HOSTS` | list[str] | `["*"]` | `ALLOWED_HOSTS` entries. |
 | `use_x_forwarded_host` | `DJANGO__USE_X_FORWARDED_HOST` | bool | `true` | Trust the `X-Forwarded-Host` header behind a reverse proxy. |
 | `admin` | `DJANGO__ADMIN__*` | object | `null` | Superuser provisioned on first boot (see below). |
 | `csrf_trusted_origins` | `DJANGO__CSRF_TRUSTED_ORIGINS` | list[str] | `["http://localhost", "https://localhost"]` | `CSRF_TRUSTED_ORIGINS` for unsafe (POST) requests. |
-| `force_script_name` | `DJANGO__FORCE_SCRIPT_NAME` | str | `""` | URL path prefix this service is served under (`FORCE_SCRIPT_NAME`). |
+| `force_script_name` | `DJANGO__FORCE_SCRIPT_NAME` | str | `""` | URL path prefix this service is served under. agentd serves its routes under the same prefix (`/<prefix>/agi`, `/<prefix>/internal/…`, `/<prefix>/ht`). |
 
 #### `django.admin` — superuser created on first boot
 
@@ -131,8 +156,8 @@ Secret fields are flagged with 🔒. "Required" means there is no default.
 |---|---|---|---|---|
 | `host` | `REDIS__HOST` | str | **required** | Redis host. |
 | `port` | `REDIS__PORT` | int | `6379` | Redis port. |
-| `key_prefix` | `REDIS__KEY_PREFIX` | str | `rekuest` | Namespace for every redis key this service writes (agent queues, probe state, reaper token, webhook replay guard). Two deployments sharing one redis MUST differ here, or agent 42 of one receives the other's Assigns. |
-| `channel_prefix` | `REDIS__CHANNEL_PREFIX` | str | `rekuest` | Key prefix for the `channels_redis` channel layer. Must differ from every other service on the same redis, or group messages bleed between services. |
+| `key_prefix` | `REDIS__KEY_PREFIX` | str | `rekuest` | Namespace for every redis key the server and agentd write (agent queues, probe state, tick tokens, webhook replay guard). Two deployments sharing one redis MUST differ here, or agent 42 of one receives the other's Assigns. |
+| `channel_prefix` | `REDIS__CHANNEL_PREFIX` | str | `rekuest` | Key prefix for the `channels_redis` channel layer, which the server and agentd both speak. Must differ from every other service on the same redis, or group messages bleed between services. |
 | `channel_capacity` | `REDIS__CHANNEL_CAPACITY` | int | `5000` | `channels_redis` capacity. This bounds the **one** receive queue a whole replica shares — not one per socket — and messages beyond it are dropped silently, so it is set far above the library default of 100. |
 
 ### `authentikate` — inbound token verification
@@ -167,69 +192,115 @@ authentikate:
   static_tokens: {}
 ```
 
-### `rekuest` — deadlines, retention and probe limits
+### `rekuest` — agentd, deadlines, retention and probe limits
 
-Every window the server enforces over agent work: how long a lost agent's tasks are held
-before being failed, how long a task may go unreported, how long finished work is kept, and
-the probe limits. All optional with sensible defaults.
+Where the server finds agentd, and every window enforced over agent work: how long a lost
+agent's tasks are held before they end, how long a task may go unreported, how long finished
+work is kept, and the probe limits. Everything except `agentd_url` is optional.
 
-| Key | Env var | Type | Default | Description |
-|---|---|---|---|---|
-| `grace_default` | `REKUEST__GRACE_DEFAULT` | int | `30` | Default reclaim grace window (seconds) after a disconnect. |
-| `hook_signature_mode` | `REKUEST__HOOK_SIGNATURE_MODE` | str | `compat` | HookAgent HTTP signatures. `compat` accepts the timestamped `X-Rekuest-Signature-V1` **or** the legacy body-only `X-Rekuest-Signature`, and sends both. `strict` accepts and sends V1 only — the legacy signature is replayable, so move to `strict` once your HookAgents are updated. |
-| `hook_max_skew` | `REKUEST__HOOK_MAX_SKEW` | int | `300` | Maximum age/clock skew (seconds) for a V1-signed HookAgent request. Also the replay guard's memory: a digest is remembered for twice this. |
-| `trigger_max_depth` | `REKUEST__TRIGGER_MAX_DEPTH` | int | `3` | How many trigger firings may chain (a triggered run creates an object whose signal fires another trigger …) before a signal stops firing. The loop guard. |
-| `signal_retention` | `REKUEST__SIGNAL_RETENTION` | int | `604800` | Seconds to keep processed signals; `0` keeps them forever. Runs keep their tasks; their `signal` link turns null. |
-| `ephemeral_task_retention` | `REKUEST__EPHEMERAL_TASK_RETENTION` | int | `86400` | Seconds to keep terminal *ephemeral* root task trees (the runs of schedules with `ephemeralRuns`, e.g. services' housekeeping sweeps). Applies even while `task_retention` is `0`; `0` disables. |
-| `task_retention` | `REKUEST__TASK_RETENTION` | int | `0` | Seconds to keep terminal root task trees before the retention sweep deletes them; `0` disables. Deleting past runs also removes them from replay discovery (`reusableTaskFor`), so it is an explicit opt-in. Suggested production value: `2592000` (30 days). |
-| `probe_ttl` | `REKUEST__PROBE_TTL` | int | `3600` | Lifetime (seconds) of a probe's redis state while it is live. |
-| `probe_linger` | `REKUEST__PROBE_LINGER` | int | `300` | How long (seconds) a finished probe's state lingers so a late subscriber can still read its outcome. |
-| `probe_max_inflight` | `REKUEST__PROBE_MAX_INFLIGHT` | int | `32` | Maximum concurrent probes per caller. Exceeding it refuses the probe rather than queueing it — probes are hover-grade work. |
-| `sweep_interval` | `REKUEST__SWEEP_INTERVAL` | int | `5` | How often (seconds) the reaper (`manage.py reaper`, the `rekuest-reaper` container) sweeps the DB-held deadlines below, the schedules and the delayed tasks. Bounds how late any of them can fire. |
-| `pickup_deadline` | `REKUEST__PICKUP_DEADLINE` | int | `60` | Seconds a dispatched task may go without **any** report from its live agent (or webhook endpoint) before the Assign is redelivered once, then ended `LOST` (never started); `0` disables. |
-| `disconnected_expiry` | `REKUEST__DISCONNECTED_EXPIRY` | int | `3600` | Seconds an undelivered task of an agent that is gone waits for it before it ends `LOST` (never started); `0` = never. |
-| `control_deadline` | `REKUEST__CONTROL_DEADLINE` | int | `60` | Seconds an unconfirmed cancel waits before escalating to an interrupt, and an unconfirmed interrupt before it is finalized; `0` disables. On by default: a Cancel/Interrupt frame lost in transit is otherwise never noticed, and nothing redelivers it the way the pickup deadline redelivers an Assign. A socket `CancelRequest.auto_interrupt` takes precedence. |
+The "Read by" column says which program acts on the key. Deadlines, retention, the trigger loop
+guard and the hook signatures are agentd's: changing them means restarting agentd, not the
+server.
 
-None of these is a timer. Each deadline starts at a database column and is enforced by the
-reaper loop (`facade/reaper.py`), which runs in its own process — `python manage.py reaper`, the
-`rekuest-reaper` container; the web replicas never sweep. It holds no state: a reaper can be
-killed at any moment without losing a pending deadline (while none runs, deadlines are late, not
-lost), and any number can run side by side (every transition is a row-locked claim with exactly
-one winner). `manage.py reaper --check` is its healthcheck (a heartbeat file touched every tick).
+| Key | Env var | Type | Default | Read by | Description |
+|---|---|---|---|---|---|
+| `agentd_url` | `REKUEST__AGENTD_URL` | str | `null` (**must be set**) | server | agentd's base URL with the script name, e.g. `http://agentd:8080/rekuest`. The server POSTs to `<agentd_url>/internal/<op>` (`facade/agentd.py`). The server starts without it, but every assign, control, registration, delete, probe and schedule change is then refused with "rekuest.agentd_url is not configured". |
+| `identifier` | `REKUEST__IDENTIFIER` | str | `live.arkitekt.rekuest` | both | This rekuest's fakts identifier: what its key is listed under in the hub trust bundle, and the issuer and audience of the service tokens the server signs its internal requests with. |
+| `service_agents` | — (use YAML) | list | `[]` | both | This hub's services, each `{service, hook_url, identifier?}`. The server's background loop provisions each as a HookAgent with the actions and default schedules of its manifest (`facade/service_agents.py`); agentd accepts their signed reports and signals. |
+| `service_agents_organization` | `REKUEST__SERVICE_AGENTS_ORGANIZATION` | str | `rekuest-system` | server | The organization (slug) the service agents, their actions and schedules live in. |
+| `sweep_interval` | `REKUEST__SWEEP_INTERVAL` | int | `5` | both | How often (seconds) each loop ticks: agentd's sweeps (deadlines, schedules, triggers, delayed tasks) and the server's background loop (`manage.py reaper`). Bounds how late any of them can fire. |
+| `grace_default` | `REKUEST__GRACE_DEFAULT` | int | `30` | agentd | Reclaim grace window (seconds) after a disconnect: how long a gone agent's running tasks wait for it before they end `LOST` (a workflow is resumed). |
+| `pickup_deadline` | `REKUEST__PICKUP_DEADLINE` | int | `60` | agentd | Seconds a dispatched task may go without **any** report from its live agent (or webhook endpoint) before the Assign is redelivered once, then ended `LOST` (never started); `0` disables. |
+| `disconnected_expiry` | `REKUEST__DISCONNECTED_EXPIRY` | int | `3600` | agentd | Seconds an undelivered task of an agent that is gone waits for it before it ends `LOST` (never started); `0` = never. |
+| `control_deadline` | `REKUEST__CONTROL_DEADLINE` | int | `60` | agentd | Seconds an unconfirmed cancel waits before escalating to an interrupt, and an unconfirmed interrupt before it is finalized; `0` disables. On by default: a Cancel/Interrupt frame lost in transit is otherwise never noticed, and nothing redelivers it the way the pickup deadline redelivers an Assign. A socket `CancelRequest.auto_interrupt` takes precedence. |
+| `hook_signature_mode` | `REKUEST__HOOK_SIGNATURE_MODE` | str | `compat` | agentd | HookAgent HTTP signatures. `compat` accepts the timestamped `X-Rekuest-Signature-V1` **or** the legacy body-only `X-Rekuest-Signature`, and sends both. `strict` accepts and sends V1 only — the legacy signature is replayable, so move to `strict` once your HookAgents are updated. |
+| `hook_max_skew` | `REKUEST__HOOK_MAX_SKEW` | int | `300` | agentd | Maximum age/clock skew (seconds) for a V1-signed HookAgent request. Also the replay guard's memory: a digest is remembered for twice this. |
+| `trigger_max_depth` | `REKUEST__TRIGGER_MAX_DEPTH` | int | `3` | agentd | How many trigger firings may chain (a triggered run creates an object whose signal fires another trigger …) before a signal stops firing. The loop guard. |
+| `signal_retention` | `REKUEST__SIGNAL_RETENTION` | int | `604800` | agentd | Seconds to keep processed signals; `0` keeps them forever. Runs keep their tasks; their `signal` link turns null. |
+| `ephemeral_task_retention` | `REKUEST__EPHEMERAL_TASK_RETENTION` | int | `86400` | agentd | Seconds to keep terminal *ephemeral* root task trees (the runs of schedules with `ephemeralRuns`, e.g. services' housekeeping sweeps). Applies even while `task_retention` is `0`; `0` disables. |
+| `task_retention` | `REKUEST__TASK_RETENTION` | int | `0` | agentd | Seconds to keep terminal root task trees before the retention sweep deletes them; `0` disables. Deleting past runs also removes them from replay discovery (`reusableTaskFor`), so it is an explicit opt-in. Suggested production value: `2592000` (30 days). |
+| `probe_ttl` | `REKUEST__PROBE_TTL` | int | `3600` | agentd | Lifetime (seconds) of a probe's redis state while it is live. |
+| `probe_linger` | `REKUEST__PROBE_LINGER` | int | `300` | agentd | How long (seconds) a finished probe's state lingers so a late subscriber can still read its outcome. |
+| `probe_max_inflight` | `REKUEST__PROBE_MAX_INFLIGHT` | int | `32` | both | Maximum concurrent probes per caller. agentd refuses a probe beyond it rather than queueing it (probes are hover-grade work); the server reports the cap in `probeStats`. |
+
+None of the deadlines is a timer. Each starts at a database column and is enforced by agentd's
+sweeps (`agentd/crates/facade/src/reaper.rs`), which run inside every agentd replica. A tick
+token in redis lets one replica sweep per tick; every transition is a row-locked claim with
+exactly one winner, so any number may run. A replica holds no state: it can be killed at any
+moment without losing a pending deadline, and while none runs, deadlines are late, not lost.
+
+The sweeps, in the order a tick runs them: stale agents, disconnected agents, schedules (each
+enabled schedule gets its next run), triggers (unprocessed signals are matched and fired), due
+tasks (`not_before` has passed), unpicked tasks, due controls, expired tasks. Retention (task
+trees and processed signals) runs on every 60th tick.
+
+Agent heartbeats are not configuration: agentd pings every 10 s, waits 5 s for the answer and
+presumes a `connected` agent dead after 30 s without one
+(`agentd/crates/rekuest-server/src/settings.rs`).
+
+The server's own loop (`python manage.py reaper`, the `rekuest-reaper` container,
+`facade/reaper.py`) does two things: it provisions `service_agents` and re-embeds actions whose
+embedding is stale. `manage.py reaper --check` is its healthcheck (a heartbeat file touched
+every tick). agentd's is `agentd healthcheck`, which the agentd image runs as its `HEALTHCHECK`.
+
+#### Schedules
+
+The server owns the schedule rows (GraphQL create, update, delete). agentd is the only reader
+of cron lines: the server asks it to validate a timing, and agentd plans each schedule's next
+run and handles "run now" (`triggerSchedule`).
+
+- A cron line has five fields (minute, hour, day of month, month, day of week) and is read in
+  the schedule's time zone. A six-field line is refused.
+- A range that wraps (`5-1`) is refused.
+- Across a daylight-saving change, a slot in the skipped hour runs at the first instant after
+  it, and a fixed-time job in the repeated hour of a fall-back night runs once.
 
 ## Running more than one replica
 
-Nothing needs to be configured to scale the service: state lives in Postgres and redis, no
+Nothing needs to be configured to scale either program: state lives in Postgres and redis, no
 request needs to return to the replica that served the last one (sticky sessions are **not**
-required), and `manage.py migrate` takes a Postgres advisory lock so every replica can run it at
-boot with one winner. What does need attention:
+required), and `manage.py migrate` takes a Postgres advisory lock so every server replica can
+run it at boot with one winner. agentd replicas all serve `/agi` and all run the sweeps. What
+does need attention:
 
 - **`redis.channel_prefix` and `redis.key_prefix`** must be unique per service, and per
   deployment if two deployments share a redis. See above.
-- **Clocks.** Liveness compares one replica's clock against another's writes, so hosts must be
-  NTP-synced. A replica measures itself against the database clock and, if it is off by more than
-  `(AGENT_STALE_AFTER − heartbeat interval − heartbeat timeout) / 2` (7.5 s at the defaults),
-  stops sweeping and reports unhealthy on `/ht` rather than deciding other replicas' agents are
-  dead. See `facade/clock.py`.
+- **Clocks.** Liveness compares one agentd replica's clock against another's writes, so hosts
+  must be NTP-synced. An agentd replica measures itself against the database clock and, if it is
+  off by more than `(stale window − heartbeat interval − heartbeat timeout) / 2` (7.5 s), skips
+  its sweeps and logs an error rather than deciding other replicas' agents are dead. See
+  `agentd/crates/facade/src/clock.rs`.
 - **`control_deadline`** should stay non-zero. A Cancel/Interrupt frame can be lost when a
   connection is displaced or redis restarts, and nothing redelivers it — the deadline is what
   stops the database from saying `CANCELLING` forever while the agent runs on.
-- **Postgres connections.** Each replica opens its own; raise the server's `max_connections`
-  before scaling a stack that shares one cluster between services.
+- **Postgres connections.** Each replica opens its own (an agentd replica holds a pool of up to
+  32); raise Postgres's `max_connections` before scaling a stack that shares one cluster between
+  services.
+- **The same version everywhere.** Server and agentd replicas must come from the same release:
+  agentd's SQL is written against that release's migrations.
 
-### `provenance` — provenance (attestation) signing keypair and policy
+### `instance` — this instance's key and whom it trusts
 
-Rekuest acts as the provenance authority: it signs an Ed25519 attestation JWT per
-non-trivial assignment and publishes the verifying key at its JWKS endpoint. This
-keypair is **orthogonal** to the auth keys above (different issuer, different lifetime);
-the private key never leaves Rekuest.
+One Ed25519 key per rekuest instance. It signs provenance tokens, the server's requests to
+agentd's internal API, and every request to the hub's services. The server and agentd must hold
+the same key, which they do by reading the same file. Required by both.
+
+| Key | Env var | Type | Default | Description |
+|---|---|---|---|---|
+| `private_key` 🔒 | `INSTANCE__PRIVATE_KEY` | str (PEM) | **required** | Ed25519 private key (PKCS#8 PEM). Its key id (`kid`) is its RFC 7638 thumbprint, which is what the hub's trust bundle lists it under. |
+| `trust.jwks_uri` | `INSTANCE__TRUST__JWKS_URI` | str | `null` | Where the hub's instance public keys are fetched from (the coord's hub-keys URL). |
+| `trust.jwks` | — (use YAML) | object | `null` | The trust bundle inline (a JWKS whose keys carry `service`), for a hub not enrolled yet. |
+
+### `provenance` — provenance (attestation) policy
+
+Rekuest acts as the provenance authority: agentd signs an Ed25519 attestation JWT per
+non-trivial assignment with the instance key (`instance.private_key`), and the server publishes
+the verifying key at `/.well-known/jwks.json`. The key is **orthogonal** to the auth keys above
+(different issuer, different lifetime); the private key never leaves Rekuest.
 
 | Key | Env var | Type | Default | Description |
 |---|---|---|---|---|
 | `issuer` | `PROVENANCE__ISSUER` | str | `rekuest` | Provenance token issuer (`iss`). |
-| `kid` | `PROVENANCE__KID` | str | `rekuest-prov-1` | Key id published at the JWKS endpoint. |
-| `private_key` 🔒 | `PROVENANCE__PRIVATE_KEY` | str (PEM) | **required** | Ed25519 signing key. The facade refuses to start without it. |
-| `public_key` | `PROVENANCE__PUBLIC_KEY` | str (PEM) | derived | Ed25519 verifying key (published via JWKS); derived from the private key when omitted. |
 | `token_ttl_seconds` | `PROVENANCE__TOKEN_TTL_SECONDS` | int | `3600` | Provenance token lifetime (seconds). |
 | `human_roles` | `PROVENANCE__HUMAN_ROLES` | list[str] | `[]` | Roles marking an accountable human; empty disables the human-root invariant. |
 | `strict` | `PROVENANCE__STRICT` | bool | `false` | Require the human-root invariant when minting. |
@@ -313,14 +384,21 @@ authentikate:
       iss: lok
       kid: lok-key-1
       public_key: "ssh-rsa AAAA..."
-provenance:
+# Required, even when empty: the provenance policy (every key has a default).
+provenance: {}
+# This instance's Ed25519 key. The server and agentd both read it.
+instance:
   private_key: |
     -----BEGIN PRIVATE KEY-----
     ...
     -----END PRIVATE KEY-----
+rekuest:
+  # Where the server reaches agentd, with django.force_script_name if one is set.
+  agentd_url: http://agentd:8080
 # Optional — everything defaults; shown for the one knob worth tuning.
 embeddings:
   distance_threshold: 0.55
 ```
 
-Validate it with `python manage.py validate_settings`.
+Validate it with `python manage.py validate_settings`. Mount the same file into the agentd
+container at `/workspace/config.yaml`.
