@@ -3,6 +3,7 @@ import logging
 from kante.types import Info
 
 from facade import inputs, models, types
+from facade.types.base import scoped_get
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ def create_higher_order_implementation(info: Info, input: inputs.CreateHigherOrd
 
 
 def delete_implementation(info: Info, input: inputs.DeleteImplementationInput) -> str:
-    implementation = models.Implementation.objects.get(id=input.implementation)
+    implementation = scoped_get(models.Implementation, info, input.implementation, field="agent__organization")
 
     implementation.delete()
 

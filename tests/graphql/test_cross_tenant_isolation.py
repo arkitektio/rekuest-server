@@ -124,3 +124,20 @@ class TestCrossTenantIsolation:
         )
 
         assert result.errors or result.data.get("state") is None, "org A fetched org B's State by id"
+
+    async def test_an_implementation_of_another_organization_cannot_be_deleted(self, authenticated_context):
+        """deleteImplementation fetched by bare id: org A could delete org B's implementation."""
+        from facade.models import Implementation
+
+        t = await _seed_two_tenants("xt-impl-delete")
+        theirs = await sync_to_async(Implementation.objects.create)(agent=t["b"]["agent"], action=t["b"]["action"], interface="theirs")
+        mine = await sync_to_async(Implementation.objects.create)(agent=t["a"]["agent"], action=t["a"]["action"], interface="mine")
+        delete = "mutation M($id: ID!) { deleteImplementation(input: {implementation: $id}) }"
+
+        refused = await schema.execute(delete, context_value=t["a"]["context"], variable_values={"id": str(theirs.pk)})
+        allowed = await schema.execute(delete, context_value=t["a"]["context"], variable_values={"id": str(mine.pk)})
+
+        assert refused.errors, "org A deleted org B's implementation"
+        assert await sync_to_async(Implementation.objects.filter(pk=theirs.pk).exists)()
+        assert not allowed.errors, allowed.errors
+        assert not await sync_to_async(Implementation.objects.filter(pk=mine.pk).exists)()
