@@ -174,6 +174,13 @@ def call(op: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     if op == "implementation/delete":
         models.Implementation.objects.get(pk=payload["implementation"], agent__organization_id=payload["principal"]["organization"]).delete()
         return {"implementation": str(payload["implementation"])}
+    if op == "action/cleanup":
+        unreferenced = models.Action.objects.filter(organization_id=payload["principal"]["organization"], implementations__isnull=True)
+        if payload.get("actions"):
+            unreferenced = unreferenced.filter(pk__in=payload["actions"])
+        ids = list(unreferenced.values_list("pk", flat=True))
+        models.Action.objects.filter(pk__in=ids).delete()
+        return {"deleted": len(ids)}
     if op == "agent/implement":
         agent = _ensure(payload["principal"])
         declaration = payload["input"]

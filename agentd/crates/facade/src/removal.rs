@@ -1,5 +1,6 @@
-//! Deleting what agentd owns: an agent, an implementation. The rekuest server asks (its
-//! `deleteAgent` and `deleteImplementation`); the rows, their cascade and the feeds are here.
+//! Deleting what agentd owns: an agent, an implementation, actions nothing implements. The
+//! rekuest server asks (its `deleteAgent`, `deleteImplementation` and `cleanupActions`); the
+//! rows, their cascade and the feeds are here.
 
 use crate::backend::{parse_id, BackendError, BackendResult};
 use crate::consumers::agent_queue::{processing_key, queue_key};
@@ -112,4 +113,30 @@ pub async fn delete_implementation(
     tx.commit().await?;
     on_commit.publish(ctx).await;
     Ok(id)
+}
+
+/// Delete the organization's actions that no implementation references (`cleanup_actions`),
+/// all of them or only those among `actions`. Their task history goes with them. How many
+/// actions were deleted.
+pub async fn cleanup_actions(
+    ctx: &Context,
+    organization: i64,
+    actions: Option<&[i64]>,
+) -> BackendResult<usize> {
+    let mut tx = ctx.db.begin().await?;
+    // A registration of the organization may be about to implement one of them.
+    lock_organization(&mut tx, organization).await?;
+    let unreferenced: Vec<i64> = sqlx::query_scalar(
+        "SELECT a.id FROM facade_action a
+          WHERE a.organization_id = $1 AND ($2::bigint[] IS NULL OR a.id = ANY($2))
+            AND NOT EXISTS (SELECT 1 FROM facade_implementation i WHERE i.action_id = a.id)
+          FOR UPDATE OF a",
+    )
+    .bind(organization)
+    .bind(actions)
+    .fetch_all(&mut *tx)
+    .await?;
+    deletion::delete_actions(&mut tx, &unreferenced).await?;
+    tx.commit().await?;
+    Ok(unreferenced.len())
 }

@@ -15,10 +15,16 @@ permissions:
   contents: write
 
 jobs:
+  # 0. The pair: agentd's own suites and the conformance run of both programs built from this
+  #    commit. The two are released as one version, so a red pair blocks the release.
+  agentd:
+    uses: ./.github/workflows/agentd.yaml
+
   # 1. Run the suite, then let python-semantic-release decide the next version
   #    from the conventional-commit history, tag HEAD (vX.Y.Z on main /
   #    vX.Y.Z-rc.N on next) and cut a GitHub Release with generated notes.
   release:
+    needs: agentd
     runs-on: ubuntu-latest
     outputs:
       released: ${{ steps.release.outputs.released }}

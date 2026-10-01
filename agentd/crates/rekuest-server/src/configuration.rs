@@ -253,9 +253,27 @@ const SECTIONS: [&str; 7] = [
     "instance",
 ];
 
+/// Keys whose value is text whatever it looks like: a password of digits is still a password.
+const TEXT_KEYS: [&str; 13] = [
+    "password",
+    "username",
+    "secret_key",
+    "private_key",
+    "public_key",
+    "access_key",
+    "host",
+    "db_name",
+    "issuer",
+    "identifier",
+    "key_prefix",
+    "channel_prefix",
+    "audience",
+];
+
 /// Lay `SECTION__KEY[__KEY…]=value` variables over the document. Names are matched without
-/// regard to case. A value replacing a string stays a string; otherwise it is read as YAML, so
-/// `REDIS__PORT=6380` is a number and `DJANGO__DEBUG=true` a boolean.
+/// regard to case. A value for a text key ([`TEXT_KEYS`], any `*_url`) or one replacing a
+/// string is a string; any other is read as YAML, so `REDIS__PORT=6380` is a number and
+/// `DJANGO__DEBUG=true` a boolean.
 fn apply_environment(
     document: &mut serde_yaml::Value,
     variables: impl Iterator<Item = (String, String)>,
@@ -285,9 +303,14 @@ fn apply_environment(
         }
         let leaf = Value::String(path[path.len() - 1].clone());
         let mapping = node.as_mapping_mut().expect("just made a mapping");
-        let value = match mapping.get(&leaf) {
-            Some(Value::String(_)) => Value::String(raw),
-            _ => serde_yaml::from_str(&raw).unwrap_or(Value::String(raw)),
+        let key = path[path.len() - 1].as_str();
+        let text = TEXT_KEYS.contains(&key)
+            || key.ends_with("_url")
+            || matches!(mapping.get(&leaf), Some(Value::String(_)));
+        let value = if text {
+            Value::String(raw)
+        } else {
+            serde_yaml::from_str(&raw).unwrap_or(Value::String(raw))
         };
         mapping.insert(leaf, value);
     }
@@ -308,6 +331,9 @@ mod tests {
             ("postgres__port", "6000"),
             ("REKUEST__TRIGGER_MAX_DEPTH", "5"),
             ("DJANGO__DEBUG", "true"),
+            // A secret given only in the environment, that happens to be digits.
+            ("INSTANCE__PRIVATE_KEY", "0042"),
+            ("REDIS__PORT", "6380"),
             ("PATH", "/usr/bin"),
             ("UNRELATED__KEY", "x"),
         ];
@@ -318,7 +344,7 @@ mod tests {
                 .map(|(k, v)| (k.to_string(), v.to_string())),
         );
         let expected: serde_yaml::Value = serde_yaml::from_str(
-            "postgres:\n  password: '12345'\n  port: 6000\nredis:\n  host: redis\nrekuest:\n  trigger_max_depth: 5\ndjango:\n  debug: true\n",
+            "postgres:\n  password: '12345'\n  port: 6000\nredis:\n  host: redis\n  port: 6380\nrekuest:\n  trigger_max_depth: 5\ndjango:\n  debug: true\ninstance:\n  private_key: '0042'\n",
         )
         .unwrap();
         assert_eq!(document, expected);

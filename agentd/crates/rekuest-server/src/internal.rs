@@ -47,6 +47,7 @@
 //! | `agent/implement` | `{"principal", "input": ImplementAgentInput}` | `{"agent", "diagnostics"}` |
 //! | `agent/delete` | `{"principal", "agent"}` (kicks it, deletes it with everything below it) | `{"agent"}` |
 //! | `implementation/delete` | `{"principal", "implementation"}` | `{"implementation"}` |
+//! | `action/cleanup` | `{"principal", "actions"?: [id, …]}` (the organization's actions nothing implements) | `{"deleted"}` |
 //! | `schedule/validate` | `{"interval_seconds"?, "cron"?, "timezone"}` | `{}`, or `400` saying what is wrong with the timing |
 //! | `schedule/plan` | `{"schedule", "replan"?, "principal"?}` (plans the next run now; `replan` cancels the waiting one first) | `{"planned"}` |
 //! | `schedule/cancel-waiting` | `{"schedule", "principal"?}` | `{}` |
@@ -113,6 +114,7 @@ pub fn routes() -> Router<Shared> {
             "/internal/implementation/delete",
             post(delete_implementation),
         )
+        .route("/internal/action/cleanup", post(cleanup_actions))
         .route("/internal/drawer/shelve", post(shelve))
         .route("/internal/drawer/unshelve", post(unshelve))
 }
@@ -435,6 +437,25 @@ internal!(
         Ok(Json(json!({"implementation": implementation.to_string()})))
     }
 );
+
+#[derive(Debug, Deserialize)]
+struct CleanupRequest {
+    principal: Principal,
+    #[serde(default)]
+    actions: Option<Vec<Id>>,
+}
+
+internal!(cleanup_actions, CleanupRequest, |state, request| {
+    let organization = request.principal.organization()?;
+    let actions = request
+        .actions
+        .as_ref()
+        .map(|actions| actions.iter().map(Id::get).collect::<Result<Vec<_>, _>>())
+        .transpose()?;
+    let deleted =
+        facade::removal::cleanup_actions(&state.facade, organization, actions.as_deref()).await?;
+    Ok(Json(json!({"deleted": deleted})))
+});
 
 #[derive(Debug, Deserialize)]
 struct TimingRequest {

@@ -9,7 +9,7 @@ use authentikate::base_models::StaticToken;
 use facade::backend::BackendError;
 use facade::consumers::agent_queue::queue_key;
 use facade::consumers::connections::Connections;
-use facade::removal::{delete_agent, delete_implementation};
+use facade::removal::{cleanup_actions, delete_agent, delete_implementation};
 use facade::settings::Settings;
 use facade::Context;
 use serde_json::json;
@@ -268,4 +268,51 @@ async fn an_implementation_is_deleted_only_by_its_organization() {
         .await
         .iter()
         .any(|(table, _)| table == "facade_lock"));
+}
+
+/// `cleanupActions`: the organization's actions nothing implements go, with their tasks; an
+/// implemented action and another organization's stay.
+#[tokio::test]
+async fn only_the_organizations_unimplemented_actions_are_cleaned_up() {
+    let Some(ctx) = context().await else { return };
+    let org = format!("removal-{}", uuid::Uuid::new_v4().simple());
+    let (orphaned, organization) = registered(&ctx, &org).await;
+    let (kept, _) = registered(&ctx, &org).await;
+    let (foreign, elsewhere) = registered(&ctx, &format!("{org}-other")).await;
+    let task = work(&ctx, orphaned).await;
+    let (orphaned_implementation, orphaned_action) = implementation(&ctx, orphaned).await;
+    let (_, kept_action) = implementation(&ctx, kept).await;
+    let (foreign_implementation, foreign_action) = implementation(&ctx, foreign).await;
+    // Their implementations go: the first organization's action and the other's are unimplemented.
+    delete_implementation(&ctx, organization, &orphaned_implementation.to_string())
+        .await
+        .unwrap();
+    delete_implementation(&ctx, elsewhere, &foreign_implementation.to_string())
+        .await
+        .unwrap();
+
+    // Asked for an action that is still implemented: nothing.
+    assert_eq!(
+        cleanup_actions(&ctx, organization, Some(&[kept_action]))
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(cleanup_actions(&ctx, organization, None).await.unwrap(), 1);
+
+    let left: Vec<i64> =
+        sqlx::query_scalar("SELECT id FROM facade_action WHERE id = ANY($1) ORDER BY id")
+            .bind(vec![orphaned_action, kept_action, foreign_action])
+            .fetch_all(&ctx.db)
+            .await
+            .unwrap();
+    let mut expected = vec![kept_action, foreign_action];
+    expected.sort();
+    assert_eq!(left, expected);
+    let tasks: i64 = sqlx::query_scalar("SELECT count(*) FROM facade_task WHERE id = $1")
+        .bind(task)
+        .fetch_one(&ctx.db)
+        .await
+        .unwrap();
+    assert_eq!(tasks, 0, "an action's task history goes with it");
 }
