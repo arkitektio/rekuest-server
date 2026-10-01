@@ -115,8 +115,8 @@ impl Catalog {
         organization: i64,
     ) -> Result<Self, String> {
         sqlx::query(
-            "INSERT INTO facade_uicatalog (name, components, operations, widget_defaults, organization_id)
-             VALUES ($1, '[]', '[]', '[]', $2) ON CONFLICT (organization_id, name) DO NOTHING",
+            "INSERT INTO facade_uicatalog (name, organization_id)
+             VALUES ($1, $2) ON CONFLICT (organization_id, name) DO NOTHING",
         )
         .bind(name)
         .bind(organization)

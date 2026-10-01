@@ -13,6 +13,7 @@ the previous run is terminal. Everything else falls out of that invariant:
   to now.
 """
 
+from django.db.models.functions import Now
 from django.db import models
 
 
@@ -36,15 +37,15 @@ class Schedule(models.Model):
         help_text="Pin every run to this agent (with ``interface``); null = resolve an agent for the action per run",
     )
     interface = models.CharField(max_length=1000, null=True, blank=True, help_text="The implementation interface on the pinned agent")
-    args = models.JSONField(default=dict, blank=True, help_text="The args every run is assigned with")
+    args = models.JSONField(default=dict, blank=True, help_text="The args every run is assigned with", db_default={})
     interval_seconds = models.PositiveIntegerField(null=True, blank=True, help_text="Run every N seconds, aligned to the schedule's creation. Exclusive with ``cron``.")
     cron = models.CharField(max_length=200, null=True, blank=True, help_text="A five-field cron line, read in ``timezone``. Exclusive with ``interval_seconds``.")
-    timezone = models.CharField(max_length=64, default="UTC", help_text="The IANA zone a cron line is read in (DST included)")
-    ephemeral_runs = models.BooleanField(default=False, help_text="Create the runs as ephemeral tasks (housekeeping sweeps: retention may drop them early)")
-    enabled = models.BooleanField(default=True, help_text="A disabled schedule creates no runs")
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    consecutive_failures = models.PositiveIntegerField(default=0, help_text="Runs in a row that ended FAILED or CRITICAL; reset by a successful one")
+    timezone = models.CharField(max_length=64, default="UTC", help_text="The IANA zone a cron line is read in (DST included)", db_default="UTC")
+    ephemeral_runs = models.BooleanField(default=False, help_text="Create the runs as ephemeral tasks (housekeeping sweeps: retention may drop them early)", db_default=False)
+    enabled = models.BooleanField(default=True, help_text="A disabled schedule creates no runs", db_default=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
+    updated_at = models.DateTimeField(auto_now=True, db_default=Now())
+    consecutive_failures = models.PositiveIntegerField(default=0, help_text="Runs in a row that ended FAILED or CRITICAL; reset by a successful one", db_default=0)
     last_error = models.TextField(null=True, blank=True, help_text="Why the last run failed, or why the next one could not be created")
     refill_after = models.DateTimeField(null=True, blank=True, help_text="Creating the next run failed; not retried before then")
 

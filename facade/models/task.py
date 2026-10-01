@@ -1,5 +1,6 @@
 import uuid
 
+from django.db.models.functions import Now
 from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
@@ -11,7 +12,7 @@ from facade import enums
 class Task(models.Model):
     """A constant log of a tasks transition through finding a Action, Implementation and finally Pod , also a store for its results"""
 
-    acted_on = ArrayField(base_field=models.CharField(max_length=1000), help_text="Which structures were acted on in this task", default=list)
+    acted_on = ArrayField(base_field=models.CharField(max_length=1000), help_text="Which structures were acted on in this task", default=list, db_default=[])
     implementation = models.ForeignKey(
         "Implementation",
         on_delete=models.SET_NULL,
@@ -32,6 +33,7 @@ class Task(models.Model):
     ephemeral = models.BooleanField(
         default=False,
         help_text="Is this Task ephemeral (e.g. should it be deleted after its done or should it be kept for future reference)",
+        db_default=False,
     )
     reference = models.CharField(
         max_length=1000,
@@ -46,6 +48,7 @@ class Task(models.Model):
     resumes = models.PositiveIntegerField(
         default=0,
         help_text="How often this workflow was sent again after its agent died. Capped: an agent that dies every time does not resume it forever.",
+        db_default=0,
     )
     code_hash = models.CharField(
         max_length=128,
@@ -65,6 +68,7 @@ class Task(models.Model):
         blank=True,
         help_text="The reference of the dependency this task was assigned to (e.g. imagej)",
         default="general",
+        db_default="general",
     )
     dependency_method = models.CharField(
         max_length=1000,
@@ -75,10 +79,12 @@ class Task(models.Model):
     capture = models.BooleanField(
         default=False,
         help_text="Should we capture the logs and events of this Task (e.g. for debugging or auditing purposes)?",
+        db_default=False,
     )
     is_higher_order_child = models.BooleanField(
         default=False,
         help_text="Whether this task is the lower child of a higher-order wrapper — its yields/terminals unfold onto the wrapper. Lets the event hot path skip the parent lookup for ordinary tasks.",
+        db_default=False,
     )
     parent = models.ForeignKey(
         "self",
@@ -96,7 +102,7 @@ class Task(models.Model):
         help_text="The Root parent (the one that was created by the user (none if this is the root))",
         related_name="all_children",
     )
-    args = models.JSONField(blank=True, null=True, help_text="The Args", default=dict)
+    args = models.JSONField(blank=True, null=True, help_text="The Args", default=dict, db_default={})
     args_hash = models.CharField(
         max_length=64,
         null=True,
@@ -104,7 +110,7 @@ class Task(models.Model):
         db_index=True,
         help_text="Canonical sha256 of the assign args (provenance canonicalization v1) — the replay-discovery key",
     )
-    dependencies = models.JSONField(blank=True, null=True, help_text="The Args", default=dict)
+    dependencies = models.JSONField(blank=True, null=True, help_text="The Args", default=dict, db_default={})
     caller = models.ForeignKey(
         "Caller",
         on_delete=models.CASCADE,
@@ -133,10 +139,11 @@ class Task(models.Model):
     is_done = models.BooleanField(
         default=False,
         help_text="Is this Task done (e.g. has it been completed and resulted in an error?)",
+        db_default=False,
     )
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     finished_at = models.DateTimeField(null=True, blank=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    updated_at = models.DateTimeField(auto_now=True, db_default=Now())
     revision = models.PositiveBigIntegerField(
         default=1,
         db_default=1,
@@ -309,7 +316,7 @@ class Task(models.Model):
 
 
 class TaskEvent(models.Model):
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     task = models.ForeignKey(
         Task,
         help_text="The task this log item belongs to",
@@ -402,7 +409,7 @@ class TaskInstruct(models.Model):
         help_text="Which caller created this Instruction (if any?)",
         related_name="task_instructs",
     )
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     task = models.ForeignKey(
         Task,
         help_text="The task this log item belongs to",

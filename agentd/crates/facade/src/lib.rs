@@ -34,6 +34,7 @@ pub mod redis_keys;
 pub mod registration;
 pub mod registration_lock;
 pub mod removal;
+pub mod schema;
 pub mod service_trust;
 pub mod settings;
 pub mod signal_intake;

@@ -1,3 +1,5 @@
+
+from django.db.models.functions import Now
 from django.db import models
 
 
@@ -16,8 +18,8 @@ class TestCase(models.Model):
     )
     name = models.CharField(max_length=2000, null=True, blank=True)
     description = models.CharField(max_length=2000, null=True, blank=True)
-    is_benchmark = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
+    is_benchmark = models.BooleanField(default=False, db_default=False)
+    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
 
     class Meta:
         constraints = [
@@ -37,6 +39,6 @@ class TestResult(models.Model):
         related_name="testing_results",
         help_text="The implementation that is testing this test",
     )
-    passed = models.BooleanField(default=False)
-    result = models.JSONField(default=dict, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    passed = models.BooleanField(default=False, db_default=False)
+    result = models.JSONField(default=dict, null=True, blank=True, db_default={})
+    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())

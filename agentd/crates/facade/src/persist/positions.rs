@@ -78,8 +78,8 @@ pub async fn get_or_create_session(
     session_id: &str,
 ) -> Result<i64, sqlx::Error> {
     sqlx::query_scalar(
-        "INSERT INTO facade_session (agent_id, session_id, created_at, updated_at, projected_pos, claimed_pos)
-         VALUES ($1, $2, now(), now(), 0, 0)
+        "INSERT INTO facade_session (agent_id, session_id)
+         VALUES ($1, $2)
          ON CONFLICT (agent_id, session_id) DO UPDATE SET session_id = EXCLUDED.session_id
          RETURNING id",
     )

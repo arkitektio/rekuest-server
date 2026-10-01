@@ -410,6 +410,9 @@ type Agent {
   """Last timestamp this agent was seen."""
   lastSeen: DateTime
 
+  """When this agent first registered."""
+  installedAt: DateTime!
+
   """Is the agent currently connected."""
   connected: Boolean!
 
@@ -3087,6 +3090,9 @@ type Patch {
   op: String!
   path: String!
   value: Args!
+
+  """The value the patch replaced, when the agent reported it."""
+  oldValue: Args
   timestamp: DateTime!
   task: Task
   state: State!

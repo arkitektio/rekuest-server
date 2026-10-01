@@ -44,6 +44,7 @@ class Agent:
     locks: list["Lock"] = strawberry_django.field(description="The agent's locks, and which task holds each.")
     memory_shelve: Optional["MemoryShelve"] = strawberry_django.field(description="Agent's associated memory shelve.")
     last_seen: datetime.datetime | None = strawberry_django.field(description="Last timestamp this agent was seen.")
+    installed_at: datetime.datetime = strawberry_django.field(description="When this agent first registered.")
     connected: bool = strawberry_django.field(description="Is the agent currently connected.")
     @strawberry_django.field(description="Agent name: the one a user gave it (updateAgent), else the one it declares.", only=["name", "display_name"])
     def name(self) -> str:

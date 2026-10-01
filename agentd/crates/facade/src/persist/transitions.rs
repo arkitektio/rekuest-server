@@ -104,15 +104,20 @@ pub async fn insert_event(
 ) -> Result<i64, sqlx::Error> {
     sqlx::query_scalar(
         "INSERT INTO facade_taskevent
-            (task_id, kind, created_at, message, returns, progress, level, agent_pos, agent_ts, step,
-             effect, key, value, delegated_to_id)
-         VALUES ($1, $2, now(), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            (task_id, kind, message, returns, progress, level, agent_pos, agent_ts, step, effect,
+             key, value, delegated_to_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          RETURNING id",
     )
     .bind(task)
     .bind(kind)
     .bind(&event.message)
-    .bind(event.returns.as_ref().map(|r| sqlx::types::Json(Value::Object(r.clone()))))
+    .bind(
+        event
+            .returns
+            .as_ref()
+            .map(|r| sqlx::types::Json(Value::Object(r.clone()))),
+    )
     .bind(event.progress.map(|p| p as i32))
     .bind(&event.level)
     .bind(event.agent_pos)

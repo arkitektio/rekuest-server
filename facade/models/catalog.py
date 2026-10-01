@@ -1,4 +1,5 @@
 from authentikate.models import Client, Organization
+from django.db.models.functions import Now
 from django.contrib.auth import get_user_model
 from django.db import models
 
@@ -22,14 +23,15 @@ class Collection(models.Model):
 
     """
 
-    name = models.CharField(max_length=1000, unique=True, help_text="The name of this Collection")
+    name = models.CharField(max_length=1000, help_text="The name of this Collection, unique within its organization")
     description = models.TextField(help_text="A description for the Collection")
     defined_at = models.DateTimeField(
         auto_created=True,
         auto_now_add=True,
         help_text="Date this Collection was created",
+        db_default=Now(),
     )
-    updated_at = models.DateTimeField(auto_now=True, help_text="Date this Collection was last updated")
+    updated_at = models.DateTimeField(auto_now=True, help_text="Date this Collection was last updated", db_default=Now())
     creator = models.ForeignKey(
         get_user_model(),
         on_delete=models.CASCADE,
@@ -42,6 +44,9 @@ class Collection(models.Model):
         related_name="collections",
         help_text="The Organization this Collection belongs to",
     )
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["organization", "name"], name="collection_unique_name_per_organization")]
 
 
 class Protocol(models.Model):
@@ -60,8 +65,11 @@ class Protocol(models.Model):
         related_name="protocols",
         help_text="The organization this Protocol belongs to. Access is scoped to it.",
     )
-    name = models.CharField(max_length=1000, unique=True, help_text="The name of this Protocol")
+    name = models.CharField(max_length=1000, help_text="The name of this Protocol, unique within its organization")
     description = models.TextField(help_text="A description for the Protocol")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["organization", "name"], name="protocol_unique_name_per_organization")]
 
     def __str__(self) -> str:
         return self.name
@@ -85,14 +93,17 @@ class UICatalog(models.Model):
     components = models.JSONField(
         default=list,
         help_text="Registered component specs (rekuest_core CatalogComponent): the names a ComponentNode.component may use and the props each accepts.",
+        db_default=[],
     )
     operations = models.JSONField(
         default=list,
         help_text="Registered operation specs (rekuest_core CatalogOperation): the names a UtilCall.operation may use, their arguments and return kind.",
+        db_default=[],
     )
     widget_defaults = models.JSONField(
         default=list,
         help_text="Default widgets per port kind and/or structure identifier (rekuest_core WidgetDefault), applied by the UI to ports that declare no widget.",
+        db_default=[],
     )
     registered_by = models.ForeignKey(
         Client,
@@ -143,8 +154,8 @@ class Toolbox(models.Model):
         help_text="The Organization this Collection belongs to",
     )
 
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
+    updated_at = models.DateTimeField(auto_now=True, db_default=Now())
 
 
 class Shortcut(models.Model):
@@ -153,7 +164,7 @@ class Shortcut(models.Model):
     toolbox = models.ForeignKey(Toolbox, on_delete=models.CASCADE, related_name="shortcuts")
     action = models.ForeignKey("Action", on_delete=models.CASCADE, related_name="shortcuts", null=True)
     implementation = models.ForeignKey("Implementation", on_delete=models.CASCADE, related_name="shortcuts", null=True)
-    saved_args = models.JSONField(default=dict)
+    saved_args = models.JSONField(default=dict, db_default={})
     creator = models.ForeignKey(
         get_user_model(),
         on_delete=models.CASCADE,
@@ -165,16 +176,19 @@ class Shortcut(models.Model):
         null=True,
         blank=True,
         help_text="Which shortcut should be bound to this Action by default. 0 means no binding",
+        db_default=0,
     )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    args = models.JSONField(default=list, help_text="Inputs for this Shortcut")
-    returns = models.JSONField(default=list, help_text="Outputs for this Shortcut")
+    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
+    updated_at = models.DateTimeField(auto_now=True, db_default=Now())
+    args = models.JSONField(default=list, help_text="Inputs for this Shortcut", db_default=[])
+    returns = models.JSONField(default=list, help_text="Outputs for this Shortcut", db_default=[])
     allow_quick = models.BooleanField(
         default=False,
         help_text="Allow quick execution of this Shortcut (e.g. run without confirmation)",
+        db_default=False,
     )
     use_returns = models.BooleanField(
         default=False,
         help_text="Use the result of this Shortcut (e.g. use the result in the next Shortcut)",
+        db_default=False,
     )

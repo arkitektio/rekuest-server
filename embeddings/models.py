@@ -69,6 +69,7 @@ class EmbeddedDescriptionMixin(models.Model):
         default="",
         editable=False,
         help_text="The embedding model that produced `embedding`. Rows whose value differs from the configured model are re-embedded in-process and are excluded from vector search until then",
+        db_default='',
     )
 
     class Meta:

@@ -1,4 +1,5 @@
 from authentikate.models import App, Organization
+from django.db.models.functions import Now
 from django.db import models
 from django.db.models.functions import Upper
 from django_choices_field import TextChoicesField
@@ -28,32 +29,37 @@ class Action(EmbeddedDescriptionMixin, models.Model):
         related_name="actions",
         help_text="The collections this Action belongs to",
     )
-    pure = models.BooleanField(default=False, help_text="Is this function pure. e.g can we cache the result?")
+    pure = models.BooleanField(default=False, help_text="Is this function pure. e.g can we cache the result?", db_default=False)
     idempotent = models.BooleanField(
         default=False,
         help_text="Is this function idempotent. e.g can we run it multiple times without changing the data again ?",
+        db_default=False,
     )
     allow_probe = models.BooleanField(
         default=False,
         help_text="May this action be invoked as a probe (zero persistence, no history/replay/recovery)? Declared by the action author; the probe mutation refuses actions without it.",
+        db_default=False,
     )
     stateful = models.BooleanField(
         default=False,
         help_text="Is this function stateful. e.g does it inherently depend on or change state (think physical devices)?",
+        db_default=False,
     )
     kind = TextChoicesField(
         max_length=1000,
         choices_enum=enums.ActionKindChoices,
         default=enums.ActionKindChoices.FUNCTION.value,
         help_text="Function, generator? Will this function generate multiple results?",
+        db_default="FUNCTION",
     )
-    port_groups = models.JSONField(default=list, help_text="Intercae that we use to interpret the meta data")
-    name = models.CharField(max_length=1000, help_text="The cleartext name of this Action (e.g. 'Segment Image')", default="Unnamed Action")
+    port_groups = models.JSONField(default=list, help_text="Intercae that we use to interpret the meta data", db_default=[])
+    name = models.CharField(max_length=1000, help_text="The cleartext name of this Action (e.g. 'Segment Image')", default="Unnamed Action", db_default="Unnamed Action")
     description = models.TextField(help_text="A description for the Action")
     scope = models.CharField(
         max_length=1000,
         default="GLOBAL",
         help_text="The scope of this Action. e.g. does the data it needs or produce live only in the scope of this Action or is it global or does it bridge data?",
+        db_default="GLOBAL",
     )
     is_test_for = models.ManyToManyField(
         "self",
@@ -68,7 +74,7 @@ class Action(EmbeddedDescriptionMixin, models.Model):
         blank=True,
         help_text="The protocols this Action implements (e.g. Predicate)",
     )
-    is_dev = models.BooleanField(default=False, help_text="Is this Action a development Action")
+    is_dev = models.BooleanField(default=False, help_text="Is this Action a development Action", db_default=False)
 
     hash = models.CharField(
         max_length=1000,
@@ -80,13 +86,13 @@ class Action(EmbeddedDescriptionMixin, models.Model):
         related_name="actions",
         help_text="The organization this Action belongs to",
     )
-    defined_at = models.DateTimeField(auto_created=True, auto_now_add=True)
+    defined_at = models.DateTimeField(auto_created=True, auto_now_add=True, db_default=Now())
 
-    args = models.JSONField(default=list, help_text="Inputs for this Action")
-    returns = models.JSONField(default=list, help_text="Outputs for this Action")
+    args = models.JSONField(default=list, help_text="Inputs for this Action", db_default=[])
+    returns = models.JSONField(default=list, help_text="Outputs for this Action", db_default=[])
 
-    arg_count = models.IntegerField(default=0, help_text="Pre-calculated number of root input ports")
-    return_count = models.IntegerField(default=0, help_text="Pre-calculated number of root output ports")
+    arg_count = models.IntegerField(default=0, help_text="Pre-calculated number of root input ports", db_default=0)
+    return_count = models.IntegerField(default=0, help_text="Pre-calculated number of root output ports", db_default=0)
 
     def __str__(self) -> str:
         return f"{self.name}"
@@ -131,7 +137,7 @@ class BasePort(models.Model):
     # every descriptor (and every IN-list element), so a length cap would turn a large-but-valid
     # requires/provides declaration into a DataError at registration time.
     compiled_jsonpath = models.TextField(null=True, blank=True, help_text="PostgreSQL JSONPath string for micro-constraints")
-    nullable = models.BooleanField(default=False)
+    nullable = models.BooleanField(default=False, db_default=False)
 
     class Meta:
         abstract = True

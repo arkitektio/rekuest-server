@@ -58,9 +58,9 @@ pub async fn on_agent_state_patch(
     }
     let inserted: Result<i64, sqlx::Error> = sqlx::query_scalar(
         "INSERT INTO facade_patch
-            (state_id, agent_id, session_id, interface, op, path, value, old_value, task_id, global_rev,
-             timestamp, agent_pos, agent_ts, step)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), $11, $12, $13)
+            (state_id, agent_id, session_id, interface, op, path, value, old_value, task_id,
+             global_rev, agent_pos, agent_ts, step)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          RETURNING id",
     )
     .bind(state)
@@ -113,8 +113,8 @@ pub async fn on_agent_snapshots(
     for (state_name, snapshot) in snapshots {
         let state = state_id(ctx, agent, state_name).await?;
         sqlx::query(
-            "INSERT INTO facade_snapshot (session_id, state_id, agent_id, value, global_rev, timestamp)
-             VALUES ($1, $2, $3, $4, $5, now())",
+            "INSERT INTO facade_snapshot (session_id, state_id, agent_id, value, global_rev)
+             VALUES ($1, $2, $3, $4, $5)",
         )
         .bind(session)
         .bind(state)
@@ -150,7 +150,7 @@ pub async fn on_agent_lock(ctx: &Context, agent: i64, key: &str, task: &str) -> 
         return Ok(());
     }
     sqlx::query(
-        "INSERT INTO facade_lock (agent_id, key, hold_by_id, created_at, updated_at) VALUES ($1, $2, $3, now(), now())
+        "INSERT INTO facade_lock (agent_id, key, hold_by_id) VALUES ($1, $2, $3)
          ON CONFLICT (agent_id, key) DO UPDATE SET hold_by_id = EXCLUDED.hold_by_id, updated_at = now()",
     )
     .bind(agent)

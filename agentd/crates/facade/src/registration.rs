@@ -18,10 +18,8 @@ pub async fn ensure_agent(
               WHERE c.id = $1
          )
          INSERT INTO facade_agent
-             (installed_at, hash, name, lease_epoch, kind, connected, blocked, app_id, release_id,
-              client_id, user_id, organization_id)
-         SELECT now(), '', client.client_id, 0, 'WEBSOCKET', false, false, client.app_id,
-                client.release_id, $1, $2, $3
+             (hash, name, kind, app_id, release_id, client_id, user_id, organization_id)
+         SELECT '', client.client_id, 'WEBSOCKET', client.app_id, client.release_id, $1, $2, $3
            FROM client
          ON CONFLICT (client_id, user_id, organization_id) DO UPDATE SET name = facade_agent.name
          RETURNING id, name",
@@ -33,8 +31,8 @@ pub async fn ensure_agent(
     .await?;
 
     sqlx::query(
-        "INSERT INTO facade_memoryshelve (name, description, created_at, updated_at, agent_id, creator_id, organization_id)
-         VALUES ($1, '', now(), now(), $2, $3, $4)
+        "INSERT INTO facade_memoryshelve (name, description, agent_id, creator_id, organization_id)
+         VALUES ($1, '', $2, $3, $4)
          ON CONFLICT (agent_id) DO NOTHING",
     )
     .bind(format!("{name} memory shelve"))
@@ -74,8 +72,8 @@ pub async fn shelve(
     agent_minted: bool,
 ) -> Result<i64, sqlx::Error> {
     let shelve: i64 = sqlx::query_scalar(
-        "INSERT INTO facade_memoryshelve (name, description, created_at, updated_at, agent_id, creator_id, organization_id)
-         SELECT a.name || ' memory shelve', '', now(), now(), a.id, a.user_id, a.organization_id
+        "INSERT INTO facade_memoryshelve (name, description, agent_id, creator_id, organization_id)
+         SELECT a.name || ' memory shelve', '', a.id, a.user_id, a.organization_id
            FROM facade_agent a WHERE a.id = $1
          ON CONFLICT (agent_id) DO UPDATE SET agent_id = EXCLUDED.agent_id
          RETURNING id",
@@ -210,8 +208,8 @@ async fn register_state(
     .fetch_one(&mut *conn)
     .await?;
     sqlx::query_scalar(
-        "INSERT INTO facade_state (interface, key, app_identifier, created_at, updated_at, agent_id, definition_id)
-         VALUES ($1, $2, $3, now(), now(), $4, $5)
+        "INSERT INTO facade_state (interface, key, app_identifier, agent_id, definition_id)
+         VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (interface, agent_id) DO UPDATE SET definition_id = excluded.definition_id, key = excluded.key,
                                                         app_identifier = excluded.app_identifier, updated_at = now()
          RETURNING id",
@@ -270,26 +268,25 @@ async fn register_blok(
     .bind(description.as_deref().unwrap_or(""))
     .fetch_optional(&mut *conn)
     .await?;
-    let materialized = match materialized {
-        Some(materialized) => materialized,
-        None => {
-            sqlx::query_scalar(
-                "INSERT INTO facade_materializedblok (name, description, created_at, updated_at, blok_id, declared_by_id)
-                 VALUES ($3, $4, now(), now(), $1, $2) RETURNING id",
+    let materialized =
+        match materialized {
+            Some(materialized) => materialized,
+            None => sqlx::query_scalar(
+                "INSERT INTO facade_materializedblok (name, description, blok_id, declared_by_id)
+                 VALUES ($3, $4, $1, $2) RETURNING id",
             )
             .bind(id)
             .bind(agent.id)
             .bind(&name)
             .bind(description.as_deref().unwrap_or(""))
             .fetch_one(&mut *conn)
-            .await?
-        }
-    };
+            .await?,
+        };
 
     for (dependency, key) in sync_blok_dependencies(conn, id, &blok.dependencies, true).await? {
         sqlx::query(
-            "INSERT INTO facade_blokagentmapping (key, created_at, updated_at, agent_id, dependency_id, materialized_blok_id)
-             VALUES ($1, now(), now(), $2, $3, $4)
+            "INSERT INTO facade_blokagentmapping (key, agent_id, dependency_id, materialized_blok_id)
+             VALUES ($1, $2, $3, $4)
              ON CONFLICT (materialized_blok_id, key) DO UPDATE SET dependency_id = excluded.dependency_id,
                                                                   agent_id = excluded.agent_id, updated_at = now()",
         )
@@ -368,7 +365,7 @@ pub async fn implement_agent(
 
     for lock in payload.locks.iter().flatten() {
         sqlx::query(
-            "INSERT INTO facade_lock (created_at, key, description, updated_at, agent_id) VALUES (now(), $2, $3, now(), $1)
+            "INSERT INTO facade_lock (key, description, agent_id) VALUES ($2, $3, $1)
              ON CONFLICT (agent_id, key) DO UPDATE SET description = excluded.description, updated_at = now()",
         )
         .bind(agent)

@@ -817,13 +817,11 @@ impl NewTask {
             "INSERT INTO facade_task
                 (action_id, args, args_hash, reference, parent_id, parent_step, call_key, root_id,
                  agent_id, acted_on, capture, step, implementation_id, code_hash, dependency,
-                 dependency_method, resolution_id, is_higher_order_child, is_done,
-                 latest_event_kind, latest_instruct_kind, dependencies,
-                 caller_id, dispatched_at, dispatch_attempts, not_before, schedule_id, ephemeral,
-                 signal_id, trigger_id, trigger_depth, resumes, revision, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
-                     false, 'QUEUED', 'ASSIGN', $19, $20, $21, $22, $23, $24, $25, $26, $27, $28,
-                     0, 1, now(), now())
+                 dependency_method, resolution_id, is_higher_order_child, latest_event_kind,
+                 latest_instruct_kind, dependencies, caller_id, dispatched_at, dispatch_attempts,
+                 not_before, schedule_id, ephemeral, signal_id, trigger_id, trigger_depth, revision)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+                     $18, 'QUEUED', 'ASSIGN', $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, 1)
              RETURNING id",
         )
         .bind(self.action)
@@ -1523,14 +1521,12 @@ async fn insert_instruct(
     control: Control,
     caller: Option<i64>,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "INSERT INTO facade_taskinstruct (task_id, kind, caller_id, created_at) VALUES ($1, $2, $3, now())",
-    )
-    .bind(task)
-    .bind(control.instruct_kind())
-    .bind(caller)
-    .execute(&mut **tx)
-    .await?;
+    sqlx::query("INSERT INTO facade_taskinstruct (task_id, kind, caller_id) VALUES ($1, $2, $3)")
+        .bind(task)
+        .bind(control.instruct_kind())
+        .bind(caller)
+        .execute(&mut **tx)
+        .await?;
     Ok(())
 }
 

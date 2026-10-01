@@ -1,4 +1,5 @@
 from authentikate.models import Organization
+from django.db.models.functions import Now
 from django.contrib.auth import get_user_model
 from django.db import models
 from django_choices_field import TextChoicesField
@@ -32,14 +33,17 @@ class Dependency(models.Model):
     action_demands = models.JSONField(
         default=list,
         help_text="The action demands this dependency has to meet",
+        db_default=[],
     )
     state_demands = models.JSONField(
         default=list,
         help_text="The state demands this dependency has to meet",
+        db_default=[],
     )
     auto_resolvable = models.BooleanField(
         default=False,
         help_text="If this dependency is auto resolvable, the system will try to automatically bind any agent that the user can assign to this dependency. If False, the user will have to manually bind an agent to this dependency before it can be used.",
+        db_default=False,
     )
     app_filter = models.CharField(
         max_length=2000,
@@ -54,9 +58,9 @@ class Dependency(models.Model):
         help_text="If set, only Agents of this version will be able to be assigned to this dependency",
     )
 
-    optional = models.BooleanField(default=False, help_text="Is this dependency optional")
+    optional = models.BooleanField(default=False, help_text="Is this dependency optional", db_default=False)
     description = models.TextField(null=True, blank=True, help_text="A description for this dependency")
-    created_at = models.DateTimeField(auto_created=True, auto_now_add=True)
+    created_at = models.DateTimeField(auto_created=True, auto_now_add=True, db_default=Now())
     min_viable_instances = models.IntegerField(
         null=True,
         help_text="The minimal viable instance count for this dependency",
@@ -79,7 +83,7 @@ class Dependency(models.Model):
 
 
 class Resolution(models.Model):
-    resolved_at = models.DateTimeField(auto_created=True, auto_now_add=True)
+    resolved_at = models.DateTimeField(auto_created=True, auto_now_add=True, db_default=Now())
     # Preset Logic
     name = models.CharField(max_length=200, null=True, blank=True, help_text="If set, this is a named preset (e.g. 'Standard Zeiss Config')")
 
@@ -154,17 +158,19 @@ class Implementation(models.Model):
             "packed under), ``arg_map`` (explicit per-port arg remap), ``dependency_map`` (lower dep "
             "key -> source), ``return_map`` (lower return key -> wrapper return key)."
         ),
+        db_default={},
     )
-    params = models.JSONField(default=dict, help_text="Params for this Implementation")
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    tracks = models.JSONField(default=list, help_text="A log of all the tasks that have been provisioned with this implementation, as well as their status and results")
-    diagnostics = models.JSONField(default=list, help_text="Non-fatal registration findings (rekuest_core Diagnostic), e.g. validator/effect calls naming operations that neither the base catalog nor the definition's catalog provides. Replaced on every registration.")
+    params = models.JSONField(default=dict, help_text="Params for this Implementation", db_default={})
+    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
+    updated_at = models.DateTimeField(auto_now=True, db_default=Now())
+    tracks = models.JSONField(default=list, help_text="A log of all the tasks that have been provisioned with this implementation, as well as their status and results", db_default=[])
+    diagnostics = models.JSONField(default=list, help_text="Non-fatal registration findings (rekuest_core Diagnostic), e.g. validator/effect calls naming operations that neither the base catalog nor the definition's catalog provides. Replaced on every registration.", db_default=[])
     manipulates = models.ManyToManyField("State", help_text="Which states does this implementation manipulate?", related_name="manipulated_by")
     required_locks = models.ManyToManyField("Lock", related_name="required_by", blank=True, help_text="The agent's locks this implementation takes while it runs (declared as its `locks`).")
     needs_token = models.BooleanField(
         default=True,
         help_text="Whether Rekuest mints a signed provenance token when this implementation is assigned. Default true (provenance-by-default); false skips minting for trivial/internal tasks.",
+        db_default=True,
     )
     provenance_audience = models.JSONField(
         null=True,
@@ -175,11 +181,13 @@ class Implementation(models.Model):
         choices_enum=enums.EffectsChoices,
         default=enums.EffectsChoices.UNKNOWN.value,
         help_text="What running this implementation again would do to the world. Informational: shown to whoever decides about a lost task.",
+        db_default="UNKNOWN",
     )
     execution = TextChoicesField(
         choices_enum=enums.ExecutionChoices,
         default=enums.ExecutionChoices.PLAIN.value,
         help_text="How this implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies.",
+        db_default="PLAIN",
     )
     code_hash = models.CharField(
         max_length=128,

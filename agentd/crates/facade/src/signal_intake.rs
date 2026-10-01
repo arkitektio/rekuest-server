@@ -103,7 +103,7 @@ async fn store(
 
     // The token proves the service was called in that task; the organization check proves the
     // task belongs where the object does.
-    let (mut causing_task, mut causing_root) = (None, None);
+    let mut causing_task = None;
     if let Some(provenance) = verify_own_token(&ctx.settings, message.provenance.as_deref()) {
         let task: Option<i64> = match provenance.task.parse::<i64>() {
             Ok(id) => {
@@ -119,10 +119,7 @@ async fn store(
             Err(_) => None,
         };
         match task {
-            Some(task) => {
-                causing_task = Some(task);
-                causing_root = Some(provenance.root);
-            }
+            Some(task) => causing_task = Some(task),
             None => tracing::warn!(
                 "Signal {} from {service}: provenance task {} is not in {}; stored without a cause",
                 message.id,
@@ -133,9 +130,9 @@ async fn store(
     }
 
     let inserted: Option<i64> = sqlx::query_scalar(
-        "INSERT INTO facade_signal (service, signal_id, kind, identifier, object, descriptors, causing_root, occurred_at,
-                                    received_at, organization_id, causing_task_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), $9, $10)
+        "INSERT INTO facade_signal (service, signal_id, kind, identifier, object, descriptors, occurred_at,
+                                    organization_id, causing_task_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (service, signal_id) DO NOTHING RETURNING id",
     )
     .bind(service)
@@ -144,7 +141,6 @@ async fn store(
     .bind(&message.identifier)
     .bind(&message.object)
     .bind(Value::Object(message.descriptors.clone()))
-    .bind(&causing_root)
     .bind(message.occurred_at)
     .bind(organization)
     .bind(causing_task)

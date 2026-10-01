@@ -84,7 +84,6 @@ def _signal(org, *, channels: int = 3, cause: models.Task | None = None) -> mode
         organization=org,
         descriptors={CHANNELS: channels},
         causing_task=cause,
-        causing_root=str(cause.root_id or cause.pk) if cause is not None else None,
     )
 
 

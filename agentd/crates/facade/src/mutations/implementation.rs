@@ -190,9 +190,9 @@ async fn upsert_action(
     // get_or_create: another organization member may have inserted it since the prefetch.
     let inserted: Option<ActionRow> = sqlx::query_as(&format!(
         "INSERT INTO facade_action
-             (defined_at, embedding_model, key, version, app_id, organization_id, hash, description, args, scope,
-              stateful, pure, idempotent, allow_probe, is_dev, kind, port_groups, returns, name, arg_count, return_count)
-         VALUES (now(), '', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 0, 0)
+             (key, version, app_id, organization_id, hash, description, args, scope, stateful, pure,
+              idempotent, allow_probe, is_dev, kind, port_groups, returns, name)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
          ON CONFLICT (organization_id, app_id, key, version) DO NOTHING
          RETURNING {ACTION_COLUMNS}"
     ))
@@ -301,7 +301,8 @@ async fn create_ports_level_by_level<P: RelationalPort>(
         }
         let ids: Vec<i64> = sqlx::query_scalar(&format!(
             "INSERT INTO {table} (action_id, parent_id, index, key, key_path, kind, identifier, compiled_jsonpath, nullable, dimension)
-             SELECT $1, parent_id, index, key, key_path, kind, identifier, compiled_jsonpath, nullable, dimension
+             SELECT $1, parent_id, index, key, key_path, kind, identifier, compiled_jsonpath,
+                     nullable, dimension
                FROM unnest($2::bigint[], $3::int[], $4::varchar[], $5::varchar[], $6::varchar[], $7::varchar[],
                                       $8::text[], $9::bool[], $10::varchar[])
                     WITH ORDINALITY AS rows(parent_id, index, key, key_path, kind, identifier, compiled_jsonpath, nullable, dimension, n)
@@ -501,9 +502,10 @@ async fn sync_dependencies(
         if updated.rows_affected() == 0 {
             sqlx::query(
                 "INSERT INTO facade_dependency
-                     (created_at, key, action_demands, state_demands, auto_resolvable, app_filter, version_filter, optional,
-                      description, min_viable_instances, max_viable_instances, prefered_instances, implementation_id)
-                 VALUES (now(), $2, $3, $4, $10, $5, $6, $11, $12, $7, $8, $9, $1)",
+                     (key, action_demands, state_demands, auto_resolvable, app_filter,
+                      version_filter, optional, description, min_viable_instances,
+                      max_viable_instances, prefered_instances, implementation_id)
+                 VALUES ($2, $3, $4, $10, $5, $6, $11, $12, $7, $8, $9, $1)",
             )
             .bind(implementation)
             .bind(&dependency.key)
@@ -605,20 +607,19 @@ pub async fn create_implementation(
         .await?;
         let mut collections = vec![];
         for name in &definition.collections {
-            sqlx::query(
-                "INSERT INTO facade_collection (defined_at, name, description, updated_at, creator_id, organization_id)
-                 VALUES (now(), $1, '', now(), $2, $3) ON CONFLICT (name) DO NOTHING",
-            )
-            .bind(name)
-            .bind(agent.user)
-            .bind(agent.organization)
-            .execute(&mut *conn)
-            .await?;
+            // By `(organization, name)`: a collection is its organization's, never shared.
             collections.push(
-                sqlx::query_scalar::<_, i64>("SELECT id FROM facade_collection WHERE name = $1")
-                    .bind(name)
-                    .fetch_one(&mut *conn)
-                    .await?,
+                sqlx::query_scalar::<_, i64>(
+                    "INSERT INTO facade_collection (name, description, creator_id, organization_id)
+                     VALUES ($1, '', $2, $3)
+                     ON CONFLICT (organization_id, name) DO UPDATE SET name = excluded.name
+                     RETURNING id",
+                )
+                .bind(name)
+                .bind(agent.user)
+                .bind(agent.organization)
+                .fetch_one(&mut *conn)
+                .await?,
             );
         }
         set_m2m(
@@ -674,10 +675,10 @@ pub async fn create_implementation(
             if recreate {
                 sqlx::query(
                     "INSERT INTO facade_implementation
-                         (id, interface, higher_order_config, params, created_at, updated_at, tracks, diagnostics,
-                          needs_token, provenance_audience, effects, execution, code_hash, action_id, agent_id,
-                          higher_order_for_id)
-                     VALUES ($1, $2, $3, $4, $5, now(), $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
+                         (id, interface, higher_order_config, params, created_at, tracks,
+                          diagnostics, needs_token, provenance_audience, effects, execution,
+                          code_hash, action_id, agent_id, higher_order_for_id)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
                 )
                 .bind(existing.id)
                 .bind(&existing.interface)
@@ -728,9 +729,9 @@ pub async fn create_implementation(
         None => {
             let row: ImplementationRow = sqlx::query_as(
                 "INSERT INTO facade_implementation
-                     (interface, higher_order_config, params, created_at, updated_at, tracks, diagnostics,
-                      needs_token, provenance_audience, effects, execution, code_hash, action_id, agent_id)
-                 VALUES ($1, '{}', $2, now(), now(), '[]', $3, $4, $5, $6, $7, $8, $9, $10)
+                     (interface, params, diagnostics, needs_token, provenance_audience, effects,
+                      execution, code_hash, action_id, agent_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                  RETURNING id, interface, action_id, higher_order_config, higher_order_for_id, tracks, created_at",
             )
             .bind(&input.interface)

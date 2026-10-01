@@ -8,4 +8,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 COPY --from=build /src/target/release/agentd /usr/local/bin/agentd
 ENV AGENTD_CONFIG=/workspace/config.yaml
 EXPOSE 8080
+# Healthy once it serves: it waits for the rekuest server's migrations before that.
+HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=24 CMD ["agentd", "healthcheck"]
 CMD ["agentd"]

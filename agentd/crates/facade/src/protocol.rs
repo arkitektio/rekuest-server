@@ -5,12 +5,8 @@ use sqlx::PgConnection;
 
 use crate::inference::{is_agent, is_hook, is_predicate};
 
-/// The protocols `definition` implements, each upserted by `(name, organization)`
+/// The protocols `definition` implements, each upserted by `(organization, name)`
 /// (`infer_protocols`).
-///
-/// `facade_protocol.name` is unique across organizations while the lookup is per organization,
-/// as in Python: a second organization's first predicate fails on the constraint. Reproduced, not
-/// fixed, so both servers refuse the same registrations.
 pub async fn infer_protocols(
     conn: &mut PgConnection,
     definition: &DefinitionInputModel,
@@ -21,28 +17,18 @@ pub async fn infer_protocols(
         .iter()
         .filter_map(|infer| infer(definition))
     {
-        let existing: Option<i64> = sqlx::query_scalar(
-            "UPDATE facade_protocol SET description = $3 WHERE name = $1 AND organization_id = $2 RETURNING id",
-        )
-        .bind(name)
-        .bind(organization)
-        .bind(description)
-        .fetch_optional(&mut *conn)
-        .await?;
-        let id = match existing {
-            Some(id) => id,
-            None => {
-                sqlx::query_scalar(
-                    "INSERT INTO facade_protocol (name, description, organization_id) VALUES ($1, $3, $2) RETURNING id",
-                )
-                .bind(name)
-                .bind(organization)
-                .bind(description)
-                .fetch_one(&mut *conn)
-                .await?
-            }
-        };
-        protocols.push(id);
+        protocols.push(
+            sqlx::query_scalar(
+                "INSERT INTO facade_protocol (name, description, organization_id) VALUES ($1, $3, $2)
+                 ON CONFLICT (organization_id, name) DO UPDATE SET description = excluded.description
+                 RETURNING id",
+            )
+            .bind(name)
+            .bind(organization)
+            .bind(description)
+            .fetch_one(&mut *conn)
+            .await?,
+        );
     }
     Ok(protocols)
 }

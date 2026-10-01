@@ -1,4 +1,5 @@
 
+from django.db.models.functions import Now
 from authentikate.models import App, Client, Organization, Release, User
 from django.contrib.auth import get_user_model
 from django.db import models
@@ -15,8 +16,8 @@ class Lock(models.Model):
     )
     key = models.CharField(max_length=2000, help_text="A unique identifier for this lock within the agent")
     description = models.TextField(null=True, blank=True, help_text="A description for the Lock")
-    created_at = models.DateTimeField(auto_created=True, auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_created=True, auto_now_add=True, db_default=Now())
+    updated_at = models.DateTimeField(auto_now=True, db_default=Now())
     hold_by = models.ForeignKey(
         "Task",
         on_delete=models.SET_NULL,
@@ -45,7 +46,7 @@ class Agent(models.Model):
     )
     hash = models.CharField(max_length=1000, help_text="The hash of the Agent (comparing the hash can be used to check if the agent has changed in a definition way)")
     release = models.ForeignKey(Release, on_delete=models.CASCADE, related_name="agents", help_text="The release this agent belongs to (agents are part of a release and are NOT associated only with an app)")
-    name = models.CharField(max_length=2000, help_text="The name the agent declares for itself; agentd writes it at every registration.", default="Nana")
+    name = models.CharField(max_length=2000, help_text="The name the agent declares for itself; agentd writes it at every registration.", default="Nana", db_default="Nana")
     display_name = models.CharField(max_length=2000, null=True, blank=True, help_text="The name a user gave this agent. It wins over the declared name, and registration never touches it.")
     description = models.TextField(null=True, blank=True, help_text="A description for the Agent")
     user = models.ForeignKey(
@@ -53,7 +54,7 @@ class Agent(models.Model):
         on_delete=models.CASCADE,
         help_text="The user this Agent belongs to",
     )
-    installed_at = models.DateTimeField(auto_created=True, auto_now_add=True)
+    installed_at = models.DateTimeField(auto_created=True, auto_now_add=True, db_default=Now())
     active_connection_id = models.CharField(
         max_length=1000,
         null=True,
@@ -76,16 +77,18 @@ class Agent(models.Model):
             "(a socket *name*, unique but not revocable) and active_session_id (the client-supplied "
             "*process* identity, which must stay equal across a reclaiming reconnect)."
         ),
+        db_default=0,
     )
     kind = models.CharField(
         max_length=1000,
         choices=[(tag, tag.value) for tag in enums.AgentKind],
         default=enums.AgentKind.WEBSOCKET,
         help_text="The kind of this Agent",
+        db_default="WEBSOCKET",
     )
     hook_url = models.CharField(max_length=1000, help_text="The webhook URL for this Agent (only if webhook)", null=True, blank=True)
     hook_url_secret = models.CharField(max_length=1000, help_text="The webhook URL secret for this Agent (only if webhook)", null=True, blank=True)
-    connected = models.BooleanField(default=False, help_text="Is this Agent connected to the backend")
+    connected = models.BooleanField(default=False, help_text="Is this Agent connected to the backend", db_default=False)
     last_seen = models.DateTimeField(help_text="The last time this Agent was seen", null=True)
     pinned_by = models.ManyToManyField(
         get_user_model(),
@@ -107,6 +110,7 @@ class Agent(models.Model):
     blocked = models.BooleanField(
         default=False,
         help_text="If this Agent is blocked, it will not be used for provision, nor will it be able to provide",
+        db_default=False,
     )
 
     class Meta:
@@ -171,8 +175,8 @@ class MemoryShelve(models.Model):
         related_name="shelves",
         help_text="The user that created this Shelf",
     )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
+    updated_at = models.DateTimeField(auto_now=True, db_default=Now())
 
 
 class MemoryDrawer(models.Model):
@@ -206,6 +210,7 @@ class MemoryDrawer(models.Model):
     agent_minted = models.BooleanField(
         default=False,
         help_text="The agent minted this drawer's reference (a numbered SHELVE): the agent addresses it by resource_id, and COLLECT names it by resource_id. False for drawers of older agents, which reference the pk.",
+        db_default=False,
     )
 
     class Meta:

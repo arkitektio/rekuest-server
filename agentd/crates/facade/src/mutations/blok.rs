@@ -22,9 +22,8 @@ pub async fn sync_blok_dependencies(
     for declared in dependencies {
         let id: i64 = sqlx::query_scalar(
             "INSERT INTO facade_blokdependency
-                 (created_at, key, action_demands, state_demands, app_filter, version_filter, optional, description,
-                  auto_resolvable, min_viable_instances, max_viable_instances, blok_id)
-             VALUES (now(), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $1)
+                 (key, action_demands, state_demands, app_filter, version_filter, optional, description, auto_resolvable, min_viable_instances, max_viable_instances, blok_id)
+             VALUES ($2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $1)
              ON CONFLICT (blok_id, key) DO UPDATE SET
                  action_demands = excluded.action_demands, state_demands = excluded.state_demands,
                  app_filter = excluded.app_filter, version_filter = excluded.version_filter,

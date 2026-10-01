@@ -13,12 +13,19 @@ async fn main() -> anyhow::Result<()> {
     let path = std::env::var("AGENTD_CONFIG").unwrap_or_else(|_| "config.yaml".into());
     let configuration = Configuration::load(&path)?;
     let bind = std::env::var("AGENTD_BIND").unwrap_or_else(|_| "0.0.0.0:8080".into());
+    // `agentd healthcheck`: is the agentd of this configuration serving? For the container's
+    // HEALTHCHECK, in an image that carries no HTTP client.
+    if std::env::args().nth(1).as_deref() == Some("healthcheck") {
+        return healthcheck(&configuration, &bind).await;
+    }
 
     let db = sqlx::postgres::PgPoolOptions::new()
         .max_connections(32)
         .connect(&configuration.postgres.url())
         .await
         .context("connecting to postgres")?;
+    // Before anything is served or swept: the tables must be the ones this build was written for.
+    facade::schema::wait_until_migrated(&db).await;
     let redis_client = redis::Client::open(configuration.redis.url()).context("redis url")?;
     let redis = redis::aio::ConnectionManager::new(redis_client.clone())
         .await
@@ -62,5 +69,29 @@ async fn main() -> anyhow::Result<()> {
             let _ = tokio::signal::ctrl_c().await;
         })
         .await?;
+    Ok(())
+}
+
+/// `GET {prefix}/ht` on this machine's port; an error unless it answers 200.
+async fn healthcheck(configuration: &Configuration, bind: &str) -> anyhow::Result<()> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let port = bind.rsplit(':').next().unwrap_or("8080");
+    let prefix = configuration.django.force_script_name.trim_matches('/');
+    let path = if prefix.is_empty() {
+        "/ht".to_owned()
+    } else {
+        format!("/{prefix}/ht")
+    };
+    let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}"))
+        .await
+        .context("agentd is not listening")?;
+    stream
+        .write_all(format!("GET {path} HTTP/1.0\r\nHost: localhost\r\n\r\n").as_bytes())
+        .await?;
+    let mut answer = String::new();
+    stream.read_to_string(&mut answer).await?;
+    let status = answer.lines().next().unwrap_or_default();
+    anyhow::ensure!(status.contains(" 200 "), "agentd answered {status:?}");
     Ok(())
 }

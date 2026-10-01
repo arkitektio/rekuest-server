@@ -57,6 +57,7 @@ class Patch:
     op: str
     path: str
     value: scalars.Args
+    old_value: scalars.Args | None = strawberry_django.field(description="The value the patch replaced, when the agent reported it.")
     timestamp: datetime.datetime
     # Patch/Snapshot store exactly one revision column, ``global_rev``, the revision *after* the
     # patch applies (see facade.logic.get_latest_state). These were declared as real columns that

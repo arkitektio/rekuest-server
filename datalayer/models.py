@@ -47,7 +47,7 @@ class DatalayerStore(PolymorphicModel):
     bucket = models.CharField(max_length=1000, help_text="The datalayer bucket/service this store belongs to.")
     original_file_name = models.CharField(max_length=1000, null=True, blank=True, help_text="The original client-provided file name.")
     content_type = models.CharField(max_length=255, null=True, blank=True, help_text="The client-provided content type for the uploaded file.")
-    populated = models.BooleanField(default=False, help_text="Whether the store has been populated with a valid path and is ready for use.")
+    populated = models.BooleanField(default=False, help_text="Whether the store has been populated with a valid path and is ready for use.", db_default=False)
 
     def build_store_path(self, datalayer: Datalayer | None = None) -> str:
         """Return the canonical object-store URI for this store."""
