@@ -1,7 +1,6 @@
 import logging
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
 from django.db import models
 from polymorphic.models import PolymorphicModel
@@ -13,11 +12,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
-
-
-def get_default_upload_token() -> str:
-    """Return the default opaque token used sfor storage keys."""
-    return uuid4().hex
 
 
 class DatalayerStore(PolymorphicModel):

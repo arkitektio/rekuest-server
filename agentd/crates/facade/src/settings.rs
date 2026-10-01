@@ -50,6 +50,16 @@ pub struct Settings {
     pub hook_signature_strict: bool,
     /// `HOOK_MAX_SKEW`: how far a V1 signature's timestamp may be from now, either way.
     pub hook_max_skew: i64,
+    /// `TASK_RETENTION_SECONDS`: terminal root task trees older than this are deleted; zero
+    /// keeps them forever.
+    pub task_retention: Duration,
+    /// `EPHEMERAL_TASK_RETENTION_SECONDS`: the same for ephemeral trees (a schedule's
+    /// housekeeping runs), which have a short horizon of their own.
+    pub ephemeral_task_retention: Duration,
+    /// `SIGNAL_RETENTION_SECONDS`: processed signals older than this are deleted; zero keeps them.
+    pub signal_retention: Duration,
+    /// `TRIGGER_MAX_DEPTH`: how many trigger firings may chain before a signal stops firing.
+    pub trigger_max_depth: i16,
     /// `SERVICE_AGENTS`: this hub's services, whose agents sign with their instance keys.
     pub service_agents: Vec<ServiceAgent>,
     /// The hub's trust bundle (`INSTANCE["TRUST_JWKS_URI"]` / `["TRUST_JWKS"]`).
@@ -109,6 +119,10 @@ impl Default for Settings {
             probe_max_inflight: 32,
             hook_signature_strict: false,
             hook_max_skew: 300,
+            task_retention: Duration::ZERO,
+            ephemeral_task_retention: Duration::from_secs(86400),
+            signal_retention: Duration::from_secs(604_800),
+            trigger_max_depth: 3,
             service_agents: vec![],
             trust_bundle: Arc::default(),
         }

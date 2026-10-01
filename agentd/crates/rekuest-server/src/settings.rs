@@ -50,6 +50,10 @@ pub fn from_configuration(configuration: &Configuration) -> anyhow::Result<Setti
         probe_max_inflight: rekuest.probe_max_inflight,
         hook_signature_strict: rekuest.hook_signature_mode.eq_ignore_ascii_case("strict"),
         hook_max_skew: rekuest.hook_max_skew as i64,
+        task_retention: Duration::from_secs(rekuest.task_retention),
+        ephemeral_task_retention: Duration::from_secs(rekuest.ephemeral_task_retention),
+        signal_retention: Duration::from_secs(rekuest.signal_retention),
+        trigger_max_depth: rekuest.trigger_max_depth,
         service_agents: rekuest
             .service_agents
             .iter()

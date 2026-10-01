@@ -1,203 +1,30 @@
-"""Schedules: one open run at a time, materialized as a delayed task by the refill sweep.
+"""Schedules, from this server's side: rows it owns, runs it asks agentd for.
 
-Real postgres + redis. The background reaper is off under test settings, so the tests drive
-``refill_schedules`` / ``dispatch_due_tasks`` themselves, from a fresh backend each time.
+Planning, moving and cancelling runs, cron lines and the refill sweep are agentd's and tested
+there (``agentd/crates/facade/tests/scheduling.rs``, ``src/timing.rs``). Here: the GraphQL
+mutations scope and check what they are given, write the row, and ask agentd for the right
+thing (``fake_agentd`` stands in for it, and records every request).
 """
-
-import datetime
-import threading
-from datetime import timedelta
 
 import pytest
 from asgiref.sync import sync_to_async
-from django.db import connection
-from django.utils import timezone
 
-from facade import enums, inputs, models, schedules
-from facade.backend import controll_backend, get_caller_for_context
-from facade.caller_context import CallerContext
+from facade import models
 from facade.schema import schema
-
 from tests.factories import TEST_TOKEN, build_implementation_for_agent, build_webhook_agent
 from tests.graphql.test_cross_tenant_isolation import OTHER_TOKEN, tenant_context
 
 pytestmark = pytest.mark.usefixtures("fake_agentd")
 
-UTC = datetime.timezone.utc
 
-
-class TestSlots:
-    def test_interval_slots_align_to_creation_not_to_the_last_run(self):
-        anchor = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
-        schedule = models.Schedule(interval_seconds=600, created_at=anchor)
-
-        assert schedules.next_slot(schedule, anchor) == anchor + timedelta(minutes=10)
-        # A run that finished 3 minutes late does not shift the grid.
-        assert schedules.next_slot(schedule, anchor + timedelta(minutes=13)) == anchor + timedelta(minutes=20)
-        assert schedules.next_slot(schedule, anchor - timedelta(days=1)) == anchor
-
-    def test_cron_is_read_in_the_schedules_zone_across_dst(self):
-        schedule = models.Schedule(cron="0 2 * * *", timezone="Europe/Berlin")
-
-        winter = schedules.next_slot(schedule, datetime.datetime(2026, 1, 10, 12, 0, tzinfo=UTC))
-        summer = schedules.next_slot(schedule, datetime.datetime(2026, 7, 10, 12, 0, tzinfo=UTC))
-        assert winter == datetime.datetime(2026, 1, 11, 1, 0, tzinfo=UTC)  # 02:00 CET
-        assert summer == datetime.datetime(2026, 7, 11, 0, 0, tzinfo=UTC)  # 02:00 CEST
-
-    @pytest.mark.parametrize(
-        "kwargs, message",
-        [
-            ({"interval_seconds": None, "cron": None, "tz": "UTC"}, "exactly one"),
-            ({"interval_seconds": 60, "cron": "* * * * *", "tz": "UTC"}, "exactly one"),
-            ({"interval_seconds": 0, "cron": None, "tz": "UTC"}, "at least 1"),
-            ({"interval_seconds": None, "cron": "every day", "tz": "UTC"}, "cron line"),
-            ({"interval_seconds": 60, "cron": None, "tz": "Mars/Olympus"}, "timezone"),
-        ],
-    )
-    def test_invalid_timing_is_refused(self, kwargs, message):
-        with pytest.raises(ValueError, match=message):
-            schedules.validate_timing(**kwargs)
-
-
-@sync_to_async
-def _schedule_for(agent_pk: int, impl_pk: int, **overrides) -> models.Schedule:
-    agent = models.Agent.objects.select_related("user", "client", "organization").get(pk=agent_pk)
-    impl = models.Implementation.objects.get(pk=impl_pk)
-    fields = {"name": "every minute", "interval_seconds": 60, "agent": agent, "interface": impl.interface, **overrides}
-    return models.Schedule.objects.create(caller=get_caller_for_context(CallerContext.from_agent(agent)), action=impl.action, **fields)
-
-
-async def _hook_schedule(prefix: str, **overrides) -> models.Schedule:
-    """A schedule pinned to a HookAgent — always a valid assign target, connected or not."""
+async def _schedulable(prefix: str, context, *, needs_token: bool = False) -> models.Implementation:
+    """An implementation on a HookAgent, both in the tenant of ``context``."""
     agent = await build_webhook_agent(prefix)
-    impl = await build_implementation_for_agent(agent.pk, prefix, needs_token=False)
-    return await _schedule_for(agent.pk, impl.pk, **overrides)
-
-
-async def _refill() -> int:
-    return await sync_to_async(schedules.refill_schedules_sync)()
-
-
-async def _open_runs(schedule: models.Schedule) -> list[models.Task]:
-    return [t async for t in models.Task.objects.filter(schedule=schedule, is_done=False)]
-
-
-async def _finish(task: models.Task, kind=enums.TaskEventKind.COMPLETED, message: str = "") -> None:
-    await models.Task.objects.filter(pk=task.pk).aupdate(is_done=True, latest_event_kind=kind, finished_at=timezone.now())
-    await models.TaskEvent.objects.acreate(task_id=task.pk, kind=kind, message=message)
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-class TestRefill:
-    async def test_plans_exactly_one_waiting_run(self):
-        schedule = await _hook_schedule("sch-one")
-
-        assert await _refill() == 1
-        assert await _refill() == 0  # it has its open run: nothing more to plan
-
-        (run,) = await _open_runs(schedule)
-        assert run.not_before > timezone.now()
-        assert run.dispatch_attempts == 0
-        assert run.reference == f"schedule:{schedule.pk}:{run.not_before.isoformat()}"
-
-    async def test_the_next_run_follows_a_finished_one(self):
-        schedule = await _hook_schedule("sch-next")
-        await _refill()
-        (first,) = await _open_runs(schedule)
-
-        await _finish(first)
-        assert await _refill() == 1
-        (second,) = await _open_runs(schedule)
-        assert second.pk != first.pk and second.not_before >= first.not_before
-
-    async def test_failures_are_counted_once_per_run_and_reset_by_success(self):
-        schedule = await _hook_schedule("sch-fail")
-        await _refill()
-        (run,) = await _open_runs(schedule)
-
-        await _finish(run, enums.TaskEventKind.CRITICAL, "bank said no")
-        await _refill()
-        refreshed = await models.Schedule.objects.aget(pk=schedule.pk)
-        assert refreshed.consecutive_failures == 1
-        assert "bank said no" in refreshed.last_error
-
-        (run,) = await _open_runs(schedule)
-        await _finish(run)
-        await _refill()
-        refreshed = await models.Schedule.objects.aget(pk=schedule.pk)
-        assert refreshed.consecutive_failures == 0 and refreshed.last_error is None
-
-    async def test_cancelling_the_waiting_run_skips_that_slot(self):
-        schedule = await _hook_schedule("sch-skip")
-        await _refill()
-        (skipped,) = await _open_runs(schedule)
-
-        await sync_to_async(controll_backend.cancel)(inputs.CancelInputModel(task=str(skipped.pk)))
-        assert (await models.Task.objects.aget(pk=skipped.pk)).latest_event_kind == enums.TaskEventKind.CANCELLED
-
-        assert await _refill() == 1
-        (following,) = await _open_runs(schedule)
-        assert following.not_before > skipped.not_before  # the reference of the skipped slot is taken
-
-    async def test_a_disabled_schedule_plans_nothing(self):
-        await _hook_schedule("sch-off", enabled=False)
-        assert await _refill() == 0
-
-    async def test_a_broken_target_is_recorded_and_backed_off(self):
-        schedule = await _hook_schedule("sch-broken")
-        await models.Implementation.objects.filter(agent_id=schedule.agent_id).adelete()
-
-        assert await _refill() == 0
-        refreshed = await models.Schedule.objects.aget(pk=schedule.pk)
-        assert "Could not create the next run" in refreshed.last_error
-        assert refreshed.refill_after > timezone.now()
-        assert await _refill() == 0  # backed off: not retried every tick
-
-    async def test_two_backends_refilling_plan_one_run(self):
-        """Real threads on their own connections: the schedule row lock lets one through."""
-        schedule = await _hook_schedule("sch-race")
-        results: list[int] = []
-        barrier = threading.Barrier(2)
-
-        def run() -> None:
-            try:
-                barrier.wait()
-                results.append(schedules.refill_schedules_sync())
-            finally:
-                connection.close()
-
-        threads = [threading.Thread(target=run) for _ in range(2)]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
-
-        assert sum(results) == 1
-        assert len(await _open_runs(schedule)) == 1
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.asyncio
-class TestTrigger:
-    async def test_run_now_moves_the_waiting_run_and_refuses_while_it_executes(self):
-        schedule = await _hook_schedule("sch-trigger", interval_seconds=3600)
-        await _refill()
-        (waiting,) = await _open_runs(schedule)
-
-        moved = await sync_to_async(schedules.trigger)(schedule)
-        assert moved.pk == waiting.pk and moved.not_before <= timezone.now()
-
-        # agentd dispatched it (the due-task sweep is agentd's): now it is executing.
-        await models.Task.objects.filter(pk=waiting.pk).aupdate(dispatch_attempts=1)
-        with pytest.raises(ValueError, match="already executing"):
-            await sync_to_async(schedules.trigger)(schedule)
-
-    async def test_run_now_without_an_open_run_creates_a_one_off(self):
-        schedule = await _hook_schedule("sch-oneoff", enabled=False)
-        task = await sync_to_async(schedules.trigger)(schedule)
-        assert task.schedule_id == schedule.pk
-        assert task.reference.startswith(f"schedule:{schedule.pk}:manual:")
+    impl = await build_implementation_for_agent(agent.pk, prefix, needs_token=needs_token)
+    organization = context.request.organization
+    await models.Action.objects.filter(pk=impl.action_id).aupdate(organization=organization)
+    await models.Agent.objects.filter(pk=agent.pk).aupdate(organization=organization)
+    return impl
 
 
 CREATE_SCHEDULE = """
@@ -268,3 +95,73 @@ class TestScheduleGraphQL:
             context_value=context_a,
         )
         assert result.errors is not None and "cron line" in str(result.errors[0])
+
+
+UPDATE_SCHEDULE = """
+    mutation UpdateSchedule($input: UpdateScheduleInput!) {
+        updateSchedule(input: $input) { id name enabled cron intervalSeconds nextRun { id } }
+    }
+"""
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+class TestScheduleChanges:
+    async def _created(self, prefix: str, context, **input) -> tuple[str, models.Implementation]:
+        impl = await _schedulable(prefix, context)
+        fields = {"name": "hourly", "action": str(impl.action_id), "intervalSeconds": 3600, "agent": str(impl.agent_id), "interface": impl.interface, **input}
+        result = await schema.execute(CREATE_SCHEDULE, variable_values={"input": fields}, context_value=context)
+        assert result.errors is None, result.errors
+        return result.data["createSchedule"]["id"], impl
+
+    async def test_a_retimed_schedule_is_replanned_and_a_renamed_one_is_not(self, authenticated_context, fake_agentd):
+        context = (await sync_to_async(tenant_context)(TEST_TOKEN))[0]
+        schedule_id, _ = await self._created("sch-retime", context)
+        first_run = (await models.Task.objects.aget(schedule_id=schedule_id, is_done=False)).pk
+        # agentd's bookkeeping on the row: a rename must not write over it.
+        await models.Schedule.objects.filter(pk=schedule_id).aupdate(consecutive_failures=2, last_error="earlier")
+        fake_agentd.calls.clear()
+
+        renamed = await schema.execute(UPDATE_SCHEDULE, variable_values={"input": {"id": schedule_id, "name": "every hour"}}, context_value=context)
+        assert renamed.errors is None, renamed.errors
+        assert renamed.data["updateSchedule"]["nextRun"]["id"] == str(first_run)
+        assert [(op, payload.get("replan")) for op, payload in fake_agentd.calls if op == "schedule/plan"] == [("schedule/plan", False)]
+        kept = await models.Schedule.objects.aget(pk=schedule_id)
+        assert (kept.name, kept.consecutive_failures, kept.last_error) == ("every hour", 2, "earlier")
+
+        retimed = await schema.execute(UPDATE_SCHEDULE, variable_values={"input": {"id": schedule_id, "cron": "0 2 * * *"}}, context_value=context)
+        assert retimed.errors is None, retimed.errors
+        assert retimed.data["updateSchedule"]["cron"] == "0 2 * * *" and retimed.data["updateSchedule"]["intervalSeconds"] is None
+        (replanned,) = [payload for op, payload in fake_agentd.calls if op == "schedule/plan" and payload.get("replan")]
+        assert replanned["principal"]["organization"] == context.request.organization.pk
+        assert retimed.data["updateSchedule"]["nextRun"]["id"] != str(first_run)  # the waiting run of the old timing went
+
+        bad = await schema.execute(UPDATE_SCHEDULE, variable_values={"input": {"id": schedule_id, "cron": "whenever"}}, context_value=context)
+        assert bad.errors is not None and "cron line" in str(bad.errors[0])
+        assert (await models.Schedule.objects.aget(pk=schedule_id)).cron == "0 2 * * *"
+
+    async def test_run_now_and_delete_go_through_agentd(self, authenticated_context, fake_agentd):
+        context = (await sync_to_async(tenant_context)(TEST_TOKEN))[0]
+        other = (await sync_to_async(tenant_context)(OTHER_TOKEN))[0]
+        schedule_id, _ = await self._created("sch-now", context)
+        waiting = await models.Task.objects.aget(schedule_id=schedule_id, is_done=False)
+        run_now = "mutation($input: ScheduleIdInput!) { triggerSchedule(input: $input) { id } }"
+        delete = "mutation($input: ScheduleIdInput!) { deleteSchedule(input: $input) }"
+
+        foreign = await schema.execute(run_now, variable_values={"input": {"id": schedule_id}}, context_value=other)
+        assert foreign.errors is not None  # another tenant's schedule reads as missing
+
+        triggered = await schema.execute(run_now, variable_values={"input": {"id": schedule_id}}, context_value=context)
+        assert triggered.errors is None, triggered.errors
+        assert triggered.data["triggerSchedule"]["id"] == str(waiting.pk)
+
+        await models.Task.objects.filter(pk=waiting.pk).aupdate(dispatch_attempts=1)
+        executing = await schema.execute(run_now, variable_values={"input": {"id": schedule_id}}, context_value=context)
+        assert executing.errors is not None and "already executing" in str(executing.errors[0])
+
+        fake_agentd.calls.clear()
+        deleted = await schema.execute(delete, variable_values={"input": {"id": schedule_id}}, context_value=context)
+        assert deleted.errors is None, deleted.errors
+        assert [op for op, _ in fake_agentd.calls] == ["schedule/cancel-waiting"]
+        assert not await models.Schedule.objects.filter(pk=schedule_id).aexists()
+        assert (await models.Task.objects.aget(pk=waiting.pk)).schedule_id is None  # the history is kept

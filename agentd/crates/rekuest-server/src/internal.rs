@@ -47,6 +47,10 @@
 //! | `agent/implement` | `{"principal", "input": ImplementAgentInput}` | `{"agent", "diagnostics"}` |
 //! | `agent/delete` | `{"principal", "agent"}` (kicks it, deletes it with everything below it) | `{"agent"}` |
 //! | `implementation/delete` | `{"principal", "implementation"}` | `{"implementation"}` |
+//! | `schedule/validate` | `{"interval_seconds"?, "cron"?, "timezone"}` | `{}`, or `400` saying what is wrong with the timing |
+//! | `schedule/plan` | `{"schedule", "replan"?, "principal"?}` (plans the next run now; `replan` cancels the waiting one first) | `{"planned"}` |
+//! | `schedule/cancel-waiting` | `{"schedule", "principal"?}` | `{}` |
+//! | `schedule/trigger` | `{"schedule"}` (run now) | `{"task"}` |
 //! | `drawer/shelve` | `{"principal", "identifier", "resource_id", "label"?, "description"?}` | `{"drawer"}` |
 //! | `drawer/unshelve` | `{"principal", "id"}` (a resource id, else a drawer id) | `{"drawer"}` |
 //! | `higher-order/create` | `{"principal", "input": {"lower", "interface", "definition", "config"?, "dependencies"?}}` | `{"implementation", "diagnostics"}` |
@@ -98,6 +102,13 @@ pub fn routes() -> Router<Shared> {
         .route("/internal/agent/ensure", post(ensure_agent))
         .route("/internal/agent/implement", post(implement_agent))
         .route("/internal/agent/delete", post(delete_agent))
+        .route("/internal/schedule/validate", post(validate_schedule))
+        .route("/internal/schedule/plan", post(plan_schedule))
+        .route(
+            "/internal/schedule/cancel-waiting",
+            post(cancel_waiting_run),
+        )
+        .route("/internal/schedule/trigger", post(trigger_schedule))
         .route(
             "/internal/implementation/delete",
             post(delete_implementation),
@@ -424,6 +435,70 @@ internal!(
         Ok(Json(json!({"implementation": implementation.to_string()})))
     }
 );
+
+#[derive(Debug, Deserialize)]
+struct TimingRequest {
+    #[serde(default)]
+    interval_seconds: Option<i64>,
+    #[serde(default)]
+    cron: Option<String>,
+    timezone: String,
+}
+
+internal!(validate_schedule, TimingRequest, |_state, request| {
+    facade::timing::Timing {
+        interval_seconds: request.interval_seconds,
+        cron: request.cron.clone(),
+        timezone: request.timezone.clone(),
+    }
+    .validate()
+    .map_err(|message| Refusal(StatusCode::BAD_REQUEST, message))?;
+    Ok(Json(json!({})))
+});
+
+#[derive(Debug, Deserialize)]
+struct ScheduleRequest {
+    schedule: Id,
+    #[serde(default)]
+    replan: bool,
+    #[serde(default)]
+    principal: Option<Principal>,
+}
+
+/// The caller a schedule's run is cancelled as: the principal's, or none (the server itself).
+async fn schedule_caller(
+    state: &Shared,
+    request: &ScheduleRequest,
+) -> Result<Option<i64>, Refusal> {
+    Ok(match &request.principal {
+        Some(principal) => {
+            let principal = principal.context(state).await?;
+            Some(backend::get_caller_for_context(&state.facade.db, &principal).await?)
+        }
+        None => None,
+    })
+}
+
+internal!(plan_schedule, ScheduleRequest, |state, request| {
+    let caller = schedule_caller(&state, &request).await?;
+    let planned = facade::schedules::plan(
+        &state.facade,
+        request.schedule.get()?,
+        request.replan,
+        caller,
+    )
+    .await?;
+    Ok(Json(json!({"planned": planned})))
+});
+internal!(cancel_waiting_run, ScheduleRequest, |state, request| {
+    let caller = schedule_caller(&state, &request).await?;
+    facade::schedules::cancel_waiting_run(&state.facade, request.schedule.get()?, caller).await?;
+    Ok(Json(json!({})))
+});
+internal!(trigger_schedule, ScheduleRequest, |state, request| {
+    let task = facade::schedules::trigger(&state.facade, request.schedule.get()?).await?;
+    Ok(Json(json!({"task": task.to_string()})))
+});
 
 #[derive(Debug, Deserialize)]
 struct CollectRequest {

@@ -27,26 +27,39 @@ use crate::clock;
 use crate::context::Context;
 use crate::persist::reconcile;
 use crate::redis_keys;
+use crate::{retention, schedules, triggers};
 
 /// How many rows one task sweep takes per tick; the next tick drains the rest.
 const SWEEP_LIMIT: i64 = 200;
+/// How many schedules or signals one tick plans.
+const PLAN_LIMIT: i64 = 100;
 
 /// The ordered sweeps (`_sweeps`). Agents before tasks: healing a stuck-connected agent is what
 /// makes its work visible to the task sweeps of the same tick.
-pub const SWEEPS: [&str; 6] = [
+pub const SWEEPS: [&str; 8] = [
     "stale agents",
     "disconnected agents",
+    // Before the due tasks: a run a schedule is given or a signal fires this tick is dispatched
+    // by the same tick when it is already due.
+    "schedules",
+    "triggers",
     "due tasks",
     "unpicked tasks",
     "due controls",
     "expired tasks",
 ];
 
+/// Retention runs on every Nth tick: the deadlines above want responsiveness, a retention
+/// horizon is measured in days.
+const RETENTION_EVERY_N_TICKS: u64 = 60;
+
 /// Run one sweep by name; the count it acted on.
 pub async fn run_sweep(ctx: &Context, name: &str) -> Result<usize, sqlx::Error> {
     match name {
         "stale agents" => reconcile::reconcile_stale_agents(ctx).await,
         "disconnected agents" => reconcile::reconcile_disconnected_agents(ctx).await,
+        "schedules" => schedules::refill_schedules(ctx, PLAN_LIMIT).await,
+        "triggers" => triggers::fire_triggers(ctx, PLAN_LIMIT).await,
         "due tasks" => reconcile::dispatch_due_tasks(ctx, SWEEP_LIMIT).await,
         "unpicked tasks" => reconcile::reconcile_unpicked_tasks(ctx, SWEEP_LIMIT).await,
         "due controls" => reconcile::escalate_due_controls(ctx, SWEEP_LIMIT).await,
@@ -117,9 +130,16 @@ pub async fn take_tick_token(ctx: &Context) -> bool {
 pub async fn run_forever(ctx: Context) {
     let jitter = uuid::Uuid::new_v4().as_u128() % 500;
     tokio::time::sleep(Duration::from_millis(jitter as u64)).await;
+    let mut tick: u64 = 0;
     loop {
         if take_tick_token(&ctx).await {
             run_sweeps(&ctx).await;
+            tick += 1;
+            if tick.is_multiple_of(RETENTION_EVERY_N_TICKS) {
+                if let Err(e) = retention::sweep(&ctx).await {
+                    tracing::error!("Retention sweep failed; continuing: {e}");
+                }
+            }
         }
         tokio::time::sleep(ctx.settings.sweep_interval).await;
     }

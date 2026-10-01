@@ -9,7 +9,10 @@ that starts depending on more of agentd shows up here instead of passing on a fi
 
 from __future__ import annotations
 
+import re
+from datetime import timedelta
 from typing import Any, Dict
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from authentikate.models import Client, Organization, User
 
@@ -94,6 +97,55 @@ def _cancel(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"task": str(task.pk)}
 
 
+def _validate_timing(payload: Dict[str, Any]) -> None:
+    """agentd's judgment of a timing, as far as its wording goes: its cron parser is not here."""
+    interval, cron, zone = payload.get("interval_seconds"), payload.get("cron"), payload.get("timezone", "UTC")
+    if (interval is None) == (cron is None):
+        raise ValueError("A schedule needs exactly one of interval_seconds or cron")
+    if interval is not None and interval < 1:
+        raise ValueError("interval_seconds must be at least 1")
+    if cron is not None and not re.fullmatch(r"\s*([\d*/,\-A-Za-z#L]+\s+){4}[\d*/,\-A-Za-z#L]+\s*", cron):
+        raise ValueError(f'Not a valid cron line: "{cron}"')
+    try:
+        ZoneInfo(zone)
+    except (ZoneInfoNotFoundError, ValueError) as error:
+        raise ValueError(f'Unknown timezone: "{zone}"') from error
+
+
+def _waiting_run(schedule: models.Schedule) -> "models.Task | None":
+    return models.Task.objects.filter(schedule=schedule, is_done=False).order_by("pk").first()
+
+
+def _plan(schedule: models.Schedule) -> bool:
+    """One waiting run a minute from now, as agentd's refill would leave it."""
+    if not schedule.enabled or _waiting_run(schedule) is not None:
+        return False
+    caller = schedule.caller
+    target = {"agent": str(schedule.agent_id), "interface": schedule.interface} if schedule.agent_id else {"action": str(schedule.action_id)}
+    slot = timezone.now() + timedelta(minutes=1)
+    request = {**target, "args": schedule.args or {}, "reference": f"schedule:{schedule.pk}:{slot.isoformat()}", "not_before": slot}
+    principal = {"user": caller.user_id, "client": caller.client_id, "organization": caller.organization_id, "roles": []}
+    return bool(_assign({"principal": principal, "input": request, "schedule": schedule.pk})["created"])
+
+
+def _schedule_op(op: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    schedule = models.Schedule.objects.select_related("caller").get(pk=payload["schedule"])
+    waiting = _waiting_run(schedule)
+    if op == "schedule/trigger":
+        if waiting is None:
+            return {"task": _assign({"principal": {"user": schedule.caller.user_id, "client": schedule.caller.client_id, "organization": schedule.caller.organization_id}, "input": {**({"agent": str(schedule.agent_id), "interface": schedule.interface} if schedule.agent_id else {"action": str(schedule.action_id)}), "args": schedule.args or {}, "reference": f"schedule:{schedule.pk}:manual:{len(calls)}"}, "schedule": schedule.pk})["task"]}
+        if waiting.dispatch_attempts != 0:
+            raise ValueError("A run of this schedule is already executing")
+        models.Task.objects.filter(pk=waiting.pk).update(not_before=timezone.now())
+        return {"task": str(waiting.pk)}
+    if op == "schedule/cancel-waiting" or payload.get("replan"):
+        if waiting is not None:
+            _cancel({"task": waiting.pk})
+    if op == "schedule/plan":
+        return {"planned": _plan(schedule)}
+    return {}
+
+
 def call(op: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     """Serve one internal API request as agentd would, as far as the Python tests need."""
     calls.append((op, payload))
@@ -101,6 +153,11 @@ def call(op: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         return _assign(payload)
     if op == "cancel":
         return _cancel(payload)
+    if op == "schedule/validate":
+        _validate_timing(payload)
+        return {}
+    if op.startswith("schedule/"):
+        return _schedule_op(op, payload)
     if op == "agent/ensure":
         agent = _ensure(payload["principal"], payload.get("name"))
         fields = [f for f in ("description", "kind", "hook_url", "hook_url_secret") if f in payload]

@@ -45,7 +45,6 @@ CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
 AGENT_REDIS_HOST = "localhost"
 AGENT_REDIS_PORT = int(os.environ.get("REKUEST_TEST_REDIS_PORT", 6666))
 
-TASK_RETENTION_SECONDS = 0
 PROBE_MAX_INFLIGHT_PER_CALLER = 8
 
 # The hub trust bundle under test, inline: rekuest's own key plus one key per service the tests

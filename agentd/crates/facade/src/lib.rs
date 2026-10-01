@@ -34,12 +34,16 @@ pub mod redis_keys;
 pub mod registration;
 pub mod registration_lock;
 pub mod removal;
+pub mod retention;
+pub mod schedules;
 pub mod schema;
 pub mod service_trust;
 pub mod settings;
 pub mod signal_intake;
 pub mod signals;
+pub mod timing;
 pub mod transport;
+pub mod triggers;
 pub mod unique;
 
 pub use context::Context;

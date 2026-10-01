@@ -52,16 +52,6 @@ class CallerContext:
         )
 
     @classmethod
-    def from_agent(cls, agent: Any, roles: List[str] | None = None) -> "CallerContext":
-        """Build from a registered ``Agent`` (the WebSocket caller path)."""
-        return cls(
-            user=agent.user,
-            client=agent.client,
-            organization=agent.organization,
-            roles=list(roles) if roles is not None else [],
-        )
-
-    @classmethod
     def coerce(cls, value: Any) -> "CallerContext":
         """Return ``value`` if it is already a ``CallerContext``, else wrap a legacy ``Info``."""
         if isinstance(value, cls):

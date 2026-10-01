@@ -116,6 +116,18 @@ pub struct RekuestBlock {
     pub probe_linger: u64,
     #[serde(default = "d32")]
     pub probe_max_inflight: i64,
+    /// Seconds to keep terminal root task trees; 0 keeps them forever.
+    #[serde(default)]
+    pub task_retention: u64,
+    /// Seconds to keep terminal ephemeral root task trees; 0 keeps them forever.
+    #[serde(default = "d86400")]
+    pub ephemeral_task_retention: u64,
+    /// Seconds to keep processed signals; 0 keeps them forever.
+    #[serde(default = "d604800")]
+    pub signal_retention: u64,
+    /// How many trigger firings may chain before a signal stops firing: the loop guard.
+    #[serde(default = "d3")]
+    pub trigger_max_depth: i16,
     /// This hub's services, provisioned by the Python server as HookAgents.
     #[serde(default)]
     pub service_agents: Vec<ServiceAgentBlock>,
@@ -153,6 +165,15 @@ fn d3600() -> u64 {
 }
 fn d32() -> i64 {
     32
+}
+fn d86400() -> u64 {
+    86400
+}
+fn d604800() -> u64 {
+    604_800
+}
+fn d3() -> i16 {
+    3
 }
 fn rekuest_identifier() -> String {
     "live.arkitekt.rekuest".into()

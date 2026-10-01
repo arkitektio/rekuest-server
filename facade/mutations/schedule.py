@@ -1,13 +1,13 @@
 """Schedule mutations: create, change, delete, run now.
 
 Every resolver scopes itself through :func:`facade.types.base.scoped_get` (a single-object root
-resolver bypasses ``get_queryset``). Creating or re-planning a schedule plans its next run right
-away rather than on the reaper's next tick, so ``nextRun`` is populated in the response.
+resolver bypasses ``get_queryset``). The rows are this server's; their runs are agentd's
+(:mod:`facade.schedules`). Creating or re-planning a schedule has agentd plan its next run right
+away rather than on its reaper's next tick, so ``nextRun`` is populated in the response.
 """
 
 import strawberry
 from django.conf import settings
-from django.db import transaction
 from kante.types import Info
 from rekuest_core.objects.models import ArgPortModel
 from rekuest_core.values import validate_assignment_args
@@ -74,52 +74,56 @@ def create_schedule(info: Info, input: inputs.CreateScheduleInput) -> types.Sche
         ephemeral_runs=input.ephemeral_runs,
         enabled=input.enabled,
     )
-    schedules.refill_one(schedule.pk)
+    schedules.plan(schedule)
     return schedule
 
 
 def update_schedule(info: Info, input: inputs.UpdateScheduleInput) -> types.Schedule:
     schedule = _schedule(info, input.id)
+    changed: list[str] = []
     replan = False
     if input.name is not None:
         schedule.name = input.name
+        changed.append("name")
     if input.args is not None:
         _check_args(schedule.action, input.args)
         schedule.args = input.args
+        changed.append("args")
         replan = True
     if input.interval_seconds is not None and input.cron is not None:
         raise ValueError("Give intervalSeconds or cron, not both")
     if input.interval_seconds is not None:
         schedule.interval_seconds, schedule.cron = input.interval_seconds, None
+        changed += ["interval_seconds", "cron"]
         replan = True
     if input.cron is not None:
         schedule.interval_seconds, schedule.cron = None, input.cron
+        changed += ["interval_seconds", "cron"]
         replan = True
     if input.timezone is not None:
         schedule.timezone = input.timezone
+        changed.append("timezone")
         replan = True
     if input.enabled is not None and input.enabled != schedule.enabled:
         schedule.enabled = input.enabled
+        changed.append("enabled")
         replan = True
     schedules.validate_timing(interval_seconds=schedule.interval_seconds, cron=schedule.cron, tz=schedule.timezone)
 
-    with transaction.atomic():
-        # A fixed target or timing is a fresh start: forget the backoff of the old one.
-        schedule.refill_after = None
-        schedule.save()
-        if replan:
-            schedules.cancel_waiting_run(schedule, caller=_caller(info))
-    if schedule.enabled:
-        schedules.refill_one(schedule.pk)
+    # Only what changed: the run bookkeeping on the row (backoff, failures) is agentd's.
+    schedule.save(update_fields=[*changed, "updated_at"])
+    # A changed target or timing is a fresh start: agentd cancels the waiting run of the old
+    # settings, forgets their backoff and plans anew (nothing, for a disabled schedule).
+    schedules.plan(schedule, replan=replan, principal=info)
+    schedule.refresh_from_db()
     return schedule
 
 
 def delete_schedule(info: Info, input: inputs.ScheduleIdInput) -> strawberry.ID:
     """Delete a schedule. Its waiting run is cancelled; an executing run finishes, and the history is kept."""
     schedule = _schedule(info, input.id)
-    with transaction.atomic():
-        schedules.cancel_waiting_run(schedule, caller=_caller(info))
-        schedule.delete()
+    schedules.cancel_waiting_run(schedule, principal=info)
+    schedule.delete()
     return input.id
 
 

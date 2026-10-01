@@ -31,8 +31,6 @@ from rekuest_core.inputs.models import iter_component_nodes, iter_util_calls
 from rekuest_core.objects.models import DiagnosticModel
 
 UNKNOWN_OPERATION = "unknown_operation"
-UNKNOWN_CATALOG = "unknown_catalog"
-
 Widget = rimodels._AssignWidgetBase | rimodels._ReturnWidgetBase
 
 

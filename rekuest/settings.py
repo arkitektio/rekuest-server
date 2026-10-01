@@ -51,21 +51,11 @@ REDIS_KEY_PREFIX = conf.redis.key_prefix
 # This hub's services, provisioned as HookAgents by the reaper (``facade.service_agents``).
 SERVICE_AGENTS = [agent.model_dump() for agent in conf.rekuest.service_agents]
 SERVICE_AGENTS_ORGANIZATION = conf.rekuest.service_agents_organization
-# Signals and triggers (``facade.triggers``): the loop guard and how long processed signals stay.
-TRIGGER_MAX_DEPTH = conf.rekuest.trigger_max_depth
-SIGNAL_RETENTION_SECONDS = conf.rekuest.signal_retention
 
-
-# How often (seconds) the scheduler loop (``facade.reaper``: ``manage.py reaper``) ticks. The
-# agent deadlines (grace, pickup, expiry, control escalation) are agentd's: it reads them from
-# the same ``rekuest`` configuration block.
+# How often (seconds) this server's background loop (``facade.reaper``: ``manage.py reaper``)
+# ticks. Every deadline, retention horizon and the trigger loop guard are agentd's: it reads
+# them from the same ``rekuest`` configuration block.
 REKUEST_GRACE = {"SWEEP_INTERVAL": conf.rekuest.sweep_interval}
-
-# Task retention: terminal root task trees older than this are deleted by the retention
-# sweep (the in-process reaper loop). 0 disables — history then grows forever.
-TASK_RETENTION_SECONDS = conf.rekuest.task_retention
-# Ephemeral runs (a schedule's ``ephemeral_runs``) get a short horizon of their own, on by default.
-EPHEMERAL_TASK_RETENTION_SECONDS = conf.rekuest.ephemeral_task_retention
 
 # Probes are agentd's (redis-held, expiring on their own); this server reads them and reports
 # the per-caller in-flight cap in ``probeStats``.

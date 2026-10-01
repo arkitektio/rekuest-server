@@ -1,43 +1,33 @@
-"""The reconciler: every deadline the server enforces fires from here.
+"""The server's own background loop: service agents and embeddings.
 
-The backend is stateless — no deadline lives in a process-local timer. Each one starts at a DB
-column and this loop acts on it once it has passed. The loop runs in its own process
-(``python manage.py reaper`` — the ``rekuest-reaper`` container), never inside the web
-replicas, so a slow sweep cannot stall requests and scaling the web tier does not multiply it:
+It runs in its own process (``python manage.py reaper``, the ``rekuest-reaper`` container),
+never inside the web replicas, so a slow pass cannot stall requests and scaling the web tier
+does not multiply it:
 
 ====================================  =============================  ==========================
-sweep                                 deadline starts at             setting
+step                                  acts on                        cadence
 ====================================  =============================  ==========================
 ``provision_service_agents``          ``rekuest.service_agents``     every 5 min (manifest re-read)
-``refill_schedules``                  open run of a ``Schedule``     the schedule's own
-``fire_triggers``                     unprocessed ``Signal``         (as soon as it arrives)
-``sweep_terminal_tasks``              ``Task.finished_at``           ``TASK_RETENTION_SECONDS``
-``reembed_stale`` (embeddings)        ``Action.embedding_model``     ``EMBEDDINGS.MODEL``
+``reembed_stale`` (embeddings)        ``Action.embedding_model``     every tick
 ====================================  =============================  ==========================
 
-The agent sweeps (stale and disconnected agents, due tasks, redelivery, control escalation,
-expiry, workflow resume) are agentd's: they dispatch and write task state, which agentd owns, and
-every agentd replica runs them. This loop keeps only what is not the agent protocol; the runs it
-creates go through agentd's internal API.
+Everything that creates, moves or prunes tasks is agentd's, and every agentd replica runs it:
+the agent sweeps, schedules, triggers and retention. What stays here needs this server: service
+manifests are fetched and registered through GraphQL-side models, and embeddings run the model.
 
-The last row is not a deadline but the same discipline: an action whose vector was produced by
-another embedding model (or none) is a DB fact, and the row-locked batch re-embed here is what
-heals it -- after a model change, after a write while the weights were unreachable, after a
-migration on a cold replica. See :mod:`embeddings.healer`.
+An action whose vector was produced by another embedding model (or none) is a database fact, and
+the row-locked batch re-embed here is what heals it: after a model change, after a write while
+the weights were unreachable, after a migration on a cold replica. See :mod:`embeddings.healer`.
 
 Consequences, all deliberate:
 
-* **No cron and no state of its own.** A reaper that starts heals whatever an earlier one
-  left behind on its first tick, which runs immediately. While none runs, deadlines are late,
-  never lost: they are rows, and the next reaper acts on them.
-* **A reaper may die at any instant.** Nothing pending is lost with it; the next tick of any
-  reaper picks it up. A deadline fires at most ``SWEEP_INTERVAL`` late — the price of having
-  no timers.
-* **Any number of reapers may run concurrently.** Correctness never depends on who sweeps:
-  every refill and firing is a row-locked claim with one winner, and sweeps
-  step over rows another reaper holds (``skip_locked``). The redis tick token below merely
-  keeps N reapers from all scanning the same rows in the same second; if redis is
-  unreachable it is skipped and everyone sweeps — wasteful, still correct.
+* **No state of its own.** A loop that starts does on its first tick, which runs immediately,
+  whatever an earlier one left undone.
+* **It may die at any instant.** Nothing pending is lost with it; the next tick of any loop
+  picks it up.
+* **Any number may run concurrently.** Provisioning is idempotent and the re-embed is
+  row-locked. The redis tick token below merely keeps N loops from doing the same work in the
+  same second; if redis is unreachable it is skipped and everyone runs: wasteful, still correct.
 
 Every iteration touches a heartbeat file; ``manage.py reaper --check`` (the container's
 healthcheck) fails once it is older than a few intervals, so a wedged loop is visible.
@@ -55,16 +45,10 @@ from channels.db import database_sync_to_async
 from django.conf import settings
 from embeddings.healer import reembed_stale
 
-from facade import models, redis_keys, schedules, service_agents, triggers
+from facade import models, redis_keys, service_agents
 from facade.deadlines import sweep_interval_seconds
-from facade.retention import sweep_terminal_tasks
 
 logger = logging.getLogger(__name__)
-
-# Retention runs on every Nth reaper tick: the deadlines above want responsiveness, the
-# retention horizon is measured in days — a slower cadence is plenty and keeps the
-# common tick free of the sweep query.
-_RETENTION_EVERY_N_TICKS = 60
 
 _PROCESS_ID = uuid.uuid4().hex
 
@@ -80,13 +64,8 @@ def _beat(heartbeat: "Path | None") -> None:
 
 
 def _sweeps() -> "List[Tuple[str, Callable[[], Awaitable[int]]]]":
-    """The ordered sweep steps. Service agents first: a freshly provisioned service's default
-    schedules get their first run in the same tick."""
-    return [
-        ("service agents", database_sync_to_async(service_agents.provision_all)),
-        ("schedules", database_sync_to_async(schedules.refill_schedules_sync)),
-        ("triggers", database_sync_to_async(triggers.fire_triggers_sync)),
-    ]
+    """The ordered steps."""
+    return [("service agents", database_sync_to_async(service_agents.provision_all))]
 
 
 async def run_sweeps() -> None:
@@ -110,8 +89,8 @@ def _take_tick_token(interval: float) -> bool:
     """
     try:
         connection = redis.Redis(host=settings.AGENT_REDIS_HOST, port=settings.AGENT_REDIS_PORT)
-        # Not agentd's ``reaper:tick``: the two loops sweep different things and must not skip
-        # each other's ticks.
+        # Not agentd's ``reaper:tick``: the two loops do different things and must not skip each
+        # other's ticks.
         return bool(connection.set(redis_keys.key("scheduler", "tick"), _PROCESS_ID, nx=True, px=max(1, int(interval * 800))))
     except Exception:
         logger.debug("Reaper tick token unavailable; sweeping anyway.", exc_info=True)
@@ -120,7 +99,6 @@ def _take_tick_token(interval: float) -> bool:
 
 async def run_forever(heartbeat: "Path | None" = None) -> None:
     """Sweep forever; never let one bad iteration kill the loop. The body of ``manage.py reaper``."""
-    tick = 0
     # A little jitter so reapers started together do not tick in lockstep; otherwise the
     # first pass runs right away — it is what heals everything a previous process left behind.
     await asyncio.sleep(random.uniform(0, 0.5))
@@ -136,11 +114,6 @@ async def run_forever(heartbeat: "Path | None" = None) -> None:
                 # tick when there are (model change, cold write). Off the event loop: the
                 # model runs on the CPU of this process.
                 await database_sync_to_async(reembed_stale)(models.Action, max_batches=5)
-                tick += 1
-                if tick % _RETENTION_EVERY_N_TICKS == 0:
-                    # One batch per slow tick; the next one drains any backlog. No-op while
-                    # retention is disabled.
-                    await database_sync_to_async(sweep_terminal_tasks)(max_batches=1)
             await asyncio.sleep(interval)
         except asyncio.CancelledError:
             return
