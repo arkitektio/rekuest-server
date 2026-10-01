@@ -10,8 +10,18 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .init();
 
-    let path = std::env::var("AGENTD_CONFIG").unwrap_or_else(|_| "config.yaml".into());
+    // The server's own file: `ARKITEKT_CONFIG_FILE` names it for both, `AGENTD_CONFIG` for
+    // agentd alone.
+    let path = std::env::var("AGENTD_CONFIG")
+        .or_else(|_| std::env::var("ARKITEKT_CONFIG_FILE"))
+        .unwrap_or_else(|_| "config.yaml".into());
     let configuration = Configuration::load(&path)?;
+    // The server signs every internal request with the instance key, and agentd verifies with
+    // it: without one, nothing the server asks for would be accepted.
+    anyhow::ensure!(
+        configuration.instance.is_some(),
+        "{path} has no `instance` block: agentd needs the instance key the rekuest server signs its requests with"
+    );
     let bind = std::env::var("AGENTD_BIND").unwrap_or_else(|_| "0.0.0.0:8080".into());
     // `agentd healthcheck`: is the agentd of this configuration serving? For the container's
     // HEALTHCHECK, in an image that carries no HTTP client.

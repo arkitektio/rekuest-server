@@ -223,17 +223,106 @@ pub struct TrustBlock {
 }
 
 impl Configuration {
+    /// The server's configuration, as the server itself reads it: the YAML file, then the
+    /// environment over it (`SECTION__KEY`, nested with `__`, as pydantic-settings does for the
+    /// Python server). A secret given only as `POSTGRES__PASSWORD` therefore reaches both.
     pub fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let path = path.as_ref();
         let text = std::fs::read_to_string(path)
             .map_err(|e| anyhow::anyhow!("reading {}: {e}", path.display()))?;
-        serde_yaml::from_str(&text).map_err(|e| anyhow::anyhow!("parsing {}: {e}", path.display()))
+        let mut document: serde_yaml::Value = serde_yaml::from_str(&text)
+            .map_err(|e| anyhow::anyhow!("parsing {}: {e}", path.display()))?;
+        apply_environment(&mut document, std::env::vars());
+        serde_yaml::from_value(document).map_err(|e| {
+            anyhow::anyhow!(
+                "parsing {} (with the environment over it): {e}",
+                path.display()
+            )
+        })
+    }
+}
+
+/// The sections of the file the environment may set a key of.
+const SECTIONS: [&str; 7] = [
+    "django",
+    "postgres",
+    "redis",
+    "authentikate",
+    "rekuest",
+    "provenance",
+    "instance",
+];
+
+/// Lay `SECTION__KEY[__KEY…]=value` variables over the document. Names are matched without
+/// regard to case. A value replacing a string stays a string; otherwise it is read as YAML, so
+/// `REDIS__PORT=6380` is a number and `DJANGO__DEBUG=true` a boolean.
+fn apply_environment(
+    document: &mut serde_yaml::Value,
+    variables: impl Iterator<Item = (String, String)>,
+) {
+    use serde_yaml::{Mapping, Value};
+    for (name, raw) in variables {
+        let path: Vec<String> = name.split("__").map(str::to_lowercase).collect();
+        if path.len() < 2
+            || !SECTIONS.contains(&path[0].as_str())
+            || path.iter().any(String::is_empty)
+        {
+            continue;
+        }
+        let mut node = &mut *document;
+        for key in &path[..path.len() - 1] {
+            if !node.is_mapping() {
+                *node = Value::Mapping(Mapping::new());
+            }
+            node = node
+                .as_mapping_mut()
+                .expect("just made a mapping")
+                .entry(Value::String(key.clone()))
+                .or_insert(Value::Mapping(Mapping::new()));
+        }
+        if !node.is_mapping() {
+            *node = Value::Mapping(Mapping::new());
+        }
+        let leaf = Value::String(path[path.len() - 1].clone());
+        let mapping = node.as_mapping_mut().expect("just made a mapping");
+        let value = match mapping.get(&leaf) {
+            Some(Value::String(_)) => Value::String(raw),
+            _ => serde_yaml::from_str(&raw).unwrap_or(Value::String(raw)),
+        };
+        mapping.insert(leaf, value);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_environment_goes_over_the_file() {
+        let mut document: serde_yaml::Value = serde_yaml::from_str(
+            "postgres:\n  password: from-file\n  port: 5432\nredis:\n  host: redis\n",
+        )
+        .unwrap();
+        let environment = [
+            ("POSTGRES__PASSWORD", "12345"),
+            ("postgres__port", "6000"),
+            ("REKUEST__TRIGGER_MAX_DEPTH", "5"),
+            ("DJANGO__DEBUG", "true"),
+            ("PATH", "/usr/bin"),
+            ("UNRELATED__KEY", "x"),
+        ];
+        apply_environment(
+            &mut document,
+            environment
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string())),
+        );
+        let expected: serde_yaml::Value = serde_yaml::from_str(
+            "postgres:\n  password: '12345'\n  port: 6000\nredis:\n  host: redis\nrekuest:\n  trigger_max_depth: 5\ndjango:\n  debug: true\n",
+        )
+        .unwrap();
+        assert_eq!(document, expected);
+    }
 
     #[test]
     fn reads_the_servers_config_and_ignores_the_rest() {
