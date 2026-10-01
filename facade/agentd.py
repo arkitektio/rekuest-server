@@ -1,10 +1,10 @@
-"""The control backend, served by agentd (the agent protocol in Rust, ``rekuest-agentd``).
+"""The control backend, served by agentd (the agent protocol in Rust, ``agentd/``).
 
 Every assign, control, agent operation, probe, registration and drawer the GraphQL mutations,
 schedules, triggers and the hub-service provisioning make goes to agentd's internal API: agentd
 owns the agent sockets and is the one writer of task state, agents and their declarations. The request is signed with this instance's key as a service token from
 rekuest to itself (agentd reads the same ``config.yaml``, so it holds the same key); the JSON
-contract is documented at the top of ``rekuest-agentd/crates/rekuest-server/src/internal.rs``.
+contract is documented at the top of ``agentd/crates/rekuest-server/src/internal.rs``.
 
 agentd answers the in-process backends' refusals with their messages: ``400`` is their
 ``ValueError``, ``403`` their ``PermissionError``; either is raised as such here, so GraphQL

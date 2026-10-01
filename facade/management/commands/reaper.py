@@ -1,10 +1,10 @@
-"""Run the reconciler loop (:mod:`facade.reaper`) — the ``rekuest-reaper`` container's process.
+"""Run the server's background loop (:mod:`facade.reaper`): the ``rekuest-reaper`` container's process.
 
-    python manage.py reaper            # sweep forever
+    python manage.py reaper            # run forever
     python manage.py reaper --check    # healthcheck: exit 1 unless the heartbeat is fresh
 
-The loop holds no state: stop it, run two, restart it — every deadline is a database row, and
-whichever reaper ticks next acts on it. The web replicas never sweep.
+The loop holds no state: stop it, run two, restart it. Everything that touches a task (deadlines,
+schedules, triggers, retention) is agentd's; this provisions service agents and re-embeds actions.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ DEFAULT_HEARTBEAT = "/tmp/rekuest-reaper.heartbeat"
 
 
 class Command(BaseCommand):
-    help = "Run the reaper loop (every deadline, schedule and delayed task fires from it)."
+    help = "Run this server's background loop: service agents and stale embeddings."
 
     def add_arguments(self, parser):
         parser.add_argument("--heartbeat", default=DEFAULT_HEARTBEAT, help="File touched every iteration (default: %(default)s).")

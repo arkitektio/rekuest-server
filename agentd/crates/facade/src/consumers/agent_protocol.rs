@@ -337,6 +337,9 @@ async fn register(
         }
     };
 
+    // `connected` changed: the agents feed shows it without waiting for anything else to.
+    crate::signals::agent_saved(ctx, agent, false).await;
+
     sender.send(ToAgent::Init {
         agent: agent.to_string(),
         inquiries: claim
@@ -605,6 +608,7 @@ async fn on_agent_disconnected(
     if !leases::release_lease(&ctx.db, agent, connection_id).await? {
         return Ok(()); // displaced: the new owner is authoritative
     }
+    crate::signals::agent_saved(ctx, agent, false).await;
     if let Err(e) = probes::persist::fail_all_for_agent(ctx, agent).await {
         tracing::error!(
             agent,

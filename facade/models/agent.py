@@ -122,8 +122,8 @@ class Agent(models.Model):
             )
         ]
 
-    # The executor lease. Owned exclusively by the claim / renew / release / revoke paths in
-    # ``facade.persist_backend``, each of which writes them with explicit ``update_fields``.
+    # The executor lease. agentd's (``agentd/crates/facade/src/persist/leases.rs``): its claim,
+    # renew, release and revoke are the only writers.
     LEASE_FIELDS = frozenset({"connected", "last_seen", "lease_epoch", "active_connection_id", "active_session_id"})
 
     def save(self, *args, **kwargs):

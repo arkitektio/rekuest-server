@@ -25,7 +25,7 @@ class AgentChange:
     def from_model(cls, a: models.Agent) -> "AgentChange":
         return cls(
             id=strawberry.ID(str(a.id)),
-            name=a.name,
+            name=a.display_name or a.name,
             kind=enums.AgentKind(a.kind),
             connected=a.connected,
             blocked=a.blocked,

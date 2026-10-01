@@ -1,19 +1,22 @@
-//! The reconciler: every deadline the server enforces fires from here (`facade/reaper.py`).
+//! The reconciler: every deadline fires from here, and every run a schedule or a signal is owed.
 //!
 //! No deadline lives in a process-local timer. Each starts at a database column, and this loop
 //! acts on it once it has passed:
 //!
-//! | sweep                             | deadline starts at | setting               |
-//! |-----------------------------------|--------------------|-----------------------|
-//! | `reconcile_stale_agents`          | `Agent.last_seen`  | `agent_stale_after`   |
-//! | `reconcile_disconnected_agents`   | `Agent.last_seen`  | `grace`               |
-//! | `dispatch_due_tasks`              | `Task.not_before`  | (the task's own)      |
-//! | `reconcile_unpicked_tasks`        | `Task.dispatched_at` | `pickup_deadline`   |
-//! | `escalate_due_controls`           | `Task.interrupt_at`  | `control_deadline`  |
+//! | sweep                             | acts on              | setting               |
+//! |-----------------------------------|----------------------|-----------------------|
+//! | `reconcile_stale_agents`          | `Agent.last_seen`    | `agent_stale_after`   |
+//! | `reconcile_disconnected_agents`   | `Agent.last_seen`    | `grace`               |
+//! | `refill_schedules`                | a schedule without an open run | (the schedule's own) |
+//! | `fire_triggers`                   | an unprocessed signal | `trigger_max_depth`  |
+//! | `dispatch_due_tasks`              | `Task.not_before`    | (the task's own)      |
+//! | `reconcile_unpicked_tasks`        | `Task.dispatched_at` | `pickup_deadline`     |
+//! | `escalate_due_controls`           | `Task.interrupt_at`  | `control_deadline`    |
 //! | `expire_disconnected_tasks`       | `Task.dispatched_at` | `disconnected_expiry` |
+//! | `retention::sweep` (every 60th tick) | `Task.finished_at`, `Signal.processed_at` | `task_retention`, `ephemeral_task_retention`, `signal_retention` |
 //!
-//! The Python reaper runs more sweeps (service agents, schedules, triggers, embeddings,
-//! retention); those stay in Python and are not run here.
+//! The rekuest server's own loop keeps what needs the server: provisioning the hub's services
+//! as agents, and re-embedding actions.
 //!
 //! Deliberately: a reaper that starts heals whatever an earlier one left behind on its first
 //! tick, which runs at once; a reaper may die at any instant and nothing pending dies with it; any
