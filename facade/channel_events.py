@@ -4,12 +4,6 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 
-class DBEvent(BaseModel):
-    """A model representing a database event."""
-
-    event_type: str = Field(..., description="Type of the event (e.g., 'insert', 'update', 'delete').")
-
-
 class StateUpdateEvent(BaseModel):
     """A model representing a state update event."""
 
@@ -185,11 +179,3 @@ class ImplementationEvent(BaseModel):
     create: int | None = Field(None, description="The template that was created.")
     update: int | None = Field(None, description="The template that was updated.")
     delete: int | None = Field(None, description="The template that was deleted.")
-
-
-class ActionEvent(BaseModel):
-    """A model representing an action event."""
-
-    create: int | None = Field(None, description="The action that was created.")
-    update: int | None = Field(None, description="The action that was updated.")
-    delete: int | None = Field(None, description="The action that was deleted.")

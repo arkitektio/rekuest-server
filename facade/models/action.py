@@ -1,5 +1,4 @@
 from authentikate.models import App, Organization
-from django.contrib.auth import get_user_model
 from django.db import models
 from django.db.models.functions import Upper
 from django_choices_field import TextChoicesField

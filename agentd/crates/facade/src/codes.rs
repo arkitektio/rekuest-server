@@ -4,7 +4,6 @@
 pub const HEARTBEAT_NOT_RESPONDED_CODE: u16 = 3001;
 pub const FROM_AGENT_MESSAGE_IS_NOT_VALID_JSON_CODE: u16 = 3002;
 pub const FROM_AGENT_MESSAGE_DOES_NOT_MATCH_SCHEMA_CODE: u16 = 3003;
-pub const FROM_AGENT_MESSAGE_RECEIVED_BEFORE_REGISTRATION_CODE: u16 = 3004;
 /// Server-side delivery to this socket failed; the agent should simply reconnect.
 pub const AGENT_TRANSPORT_FAILED_CODE: u16 = 3005;
 pub const AGENT_IS_BLOCKED_CODE: u16 = 4003;

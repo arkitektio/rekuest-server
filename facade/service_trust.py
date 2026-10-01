@@ -53,11 +53,3 @@ def entry_for_agent(agent: Any) -> dict[str, Any] | None:
 def sign_to(entry: dict[str, Any], method: str, url: str, body: bytes) -> str:
     """The ``Authorization`` value of a request from rekuest to this service."""
     return trust.sign(method, urlparse(url).path, body, issuer=rekuest_identifier(), audience=identifier_of(entry))
-
-
-def verify_from(entry: dict[str, Any], method: str, path: str, body: bytes, authorization: str | None) -> trust.Verified:
-    """Check a request claiming to come from this service; ``trust.TrustError`` when it does not."""
-    verified = trust.verify(method, path, body, authorization, audience=rekuest_identifier())
-    if verified.issuer != identifier_of(entry):
-        raise trust.TrustError(f"Signed by {verified.issuer}, not by {identifier_of(entry)}")
-    return verified

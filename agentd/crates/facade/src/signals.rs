@@ -364,32 +364,11 @@ pub async fn implementation_deleted(ctx: &Context, id: i64, agent_id: i64) {
     .await;
 }
 
-/// An action was saved (`action_singal`): its organization's action feed.
-pub async fn action_saved(ctx: &Context, id: i64, created: bool) {
-    match sqlx::query_scalar::<_, i64>("SELECT organization_id FROM facade_action WHERE id = $1")
-        .bind(id)
-        .fetch_one(&ctx.db)
-        .await
-    {
-        Ok(organization) => {
-            publish(
-                ctx,
-                channels::ACTION,
-                &CrudEvent::saved(id, created),
-                vec![format!("actions_{organization}")],
-            )
-            .await
-        }
-        Err(e) => tracing::error!(id, "action fan-out failed: {e}"),
-    }
-}
-
 /// A `post_save` / `post_delete` a transaction's writes fired, published once it commits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Signal {
     AgentSaved { id: i64, created: bool },
     AgentDeleted { id: i64, organization: i64 },
-    ActionSaved { id: i64, created: bool },
     ImplementationSaved { id: i64, created: bool },
     ImplementationDeleted { id: i64, agent_id: i64 },
     StateSaved { id: i64 },
@@ -420,7 +399,6 @@ impl OnCommit {
                 Signal::AgentDeleted { id, organization } => {
                     agent_deleted(ctx, id, organization).await
                 }
-                Signal::ActionSaved { id, created } => action_saved(ctx, id, created).await,
                 Signal::ImplementationSaved { id, created } => {
                     implementation_saved(ctx, id, created).await
                 }

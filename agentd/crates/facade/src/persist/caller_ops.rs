@@ -157,14 +157,3 @@ pub async fn on_caller_cancel(
     }
     Ok(task)
 }
-
-/// The id of a control request's task, for the `CONTROL_RESPONSE` of a refusal.
-pub fn control_task(message: &FromAgent<impl Sized>) -> Option<&str> {
-    match message {
-        FromAgent::CancelRequest { task, .. }
-        | FromAgent::InterruptRequest { task }
-        | FromAgent::PauseRequest { task }
-        | FromAgent::ResumeRequest { task, .. } => Some(task),
-        _ => None,
-    }
-}

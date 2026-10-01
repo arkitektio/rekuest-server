@@ -47,14 +47,10 @@ async fn main() -> anyhow::Result<()> {
         channel_layer,
         connections: facade::consumers::connections::Connections::default(),
     };
-    // The reaper sweeps every deadline from inside this process. Any number of processes may
-    // run it; `AGENTD_REAPER=0` leaves it to others.
-    if std::env::var("AGENTD_REAPER").map_or(true, |v| {
-        !matches!(v.as_str(), "0" | "false" | "no" | "off")
-    }) {
-        tokio::spawn(facade::reaper::run_forever(facade.clone()));
-        tracing::info!("reaper running every {:?}", facade.settings.sweep_interval);
-    }
+    // The reaper sweeps every deadline from inside this process. Any number of replicas run
+    // it: a tick token in redis lets one of them sweep per tick.
+    tokio::spawn(facade::reaper::run_forever(facade.clone()));
+    tracing::info!("reaper running every {:?}", facade.settings.sweep_interval);
     let state = Arc::new(urls::AppState {
         configuration,
         facade,

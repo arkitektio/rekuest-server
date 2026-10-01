@@ -2,7 +2,6 @@
 
 import logging
 
-import strawberry
 
 from facade import inputs, types
 from facade.agentd import AgentdProbeBackend

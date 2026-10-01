@@ -1,5 +1,5 @@
 import strawberry
-from facade import models, types, inputs, managers
+from facade import models, types, managers
 from rekuest_core.inputs import types as ritypes
 from kante.types import Info
 

@@ -3,7 +3,6 @@ from rekuest_core.inputs.models import ActionDemandInputModel
 
 from facade import models, managers
 from kante.types import Info
-from dataclasses import dataclass
 import logging
 import uuid
 import jsonpatch

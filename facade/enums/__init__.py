@@ -7,9 +7,7 @@ the established ``from facade import enums`` / ``enums.X`` access keeps working.
 from .action import ActionKindChoices, ActionScope, DemandKind, EffectsChoices, ExecutionChoices, HookKind
 from .agent import (
     AgentEventChoices,
-    AgentEventKind,
     AgentKind,
-    AgentStatus,
 )
 from .task import (
     TaskEventChoices,
@@ -19,7 +17,7 @@ from .task import (
 )
 from .log import LogLevel, LogLevelChoices
 from .signal import SignalKind, SignalKindChoices
-from .state import JSONPatchOperation, RetentionPolicyChoices
+from .state import JSONPatchOperation
 
 __all__ = [
     # signal
@@ -34,9 +32,7 @@ __all__ = [
     "HookKind",
     # agent
     "AgentEventChoices",
-    "AgentEventKind",
     "AgentKind",
-    "AgentStatus",
     # task
     "TaskEventChoices",
     "TaskEventKind",
@@ -47,5 +43,4 @@ __all__ = [
     "LogLevelChoices",
     # state
     "JSONPatchOperation",
-    "RetentionPolicyChoices",
 ]

@@ -41,5 +41,3 @@ impl RegisterDeclaration {
 
 /// A frame from an agent, as this server parses it.
 pub type AgentFrame = Envelope<RegisterDeclaration>;
-/// A message from an agent, as this server parses it.
-pub type AgentMessage = FromAgent<RegisterDeclaration>;

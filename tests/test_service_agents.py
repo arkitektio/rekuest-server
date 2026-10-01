@@ -6,7 +6,6 @@ travelling the whole way — Assign to the service, reports back — is agentd's
 rekuest-agentd's conformance suite.
 """
 
-import threading
 import time
 from urllib.parse import urlparse
 
@@ -20,20 +19,16 @@ from tests.hook_urls import housekeeping
 
 pytestmark = pytest.mark.usefixtures("fake_agentd")
 
-ran = threading.Event()
-
 
 @pytest.fixture
 def hook_action():
     """Register the service's action for this test only."""
 
     def tidy_up() -> dict:
-        ran.set()
         return {"acted": 3}
 
     housekeeping.action(interface="tidy_up", description="Tidy the service up.", default_interval=60)(tidy_up)
     housekeeping.signal("@housekeeping/room", kinds=["CREATED", "DELETED"], descriptors=["@housekeeping/area"], description="A room appeared or went.")
-    ran.clear()
     yield tidy_up
     housekeeping._actions.clear()
     housekeeping._signals.clear()
@@ -46,16 +41,6 @@ def hub(live_server, settings, hook_action):
     settings.SERVICE_AGENTS = [{"service": "housekeeping", "hook_url": f"{live_server.url}{prefix}/_rekuest/hook"}]
     settings.REKUEST_HOOK = {"REKUEST_URL": f"{live_server.url}{prefix}"}
     return settings
-
-
-def _wait_done(task_pk: int, timeout: float = 15.0) -> models.Task:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        task = models.Task.objects.get(pk=task_pk)
-        if task.is_done:
-            return task
-        time.sleep(0.1)
-    raise AssertionError(f"task {task_pk} did not finish: {models.Task.objects.get(pk=task_pk).latest_event_kind}")
 
 
 @pytest.mark.django_db(transaction=True)

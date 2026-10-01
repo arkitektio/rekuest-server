@@ -1,6 +1,6 @@
 from kante.types import Info
 import strawberry
-from facade import types, models, inputs, scalars
+from facade import models
 from django.db.models import Count
 import logging
 

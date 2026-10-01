@@ -56,22 +56,10 @@ TRIGGER_MAX_DEPTH = conf.rekuest.trigger_max_depth
 SIGNAL_RETENTION_SECONDS = conf.rekuest.signal_retention
 
 
-# Reclaim grace window (seconds). On a disconnect the failure/cascade is delayed this long so
-# a brief blip can reclaim same-session in-flight work before it fires. 0 means no grace
-# (strict). Consumed by the reclaim/grace backend via ``facade.deadlines.grace_seconds``.
-REKUEST_GRACE = {
-    "DEFAULT": conf.rekuest.grace_default,
-    # None of these windows is a timer: each starts at a DB column and is enforced by the
-    # reaper (``facade.reaper``, its own process: ``manage.py reaper``), every SWEEP_INTERVAL
-    # seconds, on whichever reaper gets there first. See ``facade.deadlines`` for the accessors.
-    "SWEEP_INTERVAL": conf.rekuest.sweep_interval,
-    # A dispatched task its live agent never reports on: redelivered once, then CRITICAL.
-    "PICKUP_DEADLINE": conf.rekuest.pickup_deadline,
-    # DISCONNECTED ("fate unknown") stays recoverable this long, then is finalized.
-    "DISCONNECTED_EXPIRY": conf.rekuest.disconnected_expiry,
-    # Unconfirmed cancel → interrupt → finalized. A request's own ``auto_interrupt`` wins.
-    "CONTROL_DEADLINE": conf.rekuest.control_deadline,
-}
+# How often (seconds) the scheduler loop (``facade.reaper``: ``manage.py reaper``) ticks. The
+# agent deadlines (grace, pickup, expiry, control escalation) are agentd's: it reads them from
+# the same ``rekuest`` configuration block.
+REKUEST_GRACE = {"SWEEP_INTERVAL": conf.rekuest.sweep_interval}
 
 # Task retention: terminal root task trees older than this are deleted by the retention
 # sweep (the in-process reaper loop). 0 disables — history then grows forever.
@@ -79,11 +67,8 @@ TASK_RETENTION_SECONDS = conf.rekuest.task_retention
 # Ephemeral runs (a schedule's ``ephemeral_runs``) get a short horizon of their own, on by default.
 EPHEMERAL_TASK_RETENTION_SECONDS = conf.rekuest.ephemeral_task_retention
 
-# Probes (facade.probes): redis-held, zero-DB-row invocations. TTL is the garbage
-# collector — a live probe's state expires after PROBE_TTL_SECONDS without a write, and a
-# terminal probe lingers PROBE_LINGER_SECONDS for late subscribers.
-PROBE_TTL_SECONDS = conf.rekuest.probe_ttl
-PROBE_LINGER_SECONDS = conf.rekuest.probe_linger
+# Probes are agentd's (redis-held, expiring on their own); this server reads them and reports
+# the per-caller in-flight cap in ``probeStats``.
 PROBE_MAX_INFLIGHT_PER_CALLER = conf.rekuest.probe_max_inflight
 
 # Application definition
@@ -136,12 +121,9 @@ REKUEST_IDENTIFIER = conf.rekuest.identifier
 AGENTD_URL = conf.rekuest.agentd_url
 
 PROVENANCE = {
-    "ISSUER": conf.provenance.issuer,
     "KID": _OKPKey.import_key(conf.instance.private_key).thumbprint(),
     "PRIVATE_KEY": conf.instance.private_key,
     "PUBLIC_KEY": None,
-    "TOKEN_TTL_SECONDS": int(conf.provenance.token_ttl_seconds),
-    "HUMAN_ROLES": list(conf.provenance.human_roles),
     "STRICT": bool(conf.provenance.strict),
 }
 

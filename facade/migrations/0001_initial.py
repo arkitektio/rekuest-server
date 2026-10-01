@@ -10,7 +10,6 @@ import facade.enums.agent
 import facade.enums.log
 import facade.enums.task
 import pgvector.django.vector
-import rekuest_core.enums
 import uuid
 from django.conf import settings
 from django.db import migrations, models

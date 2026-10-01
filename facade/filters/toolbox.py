@@ -7,7 +7,6 @@ from typing import Optional
 import strawberry
 import strawberry_django
 from django.db.models import Q
-from rekuest_core import enums as renums
 from strawberry import auto
 from strawberry.types import Info
 from strawberry_django.fields.filter_order import filter_field

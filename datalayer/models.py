@@ -1,6 +1,5 @@
 import logging
 from pathlib import PurePosixPath
-from collections.abc import Callable
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -19,12 +18,6 @@ logger = logging.getLogger(__name__)
 def get_default_upload_token() -> str:
     """Return the default opaque token used sfor storage keys."""
     return uuid4().hex
-
-
-def build_opaque_storage_key(original_file_name: str, generator: Callable[[], str] = get_default_upload_token) -> str:
-    """Build a fully opaque storage key without sembsedding filename metadata."""
-    del original_file_name
-    return generator()
 
 
 class DatalayerStore(PolymorphicModel):
@@ -127,5 +120,3 @@ class MediaStore(DatalayerStore):
             getattr(file, "content_type", "application/octet-stream"),
         )
         self.fill_info(datalayer)
-
-

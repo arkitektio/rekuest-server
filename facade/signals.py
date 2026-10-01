@@ -26,20 +26,6 @@ def _broadcast_on_commit(channel, event, topics=_UNSET):
         transaction.on_commit(lambda: channel.broadcast(event, topics))
 
 
-@receiver(post_save, sender=models.State)
-def state_post_save(sender, instance: models.State = None, created=None, **kwargs):
-    _broadcast_on_commit(channels.state_update_channel, channel_events.StateUpdateEvent(state=instance.id), [f"state_{instance.id}"])
-
-
-@receiver(post_save, sender=models.Action)
-def action_singal(sender, instance=None, created=None, **kwargs):
-    if instance:
-        if created:
-            _broadcast_on_commit(channels.action_channel, channel_events.ActionEvent(create=instance.id), [f"actions_{instance.organization.id}"])
-        else:
-            _broadcast_on_commit(channels.action_channel, channel_events.ActionEvent(update=instance.id), [f"actions_{instance.organization.id}"])
-
-
 def broadcast_agent_update(agent: models.Agent, created: bool = False) -> None:
     """Refresh the agent feeds — callable directly when a change needs no row write (an M2M
     edit), so nobody has to ``save()`` an agent merely to fire this signal."""
@@ -54,16 +40,6 @@ def broadcast_agent_update(agent: models.Agent, created: bool = False) -> None:
 def agent_post_save(sender, instance: models.Agent = None, created=None, **kwargs):
     if instance:
         broadcast_agent_update(instance, created=bool(created))
-
-
-@receiver(post_delete, sender=models.Agent)
-def agent_post_delete(sender, instance: models.Agent = None, **kwargs):
-    if instance:
-        _broadcast_on_commit(
-            channels.agent_updated_channel,
-            channel_events.AgentEvent(delete=instance.id),
-            [f"agents_for_{instance.organization.id}"],
-        )
 
 
 @receiver(post_save, sender=models.Task)

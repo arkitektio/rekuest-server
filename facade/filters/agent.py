@@ -9,7 +9,7 @@ from strawberry import UNSET, auto
 from strawberry.types import Info
 from strawberry_django.fields.filter_order import filter_field
 
-from facade import inputs, managers, models
+from facade import managers, models
 from rekuest_core.inputs import types as ritypes
 
 

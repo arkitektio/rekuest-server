@@ -2,7 +2,7 @@ import datetime
 
 from kante.types import Info
 import strawberry
-from facade import channel_events, models, enums, types
+from facade import channel_events, models, enums
 from rekuest_core import scalars as rscalars
 from typing import AsyncGenerator
 from facade.channels import task_event_channel, child_task_channel, agent_task_channel

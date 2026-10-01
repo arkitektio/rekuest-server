@@ -1534,27 +1534,9 @@ async fn insert_instruct(
     Ok(())
 }
 
-/// Two-phase: CANCELLING now, CANCELLED when the agent confirms. Sent to the task only.
-pub async fn cancel(ctx: &Context, task: &str, caller: Option<i64>) -> BackendResult<i64> {
-    request_control(ctx, task, Control::Cancel, caller).await
-}
-
 /// Forceful: reaches every still-running descendant; each confirms on its own.
 pub async fn interrupt(ctx: &Context, task: &str, caller: Option<i64>) -> BackendResult<i64> {
     request_control(ctx, task, Control::Interrupt, caller).await
-}
-
-pub async fn pause(ctx: &Context, task: &str, caller: Option<i64>) -> BackendResult<i64> {
-    request_control(ctx, task, Control::Pause, caller).await
-}
-
-pub async fn resume(
-    ctx: &Context,
-    task: &str,
-    step: bool,
-    caller: Option<i64>,
-) -> BackendResult<i64> {
-    request_control(ctx, task, Control::Resume { step }, caller).await
 }
 
 // ---------------------------------------------------------------------------------------------

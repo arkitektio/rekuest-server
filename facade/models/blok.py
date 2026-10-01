@@ -2,7 +2,6 @@ from django.contrib.auth import get_user_model
 from django.db import models
 from rekuest_core.inputs.models import ActionDependencyInputModel, StateDependencyInputModel
 
-from facade import enums
 
 
 class Dashboard(models.Model):

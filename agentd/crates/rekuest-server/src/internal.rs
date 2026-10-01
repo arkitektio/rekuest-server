@@ -98,7 +98,10 @@ pub fn routes() -> Router<Shared> {
         .route("/internal/agent/ensure", post(ensure_agent))
         .route("/internal/agent/implement", post(implement_agent))
         .route("/internal/agent/delete", post(delete_agent))
-        .route("/internal/implementation/delete", post(delete_implementation))
+        .route(
+            "/internal/implementation/delete",
+            post(delete_implementation),
+        )
         .route("/internal/drawer/shelve", post(shelve))
         .route("/internal/drawer/unshelve", post(unshelve))
 }
@@ -407,16 +410,20 @@ struct ImplementationRequest {
     implementation: Id,
 }
 
-internal!(delete_implementation, ImplementationRequest, |state, request| {
-    let organization = request.principal.organization()?;
-    let implementation = facade::removal::delete_implementation(
-        &state.facade,
-        organization,
-        &request.implementation.text(),
-    )
-    .await?;
-    Ok(Json(json!({"implementation": implementation.to_string()})))
-});
+internal!(
+    delete_implementation,
+    ImplementationRequest,
+    |state, request| {
+        let organization = request.principal.organization()?;
+        let implementation = facade::removal::delete_implementation(
+            &state.facade,
+            organization,
+            &request.implementation.text(),
+        )
+        .await?;
+        Ok(Json(json!({"implementation": implementation.to_string()})))
+    }
+);
 
 #[derive(Debug, Deserialize)]
 struct CollectRequest {

@@ -7,8 +7,6 @@ from django.db.models.expressions import RawSQL
 
 from rekuest_core.inputs.types import ActionDemandInput, PortMatchInput
 
-qt = re.compile(r"@(?P<package>[^\/]*)\/(?P<interface>[^\/]*)")
-
 # A match is duck-typed: ``PortMatchInput`` (structural fields plus optional runtime
 # ``descriptors``) and test ``SimpleNamespace`` stand-ins are both accepted — only attribute
 # access is used.

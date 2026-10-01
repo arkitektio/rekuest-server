@@ -26,6 +26,3 @@ class StorePathField(models.CharField):
         kwargs["validators"] = validators
 
         super().__init__(*args, **kwargs)
-
-
-S3Field = StorePathField

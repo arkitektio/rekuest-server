@@ -184,17 +184,32 @@ async fn an_agent_goes_with_everything_below_it_and_only_within_its_organization
         .query_async(&mut redis)
         .await
         .unwrap();
-    assert!(remains(&ctx, agent).await.len() >= 8, "the fixture reaches the cascade");
+    assert!(
+        remains(&ctx, agent).await.len() >= 8,
+        "the fixture reaches the cascade"
+    );
 
     assert_eq!(
         forbidden(delete_agent(&ctx, elsewhere, &agent.to_string()).await),
         format!("No Agent {agent} in this organization.")
     );
-    assert_eq!(remains(&ctx, agent).await.len(), remains(&ctx, neighbour).await.len());
+    assert_eq!(
+        remains(&ctx, agent).await.len(),
+        remains(&ctx, neighbour).await.len()
+    );
 
-    assert_eq!(delete_agent(&ctx, organization, &agent.to_string()).await.unwrap(), agent);
+    assert_eq!(
+        delete_agent(&ctx, organization, &agent.to_string())
+            .await
+            .unwrap(),
+        agent
+    );
 
-    assert_eq!(remains(&ctx, agent).await, vec![], "nothing of the agent is left");
+    assert_eq!(
+        remains(&ctx, agent).await,
+        vec![],
+        "nothing of the agent is left"
+    );
     let queued: i64 = redis::cmd("EXISTS")
         .arg(queue_key(&ctx.settings, agent))
         .query_async(&mut redis)
@@ -234,18 +249,23 @@ async fn an_implementation_is_deleted_only_by_its_organization() {
             .unwrap(),
         implementation
     );
-    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM facade_implementation WHERE agent_id = $1")
-        .bind(agent)
-        .fetch_one(&ctx.db)
-        .await
-        .unwrap();
+    let left: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM facade_implementation WHERE agent_id = $1")
+            .bind(agent)
+            .fetch_one(&ctx.db)
+            .await
+            .unwrap();
     assert_eq!(left, 0);
     // Its task stays, no longer naming it (SET_NULL); the agent and its lock stay.
-    let names: Option<i64> = sqlx::query_scalar("SELECT implementation_id FROM facade_task WHERE id = $1")
-        .bind(task)
-        .fetch_one(&ctx.db)
-        .await
-        .unwrap();
+    let names: Option<i64> =
+        sqlx::query_scalar("SELECT implementation_id FROM facade_task WHERE id = $1")
+            .bind(task)
+            .fetch_one(&ctx.db)
+            .await
+            .unwrap();
     assert_eq!(names, None);
-    assert!(remains(&ctx, agent).await.iter().any(|(table, _)| table == "facade_lock"));
+    assert!(remains(&ctx, agent)
+        .await
+        .iter()
+        .any(|(table, _)| table == "facade_lock"));
 }

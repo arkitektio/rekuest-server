@@ -91,8 +91,3 @@ def compile_descriptors_to_jsonpath(descriptors) -> str | None:
         return None
 
     return " && ".join(_compile_descriptor_condition(desc) for desc in descriptors)
-
-
-# Provides descriptors compile identically to requires descriptors (same operator set); the
-# alias keeps call sites self-documenting about which side they are compiling.
-compile_returndescriptors_to_jsonpath = compile_descriptors_to_jsonpath

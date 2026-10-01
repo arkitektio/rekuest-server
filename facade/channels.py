@@ -1,12 +1,12 @@
 from kante.channel import build_channel
-from .channel_events import ActionEvent, StateUpdateEvent, TaskEventCreatedEvent, ImplementationEvent, AgentEvent, ProbeEventBroadcast, ChildTaskEvent, PatchEvent
+from .channel_events import StateUpdateEvent, TaskEventCreatedEvent, ImplementationEvent, AgentEvent, ProbeEventBroadcast, ChildTaskEvent, PatchEvent
 
 
-action_channel = build_channel(ActionEvent, "action_created_broadcast")
-
+# agentd publishes on these channels by name (``agentd/crates/facade/src/channels.rs``): every
+# name is spelled out here, so renaming a payload class cannot silently change one.
 agent_updated_channel = build_channel(AgentEvent, "agent_updated_broadcast")
 
-task_event_channel = build_channel(TaskEventCreatedEvent)
+task_event_channel = build_channel(TaskEventCreatedEvent, "TaskEventCreatedEvent")
 
 # Same payload model, but explicitly distinct names: unnamed same-model channels share a
 # message type in kante, so a future group-name overlap would silently cross-feed them.
@@ -15,11 +15,11 @@ child_task_channel = build_channel(ChildTaskEvent, "child_task_feed")
 agent_task_channel = build_channel(ChildTaskEvent, "agent_task_feed")
 
 
-new_implementation_channel = build_channel(ImplementationEvent)
+new_implementation_channel = build_channel(ImplementationEvent, "ImplementationEvent")
 
 
-patch_channel = build_channel(PatchEvent)
+patch_channel = build_channel(PatchEvent, "PatchEvent")
 
-state_update_channel = build_channel(StateUpdateEvent)
+state_update_channel = build_channel(StateUpdateEvent, "StateUpdateEvent")
 
 probe_event_channel = build_channel(ProbeEventBroadcast, "probe_event_broadcast")

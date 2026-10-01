@@ -70,7 +70,10 @@ pub async fn delete_agent(ctx: &Context, organization: i64, agent: &str) -> Back
             .query_async(&mut redis)
             .await;
         if let Err(e) = dropped {
-            tracing::error!(agent = id, "Could not drop the queue of deleted agent {id}: {e}");
+            tracing::error!(
+                agent = id,
+                "Could not drop the queue of deleted agent {id}: {e}"
+            );
         }
     }
     on_commit.publish(ctx).await;

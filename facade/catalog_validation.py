@@ -25,7 +25,7 @@ from typing import Iterable, Iterator, Sequence
 
 from facade import models
 from rekuest_core import enums
-from rekuest_core.catalogs import BASE_CATALOG_ID, BASE_CATALOG_VERSION, base_operation_names, base_operations, base_version_named
+from rekuest_core.catalogs import BASE_CATALOG_ID, base_operation_names, base_operations
 from rekuest_core.inputs import models as rimodels
 from rekuest_core.inputs.models import iter_component_nodes, iter_util_calls
 from rekuest_core.objects.models import DiagnosticModel
@@ -204,27 +204,6 @@ def iter_widget_calls(widget: Widget) -> Iterator[rimodels.UtilCallInputModel]:
                 yield accessor.call
 
 
-def iter_definition_widgets(definition: rimodels.DefinitionInputModel) -> Iterator[tuple[str, Widget]]:
-    """Every widget of a definition with an owner label: args, returns, nested children, SEARCH filter ports, fallback chains."""
-
-    def widgets_of(widget: Widget | None, owner: str) -> Iterator[tuple[str, Widget]]:
-        depth = 0
-        while widget is not None:
-            yield (owner if depth == 0 else f"{owner} fallback {depth}", widget)
-            if isinstance(widget, rimodels.SearchAssignWidgetInputModel):
-                yield from walk(widget.filters or [], f"{owner} filter")
-            widget = getattr(widget, "fallback", None)
-            depth += 1
-
-    def walk(ports: Sequence[rimodels.PortInputModel], prefix: str) -> Iterator[tuple[str, Widget]]:
-        for port in ports:
-            yield from widgets_of(getattr(port, "widget", None), f"{prefix} port {port.key}")
-            yield from walk(port.children or [], prefix)
-
-    yield from walk(definition.args, f"Definition {definition.key}")
-    yield from walk(definition.returns, f"Definition {definition.key}")
-
-
 def validate_widgets_against_catalogs(catalogs: Sequence[models.UICatalog], widgets: Iterable[tuple[str, Widget]]) -> list[DiagnosticModel]:
     """Widgets are validated like blok components: a CUSTOM widget is a one-node manifest, and every call it carries is checked."""
     operations = resolve_operations(catalogs)
@@ -237,62 +216,6 @@ def validate_widgets_against_catalogs(catalogs: Sequence[models.UICatalog], widg
             diagnostics.extend(_check_component(node, component_specs, operations, catalog_label, f"widget of {owner}"))
         diagnostics.extend(_check_calls(iter_widget_calls(widget), operations, catalog_label, f"widget of {owner}"))
     return diagnostics
-
-
-def iter_definition_calls(definition: rimodels.DefinitionInputModel, optimistics: Sequence[rimodels.OptimisticInputModel] | None = None) -> Iterator[rimodels.UtilCallInputModel]:
-    """Every effect and validator call of a definition (args, returns, nested children, port groups) plus optimistic pointer calls."""
-
-    def walk(ports: list[rimodels.PortInputModel]) -> Iterator[rimodels.UtilCallInputModel]:
-        for port in ports:
-            for validator in getattr(port, "validators", None) or []:
-                yield validator.call
-            for effect in port.effects or []:
-                yield effect.call
-            yield from walk(port.children or [])
-
-    yield from walk(definition.args)
-    yield from walk(definition.returns)
-    for group in definition.port_groups or []:
-        for effect in group.effects or []:
-            yield effect.call
-    for optimistic in optimistics or []:
-        if optimistic.path_call is not None:
-            yield optimistic.path_call
-
-
-def catalogs_for_definition(definition: rimodels.DefinitionInputModel, agent: models.Agent) -> tuple[list[models.UICatalog], list[DiagnosticModel]]:
-    """The catalogs a definition opted into, plus a warning for every name that resolves to nothing.
-
-    ``base`` / ``base@1`` name the built-in catalog (always applied, so they are simply accepted);
-    another base version or an unregistered name yields an ``unknown_catalog`` warning.
-    """
-    catalogs: list[models.UICatalog] = []
-    diagnostics: list[DiagnosticModel] = []
-    seen: set[str] = set()
-    for name in definition.catalogs or []:
-        if name in seen:
-            continue
-        seen.add(name)
-        base_version = base_version_named(name)
-        if base_version is not None:
-            if base_version != BASE_CATALOG_VERSION:
-                diagnostics.append(_unknown_catalog(definition, name, f"this server provides {BASE_CATALOG_ID}"))
-            continue
-        catalog = models.UICatalog.objects.filter(name=name, organization=agent.organization).first()
-        if catalog is None:
-            diagnostics.append(_unknown_catalog(definition, name, "it is not registered in this organization"))
-            continue
-        catalogs.append(catalog)
-    return catalogs, diagnostics
-
-
-def _unknown_catalog(definition: rimodels.DefinitionInputModel, name: str, reason: str) -> DiagnosticModel:
-    return DiagnosticModel(
-        level=enums.DiagnosticLevel.WARNING,
-        code=UNKNOWN_CATALOG,
-        message=f"Definition {definition.key}: catalog {name!r} was not applied: {reason}",
-        path=f"Definition {definition.key}",
-    )
 
 
 def dump_diagnostics(diagnostics: Iterable[DiagnosticModel]) -> list[dict]:

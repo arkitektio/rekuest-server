@@ -1,4 +1,4 @@
-from authentikate.models import Organization, Release
+from authentikate.models import Organization
 from django.contrib.auth import get_user_model
 from django.db import models
 from django_choices_field import TextChoicesField

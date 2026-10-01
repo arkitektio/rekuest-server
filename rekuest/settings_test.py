@@ -40,23 +40,12 @@ DATABASE_ROUTERS = []
 # Use in-memory channel layer for tests instead of Redis
 CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
-# Default tests to grace=0 → disconnects cascade inline/immediately (the legacy,
-# deterministic behavior). The reclaim/grace tests opt into a window with override_settings.
-REKUEST_GRACE = {"DEFAULT": 0}
-
-# No reaper runs under test (it is its own process: ``manage.py reaper``). Tests call the sweeps
-# (``persist_backend.reconcile_*`` / ``expire_*`` / ``dispatch_due_tasks`` / …) explicitly, so a
-# background pass can never race a test's own assertions.
-
 # Point the agent queue at the published dokker redis port (see
 # tests/integration/docker-compose.yaml). Replaces the old redis-factory monkeypatch.
 AGENT_REDIS_HOST = "localhost"
 AGENT_REDIS_PORT = int(os.environ.get("REKUEST_TEST_REDIS_PORT", 6666))
 
-# Probes: short TTLs so expiry behavior is testable without waiting.
 TASK_RETENTION_SECONDS = 0
-PROBE_TTL_SECONDS = 60
-PROBE_LINGER_SECONDS = 30
 PROBE_MAX_INFLIGHT_PER_CALLER = 8
 
 # The hub trust bundle under test, inline: rekuest's own key plus one key per service the tests

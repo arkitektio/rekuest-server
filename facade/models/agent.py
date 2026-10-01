@@ -1,11 +1,9 @@
-import uuid
 
 from authentikate.models import App, Client, Organization, Release, User
 from django.contrib.auth import get_user_model
 from django.db import models
-from django_choices_field import TextChoicesField
 
-from facade import enums, liveness
+from facade import enums
 
 
 class Lock(models.Model):
@@ -142,11 +140,6 @@ class Agent(models.Model):
     def __str__(self):
         return f"{self.name}"
 
-    @property
-    def is_active(self):
-        return liveness.agent_is_live(self.connected, self.last_seen)
-
-
 class MemoryShelve(models.Model):
     """A shelve is a collection of shelved items that are
     related to each other. Shelves are used to group shelved
@@ -226,5 +219,3 @@ class MemoryDrawer(models.Model):
                 name="drawer_unique_resource_per_shelve",
             ),
         ]
-
-

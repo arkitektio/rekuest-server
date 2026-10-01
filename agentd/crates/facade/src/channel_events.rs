@@ -115,7 +115,7 @@ pub struct ProbeEventBroadcast {
     pub created_at: DateTime<Utc>,
 }
 
-/// `AgentEvent`, `ImplementationEvent` and `ActionEvent`: the id of the row that changed.
+/// `AgentEvent` and `ImplementationEvent`: the id of the row that changed.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct CrudEvent {
     pub create: Option<i64>,

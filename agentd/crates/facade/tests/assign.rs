@@ -710,9 +710,14 @@ async fn a_delayed_task_waits_and_a_cancel_settles_it() {
         "A delayed task (not_before in the future) cannot carry hooks"
     );
 
-    backend::cancel(&ctx, &assigned.task.to_string(), None)
-        .await
-        .unwrap();
+    backend::request_control(
+        &ctx,
+        &assigned.task.to_string(),
+        backend::Control::Cancel,
+        None,
+    )
+    .await
+    .unwrap();
     let task = row(&ctx, assigned.task).await;
     assert_eq!(
         (
@@ -735,7 +740,13 @@ async fn a_delayed_task_waits_and_a_cancel_settles_it() {
     );
     assert!(queued(&ctx, executor).await.is_empty(), "nothing is sent");
     assert!(matches!(
-        backend::cancel(&ctx, &assigned.task.to_string(), None).await,
+        backend::request_control(
+            &ctx,
+            &assigned.task.to_string(),
+            backend::Control::Cancel,
+            None
+        )
+        .await,
         Err(BackendError::Refused(_))
     ));
 }

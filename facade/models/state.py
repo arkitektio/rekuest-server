@@ -1,6 +1,5 @@
 from django.db import models
 
-from facade import enums
 
 
 class StateDefinition(models.Model):

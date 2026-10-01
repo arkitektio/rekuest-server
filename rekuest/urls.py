@@ -16,14 +16,10 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from kante.path import dynamicpath, re_dynamicpath
+from kante.path import dynamicpath
 from django.http import HttpRequest, JsonResponse
-from django.urls import include, path
 from health_check.views import HealthCheckView
 from django.views.decorators.csrf import csrf_exempt
-
-t = "d"
-
 
 def jwks_view(request: HttpRequest) -> JsonResponse:
     """Publish the provenance verifying key(s) for offline verification.

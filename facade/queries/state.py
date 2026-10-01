@@ -6,7 +6,7 @@ import strawberry
 from django.db.models import Min, Max, QuerySet
 from django.core.exceptions import ObjectDoesNotExist
 
-from facade import models, types, inputs, managers
+from facade import models, types, managers
 from rekuest_core.inputs import types as ritypes
 from kante.types import Info
 from facade.logic import get_latest_state

@@ -47,7 +47,6 @@ both — and the models/types/management-command layers — can import it safely
 from datetime import timedelta
 
 from django.conf import settings
-from django.db.models import Q
 from django.utils import timezone
 
 
@@ -66,27 +65,3 @@ def agent_is_live(connected: bool, last_seen) -> bool:
     if not connected or last_seen is None:
         return False
     return last_seen > timezone.now() - timedelta(seconds=stale_after_seconds())
-
-
-def agent_is_stale(connected: bool, last_seen) -> bool:
-    """Whether an agent is stuck-connected: ``connected`` but its lease expired (or never began).
-
-    The in-Python twin of :func:`stale_agent_q` — exactly the rows the sweep revokes. Note this
-    is NOT ``not agent_is_live(...)``: a cleanly disconnected agent is neither live nor stale,
-    because there is nothing left to heal.
-    """
-    return bool(connected) and not agent_is_live(connected, last_seen)
-
-
-def live_agent_q(prefix: str = "agent") -> Q:
-    """Q matching a genuinely-live websocket agent (connected AND recently seen)."""
-    p = f"{prefix}__" if prefix else ""
-    return Q(**{f"{p}connected": True, f"{p}last_seen__gt": timezone.now() - timedelta(seconds=stale_after_seconds())})
-
-
-def stale_agent_q(prefix: str = "agent") -> Q:
-    """Q matching a stuck-connected agent: ``connected=True`` but the heartbeat expired (or was
-    never recorded). These are exactly the rows the reaper revokes back to ``connected=False``."""
-    p = f"{prefix}__" if prefix else ""
-    cutoff = timezone.now() - timedelta(seconds=stale_after_seconds())
-    return Q(**{f"{p}connected": True}) & (Q(**{f"{p}last_seen__lt": cutoff}) | Q(**{f"{p}last_seen__isnull": True}))

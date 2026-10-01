@@ -24,8 +24,6 @@ logger = logging.getLogger(__name__)
 # the now-deprecated generic "EdDSA" identifier (RFC 8037), which joserfc flags
 # with a SecurityWarning. It must be passed explicitly wherever we sign/verify.
 ALGORITHM = "Ed25519"
-ALGORITHMS = [ALGORITHM]
-
 _lock = threading.Lock()
 _signing_key: OKPKey | None = None
 _public_key: OKPKey | None = None
@@ -33,11 +31,6 @@ _public_key: OKPKey | None = None
 
 def _kid() -> str:
     return settings.PROVENANCE["KID"]
-
-
-def issuer() -> str:
-    """The configured provenance issuer id (the token ``iss`` claim)."""
-    return settings.PROVENANCE["ISSUER"]
 
 
 def _load() -> None:
@@ -77,13 +70,6 @@ def _load() -> None:
         _public_key = public
 
 
-def get_signing_key() -> OKPKey:
-    """The Ed25519 private key used to sign provenance tokens."""
-    _load()
-    assert _signing_key is not None
-    return _signing_key
-
-
 def get_public_key() -> OKPKey:
     """The Ed25519 public key used to verify provenance tokens."""
     _load()
@@ -102,11 +88,3 @@ def get_public_jwk() -> Dict[str, Any]:
 def get_jwks_document() -> Dict[str, Any]:
     """The JWKS document published at the JWKS endpoint for offline verification."""
     return {"keys": [get_public_jwk()]}
-
-
-def reset_cache() -> None:
-    """Drop the cached keys so a subsequent call reloads from settings (tests)."""
-    global _signing_key, _public_key
-    with _lock:
-        _signing_key = None
-        _public_key = None

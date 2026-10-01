@@ -1,5 +1,4 @@
 from kante.types import Info
-import strawberry
 from facade import types, models, inputs
 import logging
 

@@ -16,9 +16,7 @@ use super::ports::{
     ReturnPortInputModel, ReturnWidgetInputModel,
 };
 use super::{min_length, ValidationError};
-use crate::enums::{
-    ActionKind, CatalogValueKind, Effects, Execution, PortKind, WindowFunction,
-};
+use crate::enums::{ActionKind, CatalogValueKind, Effects, Execution, PortKind, WindowFunction};
 use crate::pyjson::{dumps, repr_str};
 
 /// A check of a list of port-path dependencies, named for its owner.

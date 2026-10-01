@@ -12,4 +12,4 @@ __pycache__/
 .env
 # The Rust workspace builds its own image (agentd/Dockerfile).
 agentd
-testfile
+

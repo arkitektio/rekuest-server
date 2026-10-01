@@ -1,6 +1,5 @@
 from kante.types import Info
-from facade import types, models, inputs, enums
-import uuid
+from facade import types, models, inputs
 import strawberry
 
 

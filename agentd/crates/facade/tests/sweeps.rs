@@ -711,7 +711,10 @@ async fn a_webhook_agents_redelivery_is_posted_to_its_hook() {
     .await
     .expect("the Assign was posted to the hook");
     assert_eq!(assign["task"], task.to_string());
-    assert!(assign["id"].is_string(), "the frame is enveloped like a live assign");
+    assert!(
+        assign["id"].is_string(),
+        "the frame is enveloped like a live assign"
+    );
     let (attempts, dispatched): (i16, bool) = sqlx::query_as(
         "SELECT dispatch_attempts, dispatched_at IS NOT NULL FROM facade_task WHERE id = $1",
     )
@@ -719,7 +722,11 @@ async fn a_webhook_agents_redelivery_is_posted_to_its_hook() {
     .fetch_one(&ctx.db)
     .await
     .unwrap();
-    assert_eq!((attempts, dispatched), (2, true), "a delivered handoff counts as dispatched");
+    assert_eq!(
+        (attempts, dispatched),
+        (2, true),
+        "a delivered handoff counts as dispatched"
+    );
 }
 
 // -- expiry (test_pickup_watchdog.py TestExpiry) -----------------------------------------------

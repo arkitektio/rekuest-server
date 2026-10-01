@@ -82,11 +82,6 @@ impl InstanceKey {
         })
     }
 
-    /// The JWKS document published for offline verification (`get_jwks_document`).
-    pub fn jwks_document(&self) -> Value {
-        json!({"keys": [self.public_jwk()]})
-    }
-
     /// A compact JWS of `claims` under `header` (`joserfc.jwt.encode`).
     pub fn sign_jwt(&self, header: &Value, claims: &Value) -> String {
         let signing_input = format!(

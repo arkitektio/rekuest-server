@@ -144,7 +144,6 @@ async fn upsert_action(
     scope: &str,
     idempotent: bool,
     prefetch: &mut Prefetch,
-    on_commit: &mut OnCommit,
 ) -> Result<(ActionRow, bool), Refusal> {
     let hash = definition.unique_hash();
     let lookup = (definition.key.clone(), definition.version.clone());
@@ -184,10 +183,6 @@ async fn upsert_action(
         .bind(&definition.name)
         .fetch_one(&mut *conn)
         .await?;
-        on_commit.push(Signal::ActionSaved {
-            id: action.id,
-            created: false,
-        });
         prefetch.actions.insert(lookup, action.clone());
         return Ok((action, true));
     }
@@ -222,7 +217,6 @@ async fn upsert_action(
     .await?;
     let action = match inserted {
         Some(action) => {
-            on_commit.push(Signal::ActionSaved { id: action.id, created: true });
             action
         }
         None => {
@@ -557,10 +551,8 @@ pub async fn create_implementation(
     .await?;
     let stored_diagnostics = dump_diagnostics(&diagnostics);
 
-    let (mut action, definition_changed) = upsert_action(
-        conn, definition, agent, scope, idempotent, prefetch, on_commit,
-    )
-    .await?;
+    let (mut action, definition_changed) =
+        upsert_action(conn, definition, agent, scope, idempotent, prefetch).await?;
 
     // Qualifiers are not part of the hash: synced on every registration.
     let port_groups = dump(&definition.port_groups);
@@ -587,10 +579,6 @@ pub async fn create_implementation(
         action.is_dev = definition.is_dev;
         action.kind = definition.kind.value().to_owned();
         action.port_groups = port_groups;
-        on_commit.push(Signal::ActionSaved {
-            id: action.id,
-            created: false,
-        });
     }
 
     if definition_changed || !relational_state_is_current(conn, &action, definition).await? {
@@ -642,10 +630,6 @@ pub async fn create_implementation(
             &collections,
         )
         .await?;
-        on_commit.push(Signal::ActionSaved {
-            id: action.id,
-            created: false,
-        });
         prefetch
             .actions
             .insert((action.key.clone(), action.version.clone()), action.clone());
