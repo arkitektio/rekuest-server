@@ -1,9 +1,9 @@
 """The conformance stack and a raw agent.
 
 Tests speak the wire protocol directly, with no SDK in between: a frame is a dict, a close
-is a code. The target is either an already running server (``CONFORMANCE_URL``, e.g.
-``http://localhost:5690`` for the Python server or agentd) or the stack in ``stack/``,
-brought up with dokker for the session.
+is a code. The target is the pair in ``stack/`` (the rekuest server and agentd, both built
+from this repository and brought up with dokker for the session), or an already running pair:
+``CONFORMANCE_URL`` is agentd, ``CONFORMANCE_GRAPHQL_URL`` the server's GraphQL.
 """
 
 from __future__ import annotations
@@ -27,11 +27,7 @@ RECEIVE_TIMEOUT = 10.0
 
 
 class Target:
-    """Where the protocol is served: its websocket and HTTP bases, and the GraphQL API.
-
-    GraphQL stays the Python server's, so a target serving only ``/agi`` (agentd) names it
-    separately: ``CONFORMANCE_GRAPHQL_URL``, by default the same base.
-    """
+    """Where the protocol is served (agentd: websocket and HTTP) and the server's GraphQL API."""
 
     def __init__(self, http: str, graphql: str | None = None) -> None:
         self.http = http.rstrip("/")
@@ -52,23 +48,26 @@ async def target() -> AsyncIterator[Target]:
 
     from dokker import testing
 
-    # A gitignored ``stack/docker-compose.local.yml`` layers local changes on the stack, e.g. the
-    # server's source mounted over the image's to judge unreleased code.
+    # A gitignored ``stack/docker-compose.local.yml`` layers local changes on the stack.
     local = STACK.with_name("docker-compose.local.yml")
     setup = testing([str(STACK), *([str(local)] if local.exists() else [])])
-    setup.add_health_check(
-        url=lambda spec: f"http://localhost:{spec.find_service('rekuest').get_port_for_internal(80).published}/graphql",
-        service="rekuest",
-        timeout=5,
-        max_retries=30,
-    )
+
+    def published(service: str, internal: int):  # noqa: ANN202
+        return lambda spec: spec.find_service(service).get_port_for_internal(internal).published
+
+    setup.add_health_check(url=lambda spec: f"http://localhost:{published('rekuest', 80)(spec)}/graphql", service="rekuest", timeout=5, max_retries=60)
+    setup.add_health_check(url=lambda spec: f"http://localhost:{published('agentd', 8080)(spec)}/ht", service="agentd", timeout=5, max_retries=60)
+    # agentd, in the stack, reaches the hook scenarios' receiver on the host.
+    os.environ.setdefault("CONFORMANCE_HOOK_HOST", "host.docker.internal")
     async with setup:
         await setup.adown()
-        await setup.apull()
-        await setup.aup()
+        await setup.apull(services=["redis", "db", "rustfs", "initc"])
+        await setup.aup(build=True)
         await setup.acheck_health()
-        port = setup.spec.find_service("rekuest").get_port_for_internal(80).published
-        yield Target(f"http://localhost:{port}")
+        yield Target(
+            f"http://localhost:{published('agentd', 8080)(setup.spec)}",
+            f"http://localhost:{published('rekuest', 80)(setup.spec)}/graphql",
+        )
 
 
 class Closed(Exception):

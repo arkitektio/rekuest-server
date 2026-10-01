@@ -1,3 +1,5 @@
+# The pair under test, both built from this repository: the rekuest server (GraphQL, migrations)
+# and agentd (the agent protocol).
 services:
   redis:
     image: redis:latest
@@ -13,11 +15,28 @@ services:
     - redis
     - db
     - rustfs
-    image: jhnnsrs/rekuest:${REKUEST_SERVICE_TAG:-latest}
+    # The server of this repository: the schema agentd writes is the one this checkout migrates.
+    build:
+      context: ../../..
     command: bash run-debug.sh
     stop_grace_period: 1s
     ports:
     - "${REKUEST_HOST_PORT:-5690}:80"
+    volumes:
+    - ./configs/rekuest.yaml:/workspace/config.yaml
+  agentd:
+    depends_on:
+    - redis
+    - db
+    - rekuest
+    build:
+      context: ../..
+    stop_grace_period: 1s
+    # The hook scenarios' receiver runs in the test process, on the host.
+    extra_hosts:
+    - "host.docker.internal:host-gateway"
+    ports:
+    - "${AGENTD_HOST_PORT:-5692}:8080"
     volumes:
     - ./configs/rekuest.yaml:/workspace/config.yaml
   rustfs:

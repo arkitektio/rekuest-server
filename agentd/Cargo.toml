@@ -6,7 +6,7 @@ members = ["crates/*"]
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/arkitektio/rekuest-agentd"
+repository = "https://github.com/jhnnsrs/rekuest-server-next"
 
 [workspace.dependencies]
 # The wire types, shared with the agents (arkirust).

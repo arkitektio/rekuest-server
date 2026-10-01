@@ -353,6 +353,9 @@ instance:
     -----BEGIN PRIVATE KEY-----
     MC4CAQAwBQYDK2VwBCIEILK+rl9gVEjfKGiye+mLLjfEUGIdoP0WPC8lMZS3NYK2
     -----END PRIVATE KEY-----
+rekuest:
+  # The agent protocol's home: the server delegates assigns, controls and registrations to it.
+  agentd_url: http://agentd:8080
 scopes:
   rekuest_agent: Act as an agent
   rekuest_call: Call other apps with rekuest

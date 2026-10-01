@@ -1,0 +1,55 @@
+name: agentd
+
+# agentd writes the schema this repository's migrations define, so every push tests the pair:
+# the Rust workspace against a database this checkout migrated, and the conformance suite
+# against both images built from this checkout.
+on:
+  push:
+    branches: [main, next]
+  pull_request:
+    branches: [main, next]
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agentd
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: agentd
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets -- -D warnings
+      # A Postgres migrated by this checkout's server.
+      - run: scripts/test-db.sh >> "$GITHUB_ENV"
+      - run: sed -i 's/^export //' "$GITHUB_ENV"
+      - run: cargo test
+
+  contract:
+    name: Fixtures match the server's models
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync
+      - run: uv run python agentd/crates/rekuest-server-core/tests/fixtures/generate_declarations.py
+      - run: uv run python agentd/crates/rekuest-server-core/tests/fixtures/generate_units.py rekuest_core/units.py
+      # A change to the server's input models or units that agentd's fixtures do not carry.
+      - run: git diff --exit-code -- agentd/crates/rekuest-server-core/tests/fixtures
+
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - working-directory: agentd/conformance
+        run: uv sync && uv run pytest -m "not slow"

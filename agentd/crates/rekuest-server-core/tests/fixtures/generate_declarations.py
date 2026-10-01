@@ -1,8 +1,8 @@
 """Record what the rekuest server's own models make of declarations: the contract for
 rekuest_core::inputs.
 
-Run with the server's venv, from this directory:
-    /home/jhnnsrs/Code/worktrees/rekuest-server-workflows/.venv/bin/python generate_declarations.py
+Run with the server's venv (the repository root's):
+    uv run python agentd/crates/rekuest-server-core/tests/fixtures/generate_declarations.py
 
 Inputs: app_declarations.json (REGISTER payloads real apps send, dumped from their App
 registries) and the broken variants below. Output: declarations.json, where each case has the
@@ -16,7 +16,7 @@ import os
 import sys
 from pathlib import Path
 
-SERVER = "/home/jhnnsrs/Code/worktrees/rekuest-server-workflows"
+SERVER = str(Path(__file__).resolve().parents[5])  # the repository root: the server itself
 sys.path.insert(0, SERVER)
 os.chdir(SERVER)
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "rekuest.settings_test")

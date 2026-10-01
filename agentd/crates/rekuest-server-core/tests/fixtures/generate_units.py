@@ -1,8 +1,8 @@
 """Generate units.json: what the Python server's `rekuest_core/units.py` answers, per expression.
 
-Run with the rekuest server's venv (it pins the pint the server uses):
+Run with the server's venv, from the repository root (it pins the pint the server uses):
 
-    /path/to/rekuest-server/.venv/bin/python generate_units.py /path/to/rekuest-server/rekuest_core/units.py
+    uv run python agentd/crates/rekuest-server-core/tests/fixtures/generate_units.py rekuest_core/units.py
 
 Every unit name, symbol and alias of pint's default registry, their plurals, prefixed forms,
 every dimension, compound and preprocessed spellings, and invalid expressions; each with the

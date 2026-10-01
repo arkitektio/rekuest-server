@@ -10,3 +10,6 @@ __pycache__/
 .mypy_cache/
 *.sqlite3
 .env
+# The Rust workspace builds its own image (agentd/Dockerfile).
+agentd
+testfile
