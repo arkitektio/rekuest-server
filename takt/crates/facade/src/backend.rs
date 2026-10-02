@@ -144,6 +144,14 @@ pub struct AssignInput {
     pub not_before: Option<DateTime<Utc>>,
 }
 
+impl AssignInput {
+    /// The reference the caller gave, if it gave one. An empty string is none: a client that
+    /// always fills the field would otherwise have every assign answered with its first task.
+    pub fn reference(&self) -> Option<&str> {
+        self.reference.as_deref().filter(|r| !r.is_empty())
+    }
+}
+
 /// What fired a task, server-internally (`assign_with_status`'s keyword arguments).
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct AssignOrigin {
@@ -863,6 +871,12 @@ struct ExistingRow {
     action_hash: String,
     dependency: Option<String>,
     dependency_method: Option<String>,
+    args_hash: Option<String>,
+    agent_id: i64,
+    interface: Option<String>,
+    /// Found by `(caller, reference)` alone, not by its place in a parent's run.
+    #[sqlx(default)]
+    by_reference: bool,
 }
 
 /// The task an earlier delivery of this very assign created (`_existing_assign`): by
@@ -874,8 +888,10 @@ async fn existing_assign(
     reference: Option<&str>,
 ) -> BackendResult<Option<ExistingRow>> {
     const EXISTING: &str = "SELECT t.id, t.reference, t.call_key, t.action_id, t.implementation_id,
-                                   a.hash AS action_hash, t.dependency, t.dependency_method
-                              FROM facade_task t JOIN facade_action a ON a.id = t.action_id";
+                                   a.hash AS action_hash, t.dependency, t.dependency_method,
+                                   t.args_hash, t.agent_id, i.interface
+                              FROM facade_task t JOIN facade_action a ON a.id = t.action_id
+                              LEFT JOIN facade_implementation i ON i.id = t.implementation_id";
     let parent = input.parent.as_deref().map(parse_id).transpose()?;
     if let (Some(parent), Some(call_key)) = (parent, input.call_key.as_deref()) {
         let found = sqlx::query_as(&format!(
@@ -902,15 +918,63 @@ async fn existing_assign(
         }
     }
     if let Some(reference) = reference {
-        return Ok(sqlx::query_as(&format!(
+        let found: Option<ExistingRow> = sqlx::query_as(&format!(
             "{EXISTING} WHERE t.caller_id = $1 AND t.reference = $2 ORDER BY t.id LIMIT 1"
         ))
         .bind(caller)
         .bind(reference)
         .fetch_optional(db)
-        .await?);
+        .await?;
+        return Ok(found.map(|found| ExistingRow {
+            by_reference: true,
+            ..found
+        }));
     }
     Ok(None)
+}
+
+/// A reference found again is the same assign only if it asks for the same thing: the same
+/// action (as far as the request names it) with the same arguments. A reference reused for
+/// anything else is refused, never answered with the earlier task: the caller would take
+/// another call's result for its own.
+fn check_the_reference_names_the_same_assign(
+    existing: &ExistingRow,
+    input: &AssignInput,
+) -> BackendResult<()> {
+    if !existing.by_reference {
+        return Ok(());
+    }
+    fn named(given: &Option<String>) -> Option<&str> {
+        given.as_deref().filter(|g| !g.is_empty())
+    }
+    let implementation = existing.implementation_id.map(|id| id.to_string());
+    let another_target = named(&input.action).is_some_and(|a| existing.action_id.to_string() != a)
+        || named(&input.action_hash).is_some_and(|h| existing.action_hash != h)
+        || named(&input.implementation).is_some_and(|i| implementation.as_deref() != Some(i))
+        || named(&input.agent).is_some_and(|a| existing.agent_id.to_string() != a)
+        || named(&input.interface).is_some_and(|i| existing.interface.as_deref() != Some(i))
+        || (named(&input.dependency).is_some()
+            && (
+                existing.dependency.as_deref(),
+                existing.dependency_method.as_deref(),
+            ) != (input.dependency.as_deref(), input.method.as_deref()));
+    let other_args = existing
+        .args_hash
+        .as_deref()
+        .is_some_and(|hash| hash != args_hash(&input.args));
+    if another_target || other_args {
+        return Err(BackendError::Refused(format!(
+            "Reference {} already names task {}, which was assigned {}. A reference names one assignment: use a new one for a new call.",
+            pyjson::repr_str(&existing.reference),
+            existing.id,
+            if another_target {
+                "to something else"
+            } else {
+                "with other arguments"
+            }
+        )));
+    }
+    Ok(())
 }
 
 /// A call key found again must name the call it named before (`_check_it_is_the_same_call`):
@@ -1130,10 +1194,9 @@ pub async fn assign_with_status(
     };
     let caller = get_caller_for_context(&ctx.db, principal).await?;
 
-    if let Some(existing) =
-        existing_assign(&ctx.db, caller, input, input.reference.as_deref()).await?
-    {
+    if let Some(existing) = existing_assign(&ctx.db, caller, input, input.reference()).await? {
         check_it_is_the_same_call(&existing, input)?;
+        check_the_reference_names_the_same_assign(&existing, input)?;
         return Ok(Assigned {
             task: existing.id,
             reference: existing.reference,
@@ -1207,9 +1270,8 @@ pub async fn assign_with_status(
 
     let acted_on = acted_on_from_args(&input.args, &action.args);
     let reference = input
-        .reference
-        .clone()
-        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        .reference()
+        .map_or_else(|| uuid::Uuid::new_v4().to_string(), str::to_owned);
     if dependency_dict.is_none() {
         dependency_dict = Some(Value::Object(
             build_dependency_dict(
@@ -1361,11 +1423,14 @@ async fn lost_reference_race(
     error: sqlx::Error,
 ) -> BackendResult<Assigned> {
     match existing_assign(&ctx.db, caller, input, Some(reference)).await? {
-        Some(winner) => Ok(Assigned {
-            task: winner.id,
-            reference: winner.reference,
-            created: false,
-        }),
+        Some(winner) => {
+            check_the_reference_names_the_same_assign(&winner, input)?;
+            Ok(Assigned {
+                task: winner.id,
+                reference: winner.reference,
+                created: false,
+            })
+        }
         None => Err(error.into()),
     }
 }
@@ -1410,9 +1475,8 @@ async fn assign_higher_order(
     let lower_dependencies =
         build_lower_dependencies(config, &higher_dependencies).map_err(BackendError::Refused)?;
     let reference = input
-        .reference
-        .clone()
-        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        .reference()
+        .map_or_else(|| uuid::Uuid::new_v4().to_string(), str::to_owned);
 
     let wrapper = NewTask {
         args: input.args.clone(),
@@ -1876,6 +1940,10 @@ mod tests {
             action_hash: "h".into(),
             dependency: None,
             dependency_method: None,
+            args_hash: None,
+            agent_id: 5,
+            interface: Some("echo".into()),
+            by_reference: false,
         };
         let same = AssignInput {
             call_key: Some("k".into()),

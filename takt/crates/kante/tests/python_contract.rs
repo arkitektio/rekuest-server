@@ -1,6 +1,7 @@
 //! kante and Python's channels_redis on one redis: each receives what the other sends.
 //! Needs `TAKT_TEST_REDIS_URL` (`eval "$(scripts/test-db.sh)"`) and the rekuest server's venv
-//! (`KANTE_PYTHON`, default the server worktree's); skipped without the redis URL.
+//! (`KANTE_PYTHON`, default this checkout's `.venv`); skipped without the redis URL or without
+//! that interpreter.
 
 use std::process::Stdio;
 use std::time::Duration;
@@ -16,10 +17,11 @@ fn redis_url() -> Option<String> {
     std::env::var("TAKT_TEST_REDIS_URL").ok()
 }
 
-fn python() -> String {
-    std::env::var("KANTE_PYTHON").unwrap_or_else(|_| {
-        "/home/jhnnsrs/Code/worktrees/rekuest-server-workflows/.venv/bin/python".into()
-    })
+/// The server's interpreter (it has channels_redis), if there is one to run the peer with.
+fn python() -> Option<String> {
+    let python = std::env::var("KANTE_PYTHON")
+        .unwrap_or_else(|_| format!("{}/../../../.venv/bin/python", env!("CARGO_MANIFEST_DIR")));
+    std::path::Path::new(&python).exists().then_some(python)
 }
 
 fn peer() -> String {
@@ -54,8 +56,9 @@ fn message() -> Value {
 #[tokio::test]
 async fn python_receives_what_rust_group_sends() {
     let Some(url) = redis_url() else { return };
+    let Some(python) = python() else { return };
     let group = format!("contract_{}", uuid::Uuid::new_v4().simple());
-    let mut child = Command::new(python())
+    let mut child = Command::new(&python)
         .args([
             peer(),
             "receive".into(),
@@ -87,12 +90,13 @@ async fn python_receives_what_rust_group_sends() {
 #[tokio::test]
 async fn rust_receives_what_python_group_sends() {
     let Some(url) = redis_url() else { return };
+    let Some(python) = python() else { return };
     let group = format!("contract_{}", uuid::Uuid::new_v4().simple());
     let layer = layer(&url).await;
     let (channel, mut inbox) = layer.subscribe("specific").await.unwrap();
     layer.group_add(&group, &channel).await.unwrap();
 
-    let status = Command::new(python())
+    let status = Command::new(&python)
         .args([
             peer(),
             "send".into(),

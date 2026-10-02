@@ -283,6 +283,90 @@ async fn an_assign_is_persisted_dispatched_once_and_deduped() {
     );
 }
 
+/// An empty reference is no reference: a client that always sends the field must get a new
+/// task per assign, not its first one back.
+#[tokio::test]
+async fn an_empty_reference_is_not_a_reference() {
+    let Some(ctx) = context().await else { return };
+    let executor = agent(&ctx, None).await;
+    let (_, implementation) = action(&ctx, executor, false).await;
+    let principal = principal(&ctx, executor).await;
+
+    let mut tasks = vec![];
+    for x in [1, 2] {
+        let assigned = backend::assign_with_status(
+            &ctx,
+            &principal,
+            &echo(implementation, x, Some("")),
+            AssignOrigin::default(),
+        )
+        .await
+        .unwrap();
+        assert!(assigned.created);
+        assert!(!assigned.reference.is_empty());
+        tasks.push(assigned.task);
+    }
+    assert_ne!(tasks[0], tasks[1]);
+}
+
+/// A reference found again is the same assign only when it asks for the same action with the
+/// same arguments. Reused for anything else it is refused, not answered with the old task.
+#[tokio::test]
+async fn a_reference_names_one_action_with_one_set_of_arguments() {
+    let Some(ctx) = context().await else { return };
+    let executor = agent(&ctx, None).await;
+    let (_, implementation) = action(&ctx, executor, false).await;
+    let principal = principal(&ctx, executor).await;
+    let reference = uuid::Uuid::new_v4().to_string();
+
+    let first = backend::assign_with_status(
+        &ctx,
+        &principal,
+        &echo(implementation, 1, Some(&reference)),
+        AssignOrigin::default(),
+    )
+    .await
+    .unwrap();
+
+    // The very same assign, sent again: the task it already made.
+    let again = backend::assign_with_status(
+        &ctx,
+        &principal,
+        &echo(implementation, 1, Some(&reference)),
+        AssignOrigin::default(),
+    )
+    .await
+    .unwrap();
+    assert_eq!((again.task, again.created), (first.task, false));
+
+    // Other arguments under the same reference.
+    let refused = refusal(&ctx, &principal, &echo(implementation, 2, Some(&reference))).await;
+    assert_eq!(
+        refused,
+        format!(
+            "Reference '{reference}' already names task {}, which was assigned with other arguments. A reference names one assignment: use a new one for a new call.",
+            first.task
+        )
+    );
+
+    // Another implementation under the same reference.
+    let other_agent = agent(&ctx, None).await;
+    let (_, other) = action(&ctx, other_agent, false).await;
+    let refused = refusal(&ctx, &principal, &echo(other, 1, Some(&reference))).await;
+    assert!(
+        refused.contains("which was assigned to something else"),
+        "{refused}"
+    );
+
+    // Nothing was created for either.
+    let tasks: i64 = sqlx::query_scalar("SELECT count(*) FROM facade_task WHERE reference = $1")
+        .bind(&reference)
+        .fetch_one(&ctx.db)
+        .await
+        .unwrap();
+    assert_eq!(tasks, 1);
+}
+
 #[tokio::test]
 async fn a_concurrent_duplicate_has_one_winner() {
     let Some(ctx) = context().await else { return };
