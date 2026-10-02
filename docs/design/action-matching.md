@@ -50,7 +50,7 @@ Each descriptor has a `key`, an `operator`, and a `value`. The operator set
 
 | Operator | JSONPath produced |
 | --- | --- |
-| `EXISTS` (value `True`/`False`, strictly boolean — anything else raises) | `exists($.path)` / `!(exists($.path))` |
+| `EXISTS` (no value or `True` / `False` — anything else raises) | `exists($.path)` / `!(exists($.path))` |
 | `EQUALS`, `MATCHES` | `$.path == <value>` |
 | `NOT_EQUALS` | `$.path != <value>` |
 | `GTE` | `$.path >= <value>` |

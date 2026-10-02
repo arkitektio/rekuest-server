@@ -9959,11 +9959,24 @@
   {
     "step": "exists without a value",
     "outcome": {
-      "refused": "Operator DescriptorOperator.EXISTS requires a boolean value (True = must exist, False = must not exist), got None"
+      "accepted": [
+        {
+          "level": "WARNING",
+          "code": "unknown_catalog",
+          "message": "Definition bad: catalog 'base@2' was not applied: this server provides base@1",
+          "path": "Definition bad"
+        },
+        {
+          "level": "WARNING",
+          "code": "unknown_catalog",
+          "message": "Definition bad: catalog 'not-registered' was not applied: it is not registered in this organization",
+          "path": "Definition bad"
+        }
+      ]
     },
     "rows": {
       "agent": {
-        "hash": "h3",
+        "hash": "h35",
         "name": "<client id>",
         "description": "an agent",
         "name_is_client": true
@@ -10063,7 +10076,7 @@
       "implementations": [
         {
           "action": {
-            "key": "segment_v2",
+            "key": "bad",
             "args": [
               {
                 "key": "image",
@@ -10077,21 +10090,8 @@
                 "nullable": false,
                 "requires": [
                   {
-                    "key": "axes",
-                    "value": [
-                      "c",
-                      "t"
-                    ],
-                    "operator": "IN"
-                  },
-                  {
-                    "key": "$.@mikro/n",
-                    "value": 2,
-                    "operator": "GTE"
-                  },
-                  {
                     "key": "x",
-                    "value": true,
+                    "value": null,
                     "operator": "EXISTS"
                   }
                 ],
@@ -10101,78 +10101,11 @@
                 "description": null,
                 "proposed_units": null,
                 "reference_unit": null
-              },
-              {
-                "key": "sizes",
-                "kind": "LIST",
-                "label": null,
-                "widget": null,
-                "choices": null,
-                "default": null,
-                "effects": null,
-                "children": [
-                  {
-                    "key": "...",
-                    "kind": "INT",
-                    "label": null,
-                    "widget": null,
-                    "choices": null,
-                    "default": null,
-                    "effects": null,
-                    "children": null,
-                    "nullable": false,
-                    "requires": null,
-                    "dimension": null,
-                    "identifier": null,
-                    "validators": null,
-                    "description": null,
-                    "proposed_units": null,
-                    "reference_unit": null
-                  }
-                ],
-                "nullable": false,
-                "requires": null,
-                "dimension": null,
-                "identifier": null,
-                "validators": null,
-                "description": null,
-                "proposed_units": null,
-                "reference_unit": null
-              },
-              {
-                "key": "threshold",
-                "kind": "FLOAT",
-                "label": null,
-                "widget": null,
-                "choices": null,
-                "default": null,
-                "effects": [
-                  {
-                    "call": {
-                      "arguments": [],
-                      "operation": "made_up_operation"
-                    },
-                    "fade": true,
-                    "kind": "HIDE",
-                    "source": null,
-                    "message": null,
-                    "dependencies": []
-                  }
-                ],
-                "children": null,
-                "nullable": true,
-                "requires": null,
-                "dimension": null,
-                "identifier": null,
-                "validators": null,
-                "description": null,
-                "proposed_units": null,
-                "reference_unit": null
               }
             ],
-            "hash": "d0b53f40ee8d207e39edb42bf8c8ba0b2efb363527a659271d9e501b0c8f9aa2",
+            "hash": "20fa130d30a293d0bc8f02e91c88e753430206a974b88b842c55306dc8c80e8f",
             "kind": "FUNCTION",
-            "name": "segment",
+            "name": "bad",
             "pure": false,
             "ports": [
               {
@@ -10185,88 +10118,17 @@
                 "nullable": false,
                 "dimension": null,
                 "identifier": "@mikro/image",
-                "compiled_jsonpath": "($.\"axes\" == \"c\" || $.\"axes\" == \"t\") && $.\"@mikro/n\" >= 2 && exists($.\"x\")"
-              },
-              {
-                "key": "sizes",
-                "kind": "LIST",
-                "side": "arg",
-                "index": 1,
-                "parent": null,
-                "key_path": "sizes",
-                "nullable": false,
-                "dimension": null,
-                "identifier": null,
-                "compiled_jsonpath": null
-              },
-              {
-                "key": "...",
-                "kind": "INT",
-                "side": "arg",
-                "index": 0,
-                "parent": "sizes",
-                "key_path": "sizes....",
-                "nullable": false,
-                "dimension": null,
-                "identifier": null,
-                "compiled_jsonpath": null
-              },
-              {
-                "key": "threshold",
-                "kind": "FLOAT",
-                "side": "arg",
-                "index": 2,
-                "parent": null,
-                "key_path": "threshold",
-                "nullable": true,
-                "dimension": null,
-                "identifier": null,
-                "compiled_jsonpath": null
-              },
-              {
-                "key": "labels",
-                "kind": "STRUCTURE",
-                "side": "return",
-                "index": 0,
-                "parent": null,
-                "key_path": "labels",
-                "nullable": false,
-                "dimension": null,
-                "identifier": "@mikro/labels",
-                "compiled_jsonpath": "$.\"dtype\" == \"uint16\""
+                "compiled_jsonpath": "exists($.\"x\")"
               }
             ],
             "scope": "GLOBAL",
             "is_dev": false,
-            "returns": [
-              {
-                "key": "labels",
-                "kind": "STRUCTURE",
-                "label": null,
-                "widget": null,
-                "choices": null,
-                "effects": null,
-                "children": null,
-                "nullable": false,
-                "provides": [
-                  {
-                    "key": "dtype",
-                    "value": "uint16",
-                    "operator": "EQUALS"
-                  }
-                ],
-                "dimension": null,
-                "identifier": "@mikro/labels",
-                "description": null,
-                "proposed_units": null,
-                "reference_unit": null
-              }
-            ],
+            "returns": [],
             "version": "1",
             "same_app": true,
             "same_org": true,
             "stateful": false,
-            "arg_count": 3,
+            "arg_count": 1,
             "protocols": [],
             "idempotent": false,
             "allow_probe": false,
@@ -10277,70 +10139,31 @@
             "description": "No description",
             "is_test_for": [],
             "port_groups": [],
-            "return_count": 1
+            "return_count": 0
           },
-          "params": {
-            "gpu": true
-          },
-          "tracks": [
-            {
-              "label": null,
-              "windows": null,
-              "state_key": "position",
-              "value_key": "x",
-              "description": null,
-              "dependency_key": null
-            }
-          ],
-          "effects": "REPEATABLE",
-          "code_hash": "abc",
+          "params": {},
+          "tracks": [],
+          "effects": "UNKNOWN",
+          "code_hash": null,
           "execution": "PLAIN",
-          "interface": "segment",
+          "interface": "bad",
           "diagnostics": [
             {
-              "code": "unknown_operation",
-              "path": "Definition segment_v2",
+              "code": "unknown_catalog",
+              "path": "Definition bad",
               "level": "WARNING",
-              "message": "Definition segment_v2: operation 'made_up_operation' is not provided by the catalog (base@1); the UI cannot evaluate this call until it is registered"
+              "message": "Definition bad: catalog 'base@2' was not applied: this server provides base@1"
             },
             {
               "code": "unknown_catalog",
-              "path": "Definition segment_v2",
+              "path": "Definition bad",
               "level": "WARNING",
-              "message": "Definition segment_v2: catalog 'base@2' was not applied: this server provides base@1"
-            },
-            {
-              "code": "unknown_catalog",
-              "path": "Definition segment_v2",
-              "level": "WARNING",
-              "message": "Definition segment_v2: catalog 'not-registered' was not applied: it is not registered in this organization"
+              "message": "Definition bad: catalog 'not-registered' was not applied: it is not registered in this organization"
             }
           ],
           "manipulates": [],
           "needs_token": true,
-          "dependencies": [
-            {
-              "key": "stage",
-              "optional": false,
-              "app_filter": "stage-app",
-              "description": null,
-              "state_demands": [],
-              "action_demands": [
-                {
-                  "key": "move",
-                  "demand": null,
-                  "optional": false,
-                  "description": null,
-                  "allow_inactive": true
-                }
-              ],
-              "version_filter": "2",
-              "auto_resolvable": true,
-              "prefered_instances": null,
-              "max_viable_instances": null,
-              "min_viable_instances": 1
-            }
-          ],
+          "dependencies": [],
           "higher_order": false,
           "higher_order_config": {},
           "provenance_audience": [
@@ -10357,7 +10180,7 @@
     },
     "rows": {
       "agent": {
-        "hash": "h3",
+        "hash": "h35",
         "name": "<client id>",
         "description": "an agent",
         "name_is_client": true
@@ -10457,7 +10280,7 @@
       "implementations": [
         {
           "action": {
-            "key": "segment_v2",
+            "key": "bad",
             "args": [
               {
                 "key": "image",
@@ -10471,21 +10294,8 @@
                 "nullable": false,
                 "requires": [
                   {
-                    "key": "axes",
-                    "value": [
-                      "c",
-                      "t"
-                    ],
-                    "operator": "IN"
-                  },
-                  {
-                    "key": "$.@mikro/n",
-                    "value": 2,
-                    "operator": "GTE"
-                  },
-                  {
                     "key": "x",
-                    "value": true,
+                    "value": null,
                     "operator": "EXISTS"
                   }
                 ],
@@ -10495,78 +10305,11 @@
                 "description": null,
                 "proposed_units": null,
                 "reference_unit": null
-              },
-              {
-                "key": "sizes",
-                "kind": "LIST",
-                "label": null,
-                "widget": null,
-                "choices": null,
-                "default": null,
-                "effects": null,
-                "children": [
-                  {
-                    "key": "...",
-                    "kind": "INT",
-                    "label": null,
-                    "widget": null,
-                    "choices": null,
-                    "default": null,
-                    "effects": null,
-                    "children": null,
-                    "nullable": false,
-                    "requires": null,
-                    "dimension": null,
-                    "identifier": null,
-                    "validators": null,
-                    "description": null,
-                    "proposed_units": null,
-                    "reference_unit": null
-                  }
-                ],
-                "nullable": false,
-                "requires": null,
-                "dimension": null,
-                "identifier": null,
-                "validators": null,
-                "description": null,
-                "proposed_units": null,
-                "reference_unit": null
-              },
-              {
-                "key": "threshold",
-                "kind": "FLOAT",
-                "label": null,
-                "widget": null,
-                "choices": null,
-                "default": null,
-                "effects": [
-                  {
-                    "call": {
-                      "arguments": [],
-                      "operation": "made_up_operation"
-                    },
-                    "fade": true,
-                    "kind": "HIDE",
-                    "source": null,
-                    "message": null,
-                    "dependencies": []
-                  }
-                ],
-                "children": null,
-                "nullable": true,
-                "requires": null,
-                "dimension": null,
-                "identifier": null,
-                "validators": null,
-                "description": null,
-                "proposed_units": null,
-                "reference_unit": null
               }
             ],
-            "hash": "d0b53f40ee8d207e39edb42bf8c8ba0b2efb363527a659271d9e501b0c8f9aa2",
+            "hash": "20fa130d30a293d0bc8f02e91c88e753430206a974b88b842c55306dc8c80e8f",
             "kind": "FUNCTION",
-            "name": "segment",
+            "name": "bad",
             "pure": false,
             "ports": [
               {
@@ -10579,88 +10322,17 @@
                 "nullable": false,
                 "dimension": null,
                 "identifier": "@mikro/image",
-                "compiled_jsonpath": "($.\"axes\" == \"c\" || $.\"axes\" == \"t\") && $.\"@mikro/n\" >= 2 && exists($.\"x\")"
-              },
-              {
-                "key": "sizes",
-                "kind": "LIST",
-                "side": "arg",
-                "index": 1,
-                "parent": null,
-                "key_path": "sizes",
-                "nullable": false,
-                "dimension": null,
-                "identifier": null,
-                "compiled_jsonpath": null
-              },
-              {
-                "key": "...",
-                "kind": "INT",
-                "side": "arg",
-                "index": 0,
-                "parent": "sizes",
-                "key_path": "sizes....",
-                "nullable": false,
-                "dimension": null,
-                "identifier": null,
-                "compiled_jsonpath": null
-              },
-              {
-                "key": "threshold",
-                "kind": "FLOAT",
-                "side": "arg",
-                "index": 2,
-                "parent": null,
-                "key_path": "threshold",
-                "nullable": true,
-                "dimension": null,
-                "identifier": null,
-                "compiled_jsonpath": null
-              },
-              {
-                "key": "labels",
-                "kind": "STRUCTURE",
-                "side": "return",
-                "index": 0,
-                "parent": null,
-                "key_path": "labels",
-                "nullable": false,
-                "dimension": null,
-                "identifier": "@mikro/labels",
-                "compiled_jsonpath": "$.\"dtype\" == \"uint16\""
+                "compiled_jsonpath": "exists($.\"x\")"
               }
             ],
             "scope": "GLOBAL",
             "is_dev": false,
-            "returns": [
-              {
-                "key": "labels",
-                "kind": "STRUCTURE",
-                "label": null,
-                "widget": null,
-                "choices": null,
-                "effects": null,
-                "children": null,
-                "nullable": false,
-                "provides": [
-                  {
-                    "key": "dtype",
-                    "value": "uint16",
-                    "operator": "EQUALS"
-                  }
-                ],
-                "dimension": null,
-                "identifier": "@mikro/labels",
-                "description": null,
-                "proposed_units": null,
-                "reference_unit": null
-              }
-            ],
+            "returns": [],
             "version": "1",
             "same_app": true,
             "same_org": true,
             "stateful": false,
-            "arg_count": 3,
+            "arg_count": 1,
             "protocols": [],
             "idempotent": false,
             "allow_probe": false,
@@ -10671,70 +10343,31 @@
             "description": "No description",
             "is_test_for": [],
             "port_groups": [],
-            "return_count": 1
+            "return_count": 0
           },
-          "params": {
-            "gpu": true
-          },
-          "tracks": [
-            {
-              "label": null,
-              "windows": null,
-              "state_key": "position",
-              "value_key": "x",
-              "description": null,
-              "dependency_key": null
-            }
-          ],
-          "effects": "REPEATABLE",
-          "code_hash": "abc",
+          "params": {},
+          "tracks": [],
+          "effects": "UNKNOWN",
+          "code_hash": null,
           "execution": "PLAIN",
-          "interface": "segment",
+          "interface": "bad",
           "diagnostics": [
             {
-              "code": "unknown_operation",
-              "path": "Definition segment_v2",
+              "code": "unknown_catalog",
+              "path": "Definition bad",
               "level": "WARNING",
-              "message": "Definition segment_v2: operation 'made_up_operation' is not provided by the catalog (base@1); the UI cannot evaluate this call until it is registered"
+              "message": "Definition bad: catalog 'base@2' was not applied: this server provides base@1"
             },
             {
               "code": "unknown_catalog",
-              "path": "Definition segment_v2",
+              "path": "Definition bad",
               "level": "WARNING",
-              "message": "Definition segment_v2: catalog 'base@2' was not applied: this server provides base@1"
-            },
-            {
-              "code": "unknown_catalog",
-              "path": "Definition segment_v2",
-              "level": "WARNING",
-              "message": "Definition segment_v2: catalog 'not-registered' was not applied: it is not registered in this organization"
+              "message": "Definition bad: catalog 'not-registered' was not applied: it is not registered in this organization"
             }
           ],
           "manipulates": [],
           "needs_token": true,
-          "dependencies": [
-            {
-              "key": "stage",
-              "optional": false,
-              "app_filter": "stage-app",
-              "description": null,
-              "state_demands": [],
-              "action_demands": [
-                {
-                  "key": "move",
-                  "demand": null,
-                  "optional": false,
-                  "description": null,
-                  "allow_inactive": true
-                }
-              ],
-              "version_filter": "2",
-              "auto_resolvable": true,
-              "prefered_instances": null,
-              "max_viable_instances": null,
-              "min_viable_instances": 1
-            }
-          ],
+          "dependencies": [],
           "higher_order": false,
           "higher_order_config": {},
           "provenance_audience": [
@@ -10751,7 +10384,7 @@
     },
     "rows": {
       "agent": {
-        "hash": "h3",
+        "hash": "h35",
         "name": "<client id>",
         "description": "an agent",
         "name_is_client": true
@@ -10851,7 +10484,7 @@
       "implementations": [
         {
           "action": {
-            "key": "segment_v2",
+            "key": "bad",
             "args": [
               {
                 "key": "image",
@@ -10865,21 +10498,8 @@
                 "nullable": false,
                 "requires": [
                   {
-                    "key": "axes",
-                    "value": [
-                      "c",
-                      "t"
-                    ],
-                    "operator": "IN"
-                  },
-                  {
-                    "key": "$.@mikro/n",
-                    "value": 2,
-                    "operator": "GTE"
-                  },
-                  {
                     "key": "x",
-                    "value": true,
+                    "value": null,
                     "operator": "EXISTS"
                   }
                 ],
@@ -10889,78 +10509,11 @@
                 "description": null,
                 "proposed_units": null,
                 "reference_unit": null
-              },
-              {
-                "key": "sizes",
-                "kind": "LIST",
-                "label": null,
-                "widget": null,
-                "choices": null,
-                "default": null,
-                "effects": null,
-                "children": [
-                  {
-                    "key": "...",
-                    "kind": "INT",
-                    "label": null,
-                    "widget": null,
-                    "choices": null,
-                    "default": null,
-                    "effects": null,
-                    "children": null,
-                    "nullable": false,
-                    "requires": null,
-                    "dimension": null,
-                    "identifier": null,
-                    "validators": null,
-                    "description": null,
-                    "proposed_units": null,
-                    "reference_unit": null
-                  }
-                ],
-                "nullable": false,
-                "requires": null,
-                "dimension": null,
-                "identifier": null,
-                "validators": null,
-                "description": null,
-                "proposed_units": null,
-                "reference_unit": null
-              },
-              {
-                "key": "threshold",
-                "kind": "FLOAT",
-                "label": null,
-                "widget": null,
-                "choices": null,
-                "default": null,
-                "effects": [
-                  {
-                    "call": {
-                      "arguments": [],
-                      "operation": "made_up_operation"
-                    },
-                    "fade": true,
-                    "kind": "HIDE",
-                    "source": null,
-                    "message": null,
-                    "dependencies": []
-                  }
-                ],
-                "children": null,
-                "nullable": true,
-                "requires": null,
-                "dimension": null,
-                "identifier": null,
-                "validators": null,
-                "description": null,
-                "proposed_units": null,
-                "reference_unit": null
               }
             ],
-            "hash": "d0b53f40ee8d207e39edb42bf8c8ba0b2efb363527a659271d9e501b0c8f9aa2",
+            "hash": "20fa130d30a293d0bc8f02e91c88e753430206a974b88b842c55306dc8c80e8f",
             "kind": "FUNCTION",
-            "name": "segment",
+            "name": "bad",
             "pure": false,
             "ports": [
               {
@@ -10973,88 +10526,17 @@
                 "nullable": false,
                 "dimension": null,
                 "identifier": "@mikro/image",
-                "compiled_jsonpath": "($.\"axes\" == \"c\" || $.\"axes\" == \"t\") && $.\"@mikro/n\" >= 2 && exists($.\"x\")"
-              },
-              {
-                "key": "sizes",
-                "kind": "LIST",
-                "side": "arg",
-                "index": 1,
-                "parent": null,
-                "key_path": "sizes",
-                "nullable": false,
-                "dimension": null,
-                "identifier": null,
-                "compiled_jsonpath": null
-              },
-              {
-                "key": "...",
-                "kind": "INT",
-                "side": "arg",
-                "index": 0,
-                "parent": "sizes",
-                "key_path": "sizes....",
-                "nullable": false,
-                "dimension": null,
-                "identifier": null,
-                "compiled_jsonpath": null
-              },
-              {
-                "key": "threshold",
-                "kind": "FLOAT",
-                "side": "arg",
-                "index": 2,
-                "parent": null,
-                "key_path": "threshold",
-                "nullable": true,
-                "dimension": null,
-                "identifier": null,
-                "compiled_jsonpath": null
-              },
-              {
-                "key": "labels",
-                "kind": "STRUCTURE",
-                "side": "return",
-                "index": 0,
-                "parent": null,
-                "key_path": "labels",
-                "nullable": false,
-                "dimension": null,
-                "identifier": "@mikro/labels",
-                "compiled_jsonpath": "$.\"dtype\" == \"uint16\""
+                "compiled_jsonpath": "exists($.\"x\")"
               }
             ],
             "scope": "GLOBAL",
             "is_dev": false,
-            "returns": [
-              {
-                "key": "labels",
-                "kind": "STRUCTURE",
-                "label": null,
-                "widget": null,
-                "choices": null,
-                "effects": null,
-                "children": null,
-                "nullable": false,
-                "provides": [
-                  {
-                    "key": "dtype",
-                    "value": "uint16",
-                    "operator": "EQUALS"
-                  }
-                ],
-                "dimension": null,
-                "identifier": "@mikro/labels",
-                "description": null,
-                "proposed_units": null,
-                "reference_unit": null
-              }
-            ],
+            "returns": [],
             "version": "1",
             "same_app": true,
             "same_org": true,
             "stateful": false,
-            "arg_count": 3,
+            "arg_count": 1,
             "protocols": [],
             "idempotent": false,
             "allow_probe": false,
@@ -11065,70 +10547,31 @@
             "description": "No description",
             "is_test_for": [],
             "port_groups": [],
-            "return_count": 1
+            "return_count": 0
           },
-          "params": {
-            "gpu": true
-          },
-          "tracks": [
-            {
-              "label": null,
-              "windows": null,
-              "state_key": "position",
-              "value_key": "x",
-              "description": null,
-              "dependency_key": null
-            }
-          ],
-          "effects": "REPEATABLE",
-          "code_hash": "abc",
+          "params": {},
+          "tracks": [],
+          "effects": "UNKNOWN",
+          "code_hash": null,
           "execution": "PLAIN",
-          "interface": "segment",
+          "interface": "bad",
           "diagnostics": [
             {
-              "code": "unknown_operation",
-              "path": "Definition segment_v2",
+              "code": "unknown_catalog",
+              "path": "Definition bad",
               "level": "WARNING",
-              "message": "Definition segment_v2: operation 'made_up_operation' is not provided by the catalog (base@1); the UI cannot evaluate this call until it is registered"
+              "message": "Definition bad: catalog 'base@2' was not applied: this server provides base@1"
             },
             {
               "code": "unknown_catalog",
-              "path": "Definition segment_v2",
+              "path": "Definition bad",
               "level": "WARNING",
-              "message": "Definition segment_v2: catalog 'base@2' was not applied: this server provides base@1"
-            },
-            {
-              "code": "unknown_catalog",
-              "path": "Definition segment_v2",
-              "level": "WARNING",
-              "message": "Definition segment_v2: catalog 'not-registered' was not applied: it is not registered in this organization"
+              "message": "Definition bad: catalog 'not-registered' was not applied: it is not registered in this organization"
             }
           ],
           "manipulates": [],
           "needs_token": true,
-          "dependencies": [
-            {
-              "key": "stage",
-              "optional": false,
-              "app_filter": "stage-app",
-              "description": null,
-              "state_demands": [],
-              "action_demands": [
-                {
-                  "key": "move",
-                  "demand": null,
-                  "optional": false,
-                  "description": null,
-                  "allow_inactive": true
-                }
-              ],
-              "version_filter": "2",
-              "auto_resolvable": true,
-              "prefered_instances": null,
-              "max_viable_instances": null,
-              "min_viable_instances": 1
-            }
-          ],
+          "dependencies": [],
           "higher_order": false,
           "higher_order_config": {},
           "provenance_audience": [
@@ -11145,7 +10588,7 @@
     },
     "rows": {
       "agent": {
-        "hash": "h3",
+        "hash": "h35",
         "name": "<client id>",
         "description": "an agent",
         "name_is_client": true
@@ -11245,7 +10688,7 @@
       "implementations": [
         {
           "action": {
-            "key": "segment_v2",
+            "key": "bad",
             "args": [
               {
                 "key": "image",
@@ -11259,21 +10702,8 @@
                 "nullable": false,
                 "requires": [
                   {
-                    "key": "axes",
-                    "value": [
-                      "c",
-                      "t"
-                    ],
-                    "operator": "IN"
-                  },
-                  {
-                    "key": "$.@mikro/n",
-                    "value": 2,
-                    "operator": "GTE"
-                  },
-                  {
                     "key": "x",
-                    "value": true,
+                    "value": null,
                     "operator": "EXISTS"
                   }
                 ],
@@ -11283,78 +10713,11 @@
                 "description": null,
                 "proposed_units": null,
                 "reference_unit": null
-              },
-              {
-                "key": "sizes",
-                "kind": "LIST",
-                "label": null,
-                "widget": null,
-                "choices": null,
-                "default": null,
-                "effects": null,
-                "children": [
-                  {
-                    "key": "...",
-                    "kind": "INT",
-                    "label": null,
-                    "widget": null,
-                    "choices": null,
-                    "default": null,
-                    "effects": null,
-                    "children": null,
-                    "nullable": false,
-                    "requires": null,
-                    "dimension": null,
-                    "identifier": null,
-                    "validators": null,
-                    "description": null,
-                    "proposed_units": null,
-                    "reference_unit": null
-                  }
-                ],
-                "nullable": false,
-                "requires": null,
-                "dimension": null,
-                "identifier": null,
-                "validators": null,
-                "description": null,
-                "proposed_units": null,
-                "reference_unit": null
-              },
-              {
-                "key": "threshold",
-                "kind": "FLOAT",
-                "label": null,
-                "widget": null,
-                "choices": null,
-                "default": null,
-                "effects": [
-                  {
-                    "call": {
-                      "arguments": [],
-                      "operation": "made_up_operation"
-                    },
-                    "fade": true,
-                    "kind": "HIDE",
-                    "source": null,
-                    "message": null,
-                    "dependencies": []
-                  }
-                ],
-                "children": null,
-                "nullable": true,
-                "requires": null,
-                "dimension": null,
-                "identifier": null,
-                "validators": null,
-                "description": null,
-                "proposed_units": null,
-                "reference_unit": null
               }
             ],
-            "hash": "d0b53f40ee8d207e39edb42bf8c8ba0b2efb363527a659271d9e501b0c8f9aa2",
+            "hash": "20fa130d30a293d0bc8f02e91c88e753430206a974b88b842c55306dc8c80e8f",
             "kind": "FUNCTION",
-            "name": "segment",
+            "name": "bad",
             "pure": false,
             "ports": [
               {
@@ -11367,88 +10730,17 @@
                 "nullable": false,
                 "dimension": null,
                 "identifier": "@mikro/image",
-                "compiled_jsonpath": "($.\"axes\" == \"c\" || $.\"axes\" == \"t\") && $.\"@mikro/n\" >= 2 && exists($.\"x\")"
-              },
-              {
-                "key": "sizes",
-                "kind": "LIST",
-                "side": "arg",
-                "index": 1,
-                "parent": null,
-                "key_path": "sizes",
-                "nullable": false,
-                "dimension": null,
-                "identifier": null,
-                "compiled_jsonpath": null
-              },
-              {
-                "key": "...",
-                "kind": "INT",
-                "side": "arg",
-                "index": 0,
-                "parent": "sizes",
-                "key_path": "sizes....",
-                "nullable": false,
-                "dimension": null,
-                "identifier": null,
-                "compiled_jsonpath": null
-              },
-              {
-                "key": "threshold",
-                "kind": "FLOAT",
-                "side": "arg",
-                "index": 2,
-                "parent": null,
-                "key_path": "threshold",
-                "nullable": true,
-                "dimension": null,
-                "identifier": null,
-                "compiled_jsonpath": null
-              },
-              {
-                "key": "labels",
-                "kind": "STRUCTURE",
-                "side": "return",
-                "index": 0,
-                "parent": null,
-                "key_path": "labels",
-                "nullable": false,
-                "dimension": null,
-                "identifier": "@mikro/labels",
-                "compiled_jsonpath": "$.\"dtype\" == \"uint16\""
+                "compiled_jsonpath": "exists($.\"x\")"
               }
             ],
             "scope": "GLOBAL",
             "is_dev": false,
-            "returns": [
-              {
-                "key": "labels",
-                "kind": "STRUCTURE",
-                "label": null,
-                "widget": null,
-                "choices": null,
-                "effects": null,
-                "children": null,
-                "nullable": false,
-                "provides": [
-                  {
-                    "key": "dtype",
-                    "value": "uint16",
-                    "operator": "EQUALS"
-                  }
-                ],
-                "dimension": null,
-                "identifier": "@mikro/labels",
-                "description": null,
-                "proposed_units": null,
-                "reference_unit": null
-              }
-            ],
+            "returns": [],
             "version": "1",
             "same_app": true,
             "same_org": true,
             "stateful": false,
-            "arg_count": 3,
+            "arg_count": 1,
             "protocols": [],
             "idempotent": false,
             "allow_probe": false,
@@ -11459,70 +10751,31 @@
             "description": "No description",
             "is_test_for": [],
             "port_groups": [],
-            "return_count": 1
+            "return_count": 0
           },
-          "params": {
-            "gpu": true
-          },
-          "tracks": [
-            {
-              "label": null,
-              "windows": null,
-              "state_key": "position",
-              "value_key": "x",
-              "description": null,
-              "dependency_key": null
-            }
-          ],
-          "effects": "REPEATABLE",
-          "code_hash": "abc",
+          "params": {},
+          "tracks": [],
+          "effects": "UNKNOWN",
+          "code_hash": null,
           "execution": "PLAIN",
-          "interface": "segment",
+          "interface": "bad",
           "diagnostics": [
             {
-              "code": "unknown_operation",
-              "path": "Definition segment_v2",
+              "code": "unknown_catalog",
+              "path": "Definition bad",
               "level": "WARNING",
-              "message": "Definition segment_v2: operation 'made_up_operation' is not provided by the catalog (base@1); the UI cannot evaluate this call until it is registered"
+              "message": "Definition bad: catalog 'base@2' was not applied: this server provides base@1"
             },
             {
               "code": "unknown_catalog",
-              "path": "Definition segment_v2",
+              "path": "Definition bad",
               "level": "WARNING",
-              "message": "Definition segment_v2: catalog 'base@2' was not applied: this server provides base@1"
-            },
-            {
-              "code": "unknown_catalog",
-              "path": "Definition segment_v2",
-              "level": "WARNING",
-              "message": "Definition segment_v2: catalog 'not-registered' was not applied: it is not registered in this organization"
+              "message": "Definition bad: catalog 'not-registered' was not applied: it is not registered in this organization"
             }
           ],
           "manipulates": [],
           "needs_token": true,
-          "dependencies": [
-            {
-              "key": "stage",
-              "optional": false,
-              "app_filter": "stage-app",
-              "description": null,
-              "state_demands": [],
-              "action_demands": [
-                {
-                  "key": "move",
-                  "demand": null,
-                  "optional": false,
-                  "description": null,
-                  "allow_inactive": true
-                }
-              ],
-              "version_filter": "2",
-              "auto_resolvable": true,
-              "prefered_instances": null,
-              "max_viable_instances": null,
-              "min_viable_instances": 1
-            }
-          ],
+          "dependencies": [],
           "higher_order": false,
           "higher_order_config": {},
           "provenance_audience": [

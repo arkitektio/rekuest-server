@@ -460,14 +460,14 @@ def _check_default_in_choices(port: "PortInputModel") -> None:
 
 
 def _check_descriptor(descriptor: "RequiresInputModel | ProvidesInputModel", owner: str) -> None:
-    """The operator and the value agree: IN/NOT_IN take a list, LTE/GTE a number, EXISTS no value."""
+    """The operator and the value agree: IN/NOT_IN take a list, LTE/GTE a number, EXISTS no value or a boolean."""
     operator, value = descriptor.operator, descriptor.value
     if operator in (enums.DescriptorOperator.IN, enums.DescriptorOperator.NOT_IN) and not isinstance(value, list):
         raise ValueError(f"{owner} {descriptor.key!r}: {operator.value} needs a list value")
     if operator in (enums.DescriptorOperator.LTE, enums.DescriptorOperator.GTE) and (isinstance(value, bool) or not isinstance(value, (int, float))):
         raise ValueError(f"{owner} {descriptor.key!r}: {operator.value} needs a numeric value")
-    if operator == enums.DescriptorOperator.EXISTS and value not in (None, True):
-        raise ValueError(f"{owner} {descriptor.key!r}: EXISTS takes no value")
+    if operator == enums.DescriptorOperator.EXISTS and value is not None and not isinstance(value, bool):
+        raise ValueError(f"{owner} {descriptor.key!r}: EXISTS takes no value or a boolean")
 
 
 class RequiresInputModel(BaseModel):

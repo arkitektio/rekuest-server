@@ -13,7 +13,7 @@ use sqlx::PgConnection;
 
 use super::Refusal;
 use crate::catalog_validation::{collect_diagnostics, dump_diagnostics, Diagnostic};
-use crate::deletion::delete_actions;
+use crate::deletion::{delete_actions, delete_dependencies};
 use crate::descriptors::compile_descriptors_to_jsonpath;
 use crate::protocol::infer_protocols;
 use crate::provenance::audience;
@@ -468,7 +468,8 @@ async fn resolve_test_targets(
     Ok(resolved)
 }
 
-/// Upsert the implementation's declared dependencies by `(implementation, key)` (`_sync_dependencies`).
+/// Upsert the implementation's declared dependencies by `(implementation, key)` (`_sync_dependencies`),
+/// and delete the keys it no longer declares: an assign resolves every row it finds.
 /// Every field the declaration carries is written, except `assign_policy`: nothing picks agents by
 /// it, so it is not stored.
 async fn sync_dependencies(
@@ -523,6 +524,15 @@ async fn sync_dependencies(
             .await?;
         }
     }
+    let keys: Vec<&str> = dependencies.iter().map(|d| d.key.as_str()).collect();
+    let stale: Vec<i64> = sqlx::query_scalar(
+        "SELECT id FROM facade_dependency WHERE implementation_id = $1 AND NOT (key = ANY($2))",
+    )
+    .bind(implementation)
+    .bind(&keys)
+    .fetch_all(&mut *conn)
+    .await?;
+    delete_dependencies(conn, &stale).await?;
     Ok(())
 }
 

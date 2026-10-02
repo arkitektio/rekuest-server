@@ -495,9 +495,42 @@ async fn a_refused_registration_writes_nothing() {
         {"interface": "scan", "definition": {"key": "scan", "version": "1", "name": "Scan", "kind": "FUNCTION"}},
         {"interface": "zz_bad", "definition": {"key": "zz_bad", "version": "1", "name": "Bad", "kind": "FUNCTION",
             "args": [{"key": "x", "kind": "STRUCTURE", "identifier": "@x/y", "nullable": false,
-                      "requires": [{"key": "k", "operator": "EXISTS"}]}]}},
+                      "requires": [{"key": "$.", "operator": "EXISTS"}]}]}},
     ]});
     let refused = t.register(declaration).await.unwrap_err();
-    assert!(refused.contains("requires a boolean value"), "{refused}");
+    assert!(refused.contains("Invalid descriptor key"), "{refused}");
     assert_eq!(t.count("facade_implementation").await, 0);
+}
+
+/// A dependency an implementation no longer declares is deleted with the next registration: an
+/// assign resolves every dependency row it finds.
+#[tokio::test]
+async fn a_dependency_no_longer_declared_is_deleted() {
+    let Some(t) = tenant().await else { return };
+    let declaration = |dependencies: Value| {
+        json!({"implementations": [{"interface": "scan", "dependencies": dependencies,
+            "definition": {"key": "scan", "version": "1", "name": "Scan", "kind": "FUNCTION"}}]})
+    };
+    let keys = || async {
+        sqlx::query_scalar::<_, String>(
+            "SELECT d.key FROM facade_dependency d JOIN facade_implementation i ON i.id = d.implementation_id
+              WHERE i.agent_id = $1 ORDER BY d.key",
+        )
+        .bind(t.agent)
+        .fetch_all(&t.db)
+        .await
+        .unwrap()
+    };
+    t.register(declaration(
+        json!([{"key": "camera"}, {"key": "stage", "optional": true}]),
+    ))
+    .await
+    .unwrap();
+    assert_eq!(keys().await, ["camera", "stage"]);
+    t.register(declaration(json!([{"key": "stage"}])))
+        .await
+        .unwrap();
+    assert_eq!(keys().await, ["stage"]);
+    t.register(declaration(json!([]))).await.unwrap();
+    assert!(keys().await.is_empty());
 }

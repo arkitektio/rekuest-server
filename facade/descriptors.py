@@ -45,9 +45,11 @@ def _compile_descriptor_condition(desc) -> str:
     op = desc.operator
 
     if op == RequiresOperator.EXISTS:
-        # Existence check; the boolean value decides whether we assert presence or absence.
-        # Only real booleans are accepted: anything else ("true", 1, None) would previously
+        # Existence check; the boolean value decides whether we assert presence or absence, and
+        # no value asserts presence. Anything else ("true", 1) is refused: it would previously
         # compile to the absence branch — the exact inverse of what the client meant.
+        if desc.value is None:
+            return f"exists({pg_path})"
         if not isinstance(desc.value, bool):
             raise ValueError(f"Operator {op} requires a boolean value (True = must exist, False = must not exist), got {desc.value!r}")
         return f"exists({pg_path})" if desc.value else f"!(exists({pg_path}))"

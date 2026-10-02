@@ -526,7 +526,8 @@ pub struct DescriptorConstraint {
 }
 
 impl DescriptorConstraint {
-    /// Operator and value agree: IN/NOT_IN take a list, LTE/GTE a number, EXISTS no value.
+    /// Operator and value agree: IN/NOT_IN take a list, LTE/GTE a number, EXISTS no value or a
+    /// boolean.
     pub fn validate(&self, owner: &str) -> Result<(), ValidationError> {
         min_length(&self.key, "key")?;
         let value = self.value.as_ref().unwrap_or(&Value::Null);
@@ -544,8 +545,8 @@ impl DescriptorConstraint {
                     self.operator
                 )))
             }
-            DescriptorOperator::EXISTS if !(value.is_null() || *value == Value::Bool(true)) => Err(
-                ValidationError(format!("{owner} {key}: EXISTS takes no value")),
+            DescriptorOperator::EXISTS if !(value.is_null() || value.is_boolean()) => Err(
+                ValidationError(format!("{owner} {key}: EXISTS takes no value or a boolean")),
             ),
             _ => Ok(()),
         }

@@ -213,7 +213,10 @@ def test_descriptor_operator_and_value_agree() -> None:
         imodels.ProvidesInputModel(key="size", operator="GTE", value="big")
     with pytest.raises(ValidationError, match="EXISTS takes no value"):
         imodels.RequiresInputModel(key="axes", operator="EXISTS", value="c")
+    with pytest.raises(ValidationError, match="EXISTS takes no value"):
+        imodels.RequiresInputModel(key="axes", operator="EXISTS", value=1)
     imodels.RequiresInputModel(key="axes", operator="EXISTS")
+    imodels.RequiresInputModel(key="axes", operator="EXISTS", value=False)
     imodels.RequiresInputModel(key="axes", operator="IN", value=["c", "z"])
     assert imodels.RequiresInputModel(key="n", operator="LTE", value=3).operator.value == "LTE"
 

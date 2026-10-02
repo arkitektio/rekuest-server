@@ -31,8 +31,9 @@ fn compile_condition(descriptor: &DescriptorConstraint) -> Result<String, String
     let formatted = dumps(&value, false);
     let op = descriptor.operator;
     Ok(match op {
+        // Without a value EXISTS asks for presence, as `true` does.
         DescriptorOperator::EXISTS => match value {
-            Value::Bool(true) => format!("exists({path})"),
+            Value::Null | Value::Bool(true) => format!("exists({path})"),
             Value::Bool(false) => format!("!(exists({path}))"),
             other => {
                 return Err(format!(
@@ -105,13 +106,23 @@ mod tests {
             compiled.as_deref(),
             Some(r#"($."axes" == "c" || $."axes" == "t") && $."@mikro/n" >= 2 && exists($."x")"#)
         );
-        // The model allows EXISTS without a value; compiling it does not, as in Python.
-        assert!(compile_descriptors_to_jsonpath(Some(&[descriptor(
-            "x",
-            DescriptorOperator::EXISTS,
-            Value::Null
-        )]))
-        .is_err());
+        // EXISTS without a value is presence; `false` is absence; anything else is refused.
+        let exists = |value: Value| {
+            compile_descriptors_to_jsonpath(Some(&[descriptor(
+                "x",
+                DescriptorOperator::EXISTS,
+                value,
+            )]))
+        };
+        assert_eq!(
+            exists(Value::Null).unwrap().as_deref(),
+            Some(r#"exists($."x")"#)
+        );
+        assert_eq!(
+            exists(json!(false)).unwrap().as_deref(),
+            Some(r#"!(exists($."x"))"#)
+        );
+        assert!(exists(json!("true")).is_err());
         assert_eq!(compile_descriptors_to_jsonpath(Some(&[])).unwrap(), None);
     }
 }

@@ -116,6 +116,28 @@ async fn delete_resolutions(
     .await
 }
 
+/// Dependencies; a resolved dependency that chose for one keeps its choice, unlinked (SET_NULL).
+pub async fn delete_dependencies(
+    conn: &mut PgConnection,
+    dependencies: &[i64],
+) -> Result<(), sqlx::Error> {
+    if dependencies.is_empty() {
+        return Ok(());
+    }
+    exec(
+        conn,
+        "UPDATE facade_resolveddependency SET dependency_id = NULL WHERE dependency_id = ANY($1)",
+        dependencies,
+    )
+    .await?;
+    exec(
+        conn,
+        "DELETE FROM facade_dependency WHERE id = ANY($1)",
+        dependencies,
+    )
+    .await
+}
+
 /// Implementations, refused while a resolved dependency outside this cascade still points at one
 /// (PROTECT). Returns what was deleted, for `implementation_post_del`.
 pub async fn delete_implementations(
@@ -163,18 +185,7 @@ pub async fn delete_implementations(
         implementations,
     )
     .await?;
-    exec(
-        conn,
-        "UPDATE facade_resolveddependency SET dependency_id = NULL WHERE dependency_id = ANY($1)",
-        &dependencies,
-    )
-    .await?;
-    exec(
-        conn,
-        "DELETE FROM facade_dependency WHERE id = ANY($1)",
-        &dependencies,
-    )
-    .await?;
+    delete_dependencies(conn, &dependencies).await?;
     exec(
         conn,
         "UPDATE facade_implementation SET higher_order_for_id = NULL WHERE higher_order_for_id = ANY($1) AND NOT id = ANY($1)",

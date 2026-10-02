@@ -74,4 +74,4 @@ belongs to at most one group. Group effects are validated like port effects.
 
 `requires` (args) and `provides` (returns) are `{key, operator, value}` constraints compiled to
 JSONPath (`facade/descriptors.py`). One operator vocabulary, `DescriptorOperator`: `IN`/`NOT_IN`
-take a list, `LTE`/`GTE` a number, `EXISTS` no value.
+take a list, `LTE`/`GTE` a number, `EXISTS` no value (present) or a boolean (`false` = absent).

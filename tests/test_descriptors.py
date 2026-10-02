@@ -42,9 +42,13 @@ def test_exists_true_and_false():
 def test_exists_requires_a_boolean_value():
     """Non-boolean EXISTS values used to silently compile to the absence branch — the exact
     inverse of what a client sending value="true"/1 meant. They must be rejected instead."""
-    for bad_value in ("true", "yes", 1, 0, None, {}, []):
+    for bad_value in ("true", "yes", 1, 0, {}, []):
         with pytest.raises(ValueError):
             compile_descriptors_to_jsonpath([d("axes", "EXISTS", bad_value)])
+
+
+def test_exists_without_a_value_is_presence():
+    assert compile_descriptors_to_jsonpath([d("axes", "EXISTS", None)]) == 'exists($."axes")'
 
 
 def test_contains_array_membership():

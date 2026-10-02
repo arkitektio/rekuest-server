@@ -234,7 +234,7 @@ fn synthetic_steps() -> Vec<(&'static str, Value)> {
             json!({"hash": "h3", "implementations": [moved], "states": [],
                          "bloks": [blok(json!([camera_dep]))]}),
         ),
-        // The model allows EXISTS without a value; compiling it refuses, on both servers.
+        // EXISTS without a value asks for presence.
         (
             "exists without a value",
             json!({"hash": "h35", "implementations": [{
