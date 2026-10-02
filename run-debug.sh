@@ -9,6 +9,6 @@ python manage.py wait_for_database -s 2
 echo "=> Performing database migrations..."
 python manage.py migrate
 
-# GraphQL and its subscriptions only: the agent protocol (`/agi`) is served by agentd.
+# GraphQL and its subscriptions only: the agent protocol (`/agi`) is served by takt.
 echo "=> Starting Server"
 python manage.py runserver 0.0.0.0:80

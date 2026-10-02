@@ -4,9 +4,9 @@ import logging
 
 
 from facade import inputs, types
-from facade.agentd import AgentdProbeBackend
+from facade.takt import TaktProbeBackend
 
-probe_backend = AgentdProbeBackend()
+probe_backend = TaktProbeBackend()
 from kante.types import Info
 
 logger = logging.getLogger(__name__)

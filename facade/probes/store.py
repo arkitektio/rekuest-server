@@ -1,6 +1,6 @@
 """Reading the redis-held state of ephemeral Probes.
 
-agentd writes it (``agentd/crates/facade/src/probes/store.rs``): one hash per
+takt writes it (``takt/crates/facade/src/probes/store.rs``): one hash per
 probe and a per-caller in-flight counter, on the redis the agent queues use, expiring on their
 own. This server only reads, for the ``probe`` query, the ``probeStats`` query and the probe
 subscription's catch-up:

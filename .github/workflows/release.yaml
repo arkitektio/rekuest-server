@@ -15,16 +15,16 @@ permissions:
   contents: write
 
 jobs:
-  # 0. The pair: agentd's own suites and the conformance run of both programs built from this
+  # 0. The pair: takt's own suites and the conformance run of both programs built from this
   #    commit. The two are released as one version, so a red pair blocks the release.
-  agentd:
-    uses: ./.github/workflows/agentd.yaml
+  takt:
+    uses: ./.github/workflows/takt.yaml
 
   # 1. Run the suite, then let python-semantic-release decide the next version
   #    from the conventional-commit history, tag HEAD (vX.Y.Z on main /
   #    vX.Y.Z-rc.N on next) and cut a GitHub Release with generated notes.
   release:
-    needs: agentd
+    needs: takt
     runs-on: ubuntu-latest
     outputs:
       released: ${{ steps.release.outputs.released }}
@@ -103,15 +103,15 @@ jobs:
           {
             printf '%s\n\n' "$body"
             printf '## Docker images\n\n'
-            printf 'The server and agentd (the agent protocol) are released as a pair: run the same version of both.\n\n'
-            printf '```sh\ndocker pull jhnnsrs/rekuest:%s\ndocker pull jhnnsrs/rekuest-agentd:%s\n```\n\n' "$VERSION" "$VERSION"
+            printf 'The server and takt (the agent protocol) are released as a pair: run the same version of both.\n\n'
+            printf '```sh\ndocker pull jhnnsrs/rekuest:%s\ndocker pull jhnnsrs/rekuest-takt:%s\n```\n\n' "$VERSION" "$VERSION"
             printf 'Also published as `:%s`.\n\n' "$channel"
             printf '## Contributors\n\n%s\n' "$contributors"
           } | gh release edit "$TAG" --notes-file -
 
   # 2. Only if a release was actually cut: build the images at the new tag and
   #    push them under the semver "multi-tag" regime. Two images, one version: the
-  #    server (GraphQL, migrations) and agentd (the agent protocol, agentd/), which
+  #    server (GraphQL, migrations) and takt (the agent protocol, takt/), which
   #    writes the schema this server migrates and is only ever run beside the server
   #    of the same release. metadata-action expands the
   #    tag into the full set, and automatically skips the moving major/minor/
@@ -166,11 +166,11 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-      - name: Docker meta for agentd (the same tags)
-        id: agentd-meta
+      - name: Docker meta for takt (the same tags)
+        id: takt-meta
         uses: docker/metadata-action@v5
         with:
-          images: jhnnsrs/rekuest-agentd
+          images: jhnnsrs/rekuest-takt
           tags: |
             type=semver,pattern={{version}},value=${{ needs.release.outputs.tag }}
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.release.outputs.tag }}
@@ -180,14 +180,14 @@ jobs:
             latest=${{ github.ref_name == 'main' }}
 
       # The arm64 leg compiles Rust under emulation, which is slow: the layer cache is what
-      # keeps a release that did not touch agentd/ from paying for it again.
-      - name: Build and push agentd
+      # keeps a release that did not touch takt/ from paying for it again.
+      - name: Build and push takt
         uses: docker/build-push-action@v5
         with:
-          context: agentd
+          context: takt
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.agentd-meta.outputs.tags }}
-          labels: ${{ steps.agentd-meta.outputs.labels }}
-          cache-from: type=gha,scope=agentd
-          cache-to: type=gha,scope=agentd,mode=max
+          tags: ${{ steps.takt-meta.outputs.tags }}
+          labels: ${{ steps.takt-meta.outputs.labels }}
+          cache-from: type=gha,scope=takt
+          cache-to: type=gha,scope=takt,mode=max

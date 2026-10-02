@@ -38,7 +38,7 @@ AGENT_HEARTBEAT_INTERVAL = 10
 
 # Seconds without a heartbeat after which a ``connected`` agent is presumed dead. The single
 # window unifying every liveness decision (reconnect gate, availability query, GraphQL
-# ``active`` field, healing reaper) — see ``facade.liveness``. 3× the heartbeat interval, so a
+# ``active`` field, takt's healing sweep) — see ``facade.liveness``. 3× the heartbeat interval, so a
 # live agent must miss two heartbeats before it is stale.
 AGENT_STALE_AFTER = 3 * AGENT_HEARTBEAT_INTERVAL
 
@@ -48,16 +48,14 @@ AGENT_REDIS_PORT = conf.redis.port
 # Namespace of every first-party redis key — see ``facade.redis_keys``.
 REDIS_KEY_PREFIX = conf.redis.key_prefix
 
-# This hub's services, provisioned as HookAgents by the reaper (``facade.service_agents``).
+# This hub's services, provisioned as HookAgents when takt asks (``facade.upkeep``).
 SERVICE_AGENTS = [agent.model_dump() for agent in conf.rekuest.service_agents]
 SERVICE_AGENTS_ORGANIZATION = conf.rekuest.service_agents_organization
 
-# How often (seconds) this server's background loop (``facade.reaper``: ``manage.py reaper``)
-# ticks. Every deadline, retention horizon and the trigger loop guard are agentd's: it reads
-# them from the same ``rekuest`` configuration block.
-REKUEST_GRACE = {"SWEEP_INTERVAL": conf.rekuest.sweep_interval}
+# Every deadline, sweep interval, retention horizon and the trigger loop guard are takt's: it
+# reads them from the same ``rekuest`` configuration block.
 
-# Probes are agentd's (redis-held, expiring on their own); this server reads them and reports
+# Probes are takt's (redis-held, expiring on their own); this server reads them and reports
 # the per-caller in-flight cap in ``probeStats``.
 PROBE_MAX_INFLIGHT_PER_CALLER = conf.rekuest.probe_max_inflight
 
@@ -108,7 +106,7 @@ INSTANCE = {
     "TRUST_JWKS": conf.instance.trust.jwks,
 }
 REKUEST_IDENTIFIER = conf.rekuest.identifier
-AGENTD_URL = conf.rekuest.agentd_url
+TAKT_URL = conf.rekuest.takt_url or f"http://takt:8080/{conf.django.force_script_name.strip('/')}".rstrip("/")
 
 PROVENANCE = {
     "KID": _OKPKey.import_key(conf.instance.private_key).thumbprint(),
@@ -161,8 +159,8 @@ STRAWBERRY_DJANGO = {
 # process (no service, no GPU, ~1 ms per row). ``ActionFilter.search`` ORs "cosine distance
 # below DISTANCE_THRESHOLD" onto its substring match. DIMENSIONS is also the width of the
 # database column: the ``embeddings`` system checks refuse to start when the model, this
-# setting and the column disagree. Rows filled by another model are re-embedded from the
-# reaper tick (``facade.reaper``), never by a command.
+# setting and the column disagree. Rows filled by another model are re-embedded when takt
+# asks (``facade.upkeep``), never by a command.
 EMBEDDINGS = {
     "ENABLED": conf.embeddings.enabled,
     "MODEL": conf.embeddings.model,

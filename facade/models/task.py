@@ -151,7 +151,7 @@ class Task(models.Model):
     )
     # --- Deadline bookkeeping -------------------------------------------------------------
     # Every deadline the server enforces lives in these columns rather than in a process-local
-    # timer, so any backend (or a freshly restarted one) can act on it — see ``facade.reaper``.
+    # timer, so any takt replica (or a freshly restarted one) can act on it — see takt's ``reaper.rs``.
     step = models.BooleanField(
         default=False,
         db_default=False,
@@ -302,7 +302,7 @@ class Task(models.Model):
                 name="task_interrupt_due_idx",
             ),
             # The agent-disconnect and orphaned-executor sweeps (``ModelPersistBackend``,
-            # ``facade.reaper``) all run filter(agent_id=, is_done=False). A partial index holds
+            # takt's ``reaper.rs``) all run filter(agent_id=, is_done=False). A partial index holds
             # only in-flight rows instead of walking that agent's whole history.
             models.Index(fields=["agent"], condition=models.Q(is_done=False), name="task_agent_open_idx"),
             # The retention sweep: filter(is_done=True, root__isnull=True, finished_at__lt=cutoff).

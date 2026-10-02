@@ -5,10 +5,10 @@ package:
 
 | Image | Built from | What it is |
 | --- | --- | --- |
-| `jhnnsrs/rekuest` | the repository root (`Dockerfile`) | the rekuest server: GraphQL, migrations, the background loop |
-| `jhnnsrs/rekuest-agentd` | `agentd/` (`agentd/Dockerfile`) | agentd: the agent protocol and every sweep |
+| `jhnnsrs/rekuest` | the repository root (`Dockerfile`) | the rekuest server: GraphQL, migrations, the upkeep jobs takt asks for |
+| `jhnnsrs/rekuest-takt` | `takt/` (`takt/Dockerfile`) | takt: the agent protocol and every sweep |
 
-Every release pushes both images with the same set of tags. agentd writes the
+Every release pushes both images with the same set of tags. takt writes the
 schema the server of the same release migrates, so **always run the same
 version of both**.
 
@@ -24,17 +24,17 @@ release branch runs `.github/workflows/release.yaml`, which:
 3. builds both images at the new tag and pushes them under the semver
    multi-tag regime.
 
-A commit that only touches `agentd/` releases like any other: the version is
+A commit that only touches `takt/` releases like any other: the version is
 the repository's, and both images are rebuilt.
 
 The pair is tested on every push and pull request to `main` and `next` by
-`.github/workflows/agentd.yaml`:
+`.github/workflows/takt.yaml`:
 
 - the Rust workspace (`cargo fmt`, `cargo clippy`, `cargo test`) against a
-  database migrated by the checkout's server (`agentd/scripts/test-db.sh`),
-- a contract job that regenerates agentd's fixtures from the server's models
+  database migrated by the checkout's server (`takt/scripts/test-db.sh`),
+- a contract job that regenerates takt's fixtures from the server's models
   and fails if they differ from the committed ones,
-- the conformance suite (`agentd/conformance`, `uv run pytest`) against both
+- the conformance suite (`takt/conformance`, `uv run pytest`) against both
   images built from the checkout.
 
 ## Commit messages drive the version
@@ -99,11 +99,11 @@ fix to `main`/`next` if it also applies there.
 ## Deployment pinning
 
 - **Pin both images to the same tag.** `jhnnsrs/rekuest:X` beside
-  `jhnnsrs/rekuest-agentd:X`, and pull them together: a moving tag pulled for
-  one image only leaves agentd on another release than the server.
-- **Order on upgrade.** The server migrates on boot. agentd waits at startup
+  `jhnnsrs/rekuest-takt:X`, and pull them together: a moving tag pulled for
+  one image only leaves takt on another release than the server.
+- **Order on upgrade.** The server migrates on boot. takt waits at startup
   until the database has the migrations it was written against
-  (`agentd/schema-migrations.txt`), so bring up the new server first, or both
+  (`takt/schema-migrations.txt`), so bring up the new server first, or both
   at once.
 - **Staging** (`deployments/next`) pins `:next` — it rides the rc work.
 - **Stable production** should pin the **major** tag (`jhnnsrs/rekuest:1`), not

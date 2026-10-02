@@ -1,4 +1,0 @@
-# The migrations agentd is written against: it serves once the database has them all.
-# Kept current by tests/test_agentd_contract.py; regenerate with that test's hint.
-datalayer 0003_database_defaults
-facade 0005_database_defaults

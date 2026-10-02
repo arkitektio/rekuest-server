@@ -125,7 +125,7 @@ class TestCrossTenantIsolation:
 
         assert result.errors or result.data.get("state") is None, "org A fetched org B's State by id"
 
-    async def test_an_implementation_of_another_organization_cannot_be_deleted(self, authenticated_context, fake_agentd):
+    async def test_an_implementation_of_another_organization_cannot_be_deleted(self, authenticated_context, fake_takt):
         """deleteImplementation fetched by bare id: org A could delete org B's implementation."""
         from facade.models import Implementation
 
@@ -141,17 +141,17 @@ class TestCrossTenantIsolation:
         assert await sync_to_async(Implementation.objects.filter(pk=theirs.pk).exists)()
         assert not allowed.errors, allowed.errors
         assert not await sync_to_async(Implementation.objects.filter(pk=mine.pk).exists)()
-        # The server refuses before agentd is asked: only the caller's own delete reaches it.
-        assert [payload["implementation"] for op, payload in fake_agentd.calls if op == "implementation/delete"] == [str(mine.pk)]
+        # The server refuses before takt is asked: only the caller's own delete reaches it.
+        assert [payload["implementation"] for op, payload in fake_takt.calls if op == "implementation/delete"] == [str(mine.pk)]
 
-    async def test_cleanup_actions_asks_agentd_for_the_callers_organization_only(self, authenticated_context, fake_agentd):
-        """cleanupActions deletes agentd-owned rows, so agentd does it, told whose organization it is."""
+    async def test_cleanup_actions_asks_takt_for_the_callers_organization_only(self, authenticated_context, fake_takt):
+        """cleanupActions deletes takt-owned rows, so takt does it, told whose organization it is."""
         t = await _seed_two_tenants("xt-cleanup")  # neither tenant's action is implemented
 
         result = await schema.execute("mutation { cleanupActions }", context_value=t["a"]["context"])
 
         assert not result.errors, result.errors
-        (asked,) = [payload for op, payload in fake_agentd.calls if op == "action/cleanup"]
+        (asked,) = [payload for op, payload in fake_takt.calls if op == "action/cleanup"]
         assert asked["principal"]["organization"] == t["a"]["org"].pk and "actions" not in asked
         from facade.models import Action
 

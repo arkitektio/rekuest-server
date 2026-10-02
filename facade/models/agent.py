@@ -46,7 +46,7 @@ class Agent(models.Model):
     )
     hash = models.CharField(max_length=1000, help_text="The hash of the Agent (comparing the hash can be used to check if the agent has changed in a definition way)")
     release = models.ForeignKey(Release, on_delete=models.CASCADE, related_name="agents", help_text="The release this agent belongs to (agents are part of a release and are NOT associated only with an app)")
-    name = models.CharField(max_length=2000, help_text="The name the agent declares for itself; agentd writes it at every registration.", default="Nana", db_default="Nana")
+    name = models.CharField(max_length=2000, help_text="The name the agent declares for itself, written at every registration.", default="Nana", db_default="Nana")
     display_name = models.CharField(max_length=2000, null=True, blank=True, help_text="The name a user gave this agent. It wins over the declared name, and registration never touches it.")
     description = models.TextField(null=True, blank=True, help_text="A description for the Agent")
     user = models.ForeignKey(
@@ -122,7 +122,7 @@ class Agent(models.Model):
             )
         ]
 
-    # The executor lease. agentd's (``agentd/crates/facade/src/persist/leases.rs``): its claim,
+    # The executor lease. takt's (``takt/crates/facade/src/persist/leases.rs``): its claim,
     # renew, release and revoke are the only writers.
     LEASE_FIELDS = frozenset({"connected", "last_seen", "lease_epoch", "active_connection_id", "active_session_id"})
 

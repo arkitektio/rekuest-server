@@ -1,7 +1,7 @@
 import strawberry
 from kante.types import Info
 
-from facade import agentd, models, types
+from facade import takt, models, types
 from rekuest_core import scalars as rscalars
 
 
@@ -20,13 +20,13 @@ class ShelveInMemoryDrawerInput:
 
 
 def shelve_in_memory_drawer(info: Info, input: ShelveInMemoryDrawerInput) -> types.MemoryDrawer:
-    """Record a value the caller's agent holds in memory (the GraphQL twin of ``Shelve``), in agentd."""
-    payload = {"principal": agentd._principal(info), "identifier": input.identifier, "resource_id": input.resource_id}
+    """Record a value the caller's agent holds in memory (the GraphQL twin of ``Shelve``), in takt."""
+    payload = {"principal": takt._principal(info), "identifier": input.identifier, "resource_id": input.resource_id}
     if input.label is not None:
         payload["label"] = input.label
     if input.description is not None:
         payload["description"] = input.description
-    answer = agentd.call("drawer/shelve", payload)
+    answer = takt.call("drawer/shelve", payload)
     return models.MemoryDrawer.objects.get(pk=answer["drawer"])
 
 
@@ -36,9 +36,9 @@ class UnshelveMemoryDrawerInput:
 
 
 def unshelve_memory_drawer(info: Info, input: UnshelveMemoryDrawerInput) -> strawberry.ID:
-    """Drop a drawer from the caller's agent's shelve (the GraphQL twin of ``Unshelve``), in agentd.
+    """Drop a drawer from the caller's agent's shelve (the GraphQL twin of ``Unshelve``), in takt.
 
     ``id`` is looked up as a resource ID on the caller's agent's shelve first, then as a pk.
     """
-    agentd.call("drawer/unshelve", {"principal": agentd._principal(info), "id": input.id})
+    takt.call("drawer/unshelve", {"principal": takt._principal(info), "id": input.id})
     return input.id

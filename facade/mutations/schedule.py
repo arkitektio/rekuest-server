@@ -1,8 +1,8 @@
 """Schedule mutations: create, change, delete, run now.
 
 Every resolver scopes itself through :func:`facade.types.base.scoped_get` (a single-object root
-resolver bypasses ``get_queryset``). The rows are this server's; their runs are agentd's
-(:mod:`facade.schedules`). Creating or re-planning a schedule has agentd plan its next run right
+resolver bypasses ``get_queryset``). The rows are this server's; their runs are takt's
+(:mod:`facade.schedules`). Creating or re-planning a schedule has takt plan its next run right
 away rather than on its reaper's next tick, so ``nextRun`` is populated in the response.
 """
 
@@ -110,9 +110,9 @@ def update_schedule(info: Info, input: inputs.UpdateScheduleInput) -> types.Sche
         replan = True
     schedules.validate_timing(interval_seconds=schedule.interval_seconds, cron=schedule.cron, tz=schedule.timezone)
 
-    # Only what changed: the run bookkeeping on the row (backoff, failures) is agentd's.
+    # Only what changed: the run bookkeeping on the row (backoff, failures) is takt's.
     schedule.save(update_fields=[*changed, "updated_at"])
-    # A changed target or timing is a fresh start: agentd cancels the waiting run of the old
+    # A changed target or timing is a fresh start: takt cancels the waiting run of the old
     # settings, forgets their backoff and plans anew (nothing, for a disabled schedule).
     schedules.plan(schedule, replan=replan, principal=info)
     schedule.refresh_from_db()

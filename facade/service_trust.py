@@ -8,15 +8,18 @@ each listed under its service's identifier. A service can therefore only speak a
 only rekuest can speak as rekuest.
 
 Third-party HookAgents (registered through ``ensureAgent`` with a ``hook_url_secret``) keep the
-HMAC scheme (agentd's ``hooks``); only the hub's own services use keys.
+HMAC scheme (takt's ``hooks``); only the hub's own services use keys.
 """
 
 from __future__ import annotations
 
+import time
 from typing import Any
 from urllib.parse import urlparse
 
 from django.conf import settings
+from joserfc import jwt
+from joserfc.jwk import KeySet
 from rekuest_service import trust
 
 #: Service agents' clients are minted by rekuest as ``rekuest:service-<name>`` (see
@@ -53,3 +56,40 @@ def entry_for_agent(agent: Any) -> dict[str, Any] | None:
 def sign_to(entry: dict[str, Any], method: str, url: str, body: bytes) -> str:
     """The ``Authorization`` value of a request from rekuest to this service."""
     return trust.sign(method, urlparse(url).path, body, issuer=rekuest_identifier(), audience=identifier_of(entry))
+
+
+def verify_own(method: str, path: str, body: bytes, authorization: str | None, max_skew: int = 30) -> trust.Verified:
+    """Check a request takt signed as this rekuest, to this rekuest; ``TrustError`` otherwise.
+
+    takt reads the same ``config.yaml`` and so signs with this instance's own key. The check is
+    against that key itself, not the hub's trust bundle (takt's ``service_trust::verify`` does the
+    same for the requests this server sends it): the pair works before the coord has vouched for
+    the key, and no other instance can pass.
+    """
+    key = trust.instance_key()
+    if key is None:
+        raise trust.TrustError("No instance key configured (settings.INSTANCE['PRIVATE_KEY'])")
+    if not authorization or not authorization.startswith(f"{trust.SCHEME} "):
+        raise trust.TrustError("No service token")
+    token = authorization[len(trust.SCHEME) + 1 :].strip()
+    try:
+        decoded = jwt.decode(token, KeySet.import_key_set({"keys": [trust.public_jwk(key)]}), algorithms=[trust.ALGORITHM])
+    except Exception as error:  # noqa: BLE001
+        raise trust.TrustError(f"Bad service token signature: {error}") from None
+    if decoded.header.get("typ") != trust.TYP or decoded.header.get("kid") != key.thumbprint():
+        raise trust.TrustError("Not a service token of this instance")
+    claims = decoded.claims
+    identity = rekuest_identifier()
+    if claims.get("iss") != identity or claims.get("aud") != identity:
+        raise trust.TrustError("Not a token from rekuest to itself")
+    now = int(time.time())
+    exp, iat = claims.get("exp"), claims.get("iat")
+    if not isinstance(exp, int) or not isinstance(iat, int) or exp < now - max_skew or iat > now + max_skew or exp - iat > trust.LIFETIME_SECONDS + max_skew:
+        raise trust.TrustError("Service token expired or not yet valid")
+    if claims.get("htm") != method.upper() or claims.get("htu") != path:
+        raise trust.TrustError("Service token was signed for another request")
+    if claims.get("bh") != trust.body_hash(body):
+        raise trust.TrustError("Service token was signed for another body")
+    if not claims.get("jti"):
+        raise trust.TrustError("Service token without an id")
+    return trust.Verified(issuer=identity, jti=str(claims["jti"]), expires_at=exp)

@@ -2,15 +2,15 @@
 
 Liveness is ``connected AND a fresh heartbeat``:
 
-* ``connected=False`` is a **definitive negative**: a clean close was observed, or agentd's
+* ``connected=False`` is a **definitive negative**: a clean close was observed, or takt's
   sweep revoked the lease.
 * ``connected=True`` is only **not-yet-refuted**. A crashed worker never disconnects, so the
   flag can stay stuck True; the heartbeat (``last_seen``) is what makes True trustworthy,
   because it expires on its own, with no writer.
 
-agentd writes all of it (``agentd/crates/facade/src/persist/leases.rs``): the lease, the
+takt writes all of it (``takt/crates/facade/src/persist/leases.rs``): the lease, the
 heartbeat renewal and the sweep that revokes a stuck one. This module is the read side, for the
-GraphQL ``active`` field, with the same window agentd uses (``AGENT_STALE_AFTER``: three
+GraphQL ``active`` field, with the same window takt uses (``AGENT_STALE_AFTER``: three
 heartbeat intervals).
 """
 

@@ -1,7 +1,7 @@
-"""agentd inserts into these tables with SQL: a default it would have to repeat belongs in the database.
+"""takt inserts into these tables with SQL: a default it would have to repeat belongs in the database.
 
-A column whose default lives only in Python is one agentd must name in every INSERT, and one a
-migration cannot add without breaking the agentd already running. So every defaulted column of
+A column whose default lives only in Python is one takt must name in every INSERT, and one a
+migration cannot add without breaking the takt already running. So every defaulted column of
 this server's own tables carries the default in the schema too.
 """
 

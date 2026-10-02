@@ -1,4 +1,4 @@
-"""This hub's services as HookAgents: provisioned by rekuest itself, scheduled by the reaper.
+"""This hub's services as HookAgents: provisioned by rekuest itself, scheduled by takt.
 
 Each entry of ``rekuest.service_agents`` becomes:
 
@@ -6,12 +6,12 @@ Each entry of ``rekuest.service_agents`` becomes:
   ``service_agents_organization`` — minted here, because lok has no service identity to offer;
 * its **actions**, read from the service's signed manifest (``GET <hook_url>/manifest``,
   served by the vendored ``rekuest_service`` package) and registered through the ordinary
-  agentd's registration, so they are real actions like any agent's;
+  takt's registration, so they are real actions like any agent's;
 * one **schedule** per action that declares a default interval or cron line, owned by the
   scheduler identity. Its runs are ephemeral: housekeeping, not history.
 
-Provisioning is a reaper step (:meth:`ReconcileMixin.provision_service_agents`), idempotent,
-and updates everything in place — an agent is never deleted and recreated, since its schedules
+Provisioning is an upkeep job takt asks for (:mod:`facade.upkeep`), idempotent, and updates
+everything in place — an agent is never deleted and recreated, since its schedules
 cascade with it. An operator's changes to a schedule (``enabled``) survive re-provisioning; only
 its timing follows the manifest. The scheduler's caller has its OWN client, distinct from every
 service's: the caller-event mirror POSTs a task's events to a HookAgent sharing its caller's
@@ -20,15 +20,16 @@ identity, and a service must not receive echoes of its own runs.
 
 from __future__ import annotations
 
+import hashlib
 import logging
-import time
 from typing import Any
 
 import httpx
 from authentikate.models import App, Client, Membership, Organization, Release, User
 from django.conf import settings
+from django.db import connection
 
-from facade import agentd, enums, models, schedules
+from facade import takt, enums, models, schedules
 from facade.caller_context import CallerContext
 
 logger = logging.getLogger(__name__)
@@ -36,13 +37,10 @@ logger = logging.getLogger(__name__)
 ISSUER = "rekuest"
 _TIMEOUT = 5.0
 
-# Re-read every service's manifest this often. A reaper ticks every few seconds; a manifest
-# changes with a deploy. The throttle is process-local on purpose — it only saves requests;
-# whichever reaper provisions, the result is the same.
-PROVISION_EVERY_SECONDS = 300
-# ...but a service that could not be reached (still booting, restarting) is retried sooner.
-PROVISION_RETRY_SECONDS = 30
-_next_provision_at = 0.0
+# One provisioning pass at a time, across every replica: a schedule is found-or-created, and two
+# passes at once would both create it. A session-level advisory lock, not a transaction: a pass
+# asks takt to write rows that must see what this one already committed.
+PROVISION_LOCK_KEY = int.from_bytes(hashlib.sha256(b"rekuest:service-agents").digest()[:8], "big", signed=True)
 
 
 def _identity(name: str, organization: Organization) -> tuple[User, Client]:
@@ -114,9 +112,9 @@ def provision(entry: dict[str, Any]) -> models.Agent:
     service = entry["service"]
     user, client = _identity(f"service-{service}", organization)
 
-    principal = agentd._principal(CallerContext(user=user, client=client, organization=organization))
+    principal = takt._principal(CallerContext(user=user, client=client, organization=organization))
     # No secret: requests both ways are signed with instance keys (facade.service_trust).
-    ensured = agentd.call(
+    ensured = takt.call(
         "agent/ensure",
         {"principal": principal, "name": service, "kind": enums.AgentKind.WEBHOOK.value, "hook_url": entry["hook_url"], "hook_url_secret": None},
     )
@@ -126,7 +124,7 @@ def provision(entry: dict[str, Any]) -> models.Agent:
     actions = manifest["actions"]
     implementations, payload_model = _implementations(actions)
     payload = payload_model(name=service, description=f"The {service} service of this hub.", implementations=implementations)
-    agentd.call("agent/implement", {"principal": principal, "input": payload.model_dump(mode="json", exclude_none=True)})
+    takt.call("agent/implement", {"principal": principal, "input": payload.model_dump(mode="json", exclude_none=True)})
     _sync_schedules(agent, actions)
     _sync_signals(agent, manifest["signals"])
     return agent
@@ -184,18 +182,28 @@ def _sync_signals(agent: models.Agent, signals: list[dict[str, Any]]) -> None:
             row.delete()
 
 
-def provision_all(force: bool = False) -> int:
-    """Provision every configured service (throttled to PROVISION_EVERY_SECONDS). Returns how many succeeded."""
-    global _next_provision_at
+def provision_all() -> list[str] | None:
+    """Provision every configured service once; the services that could not be.
+
+    ``None`` when another replica is provisioning right now (nothing was done here). How often
+    this runs is takt's to decide (:mod:`facade.upkeep`).
+    """
     entries = getattr(settings, "SERVICE_AGENTS", None) or []
-    if not entries or (not force and time.monotonic() < _next_provision_at):
-        return 0
-    provisioned = 0
-    for entry in entries:
-        try:
-            provision(entry)
-            provisioned += 1
-        except Exception as error:  # one unreachable service must not keep the others unprovisioned
-            logger.warning("Could not provision service agent %r: %s", entry.get("service"), error)
-    _next_provision_at = time.monotonic() + (PROVISION_EVERY_SECONDS if provisioned == len(entries) else PROVISION_RETRY_SECONDS)
-    return provisioned
+    if not entries:
+        return []
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT pg_try_advisory_lock(%s)", [PROVISION_LOCK_KEY])
+        if not cursor.fetchone()[0]:
+            return None
+    try:
+        failed = []
+        for entry in entries:
+            try:
+                provision(entry)
+            except Exception as error:  # one unreachable service must not keep the others unprovisioned
+                logger.warning("Could not provision service agent %r: %s", entry.get("service"), error)
+                failed.append(str(entry.get("service")))
+        return failed
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT pg_advisory_unlock(%s)", [PROVISION_LOCK_KEY])

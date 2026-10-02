@@ -5,9 +5,9 @@ from facade import models
 
 
 class ReadOnlyAdmin(admin.ModelAdmin):
-    """Rows agentd writes: the admin shows them and changes none.
+    """Rows takt writes: the admin shows them and changes none.
 
-    agentd is their one writer (it holds the agents' leases, orders task transitions and
+    takt is their one writer (it holds the agents' leases, orders task transitions and
     publishes the feeds); a save or delete from here would bypass all of that.
     """
 

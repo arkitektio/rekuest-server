@@ -1,10 +1,10 @@
 """GraphQL surface for higher-order implementations.
 
-``createHigherOrderImplementation`` is served by agentd (``internal/higher-order/create``):
-the checks and the writes are judged there (rekuest-agentd ``tests/higher_order.rs``). Here:
-that the mutation hands the request over and answers with the row agentd created, that
-agentd's refusals reach GraphQL as they are, and that re-registering an agent keeps the
-wrappers deployed onto it: agentd's (tests/higher_order.rs), where registration lives.
+``createHigherOrderImplementation`` is served by takt (``internal/higher-order/create``):
+the checks and the writes are judged there (rekuest-takt ``tests/higher_order.rs``). Here:
+that the mutation hands the request over and answers with the row takt created, that
+takt's refusals reach GraphQL as they are, and that re-registering an agent keeps the
+wrappers deployed onto it: takt's (tests/higher_order.rs), where registration lives.
 """
 
 import json
@@ -15,7 +15,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
-from facade import agentd
+from facade import takt
 from facade.models import Action, Implementation
 from facade.schema import schema
 from tests.factories import create_agent_for_registry, create_registry_bundle
@@ -75,9 +75,9 @@ link = sync_to_async(_link)
 
 
 @pytest.fixture
-def agentd_answers(monkeypatch: pytest.MonkeyPatch, settings: object) -> Callable[..., list[dict]]:
-    """agentd answered by ``handler``; the JSON bodies it received."""
-    settings.AGENTD_URL = "http://agentd:8080/rekuest"
+def takt_answers(monkeypatch: pytest.MonkeyPatch, settings: object) -> Callable[..., list[dict]]:
+    """takt answered by ``handler``; the JSON bodies it received."""
+    settings.TAKT_URL = "http://takt:8080/rekuest"
     seen: list[dict] = []
 
     def install(handler: Callable[[httpx.Request], httpx.Response]) -> list[dict]:
@@ -85,7 +85,7 @@ def agentd_answers(monkeypatch: pytest.MonkeyPatch, settings: object) -> Callabl
             seen.append(json.loads(request.content))
             return handler(request)
 
-        monkeypatch.setattr(agentd, "_client", httpx.Client(transport=httpx.MockTransport(record)))
+        monkeypatch.setattr(takt, "_client", httpx.Client(transport=httpx.MockTransport(record)))
         return seen
 
     return install
@@ -94,13 +94,13 @@ def agentd_answers(monkeypatch: pytest.MonkeyPatch, settings: object) -> Callabl
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 class TestCreateHigherOrderImplementation:
-    """The mutation hands over to agentd."""
+    """The mutation hands over to takt."""
 
-    async def test_the_request_goes_to_agentd_and_the_wrapper_comes_back(self, authenticated_context: HttpContext, agentd_answers: Callable[..., list[dict]]) -> None:
-        """The request agentd receives, and the row the mutation answers with."""
+    async def test_the_request_goes_to_takt_and_the_wrapper_comes_back(self, authenticated_context: HttpContext, takt_answers: Callable[..., list[dict]]) -> None:
+        """The request takt receives, and the row the mutation answers with."""
         higher_id, lower_id = await build_impls("ho-ok")
-        await link(higher_id, lower_id)  # what agentd would have written
-        seen = agentd_answers(lambda request: httpx.Response(200, json={"implementation": higher_id, "diagnostics": []}))
+        await link(higher_id, lower_id)  # what takt would have written
+        seen = takt_answers(lambda request: httpx.Response(200, json={"implementation": higher_id, "diagnostics": []}))
 
         result = await schema.execute(
             CREATE,
@@ -117,9 +117,9 @@ class TestCreateHigherOrderImplementation:
         assert body["input"]["config"] == {"args_key": "args"}
         assert body["principal"]["organization"] is not None
 
-    async def test_a_refusal_reaches_graphql_as_agentd_worded_it(self, authenticated_context: HttpContext, agentd_answers: Callable[..., list[dict]]) -> None:
-        """agentd's message is the GraphQL error."""
-        agentd_answers(lambda request: httpx.Response(400, json={"error": "An implementation cannot wrap itself"}))
+    async def test_a_refusal_reaches_graphql_as_takt_worded_it(self, authenticated_context: HttpContext, takt_answers: Callable[..., list[dict]]) -> None:
+        """takt's message is the GraphQL error."""
+        takt_answers(lambda request: httpx.Response(400, json={"error": "An implementation cannot wrap itself"}))
 
         result = await schema.execute(
             CREATE,
@@ -129,9 +129,9 @@ class TestCreateHigherOrderImplementation:
 
         assert result.errors is not None and result.errors[0].message == "An implementation cannot wrap itself"
 
-    async def test_without_agentd_it_says_so(self, authenticated_context: HttpContext, settings: object) -> None:
-        """No agentd configured: a clear error, no in-process fallback."""
-        settings.AGENTD_URL = None
+    async def test_without_takt_it_says_so(self, authenticated_context: HttpContext, settings: object) -> None:
+        """No takt configured: a clear error, no in-process fallback."""
+        settings.TAKT_URL = None
 
         result = await schema.execute(
             CREATE,
@@ -139,4 +139,4 @@ class TestCreateHigherOrderImplementation:
             variable_values={"input": {"lower": "1", "interface": "flow:1", "definition": DEFINITION}},
         )
 
-        assert result.errors is not None and "agentd" in result.errors[0].message
+        assert result.errors is not None and "takt" in result.errors[0].message

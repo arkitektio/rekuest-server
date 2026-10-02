@@ -1,0 +1,9 @@
+# The conformance stack's database and redis, published, for takt's tests. The rekuest service
+# is started so the Python server migrates the schema: takt never migrates.
+services:
+  db:
+    ports:
+      - "${TAKT_TEST_DB_PORT:-5694}:5432"
+  redis:
+    ports:
+      - "${TAKT_TEST_REDIS_PORT:-5695}:6379"

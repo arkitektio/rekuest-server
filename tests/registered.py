@@ -1,6 +1,6 @@
 """Test fixtures: the rows a registration writes, built directly.
 
-Registration is agentd's (rekuest-agentd ``registration::implement_agent``, parity-tested against
+Registration is takt's (rekuest-takt ``registration::implement_agent``, parity-tested against
 what this server used to do). Tests of the Python server's own features — matching, filters,
 structure usages, dependency resolution, triggers — only need realistic rows to work on: an
 Action with its relational port tree (compiled requires/provides), an Implementation on an

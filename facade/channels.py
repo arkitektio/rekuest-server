@@ -2,7 +2,7 @@ from kante.channel import build_channel
 from .channel_events import StateUpdateEvent, TaskEventCreatedEvent, ImplementationEvent, AgentEvent, ProbeEventBroadcast, ChildTaskEvent, PatchEvent
 
 
-# agentd publishes on these channels by name (``agentd/crates/facade/src/channels.rs``): every
+# takt publishes on these channels by name (``takt/crates/facade/src/channels.rs``): every
 # name is spelled out here, so renaming a payload class cannot silently change one.
 agent_updated_channel = build_channel(AgentEvent, "agent_updated_broadcast")
 

@@ -5,7 +5,7 @@ remapping its arguments, dependencies and returns. It is how Rekuest expresses p
 and configuration presets **without** the agents needing any orchestration logic of their own —
 Rekuest does the wiring.
 
-The wiring runs in agentd. Key files, under `agentd/crates/facade/src/`:
+The wiring runs in takt. Key files, under `takt/crates/facade/src/`:
 
 - `higher_order.rs` — the pure projection and validation functions.
 - `mutations/higher_order.rs` — `create_higher_order_implementation`, behind the
@@ -95,7 +95,7 @@ clash):
 ## Projecting dependencies inward — `build_lower_dependencies`
 
 `build_lower_dependencies(config, resolved_h_dependencies)` takes the wrapper's *resolved* dependency
-object (an explicit, stored contract — see [task-lifecycle.md](../../agentd/docs/task-lifecycle.md)) and
+object (an explicit, stored contract — see [task-lifecycle.md](../../takt/docs/task-lifecycle.md)) and
 projects it onto `L`'s dependency slots:
 
 - **Empty `dependency_map`** → pass-through by matching key.
@@ -117,7 +117,7 @@ to pass.
 
 ## Server-side event unfolding
 
-Because the user watches the **wrapper** but the work runs on the **child**, agentd re-emits the
+Because the user watches the **wrapper** but the work runs on the **child**, takt re-emits the
 child's terminal/yield events onto the wrapper. `unfold_to_higher_order` (called when a report
 for the child is persisted, `persist/reports.rs`, and when a sweep ends it, `persist/reconcile.rs`):
 

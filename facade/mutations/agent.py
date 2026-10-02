@@ -5,7 +5,7 @@ import strawberry
 from kante.types import Info
 from pydantic import BaseModel, Field
 
-from facade import agentd, enums, inputs, models, signals, types
+from facade import takt, enums, inputs, models, signals, types
 from facade.types.base import scoped_get
 from rekuest_core.inputs.models import BlokImplementationInputModel, ImplementationInputModel, LockImplementationInputModel, StateImplementationInputModel
 from rekuest_core.inputs.types import BlokImplementationInput, ImplementationInput, LockImplementationInput, StateImplementationInput
@@ -45,11 +45,11 @@ class DeleteAgentInput:
 def ensure_agent(info: Info, input: AgentInput) -> types.Agent:
     """Create (or find) the caller's agent, configure its transport, forget what it had shelved.
 
-    Served by agentd (``internal/agent/ensure``), which owns agent rows. For dashboards and a
+    Served by takt (``internal/agent/ensure``), which owns agent rows. For dashboards and a
     HookAgent's bootstrap (``kind``, ``hook_url``, ``hook_url_secret``), which has no socket to
     register over; an agent turning WEBHOOK has its socket queue abandoned there.
     """
-    payload: dict = {"principal": agentd._principal(info), "clear_drawers": True}
+    payload: dict = {"principal": takt._principal(info), "clear_drawers": True}
     if input.name is not None:
         payload["name"] = input.name
     if input.description is not None:
@@ -60,7 +60,7 @@ def ensure_agent(info: Info, input: AgentInput) -> types.Agent:
         payload["hook_url"] = input.hook_url
     if input.hook_url_secret is not None:
         payload["hook_url_secret"] = input.hook_url_secret
-    answer = agentd.call("agent/ensure", payload)
+    answer = takt.call("agent/ensure", payload)
     return models.Agent.objects.get(pk=answer["agent"])
 
 
@@ -92,11 +92,11 @@ class ImplementAgentInput:
 def implement_agent(info: Info, input: ImplementAgentInput) -> types.Agent:
     """Reconcile the caller's agent's declared implementations/states/locks/bloks, atomically.
 
-    Served by agentd (``internal/agent/implement``): the same reconciliation a socket agent's
+    Served by takt (``internal/agent/implement``): the same reconciliation a socket agent's
     REGISTER runs, so either the whole declared set lands or none of it.
     """
     model = input.to_pydantic()
-    answer = agentd.call("agent/implement", {"principal": agentd._principal(info), "input": model.model_dump(mode="json", exclude_none=True)})
+    answer = takt.call("agent/implement", {"principal": takt._principal(info), "input": model.model_dump(mode="json", exclude_none=True)})
     return models.Agent.objects.get(pk=answer["agent"])
 
 
@@ -122,7 +122,7 @@ def update_agent(info: Info, input: inputs.UpdateAgentInput) -> types.Agent:
 
 
 def delete_agent(info: Info, input: DeleteAgentInput) -> strawberry.ID:
-    """Delete an agent with everything below it. agentd owns the rows: it kicks a connected agent and cascades."""
+    """Delete an agent with everything below it. takt owns the rows: it kicks a connected agent and cascades."""
     agent = scoped_get(models.Agent, info, input.id)
-    agentd.call("agent/delete", {"principal": agentd._principal(info), "agent": str(agent.pk)})
+    takt.call("agent/delete", {"principal": takt._principal(info), "agent": str(agent.pk)})
     return input.id

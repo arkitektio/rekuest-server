@@ -48,13 +48,13 @@ django_settings_module = "rekuest.settings"
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "rekuest.settings_test"
-# agentd/ carries its own suites (cargo test, agentd/conformance).
+# takt/ carries its own suites (cargo test, takt/conformance).
 testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 300
 target-version = "py312"
-extend-exclude = ["agentd"]
+extend-exclude = ["takt"]
 
 [tool.ruff.lint]
 # Updated Ruff config format (new versions of Ruff prefer tool.ruff.lint)

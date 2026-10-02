@@ -31,7 +31,7 @@ diagram shows the high-level design of Rekuest:
 > the service — the Caller/Agent identity model, the relational action-matching engine, the
 > realtime layer and higher-order implementations — see **[`docs/design/`](./docs/design/README.md)**.
 > The agent protocol, the task lifecycle and workflows are documented with their implementation,
-> in [`agentd/docs/`](./agentd/docs/).
+> in [`takt/docs/`](./takt/docs/).
 
 ## Two programs, released together
 
@@ -40,26 +40,25 @@ and are released under the same version.
 
 | program | where | what it does |
 |---|---|---|
-| **the rekuest server** (Python/Django) | the repository root | GraphQL (queries, mutations, subscriptions), the database migrations, and a small background loop. |
-| **agentd** (Rust) | [`agentd/`](./agentd/README.md) | The whole agent protocol: the agent websocket `/agi`, the HookAgent intake `/agi/http/{agent_id}`, the signal intake `/agi/signal/{service}`, registration, assign and control, probes, and every sweep (stale agents, deadlines, workflow resume, schedules, triggers, retention). |
+| **the rekuest server** (Python/Django) | the repository root | GraphQL (queries, mutations, subscriptions), the database migrations, and the two upkeep jobs takt asks it for (service agents, embeddings). |
+| **takt** (Rust) | [`takt/`](./takt/README.md) | The whole agent protocol: the agent websocket `/agent`, the HookAgent intake `/agent/http/{agent_id}`, the signal intake `/agent/signal/{service}` (each also under its former name, `/agi`), registration, assign and control, probes, and every sweep (stale agents, deadlines, workflow resume, schedules, triggers, retention). |
 
 The server has no websocket route for agents and no agent code: `rekuest/asgi.py` serves GraphQL
-only. Whatever a mutation needs done to a task or an agent, the server asks agentd for, through
-agentd's internal API (`facade/agentd.py`, signed with the instance key).
+only. Whatever a mutation needs done to a task or an agent, the server asks takt for, through
+takt's internal API (`facade/takt.py`, signed with the instance key).
 
-The server owns the schema and migrates it. agentd writes the same tables with its own SQL, never
+The server owns the schema and migrates it. takt writes the same tables with its own SQL, never
 migrates, and waits at startup until the database has the migrations listed in
-`agentd/schema-migrations.txt`.
+`takt/schema-migrations.txt`.
 
 ## Running it: three processes
 
 | process | command | role |
 |---|---|---|
-| web (any number of replicas) | `bash run.sh` (daphne) | Migrates on boot, then serves GraphQL and its subscriptions. |
-| background loop (one is enough) | `bash run-reaper.sh` → `python manage.py reaper` | Provisions this hub's services as HookAgents and re-embeds actions whose embedding is stale. Healthcheck: `python manage.py reaper --check`. |
-| agentd (any number of replicas) | the `jhnnsrs/rekuest-agentd` image, same `config.yaml` | The agent protocol and every sweep. Healthcheck: `agentd healthcheck`. |
+| web (any number of replicas) | `bash run.sh` (daphne) | Migrates on boot, then serves GraphQL and its subscriptions. Runs no loop: takt asks it to provision this hub's services and to embed new actions when those are due. Its health check (`ht`) answers for takt too. |
+| takt (any number of replicas) | the `jhnnsrs/rekuest-takt` image, same `config.yaml` | The agent protocol (`agent`, formerly `agi`), every sweep, and the clock of the server's upkeep jobs. Healthcheck: `takt healthcheck`. |
 
-The first two run from the `jhnnsrs/rekuest` image. Always run the same version of both images.
+The web process runs from the `jhnnsrs/rekuest` image. Always run the same version of both images.
 
 To run the pair locally from this checkout:
 
@@ -68,30 +67,33 @@ docker compose up --build
 ```
 
 [`docker-compose.yaml`](./docker-compose.yaml) starts Postgres, redis, the server
-(`http://localhost:8234/graphql`), the background loop and agentd (`ws://localhost:8235/agi`), all
+(`http://localhost:8234/graphql`) and takt (`ws://localhost:8235/agent`), both
 reading [`config.yaml`](./config.yaml). Tokens are verified against the issuers in that file's
 `authentikate` block.
 
 What a deployment has to get right:
 
-- **`rekuest.agentd_url`** must be set in `config.yaml` (or as `REKUEST__AGENTD_URL`): where the
-  server reaches agentd, with the script name, e.g. `http://agentd:8080/rekuest`. Without it every
-  assign, control, registration, delete and probe is refused.
-- **The gateway** routes `/<script name>/agi*` to agentd and everything else to the server.
-- **Hub services** POST their HookAgent reports and signals to agentd, so their `rekuest_url`
-  points at agentd, not at the server.
-- **Both read the same `config.yaml`.** agentd honours the same `SECTION__KEY` environment
+- **The pair finds each other by name.** The server reaches takt at `rekuest.takt_url`
+  (default `http://takt:8080/<script name>`), takt reaches the server at `rekuest.server_url`
+  (default `http://rekuest:80/<script name>`). Set them where the services are named
+  otherwise; while takt is unreachable every assign, control, registration, delete and probe
+  is refused and the server's `ht` is unhealthy.
+- **The gateway** routes `/<script name>/agent*` and `/<script name>/agi*` to takt and
+  everything else to the server, except `/<script name>/_rekuest*`, which it must not route.
+- **Hub services** POST their HookAgent reports and signals to takt, so their `rekuest_url`
+  points at takt, not at the server.
+- **Both read the same `config.yaml`.** takt honours the same `SECTION__KEY` environment
   overrides and `ARKITEKT_CONFIG_FILE` as the server. See [CONFIG.md](./CONFIG.md).
 
-The background loop holds no state and may run more than once side by side. Every agentd replica
-runs the sweeps; a tick token in redis lets one of them sweep per tick. While no agentd runs,
+The server holds no state and runs no loop. Every takt replica runs the sweeps and asks the
+server for its upkeep jobs; a tick token in redis lets one of them sweep per tick. While no takt runs,
 deadlines, schedules and triggers are late, never lost.
 
 ## Developmental Notices
 
-Transport is Redis: agent commands travel through a per-agent Redis list that agentd drains (chosen
+Transport is Redis: agent commands travel through a per-agent Redis list that takt drains (chosen
 over the Channels layer so a message pushed while an agent is briefly offline survives its
-reconnect), and GraphQL subscriptions fan out through `channels_redis`, which agentd speaks too. There is no RabbitMQ and no Kafka. To learn more
+reconnect), and GraphQL subscriptions fan out through `channels_redis`, which takt speaks too. There is no RabbitMQ and no Kafka. To learn more
 about this design decision, please refer to the
 [Why Not?](https://arkitekt.live/docs/design/why-not) section.
 

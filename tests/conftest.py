@@ -144,12 +144,12 @@ def authenticated_context(db, backend_stack):
 
 
 @pytest.fixture
-def fake_agentd(monkeypatch, settings):
-    """agentd's internal API answered in-process (``tests/agentd_fake.py``)."""
-    from facade import agentd
-    from tests import agentd_fake
+def fake_takt(monkeypatch, settings):
+    """takt's internal API answered in-process (``tests/takt_fake.py``)."""
+    from facade import takt
+    from tests import takt_fake
 
-    settings.AGENTD_URL = "http://agentd.test/rekuest"
-    agentd_fake.calls.clear()
-    monkeypatch.setattr(agentd, "call", agentd_fake.call)
-    return agentd_fake
+    settings.TAKT_URL = "http://takt.test/rekuest"
+    takt_fake.calls.clear()
+    monkeypatch.setattr(takt, "call", takt_fake.call)
+    return takt_fake

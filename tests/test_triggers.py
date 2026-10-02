@@ -1,7 +1,7 @@
 """Triggers, from this server's side: the rows its GraphQL creates, checked when written.
 
-Receiving signals, matching them to triggers and firing them are agentd's and tested there
-(``agentd/crates/facade/tests/scheduling.rs``, ``signal_intake.rs``). Real postgres.
+Receiving signals, matching them to triggers and firing them are takt's and tested there
+(``takt/crates/facade/tests/scheduling.rs``, ``signal_intake.rs``). Real postgres.
 """
 
 

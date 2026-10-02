@@ -1,0 +1,63 @@
+# The pair under test, both built from this repository: the rekuest server (GraphQL, migrations)
+# and takt (the agent protocol).
+services:
+  redis:
+    image: redis:latest
+  db:
+    image: jhnnsrs/daten:latest
+    restart: always
+    environment:
+      POSTGRES_MULTIPLE_DATABASES: rekuest
+      POSTGRES_PASSWORD: hello_django
+      POSTGRES_USER: hello_django
+  rekuest:
+    depends_on:
+    - redis
+    - db
+    - rustfs
+    # The server of this repository: the schema takt writes is the one this checkout migrates.
+    build:
+      context: ../../..
+    command: bash run-debug.sh
+    stop_grace_period: 1s
+    ports:
+    - "${REKUEST_HOST_PORT:-5690}:80"
+    volumes:
+    - ./configs/rekuest.yaml:/workspace/config.yaml
+  takt:
+    depends_on:
+    - redis
+    - db
+    - rekuest
+    build:
+      context: ../..
+    stop_grace_period: 1s
+    # The hook scenarios' receiver runs in the test process, on the host.
+    extra_hosts:
+    - "host.docker.internal:host-gateway"
+    ports:
+    - "${TAKT_HOST_PORT:-5692}:8080"
+    volumes:
+    - ./configs/rekuest.yaml:/workspace/config.yaml
+  rustfs:
+    environment:
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_SECRET_KEY: e8821a29d189789e39c9922a3bfcfb4a
+      RUSTFS_ACCESS_KEY: crappygreysetter
+    image: rustfs/rustfs:latest
+    ports:
+    - "${RUSTFS_HOST_PORT:-5691}:9000"
+  initc:
+    depends_on:
+      rustfs:
+        condition: service_started
+    environment:
+      RUSTFS_HOST: http://rustfs:9000
+      RUSTFS_SECRET_KEY: e8821a29d189789e39c9922a3bfcfb4a
+      RUSTFS_ACCESS_KEY: crappygreysetter
+    image: jhnnsrs/init:latest
+    volumes:
+    - ./configs/rustfs.yaml:/workspace/config.yaml
+
+

@@ -10,7 +10,7 @@ with a ``ValidationError`` if they are not supplied via config or environment.
 import os
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -65,7 +65,7 @@ class RedisSettings(BaseModel):
 
     host: str = Field(description="Redis host.")
     port: int = Field(default=6379, description="Redis port.")
-    key_prefix: str = Field(default="rekuest", description="Namespace for every redis key this service writes (agent queues, probe state, reaper token, webhook replay guard). Give each deployment sharing one redis a distinct value.")
+    key_prefix: str = Field(default="rekuest", description="Namespace for every redis key this service writes (agent queues, probe state, sweep and upkeep tokens, replay guards). Give each deployment sharing one redis a distinct value.")
     channel_prefix: str = Field(default="rekuest", description="Key prefix for the channels_redis channel layer. Must differ from every other service on the same redis, or group messages bleed across services.")
     channel_capacity: int = Field(default=5000, description="channels_redis capacity. This bounds the ONE per-process receive queue shared by every socket and subscription in a replica — messages beyond it are dropped silently — so it must be far above the library default of 100.")
 
@@ -102,7 +102,7 @@ class RekuestBlock(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     grace_default: int = Field(default=30, description="Default reclaim grace window (seconds) after a disconnect.")
-    sweep_interval: int = Field(default=5, description="How often (seconds) the reaper (`manage.py reaper`) sweeps the DB-held deadlines. Bounds how late a deadline can fire.")
+    sweep_interval: int = Field(default=5, description="How often (seconds) takt sweeps the DB-held deadlines. Bounds how late a deadline can fire.")
     pickup_deadline: int = Field(default=60, description="Seconds a dispatched task may go without any report from its (live) agent before the Assign is redelivered once, then failed; 0 disables.")
     disconnected_expiry: int = Field(default=3600, description="Seconds a DISCONNECTED (fate unknown) task stays recoverable before it is finalized as terminal; 0 = never.")
     control_deadline: int = Field(default=60, description="Seconds an unconfirmed cancel may wait before it escalates to an interrupt (and an unconfirmed interrupt before it is finalized); 0 disables. On by default: a Cancel/Interrupt frame lost in transit (a displaced connection, a redis restart) is otherwise never noticed — the DB says CANCELLING while the agent never heard of it.")
@@ -110,7 +110,7 @@ class RekuestBlock(BaseModel):
     hook_max_skew: int = Field(default=300, description="Maximum age/clock skew (seconds) accepted for a V1-signed HookAgent request; also bounds the replay-guard window.")
     task_retention: int = Field(default=0, description="Seconds to keep terminal root task trees; 0 disables deletion. Deleting past runs also removes them from replay (reusable_task_for). Suggested production value: 2592000 (30 days).")
     ephemeral_task_retention: int = Field(default=86400, description="Seconds to keep terminal EPHEMERAL root task trees (housekeeping runs of schedules with ephemeralRuns); applies even while task_retention is 0. 0 disables.")
-    agentd_url: Optional[str] = Field(default=None, description="agentd (rekuest-agentd, the agent protocol in Rust) beside this server, with its script name, e.g. http://agentd:8080/rekuest. Must be set: assigns, controls, registrations, deletes, schedules and probes go through its internal API, signed with the instance key. Without it the server starts, and each of those raises AgentdUnavailable.")
+    takt_url: Optional[str] = Field(default=None, validation_alias=AliasChoices("takt_url", "agentd_url"), description="takt (the agent protocol and every sweep, in Rust) beside this server, with its script name. Defaults to http://takt:8080/<django.force_script_name>, its name in the usual compose layout. Assigns, controls, registrations, deletes, schedules and probes go through its internal API, signed with the instance key; while it is unreachable each of those raises TaktUnavailable. `agentd_url` is its former name and still read.")
     identifier: str = Field(default="live.arkitekt.rekuest", description="This rekuest's fakts identifier — what its key is listed under in the hub trust bundle, and what services require rekuest's requests to come from.")
     service_agents: list[ServiceAgent] = Field(default_factory=list, description="This hub's services whose periodic work rekuest schedules: each becomes a HookAgent whose actions and default schedules come from the service's manifest.")
     trigger_max_depth: int = Field(default=3, description="How many trigger firings may chain (a triggered run's object signalling another trigger …) before a signal stops firing — the loop guard.")
@@ -171,7 +171,7 @@ class EmbeddingsSettings(BaseModel):
     model_path: Optional[str] = Field(default=None, description="Directory holding the weights of `model` (save_pretrained layout). The Docker image bakes them under /opt/models and sets EMBEDDINGS__MODEL_PATH; unset, model2vec downloads from Hugging Face on first use.")
     dimensions: int = Field(default=256, description="Vector width of `model`. Also the width of the database column, so changing it is a migration. Checked against both at startup.")
     distance_threshold: float = Field(default=0.55, description="Cosine distance (0 identical, 1 unrelated) above which a row no longer counts as a semantic `search` hit.")
-    sweep_interval: int = Field(default=30, description="Seconds between in-process passes that re-embed rows whose `embedding_model` is not `model`. rekuest folds this into its reaper tick instead.")
+    sweep_interval: int = Field(default=30, description="Seconds between in-process passes that re-embed rows whose `embedding_model` is not `model`. Unused by rekuest: takt asks for the re-embed (every 30 s).")
     sweep_batch_size: int = Field(default=200, description="Rows re-embedded per pass.")
 
 

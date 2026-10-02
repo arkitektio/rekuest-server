@@ -19,7 +19,7 @@ django_asgi_app = get_asgi_application()
 
 from facade.schema import schema  # noqa: E402
 from kante.router import router  # noqa: E402
-# The agent protocol (``/agi``: sockets, HookAgent intake, signals) is agentd's; this serves
+# The agent protocol (``/agi``: sockets, HookAgent intake, signals) is takt's; this serves
 # GraphQL and its subscriptions only.
 application = router(
     django_asgi_app=django_asgi_app,

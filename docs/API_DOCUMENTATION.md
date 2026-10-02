@@ -12,25 +12,25 @@ subscriptions) for registering agents, defining actions, routing task execution,
 state. See [`design/README.md`](design/README.md) for the end-to-end picture.
 
 This file covers the GraphQL API, which the rekuest server serves. The agent protocol (the `/agi`
-WebSocket, the HookAgent and signal intakes) is served by agentd and documented in
-[`../agentd/docs/`](../agentd/docs/).
+WebSocket, the HookAgent and signal intakes) is served by takt and documented in
+[`../takt/docs/`](../takt/docs/).
 
 ## Architecture
 
 - **Two programs.** The rekuest server serves this GraphQL API (HTTP queries and mutations,
-  WebSocket subscriptions) and owns the database schema. agentd serves the agent protocol at
-  `/agi`. A gateway routes `<prefix>/agi*` to agentd and everything else to the server.
-- **Mutations that touch a task or an agent are executed by agentd.** `assign`, `cancel`,
+  WebSocket subscriptions) and owns the database schema. takt serves the agent protocol at
+  `/agi`. A gateway routes `<prefix>/agi*` to takt and everything else to the server.
+- **Mutations that touch a task or an agent are executed by takt.** `assign`, `cancel`,
   `interrupt`, `pause`, `resume`, the probe mutations, `ensureAgent`, `implementAgent`,
   `deleteAgent`, `deleteImplementation`, `createHigherOrderImplementation`, `bounce`, `kick`,
   `block`, `unblock`, `collect`, the drawer mutations and the schedule timing calls go through
-  agentd's internal API (`facade/agentd.py`). A refusal comes back as an ordinary GraphQL error;
-  if agentd is unreachable the mutation fails.
+  takt's internal API (`facade/takt.py`). A refusal comes back as an ordinary GraphQL error;
+  if takt is unreachable the mutation fails.
 - **PostgreSQL** for persistent storage. The relational port-matching engine uses Postgres-specific
   `jsonb_path_match`/JSONPath, so Postgres is required (SQLite is not sufficient for matching).
 - **Redis** for both the realtime channel layer (subscription fan-out) and the per-agent delivery
-  queue agentd drains (work survives an agent being briefly offline).
-- Horizontally scalable: server and agentd replicas are stateless; shared state lives in Postgres
+  queue takt drains (work survives an agent being briefly offline).
+- Horizontally scalable: server and takt replicas are stateless; shared state lives in Postgres
   and Redis.
 
 ## Core Concepts
@@ -44,7 +44,7 @@ Every authenticated request carries a `(client, user, organization)` triple.
 - **Caller** — that triple acting as a **requestor** (who asks for work). Owns tasks; keys the
   realtime topics `root_tasks_caller_{id}` and `task_caller_{id}`. A frontend has a Caller and no Agent.
 - **Agent** — that triple plus an `app`/`release`/`device`, acting as a **provider** (who executes
-  work). Connects to agentd over the WebSocket and runs implementations.
+  work). Connects to takt over the WebSocket and runs implementations.
 
 ### Actions and Implementations
 - **Action** — an abstract, versioned function contract (`app`, `key`, `version`, `hash`, typed
@@ -55,7 +55,7 @@ Every authenticated request carries a `(client, user, organization)` triple.
 ### Tasks
 - **Task** — one task execution: the central log, stamped with the caller, routed to an
   agent, accumulating `TaskEvent`s. See
-  [`../agentd/docs/task-lifecycle.md`](../agentd/docs/task-lifecycle.md).
+  [`../takt/docs/task-lifecycle.md`](../takt/docs/task-lifecycle.md).
 
 ### State management
 - **StateDefinition** — the schema for a kind of agent state.
@@ -200,8 +200,8 @@ Content-Type: application/json
 { "query": "query { agents { id name } }" }
 ```
 
-Agents authenticate the same way over agentd's WebSocket — the first frame is a `Register` carrying
-the token; see [`../agentd/docs/agent-protocol.md`](../agentd/docs/agent-protocol.md).
+Agents authenticate the same way over takt's WebSocket — the first frame is a `Register` carrying
+the token; see [`../takt/docs/agent-protocol.md`](../takt/docs/agent-protocol.md).
 
 ## Error Handling
 
@@ -236,7 +236,7 @@ python manage.py runserver
 ```
 
 `config.yaml` is checked in with development values. Mutations that touch a task or an agent
-need a running agentd and `rekuest.agentd_url` pointing at it; `docker compose up --build` at the
+need a running takt and `rekuest.takt_url` pointing at it; `docker compose up --build` at the
 repository root starts the pair.
 
 ### Testing
@@ -245,7 +245,7 @@ repository root starts the pair.
 uv run pytest tests/ --ignore=tests/test_integration.py
 ```
 
-agentd's own suites are in `agentd/` (`cargo test`, and `agentd/conformance`).
+takt's own suites are in `takt/` (`cargo test`, and `takt/conformance`).
 See [`DEVELOPMENT.md`](DEVELOPMENT.md) for the full workflow.
 
 ### GraphQL Playground
@@ -257,14 +257,14 @@ Visit `http://localhost:8000/graphql` to explore the schema and run queries inte
 
 Both programs are configured by one `config.yaml`, with `SECTION__KEY` environment overrides
 (`POSTGRES__PASSWORD`, `REDIS__HOST`, `DJANGO__DEBUG`, …). See [`../CONFIG.md`](../CONFIG.md).
-`rekuest.agentd_url` and the `instance` block are required.
+`rekuest.takt_url` and the `instance` block are required.
 
-Images: `jhnnsrs/rekuest` (the server and its background loop) and `jhnnsrs/rekuest-agentd`,
+Images: `jhnnsrs/rekuest` (the server) and `jhnnsrs/rekuest-takt`,
 released under the same version tags. Run the same version of both.
 
 ### Scaling
-- Run multiple server replicas (GraphQL) and multiple agentd replicas (`/agi`) behind a gateway
-  that routes `<prefix>/agi*` to agentd.
+- Run multiple server replicas (GraphQL) and multiple takt replicas (`/agi`) behind a gateway
+  that routes `<prefix>/agi*` to takt.
 - Use PostgreSQL with connection pooling; consider Redis HA for the channel layer and queue.
 
 ## Performance & Security

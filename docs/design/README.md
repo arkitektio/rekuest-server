@@ -9,17 +9,17 @@ workflow (see [`../DEVELOPMENT.md`](../DEVELOPMENT.md)).
 > `Registry` → `Caller`), a short historical note is included so older code still reads sensibly.
 
 > **Two programs.** The rekuest server (Python/Django, the repository root) serves GraphQL, owns
-> the schema and its migrations, and runs a small background loop. **agentd** (Rust,
-> [`agentd/`](../../agentd/README.md)) owns the whole agent protocol: agent sockets, the HookAgent
+> the schema and its migrations, and runs no loop of its own. **takt** (Rust,
+> [`takt/`](../../takt/README.md)) owns the whole agent protocol: agent sockets, the HookAgent
 > and signal intakes, registration, assign and control, the task state machine, every sweep
-> (deadlines, schedules, triggers, retention) and workflow resume. The server calls agentd's
+> (deadlines, schedules, triggers, retention) and workflow resume. The server calls takt's
 > internal API for everything that writes task state or registrations. The protocol documents are
-> in [`agentd/docs/`](../../agentd/docs/).
+> in [`takt/docs/`](../../takt/docs/).
 
 ## What is Rekuest?
 
 Rekuest is the broker at the centre of the [Arkitekt](https://arkitekt.live) ecosystem. It is a
-**GraphQL API (the server) and an agent WebSocket (agentd)** that together mediate between two
+**GraphQL API (the server) and an agent WebSocket (takt)** that together mediate between two
 kinds of participants:
 
 - **Callers** — users and frontend apps that *request* work ("run this action with these args").
@@ -44,11 +44,11 @@ flowchart LR
     subgraph Server["rekuest server (Python)"]
         direction TB
         GQL["GraphQL HTTP + subscriptions<br/>(kante + strawberry)"]
-        CL["facade/agentd.py<br/>(internal API client)"]
+        CL["facade/takt.py<br/>(internal API client)"]
         SIG["Signals + channels<br/>(realtime fan-out)"]
     end
 
-    subgraph Agentd["agentd (Rust)"]
+    subgraph Takt["takt (Rust)"]
         direction TB
         WS["WebSocket /agi<br/>HookAgent + signal intakes"]
         BE["Assign, control, persistence<br/>(facade::backend, facade::persist)"]
@@ -78,32 +78,33 @@ flowchart LR
 **The server.** `rekuest/asgi.py` assembles one ASGI application via kante's `router`: GraphQL
 over HTTP and its subscriptions over WebSocket, served from `facade.schema.schema` (a
 `kante.Schema` with `Query` / `Mutation` / `Subscription` roots). There is no agent route.
-`run.sh` migrates the database, then starts daphne. A second process from the same image,
-`python manage.py reaper` (`facade/reaper.py`), provisions this hub's services as HookAgents
-(`facade/service_agents.py`) and re-embeds actions whose embedding is stale
-(`embeddings/healer.py`).
+`run.sh` migrates the database, then starts daphne. The server runs no loop: when takt asks
+(`facade/upkeep.py`, a signed internal endpoint), it provisions this hub's services as
+HookAgents (`facade/service_agents.py`) and re-embeds actions whose embedding is stale
+(`embeddings/healer.py`). Its health check answers for takt too (`rekuest/health.py`).
 
-**agentd.** The `agentd` binary (`agentd/crates/rekuest-server/src/main.rs`) reads the same
+**takt.** The `takt` binary (`takt/crates/rekuest-server/src/main.rs`) reads the same
 `config.yaml`, waits until the database has the migrations it was written against
-(`agentd/schema-migrations.txt`), and then serves, under the same script-name prefix as the
-server (`agentd/crates/rekuest-server/src/urls.rs`):
+(`takt/schema-migrations.txt`), and then serves, under the same script-name prefix as the
+server (`takt/crates/rekuest-server/src/urls.rs`):
 
 | Route | What it is |
 | --- | --- |
-| `GET /agi` | the agent WebSocket |
-| `POST /agi/http/{agent_id}` | the HookAgent HTTP intake |
-| `POST /agi/signal/{service}` | a hub service's signal |
-| `POST /internal/<op>` | the internal API the server calls (`facade/agentd.py`) |
+| `GET /agent` | the agent WebSocket |
+| `POST /agent/http/{agent_id}` | the HookAgent HTTP intake |
+| `POST /agent/signal/{service}` | a hub service's signal |
+| `/agi`, `/agi/http/…`, `/agi/signal/…` | the same three under their former name |
+| `POST /internal/<op>` | the internal API the server calls (`facade/takt.py`) |
 | `GET /ht` | health: Postgres and Redis answer |
 
-It also runs the sweeps (`agentd/crates/facade/src/reaper.rs`) inside the same process: stale
+It also runs the sweeps (`takt/crates/facade/src/reaper.rs`) inside the same process: stale
 and disconnected agents, schedules, triggers, due tasks, unpicked tasks, control escalation,
 expiry, and retention.
 
-**Between the two.** A gateway routes `<prefix>/agi*` to agentd and everything else to the
+**Between the two.** A gateway routes `<prefix>/agent*` and `<prefix>/agi*` to takt and everything else to the
 server. A mutation that assigns, controls, registers or deletes calls
-`POST <rekuest.agentd_url>/internal/<op>`, signed with the instance key (a service token whose
-issuer and audience are both `rekuest.identifier`). agentd publishes task and agent changes on
+`POST <rekuest.takt_url>/internal/<op>`, signed with the instance key (a service token whose
+issuer and audience are both `rekuest.identifier`). takt publishes task and agent changes on
 the same `channels_redis` layer the server's subscriptions listen on.
 
 Configuration is a typed pydantic-settings schema (`rekuest/configuration.py`) loaded from
@@ -112,16 +113,16 @@ shape runtime behaviour the most:
 
 | Setting | Read by | Role |
 | --- | --- | --- |
-| `rekuest.agentd_url` | server | Where the server reaches agentd's internal API. |
+| `rekuest.takt_url` | server | Where the server reaches takt's internal API. |
 | `instance.private_key` | both | Signs internal requests and provenance tokens. |
-| `rekuest.grace_default`, `pickup_deadline`, `disconnected_expiry`, `control_deadline` | agentd | The deadlines the sweeps enforce. |
-| `rekuest.sweep_interval` | both | How often agentd's sweeps and the server's background loop tick. |
+| `rekuest.grace_default`, `pickup_deadline`, `disconnected_expiry`, `control_deadline` | takt | The deadlines the sweeps enforce. |
+| `rekuest.sweep_interval` | takt | How often takt's sweeps tick. |
 | `redis.key_prefix` | both | Namespace of the agent queues and every other redis key. |
 | `redis.channel_prefix` | both | The `channels_redis` layer behind the realtime fan-out. |
 
-The heartbeat is not configuration: agentd pings an agent every 10 s, waits 5 s for the answer,
+The heartbeat is not configuration: takt pings an agent every 10 s, waits 5 s for the answer,
 and presumes a `connected` agent dead after 30 s without one
-(`agentd/crates/rekuest-server/src/settings.rs`). The server's `Agent.active` field reads
+(`takt/crates/rekuest-server/src/settings.rs`). The server's `Agent.active` field reads
 liveness with the same window (`facade/liveness.py`).
 
 Persistence is PostgreSQL — the relational port-matching engine relies on Postgres-specific
@@ -141,21 +142,21 @@ Start at the top and follow the flow of a request:
    choices it carries, how defaults and assignment values are checked, and which widgets fit.
 4. **[action-matching.md](action-matching.md)** — how an Action's `provides`/`requires`
    descriptors compile to JSONPath and how the relational port engine finds matching actions.
-4. **[task-lifecycle.md](../../agentd/docs/task-lifecycle.md)** — `assign`, the
+4. **[task-lifecycle.md](../../takt/docs/task-lifecycle.md)** — `assign`, the
    Task event state machine, and how results flow back to the caller.
-5. **[agent-protocol.md](../../agentd/docs/agent-protocol.md)** — the WebSocket wire protocol: register, authenticate,
+5. **[agent-protocol.md](../../takt/docs/agent-protocol.md)** — the WebSocket wire protocol: register, authenticate,
    the liveness lease and its fencing token, task delivery, and connection takeover.
-6. **[caller-protocol.md](../../agentd/docs/caller-protocol.md)** — sub-assignment on the same socket: how an agent
+6. **[caller-protocol.md](../../takt/docs/caller-protocol.md)** — sub-assignment on the same socket: how an agent
    assigns *dependent* work (`AssignRequest`), controls its lifecycle
    (cancel/interrupt/pause/resume), and observes results (`…Event` mirrors); plus the HTTP intake.
 7. **[realtime.md](realtime.md)** — channels, signals, topic keys, and how subscriptions consume
    them.
 8. **[higher-order.md](higher-order.md)** — higher-order implementations (one implementation
    wrapping another) and server-side event unfolding.
-9. **[workflows.md](../../agentd/docs/workflows.md)** — what happens when an agent dies: a plain task ends `LOST`
+9. **[workflows.md](../../takt/docs/workflows.md)** — what happens when an agent dies: a plain task ends `LOST`
    (final; late outcomes kept as `LATE_REPORT`), a `WORKFLOW` is resumed from its journal (keyed
    calls and effects, code pin, resume cap), plus holds and state guards.
-10. **[provenance.md](../../agentd/docs/provenance.md)** — Rekuest as the provenance authority: the signed
+10. **[provenance.md](../../takt/docs/provenance.md)** — Rekuest as the provenance authority: the signed
    attestation token minted at dispatch, its claim vocabulary, the human-root invariant, and the
    JWKS endpoint downstream services verify against.
 

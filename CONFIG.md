@@ -4,12 +4,12 @@ This document explains how the **rekuest** service is configured, then lists eve
 configuration value, its environment-variable name, its default, and what it does.
 
 One `config.yaml` configures both programs of a deployment: the rekuest server (Python) and
-agentd (Rust, the agent protocol). Each reads the blocks it needs and ignores the rest.
+takt (Rust, the agent protocol). Each reads the blocks it needs and ignores the rest.
 
 The single source of truth for the schema is
 [`rekuest/configuration.py`](rekuest/configuration.py); this file documents it for
-humans. agentd's reading of the same file is
-[`agentd/crates/rekuest-server/src/configuration.rs`](agentd/crates/rekuest-server/src/configuration.rs).
+humans. takt's reading of the same file is
+[`takt/crates/rekuest-server/src/configuration.rs`](takt/crates/rekuest-server/src/configuration.rs).
 If the documents and the code ever disagree, the code wins — and you can always print the
 server's live, resolved configuration with `python manage.py validate_settings` (see below).
 
@@ -56,20 +56,20 @@ redis:
 
 ### One file, two programs
 
-agentd reads the same file. It looks for it at `AGENTD_CONFIG`, then at
-`ARKITEKT_CONFIG_FILE`, then at `config.yaml` in its working directory; the agentd image sets
-`AGENTD_CONFIG=/workspace/config.yaml`, so mount the server's file there.
+takt reads the same file. It looks for it at `TAKT_CONFIG`, then at
+`ARKITEKT_CONFIG_FILE`, then at `config.yaml` in its working directory; the takt image sets
+`TAKT_CONFIG=/workspace/config.yaml`, so mount the server's file there.
 
-agentd reads these blocks: `django` (`debug`, `force_script_name`), `postgres`, `redis`,
-`authentikate`, `rekuest`, `provenance` and `instance`. The `instance` block is required: agentd
+takt reads these blocks: `django` (`debug`, `force_script_name`), `postgres`, `redis`,
+`authentikate`, `rekuest`, `provenance` and `instance`. The `instance` block is required: takt
 refuses to start without it, because the server signs every internal request with the instance
-key and agentd verifies with it.
+key and takt verifies with it.
 
-The environment overrides below apply to agentd too, for keys in those seven blocks
+The environment overrides below apply to takt too, for keys in those seven blocks
 (`POSTGRES__PASSWORD`, `REKUEST__PICKUP_DEADLINE`, …). A secret given only as an environment
 variable therefore has to be set on both containers.
 
-Two variables are agentd's alone: `AGENTD_BIND` (the listen address, default `0.0.0.0:8080`)
+Two variables are takt's alone: `TAKT_BIND` (the listen address, default `0.0.0.0:8080`)
 and `RUST_LOG` (the log filter, default `info`).
 
 ### Environment variables (the `__` rule)
@@ -122,14 +122,14 @@ Secret fields are flagged with 🔒. "Required" means there is no default.
 | Key | Env var | Type | Default | Description |
 |---|---|---|---|---|
 | `secret_key` 🔒 | `DJANGO__SECRET_KEY` | str | **required** | Django `SECRET_KEY` for cryptographic signing. |
-| `debug` | `DJANGO__DEBUG` | bool | `false` | Enable Django debug mode. Never enable in production. Static tokens (`authentikate.static_tokens`) are accepted only while it is on, by the server and by agentd. |
+| `debug` | `DJANGO__DEBUG` | bool | `false` | Enable Django debug mode. Never enable in production. Static tokens (`authentikate.static_tokens`) are accepted only while it is on, by the server and by takt. |
 | `log_level` | `DJANGO__LOG_LEVEL` | str | `INFO` | Root logger level of the server. The `LOG_LEVEL` environment variable overrides it. |
 | `enable_rich_logging` | `DJANGO__ENABLE_RICH_LOGGING` | bool | `false` | Render the server's console logs with rich. A development convenience. |
 | `hosts` | `DJANGO__HOSTS` | list[str] | `["*"]` | `ALLOWED_HOSTS` entries. |
 | `use_x_forwarded_host` | `DJANGO__USE_X_FORWARDED_HOST` | bool | `true` | Trust the `X-Forwarded-Host` header behind a reverse proxy. |
 | `admin` | `DJANGO__ADMIN__*` | object | `null` | Superuser provisioned on first boot (see below). |
 | `csrf_trusted_origins` | `DJANGO__CSRF_TRUSTED_ORIGINS` | list[str] | `["http://localhost", "https://localhost"]` | `CSRF_TRUSTED_ORIGINS` for unsafe (POST) requests. |
-| `force_script_name` | `DJANGO__FORCE_SCRIPT_NAME` | str | `""` | URL path prefix this service is served under. agentd serves its routes under the same prefix (`/<prefix>/agi`, `/<prefix>/internal/…`, `/<prefix>/ht`). |
+| `force_script_name` | `DJANGO__FORCE_SCRIPT_NAME` | str | `""` | URL path prefix this service is served under. takt serves its routes under the same prefix (`/<prefix>/agent` and its former name `/<prefix>/agi`, `/<prefix>/internal/…`, `/<prefix>/ht`). |
 
 #### `django.admin` — superuser created on first boot
 
@@ -156,8 +156,8 @@ Secret fields are flagged with 🔒. "Required" means there is no default.
 |---|---|---|---|---|
 | `host` | `REDIS__HOST` | str | **required** | Redis host. |
 | `port` | `REDIS__PORT` | int | `6379` | Redis port. |
-| `key_prefix` | `REDIS__KEY_PREFIX` | str | `rekuest` | Namespace for every redis key the server and agentd write (agent queues, probe state, tick tokens, webhook replay guard). Two deployments sharing one redis MUST differ here, or agent 42 of one receives the other's Assigns. |
-| `channel_prefix` | `REDIS__CHANNEL_PREFIX` | str | `rekuest` | Key prefix for the `channels_redis` channel layer, which the server and agentd both speak. Must differ from every other service on the same redis, or group messages bleed between services. |
+| `key_prefix` | `REDIS__KEY_PREFIX` | str | `rekuest` | Namespace for every redis key the server and takt write (agent queues, probe state, tick tokens, webhook replay guard). Two deployments sharing one redis MUST differ here, or agent 42 of one receives the other's Assigns. |
+| `channel_prefix` | `REDIS__CHANNEL_PREFIX` | str | `rekuest` | Key prefix for the `channels_redis` channel layer, which the server and takt both speak. Must differ from every other service on the same redis, or group messages bleed between services. |
 | `channel_capacity` | `REDIS__CHANNEL_CAPACITY` | int | `5000` | `channels_redis` capacity. This bounds the **one** receive queue a whole replica shares — not one per socket — and messages beyond it are dropped silently, so it is set far above the library default of 100. |
 
 ### `authentikate` — inbound token verification
@@ -192,39 +192,40 @@ authentikate:
   static_tokens: {}
 ```
 
-### `rekuest` — agentd, deadlines, retention and probe limits
+### `rekuest` — takt, deadlines, retention and probe limits
 
-Where the server finds agentd, and every window enforced over agent work: how long a lost
+Where the server finds takt, and every window enforced over agent work: how long a lost
 agent's tasks are held before they end, how long a task may go unreported, how long finished
-work is kept, and the probe limits. Everything except `agentd_url` is optional.
+work is kept, and the probe limits. Everything is optional.
 
 The "Read by" column says which program acts on the key. Deadlines, retention, the trigger loop
-guard and the hook signatures are agentd's: changing them means restarting agentd, not the
+guard and the hook signatures are takt's: changing them means restarting takt, not the
 server.
 
 | Key | Env var | Type | Default | Read by | Description |
 |---|---|---|---|---|---|
-| `agentd_url` | `REKUEST__AGENTD_URL` | str | `null` (**must be set**) | server | agentd's base URL with the script name, e.g. `http://agentd:8080/rekuest`. The server POSTs to `<agentd_url>/internal/<op>` (`facade/agentd.py`). The server starts without it, but every assign, control, registration, delete, probe and schedule change is then refused with "rekuest.agentd_url is not configured". |
+| `takt_url` | `REKUEST__TAKT_URL` | str | `http://takt:8080/<script name>` | server | takt's base URL with the script name. The server POSTs to `<takt_url>/internal/<op>` (`facade/takt.py`) and asks `<takt_url>/ht` for its own health check. While takt is unreachable every assign, control, registration, delete, probe and schedule change is refused. `agentd_url`, its former name, is still read. |
+| `server_url` | `REKUEST__SERVER_URL` | str | `http://rekuest:80/<script name>` | takt | The server's base URL with the script name. takt POSTs the upkeep jobs to `<server_url>/_rekuest/upkeep/<job>` (`takt/crates/facade/src/upkeep.rs`). Empty turns upkeep off: no service agent is provisioned and new actions get no embedding. |
 | `identifier` | `REKUEST__IDENTIFIER` | str | `live.arkitekt.rekuest` | both | This rekuest's fakts identifier: what its key is listed under in the hub trust bundle, and the issuer and audience of the service tokens the server signs its internal requests with. |
-| `service_agents` | — (use YAML) | list | `[]` | both | This hub's services, each `{service, hook_url, identifier?}`. The server's background loop provisions each as a HookAgent with the actions and default schedules of its manifest (`facade/service_agents.py`); agentd accepts their signed reports and signals. |
+| `service_agents` | — (use YAML) | list | `[]` | both | This hub's services, each `{service, hook_url, identifier?}`. The server provisions each as a HookAgent (when takt asks, `facade/upkeep.py`) with the actions and default schedules of its manifest (`facade/service_agents.py`); takt accepts their signed reports and signals. |
 | `service_agents_organization` | `REKUEST__SERVICE_AGENTS_ORGANIZATION` | str | `rekuest-system` | server | The organization (slug) the service agents, their actions and schedules live in. |
-| `sweep_interval` | `REKUEST__SWEEP_INTERVAL` | int | `5` | both | How often (seconds) each loop ticks: agentd's sweeps (deadlines, schedules, triggers, delayed tasks) and the server's background loop (`manage.py reaper`). Bounds how late any of them can fire. |
-| `grace_default` | `REKUEST__GRACE_DEFAULT` | int | `30` | agentd | Reclaim grace window (seconds) after a disconnect: how long a gone agent's running tasks wait for it before they end `LOST` (a workflow is resumed). |
-| `pickup_deadline` | `REKUEST__PICKUP_DEADLINE` | int | `60` | agentd | Seconds a dispatched task may go without **any** report from its live agent (or webhook endpoint) before the Assign is redelivered once, then ended `LOST` (never started); `0` disables. |
-| `disconnected_expiry` | `REKUEST__DISCONNECTED_EXPIRY` | int | `3600` | agentd | Seconds an undelivered task of an agent that is gone waits for it before it ends `LOST` (never started); `0` = never. |
-| `control_deadline` | `REKUEST__CONTROL_DEADLINE` | int | `60` | agentd | Seconds an unconfirmed cancel waits before escalating to an interrupt, and an unconfirmed interrupt before it is finalized; `0` disables. On by default: a Cancel/Interrupt frame lost in transit is otherwise never noticed, and nothing redelivers it the way the pickup deadline redelivers an Assign. A socket `CancelRequest.auto_interrupt` takes precedence. |
-| `hook_signature_mode` | `REKUEST__HOOK_SIGNATURE_MODE` | str | `compat` | agentd | HookAgent HTTP signatures. `compat` accepts the timestamped `X-Rekuest-Signature-V1` **or** the legacy body-only `X-Rekuest-Signature`, and sends both. `strict` accepts and sends V1 only — the legacy signature is replayable, so move to `strict` once your HookAgents are updated. |
-| `hook_max_skew` | `REKUEST__HOOK_MAX_SKEW` | int | `300` | agentd | Maximum age/clock skew (seconds) for a V1-signed HookAgent request. Also the replay guard's memory: a digest is remembered for twice this. |
-| `trigger_max_depth` | `REKUEST__TRIGGER_MAX_DEPTH` | int | `3` | agentd | How many trigger firings may chain (a triggered run creates an object whose signal fires another trigger …) before a signal stops firing. The loop guard. |
-| `signal_retention` | `REKUEST__SIGNAL_RETENTION` | int | `604800` | agentd | Seconds to keep processed signals; `0` keeps them forever. Runs keep their tasks; their `signal` link turns null. |
-| `ephemeral_task_retention` | `REKUEST__EPHEMERAL_TASK_RETENTION` | int | `86400` | agentd | Seconds to keep terminal *ephemeral* root task trees (the runs of schedules with `ephemeralRuns`, e.g. services' housekeeping sweeps). Applies even while `task_retention` is `0`; `0` disables. |
-| `task_retention` | `REKUEST__TASK_RETENTION` | int | `0` | agentd | Seconds to keep terminal root task trees before the retention sweep deletes them; `0` disables. Deleting past runs also removes them from replay discovery (`reusableTaskFor`), so it is an explicit opt-in. Suggested production value: `2592000` (30 days). |
-| `probe_ttl` | `REKUEST__PROBE_TTL` | int | `3600` | agentd | Lifetime (seconds) of a probe's redis state while it is live. |
-| `probe_linger` | `REKUEST__PROBE_LINGER` | int | `300` | agentd | How long (seconds) a finished probe's state lingers so a late subscriber can still read its outcome. |
-| `probe_max_inflight` | `REKUEST__PROBE_MAX_INFLIGHT` | int | `32` | both | Maximum concurrent probes per caller. agentd refuses a probe beyond it rather than queueing it (probes are hover-grade work); the server reports the cap in `probeStats`. |
+| `sweep_interval` | `REKUEST__SWEEP_INTERVAL` | int | `5` | both | How often (seconds) takt's sweeps tick (deadlines, schedules, triggers, delayed tasks). Bounds how late any of them can fire. |
+| `grace_default` | `REKUEST__GRACE_DEFAULT` | int | `30` | takt | Reclaim grace window (seconds) after a disconnect: how long a gone agent's running tasks wait for it before they end `LOST` (a workflow is resumed). |
+| `pickup_deadline` | `REKUEST__PICKUP_DEADLINE` | int | `60` | takt | Seconds a dispatched task may go without **any** report from its live agent (or webhook endpoint) before the Assign is redelivered once, then ended `LOST` (never started); `0` disables. |
+| `disconnected_expiry` | `REKUEST__DISCONNECTED_EXPIRY` | int | `3600` | takt | Seconds an undelivered task of an agent that is gone waits for it before it ends `LOST` (never started); `0` = never. |
+| `control_deadline` | `REKUEST__CONTROL_DEADLINE` | int | `60` | takt | Seconds an unconfirmed cancel waits before escalating to an interrupt, and an unconfirmed interrupt before it is finalized; `0` disables. On by default: a Cancel/Interrupt frame lost in transit is otherwise never noticed, and nothing redelivers it the way the pickup deadline redelivers an Assign. A socket `CancelRequest.auto_interrupt` takes precedence. |
+| `hook_signature_mode` | `REKUEST__HOOK_SIGNATURE_MODE` | str | `compat` | takt | HookAgent HTTP signatures. `compat` accepts the timestamped `X-Rekuest-Signature-V1` **or** the legacy body-only `X-Rekuest-Signature`, and sends both. `strict` accepts and sends V1 only — the legacy signature is replayable, so move to `strict` once your HookAgents are updated. |
+| `hook_max_skew` | `REKUEST__HOOK_MAX_SKEW` | int | `300` | takt | Maximum age/clock skew (seconds) for a V1-signed HookAgent request. Also the replay guard's memory: a digest is remembered for twice this. |
+| `trigger_max_depth` | `REKUEST__TRIGGER_MAX_DEPTH` | int | `3` | takt | How many trigger firings may chain (a triggered run creates an object whose signal fires another trigger …) before a signal stops firing. The loop guard. |
+| `signal_retention` | `REKUEST__SIGNAL_RETENTION` | int | `604800` | takt | Seconds to keep processed signals; `0` keeps them forever. Runs keep their tasks; their `signal` link turns null. |
+| `ephemeral_task_retention` | `REKUEST__EPHEMERAL_TASK_RETENTION` | int | `86400` | takt | Seconds to keep terminal *ephemeral* root task trees (the runs of schedules with `ephemeralRuns`, e.g. services' housekeeping sweeps). Applies even while `task_retention` is `0`; `0` disables. |
+| `task_retention` | `REKUEST__TASK_RETENTION` | int | `0` | takt | Seconds to keep terminal root task trees before the retention sweep deletes them; `0` disables. Deleting past runs also removes them from replay discovery (`reusableTaskFor`), so it is an explicit opt-in. Suggested production value: `2592000` (30 days). |
+| `probe_ttl` | `REKUEST__PROBE_TTL` | int | `3600` | takt | Lifetime (seconds) of a probe's redis state while it is live. |
+| `probe_linger` | `REKUEST__PROBE_LINGER` | int | `300` | takt | How long (seconds) a finished probe's state lingers so a late subscriber can still read its outcome. |
+| `probe_max_inflight` | `REKUEST__PROBE_MAX_INFLIGHT` | int | `32` | both | Maximum concurrent probes per caller. takt refuses a probe beyond it rather than queueing it (probes are hover-grade work); the server reports the cap in `probeStats`. |
 
-None of the deadlines is a timer. Each starts at a database column and is enforced by agentd's
-sweeps (`agentd/crates/facade/src/reaper.rs`), which run inside every agentd replica. A tick
+None of the deadlines is a timer. Each starts at a database column and is enforced by takt's
+sweeps (`takt/crates/facade/src/reaper.rs`), which run inside every takt replica. A tick
 token in redis lets one replica sweep per tick; every transition is a row-locked claim with
 exactly one winner, so any number may run. A replica holds no state: it can be killed at any
 moment without losing a pending deadline, and while none runs, deadlines are late, not lost.
@@ -234,19 +235,23 @@ enabled schedule gets its next run), triggers (unprocessed signals are matched a
 tasks (`not_before` has passed), unpicked tasks, due controls, expired tasks. Retention (task
 trees and processed signals) runs on every 60th tick.
 
-Agent heartbeats are not configuration: agentd pings every 10 s, waits 5 s for the answer and
+Agent heartbeats are not configuration: takt pings every 10 s, waits 5 s for the answer and
 presumes a `connected` agent dead after 30 s without one
-(`agentd/crates/rekuest-server/src/settings.rs`).
+(`takt/crates/rekuest-server/src/settings.rs`).
 
-The server's own loop (`python manage.py reaper`, the `rekuest-reaper` container,
-`facade/reaper.py`) does two things: it provisions `service_agents` and re-embeds actions whose
-embedding is stale. `manage.py reaper --check` is its healthcheck (a heartbeat file touched
-every tick). agentd's is `agentd healthcheck`, which the agentd image runs as its `HEALTHCHECK`.
+The server runs no loop of its own. Two jobs need it — provisioning `service_agents` (their
+manifests are registered through its models) and embedding the actions takt registered (only
+its image carries the model) — and takt asks for each when it is due, at
+`POST <server_url>/_rekuest/upkeep/{provision,reembed}`, signed with the instance key:
+provisioning at start and every 5 minutes (30 s after a failed pass), embedding every 30 s.
+`_rekuest` paths must not be routed at the edge. The server's `ht` answers for takt as well
+(it asks takt's `ht`), so one health check covers the pair; takt's own is `takt healthcheck`,
+which the takt image runs as its `HEALTHCHECK`.
 
 #### Schedules
 
-The server owns the schedule rows (GraphQL create, update, delete). agentd is the only reader
-of cron lines: the server asks it to validate a timing, and agentd plans each schedule's next
+The server owns the schedule rows (GraphQL create, update, delete). takt is the only reader
+of cron lines: the server asks it to validate a timing, and takt plans each schedule's next
 run and handles "run now" (`triggerSchedule`).
 
 - A cron line has five fields (minute, hour, day of month, month, day of week) and is read in
@@ -260,29 +265,29 @@ run and handles "run now" (`triggerSchedule`).
 Nothing needs to be configured to scale either program: state lives in Postgres and redis, no
 request needs to return to the replica that served the last one (sticky sessions are **not**
 required), and `manage.py migrate` takes a Postgres advisory lock so every server replica can
-run it at boot with one winner. agentd replicas all serve `/agi` and all run the sweeps. What
+run it at boot with one winner. takt replicas all serve `/agent` and all run the sweeps; one of them asks for each upkeep job when it is due. What
 does need attention:
 
 - **`redis.channel_prefix` and `redis.key_prefix`** must be unique per service, and per
   deployment if two deployments share a redis. See above.
-- **Clocks.** Liveness compares one agentd replica's clock against another's writes, so hosts
-  must be NTP-synced. An agentd replica measures itself against the database clock and, if it is
+- **Clocks.** Liveness compares one takt replica's clock against another's writes, so hosts
+  must be NTP-synced. An takt replica measures itself against the database clock and, if it is
   off by more than `(stale window − heartbeat interval − heartbeat timeout) / 2` (7.5 s), skips
   its sweeps and logs an error rather than deciding other replicas' agents are dead. See
-  `agentd/crates/facade/src/clock.rs`.
+  `takt/crates/facade/src/clock.rs`.
 - **`control_deadline`** should stay non-zero. A Cancel/Interrupt frame can be lost when a
   connection is displaced or redis restarts, and nothing redelivers it — the deadline is what
   stops the database from saying `CANCELLING` forever while the agent runs on.
-- **Postgres connections.** Each replica opens its own (an agentd replica holds a pool of up to
+- **Postgres connections.** Each replica opens its own (an takt replica holds a pool of up to
   32); raise Postgres's `max_connections` before scaling a stack that shares one cluster between
   services.
-- **The same version everywhere.** Server and agentd replicas must come from the same release:
-  agentd's SQL is written against that release's migrations.
+- **The same version everywhere.** Server and takt replicas must come from the same release:
+  takt's SQL is written against that release's migrations.
 
 ### `instance` — this instance's key and whom it trusts
 
 One Ed25519 key per rekuest instance. It signs provenance tokens, the server's requests to
-agentd's internal API, and every request to the hub's services. The server and agentd must hold
+takt's internal API, and every request to the hub's services. The server and takt must hold
 the same key, which they do by reading the same file. Required by both.
 
 | Key | Env var | Type | Default | Description |
@@ -293,7 +298,7 @@ the same key, which they do by reading the same file. Required by both.
 
 ### `provenance` — provenance (attestation) policy
 
-Rekuest acts as the provenance authority: agentd signs an Ed25519 attestation JWT per
+Rekuest acts as the provenance authority: takt signs an Ed25519 attestation JWT per
 non-trivial assignment with the instance key (`instance.private_key`), and the server publishes
 the verifying key at `/.well-known/jwks.json`. The key is **orthogonal** to the auth keys above
 (different issuer, different lifetime); the private key never leaves Rekuest.
@@ -336,19 +341,19 @@ the block may be omitted.
 | `model_path` | `EMBEDDINGS__MODEL_PATH` | str | `null` | Directory holding the weights of `model`. The Docker image bakes them under `/opt/models/embeddings` and sets this itself (with `HF_HUB_OFFLINE=1`); unset, model2vec downloads from Hugging Face on first use. |
 | `dimensions` | `EMBEDDINGS__DIMENSIONS` | int | `256` | Vector width of `model` — and of the database column. Checked against both at startup (`embeddings.E001` / `E002`). |
 | `distance_threshold` | `EMBEDDINGS__DISTANCE_THRESHOLD` | float | `0.55` | Cosine distance (0 identical, 1 unrelated) above which a row no longer counts as a semantic hit. Lower is stricter. |
-| `sweep_interval` | `EMBEDDINGS__SWEEP_INTERVAL` | int | `30` | Unused by rekuest: stale rows are re-embedded on the reaper tick (`rekuest.sweep_interval`). Kept for parity with the other services' config. |
+| `sweep_interval` | `EMBEDDINGS__SWEEP_INTERVAL` | int | `30` | Unused by rekuest: stale rows are re-embedded when takt asks (every 30 s). Kept for parity with the other services' config. |
 | `sweep_batch_size` | `EMBEDDINGS__SWEEP_BATCH_SIZE` | int | `200` | Rows re-embedded per batch. |
 
 Rows that were written before embeddings were enabled, while the model could not be loaded,
-or by a previous `model` are healed by the reaper loop (`facade/reaper.py`) in row-locked
+or by a previous `model` are healed by the `reembed` upkeep job (`facade/upkeep.py`, asked for by takt) in row-locked
 batches — no command, no cron, any number of replicas. Until healed, such rows are found by
 the substring leg only.
 
-**Changing the model.** Same `dimensions`: change `model`, restart, and the reaper re-embeds
-every row within a few ticks. Different `dimensions`: the column type changes, so write a
+**Changing the model.** Same `dimensions`: change `model`, restart, and the upkeep job re-embeds
+every row within a few passes. Different `dimensions`: the column type changes, so write a
 migration that first nulls the column (`UPDATE facade_action SET embedding = NULL,
 embedding_model = ''` — Postgres refuses to retype non-empty vectors), then `AlterField`s it
-to the new width, then change the config; the reaper refills it after boot. `migrate` refuses
+to the new width, then change the config; the upkeep job refills it after boot. `migrate` refuses
 to run while the column, the setting and the model disagree.
 
 The Docker image bakes the default model; a different `model` needs a rebuild with
@@ -386,19 +391,21 @@ authentikate:
       public_key: "ssh-rsa AAAA..."
 # Required, even when empty: the provenance policy (every key has a default).
 provenance: {}
-# This instance's Ed25519 key. The server and agentd both read it.
+# This instance's Ed25519 key. The server and takt both read it.
 instance:
   private_key: |
     -----BEGIN PRIVATE KEY-----
     ...
     -----END PRIVATE KEY-----
 rekuest:
-  # Where the server reaches agentd, with django.force_script_name if one is set.
-  agentd_url: http://agentd:8080
+  # Only where the pair is not named `rekuest` and `takt` (with django.force_script_name
+  # appended if one is set):
+  # takt_url: http://takt:8080
+  # server_url: http://rekuest:80
 # Optional — everything defaults; shown for the one knob worth tuning.
 embeddings:
   distance_threshold: 0.55
 ```
 
-Validate it with `python manage.py validate_settings`. Mount the same file into the agentd
+Validate it with `python manage.py validate_settings`. Mount the same file into the takt
 container at `/workspace/config.yaml`.

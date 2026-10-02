@@ -1,0 +1,390 @@
+//! The rekuest server's `config.yaml` (`rekuest/configuration.py`), read by takt too.
+//!
+//! One file configures both processes: the Python server (GraphQL, subscriptions) and takt
+//! (the agent protocol). takt reads only the blocks it needs; everything else in the file is
+//! ignored. Field names and defaults follow `rekuest/configuration.py`.
+
+use std::path::Path;
+
+use serde::Deserialize;
+use serde_json::Value;
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Configuration {
+    #[serde(default)]
+    pub django: DjangoBlock,
+    pub postgres: PostgresBlock,
+    pub redis: RedisBlock,
+    /// authentikate's settings (issuers, audience, static tokens), read in Phase 1.
+    #[serde(default)]
+    pub authentikate: Value,
+    #[serde(default)]
+    pub rekuest: RekuestBlock,
+    #[serde(default)]
+    pub provenance: ProvenanceBlock,
+    pub instance: Option<InstanceBlock>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DjangoBlock {
+    /// Debug mode: static tokens are accepted only while it is on.
+    #[serde(default)]
+    pub debug: bool,
+    /// The URL prefix the server is mounted under (e.g. `rekuest`).
+    #[serde(default)]
+    pub force_script_name: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PostgresBlock {
+    pub db_name: String,
+    pub username: String,
+    pub password: String,
+    pub host: String,
+    #[serde(default = "default_pg_port")]
+    pub port: u16,
+}
+
+fn default_pg_port() -> u16 {
+    5432
+}
+
+impl PostgresBlock {
+    pub fn url(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}/{}",
+            self.username, self.password, self.host, self.port, self.db_name
+        )
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RedisBlock {
+    pub host: String,
+    #[serde(default = "default_redis_port")]
+    pub port: u16,
+    /// Namespace of every key the protocol writes (agent queues, probes, the tick token).
+    #[serde(default = "default_prefix")]
+    pub key_prefix: String,
+    /// The channels_redis layer's prefix, shared with the Python server's fan-out.
+    #[serde(default = "default_prefix")]
+    pub channel_prefix: String,
+    #[serde(default = "default_capacity")]
+    pub channel_capacity: u64,
+}
+
+fn default_redis_port() -> u16 {
+    6379
+}
+
+fn default_prefix() -> String {
+    "rekuest".into()
+}
+
+fn default_capacity() -> u64 {
+    5000
+}
+
+impl RedisBlock {
+    pub fn url(&self) -> String {
+        format!("redis://{}:{}/", self.host, self.port)
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RekuestBlock {
+    #[serde(default = "d30")]
+    pub grace_default: u64,
+    #[serde(default = "d5")]
+    pub sweep_interval: u64,
+    #[serde(default = "d60")]
+    pub pickup_deadline: u64,
+    #[serde(default = "d3600")]
+    pub disconnected_expiry: u64,
+    #[serde(default = "d60")]
+    pub control_deadline: u64,
+    #[serde(default = "compat")]
+    pub hook_signature_mode: String,
+    #[serde(default = "d300")]
+    pub hook_max_skew: u64,
+    /// What this rekuest signs as, and what service tokens to it must be for.
+    #[serde(default = "rekuest_identifier")]
+    pub identifier: String,
+    #[serde(default = "d3600")]
+    pub probe_ttl: u64,
+    #[serde(default = "d300")]
+    pub probe_linger: u64,
+    #[serde(default = "d32")]
+    pub probe_max_inflight: i64,
+    /// Seconds to keep terminal root task trees; 0 keeps them forever.
+    #[serde(default)]
+    pub task_retention: u64,
+    /// Seconds to keep terminal ephemeral root task trees; 0 keeps them forever.
+    #[serde(default = "d86400")]
+    pub ephemeral_task_retention: u64,
+    /// Seconds to keep processed signals; 0 keeps them forever.
+    #[serde(default = "d604800")]
+    pub signal_retention: u64,
+    /// How many trigger firings may chain before a signal stops firing: the loop guard.
+    #[serde(default = "d3")]
+    pub trigger_max_depth: i16,
+    /// This hub's services, provisioned by the Python server as HookAgents.
+    #[serde(default)]
+    pub service_agents: Vec<ServiceAgentBlock>,
+    /// The Python server beside this takt, with its script name: takt asks it for the upkeep
+    /// jobs (`facade::upkeep`). Defaults to `http://rekuest:80/<django.force_script_name>`, its
+    /// name in the usual compose layout; empty turns upkeep off.
+    #[serde(default)]
+    pub server_url: Option<String>,
+}
+
+/// One of this hub's services, reached as a HookAgent (`ServiceAgentSettings`).
+#[derive(Debug, Clone, Deserialize)]
+pub struct ServiceAgentBlock {
+    pub service: String,
+    pub hook_url: String,
+    #[serde(default)]
+    pub identifier: Option<String>,
+}
+
+impl Default for RekuestBlock {
+    fn default() -> Self {
+        serde_json::from_value(serde_json::json!({})).expect("every field has a default")
+    }
+}
+
+fn d5() -> u64 {
+    5
+}
+fn d30() -> u64 {
+    30
+}
+fn d60() -> u64 {
+    60
+}
+fn d300() -> u64 {
+    300
+}
+fn d3600() -> u64 {
+    3600
+}
+fn d32() -> i64 {
+    32
+}
+fn d86400() -> u64 {
+    86400
+}
+fn d604800() -> u64 {
+    604_800
+}
+fn d3() -> i16 {
+    3
+}
+fn rekuest_identifier() -> String {
+    "live.arkitekt.rekuest".into()
+}
+fn compat() -> String {
+    "compat".into()
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ProvenanceBlock {
+    #[serde(default = "issuer")]
+    pub issuer: String,
+    #[serde(default = "d3600")]
+    pub token_ttl_seconds: u64,
+    #[serde(default)]
+    pub human_roles: Vec<String>,
+    #[serde(default)]
+    pub strict: bool,
+}
+
+impl Default for ProvenanceBlock {
+    fn default() -> Self {
+        serde_json::from_value(serde_json::json!({})).expect("every field has a default")
+    }
+}
+
+fn issuer() -> String {
+    "rekuest".into()
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct InstanceBlock {
+    /// Ed25519 private key (PKCS#8 PEM): signs provenance tokens and verifies service tokens.
+    pub private_key: String,
+    /// The hub's trust bundle.
+    #[serde(default)]
+    pub trust: TrustBlock,
+}
+
+/// Where the hub's instance public keys come from: the coord's bundle, or inline (`TrustBlock`).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct TrustBlock {
+    #[serde(default)]
+    pub jwks_uri: Option<String>,
+    #[serde(default)]
+    pub jwks: Option<serde_json::Value>,
+}
+
+impl Configuration {
+    /// The server's configuration, as the server itself reads it: the YAML file, then the
+    /// environment over it (`SECTION__KEY`, nested with `__`, as pydantic-settings does for the
+    /// Python server). A secret given only as `POSTGRES__PASSWORD` therefore reaches both.
+    pub fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+        let path = path.as_ref();
+        let text = std::fs::read_to_string(path)
+            .map_err(|e| anyhow::anyhow!("reading {}: {e}", path.display()))?;
+        let mut document: serde_yaml::Value = serde_yaml::from_str(&text)
+            .map_err(|e| anyhow::anyhow!("parsing {}: {e}", path.display()))?;
+        apply_environment(&mut document, std::env::vars());
+        serde_yaml::from_value(document).map_err(|e| {
+            anyhow::anyhow!(
+                "parsing {} (with the environment over it): {e}",
+                path.display()
+            )
+        })
+    }
+}
+
+/// The sections of the file the environment may set a key of.
+const SECTIONS: [&str; 7] = [
+    "django",
+    "postgres",
+    "redis",
+    "authentikate",
+    "rekuest",
+    "provenance",
+    "instance",
+];
+
+/// Keys whose value is text whatever it looks like: a password of digits is still a password.
+const TEXT_KEYS: [&str; 13] = [
+    "password",
+    "username",
+    "secret_key",
+    "private_key",
+    "public_key",
+    "access_key",
+    "host",
+    "db_name",
+    "issuer",
+    "identifier",
+    "key_prefix",
+    "channel_prefix",
+    "audience",
+];
+
+/// Lay `SECTION__KEY[__KEY…]=value` variables over the document. Names are matched without
+/// regard to case. A value for a text key ([`TEXT_KEYS`], any `*_url`) or one replacing a
+/// string is a string; any other is read as YAML, so `REDIS__PORT=6380` is a number and
+/// `DJANGO__DEBUG=true` a boolean.
+fn apply_environment(
+    document: &mut serde_yaml::Value,
+    variables: impl Iterator<Item = (String, String)>,
+) {
+    use serde_yaml::{Mapping, Value};
+    for (name, raw) in variables {
+        let path: Vec<String> = name.split("__").map(str::to_lowercase).collect();
+        if path.len() < 2
+            || !SECTIONS.contains(&path[0].as_str())
+            || path.iter().any(String::is_empty)
+        {
+            continue;
+        }
+        let mut node = &mut *document;
+        for key in &path[..path.len() - 1] {
+            if !node.is_mapping() {
+                *node = Value::Mapping(Mapping::new());
+            }
+            node = node
+                .as_mapping_mut()
+                .expect("just made a mapping")
+                .entry(Value::String(key.clone()))
+                .or_insert(Value::Mapping(Mapping::new()));
+        }
+        if !node.is_mapping() {
+            *node = Value::Mapping(Mapping::new());
+        }
+        let leaf = Value::String(path[path.len() - 1].clone());
+        let mapping = node.as_mapping_mut().expect("just made a mapping");
+        let key = path[path.len() - 1].as_str();
+        let text = TEXT_KEYS.contains(&key)
+            || key.ends_with("_url")
+            || matches!(mapping.get(&leaf), Some(Value::String(_)));
+        let value = if text {
+            Value::String(raw)
+        } else {
+            serde_yaml::from_str(&raw).unwrap_or(Value::String(raw))
+        };
+        mapping.insert(leaf, value);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_environment_goes_over_the_file() {
+        let mut document: serde_yaml::Value = serde_yaml::from_str(
+            "postgres:\n  password: from-file\n  port: 5432\nredis:\n  host: redis\n",
+        )
+        .unwrap();
+        let environment = [
+            ("POSTGRES__PASSWORD", "12345"),
+            ("postgres__port", "6000"),
+            ("REKUEST__TRIGGER_MAX_DEPTH", "5"),
+            ("DJANGO__DEBUG", "true"),
+            // A secret given only in the environment, that happens to be digits.
+            ("INSTANCE__PRIVATE_KEY", "0042"),
+            ("REDIS__PORT", "6380"),
+            ("PATH", "/usr/bin"),
+            ("UNRELATED__KEY", "x"),
+        ];
+        apply_environment(
+            &mut document,
+            environment
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string())),
+        );
+        let expected: serde_yaml::Value = serde_yaml::from_str(
+            "postgres:\n  password: '12345'\n  port: 6000\nredis:\n  host: redis\n  port: 6380\nrekuest:\n  trigger_max_depth: 5\ndjango:\n  debug: true\ninstance:\n  private_key: '0042'\n",
+        )
+        .unwrap();
+        assert_eq!(document, expected);
+    }
+
+    #[test]
+    fn reads_the_servers_config_and_ignores_the_rest() {
+        let config: Configuration = serde_yaml::from_str(
+            r#"
+django:
+  secret_key: s
+  debug: true
+  force_script_name: rekuest
+postgres:
+  db_name: rekuest
+  username: u
+  password: p
+  host: db
+redis:
+  host: redis
+  channel_prefix: rekuest
+embeddings:
+  enabled: false
+rekuest:
+  pickup_deadline: 0
+"#,
+        )
+        .unwrap();
+        assert!(config.django.debug);
+        assert_eq!(config.postgres.url(), "postgres://u:p@db:5432/rekuest");
+        assert_eq!(config.redis.key_prefix, "rekuest");
+        assert_eq!(config.rekuest.pickup_deadline, 0);
+        assert_eq!(config.rekuest.grace_default, 30);
+        assert_eq!(config.provenance.issuer, "rekuest");
+        assert_eq!(config.rekuest.identifier, "live.arkitekt.rekuest");
+        assert_eq!(config.rekuest.probe_max_inflight, 32);
+    }
+}

@@ -1,12 +1,11 @@
 """Service agents: provisioning from a manifest (its schedules and signal declarations), and the
 vendored ``rekuest_service`` side (its hook endpoint and declaration API).
 
-The agent row and its implementations are agentd's (``fake_agentd`` stands in for it); a run
-travelling the whole way — Assign to the service, reports back — is agentd's path too, judged by
-rekuest-agentd's conformance suite.
+The agent row and its implementations are takt's (``fake_takt`` stands in for it); a run
+travelling the whole way — Assign to the service, reports back — is takt's path too, judged by
+rekuest-takt's conformance suite.
 """
 
-import time
 from urllib.parse import urlparse
 
 import pytest
@@ -17,7 +16,7 @@ from facade import enums, models, service_agents
 from rekuest_service import Service, trust
 from tests.hook_urls import housekeeping
 
-pytestmark = pytest.mark.usefixtures("fake_agentd")
+pytestmark = pytest.mark.usefixtures("fake_takt")
 
 
 @pytest.fixture
@@ -46,7 +45,7 @@ def hub(live_server, settings, hook_action):
 @pytest.mark.django_db(transaction=True)
 class TestServiceAgents:
     def test_provisioning_registers_the_manifest_and_its_default_schedule(self, hub):
-        assert service_agents.provision_all(force=True) == 1
+        assert service_agents.provision_all() == []
 
         agent = models.Agent.objects.get(name="housekeeping")
         assert agent.kind == enums.AgentKind.WEBHOOK.value
@@ -63,42 +62,40 @@ class TestServiceAgents:
         assert declared == {("@housekeeping/room", "CREATED", ("@housekeeping/area",)), ("@housekeeping/room", "DELETED", ("@housekeeping/area",))}
 
         # Idempotent, and in place: re-provisioning neither duplicates nor recreates.
-        assert service_agents.provision_all(force=True) == 1
+        assert service_agents.provision_all() == []
         assert models.Agent.objects.filter(name="housekeeping").count() == 1
         assert models.Schedule.objects.get(pk=schedule.pk).agent_id == agent.pk
 
     def test_a_dropped_signal_declaration_is_removed(self, hub):
-        service_agents.provision_all(force=True)
+        service_agents.provision_all()
         housekeeping._signals.clear()
         housekeeping.signal("@housekeeping/room", kinds=["CREATED"])
 
-        service_agents.provision_all(force=True)
+        service_agents.provision_all()
         assert list(models.SignalDeclaration.objects.values_list("kind", flat=True)) == ["CREATED"]
 
     def test_a_manifest_without_signals_declares_none(self, hub):
         housekeeping._signals.clear()
-        assert service_agents.provision_all(force=True) == 1
+        assert service_agents.provision_all() == []
         assert models.SignalDeclaration.objects.count() == 0
 
     def test_a_dropped_default_disables_its_schedule(self, hub):
-        service_agents.provision_all(force=True)
+        service_agents.provision_all()
         schedule = models.Schedule.objects.get(interface="tidy_up")
         housekeeping._actions["tidy_up"] = housekeeping._actions["tidy_up"].__class__(
             **{**housekeeping._actions["tidy_up"].__dict__, "default_interval": None}
         )
 
-        service_agents.provision_all(force=True)
+        service_agents.provision_all()
         assert models.Schedule.objects.get(pk=schedule.pk).enabled is False
 
 
 @pytest.mark.django_db(transaction=True)
-def test_an_unreachable_service_is_retried_sooner(settings, monkeypatch):
-    settings.SERVICE_AGENTS = [{"service": "offline", "hook_url": "http://127.0.0.1:9/_rekuest/hook"}]
-    monkeypatch.setattr(service_agents, "_next_provision_at", 0.0)
+def test_an_unreachable_service_is_reported_and_the_others_still_provisioned(hub):
+    hub.SERVICE_AGENTS = [{"service": "offline", "hook_url": "http://127.0.0.1:9/_rekuest/hook"}, *hub.SERVICE_AGENTS]
 
-    assert service_agents.provision_all() == 0
-    wait = service_agents._next_provision_at - time.monotonic()
-    assert 0 < wait <= service_agents.PROVISION_RETRY_SECONDS
+    assert service_agents.provision_all() == ["offline"]
+    assert models.Agent.objects.filter(client__client_id="rekuest:service-housekeeping").exists()
 
 
 @pytest.mark.django_db

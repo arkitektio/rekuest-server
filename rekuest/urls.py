@@ -20,6 +20,7 @@ from kante.path import dynamicpath
 from django.http import HttpRequest, JsonResponse
 from health_check.views import HealthCheckView
 from django.views.decorators.csrf import csrf_exempt
+from facade.upkeep import upkeep_view
 
 def jwks_view(request: HttpRequest) -> JsonResponse:
     """Publish the provenance verifying key(s) for offline verification.
@@ -38,12 +39,15 @@ def jwks_view(request: HttpRequest) -> JsonResponse:
 urlpatterns = [
     dynamicpath("admin/", admin.site.urls),
     dynamicpath(".well-known/jwks.json", csrf_exempt(jwks_view), name="provenance_jwks"),
+    # takt's calls only (signed with the instance key); the edge does not route ``_rekuest``.
+    dynamicpath("_rekuest/upkeep/<str:job>", upkeep_view, name="upkeep"),
     dynamicpath(
         "ht",
         csrf_exempt(
             HealthCheckView.as_view(
                 checks=[
                     "health_check.Database",
+                    "rekuest.health.Takt",
                 ]
             )
         ),

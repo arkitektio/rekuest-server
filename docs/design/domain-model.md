@@ -5,9 +5,9 @@ flow — identity → catalogue → provisioning → execution → state — and
 rules that encode most of the business logic.
 
 The Django models here define the schema, and the server's migrations are the only thing that
-changes it. Two programs write the rows: the server through the ORM, and agentd
-([`agentd/`](../../agentd/README.md)) with its own SQL — agents, implementations, tasks, task
-events, states, patches and locks are almost entirely agentd's writes. Because agentd's inserts
+changes it. Two programs write the rows: the server through the ORM, and takt
+([`takt/`](../../takt/README.md)) with its own SQL — agents, implementations, tasks, task
+events, states, patches and locks are almost entirely takt's writes. Because takt's inserts
 do not pass through Django, every defaulted column carries its default in the database
 (`db_default`, enforced by `tests/models/test_database_defaults.py`).
 
@@ -92,8 +92,8 @@ agent can run this action, via this `interface`". Key fields: `action`, `agent`,
 `interface`, `params` (bound overrides), `manipulates` (M2M to `State`), `required_locks`,
 `code_hash`, the provenance pair `needs_token` / `provenance_audience`, and the higher-order pair
 `higher_order_for` / `higher_order_config` (see [higher-order.md](higher-order.md)).
-Implementations are written by agentd: an agent's registration reconciles them, and
-`createHigherOrderImplementation` / `deleteImplementation` reach agentd through its internal API.
+Implementations are written by takt: an agent's registration reconciles them, and
+`createHigherOrderImplementation` / `deleteImplementation` reach takt through its internal API.
 
 **`Dependency`** declares what an implementation *needs* to run (other actions/states), with
 `app_filter`/`version_filter`, viability counts (`min_viable_instances` /
@@ -121,12 +121,12 @@ task run, tracking it from assignment to completion. The fields that matter most
 | `acted_on` (array) | Structures this task modified (provenance). |
 | `latest_event_kind` / `latest_instruct_kind` | Denormalized "current state" for fast reads. |
 | `is_done`, `finished_at` | Terminal markers. |
-| `ephemeral` | A run that is housekeeping, not history (the runs of a schedule with `ephemeralRuns`): excluded from replay offers and deleted after `rekuest.ephemeral_task_retention`. Zero-persistence work is a *Probe*, held in redis by agentd, not a Task. |
+| `ephemeral` | A run that is housekeeping, not history (the runs of a schedule with `ephemeralRuns`): excluded from replay offers and deleted after `rekuest.ephemeral_task_retention`. Zero-persistence work is a *Probe*, held in redis by takt, not a Task. |
 | `schedule` / `signal` / `trigger` | What caused the run, when it was not a direct assign. |
-| `not_before`, `dispatched_at`, `picked_up_at`, `interrupt_at` | The columns agentd's sweeps read their deadlines from. |
+| `not_before`, `dispatched_at`, `picked_up_at`, `interrupt_at` | The columns takt's sweeps read their deadlines from. |
 
 **`TaskEvent`** is the immutable per-transition log entry the agent (or server) appends:
-`kind` (see the lifecycle in [task-lifecycle.md](../../agentd/docs/task-lifecycle.md)), optional
+`kind` (see the lifecycle in [task-lifecycle.md](../../takt/docs/task-lifecycle.md)), optional
 `returns` (for `YIELD`), `progress`, `message`, `level`, and `delegated_to` (used by higher-order
 unfolding).
 
@@ -135,11 +135,11 @@ unfolding).
 
 **`Schedule`** (`facade/models/schedule.py`) is configuration: what to run, when (an interval or a
 five-field cron line read in a time zone), as whom. The server's GraphQL creates and changes the
-rows; agentd plans each enabled schedule's next run as a delayed task.
+rows; takt plans each enabled schedule's next run as a delayed task.
 
 **`Signal`** and **`Trigger`** (`facade/models/signal.py`): a hub service announces that
-something happened to one of its objects (a signal, received by agentd), and a trigger assigns an
-action when a matching signal arrives. The server owns the trigger rows; agentd matches and fires.
+something happened to one of its objects (a signal, received by takt), and a trigger assigns an
+action when a matching signal arrives. The server owns the trigger rows; takt matches and fires.
 
 **`Lock`** (in `agent.py`) is a per-agent mutual-exclusion key, optionally `hold_by` a
 `Task`.

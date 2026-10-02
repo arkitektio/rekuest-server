@@ -1,6 +1,6 @@
 """What a trigger is checked against when it is written (see :mod:`facade.models.signal`).
 
-Matching signals to triggers and firing them is agentd's (its reaper's ``triggers`` sweep). This
+Matching signals to triggers and firing them is takt's (its reaper's ``triggers`` sweep). This
 server owns the trigger rows: its GraphQL creates them, and refuses one whose port does not take
 the structure it reacts to or whose conditions do not compile, so a broken trigger is refused
 once instead of failing on every signal.

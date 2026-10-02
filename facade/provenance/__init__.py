@@ -1,6 +1,6 @@
 """Provenance token issuing.
 
-Rekuest is the *provenance authority*: at dispatch agentd mints a signed (Ed25519)
+Rekuest is the *provenance authority*: at dispatch takt mints a signed (Ed25519)
 JWT attesting who caused an assignment and with which inputs, and
 publishes the verifying key at a JWKS endpoint (served here, :mod:`facade.provenance.keys`). This is an attestation meant to
 be recorded downstream (e.g. by Mikro/koherent), never an authorization grant —

@@ -8,7 +8,7 @@ work (previews, live parameter tweaks) where latency and cancellation matter and
 does not.
 
 The two concepts are separated by the id space: Task ids are integer PKs, Probe ids are
-``p-<hex>`` strings (agentd mints them), so every router can branch with a
+``p-<hex>`` strings (takt mints them), so every router can branch with a
 prefix check.
 """
 
