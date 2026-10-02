@@ -20,6 +20,7 @@ from kante.path import dynamicpath
 from django.http import HttpRequest, JsonResponse
 from health_check.views import HealthCheckView
 from django.views.decorators.csrf import csrf_exempt
+from rekuest_service.views import answers_challenge
 from facade.upkeep import upkeep_view
 
 def jwks_view(request: HttpRequest) -> JsonResponse:
@@ -43,12 +44,14 @@ urlpatterns = [
     dynamicpath("_rekuest/upkeep/<str:job>", upkeep_view, name="upkeep"),
     dynamicpath(
         "ht",
-        csrf_exempt(
-            HealthCheckView.as_view(
-                checks=[
-                    "health_check.Database",
-                    "rekuest.health.Takt",
-                ]
+        answers_challenge(
+            csrf_exempt(
+                HealthCheckView.as_view(
+                    checks=[
+                        "health_check.Database",
+                        "rekuest.health.Takt",
+                    ]
+                )
             )
         ),
         name="health_check",
