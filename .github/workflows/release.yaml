@@ -179,8 +179,8 @@ jobs:
           flavor: |
             latest=${{ github.ref_name == 'main' }}
 
-      # The arm64 leg compiles Rust under emulation, which is slow: the layer cache is what
-      # keeps a release that did not touch takt/ from paying for it again.
+      # takt's Dockerfile cross-compiles: the Rust build runs on the runner's own
+      # architecture for both platforms. Emulation is only used for the final stage.
       - name: Build and push takt
         uses: docker/build-push-action@v5
         with:
