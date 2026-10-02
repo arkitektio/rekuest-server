@@ -270,20 +270,20 @@ pub fn value_mismatch<P: PortLike>(
             }
             None => {}
         },
-        PortKind::UNION => {
+        PortKind::UNION
             if !children.iter().any(|child| {
                 value_mismatch(child, value, Some(&path), reference_envelope).is_none()
-            }) {
-                let variants = children
-                    .iter()
-                    .map(|c| repr_str(c.kind().value()))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                return Some(format!(
-                    "{path}: {} matches none of the UNION variants [{variants}]",
-                    repr(value)
-                ));
-            }
+            }) =>
+        {
+            let variants = children
+                .iter()
+                .map(|c| repr_str(c.kind().value()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Some(format!(
+                "{path}: {} matches none of the UNION variants [{variants}]",
+                repr(value)
+            ));
         }
         _ => {}
     }
