@@ -116,6 +116,10 @@ class TaktControllBackend:
         answer = call("assign", payload)
         return models.Task.objects.get(pk=answer["task"]), bool(answer["created"])
 
+    def resolve_dependencies(self, principal: Any, input: Any) -> Dict[str, Any]:
+        """A dry run of an assign's dependency tree: what it would bind, and what is unmet."""
+        return call("resolve", {"principal": _principal(principal), "input": _dump(input)})
+
     def _control(self, op: str, input: Any, caller: "models.Caller | None", **extra: Any) -> models.Task:
         payload: Dict[str, Any] = {"task": str(input.task), **extra}
         if caller is not None:

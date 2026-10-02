@@ -436,6 +436,484 @@ async fn args_are_validated_and_roots_come_only_from_humans() {
     );
 }
 
+/// A dependency of `implementation` nobody auto-resolves.
+async fn dependency(
+    ctx: &Context,
+    implementation: i64,
+    key: &str,
+    optional: bool,
+    min: Option<i32>,
+) {
+    sqlx::query(
+        "INSERT INTO facade_dependency (key, action_demands, state_demands, auto_resolvable, optional,
+                                        min_viable_instances, implementation_id)
+         VALUES ($2, '[]', '[]', false, $3, $4, $1)",
+    )
+    .bind(implementation)
+    .bind(key)
+    .bind(optional)
+    .bind(min)
+    .execute(&ctx.db)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn an_optional_dependency_may_stay_unbound() {
+    let Some(ctx) = context().await else { return };
+    let executor = agent(&ctx, None).await;
+    let principal = principal(&ctx, executor).await;
+
+    // Required and unmapped: refused.
+    let (_, required) = action(&ctx, executor, false).await;
+    dependency(&ctx, required, "camera", false, None).await;
+    let refused = backend::assign_with_status(
+        &ctx,
+        &principal,
+        &echo(required, 1, None),
+        AssignOrigin::default(),
+    )
+    .await
+    .unwrap_err()
+    .to_string();
+    assert!(
+        refused.starts_with("Dependency camera was not provided with an overwrite"),
+        "{refused}"
+    );
+
+    // Optional and unmapped: the task runs with the dependency unbound, whatever its minimum.
+    let executor = agent(&ctx, None).await;
+    let principal = self::principal(&ctx, executor).await;
+    let (_, optional) = action(&ctx, executor, false).await;
+    dependency(&ctx, optional, "stage", true, Some(2)).await;
+    let assigned = backend::assign_with_status(
+        &ctx,
+        &principal,
+        &echo(optional, 1, None),
+        AssignOrigin::default(),
+    )
+    .await
+    .unwrap();
+    let snapshot: Value = sqlx::query_scalar("SELECT dependencies FROM facade_task WHERE id = $1")
+        .bind(assigned.task)
+        .fetch_one(&ctx.db)
+        .await
+        .unwrap();
+    assert_eq!(snapshot, json!({"stage": []}));
+
+    // Optional but bound: the minimum still holds.
+    let bound = AssignInput {
+        dependencies: Some(vec![backend::ResolvedDependencyInput {
+            key: "stage".into(),
+            auto_resolve: false,
+            mapped_agents: vec![backend::MappedAgentInput {
+                key: "stage".into(),
+                agent: executor.to_string(),
+                dependencies: vec![],
+            }],
+        }]),
+        ..echo(optional, 2, None)
+    };
+    let refused = backend::assign_with_status(&ctx, &principal, &bound, AssignOrigin::default())
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(
+        refused.starts_with("Not enough agents found for dependency stage"),
+        "{refused}"
+    );
+}
+
+/// A dependency of `implementation` on the `echo` action of `target`'s app.
+async fn depends_on(
+    ctx: &Context,
+    implementation: i64,
+    key: &str,
+    target: i64,
+    auto_resolvable: bool,
+    optional: bool,
+) {
+    sqlx::query(
+        "INSERT INTO facade_dependency (key, action_demands, state_demands, auto_resolvable, optional,
+                                        app_filter, implementation_id)
+         SELECT $2, '[{\"key\": \"echo\"}]', '[]', $4, $5, app.identifier, $1
+           FROM facade_agent a JOIN authentikate_app app ON app.id = a.app_id WHERE a.id = $3",
+    )
+    .bind(implementation)
+    .bind(key)
+    .bind(target)
+    .bind(auto_resolvable)
+    .bind(optional)
+    .execute(&ctx.db)
+    .await
+    .unwrap();
+}
+
+async fn snapshot(ctx: &Context, task: i64) -> Value {
+    sqlx::query_scalar("SELECT dependencies FROM facade_task WHERE id = $1")
+        .bind(task)
+        .fetch_one(&ctx.db)
+        .await
+        .unwrap()
+}
+
+/// What a dependency binds: `agent` with its `echo`, and `below` under that.
+fn bound(agent: i64, implementation: i64, below: Value) -> Value {
+    json!([{"agent": agent.to_string(),
+            "actions": {"echo": {"implementation": implementation.to_string(), "dependencies": below}}}])
+}
+
+fn pin(
+    key: &str,
+    agent: i64,
+    below: Vec<backend::ResolvedDependencyInput>,
+) -> backend::ResolvedDependencyInput {
+    backend::ResolvedDependencyInput {
+        key: key.into(),
+        auto_resolve: false,
+        mapped_agents: vec![backend::MappedAgentInput {
+            key: key.into(),
+            agent: agent.to_string(),
+            dependencies: below,
+        }],
+    }
+}
+
+/// Three agents of one organization, each with an `echo`: `(agent, implementation)`.
+async fn chain(ctx: &Context) -> [(i64, i64); 3] {
+    let organization = format!("o-{}", uuid::Uuid::new_v4().simple());
+    let mut links = [(0, 0); 3];
+    for link in &mut links {
+        let agent = agent(ctx, Some(&organization)).await;
+        *link = (agent, action(ctx, agent, false).await.1);
+    }
+    links
+}
+
+async fn refusal(ctx: &Context, principal: &CallerContext, input: &AssignInput) -> String {
+    backend::assign_with_status(ctx, principal, input, AssignOrigin::default())
+        .await
+        .unwrap_err()
+        .to_string()
+}
+
+#[tokio::test]
+async fn the_tree_is_resolved_at_the_root_and_children_inherit_their_subtree() {
+    let Some(ctx) = context().await else { return };
+    let [(workflow_agent, workflow), (relay_agent, relay), (leaf_agent, leaf)] = chain(&ctx).await;
+    depends_on(&ctx, workflow, "relay", relay_agent, true, false).await;
+    depends_on(&ctx, relay, "leaf", leaf_agent, true, false).await;
+    let principal = principal(&ctx, workflow_agent).await;
+
+    let root = backend::assign_with_status(
+        &ctx,
+        &principal,
+        &echo(workflow, 1, None),
+        AssignOrigin::default(),
+    )
+    .await
+    .unwrap()
+    .task;
+    let below = json!({"leaf": bound(leaf_agent, leaf, json!({}))});
+    assert_eq!(
+        snapshot(&ctx, root).await,
+        json!({"relay": bound(relay_agent, relay, below.clone())})
+    );
+
+    // The workflow calls its dependency: the child lands on the relay and carries its subtree.
+    let call = |parent: i64, dependency: &str| AssignInput {
+        dependency: Some(dependency.into()),
+        method: Some("echo".into()),
+        parent: Some(parent.to_string()),
+        args: json!({"x": 1}).as_object().unwrap().clone(),
+        ..AssignInput::default()
+    };
+    let child = backend::assign_with_status(
+        &ctx,
+        &principal,
+        &call(root, "relay"),
+        AssignOrigin::default(),
+    )
+    .await
+    .unwrap()
+    .task;
+    assert_eq!(snapshot(&ctx, child).await, below);
+    let on: (i64, i64) =
+        sqlx::query_as("SELECT agent_id, implementation_id FROM facade_task WHERE id = $1")
+            .bind(child)
+            .fetch_one(&ctx.db)
+            .await
+            .unwrap();
+    assert_eq!(on, (relay_agent, relay));
+
+    // A guard one level down reads the child's subtree: the relay guards its leaf's state.
+    let session = format!("s-{}", uuid::Uuid::new_v4());
+    sqlx::query("UPDATE facade_agent SET active_session_id = $2 WHERE id = $1")
+        .bind(leaf_agent)
+        .bind(&session)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    sqlx::query(
+        "WITH d AS (INSERT INTO facade_statedefinition (name, hash, ports, description, organization_id)
+                    SELECT 'plate', $2, '[]', '', organization_id FROM facade_agent WHERE id = $1 RETURNING id)
+         INSERT INTO facade_state (interface, key, created_at, updated_at, agent_id, definition_id)
+         SELECT 'plate', 'plate', now(), now(), $1, d.id FROM d",
+    )
+    .bind(leaf_agent)
+    .bind(uuid::Uuid::new_v4().to_string())
+    .execute(&ctx.db)
+    .await
+    .unwrap();
+    let guard = frame(
+        json!({"type": "STATE_REVISION_REQUEST", "parent": child.to_string(),
+                             "dependency": "leaf", "state": "plate", "since": null, "paths": []}),
+    );
+    assert!(matches!(
+        route(&ctx, relay_agent, &guard, None).await.unwrap(),
+        Some(ToAgent::StateRevisionResponse {
+            revision: Some(_),
+            error: None,
+            ..
+        })
+    ));
+
+    // The relay calls its own dependency from the subtree it inherited.
+    let grandchild = backend::assign_with_status(
+        &ctx,
+        &principal,
+        &call(child, "leaf"),
+        AssignOrigin::default(),
+    )
+    .await
+    .unwrap()
+    .task;
+    assert_eq!(snapshot(&ctx, grandchild).await, json!({}));
+    assert_eq!(row(&ctx, grandchild).await.root_id, Some(root));
+    // The root's own dependencies are not the child's.
+    let refused = refusal(&ctx, &principal, &call(child, "relay")).await;
+    assert_eq!(
+        refused,
+        "Dependency relay not found in parent task dependencies. It has [\"leaf\"]"
+    );
+}
+
+#[tokio::test]
+async fn a_pin_applies_at_its_own_level_only() {
+    let Some(ctx) = context().await else { return };
+    let [(workflow_agent, workflow), (relay_agent, relay), (leaf_agent, leaf)] = chain(&ctx).await;
+    // The same key at both levels, and neither resolves by itself.
+    depends_on(&ctx, workflow, "peer", relay_agent, false, false).await;
+    depends_on(&ctx, relay, "peer", leaf_agent, false, false).await;
+    let principal = principal(&ctx, workflow_agent).await;
+
+    // The root's pin is not the relay's: its `peer` is still unpinned.
+    let shallow = AssignInput {
+        dependencies: Some(vec![pin("peer", relay_agent, vec![])]),
+        ..echo(workflow, 1, None)
+    };
+    let refused = refusal(&ctx, &principal, &shallow).await;
+    assert!(
+        refused.starts_with("Dependency peer was not provided with an overwrite"),
+        "{refused}"
+    );
+
+    let nested = AssignInput {
+        dependencies: Some(vec![pin(
+            "peer",
+            relay_agent,
+            vec![pin("peer", leaf_agent, vec![])],
+        )]),
+        ..echo(workflow, 2, None)
+    };
+    let root = backend::assign_with_status(&ctx, &principal, &nested, AssignOrigin::default())
+        .await
+        .unwrap()
+        .task;
+    assert_eq!(
+        snapshot(&ctx, root).await,
+        json!({"peer": bound(relay_agent, relay,
+                 json!({"peer": bound(leaf_agent, leaf, json!({}))}))})
+    );
+}
+
+#[tokio::test]
+async fn a_cycle_and_a_tree_too_deep_are_refused() {
+    let Some(ctx) = context().await else { return };
+    let [(workflow_agent, workflow), (relay_agent, relay), (leaf_agent, leaf)] = chain(&ctx).await;
+    depends_on(&ctx, workflow, "relay", relay_agent, true, false).await;
+    depends_on(&ctx, relay, "leaf", leaf_agent, true, false).await;
+    let principal = principal(&ctx, workflow_agent).await;
+
+    let shallow = Context {
+        settings: Arc::new(Settings {
+            dependency_max_depth: 0,
+            ..(*ctx.settings).clone()
+        }),
+        ..ctx.clone()
+    };
+    assert_eq!(
+        refusal(&shallow, &principal, &echo(workflow, 1, None)).await,
+        format!("Dependencies nest deeper than 0 levels ({workflow} → {relay})")
+    );
+
+    depends_on(&ctx, leaf, "back", workflow_agent, true, false).await;
+    assert_eq!(
+        refusal(&ctx, &principal, &echo(workflow, 2, None)).await,
+        format!(
+            "Dependency cycle: implementation {workflow} depends on itself ({workflow} → {relay} → {leaf} → {workflow})"
+        )
+    );
+}
+
+#[tokio::test]
+async fn an_unmet_dependency_below_refuses_the_root_and_a_dry_run_reports_it() {
+    let Some(ctx) = context().await else { return };
+    let [(workflow_agent, workflow), (relay_agent, relay), (leaf_agent, leaf)] = chain(&ctx).await;
+    depends_on(&ctx, workflow, "relay", relay_agent, true, false).await;
+    depends_on(&ctx, relay, "leaf", leaf_agent, false, false).await;
+    let principal = principal(&ctx, workflow_agent).await;
+
+    let reason = refusal(&ctx, &principal, &echo(workflow, 1, None)).await;
+    assert!(
+        reason.starts_with("Dependency leaf was not provided with an overwrite"),
+        "{reason}"
+    );
+
+    // The dry run names the node and goes on instead of refusing.
+    let tree = backend::resolve_dependencies(&ctx, &principal, &workflow.to_string(), &[])
+        .await
+        .unwrap();
+    assert_eq!(tree["satisfied"], json!(false));
+    assert_eq!(tree["meta"]["relay"]["unmet"], Value::Null);
+    let below = &tree["dependencies"]["relay"][0]["actions"]["echo"];
+    assert_eq!(below["implementation"], json!(relay.to_string()));
+    assert_eq!(below["dependencies"], json!({"leaf": []}));
+    assert_eq!(below["meta"]["leaf"]["unmet"], json!(reason));
+    let declared: i64 = sqlx::query_scalar(
+        "SELECT id FROM facade_dependency WHERE implementation_id = $1 AND key = 'leaf'",
+    )
+    .bind(relay)
+    .fetch_one(&ctx.db)
+    .await
+    .unwrap();
+    assert_eq!(
+        below["meta"]["leaf"]["dependency"],
+        json!(declared.to_string())
+    );
+
+    // Pinned one level down, the same dry run is satisfied, and is what an assign freezes.
+    let pins = vec![pin(
+        "relay",
+        relay_agent,
+        vec![pin("leaf", leaf_agent, vec![])],
+    )];
+    let tree = backend::resolve_dependencies(&ctx, &principal, &workflow.to_string(), &pins)
+        .await
+        .unwrap();
+    assert_eq!(tree["satisfied"], json!(true));
+    let frozen = json!({"relay": bound(relay_agent, relay,
+                          json!({"leaf": bound(leaf_agent, leaf, json!({}))}))});
+    let mut resolved = tree["dependencies"].clone();
+    resolved["relay"][0]["actions"]["echo"]
+        .as_object_mut()
+        .unwrap()
+        .remove("meta");
+    assert_eq!(resolved, frozen);
+    let pinned = AssignInput {
+        dependencies: Some(pins),
+        ..echo(workflow, 2, None)
+    };
+    let root = backend::assign_with_status(&ctx, &principal, &pinned, AssignOrigin::default())
+        .await
+        .unwrap()
+        .task;
+    assert_eq!(snapshot(&ctx, root).await, frozen);
+
+    // An agent of another organization cannot be pinned: it binds nothing.
+    let foreign = agent(&ctx, None).await;
+    action(&ctx, foreign, false).await;
+    let tree = backend::resolve_dependencies(
+        &ctx,
+        &principal,
+        &workflow.to_string(),
+        &[pin("relay", foreign, vec![])],
+    )
+    .await
+    .unwrap();
+    assert_eq!(tree["dependencies"]["relay"], json!([]));
+
+    // Another organization's implementation is not theirs to look into.
+    let stranger = agent(&ctx, None).await;
+    assert!(matches!(
+        backend::resolve_dependencies(
+            &ctx,
+            &self::principal(&ctx, stranger).await,
+            &workflow.to_string(),
+            &[]
+        )
+        .await,
+        Err(BackendError::Forbidden(_))
+    ));
+}
+
+#[tokio::test]
+async fn an_optional_dependency_below_stays_unbound() {
+    let Some(ctx) = context().await else { return };
+    let [(workflow_agent, workflow), (relay_agent, relay), (leaf_agent, _)] = chain(&ctx).await;
+    depends_on(&ctx, workflow, "relay", relay_agent, true, false).await;
+    depends_on(&ctx, relay, "leaf", leaf_agent, false, true).await;
+    let principal = principal(&ctx, workflow_agent).await;
+    let root = backend::assign_with_status(
+        &ctx,
+        &principal,
+        &echo(workflow, 1, None),
+        AssignOrigin::default(),
+    )
+    .await
+    .unwrap()
+    .task;
+    assert_eq!(
+        snapshot(&ctx, root).await,
+        json!({"relay": bound(relay_agent, relay, json!({"leaf": []}))})
+    );
+}
+
+#[tokio::test]
+async fn an_auto_resolvable_dependency_without_an_app_is_unbound() {
+    let Some(ctx) = context().await else { return };
+    let executor = agent(&ctx, None).await;
+    let (_, implementation) = action(&ctx, executor, false).await;
+    let principal = principal(&ctx, executor).await;
+    let declare = |key: &'static str, optional: bool| {
+        sqlx::query(
+            "INSERT INTO facade_dependency (key, action_demands, state_demands, auto_resolvable, optional, implementation_id)
+             VALUES ($2, '[]', '[]', true, $3, $1)",
+        )
+        .bind(implementation)
+        .bind(key)
+        .bind(optional)
+        .execute(&ctx.db)
+    };
+    declare("maybe", true).await.unwrap();
+    let assigned = backend::assign_with_status(
+        &ctx,
+        &principal,
+        &echo(implementation, 1, None),
+        AssignOrigin::default(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(snapshot(&ctx, assigned.task).await, json!({"maybe": []}));
+
+    declare("needed", false).await.unwrap();
+    let refused = refusal(&ctx, &principal, &echo(implementation, 2, None)).await;
+    assert!(
+        refused.starts_with("Dependency needed is auto resolvable but names no app"),
+        "{refused}"
+    );
+}
+
 #[tokio::test]
 async fn an_assign_request_answers_and_a_resend_is_not_created_again() {
     let Some(ctx) = context().await else { return };

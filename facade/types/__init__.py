@@ -62,6 +62,7 @@ from .demand import (
 from .dependency import (
     AgentMapping,
     Dependency,
+    DependencyTree,
     ImplementationMapping,
     ResolvedAgentDependency,
     ResolvedDependency,
@@ -119,6 +120,7 @@ __all__ = [
     "Resolution",
     "ImplementationMapping",
     "AgentMapping",
+    "DependencyTree",
     "ResolvedAgentDependency",
     "Implementation",
     "Lock",

@@ -1,5 +1,5 @@
 import strawberry
-from facade import models, types, managers
+from facade import inputs, models, types, managers
 from rekuest_core.inputs import types as ritypes
 from kante.types import Info
 
@@ -56,3 +56,11 @@ def resolved_implementations(
     ).all()
 
     return [rd.implementation for rd in resolved_dependencies]
+
+
+def dependency_tree(info: Info, input: inputs.DependencyTreeInput) -> types.DependencyTree:
+    """What an assign would bind. takt resolves it exactly as it would for the assign."""
+    from facade.backend import controll_backend
+
+    model = input.to_pydantic()
+    return types.DependencyTree(_value=controll_backend.resolve_dependencies(info, model), _implementation=model.implementation)

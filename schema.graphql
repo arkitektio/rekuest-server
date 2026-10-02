@@ -2052,6 +2052,30 @@ input DependencyFilter {
 }
 
 """
+What assigning an implementation would bind: its dependency tree, resolved without assigning.
+"""
+type DependencyTree {
+  """
+  The implementation's dependencies, each with the agents it would bind and, below those, their own.
+  """
+  dependencies: [ResolvedAgentDependency!]!
+
+  """
+  Whether an assign with these overwrites would go through: nothing in the tree is unmet.
+  """
+  satisfied: Boolean!
+}
+
+"""An assign's dependencies, to resolve without assigning."""
+input DependencyTreeInput {
+  """The implementation an assign would target."""
+  implementation: ID!
+
+  """The overwrites the assign would carry."""
+  dependencies: [ResolvedDependencyInput!] = null
+}
+
+"""
 A single runtime descriptor key/value pair carried by a candidate object.
 """
 input DescriptorInput {
@@ -2491,7 +2515,9 @@ type ImplementationMapping {
   """Get the key of the implementation mapping."""
   implementation: Implementation!
 
-  """Get the key of the implementation mapping."""
+  """
+  What the bound implementation's own dependencies resolve to: the level below.
+  """
   resolvedDependencies: [ResolvedAgentDependency!]!
 }
 
@@ -2636,6 +2662,11 @@ input MappedAgentInput {
   The agent ID to map the actions to. This is used to identify the agent in the system.
   """
   agent: ID!
+
+  """
+  Overwrites one level down: for the dependencies of the implementations bound on this agent. A dependency key repeats across levels, so an overwrite only ever applies at the level it is given.
+  """
+  dependencies: [ResolvedDependencyInput!] = null
 }
 
 """The input for creating a blok."""
@@ -3733,6 +3764,11 @@ type Query {
   """Fetch resolved dependencies for a resolution."""
   resolvedImplementations(resolution: ID!, dependencyKey: String = null, methodKey: String = null): [Implementation!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
+  """
+  What assigning an implementation with these overwrites would bind, level by level, and what is unmet: a dry run of the assign's dependency resolution.
+  """
+  dependencyTree(input: DependencyTreeInput!): DependencyTree! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
   """Retrieve state for a specific context."""
   stateFor(agent: ID!, stateHash: String = null, demand: StateDemandInput = null): State! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
@@ -3906,6 +3942,16 @@ input ResolutionFilter {
 }
 
 type ResolvedAgentDependency {
+  """
+  The dependency as its implementation declares it, while it still declares it.
+  """
+  dependency: Dependency
+
+  """
+  Why an assign would refuse this dependency as it is bound here. Only a dry run (dependencyTree) says so; null when it is met.
+  """
+  unmet: String
+
   """Get a specific argument by key."""
   values: String
 

@@ -66,6 +66,7 @@ pub fn from_configuration(configuration: &Configuration) -> anyhow::Result<Setti
         ephemeral_task_retention: Duration::from_secs(rekuest.ephemeral_task_retention),
         signal_retention: Duration::from_secs(rekuest.signal_retention),
         trigger_max_depth: rekuest.trigger_max_depth,
+        dependency_max_depth: rekuest.dependency_max_depth,
         service_agents: rekuest
             .service_agents
             .iter()

@@ -63,6 +63,9 @@ pub struct Settings {
     pub signal_retention: Duration,
     /// `TRIGGER_MAX_DEPTH`: how many trigger firings may chain before a signal stops firing.
     pub trigger_max_depth: i16,
+    /// `DEPENDENCY_MAX_DEPTH`: how many levels of dependencies an assign resolves below the
+    /// assigned implementation before it refuses.
+    pub dependency_max_depth: usize,
     /// `SERVICE_AGENTS`: this hub's services, whose agents sign with their instance keys.
     pub service_agents: Vec<ServiceAgent>,
     /// The hub's trust bundle (`INSTANCE["TRUST_JWKS_URI"]` / `["TRUST_JWKS"]`).
@@ -127,6 +130,7 @@ impl Default for Settings {
             ephemeral_task_retention: Duration::from_secs(86400),
             signal_retention: Duration::from_secs(604_800),
             trigger_max_depth: 3,
+            dependency_max_depth: 8,
             service_agents: vec![],
             trust_bundle: Arc::default(),
         }

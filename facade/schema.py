@@ -71,6 +71,7 @@ class Query:
     triggers: list[types.Trigger] = field(description="All triggers in the organization.")
     signals: list[types.Signal] = field(description="Signals services sent about the organization's objects, for inspection.")
     resolved_implementations = field(resolver=queries.resolved_implementations, description="Fetch resolved dependencies for a resolution.")
+    dependency_tree = field(resolver=queries.dependency_tree, description="What assigning an implementation with these overwrites would bind, level by level, and what is unmet: a dry run of the assign's dependency resolution.")
 
     agent: types.Agent = field(resolver=queries.agent, description="Fetch a specific agent by ID or by app, version and device_id.")
 

@@ -12,7 +12,7 @@ from rekuest_core import scalars as rscalars
 from facade import enums, filters, models, scalars
 from facade.type_gen import create_stats_type
 from facade.types.base import build_prescoped_queryset, build_prescoper
-from facade.types.dependency import ResolvedAgentDependency
+from facade.types.dependency import ResolvedAgentDependency, resolved_level
 
 
 @strawberry_django.type(models.Task, filters=filters.TaskFilter, ordering=filters.TaskOrder, pagination=True, description="Tracks the assignment of an implementation to a specific task.")
@@ -59,7 +59,7 @@ class Task:
 
     @strawberry_django.field(description="The resolved dependencies for this task.")
     def resolved_dependencies(self) -> List[ResolvedAgentDependency]:
-        return [ResolvedAgentDependency(_key=key, _value=item) for key, item in self.dependencies.items()]
+        return resolved_level({"dependencies": self.dependencies}, self.implementation_id)
 
     @classmethod
     def get_queryset(cls, queryset, info, **kwargs):

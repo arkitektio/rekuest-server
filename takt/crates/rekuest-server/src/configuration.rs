@@ -128,6 +128,9 @@ pub struct RekuestBlock {
     /// How many trigger firings may chain before a signal stops firing: the loop guard.
     #[serde(default = "d3")]
     pub trigger_max_depth: i16,
+    /// How many levels of dependencies an assign resolves below the assigned implementation.
+    #[serde(default = "d8")]
+    pub dependency_max_depth: usize,
     /// This hub's services, provisioned by the Python server as HookAgents.
     #[serde(default)]
     pub service_agents: Vec<ServiceAgentBlock>,
@@ -176,6 +179,9 @@ fn d86400() -> u64 {
 }
 fn d604800() -> u64 {
     604_800
+}
+fn d8() -> usize {
+    8
 }
 fn d3() -> i16 {
     3

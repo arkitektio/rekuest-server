@@ -8,6 +8,8 @@
 //! Errors carry the Python server's messages: [`BackendError::Refused`] is its `ValueError` /
 //! `DoesNotExist`, [`BackendError::Forbidden`] its `PermissionError`.
 
+use std::future::Future;
+use std::pin::Pin;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
@@ -81,11 +83,14 @@ pub struct HookInput {
     pub hash: String,
 }
 
-/// An agent a dependency is mapped to (`MappedAgentInputModel`).
+/// An agent a dependency is mapped to (`MappedAgentInputModel`). `dependencies` are the
+/// overwrites one level down: for the dependencies of what is bound on this agent.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MappedAgentInput {
     pub key: String,
     pub agent: String,
+    #[serde(default)]
+    pub dependencies: Vec<ResolvedDependencyInput>,
 }
 
 /// The caller's resolution of one dependency (`ResolvedDependencyInputModel`).
@@ -344,9 +349,14 @@ async fn resolve_dependency_target(
     )?;
     let dependencies = dependencies.unwrap_or(Value::Null);
     let Some(entries) = dependencies.get(dependency) else {
+        let bound: Vec<&String> = dependencies
+            .as_object()
+            .into_iter()
+            .flatten()
+            .map(|(key, _)| key)
+            .collect();
         return Err(BackendError::Refused(format!(
-            "Dependency {dependency} not found in parent task dependencies. {}",
-            pyjson::repr(&dependencies)
+            "Dependency {dependency} not found in parent task dependencies. It has {bound:?}"
         )));
     };
     let entries: Vec<&Value> = entries
@@ -444,9 +454,11 @@ fn acted_on_from_args(args: &Map<String, Value>, action_args: &Value) -> Vec<Str
 
 #[derive(Debug, sqlx::FromRow)]
 struct DependencyRow {
+    id: i64,
     key: String,
     action_demands: Value,
     auto_resolvable: bool,
+    optional: bool,
     app_filter: Option<String>,
     version_filter: Option<String>,
     min_viable_instances: Option<i32>,
@@ -454,15 +466,32 @@ struct DependencyRow {
 }
 
 /// The full set of available agents matching one dependency, by id
-/// (`_resolve_dependency_agents`): its app, and its version when it pins one (`*` or none is any).
+/// (`_resolve_dependency_agents`): the agents its overwrite maps, or those of its app, and of its
+/// version when it pins one (`*` or none is any).
 async fn resolve_dependency_agents(
     ctx: &Context,
     dependency: &DependencyRow,
     caller: &CallerContext,
-    overwrites: &[ResolvedDependencyInput],
+    overwrite: Option<&ResolvedDependencyInput>,
 ) -> BackendResult<Vec<i64>> {
     let by_app = || async {
-        sqlx::query_scalar::<_, i64>(&format!(
+        // Without an app there is nothing to resolve by: the dependency is unbound.
+        if dependency
+            .app_filter
+            .as_deref()
+            .filter(|app| !app.is_empty())
+            .is_none()
+        {
+            return if dependency.optional {
+                Ok(vec![])
+            } else {
+                Err(BackendError::Refused(format!(
+                    "Dependency {} is auto resolvable but names no app to resolve it by. Please provide a dependency overwrite for this dependency to ensure it can be resolved properly.",
+                    dependency.key
+                )))
+            };
+        }
+        Ok(sqlx::query_scalar::<_, i64>(&format!(
             "SELECT a.id FROM facade_agent a JOIN authentikate_app app ON app.id = a.app_id
                     JOIN authentikate_release r ON r.id = a.release_id
               WHERE app.identifier = $2 AND a.organization_id = $3 AND {AVAILABLE}
@@ -474,9 +503,9 @@ async fn resolve_dependency_agents(
         .bind(caller.organization)
         .bind(&dependency.version_filter)
         .fetch_all(&ctx.db)
-        .await
+        .await?)
     };
-    match overwrites.iter().find(|o| o.key == dependency.key) {
+    match overwrite {
         Some(overwrite) if overwrite.auto_resolve => {
             if !dependency.auto_resolvable {
                 return Err(BackendError::Refused(format!(
@@ -484,7 +513,7 @@ async fn resolve_dependency_agents(
                     dependency.key
                 )));
             }
-            Ok(by_app().await?)
+            by_app().await
         }
         Some(overwrite) => {
             let ids = overwrite
@@ -492,15 +521,20 @@ async fn resolve_dependency_agents(
                 .iter()
                 .map(|mapped| parse_id(&mapped.agent))
                 .collect::<BackendResult<Vec<i64>>>()?;
+            // The caller's own organization's agents: an id from elsewhere binds nothing.
             Ok(sqlx::query_scalar(&format!(
-                "SELECT a.id FROM facade_agent a WHERE a.id = ANY($2) AND {AVAILABLE} ORDER BY a.id"
+                "SELECT a.id FROM facade_agent a
+                  WHERE a.id = ANY($2) AND a.organization_id = $3 AND {AVAILABLE} ORDER BY a.id"
             ))
             .bind(live_cutoff(ctx))
             .bind(&ids)
+            .bind(caller.organization)
             .fetch_all(&ctx.db)
             .await?)
         }
-        None if dependency.auto_resolvable => Ok(by_app().await?),
+        None if dependency.auto_resolvable => by_app().await,
+        // An optional dependency may be left unbound: the call runs without it.
+        None if dependency.optional => Ok(vec![]),
         None => Err(BackendError::Refused(format!(
             "Dependency {} was not provided with an overwrite, and is not auto resolvable. Please provide a dependency overwrite for this dependency to ensure it can be resolved properly.",
             dependency.key
@@ -508,100 +542,128 @@ async fn resolve_dependency_agents(
     }
 }
 
-/// The per-agent implementation maps of one dependency (`_build_dependency_entries`): each
-/// action demand's slot mapped to the agent's implementation of the demanded action. State
-/// demands select agents; they have no per-call representation.
-async fn build_dependency_entries(
-    ctx: &Context,
-    dependency: &DependencyRow,
-    agents: &[i64],
-) -> BackendResult<Vec<Value>> {
-    // Slot → action key: the demand's key names the action; the slot key stands in for it
-    // when the demand pins none. A later slot for the same action wins, as in the dict.
-    let mut action_keys: Vec<(String, String)> = vec![];
-    for demand in dependency.action_demands.as_array().into_iter().flatten() {
-        let slot = demand
-            .get("key")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_owned();
-        let action_key = demand
-            .get("demand")
-            .and_then(|d| d.get("key"))
-            .and_then(Value::as_str)
-            .filter(|k| !k.is_empty())
-            .map(str::to_owned)
-            .unwrap_or_else(|| slot.clone());
-        match action_keys.iter_mut().find(|(key, _)| *key == action_key) {
-            Some(entry) => entry.1 = slot,
-            None => action_keys.push((action_key, slot)),
-        }
-    }
-
-    let mut found: Vec<(i64, String, i64, bool)> = vec![];
-    if !agents.is_empty() && !action_keys.is_empty() {
-        let keys: Vec<&str> = action_keys.iter().map(|(key, _)| key.as_str()).collect();
-        found = sqlx::query_as(
-            "SELECT i.agent_id, ac.key, i.id,
-                    EXISTS (SELECT 1 FROM facade_dependency d WHERE d.implementation_id = i.id)
-               FROM facade_implementation i JOIN facade_action ac ON ac.id = i.action_id
-              WHERE i.agent_id = ANY($1) AND ac.key = ANY($2)
-              ORDER BY i.id",
-        )
-        .bind(agents)
-        .bind(&keys)
-        .fetch_all(&ctx.db)
-        .await?;
-    }
-
-    let mut entries = vec![];
-    for agent in agents {
-        let mut actions = Map::new();
-        for (action_key, slot) in &action_keys {
-            let Some((_, _, implementation, nested)) = found
-                .iter()
-                .rev()
-                .find(|(a, key, _, _)| a == agent && key == action_key)
-            else {
-                return Err(BackendError::Refused(format!(
-                    "No implementation found for dependency demand {slot} on agent {agent}"
-                )));
-            };
-            if *nested {
-                return Err(BackendError::Refused(
-                    "Nested dependencies are not supported yet, but they are coming soon!".into(),
-                ));
-            }
-            actions.insert(
-                slot.clone(),
-                json!({"implementation": implementation.to_string(), "dependencies": {}}),
-            );
-        }
-        entries.push(json!({"agent": agent.to_string(), "actions": actions}));
-    }
-    Ok(entries)
+/// One level of a dependency tree: an implementation's dependencies, resolved.
+#[derive(Debug, Clone, Default)]
+struct Level {
+    /// The snapshot: dependency key → the agents bound to it, each with its implementations
+    /// and, below those, their own level.
+    dependencies: Map<String, Value>,
+    /// A dry run's notes, by dependency key: the declared dependency and why it is unmet.
+    meta: Map<String, Value>,
 }
 
-/// The dependency snapshot frozen onto a task (`build_dependency_dict`).
-async fn build_dependency_dict(
-    ctx: &Context,
-    implementation: i64,
-    caller: &CallerContext,
-    overwrites: &[ResolvedDependencyInput],
-) -> BackendResult<Map<String, Value>> {
-    let dependencies: Vec<DependencyRow> = sqlx::query_as(
-        "SELECT key, action_demands, auto_resolvable, app_filter, version_filter, min_viable_instances,
-                max_viable_instances
-           FROM facade_dependency WHERE implementation_id = $1 ORDER BY id",
-    )
-    .bind(implementation)
-    .fetch_all(&ctx.db)
-    .await?;
-    let mut dict = Map::new();
-    for dependency in &dependencies {
-        let mut agents = resolve_dependency_agents(ctx, dependency, caller, overwrites).await?;
-        // The full match set is counted before it is capped at max.
-        if let Some(min) = dependency.min_viable_instances {
+/// One resolve of a dependency tree, from the assigned implementation down: what it binds is
+/// frozen on the root task, and every child inherits its subtree from its parent.
+struct Resolve<'a> {
+    ctx: &'a Context,
+    caller: &'a CallerContext,
+    /// A dry run notes what cannot be met on its node and goes on; an assign refuses.
+    collect: bool,
+    /// The implementations from the root down to the level being resolved.
+    path: Vec<i64>,
+    /// How many dependencies a dry run found unmet.
+    unmet: usize,
+}
+
+impl<'a> Resolve<'a> {
+    fn new(ctx: &'a Context, caller: &'a CallerContext, collect: bool) -> Self {
+        Self {
+            ctx,
+            caller,
+            collect,
+            path: vec![],
+            unmet: 0,
+        }
+    }
+
+    fn path(&self, implementation: i64) -> String {
+        self.path
+            .iter()
+            .chain([&implementation])
+            .map(i64::to_string)
+            .collect::<Vec<_>>()
+            .join(" → ")
+    }
+
+    /// The level of `implementation`. `overwrites` are this level's alone: a pin for a level
+    /// further down sits under the agent it is for, since keys repeat across levels.
+    fn level<'s>(
+        &'s mut self,
+        implementation: i64,
+        overwrites: &'s [ResolvedDependencyInput],
+    ) -> Pin<Box<dyn Future<Output = BackendResult<Level>> + Send + 's>> {
+        Box::pin(async move {
+            // An actor runs one call at a time by default: a workflow that reaches itself
+            // would wait on itself.
+            if self.path.contains(&implementation) {
+                return Err(BackendError::Refused(format!(
+                    "Dependency cycle: implementation {implementation} depends on itself ({})",
+                    self.path(implementation)
+                )));
+            }
+            let limit = self.ctx.settings.dependency_max_depth;
+            if self.path.len() > limit {
+                return Err(BackendError::Refused(format!(
+                    "Dependencies nest deeper than {limit} levels ({})",
+                    self.path(implementation)
+                )));
+            }
+            self.path.push(implementation);
+            let level = self.dependencies_of(implementation, overwrites).await;
+            self.path.pop();
+            level
+        })
+    }
+
+    async fn dependencies_of(
+        &mut self,
+        implementation: i64,
+        overwrites: &[ResolvedDependencyInput],
+    ) -> BackendResult<Level> {
+        let dependencies: Vec<DependencyRow> = sqlx::query_as(
+            "SELECT id, key, action_demands, auto_resolvable, optional, app_filter, version_filter,
+                    min_viable_instances, max_viable_instances
+               FROM facade_dependency WHERE implementation_id = $1 ORDER BY id",
+        )
+        .bind(implementation)
+        .fetch_all(&self.ctx.db)
+        .await?;
+        let mut level = Level::default();
+        for dependency in &dependencies {
+            let overwrite = overwrites.iter().find(|o| o.key == dependency.key);
+            let (entries, unmet) = match self.bind(dependency, overwrite).await {
+                Ok(entries) => (entries, None),
+                Err(BackendError::Refused(reason)) if self.collect => {
+                    self.unmet += 1;
+                    (vec![], Some(reason))
+                }
+                Err(e) => return Err(e),
+            };
+            level
+                .dependencies
+                .insert(dependency.key.clone(), Value::Array(entries));
+            if self.collect {
+                level.meta.insert(
+                    dependency.key.clone(),
+                    json!({"dependency": dependency.id.to_string(), "unmet": unmet}),
+                );
+            }
+        }
+        Ok(level)
+    }
+
+    /// The agents bound to one dependency, each with what it implements of it.
+    async fn bind(
+        &mut self,
+        dependency: &DependencyRow,
+        overwrite: Option<&ResolvedDependencyInput>,
+    ) -> BackendResult<Vec<Value>> {
+        let mut agents =
+            resolve_dependency_agents(self.ctx, dependency, self.caller, overwrite).await?;
+        // The full match set is counted before it is capped at max. An optional dependency
+        // nobody answers stays unbound; one that is bound still needs its minimum.
+        let unbound = dependency.optional && agents.is_empty();
+        if let Some(min) = dependency.min_viable_instances.filter(|_| !unbound) {
             if (agents.len() as i64) < i64::from(min) {
                 return Err(BackendError::Refused(format!(
                     "Not enough agents found for dependency {}. Required at least {min} but found only {}. Please ensure that there are enough agents available to resolve this dependency.",
@@ -613,12 +675,156 @@ async fn build_dependency_dict(
         if let Some(max) = dependency.max_viable_instances {
             agents.truncate(max.max(0) as usize);
         }
-        dict.insert(
-            dependency.key.clone(),
-            Value::Array(build_dependency_entries(ctx, dependency, &agents).await?),
-        );
+        self.entries(dependency, &agents, overwrite).await
     }
-    Ok(dict)
+
+    /// The per-agent implementation maps of one dependency (`_build_dependency_entries`): each
+    /// action demand's slot mapped to the agent's implementation of the demanded action, and
+    /// that implementation's own level below it. State demands select agents; they have no
+    /// per-call representation.
+    async fn entries(
+        &mut self,
+        dependency: &DependencyRow,
+        agents: &[i64],
+        overwrite: Option<&ResolvedDependencyInput>,
+    ) -> BackendResult<Vec<Value>> {
+        // Slot → action key: the demand's key names the action; the slot key stands in for it
+        // when the demand pins none. A later slot for the same action wins, as in the dict.
+        let mut action_keys: Vec<(String, String)> = vec![];
+        for demand in dependency.action_demands.as_array().into_iter().flatten() {
+            let slot = demand
+                .get("key")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            let action_key = demand
+                .get("demand")
+                .and_then(|d| d.get("key"))
+                .and_then(Value::as_str)
+                .filter(|k| !k.is_empty())
+                .map(str::to_owned)
+                .unwrap_or_else(|| slot.clone());
+            match action_keys.iter_mut().find(|(key, _)| *key == action_key) {
+                Some(entry) => entry.1 = slot,
+                None => action_keys.push((action_key, slot)),
+            }
+        }
+
+        // (agent, action key, implementation, has dependencies of its own, is a wrapper)
+        let mut found: Vec<(i64, String, i64, bool, bool)> = vec![];
+        if !agents.is_empty() && !action_keys.is_empty() {
+            let keys: Vec<&str> = action_keys.iter().map(|(key, _)| key.as_str()).collect();
+            found = sqlx::query_as(
+                "SELECT i.agent_id, ac.key, i.id,
+                        EXISTS (SELECT 1 FROM facade_dependency d WHERE d.implementation_id = i.id),
+                        i.higher_order_for_id IS NOT NULL
+                   FROM facade_implementation i JOIN facade_action ac ON ac.id = i.action_id
+                  WHERE i.agent_id = ANY($1) AND ac.key = ANY($2)
+                  ORDER BY i.id",
+            )
+            .bind(agents)
+            .bind(&keys)
+            .fetch_all(&self.ctx.db)
+            .await?;
+        }
+
+        let mut entries = vec![];
+        for agent in agents {
+            // What the caller pinned below this agent: one level down, for whatever is bound
+            // on it that declares the key.
+            let pins: &[ResolvedDependencyInput] = overwrite
+                .filter(|overwrite| !overwrite.auto_resolve)
+                .and_then(|overwrite| {
+                    overwrite
+                        .mapped_agents
+                        .iter()
+                        .find(|mapped| mapped.agent.trim() == agent.to_string())
+                })
+                .map(|mapped| mapped.dependencies.as_slice())
+                .unwrap_or_default();
+            let mut actions = Map::new();
+            for (action_key, slot) in &action_keys {
+                let Some((_, _, implementation, nested, wrapper)) = found
+                    .iter()
+                    .rev()
+                    .find(|(a, key, _, _, _)| a == agent && key == action_key)
+                else {
+                    return Err(BackendError::Refused(format!(
+                        "No implementation found for dependency demand {slot} on agent {agent}"
+                    )));
+                };
+                let mut bound =
+                    json!({"implementation": implementation.to_string(), "dependencies": {}});
+                if *nested {
+                    // A wrapper resolves its own dependencies when it is assigned, not from
+                    // its parent's snapshot.
+                    if *wrapper {
+                        return Err(BackendError::Refused(format!(
+                            "Dependency {}: {slot} on agent {agent} is a higher-order implementation with dependencies of its own, which cannot be nested yet",
+                            dependency.key
+                        )));
+                    }
+                    let below = self.level(*implementation, pins).await?;
+                    bound["dependencies"] = Value::Object(below.dependencies);
+                    if self.collect {
+                        bound["meta"] = Value::Object(below.meta);
+                    }
+                }
+                actions.insert(slot.clone(), bound);
+            }
+            entries.push(json!({"agent": agent.to_string(), "actions": actions}));
+        }
+        Ok(entries)
+    }
+}
+
+/// The dependency snapshot frozen onto a task (`build_dependency_dict`): the whole tree below
+/// `implementation`.
+async fn build_dependency_dict(
+    ctx: &Context,
+    implementation: i64,
+    caller: &CallerContext,
+    overwrites: &[ResolvedDependencyInput],
+) -> BackendResult<Map<String, Value>> {
+    let level = Resolve::new(ctx, caller, false)
+        .level(implementation, overwrites)
+        .await?;
+    Ok(level.dependencies)
+}
+
+/// What assigning `implementation` with these overwrites would bind, without assigning: the
+/// tree as a task would freeze it (`dependencies`), the declared dependency and the reason it
+/// is unmet for every node (`meta`, and `meta` beside each nested `dependencies`), and
+/// whether an assign would go through (`satisfied`).
+pub async fn resolve_dependencies(
+    ctx: &Context,
+    principal: &CallerContext,
+    implementation: &str,
+    overwrites: &[ResolvedDependencyInput],
+) -> BackendResult<Value> {
+    let implementation = parse_id(implementation)?;
+    let organization: i64 = get(
+        sqlx::query_scalar(
+            "SELECT a.organization_id FROM facade_implementation i
+               JOIN facade_agent a ON a.id = i.agent_id WHERE i.id = $1",
+        )
+        .bind(implementation)
+        .fetch_optional(&ctx.db)
+        .await?,
+        "Implementation",
+    )?;
+    if principal.organization != Some(organization) {
+        return Err(BackendError::Forbidden(format!(
+            "Implementation {implementation} is not in your organization."
+        )));
+    }
+    let mut resolve = Resolve::new(ctx, principal, true);
+    let level = resolve.level(implementation, overwrites).await?;
+    Ok(json!({
+        "dependencies": level.dependencies,
+        "meta": level.meta,
+        "satisfied": resolve.unmet == 0,
+    }))
 }
 
 /// The durable `Caller` of an identity (`get_caller_for_context`).

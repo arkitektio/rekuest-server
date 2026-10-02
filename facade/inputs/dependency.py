@@ -1,5 +1,7 @@
 """Inputs for dependency mapping and resolution."""
 
+from typing import Annotated
+
 import strawberry
 from pydantic import BaseModel, Field
 from strawberry.experimental import pydantic
@@ -8,6 +10,11 @@ from strawberry.experimental import pydantic
 class MappedAgentInputModel(BaseModel):
     key: str = Field(description="The key of the agent to map. This is used to identify the agent in the system.")
     agent: str = Field(description="The agent ID to map the actions to. This is used to identify the agent in the system.")
+    # None, not []: the dump drops it, so an assign that pins nothing below reads as it always did.
+    dependencies: list["ResolvedDependencyInputModel"] | None = Field(
+        default=None,
+        description="Overwrites one level down: for the dependencies of the implementations bound on this agent. A dependency key repeats across levels, so an overwrite only ever applies at the level it is given.",
+    )
 
 
 class ResolvedDependencyInputModel(BaseModel):
@@ -19,6 +26,9 @@ class ResolvedDependencyInputModel(BaseModel):
     )
 
 
+MappedAgentInputModel.model_rebuild()
+
+
 @pydantic.input(
     MappedAgentInputModel,
     description="The input for mapping actions to implementations in a agent.",
@@ -26,6 +36,7 @@ class ResolvedDependencyInputModel(BaseModel):
 class MappedAgentInput:
     key: str
     agent: strawberry.ID
+    dependencies: list[Annotated["ResolvedDependencyInput", strawberry.lazy("facade.inputs.dependency")]] | None = None
 
 
 @pydantic.input(
@@ -36,6 +47,20 @@ class ResolvedDependencyInput:
     key: str
     mapped_agents: list[MappedAgentInput]
     auto_resolve: bool = False
+
+
+class DependencyTreeInputModel(BaseModel):
+    implementation: str = Field(description="The implementation an assign would target.")
+    dependencies: list[ResolvedDependencyInputModel] | None = Field(default=None, description="The overwrites the assign would carry.")
+
+
+@pydantic.input(
+    DependencyTreeInputModel,
+    description="An assign's dependencies, to resolve without assigning.",
+)
+class DependencyTreeInput:
+    implementation: strawberry.ID
+    dependencies: list[ResolvedDependencyInput] | None = None
 
 
 @strawberry.input

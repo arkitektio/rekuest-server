@@ -36,6 +36,7 @@
 //! | route | body | answer |
 //! |---|---|---|
 //! | `assign` | `{"principal", "input": AssignInput, "schedule"?, "signal"?, "trigger"?, "trigger_depth"?}` | `{"task", "reference", "created"}` |
+//! | `resolve` | `{"principal", "input": {"implementation", "dependencies"?}}` (a dry run of an assign's dependency tree) | `{"dependencies", "meta", "satisfied"}` |
 //! | `cancel`, `interrupt`, `pause` | `{"principal"?, "task"}` | `{"task"}` |
 //! | `resume` | `{"principal"?, "task", "step"?}` | `{"task"}` |
 //! | `bounce`, `kick`, `unblock` | `{"principal", "agent"}` | `{"agent"}` |
@@ -58,7 +59,9 @@
 //!
 //! `AssignInput` is `AssignInputModel`'s JSON (`action`, `action_hash`, `implementation`,
 //! `agent` + `interface`, `dependency` + `method`, `args`, `reference`, `parent`, `parent_step`,
-//! `call_key`, `hooks`, `capture`, `step`, `resolution`, `dependencies`, `not_before`);
+//! `call_key`, `hooks`, `capture`, `step`, `resolution`, `dependencies`, `not_before`). A
+//! `dependencies` entry is `{"key", "mapped_agents": [{"key", "agent", "dependencies"?}],
+//! "auto_resolve"?}`: a mapped agent's own `dependencies` overwrite one level down;
 //! `ProbeInput` is `ProbeInputModel`'s (`action`, `action_hash`, `implementation`, `args`,
 //! `reference`). Ids in answers are strings. A control without a principal is an internal,
 //! trusted one (`caller=None`); with one, the task must be in the principal's organization.
@@ -86,6 +89,7 @@ use crate::urls::Shared;
 pub fn routes() -> Router<Shared> {
     Router::new()
         .route("/internal/assign", post(assign))
+        .route("/internal/resolve", post(resolve))
         .route("/internal/cancel", post(cancel))
         .route("/internal/interrupt", post(interrupt))
         .route("/internal/pause", post(pause))
@@ -327,6 +331,31 @@ internal!(assign, AssignRequest, |state, request| {
         "reference": assigned.reference,
         "created": assigned.created,
     })))
+});
+
+#[derive(Debug, Deserialize)]
+struct ResolveInput {
+    implementation: Id,
+    #[serde(default)]
+    dependencies: Vec<backend::ResolvedDependencyInput>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ResolveRequest {
+    principal: Principal,
+    input: ResolveInput,
+}
+
+internal!(resolve, ResolveRequest, |state, request| {
+    let principal = request.principal.context(&state).await?;
+    let tree = backend::resolve_dependencies(
+        &state.facade,
+        &principal,
+        &request.input.implementation.text(),
+        &request.input.dependencies,
+    )
+    .await?;
+    Ok(Json(tree))
 });
 
 #[derive(Debug, Deserialize)]

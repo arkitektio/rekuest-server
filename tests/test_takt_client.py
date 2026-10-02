@@ -65,3 +65,15 @@ def test_an_unreachable_takt_is_said_so(served: Callable[..., list[httpx.Request
 
     with pytest.raises(takt.TaktUnavailable, match="unreachable"):
         takt.call("assign", {})
+
+
+def test_an_assign_without_nested_overwrites_reads_as_it_always_did(served: Callable[..., list[httpx.Request]]) -> None:
+    """A mapped agent that pins nothing below sends no ``dependencies`` key: a takt from before
+    nested dependencies reads the same payload."""
+    from facade.inputs import MappedAgentInputModel, ResolvedDependencyInputModel
+
+    flat = ResolvedDependencyInputModel(key="stage", mapped_agents=[MappedAgentInputModel(key="stage", agent="3")])
+    assert takt._dump(flat) == {"key": "stage", "mapped_agents": [{"key": "stage", "agent": "3"}], "auto_resolve": False}
+
+    nested = ResolvedDependencyInputModel(key="relay", mapped_agents=[MappedAgentInputModel(key="relay", agent="3", dependencies=[flat])])
+    assert takt._dump(nested)["mapped_agents"][0]["dependencies"] == [takt._dump(flat)]

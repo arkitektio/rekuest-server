@@ -75,12 +75,33 @@ implementation's `Dependency` rows:
 
 - **auto-resolvable / auto_resolve overwrite** — find connected agents matching `app_filter`
   (recently seen, in the request's org), clamped to `min`/`max_viable_instances` (raising if too
-  few).
-- **explicit overwrite** — restrict to the caller-supplied `mapped_agents`, same viability checks.
-- a non-auto-resolvable dependency with no overwrite is an error.
+  few). Without an `app_filter` there is nothing to resolve by: the dependency is unbound.
+- **explicit overwrite** — restrict to the caller-supplied `mapped_agents` (of the request's
+  org), same viability checks.
+- a non-auto-resolvable dependency with no overwrite is an error, unless it is `optional`: an
+  optional dependency nobody answers stays unbound (`[]`).
+
+A bound implementation may have dependencies of its own. They are resolved the same way, right
+here, one level below it, and so on down: **the whole tree is resolved at the root assign.**
+
+- Overwrites are per level. A dependency key is a parameter name and repeats across levels, so
+  the overwrites for a level below sit under the agent they are for
+  (`mapped_agents[].dependencies`), and the root's list never reaches down.
+- A **cycle** (an implementation reached again on its own path) is refused: an actor runs one
+  call at a time by default and would wait on itself. A tree deeper than
+  `rekuest.dependency_max_depth` is refused.
+- A higher-order wrapper with dependencies of its own cannot be bound below the root.
+- Anything unmet anywhere in the tree refuses the assign.
 
 The result is a nested dict `{dep_key: [{agent, actions: {key: {implementation, dependencies}}}]}`
-stored on `Task.dependencies`, ready for the agent to fan out child tasks against.
+stored on `Task.dependencies`, where each `dependencies` is the bound implementation's own
+level. A child assigned through `dependency` + `method` takes its target from its parent's
+dict and is given that target's `dependencies` as its own: every task carries exactly its
+subtree, frozen when the root was assigned.
+
+`POST /internal/resolve` (GraphQL `dependencyTree`) runs the same resolution without
+assigning. Instead of refusing it notes on each node why it is unmet and goes on, so a UI can
+show the tree and what is still to pin.
 
 ## Step 4 — persist and broadcast
 

@@ -104,6 +104,8 @@ def create_implementation(input: ImplementationInputModel, agent: models.Agent) 
                 max_viable_instances=dependency.max_viable_instances,
                 prefered_instances=dependency.prefered_instances,
                 auto_resolvable=dependency.auto_resolvable,
+                optional=dependency.optional,
+                description=dependency.description,
             ),
         )
     if input.manipulates:

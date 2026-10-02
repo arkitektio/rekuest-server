@@ -2,7 +2,7 @@ from .task import reusable_task_for, my_tasks
 from .probe import probe, probe_stats
 from .event import event
 from .action import action, similar_actions
-from .implementation import implementation_at, my_implementation_at, resolved_implementations
+from .implementation import dependency_tree, implementation_at, my_implementation_at, resolved_implementations
 from .state import (
     state_for,
     task_boundaries,

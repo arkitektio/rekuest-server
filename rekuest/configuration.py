@@ -114,6 +114,7 @@ class RekuestBlock(BaseModel):
     identifier: str = Field(default="live.arkitekt.rekuest", description="This rekuest's fakts identifier — what its key is listed under in the hub trust bundle, and what services require rekuest's requests to come from.")
     service_agents: list[ServiceAgent] = Field(default_factory=list, description="This hub's services whose periodic work rekuest schedules: each becomes a HookAgent whose actions and default schedules come from the service's manifest.")
     trigger_max_depth: int = Field(default=3, description="How many trigger firings may chain (a triggered run's object signalling another trigger …) before a signal stops firing — the loop guard.")
+    dependency_max_depth: int = Field(default=8, description="How many levels of dependencies an assign resolves below the assigned implementation before it refuses.")
     signal_retention: int = Field(default=604800, description="Seconds to keep processed signals (the runs they caused keep their link as null afterwards); 0 keeps them forever.")
     service_agents_organization: str = Field(default="rekuest-system", description="The organization (slug) the service agents, their actions and schedules live in. Its members see and control them.")
     probe_ttl: int = Field(default=3600, description="Lifetime (seconds) of a probe's redis state while live.")
