@@ -30,10 +30,19 @@ class _WireRuleModel(BaseModel):
     description: str | None = Field(default=None, description="What the rule is for.")
     agent: str = Field(min_length=1, description="The name of the agent whose action runs, as the importing organization sees it (e.g. 'kuvert').")
     interface: str = Field(min_length=1, description="The interface of that agent to run (e.g. 'sync_all_mailboxes').")
-    args: dict[str, Any] = Field(default_factory=dict, description="The args every run is assigned with.")
+    # Optional rather than defaulting to {}: an object-valued default on a custom scalar is not
+    # something every GraphQL client can read out of the schema.
+    args: dict[str, Any] | None = Field(default=None, description="The args every run is assigned with.")
     enabled: bool = Field(default=True, description="Whether the rule starts out enabled. An organization's own later switch is kept on re-import.")
     ends_at: datetime.datetime | None = Field(default=None, description="The rule stops after this moment.")
     max_runs: int | None = Field(default=None, ge=1, description="The rule stops once it created this many runs.")
+
+
+    @model_validator(mode="after")
+    def args_are_a_dict(self) -> Self:
+        if self.args is None:
+            self.args = {}
+        return self
 
 
 class WireScheduleModel(_WireRuleModel):

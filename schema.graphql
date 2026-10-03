@@ -6599,7 +6599,7 @@ input WireScheduleInput {
   interface: String!
 
   """The args every run is assigned with."""
-  args: Args = {}
+  args: Args = null
 
   """
   Whether the rule starts out enabled. An organization's own later switch is kept on re-import.
@@ -6661,7 +6661,7 @@ input WireTriggerInput {
   interface: String!
 
   """The args every run is assigned with."""
-  args: Args = {}
+  args: Args = null
 
   """
   Whether the rule starts out enabled. An organization's own later switch is kept on re-import.
