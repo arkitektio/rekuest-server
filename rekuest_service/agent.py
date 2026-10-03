@@ -9,6 +9,13 @@
         '''Re-embed stale rows.'''
         return {"reembedded": reembed_all(MODELS)}
 
+Every organization of the hub has the agent, with its own schedules, so an action runs for one
+organization: a function that takes ``organization`` is given its slug and does that
+organization's share of the work, nothing else::
+
+    @agent.action(default_interval=300)
+    def sync_all_mailboxes(organization: str) -> dict: ...
+
 A HookAgent is an agent like any app's, with two differences: it is reached over HTTP (rekuest
 POSTs each Assign to the service's ``_rekuest/hook``; :mod:`rekuest_service.views`), and it
 belongs to a :class:`~rekuest_service.Service`, which is where the structures it works on are
@@ -37,6 +44,11 @@ class Action:
     description: str | None
     default_interval: int | None
     default_cron: str | None
+
+    @property
+    def takes_organization(self) -> bool:
+        """Whether the function asks for the ``organization`` (slug) the run is for."""
+        return "organization" in inspect.signature(self.function).parameters
 
     def manifest(self) -> dict[str, Any]:
         return {
@@ -78,7 +90,7 @@ class HookAgent:
         default_interval: int | None = None,
         default_cron: str | None = None,
     ) -> Any:
-        """Offer ``function`` (sync or async, no arguments) as an action; ``@agent.action`` or ``@agent.action(...)``.
+        """Offer ``function`` (sync or async; no arguments, or ``organization``) as an action; ``@agent.action`` or ``@agent.action(...)``.
 
         The interface defaults to the function's name; name and description to its docstring's
         first line and the rest. ``default_interval`` (seconds) or ``default_cron`` makes rekuest

@@ -103,7 +103,11 @@ def hook(service: Service, request: HttpRequest) -> HttpResponse:
 
     # A thread, not an event-loop task: it outlives the request under any server (WSGI
     # runserver tears its loop down with the response), and the function may block.
-    threading.Thread(target=_run, args=(service, config, agent_id, task, target, message.get("args") or {}), name=f"rekuest-hook-{task}", daemon=True).start()
+    args = dict(message.get("args") or {})
+    if target.takes_organization:
+        # Whose run this is: the organization of the agent rekuest assigned (every organization has its own).
+        args["organization"] = message.get("org") or None
+    threading.Thread(target=_run, args=(service, config, agent_id, task, target, args), name=f"rekuest-hook-{task}", daemon=True).start()
     return JsonResponse({"accepted": task}, status=202)
 
 
