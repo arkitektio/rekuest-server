@@ -135,13 +135,17 @@ on every 60th tick. A replica whose clock is off the database's by more than the
 skips its sweeps (`facade::clock`).
 
 **Schedules.** The server owns the schedule rows; takt is the only reader of cron lines. It
-validates a timing for the server, gives every enabled schedule its next run as a delayed task,
-and handles "run now". A cron line has five fields and is read in the schedule's time zone. A
+validates a timing for the server, gives every enabled schedule that is due one its next run as
+a delayed task, and handles "run now". A schedule's policies are takt's to honour: whether runs
+may overlap, whether missed slots are caught up, and when it ends. A cron line has five fields and is read in the schedule's time zone. A
 fixed-time job in the repeated hour of a fall-back night runs once. Six-field lines and wrapping
 ranges such as `5-1` are refused (`facade::timing`).
 
-**Triggers.** Unprocessed signals are matched against triggers and the matching triggers'
-actions are assigned (`facade::triggers`). `rekuest.trigger_max_depth` bounds chains.
+**Triggers.** Unprocessed signals are matched against triggers and the applying triggers'
+actions are assigned (`facade::triggers`). Every listening trigger is logged with what became
+of it (`facade_firing`: fired, rejected, failed), a trigger's debounce window and end are
+honoured, and a trigger can be replayed on a stored signal. `rekuest.trigger_max_depth` bounds
+chains.
 
 
 ## Upkeep

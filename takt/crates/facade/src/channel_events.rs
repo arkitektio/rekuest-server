@@ -161,3 +161,19 @@ mod tests {
         assert_eq!(pydantic_datetime(&precise), "2026-09-30T09:44:08.960420Z");
     }
 }
+
+/// `SignalFeedEvent`: a signal arrived (`create`) or was matched against the triggers (`update`).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SignalFeedEvent {
+    pub create: Option<i64>,
+    pub update: Option<i64>,
+}
+
+/// `RuleFeedEvent`: a schedule or trigger changed. takt only ever reports `update` (its
+/// bookkeeping); creating and deleting rules is the Python server's.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct RuleFeedEvent {
+    pub schedule: Option<i64>,
+    pub trigger: Option<i64>,
+    pub change: &'static str,
+}

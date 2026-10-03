@@ -889,3 +889,475 @@ async fn only_ephemeral_runs_go_while_task_retention_is_off() {
     assert_eq!(tree_size(&ctx, old_housekeeping).await, 0);
     assert_eq!(tree_size(&ctx, fresh_housekeeping).await, 2);
 }
+
+// -- the firing log, replay and the rules' policies ---------------------------------------------
+
+/// What became of `trigger` for its signals, oldest first: (signal, outcome, reason, task, replay).
+async fn firings(
+    ctx: &Context,
+    trigger: i64,
+) -> Vec<(i64, String, Option<String>, Option<i64>, bool)> {
+    sqlx::query_as(
+        "SELECT signal_id, outcome, reason, task_id, replay FROM facade_firing WHERE trigger_id = $1 ORDER BY id",
+    )
+    .bind(trigger)
+    .fetch_all(&ctx.db)
+    .await
+    .unwrap()
+}
+
+async fn set(ctx: &Context, table: &str, id: i64, assignment: &str) {
+    sqlx::query(&format!("UPDATE {table} SET {assignment} WHERE id = $1"))
+        .bind(id)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+}
+
+async fn counted(ctx: &Context, table: &str, id: i64) -> (i32, bool) {
+    sqlx::query_as(&format!(
+        "SELECT run_count, last_fired_at IS NOT NULL FROM {table} WHERE id = $1"
+    ))
+    .bind(id)
+    .fetch_one(&ctx.db)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn every_listening_trigger_is_logged_and_a_signal_nobody_hears_has_no_firing() {
+    let _serial = SERIAL.lock().await;
+    let Some(ctx) = context(Settings::default()).await else {
+        return;
+    };
+    let org = unique("log");
+    let target = target(&ctx, &org).await;
+    let picky = trigger(
+        &ctx,
+        &org,
+        &target,
+        json!([{"key": CHANNELS, "operator": "GTE", "value": 4}]),
+    )
+    .await;
+    let open = trigger(&ctx, &org, &target, json!([])).await;
+
+    // One channel: too few for the port (two or more), whatever the triggers say.
+    let too_few = signal(&ctx, target.organization, 1, None).await;
+    // Three: enough for the port and for the open trigger, not for the picky one.
+    let three = signal(&ctx, target.organization, 3, None).await;
+    assert_eq!(triggers::fire_one(&ctx, too_few).await.unwrap(), 0);
+    assert_eq!(triggers::fire_one(&ctx, three).await.unwrap(), 1);
+
+    let of_open = firings(&ctx, open).await;
+    assert_eq!(of_open.len(), 2);
+    assert_eq!((of_open[0].0, of_open[0].1.as_str()), (too_few, "REJECTED"));
+    assert!(of_open[0].2.as_ref().unwrap().contains("requires"));
+    assert_eq!((of_open[1].0, of_open[1].1.as_str()), (three, "FIRED"));
+    assert!(of_open[1].2.is_none() && of_open[1].3.is_some() && !of_open[1].4);
+
+    let of_picky = firings(&ctx, picky).await;
+    assert_eq!(of_picky.len(), 2);
+    assert!(of_picky.iter().all(|firing| firing.1 == "REJECTED"));
+    assert!(of_picky[1].2.as_ref().unwrap().contains("conditions"));
+    // A rejection is not a failure of the trigger; a firing counts.
+    assert_eq!(trigger_state(&ctx, picky).await, (0, None));
+    assert_eq!(counted(&ctx, "facade_trigger", picky).await, (0, false));
+    assert_eq!(counted(&ctx, "facade_trigger", open).await, (1, true));
+
+    // A signal no trigger listens for: processed, and nothing in the log.
+    let elsewhere = target_in_new_org(&ctx).await;
+    let unheard = signal(&ctx, elsewhere, 3, None).await;
+    assert_eq!(triggers::fire_one(&ctx, unheard).await.unwrap(), 0);
+    assert!(processed(&ctx, unheard).await);
+    let logged: i64 = sqlx::query_scalar("SELECT count(*) FROM facade_firing WHERE signal_id = $1")
+        .bind(unheard)
+        .fetch_one(&ctx.db)
+        .await
+        .unwrap();
+    assert_eq!(logged, 0);
+}
+
+async fn target_in_new_org(ctx: &Context) -> i64 {
+    target(ctx, &unique("unheard")).await.organization
+}
+
+#[tokio::test]
+async fn a_failed_firing_is_logged_and_the_log_goes_with_its_signal() {
+    let _serial = SERIAL.lock().await;
+    let Some(ctx) = context(Settings {
+        signal_retention: Duration::from_secs(3600),
+        ..Settings::default()
+    })
+    .await
+    else {
+        return;
+    };
+    let org = unique("log-failed");
+    let target = target(&ctx, &org).await;
+    let trigger = trigger(&ctx, &org, &target, json!([])).await;
+    set(&ctx, "facade_trigger", trigger, "interface = 'gone'").await;
+    let broken = signal(&ctx, target.organization, 3, None).await;
+    assert_eq!(triggers::fire_one(&ctx, broken).await.unwrap(), 0);
+
+    let logged = firings(&ctx, trigger).await;
+    assert_eq!(logged.len(), 1);
+    assert_eq!(logged[0].1, "FAILED");
+    assert!(logged[0].2.is_some() && logged[0].3.is_none());
+    let stamped: bool =
+        sqlx::query_scalar("SELECT last_error_at IS NOT NULL FROM facade_trigger WHERE id = $1")
+            .bind(trigger)
+            .fetch_one(&ctx.db)
+            .await
+            .unwrap();
+    assert!(stamped);
+
+    // Signal retention takes the firing with the signal.
+    set(
+        &ctx,
+        "facade_signal",
+        broken,
+        "processed_at = now() - interval '2 hours'",
+    )
+    .await;
+    for _ in 0..200 {
+        if retention::sweep_signals(&ctx).await.unwrap() == 0 {
+            break;
+        }
+    }
+    assert!(firings(&ctx, trigger).await.is_empty());
+}
+
+#[tokio::test]
+async fn deleting_a_fired_run_keeps_its_firing() {
+    let _serial = SERIAL.lock().await;
+    let Some(ctx) = context(Settings::default()).await else {
+        return;
+    };
+    let org = unique("log-kept");
+    let target = target(&ctx, &org).await;
+    let trigger = trigger(&ctx, &org, &target, json!([])).await;
+    let signal = signal(&ctx, target.organization, 3, None).await;
+    assert_eq!(triggers::fire_one(&ctx, signal).await.unwrap(), 1);
+    let run = firings(&ctx, trigger).await[0].3.expect("the run it fired");
+
+    // What task retention and the delete walks do to a run.
+    let mut tx = ctx.db.begin().await.unwrap();
+    facade::deletion::delete_tasks(&mut tx, &[run])
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    let logged = firings(&ctx, trigger).await;
+    assert_eq!(logged.len(), 1);
+    assert_eq!((logged[0].1.as_str(), logged[0].3), ("FIRED", None));
+}
+
+#[tokio::test]
+async fn a_debounced_trigger_fires_once_per_object_within_its_window() {
+    let _serial = SERIAL.lock().await;
+    let Some(ctx) = context(Settings::default()).await else {
+        return;
+    };
+    let org = unique("debounce");
+    let target = target(&ctx, &org).await;
+    let trigger = trigger(&ctx, &org, &target, json!([])).await;
+    set(&ctx, "facade_trigger", trigger, "debounce_seconds = 60").await;
+
+    // Two signals for one object, raced by two replicas: one run.
+    let first = signal(&ctx, target.organization, 3, None).await;
+    let second = signal(&ctx, target.organization, 3, None).await;
+    let (one, other) = tokio::join!(
+        triggers::fire_one(&ctx, first),
+        triggers::fire_one(&ctx, second)
+    );
+    assert_eq!(one.unwrap() + other.unwrap(), 1);
+    let logged = firings(&ctx, trigger).await;
+    let outcomes: Vec<&str> = logged.iter().map(|firing| firing.1.as_str()).collect();
+    assert_eq!(outcomes.iter().filter(|o| **o == "FIRED").count(), 1);
+    let rejected = logged.iter().find(|firing| firing.1 == "REJECTED").unwrap();
+    assert!(rejected.2.as_ref().unwrap().starts_with("Debounced"));
+
+    // Another object is not held back, and neither is this one once the window passed.
+    let other_object: i64 = sqlx::query_scalar(
+        "INSERT INTO facade_signal (service, signal_id, kind, identifier, object, organization_id, descriptors)
+         VALUES ('mikro', $1, 'CREATED', $2, '43', $3, $4) RETURNING id",
+    )
+    .bind(unique("sig"))
+    .bind(IDENTIFIER)
+    .bind(target.organization)
+    .bind(json!({CHANNELS: 3}))
+    .fetch_one(&ctx.db)
+    .await
+    .unwrap();
+    assert_eq!(triggers::fire_one(&ctx, other_object).await.unwrap(), 1);
+    sqlx::query(
+        "UPDATE facade_firing SET created_at = now() - interval '5 minutes' WHERE trigger_id = $1",
+    )
+    .bind(trigger)
+    .execute(&ctx.db)
+    .await
+    .unwrap();
+    let later = signal(&ctx, target.organization, 3, None).await;
+    assert_eq!(triggers::fire_one(&ctx, later).await.unwrap(), 1);
+    assert_eq!(counted(&ctx, "facade_trigger", trigger).await.0, 3);
+}
+
+#[tokio::test]
+async fn a_trigger_stops_at_its_run_limit_and_at_its_end() {
+    let _serial = SERIAL.lock().await;
+    let Some(ctx) = context(Settings::default()).await else {
+        return;
+    };
+    let org = unique("limits");
+    let target = target(&ctx, &org).await;
+    let limited = trigger(&ctx, &org, &target, json!([])).await;
+    set(&ctx, "facade_trigger", limited, "max_runs = 1").await;
+
+    // Two signals raced by two replicas near the limit: one run, never two.
+    let first = signal(&ctx, target.organization, 3, None).await;
+    let second = signal(&ctx, target.organization, 3, None).await;
+    let (one, other) = tokio::join!(
+        triggers::fire_one(&ctx, first),
+        triggers::fire_one(&ctx, second)
+    );
+    assert_eq!(one.unwrap() + other.unwrap(), 1);
+    assert_eq!(fired(&ctx, limited).await.len(), 1);
+    let logged = firings(&ctx, limited).await;
+    let ended = logged.iter().find(|firing| firing.1 == "REJECTED").unwrap();
+    assert_eq!(ended.2.as_deref(), Some("The trigger has ended"));
+    assert_eq!(
+        trigger_state(&ctx, limited).await,
+        (0, None),
+        "ended, not failing"
+    );
+
+    set(
+        &ctx,
+        "facade_trigger",
+        limited,
+        "max_runs = NULL, ends_at = now() - interval '1 minute'",
+    )
+    .await;
+    let late = signal(&ctx, target.organization, 3, None).await;
+    assert_eq!(triggers::fire_one(&ctx, late).await.unwrap(), 0);
+    assert_eq!(fired(&ctx, limited).await.len(), 1);
+}
+
+#[tokio::test]
+async fn a_replay_fires_whatever_the_signal_and_the_policies_say() {
+    let _serial = SERIAL.lock().await;
+    let Some(ctx) = context(Settings::default()).await else {
+        return;
+    };
+    let org = unique("replay");
+    let target = target(&ctx, &org).await;
+    let trigger = trigger(
+        &ctx,
+        &org,
+        &target,
+        json!([{"key": CHANNELS, "operator": "GTE", "value": 9}]),
+    )
+    .await;
+    set(
+        &ctx,
+        "facade_trigger",
+        trigger,
+        "max_runs = 1, run_count = 1",
+    )
+    .await;
+    let cause = causing_task(&ctx, &org, &target, 1).await;
+    let signal = signal(&ctx, target.organization, 3, Some(cause)).await;
+    assert_eq!(triggers::fire_one(&ctx, signal).await.unwrap(), 0);
+
+    let firing = triggers::replay(&ctx, target.organization, trigger, signal)
+        .await
+        .unwrap();
+    let again = triggers::replay(&ctx, target.organization, trigger, signal)
+        .await
+        .unwrap();
+    assert_ne!(firing, again, "every replay is a firing of its own");
+
+    let logged = firings(&ctx, trigger).await;
+    assert_eq!(logged.len(), 3);
+    assert_eq!((logged[0].1.as_str(), logged[0].4), ("REJECTED", false));
+    assert!(logged[1..]
+        .iter()
+        .all(|f| f.1 == "FIRED" && f.4 && f.3.is_some()));
+    assert_eq!(logged[1].2.as_deref(), Some("Replayed by hand"));
+    let runs = fired(&ctx, trigger).await;
+    assert_eq!(runs.len(), 2);
+    // Asked for by a person: a root run, not a child of what caused the signal.
+    assert!(runs.iter().all(|run| run.parent_id.is_none()));
+    assert!(runs[0].reference.contains(":replay:"));
+    assert_eq!(counted(&ctx, "facade_trigger", trigger).await.0, 3);
+
+    // Another organization's trigger or signal reads as missing.
+    let elsewhere = target_in_new_org(&ctx).await;
+    assert!(matches!(
+        triggers::replay(&ctx, elsewhere, trigger, signal).await,
+        Err(BackendError::Refused(_))
+    ));
+}
+
+#[tokio::test]
+async fn overlap_lets_the_next_run_be_planned_while_the_previous_executes() {
+    let _serial = SERIAL.lock().await;
+    let Some(ctx) = context(Settings::default()).await else {
+        return;
+    };
+    let (skipping, _) = schedule(&ctx, 60, true).await;
+    let (allowing, _) = schedule(&ctx, 60, true).await;
+    set(&ctx, "facade_schedule", allowing, "overlap = 'ALLOW'").await;
+
+    for id in [skipping, allowing] {
+        assert!(schedules::refill_one(&ctx, id).await.unwrap());
+        let run = the_open_run(&ctx, id).await;
+        // Handed over, still running.
+        set(&ctx, "facade_task", run.id, "dispatch_attempts = 1").await;
+    }
+    schedules::refill_schedules(&ctx, 100_000).await.unwrap();
+
+    assert_eq!(open_runs(&ctx, skipping).await.len(), 1, "no overlap");
+    let runs = open_runs(&ctx, allowing).await;
+    assert_eq!(
+        runs.len(),
+        2,
+        "the next slot is planned beside the running one"
+    );
+    assert_eq!(runs[1].dispatch_attempts, 0);
+    assert_eq!(counted(&ctx, "facade_schedule", allowing).await, (2, true));
+
+    // Still exactly one waiting run, and run-now moves it instead of refusing.
+    assert!(!schedules::refill_one(&ctx, allowing).await.unwrap());
+    assert_eq!(
+        schedules::trigger(&ctx, allowing).await.unwrap(),
+        runs[1].id
+    );
+    assert!(matches!(
+        schedules::trigger(&ctx, skipping).await,
+        Err(BackendError::Refused(_))
+    ));
+
+    // The streak is read off the finished runs: one failed run is one failure, however often asked.
+    finish(&ctx, runs[0].id, "CRITICAL", "boom").await;
+    set(&ctx, "facade_task", runs[1].id, "dispatch_attempts = 1").await;
+    assert!(schedules::refill_one(&ctx, allowing).await.unwrap());
+    let (failures, error, _) = bookkeeping(&ctx, allowing).await;
+    assert_eq!(failures, 1);
+    assert!(error.unwrap().contains("boom"));
+}
+
+#[tokio::test]
+async fn a_schedule_stops_at_its_run_limit_and_at_its_end() {
+    let _serial = SERIAL.lock().await;
+    let Some(ctx) = context(Settings::default()).await else {
+        return;
+    };
+    let (limited, _) = schedule(&ctx, 60, true).await;
+    set(&ctx, "facade_schedule", limited, "max_runs = 1").await;
+    assert!(schedules::refill_one(&ctx, limited).await.unwrap());
+    let run = the_open_run(&ctx, limited).await;
+    finish(&ctx, run.id, "COMPLETED", "").await;
+    assert!(!schedules::refill_one(&ctx, limited).await.unwrap());
+    schedules::refill_schedules(&ctx, 100_000).await.unwrap();
+    assert!(open_runs(&ctx, limited).await.is_empty());
+    assert_eq!(
+        bookkeeping(&ctx, limited).await.1,
+        None,
+        "ended, not failing"
+    );
+
+    // An end before the next slot: nothing is planned for after it.
+    let (ending, _) = schedule(&ctx, 3600, true).await;
+    set(
+        &ctx,
+        "facade_schedule",
+        ending,
+        "ends_at = now() + interval '1 minute'",
+    )
+    .await;
+    assert!(!schedules::refill_one(&ctx, ending).await.unwrap());
+    let (ended, _) = schedule(&ctx, 60, true).await;
+    set(
+        &ctx,
+        "facade_schedule",
+        ended,
+        "ends_at = now() - interval '1 minute'",
+    )
+    .await;
+    assert!(!schedules::refill_one(&ctx, ended).await.unwrap());
+}
+
+#[tokio::test]
+async fn catch_up_runs_missed_slots_late_and_in_order() {
+    let _serial = SERIAL.lock().await;
+    let Some(ctx) = context(Settings::default()).await else {
+        return;
+    };
+    // Created an hour ago, last planned ten minutes ago, then nothing (takt was down).
+    let missed =
+        "created_at = now() - interval '1 hour', last_slot_at = now() - interval '10 minutes'";
+    let (skipping, _) = schedule(&ctx, 60, true).await;
+    set(&ctx, "facade_schedule", skipping, missed).await;
+    let (catching, _) = schedule(&ctx, 60, true).await;
+    set(
+        &ctx,
+        "facade_schedule",
+        catching,
+        &format!("{missed}, catch_up = true"),
+    )
+    .await;
+
+    assert!(schedules::refill_one(&ctx, skipping).await.unwrap());
+    assert!(the_open_run(&ctx, skipping).await.not_before.unwrap() > Utc::now());
+
+    // A missed slot is due already, so its run is handed over at once rather than delayed.
+    assert!(schedules::refill_one(&ctx, catching).await.unwrap());
+    let first = the_open_run(&ctx, catching).await;
+    assert!(first.not_before.is_none(), "run late, not delayed");
+    let first_slot = last_slot(&ctx, catching).await;
+    assert!(first_slot < Utc::now());
+    finish(&ctx, first.id, "COMPLETED", "").await;
+    assert!(schedules::refill_one(&ctx, catching).await.unwrap());
+    let second_slot = last_slot(&ctx, catching).await;
+    assert_eq!(
+        (second_slot - first_slot).num_seconds(),
+        60,
+        "the very next slot"
+    );
+
+    // A gap of more than a hundred slots is not a hiccup: it resumes from now.
+    let (stale, _) = schedule(&ctx, 60, true).await;
+    set(
+        &ctx,
+        "facade_schedule",
+        stale,
+        "created_at = now() - interval '3 days', last_slot_at = now() - interval '2 days', catch_up = true",
+    )
+    .await;
+    assert!(schedules::refill_one(&ctx, stale).await.unwrap());
+    assert!(the_open_run(&ctx, stale).await.not_before.unwrap() > Utc::now());
+}
+
+async fn last_slot(ctx: &Context, schedule: i64) -> DateTime<Utc> {
+    sqlx::query_scalar("SELECT last_slot_at FROM facade_schedule WHERE id = $1")
+        .bind(schedule)
+        .fetch_one(&ctx.db)
+        .await
+        .unwrap()
+}
+
+#[test]
+fn the_upcoming_slots_of_a_timing_follow_each_other() {
+    let timing = facade::timing::Timing {
+        interval_seconds: Some(90),
+        cron: None,
+        timezone: "UTC".into(),
+    };
+    let slots = schedules::upcoming(&timing, Utc::now() - chrono::Duration::hours(1), 4).unwrap();
+    assert_eq!(slots.len(), 4);
+    assert!(slots[0] > Utc::now());
+    assert!(slots
+        .windows(2)
+        .all(|pair| (pair[1] - pair[0]).num_seconds() == 90));
+}

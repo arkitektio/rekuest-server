@@ -53,6 +53,8 @@
 //! | `schedule/plan` | `{"schedule", "replan"?, "principal"?}` (plans the next run now; `replan` cancels the waiting one first) | `{"planned"}` |
 //! | `schedule/cancel-waiting` | `{"schedule", "principal"?}` | `{}` |
 //! | `schedule/trigger` | `{"schedule"}` (run now) | `{"task"}` |
+//! | `schedule/upcoming` | `{"interval_seconds"?, "cron"?, "timezone", "created_at", "count"}` (the timing's next slots after now) | `{"slots": [RFC 3339, …]}` |
+//! | `trigger/fire` | `{"principal", "trigger", "signal"}` (a replay: fires the trigger on a stored signal, whatever its conditions) | `{"firing"}` |
 //! | `drawer/shelve` | `{"principal", "identifier", "resource_id", "label"?, "description"?}` | `{"drawer"}` |
 //! | `drawer/unshelve` | `{"principal", "id"}` (a resource id, else a drawer id) | `{"drawer"}` |
 //! | `higher-order/create` | `{"principal", "input": {"lower", "interface", "definition", "config"?, "dependencies"?}}` | `{"implementation", "diagnostics"}` |
@@ -114,6 +116,8 @@ pub fn routes() -> Router<Shared> {
             post(cancel_waiting_run),
         )
         .route("/internal/schedule/trigger", post(trigger_schedule))
+        .route("/internal/schedule/upcoming", post(upcoming_slots))
+        .route("/internal/trigger/fire", post(fire_trigger))
         .route(
             "/internal/implementation/delete",
             post(delete_implementation),
@@ -548,6 +552,57 @@ internal!(cancel_waiting_run, ScheduleRequest, |state, request| {
 internal!(trigger_schedule, ScheduleRequest, |state, request| {
     let task = facade::schedules::trigger(&state.facade, request.schedule.get()?).await?;
     Ok(Json(json!({"task": task.to_string()})))
+});
+
+#[derive(Debug, Deserialize)]
+struct UpcomingRequest {
+    #[serde(default)]
+    interval_seconds: Option<i64>,
+    #[serde(default)]
+    cron: Option<String>,
+    timezone: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    count: usize,
+}
+
+internal!(upcoming_slots, UpcomingRequest, |_state, request| {
+    let timing = facade::timing::Timing {
+        interval_seconds: request.interval_seconds,
+        cron: request.cron.clone(),
+        timezone: request.timezone.clone(),
+    };
+    timing
+        .validate()
+        .map_err(|message| Refusal(StatusCode::BAD_REQUEST, message))?;
+    let slots = facade::schedules::upcoming(&timing, request.created_at, request.count.min(50))
+        .map_err(|message| Refusal(StatusCode::BAD_REQUEST, message))?;
+    let slots: Vec<String> = slots.iter().map(chrono::DateTime::to_rfc3339).collect();
+    Ok(Json(json!({"slots": slots})))
+});
+
+#[derive(Debug, Deserialize)]
+struct FireRequest {
+    principal: Principal,
+    trigger: Id,
+    signal: Id,
+}
+
+internal!(fire_trigger, FireRequest, |state, request| {
+    let principal = request.principal.context(&state).await?;
+    let Some(organization) = principal.organization else {
+        return Err(Refusal(
+            StatusCode::BAD_REQUEST,
+            "Cannot fire a trigger without an organization".into(),
+        ));
+    };
+    let firing = facade::triggers::replay(
+        &state.facade,
+        organization,
+        request.trigger.get()?,
+        request.signal.get()?,
+    )
+    .await?;
+    Ok(Json(json!({"firing": firing.to_string()})))
 });
 
 #[derive(Debug, Deserialize)]

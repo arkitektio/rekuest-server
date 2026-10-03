@@ -31,8 +31,8 @@ pub async fn sweep(ctx: &Context) -> Result<usize, sqlx::Error> {
     Ok(deleted)
 }
 
-/// Drop one batch of processed signals past the signal horizon (`_sweep_signals`); the runs
-/// they caused keep theirs as null.
+/// Drop one batch of processed signals past the signal horizon (`_sweep_signals`), with their
+/// firing log; the runs they caused keep theirs as null.
 pub async fn sweep_signals(ctx: &Context) -> Result<usize, sqlx::Error> {
     let retention = ctx.settings.signal_retention;
     if retention.is_zero() {
@@ -51,6 +51,11 @@ pub async fn sweep_signals(ctx: &Context) -> Result<usize, sqlx::Error> {
         return Ok(0);
     }
     sqlx::query("UPDATE facade_task SET signal_id = NULL WHERE signal_id = ANY($1)")
+        .bind(&signals)
+        .execute(&mut *tx)
+        .await?;
+    // The firing log lives as long as its signal.
+    sqlx::query("DELETE FROM facade_firing WHERE signal_id = ANY($1)")
         .bind(&signals)
         .execute(&mut *tx)
         .await?;

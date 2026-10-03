@@ -66,6 +66,13 @@ pub async fn delete_tasks(conn: &mut PgConnection, tasks: &[i64]) -> Result<(), 
         &all,
     )
     .await?;
+    // The firing log outlives the run it created: it keeps saying the trigger fired.
+    exec(
+        conn,
+        "UPDATE facade_firing SET task_id = NULL WHERE task_id = ANY($1)",
+        &all,
+    )
+    .await?;
     exec(
         conn,
         "DELETE FROM facade_taskevent WHERE task_id = ANY($1) OR delegated_to_id = ANY($1)",
@@ -277,6 +284,12 @@ pub async fn delete_actions(
     .await?;
     exec(
         conn,
+        "DELETE FROM facade_firing WHERE trigger_id IN (SELECT id FROM facade_trigger WHERE action_id = ANY($1))",
+        actions,
+    )
+    .await?;
+    exec(
+        conn,
         "DELETE FROM facade_trigger WHERE action_id = ANY($1)",
         actions,
     )
@@ -416,6 +429,8 @@ pub async fn delete_agent(
           WHERE schedule_id IN (SELECT id FROM facade_schedule WHERE agent_id = ANY($1))",
         "DELETE FROM facade_schedule WHERE agent_id = ANY($1)",
         "UPDATE facade_task SET trigger_id = NULL
+          WHERE trigger_id IN (SELECT id FROM facade_trigger WHERE agent_id = ANY($1))",
+        "DELETE FROM facade_firing
           WHERE trigger_id IN (SELECT id FROM facade_trigger WHERE agent_id = ANY($1))",
         "DELETE FROM facade_trigger WHERE agent_id = ANY($1)",
         "DELETE FROM facade_dashboardplacement

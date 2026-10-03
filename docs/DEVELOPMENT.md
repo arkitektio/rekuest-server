@@ -87,7 +87,9 @@ rekuest-server-next/
 │   ├── takt.py           # Client of takt's internal API (assign, control, agents, probes)
 │   ├── backend.py          # The control backend the mutations call; delegates to takt.py
 │   ├── schedules.py        # Schedule calls to takt (validate, plan, run now)
-│   ├── triggers.py         # What a trigger is checked against when it is written
+│   ├── triggers.py         # What a trigger is checked against when it is written; dry run, replay
+│   ├── rules.py            # What schedules and triggers share: their target and their policies
+│   ├── wiregrams.py        # Import, delete, export of wiregrams (documents of rules)
 │   ├── service_catalog.py  # Catalogues this hub's services: structures + signals
 │   ├── hook_agents.py      # Gives every organization this hub's hook agents
 │   ├── provisioning.py     # The pass that runs both, one replica at a time

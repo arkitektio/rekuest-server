@@ -16,8 +16,8 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::channel_events::{
-    ChildTaskEvent, CrudEvent, PatchEvent, StateUpdateEvent, TaskChangePayload,
-    TaskEventCreatedEvent, TaskEventPayload,
+    ChildTaskEvent, CrudEvent, PatchEvent, RuleFeedEvent, SignalFeedEvent, StateUpdateEvent,
+    TaskChangePayload, TaskEventCreatedEvent, TaskEventPayload,
 };
 use crate::channels;
 use crate::context::Context;
@@ -26,6 +26,53 @@ async fn publish(ctx: &Context, channel: &str, payload: &impl Serialize, groups:
     if let Err(e) = kante::channel::broadcast(&ctx.channel_layer, channel, payload, &groups).await {
         tracing::error!(channel, ?groups, "broadcast failed: {e}");
     }
+}
+
+/// A signal arrived (`created`) or was matched against the triggers: tell its organization's
+/// `signals` subscribers. Ids only; they fetch the row.
+pub async fn signal_changed(ctx: &Context, signal: i64, organization: i64, created: bool) {
+    let event = SignalFeedEvent {
+        create: created.then_some(signal),
+        update: (!created).then_some(signal),
+    };
+    publish(
+        ctx,
+        channels::SIGNAL_FEED,
+        &event,
+        vec![format!("signals_org_{organization}")],
+    )
+    .await;
+}
+
+/// The rule whose bookkeeping takt just wrote.
+#[derive(Debug, Clone, Copy)]
+pub enum Rule {
+    Schedule(i64),
+    Trigger(i64),
+}
+
+/// takt wrote a rule's bookkeeping (counts, failures, the last error): tell its organization's
+/// `schedules` / `triggers` subscribers. The Python server reports its own writes (a user's edit).
+pub async fn rule_changed(ctx: &Context, rule: Rule, organization: i64) {
+    let event = match rule {
+        Rule::Schedule(id) => RuleFeedEvent {
+            schedule: Some(id),
+            trigger: None,
+            change: "update",
+        },
+        Rule::Trigger(id) => RuleFeedEvent {
+            schedule: None,
+            trigger: Some(id),
+            change: "update",
+        },
+    };
+    publish(
+        ctx,
+        channels::RULE_FEED,
+        &event,
+        vec![format!("rules_org_{organization}")],
+    )
+    .await;
 }
 
 #[derive(sqlx::FromRow)]

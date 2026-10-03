@@ -140,6 +140,16 @@ rows; takt plans each enabled schedule's next run as a delayed task.
 **`Signal`** and **`Trigger`** (`facade/models/signal.py`): a hub service announces that
 something happened to one of its objects (a signal, received by takt), and a trigger assigns an
 action when a matching signal arrives. The server owns the trigger rows; takt matches and fires.
+takt logs what became of every trigger that listened for a signal as a **`Firing`** (fired,
+rejected, failed), kept as long as the signal.
+
+Schedules and triggers are *rules*: an organization's own automation. Nothing creates one by
+itself. Both carry policies (an end, a run limit; a debounce window on triggers; overlap and
+catch-up on schedules), checked when written (`facade/rules.py`) and honoured by takt.
+
+**`Wiregram`** (`facade/models/wiregram.py`) is one imported document of rules. It owns the
+schedules and triggers it created (`wiregram`, `wire_key` on each); importing the same key again
+brings them in line with the new document (`facade/wiregrams.py`).
 
 **`Lock`** (in `agent.py`) is a per-agent mutual-exclusion key, optionally `hold_by` a
 `Task`.

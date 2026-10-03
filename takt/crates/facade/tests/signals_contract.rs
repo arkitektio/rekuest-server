@@ -18,7 +18,7 @@ const STACK_CONTAINER: &str = "takt-testdb-rekuest-1";
 const SEED: &str = r#"
 import json, uuid
 from facade import models
-from facade.channel_events import TaskEventCreatedEvent, TaskEventPayload, ChildTaskEvent, TaskChangePayload, PatchEvent
+from facade.channel_events import TaskEventCreatedEvent, TaskEventPayload, ChildTaskEvent, TaskChangePayload, PatchEvent, SignalFeedEvent, RuleFeedEvent
 from tests.factories import _seed_throwaway_agent_graph, _build_task_for_agent_caller, _build_state_for_agent
 prefix = "signals-" + uuid.uuid4().hex[:8]
 agent = _seed_throwaway_agent_graph(prefix)
@@ -34,6 +34,10 @@ print("SEED " + json.dumps({
     "event_payload": TaskEventCreatedEvent(event=TaskEventPayload.from_event(event)).model_dump(mode="json"),
     "child_payload": ChildTaskEvent(update=TaskChangePayload.from_task(child)).model_dump(mode="json"),
     "patch_payload": PatchEvent.from_patch(patch).model_dump(mode="json"),
+    "signal_arrived": SignalFeedEvent(create=41).model_dump(mode="json"),
+    "signal_processed": SignalFeedEvent(update=41).model_dump(mode="json"),
+    "schedule_changed": RuleFeedEvent(schedule=7, change="update").model_dump(mode="json"),
+    "trigger_changed": RuleFeedEvent(trigger=9, change="update").model_dump(mode="json"),
 }))
 "#;
 
@@ -155,4 +159,25 @@ async fn the_rust_fan_out_is_the_python_fan_out() {
     let got = next(&mut patches).await;
     assert_eq!(got["type"], "channel.PatchEvent");
     assert_eq!(got["message"], seed["patch_payload"]);
+
+    // Automation: a signal arriving and being processed, and a rule's bookkeeping, on the
+    // organization's feeds. Ids only, so any ids do.
+    let mut signals = listen(&ctx, &[format!("signals_org_{}", id("org"))]).await;
+    facade::signals::signal_changed(&ctx, 41, id("org"), true).await;
+    let got = next(&mut signals).await;
+    assert_eq!(got["type"], "channel.signal_feed");
+    assert_eq!(got["message"], seed["signal_arrived"]);
+    facade::signals::signal_changed(&ctx, 41, id("org"), false).await;
+    assert_eq!(
+        next(&mut signals).await["message"],
+        seed["signal_processed"]
+    );
+
+    let mut rules = listen(&ctx, &[format!("rules_org_{}", id("org"))]).await;
+    facade::signals::rule_changed(&ctx, facade::signals::Rule::Schedule(7), id("org")).await;
+    let got = next(&mut rules).await;
+    assert_eq!(got["type"], "channel.rule_feed");
+    assert_eq!(got["message"], seed["schedule_changed"]);
+    facade::signals::rule_changed(&ctx, facade::signals::Rule::Trigger(9), id("org")).await;
+    assert_eq!(next(&mut rules).await["message"], seed["trigger_changed"]);
 }

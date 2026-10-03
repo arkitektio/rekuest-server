@@ -106,9 +106,12 @@ query Tasks {
   tasks { id reference latestEventKind isDone }
 }
 
-# Schedules and triggers
-query Schedules {
-  schedules { id }
+# Automation: schedules, triggers, the signals services sent, and what became of each trigger
+query Automation {
+  schedules(filters: {enabled: true}) { id name runCount lastRunAt exhausted upcoming(count: 3) }
+  triggers(filters: {failing: true}) { id name lastError firings(limit: 5) { outcome reason } }
+  signals(filters: {matched: false}) { id identifier object firings { outcome reason trigger { name } } }
+  wiregrams { key name schedules { id } triggers { id } }
 }
 ```
 
@@ -148,7 +151,18 @@ Other notable mutations (see `facade/schema.py` for the full list):
 - **Schedules:** `createSchedule`, `updateSchedule`, `deleteSchedule`, `triggerSchedule` (run
   now). A schedule's `cron` is a five-field line read in its `timezone`; six-field lines and
   wrapping ranges such as `5-1` are refused.
-- **Triggers:** `createTrigger`, `updateTrigger`, `deleteTrigger`.
+- **Triggers:** `createTrigger`, `updateTrigger`, `deleteTrigger`, and `fireTrigger` to replay a
+  trigger on a stored signal. `matchingSignals` and `Trigger.matchingSignals` are a dry run:
+  which stored signals a rule would fire on.
+- **Policies** on both: `description`, `endsAt`, `maxRuns`; `debounceSeconds` on a trigger;
+  `overlap` and `catchUp` on a schedule. `updateSchedule` / `updateTrigger` can also change the
+  target (action, agent, interface, port); the result is checked as a whole.
+- **Wiregrams:** `importWiregram`, `deleteWiregram`, `exportWiregram`. A wiregram is one
+  document of schedules and triggers; nothing is wired on a hub unless a user creates a rule or
+  imports one. Rules name their target as an agent's name and interface. Importing the same
+  `key` again updates what the earlier import created and removes what the document no longer
+  lists; all or nothing.
+- **Feeds:** the `signals`, `schedules` and `triggers` subscriptions.
 - **Probes:** `probe`, `cancelProbe`, `pauseProbe`, `resumeProbe`.
 - **Drawers:** `shelveInMemoryDrawer`, `unshelveMemoryDrawer`, `collect`.
 - **Resolution:** `autoResolve`.

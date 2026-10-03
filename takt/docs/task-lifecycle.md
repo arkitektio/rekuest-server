@@ -275,8 +275,8 @@ stuck-connected agent is what makes its work visible to the task sweeps of the s
 |---|---|---|
 | stale agents | `reconcile::reconcile_stale_agents` | revokes the lease of an agent stuck `connected` past the stale window |
 | disconnected agents | `reconcile::reconcile_disconnected_agents` | after the grace window, ends a gone agent's running tasks `LOST` and resumes its workflows |
-| schedules | `schedules::refill_schedules` | gives every enabled schedule without an open run its next one, as a delayed task |
-| triggers | `triggers::fire_triggers` | claims unprocessed signals and assigns every matching trigger's action |
+| schedules | `schedules::refill_schedules` | gives every enabled schedule that is due one its next run, as a delayed task |
+| triggers | `triggers::fire_triggers` | claims unprocessed signals, assigns every applying trigger's action and logs what became of each listening trigger |
 | due tasks | `reconcile::dispatch_due_tasks` | dispatches tasks whose `not_before` has passed |
 | unpicked tasks | `reconcile::reconcile_unpicked_tasks` | redelivers once, then ends `LOST`, a task its live agent never reported on |
 | due controls | `reconcile::escalate_due_controls` | escalates an unconfirmed cancel to an interrupt, finalizes an unconfirmed interrupt |
@@ -293,11 +293,15 @@ clock makes a wrong decision, not a late one.
 
 ### Schedules and triggers
 
-A **schedule** always has exactly one waiting run while it is enabled. The server owns the
-schedule rows (GraphQL create, update, delete); takt plans the runs (`schedules.rs`) and is
-the only reader of cron lines (`timing.rs`). The server asks through the internal API to
-validate a timing (`schedule/validate`), to plan after a change (`schedule/plan`), to drop the
-waiting run (`schedule/cancel-waiting`) and to run now (`schedule/trigger`).
+Nothing creates a schedule or a trigger by itself: they are an organization's own automation,
+written one by one or imported as a wiregram (the server's `facade/wiregrams.py`).
+
+A **schedule** always has exactly one waiting run while it is enabled and has not ended. The
+server owns the schedule rows (GraphQL create, update, delete); takt plans the runs
+(`schedules.rs`) and is the only reader of cron lines (`timing.rs`). The server asks through the
+internal API to validate a timing (`schedule/validate`), to plan after a change
+(`schedule/plan`), to drop the waiting run (`schedule/cancel-waiting`), to run now
+(`schedule/trigger`) and for a timing's next slots (`schedule/upcoming`).
 
 - A timing is an interval in seconds, aligned to the schedule's creation, or a five-field cron
   line read in the schedule's time zone.
@@ -306,13 +310,43 @@ waiting run (`schedule/cancel-waiting`) and to run now (`schedule/trigger`).
 - Six-field lines and wrapping ranges such as `5-1` are refused.
 - A run's reference is `schedule:<id>:<slot>`, unique per caller, so two replicas planning the
   same schedule create one run.
+- **Overlap.** `SKIP` (the default): the next run is planned once the previous one finished, so
+  runs never overlap. `ALLOW`: it is planned as soon as the previous one was handed over. A run
+  is *waiting* while it has not been handed over (`dispatch_attempts = 0`); there is never more
+  than one.
+- **Catch-up.** Off (the default): the next slot is the first after now, so slots that passed
+  while takt was down or a run was open are skipped. On: it is the first after the slot planned
+  last (`last_slot_at`), so missed slots run late, one after another; a missed slot is due, so
+  its run is handed over at once. A gap of more than 100 slots is not caught up.
+- **An end.** At `ends_at`, or once `max_runs` runs were created (`run_count`), nothing more is
+  planned. Nothing is written to say so; the columns say it.
 
 A **trigger** assigns an action when a matching signal arrives. A hub service POSTs a signal to
 `/agi/signal/{service}` (`signal_intake.rs`); it is stored and acknowledged at once. The
-`triggers` sweep matches it (kind, structure identifier, organization, the trigger's conditions
-and the target port's own `requires`) and assigns. Each trigger and signal pair runs at most
-once (`trigger:<id>:<signal>`), and `rekuest.trigger_max_depth` bounds chains of triggers
-feeding each other.
+`triggers` sweep looks at every enabled trigger of the signal's organization that listens for
+its kind and structure, and writes one `facade_firing` row for each:
+
+- `FIRED`, with the run, when the signal satisfies the trigger's conditions and the target
+  port's own `requires`, and no policy holds it back;
+- `REJECTED`, with the reason, when the signal does not satisfy it, the trigger has ended
+  (`ends_at`, `max_runs`), or it is debounced (`debounce_seconds`: it already fired for this
+  object within the window; the first signal fires, later ones are rejected);
+- `FAILED`, with the reason, when the run could not be created, or the chain of triggers is
+  deeper than `rekuest.trigger_max_depth`. Only this counts against the trigger
+  (`consecutive_failures`, `last_error`).
+
+A signal nobody listens for has no firing at all. Each trigger and signal pair runs at most once
+(`trigger:<id>:<signal>`). Trigger rows are locked while their policies are checked, so two
+replicas working on two signals cannot both pass a debounce or a run limit. A firing lives as
+long as its signal; a run deleted earlier leaves its firing with no task.
+
+`trigger/fire` **replays** a trigger on a stored signal: the run is created whatever the
+signal's descriptors and the trigger's policies say, as a root run of the trigger's owner, and
+logged as a firing of its own (`replay`).
+
+takt publishes what it writes: a signal arriving and being processed on `signal_feed`
+(`signals_org_<org>`), a rule's bookkeeping on `rule_feed` (`rules_org_<org>`). The server
+publishes its own writes to rules on the same channel.
 
 ## Idempotency is a database guarantee
 

@@ -9,3 +9,5 @@ pub const NEW_IMPLEMENTATION: &str = "ImplementationEvent";
 pub const PATCH: &str = "PatchEvent";
 pub const STATE_UPDATE: &str = "StateUpdateEvent";
 pub const PROBE_EVENT: &str = "probe_event_broadcast";
+pub const SIGNAL_FEED: &str = "signal_feed";
+pub const RULE_FEED: &str = "rule_feed";

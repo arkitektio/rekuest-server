@@ -147,7 +147,10 @@ async fn store(
     .fetch_optional(&ctx.db)
     .await?;
     match inserted {
-        Some(id) => Ok(Some((id, true, causing_task))),
+        Some(id) => {
+            crate::signals::signal_changed(ctx, id, organization, true).await;
+            Ok(Some((id, true, causing_task)))
+        }
         // The same signal, raced in from a concurrent resend.
         None => Ok(existing().await?.map(|(id, cause)| (id, false, cause))),
     }
