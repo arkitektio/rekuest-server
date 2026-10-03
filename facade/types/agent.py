@@ -57,6 +57,8 @@ class Agent:
     hook_url: str | None = strawberry_django.field(description="Webhook URL for this Agent (only if webhook)", default=None)
     hook_url_secret: str | None = strawberry_django.field(description="Webhook URL secret for this Agent (only if webhook)", default=None)
     tasks: list["Task"] = strawberry_django.field(description="Tasks executed by this agent.")
+    schedules: list["Schedule"] = strawberry_django.field(description="The schedules whose runs are pinned to this agent.")
+    triggers: list["Trigger"] = strawberry_django.field(description="The triggers whose runs are pinned to this agent.")
     app: App = strawberry_django.field(description="The app this agent belongs to.")
     release: Release = strawberry_django.field(description="The release this agent belongs to.")
     placements: list["Placement"] = strawberry_django.field(description="Placements associated with this agent.")

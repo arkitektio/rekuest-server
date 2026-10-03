@@ -81,6 +81,18 @@ class TaskFilter:
     def reference(self, info: Info, queryset, value: str, prefix: str):
         return queryset.filter(**{f"{prefix}reference": value}), Q()
 
+    @filter_field(description="Keep the runs of this schedule")
+    def schedule(self, info: Info, queryset, value: strawberry.ID, prefix: str):
+        return queryset.filter(**{f"{prefix}schedule_id": value}), Q()
+
+    @filter_field(description="Keep the runs this trigger fired")
+    def trigger(self, info: Info, queryset, value: strawberry.ID, prefix: str):
+        return queryset.filter(**{f"{prefix}trigger_id": value}), Q()
+
+    @filter_field(description="Keep the runs this signal caused")
+    def signal(self, info: Info, queryset, value: strawberry.ID, prefix: str):
+        return queryset.filter(**{f"{prefix}signal_id": value}), Q()
+
     @filter_field(description="Only tasks created before this timestamp")
     def created_before(self, info: Info, queryset, value: datetime.datetime, prefix: str):
         return queryset.filter(**{f"{prefix}created_at__lt": value}), Q()

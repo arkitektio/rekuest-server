@@ -4,7 +4,8 @@ from __future__ import annotations
 
 
 def build_prescoped_queryset(info, queryset, field="organization"):
-    if info.variable_values.get("filters", {}).get("scope") is None:
+    # ``filters`` may be absent, or given as null: both mean "no custom scope".
+    if (info.variable_values.get("filters") or {}).get("scope") is None:
         queryset = queryset.filter(**{field: info.context.request.organization})
         return queryset
 

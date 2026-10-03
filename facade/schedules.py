@@ -9,12 +9,26 @@ here only make a change take effect before the next tick.
 
 from typing import Any
 
-from facade import takt, models
+from facade import models, rules, takt
 
 
 def validate_timing(*, interval_seconds: int | None, cron: str | None, tz: str) -> None:
     """Raise ``ValueError`` unless exactly one of interval/cron is set and both it and ``tz`` parse."""
     takt.call("schedule/validate", {"interval_seconds": interval_seconds, "cron": cron, "timezone": tz})
+
+
+def validate(*, action: models.Action, agent: models.Agent | None, interface: str | None, args: dict, interval_seconds: int | None, cron: str | None, tz: str) -> None:
+    """Everything a schedule must satisfy to be written. One place, used when a schedule is
+    created, changed or imported: its pin is an implementation of the action, its args fit, its
+    timing parses."""
+    from rekuest_core.objects.models import ArgPortModel
+    from rekuest_core.values import validate_assignment_args
+
+    rules.check_pin(action, agent, interface)
+    rules.check_provenance(action, agent, interface, "This action needs a provenance token, which a scheduled run cannot get while provenance is strict")
+    if action.args:
+        validate_assignment_args([ArgPortModel(**port) for port in action.args], args)
+    validate_timing(interval_seconds=interval_seconds, cron=cron, tz=tz)
 
 
 def _request(schedule: models.Schedule, principal: Any = None, **extra: Any) -> dict[str, Any]:

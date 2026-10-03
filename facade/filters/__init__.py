@@ -9,6 +9,7 @@ each submodule's namespace below, so nested filter references resolve at schema-
 from . import (
     action,
     agent,
+    automation,
     task,
     auth,
     blok,
@@ -23,6 +24,7 @@ from . import (
     toolbox,
 )
 from .action import ActionFilter, ActionOrder
+from .automation import ScheduleFilter, ScheduleOrder, SignalFilter, SignalOrder, TriggerFilter, TriggerOrder
 from .agent import (
     AgentFilter,
     AgentOrder,
@@ -129,6 +131,12 @@ __all__ = [
     "DashboardPlacementOrder",
     "SessionOrder",
     "SessionFilter",
+    "ScheduleFilter",
+    "ScheduleOrder",
+    "TriggerFilter",
+    "TriggerOrder",
+    "SignalFilter",
+    "SignalOrder",
 ]
 
 # --- Nested-filter reference resolution -------------------------------------------
@@ -137,6 +145,7 @@ __all__ = [
 _SUBMODULES = (
     action,
     agent,
+    automation,
     task,
     auth,
     blok,

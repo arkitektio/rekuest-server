@@ -19,10 +19,14 @@ class CreateScheduleInput:
     enabled: bool = True
 
 
-@strawberry.input(description="Change a schedule. Giving intervalSeconds clears cron and vice versa. A waiting run is re-planned; an executing one finishes first.")
+@strawberry.input(description="Change a schedule. Giving intervalSeconds clears cron and vice versa. Give `agent: null` (with `interface: null`) to unpin it. A waiting run is re-planned; an executing one finishes first.")
 class UpdateScheduleInput:
     id: strawberry.ID
     name: str | None = None
+    action: strawberry.ID | None = None
+    agent: strawberry.ID | None = strawberry.UNSET
+    interface: str | None = strawberry.UNSET
+    ephemeral_runs: bool | None = None
     args: scalars.Args | None = None
     interval_seconds: int | None = None
     cron: str | None = None

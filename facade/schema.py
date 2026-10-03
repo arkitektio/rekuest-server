@@ -1,7 +1,8 @@
 import strawberry
 from rekuest.logs import QuietErrorsSchema
 import strawberry_django
-from facade import models, mutations, queries, subscriptions, types
+from facade import enums, models, mutations, queries, subscriptions, types
+from rekuest_core import scalars as rscalars
 from kante.types import Info
 from rekuest_core.constants import interface_types, input_union_types
 from kante.unions import unionElementOf
@@ -173,6 +174,17 @@ class Query:
         if identifier is not None:
             declarations = declarations.filter(identifier=identifier)
         return cast(list[types.SignalDeclaration], list(declarations))
+
+    @field(description="Fetch a signal by ID.")
+    def signal(self, info: Info, id: strawberry.ID) -> types.Signal:
+        return cast(types.Signal, scoped_get(models.Signal, info, id, field="organization"))
+
+    @field(description="A dry run for a trigger not written yet: the organization's stored signals of this kind and structure whose descriptors satisfy the conditions, newest first. Fires nothing.")
+    def matching_signals(self, info: Info, kind: enums.SignalKind, identifier: str, conditions: rscalars.AnyDefault | None = None, limit: int = 20) -> list[types.Signal]:
+        from facade import triggers
+
+        _, compiled = triggers.compile_conditions(conditions or [])
+        return cast(list[types.Signal], list(triggers.matching_signals(info.context.request.organization, kind.value, identifier, [compiled], limit)))
 
     @field(description="Fetch a trigger by ID.")
     def trigger(self, info: Info, id: strawberry.ID) -> types.Trigger:

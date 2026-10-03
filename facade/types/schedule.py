@@ -9,11 +9,11 @@ import strawberry
 import strawberry_django
 from rekuest_core import scalars as rscalars
 
-from facade import models
+from facade import filters, models
 from facade.types.base import build_prescoped_queryset
 
 
-@strawberry_django.type(models.Schedule, pagination=True, description="A recurring assignment of one action. It owns at most one open run at a time: the next one, a delayed task created once the previous run finished.")
+@strawberry_django.type(models.Schedule, filters=filters.ScheduleFilter, ordering=filters.ScheduleOrder, pagination=True, description="A recurring assignment of one action. It owns at most one open run at a time: the next one, a delayed task created once the previous run finished.")
 class Schedule:
     id: strawberry.ID = strawberry_django.field(description="Unique ID of the schedule.")
     name: str = strawberry_django.field(description="Human-readable name.")
@@ -35,6 +35,10 @@ class Schedule:
     @strawberry_django.field(description="The open run: waiting for its slot, or executing. Null while the next run is being planned, or when disabled.")
     def next_run(self) -> Optional["Task"]:
         return self.tasks.filter(is_done=False).first()
+
+    @strawberry_django.field(description="When its newest run was created; null when it never ran (or its runs were since deleted by retention).")
+    def last_run_at(self) -> datetime.datetime | None:
+        return self.tasks.order_by("-created_at").values_list("created_at", flat=True).first()
 
     @strawberry_django.field(description="The most recent runs, newest first.")
     def runs(self, limit: int = 20) -> list["Task"]:

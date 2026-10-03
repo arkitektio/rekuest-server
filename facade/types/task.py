@@ -39,6 +39,7 @@ class Task:
     updated_at: datetime.datetime = strawberry_django.field(description="Last update timestamp.")
     revision: int = strawberry_django.field(description="Monotonic per-task version, bumped by every write. Pairs with the change feeds: discard a TaskChange whose revision is not greater than the one you hold.")
     finished_at: datetime.datetime | None = strawberry.field(description="Timestamp when the task was finished.")
+    schedule: Optional["Schedule"] = strawberry.field(description="The schedule this task is a run of, if any.")
     signal: Optional["Signal"] = strawberry.field(description="The signal that caused this task, if a trigger fired it.")
     trigger: Optional["Trigger"] = strawberry.field(description="The trigger that fired this task, if any.")
     not_before: datetime.datetime | None = strawberry.field(description="The task is held back until then (a delayed task); null = dispatched on creation.")

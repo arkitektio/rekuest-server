@@ -87,6 +87,12 @@ type Action {
   """Tasks created for this action."""
   tasks(filters: TaskFilter, ordering: [TaskOrder!]! = [], pagination: OffsetPaginationInput): [Task!]!
 
+  """The schedules that run this action."""
+  schedules(filters: ScheduleFilter, ordering: [ScheduleOrder!]! = [], pagination: OffsetPaginationInput): [Schedule!]!
+
+  """The triggers that run this action."""
+  triggers(filters: TriggerFilter, ordering: [TriggerOrder!]! = [], pagination: OffsetPaginationInput): [Trigger!]!
+
   """
   This action's stored vector, as `<model id>:<floats>`. Null until it has been indexed.
   """
@@ -438,6 +444,12 @@ type Agent {
 
   """Tasks executed by this agent."""
   tasks(filters: TaskFilter, ordering: [TaskOrder!]! = [], pagination: OffsetPaginationInput): [Task!]!
+
+  """The schedules whose runs are pinned to this agent."""
+  schedules(filters: ScheduleFilter, ordering: [ScheduleOrder!]! = [], pagination: OffsetPaginationInput): [Schedule!]!
+
+  """The triggers whose runs are pinned to this agent."""
+  triggers(filters: TriggerFilter, ordering: [TriggerOrder!]! = [], pagination: OffsetPaginationInput): [Trigger!]!
 
   """The app this agent belongs to."""
   app: App!
@@ -3639,15 +3651,15 @@ type Query {
   tasks(filters: TaskFilter, ordering: [TaskOrder!]! = [], pagination: OffsetPaginationInput): [Task!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """All schedules in the organization."""
-  schedules(pagination: OffsetPaginationInput): [Schedule!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+  schedules(filters: ScheduleFilter, ordering: [ScheduleOrder!]! = [], pagination: OffsetPaginationInput): [Schedule!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """All triggers in the organization."""
-  triggers(pagination: OffsetPaginationInput): [Trigger!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+  triggers(filters: TriggerFilter, ordering: [TriggerOrder!]! = [], pagination: OffsetPaginationInput): [Trigger!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """
   Signals services sent about the organization's objects, for inspection.
   """
-  signals(pagination: OffsetPaginationInput): [Signal!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+  signals(filters: SignalFilter, ordering: [SignalOrder!]! = [], pagination: OffsetPaginationInput): [Signal!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """Fetch a specific agent by ID or by app, version and device_id."""
   agent(id: ID = null, app: String = null, version: String = null, deviceId: String = null): Agent! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
@@ -3836,6 +3848,14 @@ type Query {
   The signals this hub's services declare they emit — what triggers can wait for. Hub-wide.
   """
   signalDeclarations(identifier: String = null): [SignalDeclaration!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """Fetch a signal by ID."""
+  signal(id: ID!): Signal! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """
+  A dry run for a trigger not written yet: the organization's stored signals of this kind and structure whose descriptors satisfy the conditions, newest first. Fires nothing.
+  """
+  matchingSignals(kind: SignalKind!, identifier: String!, conditions: AnyDefault = null, limit: Int! = 20): [Signal!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """Fetch a trigger by ID."""
   trigger(id: ID!): Trigger! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
@@ -4205,13 +4225,52 @@ type Schedule {
   """
   nextRun: Task
 
+  """
+  When its newest run was created; null when it never ran (or its runs were since deleted by retention).
+  """
+  lastRunAt: DateTime
+
   """The most recent runs, newest first."""
   runs(limit: Int! = 20): [Task!]!
+}
+
+"""A way to filter schedules"""
+input ScheduleFilter {
+  AND: ScheduleFilter
+  OR: ScheduleFilter
+  NOT: ScheduleFilter
+  DISTINCT: Boolean
+
+  """Filter by IDs"""
+  ids: [ID!]
+
+  """Keep schedules whose name contains this text"""
+  search: String
+
+  """Keep only enabled (true) or only disabled (false) rules"""
+  enabled: Boolean
+
+  """Filter by the action the rule runs"""
+  action: ID
+
+  """Filter by the agent the rule's runs are pinned to"""
+  agent: ID
+
+  """
+  Keep only rules whose last run or firing failed (true), or only those in good standing (false)
+  """
+  failing: Boolean
 }
 
 """Identify a schedule."""
 input ScheduleIdInput {
   id: ID!
+}
+
+input ScheduleOrder @oneOf {
+  name: Ordering
+  createdAt: Ordering
+  updatedAt: Ordering
 }
 
 type SearchAssignWidget implements AssignWidget {
@@ -4461,6 +4520,48 @@ type SignalDeclaration {
 
   """The service that emits it."""
   service: Service!
+
+  """Your organization's triggers that wait for this signal."""
+  triggers: [Trigger!]!
+}
+
+"""A way to filter signals"""
+input SignalFilter {
+  AND: SignalFilter
+  OR: SignalFilter
+  NOT: SignalFilter
+  DISTINCT: Boolean
+
+  """Filter by IDs"""
+  ids: [ID!]
+
+  """Filter by what happened to the object"""
+  kind: [SignalKind!]
+
+  """Filter by the object's structure identifier"""
+  identifier: String
+
+  """Filter by the object's id within its structure"""
+  object: String
+
+  """Filter by the service that sent the signal"""
+  service: String
+
+  """
+  Keep only signals triggers were already matched against (true), or only those still waiting (false)
+  """
+  processed: Boolean
+
+  """
+  Keep only signals that caused at least one run (true), or only those that caused none (false)
+  """
+  matched: Boolean
+
+  """Only signals received before this timestamp"""
+  receivedBefore: DateTime
+
+  """Only signals received after this timestamp"""
+  receivedAfter: DateTime
 }
 
 """What happened to the object a service signalled."""
@@ -4468,6 +4569,11 @@ enum SignalKind {
   CREATED
   UPDATED
   DELETED
+}
+
+input SignalOrder @oneOf {
+  receivedAt: Ordering
+  occurredAt: Ordering
 }
 
 type SliderAssignWidget implements AssignWidget {
@@ -5054,6 +5160,9 @@ type Task {
   """Timestamp when the task was finished."""
   finishedAt: DateTime
 
+  """The schedule this task is a run of, if any."""
+  schedule: Schedule
+
   """The signal that caused this task, if a trigger fired it."""
   signal: Signal
 
@@ -5306,6 +5415,15 @@ input TaskFilter {
 
   """Filter by the caller-supplied reference of the task"""
   reference: String
+
+  """Keep the runs of this schedule"""
+  schedule: ID
+
+  """Keep the runs this trigger fired"""
+  trigger: ID
+
+  """Keep the runs this signal caused"""
+  signal: ID
 
   """Only tasks created before this timestamp"""
   createdBefore: DateTime
@@ -5637,11 +5755,61 @@ type Trigger {
 
   """The most recent runs, newest first."""
   runs(limit: Int! = 20): [Task!]!
+
+  """
+  When its newest run was created; null when it never fired (or its runs were since deleted by retention).
+  """
+  lastRunAt: DateTime
+
+  """
+  A dry run: the stored signals this trigger would fire on as it is now, newest first. Applies its conditions and its port's requires, like a real firing; fires nothing.
+  """
+  matchingSignals(limit: Int! = 20): [Signal!]!
+}
+
+"""A way to filter triggers"""
+input TriggerFilter {
+  AND: TriggerFilter
+  OR: TriggerFilter
+  NOT: TriggerFilter
+  DISTINCT: Boolean
+
+  """Filter by IDs"""
+  ids: [ID!]
+
+  """Keep triggers whose name contains this text"""
+  search: String
+
+  """Keep only enabled (true) or only disabled (false) rules"""
+  enabled: Boolean
+
+  """Filter by the action the rule runs"""
+  action: ID
+
+  """Filter by the agent the rule's runs are pinned to"""
+  agent: ID
+
+  """
+  Keep only rules whose last run or firing failed (true), or only those in good standing (false)
+  """
+  failing: Boolean
+
+  """Filter by the signal kind the trigger reacts to"""
+  kind: SignalKind
+
+  """Filter by the structure identifier the trigger reacts to"""
+  identifier: String
 }
 
 """Identify a trigger."""
 input TriggerIdInput {
   id: ID!
+}
+
+input TriggerOrder @oneOf {
+  name: Ordering
+  createdAt: Ordering
+  updatedAt: Ordering
 }
 
 """
@@ -5781,11 +5949,15 @@ input UpdatePlacementInput {
 }
 
 """
-Change a schedule. Giving intervalSeconds clears cron and vice versa. A waiting run is re-planned; an executing one finishes first.
+Change a schedule. Giving intervalSeconds clears cron and vice versa. Give `agent: null` (with `interface: null`) to unpin it. A waiting run is re-planned; an executing one finishes first.
 """
 input UpdateScheduleInput {
   id: ID!
   name: String = null
+  action: ID = null
+  agent: ID
+  interface: String
+  ephemeralRuns: Boolean = null
   args: Args = null
   intervalSeconds: Int = null
   cron: String = null
@@ -5826,12 +5998,20 @@ input UpdateThreeDModelInput {
   dependency: AgentDependencyInput = null
 }
 
-"""Change a trigger. Omitted fields stay as they are."""
+"""
+Change a trigger. Omitted fields stay as they are; the result is checked as a whole, like a new trigger. Give `agent: null` (with `interface: null`) to unpin it.
+"""
 input UpdateTriggerInput {
   id: ID!
   name: String = null
+  kind: SignalKind = null
+  identifier: String = null
+  action: ID = null
+  port: String = null
   args: Args = null
   conditions: AnyDefault = null
+  agent: ID
+  interface: String
   enabled: Boolean = null
 }
 

@@ -44,6 +44,8 @@ class Action:
     test_cases: list["TestCase"] | None = strawberry_django.field(description="Test cases for this action.")
     organization: "Organization" = strawberry_django.field(description="The organization that owns this action.")
     tasks: list["Task"] = strawberry_django.field(description="Tasks created for this action.")
+    schedules: list["Schedule"] = strawberry_django.field(description="The schedules that run this action.")
+    triggers: list["Trigger"] = strawberry_django.field(description="The triggers that run this action.")
 
     @strawberry_django.field(description="This action's stored vector, as `<model id>:<floats>`. Null until it has been indexed.")
     def embedding(self) -> Embedding | None:

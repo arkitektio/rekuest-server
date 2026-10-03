@@ -7,13 +7,14 @@ from typing import Optional
 
 import strawberry
 import strawberry_django
+from kante.types import Info
 from rekuest_core import scalars as rscalars
 
-from facade import enums, models
+from facade import enums, filters, models
 from facade.types.base import build_prescoped_queryset
 
 
-@strawberry_django.type(models.Signal, pagination=True, description="Something a service announced: an object of a structure was created, updated or deleted.")
+@strawberry_django.type(models.Signal, filters=filters.SignalFilter, ordering=filters.SignalOrder, pagination=True, description="Something a service announced: an object of a structure was created, updated or deleted.")
 class Signal:
     id: strawberry.ID = strawberry_django.field(description="Unique ID of the signal.")
     service: str = strawberry_django.field(description="The service that sent it.")
@@ -35,7 +36,7 @@ class Signal:
         return build_prescoped_queryset(info, queryset, field="organization")
 
 
-@strawberry_django.type(models.Trigger, pagination=True, description="A rule over signals: on a signal of this kind and structure whose descriptors match, run the action with the object in `port`.")
+@strawberry_django.type(models.Trigger, filters=filters.TriggerFilter, ordering=filters.TriggerOrder, pagination=True, description="A rule over signals: on a signal of this kind and structure whose descriptors match, run the action with the object in `port`.")
 class Trigger:
     id: strawberry.ID = strawberry_django.field(description="Unique ID of the trigger.")
     name: str = strawberry_django.field(description="Human-readable name.")
@@ -58,6 +59,18 @@ class Trigger:
     def runs(self, limit: int = 20) -> list["Task"]:
         return list(self.tasks.order_by("-created_at")[: max(0, min(limit, 200))])
 
+    @strawberry_django.field(description="When its newest run was created; null when it never fired (or its runs were since deleted by retention).")
+    def last_run_at(self) -> datetime.datetime | None:
+        return self.tasks.order_by("-created_at").values_list("created_at", flat=True).first()
+
+    @strawberry_django.field(description="A dry run: the stored signals this trigger would fire on as it is now, newest first. Applies its conditions and its port's requires, like a real firing; fires nothing.")
+    def matching_signals(self, limit: int = 20) -> list["Signal"]:
+        from facade import triggers
+
+        port = models.ArgPort.objects.filter(action_id=self.action_id, parent__isnull=True, key=self.port).first()
+        paths = [self.compiled_jsonpath, port.compiled_jsonpath if port is not None else None]
+        return list(triggers.matching_signals(self.caller.organization_id, self.kind, self.identifier, paths, limit))
+
     @classmethod
     def get_queryset(cls, queryset, info, **kwargs):
         return build_prescoped_queryset(info, queryset, field="caller__organization")
@@ -72,3 +85,7 @@ class SignalDeclaration:
     description: str | None = strawberry_django.field(description="What the service says about the signal.")
 
     service: "Service" = strawberry_django.field(description="The service that emits it.")
+
+    @strawberry_django.field(description="Your organization's triggers that wait for this signal.")
+    def triggers(self, info: Info) -> list["Trigger"]:
+        return list(models.Trigger.objects.filter(kind=self.kind, identifier=self.identifier, caller__organization=info.context.request.organization).order_by("name"))

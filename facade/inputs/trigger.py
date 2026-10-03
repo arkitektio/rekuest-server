@@ -20,12 +20,18 @@ class CreateTriggerInput:
     enabled: bool = True
 
 
-@strawberry.input(description="Change a trigger. Omitted fields stay as they are.")
+@strawberry.input(description="Change a trigger. Omitted fields stay as they are; the result is checked as a whole, like a new trigger. Give `agent: null` (with `interface: null`) to unpin it.")
 class UpdateTriggerInput:
     id: strawberry.ID
     name: str | None = None
+    kind: enums.SignalKind | None = None
+    identifier: str | None = None
+    action: strawberry.ID | None = None
+    port: str | None = None
     args: scalars.Args | None = None
     conditions: rscalars.AnyDefault | None = None
+    agent: strawberry.ID | None = strawberry.UNSET
+    interface: str | None = strawberry.UNSET
     enabled: bool | None = None
 
 
