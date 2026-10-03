@@ -33,3 +33,28 @@ def check_provenance(action: models.Action, agent: models.Agent | None, interfac
         implementations = implementations.filter(agent=agent, interface=interface)
     if implementations.filter(needs_token=True).exists():
         raise ValueError(why)
+
+
+def check_policies(*, max_runs: int | None = None, debounce_seconds: int | None = None) -> None:
+    """The limits a rule may carry: a positive run limit, and a debounce window signals outlive.
+
+    Debounce looks back over stored firings, which go with their signals: a window longer than
+    signal retention could not be honoured.
+    """
+    if max_runs is not None and max_runs < 1:
+        raise ValueError("maxRuns must be at least 1")
+    if debounce_seconds is not None:
+        if debounce_seconds < 1:
+            raise ValueError("debounceSeconds must be at least 1")
+        retention = getattr(settings, "SIGNAL_RETENTION_SECONDS", 0)
+        if retention and debounce_seconds > retention:
+            raise ValueError(f"debounceSeconds cannot exceed the signal retention ({retention} s)")
+
+
+def exhausted(rule) -> bool:
+    """Whether a rule stopped by itself: its end passed, or it created its last allowed run."""
+    from django.utils import timezone
+
+    if rule.ends_at is not None and rule.ends_at <= timezone.now():
+        return True
+    return rule.max_runs is not None and rule.run_count >= rule.max_runs

@@ -139,3 +139,27 @@ class SignalFilter:
     @filter_field(description="Only signals received after this timestamp")
     def received_after(self, info: Info, queryset, value: datetime.datetime, prefix: str):
         return queryset.filter(**{f"{prefix}received_at__gt": value}), Q()
+
+
+@strawberry_django.order_type(models.Firing)
+class FiringOrder:
+    created_at: auto
+
+
+@strawberry_django.filter_type(models.Firing, description="A way to filter the firing log")
+class FiringFilter:
+    @filter_field(description="Keep the firings of this trigger")
+    def trigger(self, info: Info, queryset, value: strawberry.ID, prefix: str):
+        return queryset.filter(**{f"{prefix}trigger_id": value}), Q()
+
+    @filter_field(description="Keep the firings for this signal")
+    def signal(self, info: Info, queryset, value: strawberry.ID, prefix: str):
+        return queryset.filter(**{f"{prefix}signal_id": value}), Q()
+
+    @filter_field(description="Filter by what became of the trigger")
+    def outcome(self, info: Info, queryset, value: list[enums.FiringOutcome], prefix: str):
+        return queryset.filter(**{f"{prefix}outcome__in": [outcome.value for outcome in value]}), Q()
+
+    @filter_field(description="Keep only replays (true) or only firings caused by a signal arriving (false)")
+    def replay(self, info: Info, queryset, value: bool, prefix: str):
+        return queryset.filter(**{f"{prefix}replay": value}), Q()

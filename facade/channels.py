@@ -1,5 +1,5 @@
 from kante.channel import build_channel
-from .channel_events import StateUpdateEvent, TaskEventCreatedEvent, ImplementationEvent, AgentEvent, ProbeEventBroadcast, ChildTaskEvent, PatchEvent
+from .channel_events import StateUpdateEvent, TaskEventCreatedEvent, ImplementationEvent, AgentEvent, ProbeEventBroadcast, ChildTaskEvent, PatchEvent, RuleFeedEvent, SignalFeedEvent
 
 
 # takt publishes on these channels by name (``takt/crates/facade/src/channels.rs``): every
@@ -23,3 +23,8 @@ patch_channel = build_channel(PatchEvent, "PatchEvent")
 state_update_channel = build_channel(StateUpdateEvent, "StateUpdateEvent")
 
 probe_event_channel = build_channel(ProbeEventBroadcast, "probe_event_broadcast")
+
+# Automation. Signals are takt's rows (it publishes); rules are written by both sides.
+signal_channel = build_channel(SignalFeedEvent, "signal_feed")
+
+rule_channel = build_channel(RuleFeedEvent, "rule_feed")

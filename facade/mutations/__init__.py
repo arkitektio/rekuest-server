@@ -7,7 +7,8 @@ from .agent import ensure_agent, pin_agent, delete_agent
 from .dashboard import create_dashboard, delete_dashboard, update_dashboard
 from .shortcut import create_shortcut, delete_shortcut
 from .schedule import create_schedule, update_schedule, delete_schedule, trigger_schedule
-from .trigger import create_trigger, update_trigger, delete_trigger
+from .wiregram import delete_wiregram, export_wiregram, import_wiregram
+from .trigger import create_trigger, update_trigger, delete_trigger, fire_trigger
 from .blok import create_blok, delete_blok, update_blok
 from .catalog import register_ui_catalog
 from .materialized_blok import materialize_blok, delete_materialized_blok, update_materialized_blok
@@ -21,6 +22,10 @@ __all__ = [
     "create_trigger",
     "update_trigger",
     "delete_trigger",
+    "fire_trigger",
+    "import_wiregram",
+    "delete_wiregram",
+    "export_wiregram",
     "create_schedule",
     "update_schedule",
     "delete_schedule",

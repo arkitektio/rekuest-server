@@ -16,13 +16,17 @@ from .task import (
     TaskInstructKind,
 )
 from .log import LogLevel, LogLevelChoices
-from .signal import SignalKind, SignalKindChoices
+from .signal import FiringOutcome, FiringOutcomeChoices, ScheduleOverlap, ScheduleOverlapChoices, SignalKind, SignalKindChoices
 from .state import JSONPatchOperation
 
 __all__ = [
     # signal
     "SignalKind",
     "SignalKindChoices",
+    "FiringOutcome",
+    "FiringOutcomeChoices",
+    "ScheduleOverlap",
+    "ScheduleOverlapChoices",
     # action
     "ActionKindChoices",
     "ActionScope",

@@ -156,8 +156,22 @@ def call(op: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     if op == "schedule/validate":
         _validate_timing(payload)
         return {}
+    if op == "schedule/upcoming":
+        # takt reads the timing; here an interval is enough to stand in for it.
+        _validate_timing(payload)
+        step = timedelta(seconds=payload.get("interval_seconds") or 3600)
+        return {"slots": [(timezone.now() + step * (index + 1)).isoformat() for index in range(payload["count"])]}
     if op.startswith("schedule/"):
         return _schedule_op(op, payload)
+    if op == "trigger/fire":
+        trigger = models.Trigger.objects.get(pk=payload["trigger"])
+        signal = models.Signal.objects.get(pk=payload["signal"])
+        target = {"agent": str(trigger.agent_id), "interface": trigger.interface} if trigger.agent_id else {"action": str(trigger.action_id)}
+        args = {**(trigger.args or {}), trigger.port: {"__identifier": signal.identifier, "object": signal.object}}
+        request = {**target, "args": args, "reference": f"trigger:{trigger.pk}:{signal.pk}:replay:{len(calls)}"}
+        task = _assign({"principal": payload["principal"], "input": request, "signal": signal.pk, "trigger": trigger.pk})["task"]
+        firing = models.Firing.objects.create(signal=signal, trigger=trigger, outcome="FIRED", reason="Replayed by hand", task_id=task, replay=True)
+        return {"firing": str(firing.pk), "task": str(task)}
     if op == "agent/ensure":
         agent = _ensure(payload["principal"], payload.get("name"))
         fields = [f for f in ("description", "kind", "hook_url", "hook_url_secret") if f in payload]

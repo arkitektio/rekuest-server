@@ -29,7 +29,8 @@ from .probe import (
     ResumeProbeInputModel,
 )
 from .schedule import CreateScheduleInput, ScheduleIdInput, UpdateScheduleInput
-from .trigger import CreateTriggerInput, TriggerIdInput, UpdateTriggerInput
+from .wiregram import ExportWiregramInput, WiregramIdInput, WiregramInput, WireScheduleInput, WireTriggerInput
+from .trigger import CreateTriggerInput, TriggerIdInput, UpdateTriggerInput, FireTriggerInput
 from .task import (
     AssignInput,
     AssignInputModel,
@@ -121,6 +122,12 @@ from .toolbox import (
 __all__ = [
     "CreateTriggerInput",
     "TriggerIdInput",
+    "FireTriggerInput",
+    "WiregramInput",
+    "WireScheduleInput",
+    "WireTriggerInput",
+    "WiregramIdInput",
+    "ExportWiregramInput",
     "UpdateTriggerInput",
     "CreateScheduleInput",
     "ScheduleIdInput",

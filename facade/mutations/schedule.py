@@ -9,7 +9,7 @@ away rather than on its reaper's next tick, so ``nextRun`` is populated in the r
 import strawberry
 from kante.types import Info
 
-from facade import inputs, models, schedules, types
+from facade import inputs, models, rules, schedules, types
 from facade.backend import get_caller_for_context
 from facade.caller_context import CallerContext
 from facade.types.base import scoped_get
@@ -29,7 +29,13 @@ def create_schedule(info: Info, input: inputs.CreateScheduleInput) -> types.Sche
     args = input.args or {}
     schedules.validate(action=action, agent=agent, interface=input.interface, args=args, interval_seconds=input.interval_seconds, cron=input.cron, tz=input.timezone)
 
+    rules.check_policies(max_runs=input.max_runs)
     schedule = models.Schedule.objects.create(
+        description=input.description,
+        ends_at=input.ends_at,
+        max_runs=input.max_runs,
+        overlap=input.overlap.value,
+        catch_up=input.catch_up,
         name=input.name,
         caller=_caller(info),
         action=action,
@@ -83,6 +89,17 @@ def update_schedule(info: Info, input: inputs.UpdateScheduleInput) -> types.Sche
         change("timezone", input.timezone)
     if input.enabled is not None:
         change("enabled", input.enabled)
+    if input.description is not strawberry.UNSET:
+        change("description", input.description, replans=False)
+    # A new end or limit may end the schedule now: its waiting run goes with the old terms.
+    for policy in ("ends_at", "max_runs"):
+        if getattr(input, policy) is not strawberry.UNSET:
+            change(policy, getattr(input, policy))
+    if input.overlap is not None:
+        change("overlap", input.overlap.value, replans=False)
+    if input.catch_up is not None:
+        change("catch_up", input.catch_up, replans=False)
+    rules.check_policies(max_runs=schedule.max_runs)
     schedules.validate(
         action=schedule.action, agent=schedule.agent, interface=schedule.interface, args=schedule.args, interval_seconds=schedule.interval_seconds, cron=schedule.cron, tz=schedule.timezone
     )

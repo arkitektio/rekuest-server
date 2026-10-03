@@ -24,7 +24,7 @@ from . import (
     toolbox,
 )
 from .action import ActionFilter, ActionOrder
-from .automation import ScheduleFilter, ScheduleOrder, SignalFilter, SignalOrder, TriggerFilter, TriggerOrder
+from .automation import FiringFilter, FiringOrder, ScheduleFilter, ScheduleOrder, SignalFilter, SignalOrder, TriggerFilter, TriggerOrder
 from .agent import (
     AgentFilter,
     AgentOrder,
@@ -137,6 +137,8 @@ __all__ = [
     "TriggerOrder",
     "SignalFilter",
     "SignalOrder",
+    "FiringFilter",
+    "FiringOrder",
 ]
 
 # --- Nested-filter reference resolution -------------------------------------------

@@ -20,7 +20,8 @@ from .agent import (
     MemoryShelve,
 )
 from .schedule import Schedule
-from .signal import Signal, SignalDeclaration, Trigger
+from .signal import Firing, Signal, SignalDeclaration, Trigger
+from .wiregram import Wiregram
 from .structure import Service, StructureDeclaration
 from .task import (
     Task,
@@ -66,6 +67,8 @@ __all__ = [
     "Schedule",
     # signals
     "Signal",
+    "Firing",
+    "Wiregram",
     "SignalDeclaration",
     "Trigger",
     # structures

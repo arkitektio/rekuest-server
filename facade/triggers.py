@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from facade import models, rules
+from facade import models, rules, takt
 from facade.descriptors import compile_descriptors_to_jsonpath
 
 
@@ -92,3 +92,13 @@ def matching_signals(organization: Any, kind: str, identifier: str, paths: list[
         if path:
             signals = signals.extra(where=[_PATH_MATCHES], params=[path])
     return signals.order_by("-received_at")[: max(0, min(limit, 200))]
+
+
+def fire(trigger: models.Trigger, signal: models.Signal, principal: Any) -> models.Firing:
+    """Fire ``trigger`` on a stored ``signal`` by hand: a replay.
+
+    takt creates the run whether or not the signal satisfies the trigger and whatever its
+    policies say (that is what a replay is for), and logs it as a firing of its own.
+    """
+    answer = takt.call("trigger/fire", {"trigger": str(trigger.pk), "signal": str(signal.pk), "principal": takt._principal(principal)})
+    return models.Firing.objects.get(pk=answer["firing"])

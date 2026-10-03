@@ -71,6 +71,8 @@ class Query:
     schedules: list[types.Schedule] = field(description="All schedules in the organization.")
     triggers: list[types.Trigger] = field(description="All triggers in the organization.")
     signals: list[types.Signal] = field(description="Signals services sent about the organization's objects, for inspection.")
+    wiregrams: list[types.Wiregram] = field(description="The automation documents the organization imported.")
+    firings: list[types.Firing] = field(description="The firing log: what became of each trigger for each signal it listened for.")
     resolved_implementations = field(resolver=queries.resolved_implementations, description="Fetch resolved dependencies for a resolution.")
     dependency_tree = field(resolver=queries.dependency_tree, description="What assigning an implementation with these overwrites would bind, level by level, and what is unmet: a dry run of the assign's dependency resolution.")
 
@@ -186,6 +188,10 @@ class Query:
         _, compiled = triggers.compile_conditions(conditions or [])
         return cast(list[types.Signal], list(triggers.matching_signals(info.context.request.organization, kind.value, identifier, [compiled], limit)))
 
+    @field(description="Fetch a wiregram by ID.")
+    def wiregram(self, info: Info, id: strawberry.ID) -> types.Wiregram:
+        return cast(types.Wiregram, scoped_get(models.Wiregram, info, id))
+
     @field(description="Fetch a trigger by ID.")
     def trigger(self, info: Info, id: strawberry.ID) -> types.Trigger:
         return cast(types.Trigger, scoped_get(models.Trigger, info, id, field="caller__organization"))
@@ -217,6 +223,10 @@ class Mutation:
     create_trigger = mutation(resolver=mutations.create_trigger, description="Create a trigger: run an action when a service signals a matching object.")
     update_trigger = mutation(resolver=mutations.update_trigger, description="Change a trigger.")
     delete_trigger = mutation(resolver=mutations.delete_trigger, description="Delete a trigger; its runs are kept.")
+    fire_trigger = mutation(resolver=mutations.fire_trigger, description="Fire a trigger on a stored signal by hand (a replay). The run is created whether or not the signal satisfies the trigger, and logged as a firing of its own.")
+    import_wiregram = mutation(resolver=mutations.import_wiregram, description="Import a wiregram: one document of schedules and triggers. All or nothing; importing the same key again updates what it created and removes what it no longer lists.")
+    delete_wiregram = mutation(resolver=mutations.delete_wiregram, description="Delete a wiregram and the rules it owns.")
+    export_wiregram = mutation(resolver=mutations.export_wiregram, description="Write existing schedules and triggers down as a wiregram document, to import elsewhere. Changes nothing.")
     create_schedule = mutation(resolver=mutations.create_schedule, description="Create a recurring assignment of an action. Its next run is planned immediately.")
     update_schedule = mutation(resolver=mutations.update_schedule, description="Change a schedule; a waiting run is re-planned.")
     delete_schedule = mutation(resolver=mutations.delete_schedule, description="Delete a schedule. Its waiting run is cancelled; history is kept.")
@@ -290,6 +300,9 @@ class Subscription:
     mytasks = subscription(resolver=subscriptions.mytasks, description="Subscribe to root tasks created by this client (caller-scoped).")
     tasks = subscription(resolver=subscriptions.tasks, description="Subscribe to root task changes across the whole organization.")
     agents = subscription(resolver=subscriptions.agents, description="Subscribe to updates on agent connections and statuses.")
+    signals = subscription(resolver=subscriptions.signals, description="Subscribe to the signals services send about the organization's objects: one arrived, or triggers were matched against it.")
+    schedules = subscription(resolver=subscriptions.schedules, description="Subscribe to the organization's schedules being created, changed (by a user or by their runs) or deleted.")
+    triggers = subscription(resolver=subscriptions.triggers, description="Subscribe to the organization's triggers being created, changed (by a user or by their firings) or deleted.")
     implementation_change = subscription(resolver=subscriptions.implementation_change, description="Subscribe to changes in implementations.")
     implementations = subscription(resolver=subscriptions.implementations, description="Subscribe to creation or updates of implementations.")
     state_update_events = subscription(resolver=subscriptions.state_update_events, description="Subscribe to updates of state values and patches.")

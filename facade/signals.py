@@ -103,3 +103,30 @@ def organization_post_save(sender, instance: Organization = None, created=None, 
         from facade import hook_agents
 
         transaction.on_commit(lambda: hook_agents.provision_new_organization(instance))
+
+
+def _broadcast_rule(which: str, instance, change: str) -> None:
+    """Tell the organization's rule feed. Bookkeeping takt writes with its own SQL is published by takt."""
+    organization = models.Caller.objects.filter(pk=instance.caller_id).values_list("organization_id", flat=True).first()
+    if organization is not None:
+        _broadcast_on_commit(channels.rule_channel, channel_events.RuleFeedEvent(**{which: instance.pk, "change": change}), [f"rules_org_{organization}"])
+
+
+@receiver(post_save, sender=models.Schedule)
+def schedule_post_save(sender, instance: models.Schedule = None, created=None, **kwargs):
+    _broadcast_rule("schedule", instance, "create" if created else "update")
+
+
+@receiver(post_delete, sender=models.Schedule)
+def schedule_post_delete(sender, instance: models.Schedule = None, **kwargs):
+    _broadcast_rule("schedule", instance, "delete")
+
+
+@receiver(post_save, sender=models.Trigger)
+def trigger_post_save(sender, instance: models.Trigger = None, created=None, **kwargs):
+    _broadcast_rule("trigger", instance, "create" if created else "update")
+
+
+@receiver(post_delete, sender=models.Trigger)
+def trigger_post_delete(sender, instance: models.Trigger = None, **kwargs):
+    _broadcast_rule("trigger", instance, "delete")

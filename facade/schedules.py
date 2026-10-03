@@ -53,3 +53,13 @@ def trigger(schedule: models.Schedule) -> models.Task:
     """Run now: the waiting run is moved to now, or a one-off run is created. Refused
     (``ValueError``) while a run executes."""
     return models.Task.objects.get(pk=takt.call("schedule/trigger", _request(schedule))["task"])
+
+
+def upcoming(schedule: models.Schedule, count: int = 5) -> list[str]:
+    """The next ``count`` slots of the schedule's timing after now, as takt reads it (ISO, UTC).
+
+    What the timing says, not a promise: a disabled or ended schedule runs none of them, and with
+    ``SKIP`` overlap a slot that passes while a run is open is skipped.
+    """
+    request = {"interval_seconds": schedule.interval_seconds, "cron": schedule.cron, "timezone": schedule.timezone, "created_at": schedule.created_at.isoformat(), "count": max(1, min(count, 50))}
+    return list(takt.call("schedule/upcoming", request)["slots"])

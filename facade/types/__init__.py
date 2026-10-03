@@ -15,6 +15,7 @@ from . import (
     action,
     agent,
     schedule,
+    wiregram,
     trigger,
     task,
     auth,
@@ -36,7 +37,8 @@ from . import (
 from .action import Action, ActionStats, ActionStatsResolver
 from .agent import Agent, Lock
 from .schedule import Schedule
-from .trigger import Signal, SignalDeclaration, Trigger
+from .wiregram import Wiregram
+from .trigger import Firing, Signal, SignalDeclaration, Trigger
 from .task import (
     Task,
     TaskEvent,
@@ -111,6 +113,8 @@ __all__ = [
     "Caller",
     "Schedule",
     "Signal",
+    "Firing",
+    "Wiregram",
     "SignalDeclaration",
     "Trigger",
     "Collection",
@@ -173,6 +177,7 @@ _SUBMODULES = (
     action,
     agent,
     schedule,
+    wiregram,
     trigger,
     task,
     auth,

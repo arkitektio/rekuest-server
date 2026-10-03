@@ -179,3 +179,18 @@ class ImplementationEvent(BaseModel):
     create: int | None = Field(None, description="The template that was created.")
     update: int | None = Field(None, description="The template that was updated.")
     delete: int | None = Field(None, description="The template that was deleted.")
+
+
+class SignalFeedEvent(BaseModel):
+    """A signal arrived (``create``) or was matched against the triggers (``update``); ids only."""
+
+    create: int | None = Field(None, description="The signal that arrived.")
+    update: int | None = Field(None, description="The signal that was processed.")
+
+
+class RuleFeedEvent(BaseModel):
+    """A schedule or trigger was created, changed or deleted; ids only."""
+
+    schedule: int | None = Field(None, description="The schedule concerned.")
+    trigger: int | None = Field(None, description="The trigger concerned.")
+    change: str = Field(..., description="create, update or delete")

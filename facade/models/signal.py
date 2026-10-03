@@ -76,8 +76,20 @@ class Trigger(models.Model):
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
     consecutive_failures = models.PositiveIntegerField(default=0, help_text="Firings in a row that could not create a run", db_default=0)
     last_error = models.TextField(null=True, blank=True, help_text="Why the last firing did not create a run")
+    description = models.TextField(null=True, blank=True, help_text="What the rule is for")
+    ends_at = models.DateTimeField(null=True, blank=True, help_text="Nothing fires after this moment; null = never ends")
+    max_runs = models.PositiveIntegerField(null=True, blank=True, help_text="Nothing fires once it created this many; null = no limit")
+    run_count = models.PositiveIntegerField(default=0, help_text="Runs it created, counted by takt (retention deletes old runs, this stays)", db_default=0)
+    last_fired_at = models.DateTimeField(null=True, blank=True, help_text="When it last created a run")
+    last_error_at = models.DateTimeField(null=True, blank=True, help_text="When `last_error` was written")
+    wiregram = models.ForeignKey("Wiregram", on_delete=models.CASCADE, null=True, blank=True, related_name="triggers", help_text="The wiregram that owns this rule, if it was imported with one")
+    wire_key = models.CharField(max_length=200, null=True, blank=True, help_text="What the wiregram's document calls this rule")
+    debounce_seconds = models.PositiveIntegerField(null=True, blank=True, help_text="Fire at most once per object within this many seconds (the first signal fires, later ones are rejected); null = every signal")
 
     class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["wiregram", "wire_key"], condition=models.Q(wiregram__isnull=False), name="trigger_unique_wire_key"),
+        ]
         indexes = [
             models.Index(fields=["kind", "identifier"], condition=models.Q(enabled=True), name="trigger_enabled_match_idx"),
             models.Index(fields=["caller", "-created_at"], name="trigger_caller_created_idx"),
@@ -85,6 +97,36 @@ class Trigger(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} (on {self.kind} {self.identifier})"
+
+
+class Firing(models.Model):
+    """What became of one trigger for one signal: the firing log.
+
+    takt writes one row for every enabled trigger that listens for a signal's kind and structure
+    in its organization, whether it ran or not, so a signal that caused nothing can be told from
+    one nobody listened for (that one has no firings at all), and a rule that never fires says why.
+    A row lives as long as its signal (signal retention removes both).
+    """
+
+    signal = models.ForeignKey(Signal, on_delete=models.CASCADE, related_name="firings", help_text="The signal")
+    trigger = models.ForeignKey(Trigger, on_delete=models.CASCADE, related_name="firings", help_text="The trigger that was tried on it")
+    outcome = models.CharField(max_length=20, choices=enums.FiringOutcomeChoices.choices, help_text="FIRED: a run was created. REJECTED: the trigger did not apply. FAILED: creating the run failed.")
+    reason = models.TextField(null=True, blank=True, help_text="Why it was rejected or failed; for a replay, that it was one")
+    task = models.ForeignKey("Task", on_delete=models.SET_NULL, null=True, blank=True, related_name="firings", help_text="The run it created, while that run exists")
+    replay = models.BooleanField(default=False, db_default=False, help_text="Fired by hand on a stored signal, not by the signal arriving")
+    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
+
+    class Meta:
+        constraints = [
+            # Once per trigger × signal, like the run's reference; a replay is a firing of its own.
+            models.UniqueConstraint(fields=["signal", "trigger"], condition=models.Q(replay=False), name="firing_unique_per_signal_trigger"),
+        ]
+        indexes = [
+            models.Index(fields=["trigger", "-created_at"], name="firing_trigger_created_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.outcome}: trigger {self.trigger_id} on signal {self.signal_id}"
 
 
 class SignalDeclaration(models.Model):

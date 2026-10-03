@@ -227,3 +227,103 @@ class TestRepointing:
 
         mismatched = await schema.execute(UPDATE_SCHEDULE, variable_values={"input": {"id": schedule["id"], "action": str(first.action_id)}}, context_value=context)
         assert mismatched.errors is not None and "no implementation" in str(mismatched.errors[0])
+
+
+class TestPoliciesAndTheFiringLog:
+    async def test_policies_are_checked_and_lifted(self, authenticated_context, settings):
+        context, _ = await _contexts()
+        await _declared("policy-service", "CREATED")
+        impl = await sync_to_async(_target)("policy-trig", context.request.organization)
+        settings.SIGNAL_RETENTION_SECONDS = 3600
+
+        async def create(**fields):
+            values = {"name": "t", "kind": "CREATED", "identifier": IDENTIFIER, "action": str(impl.action_id), "port": "image", "args": {"size": 64}, **fields}
+            return await schema.execute("mutation($input: CreateTriggerInput!) { createTrigger(input: $input) { id debounceSeconds maxRuns exhausted } }", variable_values={"input": values}, context_value=context)
+
+        too_long = await create(debounceSeconds=7200)
+        assert too_long.errors is not None and "signal retention" in str(too_long.errors[0])
+        assert (await create(maxRuns=0)).errors is not None
+
+        created = await create(debounceSeconds=60, maxRuns=1, description="one thumbnail per burst")
+        assert created.errors is None, created.errors
+        trigger = created.data["createTrigger"]
+        assert (trigger["debounceSeconds"], trigger["maxRuns"], trigger["exhausted"]) == (60, 1, False)
+
+        # takt counted its one allowed run: it is exhausted, until the limit is lifted.
+        await models.Trigger.objects.filter(pk=trigger["id"]).aupdate(run_count=1)
+        query = "query($id: ID!) { trigger(id: $id) { exhausted runCount } }"
+        assert (await _run(query, context, id=trigger["id"]))["trigger"] == {"exhausted": True, "runCount": 1}
+        lifted = await _run("mutation($input: UpdateTriggerInput!) { updateTrigger(input: $input) { exhausted maxRuns debounceSeconds } }", context, input={"id": trigger["id"], "maxRuns": None})
+        assert lifted["updateTrigger"] == {"exhausted": False, "maxRuns": None, "debounceSeconds": 60}
+
+    async def test_a_schedule_carries_its_policies_and_says_what_comes_next(self, authenticated_context):
+        context, _ = await _contexts()
+        impl = await _schedulable("policy-sched", context)
+        created = await _run(
+            "mutation($input: CreateScheduleInput!) { createSchedule(input: $input) { id overlap catchUp endsAt exhausted upcoming(count: 3) } }",
+            context,
+            input={"name": "hourly", "action": str(impl.action_id), "intervalSeconds": 3600, "overlap": "ALLOW", "catchUp": True, "endsAt": "2099-01-01T00:00:00+00:00"},
+        )
+        schedule = created["createSchedule"]
+        assert (schedule["overlap"], schedule["catchUp"], schedule["exhausted"]) == ("ALLOW", True, False)
+        assert len(schedule["upcoming"]) == 3 and schedule["upcoming"] == sorted(schedule["upcoming"])
+
+        ended = await _run("mutation($input: UpdateScheduleInput!) { updateSchedule(input: $input) { exhausted overlap } }", context, input={"id": schedule["id"], "endsAt": "2000-01-01T00:00:00+00:00", "overlap": "SKIP"})
+        assert ended["updateSchedule"] == {"exhausted": True, "overlap": "SKIP"}
+
+    async def test_the_firing_log_is_read_and_a_trigger_is_replayed(self, authenticated_context):
+        context, other = await _contexts()
+        await _declared("firing-service", "CREATED")
+        organization = context.request.organization
+        impl = await sync_to_async(_target)("firing-trig", organization)
+        trigger = await _trigger(context, impl, agent=str(impl.agent_id), interface=impl.interface)
+        silent, loud = await _signal(organization, "one", 1), await _signal(organization, "three", 3)
+        # What takt would have logged for the first signal.
+        await models.Firing.objects.acreate(signal=silent, trigger_id=trigger, outcome="REJECTED", reason="the port's requires not met")
+
+        log = "query($filters: FiringFilter) { firings(filters: $filters) { outcome reason replay signal { object } trigger { id } task { id } } }"
+        assert (await _run(log, context, filters={"outcome": ["REJECTED"]}))["firings"] == [
+            {"outcome": "REJECTED", "reason": "the port's requires not met", "replay": False, "signal": {"object": "one"}, "trigger": {"id": trigger}, "task": None}
+        ]
+        assert (await _run(log, other))["firings"] == []  # another tenant sees none of it
+
+        fire = "mutation($input: FireTriggerInput!) { fireTrigger(input: $input) { outcome replay task { id trigger { id } signal { id } } } }"
+        replayed = (await _run(fire, context, input={"trigger": trigger, "signal": str(loud.pk)}))["fireTrigger"]
+        assert (replayed["outcome"], replayed["replay"]) == ("FIRED", True)
+        assert replayed["task"]["trigger"] == {"id": trigger} and replayed["task"]["signal"] == {"id": str(loud.pk)}
+        foreign = await schema.execute(fire, variable_values={"input": {"trigger": trigger, "signal": str(loud.pk)}}, context_value=other)
+        assert foreign.errors is not None
+
+        seen = await _run("query($id: ID!) { signal(id: $id) { firings { outcome } } trigger(id: \"%s\") { firings { outcome } } }" % trigger, context, id=str(silent.pk))
+        assert seen["signal"]["firings"] == [{"outcome": "REJECTED"}]
+        assert [f["outcome"] for f in seen["trigger"]["firings"]] == ["FIRED", "REJECTED"]  # newest first
+
+
+class TestRuleFeed:
+    async def test_a_users_change_to_a_rule_is_published_to_its_organization(self, authenticated_context):
+        """What the ``schedules`` / ``triggers`` subscriptions listen to, read off the channel layer itself."""
+        from channels.layers import get_channel_layer
+
+        context, other = await _contexts()
+        layer = get_channel_layer()
+        mine, theirs = await layer.new_channel(), await layer.new_channel()
+        await layer.group_add(f"rules_org_{context.request.organization.pk}", mine)
+        await layer.group_add(f"rules_org_{other.request.organization.pk}", theirs)
+
+        impl = await _schedulable("feed-sched", context)
+        schedule = (await _run(CREATE_SCHEDULE, context, input={"name": "hourly", "action": str(impl.action_id), "intervalSeconds": 3600}))["createSchedule"]["id"]
+        await _run("mutation($input: ScheduleIdInput!) { deleteSchedule(input: $input) }", context, input={"id": schedule})
+
+        async def received() -> list[tuple]:
+            import asyncio
+
+            seen = []
+            while True:
+                try:
+                    message = (await asyncio.wait_for(layer.receive(mine), timeout=0.5))["message"]
+                except asyncio.TimeoutError:
+                    return seen
+                seen.append((message["schedule"], message["trigger"], message["change"]))
+
+        assert await received() == [(int(schedule), None, "create"), (int(schedule), None, "delete")]
+        assert layer.channels.get(theirs) is None or layer.channels[theirs].empty()  # nothing for the other organization

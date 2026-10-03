@@ -54,7 +54,9 @@ SERVICES = [entry.model_dump() for entry in conf.rekuest.services]
 HOOK_AGENTS = [entry.model_dump() for entry in conf.rekuest.hook_agents]
 
 # Every deadline, sweep interval, retention horizon and the trigger loop guard are takt's: it
-# reads them from the same ``rekuest`` configuration block.
+# reads them from the same ``rekuest`` configuration block. This one is read here too, only to
+# refuse a trigger whose debounce window would outlive the signals it looks back over.
+SIGNAL_RETENTION_SECONDS = conf.rekuest.signal_retention
 
 # Probes are takt's (redis-held, expiring on their own); this server reads them and reports
 # the per-caller in-flight cap in ``probeStats``.
