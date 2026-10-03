@@ -49,6 +49,7 @@ def create_schedule(info: Info, input: inputs.CreateScheduleInput) -> types.Sche
         enabled=input.enabled,
     )
     schedules.plan(schedule)
+    schedule.refresh_from_db()  # takt counted the run it planned
     return schedule
 
 
@@ -100,9 +101,13 @@ def update_schedule(info: Info, input: inputs.UpdateScheduleInput) -> types.Sche
     if input.catch_up is not None:
         change("catch_up", input.catch_up, replans=False)
     rules.check_policies(max_runs=schedule.max_runs)
-    schedules.validate(
-        action=schedule.action, agent=schedule.agent, interface=schedule.interface, args=schedule.args, interval_seconds=schedule.interval_seconds, cron=schedule.cron, tz=schedule.timezone
-    )
+    # What it runs and when is checked only when that changed, and then as a whole. A schedule
+    # that broke since it was written (its implementation re-registered away) can still be
+    # renamed, limited or switched off.
+    if set(changed) & {"action", "agent", "interface", "args", "interval_seconds", "cron", "timezone"}:
+        schedules.validate(
+            action=schedule.action, agent=schedule.agent, interface=schedule.interface, args=schedule.args, interval_seconds=schedule.interval_seconds, cron=schedule.cron, tz=schedule.timezone
+        )
 
     # Only what changed: the run bookkeeping on the row (backoff, failures) is takt's.
     schedule.save(update_fields=[*changed, "updated_at"])

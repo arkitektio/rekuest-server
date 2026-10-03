@@ -1267,6 +1267,17 @@ async fn a_schedule_stops_at_its_run_limit_and_at_its_end() {
         "ended, not failing"
     );
 
+    // A run that was only planned and then replaced (the schedule was retimed, retargeted or
+    // re-imported) does not use the limit up: it still gets its one run.
+    let (edited, _) = schedule(&ctx, 60, true).await;
+    set(&ctx, "facade_schedule", edited, "max_runs = 1").await;
+    assert!(schedules::refill_one(&ctx, edited).await.unwrap());
+    let planned = the_open_run(&ctx, edited).await;
+    assert!(schedules::plan(&ctx, edited, true, None).await.unwrap());
+    let replanned = the_open_run(&ctx, edited).await;
+    assert_ne!(replanned.id, planned.id);
+    assert_eq!(counted(&ctx, "facade_schedule", edited).await.0, 1);
+
     // An end before the next slot: nothing is planned for after it.
     let (ending, _) = schedule(&ctx, 3600, true).await;
     set(

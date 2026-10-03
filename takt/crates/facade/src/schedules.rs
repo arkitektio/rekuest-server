@@ -398,6 +398,14 @@ pub async fn cancel_waiting_run(
     .await?;
     if let Some(run) = waiting {
         backend::request_control(ctx, &run.to_string(), Control::Cancel, caller).await?;
+        // It was counted when it was planned, and it never ran: a schedule that is retimed or
+        // retargeted must not use up its `max_runs` on runs that were only ever planned.
+        sqlx::query(
+            "UPDATE facade_schedule SET run_count = GREATEST(run_count - 1, 0) WHERE id = $1",
+        )
+        .bind(schedule)
+        .execute(&ctx.db)
+        .await?;
     }
     Ok(())
 }

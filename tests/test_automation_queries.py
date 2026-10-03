@@ -229,6 +229,51 @@ class TestRepointing:
         assert mismatched.errors is not None and "no implementation" in str(mismatched.errors[0])
 
 
+class TestBrokenRules:
+    """A rule that broke since it was written can still be renamed and switched off."""
+
+    async def test_a_trigger_whose_signal_is_no_longer_declared(self, authenticated_context):
+        context, _ = await _contexts()
+        await _declared("gone-service", "CREATED")
+        impl = await sync_to_async(_target)("gone-trig", context.request.organization)
+        trigger = await _trigger(context, impl)
+        await models.SignalDeclaration.objects.all().adelete()
+        update = "mutation($input: UpdateTriggerInput!) { updateTrigger(input: $input) { name enabled maxRuns } }"
+
+        switched = await _run(update, context, input={"id": trigger, "enabled": False, "name": "retired", "maxRuns": 5})
+        assert switched["updateTrigger"] == {"name": "retired", "enabled": False, "maxRuns": 5}
+        # What it listens for is still checked as soon as that is what changes.
+        retargeted = await schema.execute(update, variable_values={"input": {"id": trigger, "args": {"size": 32}}}, context_value=context)
+        assert retargeted.errors is not None and "No service declares" in str(retargeted.errors[0])
+
+    async def test_a_schedule_whose_implementation_is_gone(self, authenticated_context):
+        context, _ = await _contexts()
+        impl = await _schedulable("gone-sched", context)
+        schedule = (await _run(CREATE_SCHEDULE, context, input={"name": "hourly", "action": str(impl.action_id), "intervalSeconds": 3600, "agent": str(impl.agent_id), "interface": impl.interface}))[
+            "createSchedule"
+        ]["id"]
+        await models.Implementation.objects.filter(pk=impl.pk).adelete()
+        update = "mutation($input: UpdateScheduleInput!) { updateSchedule(input: $input) { name enabled } }"
+
+        switched = await _run(update, context, input={"id": schedule, "enabled": False, "name": "retired"})
+        assert switched["updateSchedule"] == {"name": "retired", "enabled": False}
+        retimed = await schema.execute(update, variable_values={"input": {"id": schedule, "intervalSeconds": 60}}, context_value=context)
+        assert retimed.errors is not None and "no implementation" in str(retimed.errors[0])
+
+    async def test_an_edit_does_not_use_up_a_schedules_run_limit(self, authenticated_context):
+        context, _ = await _contexts()
+        impl = await _schedulable("limit-sched", context)
+        created = (await _run("mutation($input: CreateScheduleInput!) { createSchedule(input: $input) { id runCount exhausted nextRun { id } } }", context, input={"name": "once", "action": str(impl.action_id), "intervalSeconds": 3600, "maxRuns": 1}))[
+            "createSchedule"
+        ]
+        # Its one allowed run is planned and waiting: not over yet.
+        assert (created["runCount"], created["exhausted"]) == (1, False) and created["nextRun"] is not None
+
+        retimed = (await _run("mutation($input: UpdateScheduleInput!) { updateSchedule(input: $input) { runCount exhausted nextRun { id } } }", context, input={"id": created["id"], "intervalSeconds": 60}))["updateSchedule"]
+        assert retimed["runCount"] == 1 and retimed["exhausted"] is False
+        assert retimed["nextRun"] is not None and retimed["nextRun"]["id"] != created["nextRun"]["id"]
+
+
 class TestPoliciesAndTheFiringLog:
     async def test_policies_are_checked_and_lifted(self, authenticated_context, settings):
         context, _ = await _contexts()

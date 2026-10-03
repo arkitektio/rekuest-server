@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from authentikate.models import Client, Organization, User
 
 from django.db import IntegrityError, transaction
+from django.db.models import F
 from django.utils import timezone
 
 from facade import enums, models
@@ -120,12 +121,18 @@ def _plan(schedule: models.Schedule) -> bool:
     """One waiting run a minute from now, as takt's refill would leave it."""
     if not schedule.enabled or _waiting_run(schedule) is not None:
         return False
+    schedule.refresh_from_db()
+    if (schedule.ends_at is not None and schedule.ends_at <= timezone.now()) or (schedule.max_runs is not None and schedule.run_count >= schedule.max_runs):
+        return False  # it has ended: nothing more is planned
     caller = schedule.caller
     target = {"agent": str(schedule.agent_id), "interface": schedule.interface} if schedule.agent_id else {"action": str(schedule.action_id)}
     slot = timezone.now() + timedelta(minutes=1)
     request = {**target, "args": schedule.args or {}, "reference": f"schedule:{schedule.pk}:{slot.isoformat()}", "not_before": slot}
     principal = {"user": caller.user_id, "client": caller.client_id, "organization": caller.organization_id, "roles": []}
-    return bool(_assign({"principal": principal, "input": request, "schedule": schedule.pk})["created"])
+    created = bool(_assign({"principal": principal, "input": request, "schedule": schedule.pk})["created"])
+    if created:  # counted when planned, as takt does
+        models.Schedule.objects.filter(pk=schedule.pk).update(run_count=F("run_count") + 1)
+    return created
 
 
 def _schedule_op(op: str, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -141,6 +148,8 @@ def _schedule_op(op: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     if op == "schedule/cancel-waiting" or payload.get("replan"):
         if waiting is not None:
             _cancel({"task": waiting.pk})
+            if waiting.dispatch_attempts == 0:  # only ever planned: it was not a run
+                models.Schedule.objects.filter(pk=schedule.pk, run_count__gt=0).update(run_count=F("run_count") - 1)
     if op == "schedule/plan":
         return {"planned": _plan(schedule)}
     return {}

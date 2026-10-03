@@ -42,9 +42,10 @@ class Schedule:
     wiregram: Optional["Wiregram"] = strawberry_django.field(description="The wiregram that owns this schedule, if it was imported with one.")
     wire_key: str | None = strawberry_django.field(description="What the wiregram's document calls this schedule.")
 
-    @strawberry_django.field(description="Whether it stopped by itself: its end passed, or it created its last allowed run.")
+    @strawberry_django.field(description="Whether it stopped by itself: its end passed, or its last allowed run is over.")
     def exhausted(self) -> bool:
-        return rules.exhausted(self)
+        # A run is counted when it is planned: the last allowed one may still be waiting or running.
+        return rules.exhausted(self) and not self.tasks.filter(is_done=False).exists()
 
     @strawberry_django.field(description="The next run: the one waiting for its slot, else the newest one still executing. Null while the next run is being planned, or when disabled or ended.")
     def next_run(self) -> Optional["Task"]:

@@ -75,21 +75,24 @@ def update_trigger(info: Info, input: inputs.UpdateTriggerInput) -> types.Trigge
             change(policy, getattr(input, policy))
     rules.check_policies(max_runs=trigger.max_runs, debounce_seconds=trigger.debounce_seconds)
 
-    # The trigger as it would be, checked as a whole: a new action with the old port, or new
-    # conditions against a new kind, are judged together.
-    conditions, compiled = triggers.validate(
-        action=trigger.action,
-        agent=trigger.agent,
-        interface=trigger.interface,
-        kind=trigger.kind,
-        identifier=trigger.identifier,
-        port=trigger.port,
-        args=trigger.args,
-        conditions=input.conditions if input.conditions is not None else trigger.conditions,
-    )
-    if (conditions, compiled) != (trigger.conditions, trigger.compiled_jsonpath):
-        trigger.conditions, trigger.compiled_jsonpath = conditions, compiled
-        changed += ["conditions", "compiled_jsonpath"]
+    # What it runs and what it listens for is checked only when that changed, and then as a
+    # whole (a new action with the old port, new conditions against a new kind). A trigger that
+    # broke since it was written — its action re-registered, its signal no longer declared —
+    # can still be renamed, limited or switched off.
+    if input.conditions is not None or set(changed) & {"kind", "identifier", "action", "agent", "interface", "port", "args"}:
+        conditions, compiled = triggers.validate(
+            action=trigger.action,
+            agent=trigger.agent,
+            interface=trigger.interface,
+            kind=trigger.kind,
+            identifier=trigger.identifier,
+            port=trigger.port,
+            args=trigger.args,
+            conditions=input.conditions if input.conditions is not None else trigger.conditions,
+        )
+        if (conditions, compiled) != (trigger.conditions, trigger.compiled_jsonpath):
+            trigger.conditions, trigger.compiled_jsonpath = conditions, compiled
+            changed += ["conditions", "compiled_jsonpath"]
 
     # Only what changed: the firing bookkeeping on the row (failures, last error) is takt's.
     trigger.save(update_fields=[*changed, "updated_at"])

@@ -4411,7 +4411,7 @@ type Schedule {
   wireKey: String
 
   """
-  Whether it stopped by itself: its end passed, or it created its last allowed run.
+  Whether it stopped by itself: its end passed, or its last allowed run is over.
   """
   exhausted: Boolean!
 
