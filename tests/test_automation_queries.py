@@ -372,3 +372,75 @@ class TestRuleFeed:
 
         assert await received() == [(int(schedule), None, "create"), (int(schedule), None, "delete")]
         assert layer.channels.get(theirs) is None or layer.channels[theirs].empty()  # nothing for the other organization
+
+
+class TestSearchAndLookups:
+    async def test_rules_are_searched_by_what_they_run_and_where_they_came_from(self, authenticated_context):
+        context, _ = await _contexts()
+        await _declared("search-service", "CREATED")
+        impl = await sync_to_async(_target)("search-trig", context.request.organization)
+        await models.Agent.objects.filter(pk=impl.agent_id).aupdate(name="thumbnailer")
+        await models.Action.objects.filter(pk=impl.action_id).aupdate(name="Make Thumbnail")
+        plain = await _trigger(context, impl, name="plain", description="keeps previews fresh")
+        pinned = await _trigger(context, impl, name="pinned", agent=str(impl.agent_id), interface=impl.interface)
+        query = "query($filters: TriggerFilter) { triggers(filters: $filters, ordering: [{name: ASC}]) { id } }"
+
+        async def found(text):
+            return [row["id"] for row in (await _run(query, context, filters={"search": text}))["triggers"]]
+
+        assert await found("PREVIEWS") == [plain]  # its description
+        assert await found("thumbnailer") == [pinned]  # the agent it is pinned to
+        assert await found("make thumb") == [pinned, plain]  # the action both run
+        assert await found("arraydataset") == [pinned, plain]  # the structure they listen for
+        assert await found("nothing like this") == []
+
+        scheduled = await _schedulable("search-sched", context)
+        await models.Action.objects.filter(pk=scheduled.action_id).aupdate(name="Sweep Mailboxes")
+        schedule = (await _run(CREATE_SCHEDULE, context, input={"name": "nightly", "action": str(scheduled.action_id), "cron": "0 2 * * *"}))["createSchedule"]["id"]
+        schedules = "query($filters: ScheduleFilter) { schedules(filters: $filters) { id } }"
+        for text in ("mailboxes", "0 2 *", "night"):
+            assert [row["id"] for row in (await _run(schedules, context, filters={"search": text}))["schedules"]] == [schedule], text
+
+    async def test_signals_are_searched_by_text_and_name_their_service(self, authenticated_context):
+        context, other = await _contexts()
+        organization = context.request.organization
+        catalogued = await models.Service.objects.acreate(name="mikro", description="Microscopy data")
+        dataset = await _signal(organization, "dataset-77", 3)
+        stranger = await models.Signal.objects.acreate(service="retired", signal_id="x", kind="CREATED", identifier="@old/thing", object="1", organization=organization, descriptors={"@old/colour": "magenta"})
+        # Another tenant's signal about an object of the same id.
+        await models.Signal.objects.acreate(service="mikro", signal_id="theirs", kind="CREATED", identifier=IDENTIFIER, object="dataset-77", organization=other.request.organization, descriptors={CHANNELS: 3})
+        query = "query($filters: SignalFilter) { signals(filters: $filters) { id serviceName service { id name description } } }"
+
+        async def found(text):
+            return [row["id"] for row in (await _run(query, context, filters={"search": text}))["signals"]]
+
+        assert await found("dataset-77") == [str(dataset.pk)]  # the object's id
+        assert await found("ARRAYDATASET") == [str(dataset.pk)]  # the structure
+        assert await found("magenta") == [str(stranger.pk)]  # a descriptor's value
+        assert await found("n_channels") == [str(dataset.pk)]  # a descriptor's key
+        assert await found("retired") == [str(stranger.pk)]  # the sender
+
+        rows = {row["id"]: row for row in (await _run(query, context))["signals"]}
+        assert rows[str(dataset.pk)]["service"] == {"id": str(catalogued.pk), "name": "mikro", "description": "Microscopy data"}
+        # A sender the hub no longer catalogues is still named.
+        assert (rows[str(stranger.pk)]["serviceName"], rows[str(stranger.pk)]["service"]) == ("retired", None)
+
+    async def test_a_service_and_a_firing_are_fetched_by_id(self, authenticated_context):
+        context, other = await _contexts()
+        await _declared("lookup-service", "CREATED")
+        service = await models.Service.objects.aget(name="lookup-service")
+        organization = context.request.organization
+        impl = await sync_to_async(_target)("lookup-trig", organization)
+        trigger = await _trigger(context, impl)
+        signal = await _signal(organization, "one", 1)
+        firing = await models.Firing.objects.acreate(signal=signal, trigger_id=trigger, outcome="REJECTED", reason="too few channels")
+
+        found = await _run("query($id: ID!) { service(id: $id) { name signals { kind } } }", context, id=str(service.pk))
+        assert found["service"] == {"name": "lookup-service", "signals": [{"kind": "CREATED"}]}
+        # A service is the hub's: every organization reads it.
+        assert (await _run("query($id: ID!) { service(id: $id) { name } }", other, id=str(service.pk)))["service"] == {"name": "lookup-service"}
+
+        query = "query($id: ID!) { firing(id: $id) { outcome reason trigger { id } signal { object } } }"
+        assert (await _run(query, context, id=str(firing.pk)))["firing"] == {"outcome": "REJECTED", "reason": "too few channels", "trigger": {"id": trigger}, "signal": {"object": "one"}}
+        foreign = await schema.execute(query, variable_values={"id": str(firing.pk)}, context_value=other)
+        assert foreign.errors is not None  # another tenant's firing reads as missing

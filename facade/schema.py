@@ -187,6 +187,15 @@ class Query:
             declarations = declarations.filter(identifier=identifier)
         return cast(list[types.SignalDeclaration], list(declarations))
 
+    # Not a method called `service`: federation's own `_service` field lives under that Python name.
+    @field(name="service", description="Fetch a service of this hub by ID. Hub-wide.")
+    def hub_service(self, info: Info, id: strawberry.ID) -> types.Service:
+        return cast(types.Service, models.Service.objects.get(pk=id))
+
+    @field(description="Fetch a firing by ID.")
+    def firing(self, info: Info, id: strawberry.ID) -> types.Firing:
+        return cast(types.Firing, scoped_get(models.Firing, info, id, field="signal__organization"))
+
     @field(description="Fetch a signal by ID.")
     def signal(self, info: Info, id: strawberry.ID) -> types.Signal:
         return cast(types.Signal, scoped_get(models.Signal, info, id, field="organization"))

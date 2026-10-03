@@ -17,7 +17,12 @@ from facade.types.base import build_prescoped_queryset
 @strawberry_django.type(models.Signal, filters=filters.SignalFilter, ordering=filters.SignalOrder, pagination=True, description="Something a service announced: an object of a structure was created, updated or deleted.")
 class Signal:
     id: strawberry.ID = strawberry_django.field(description="Unique ID of the signal.")
-    service: str = strawberry_django.field(description="The service that sent it.")
+    service_name: str = strawberry_django.field(field_name="service", description="The name of the service that sent it.")
+
+    @strawberry_django.field(description="The service that sent it, as the hub catalogues it; null when it is no longer catalogued.")
+    def service(self) -> Optional["Service"]:
+        return models.Service.objects.filter(name=self.service).first()
+
     kind: enums.SignalKind = strawberry_django.field(description="What happened to the object.")
     identifier: str = strawberry_django.field(description="The object's structure identifier, e.g. @mikro/arraydataset.")
     object: str = strawberry_django.field(description="The object's id within its structure.")

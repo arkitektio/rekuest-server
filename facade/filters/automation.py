@@ -10,12 +10,22 @@ import datetime
 
 import strawberry
 import strawberry_django
-from django.db.models import Q
+from django.db.models import Q, TextField
+from django.db.models.functions import Cast
 from strawberry import auto
 from strawberry.types import Info
 from strawberry_django.fields.filter_order import filter_field
 
 from facade import enums, models
+
+
+def _rule_search(prefix: str, text: str, *own: str) -> Q:
+    """A rule mentions ``text``: itself, what it runs, or where it came from."""
+    fields = ("name", "description", "interface", "action__name", "action__description", "agent__name", "wiregram__name", "wiregram__key", *own)
+    found = Q()
+    for field in fields:
+        found |= Q(**{f"{prefix}{field}__icontains": text})
+    return found
 
 
 @strawberry_django.order_type(models.Schedule)
@@ -31,9 +41,9 @@ class ScheduleFilter:
     def ids(self, info: Info, queryset, value: list[strawberry.ID], prefix: str):
         return queryset.filter(**{f"{prefix}id__in": value}), Q()
 
-    @filter_field(description="Keep schedules whose name contains this text")
+    @filter_field(description="Keep schedules that mention this text: in their name or description, in the action or agent they run, its interface, their cron line, or the wiregram they came from")
     def search(self, info: Info, queryset, value: str, prefix: str):
-        return queryset.filter(**{f"{prefix}name__icontains": value}), Q()
+        return queryset, _rule_search(prefix, value, "cron")
 
     @filter_field(description="Keep only enabled (true) or only disabled (false) rules")
     def enabled(self, info: Info, queryset, value: bool, prefix: str):
@@ -66,9 +76,9 @@ class TriggerFilter:
     def ids(self, info: Info, queryset, value: list[strawberry.ID], prefix: str):
         return queryset.filter(**{f"{prefix}id__in": value}), Q()
 
-    @filter_field(description="Keep triggers whose name contains this text")
+    @filter_field(description="Keep triggers that mention this text: in their name or description, in the action or agent they run, its interface, the structure they listen for, its port, or the wiregram they came from")
     def search(self, info: Info, queryset, value: str, prefix: str):
-        return queryset.filter(**{f"{prefix}name__icontains": value}), Q()
+        return queryset, _rule_search(prefix, value, "identifier", "port")
 
     @filter_field(description="Keep only enabled (true) or only disabled (false) rules")
     def enabled(self, info: Info, queryset, value: bool, prefix: str):
@@ -111,6 +121,11 @@ class SignalFilter:
     @filter_field(description="Filter by what happened to the object")
     def kind(self, info: Info, queryset, value: list[enums.SignalKind], prefix: str):
         return queryset.filter(**{f"{prefix}kind__in": [kind.value for kind in value]}), Q()
+
+    @filter_field(description="Keep signals that mention this text: in the structure identifier, the object's id, the sending service, or anywhere in the descriptors (keys and values)")
+    def search(self, info: Info, queryset, value: str, prefix: str):
+        queryset = queryset.alias(_descriptor_text=Cast(f"{prefix}descriptors", TextField()))
+        return queryset, Q(**{f"{prefix}identifier__icontains": value}) | Q(**{f"{prefix}object__icontains": value}) | Q(**{f"{prefix}service__icontains": value}) | Q(_descriptor_text__icontains=value)
 
     @filter_field(description="Filter by the object's structure identifier")
     def identifier(self, info: Info, queryset, value: str, prefix: str):
