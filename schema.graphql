@@ -2385,6 +2385,78 @@ enum HookKind {
 }
 
 """
+A structure a service of this hub hosts, as that service declares it: a row, with its descriptors. Hub-wide. (`Structure` is the wider notion: it also covers identifiers only action ports reference.)
+"""
+type HostedStructure {
+  """Unique ID of the hosted structure."""
+  id: ID!
+
+  """The full identifier, e.g. '@mikro/arraydataset'."""
+  identifier: String!
+
+  """What the hosting service calls one such object."""
+  label: String
+
+  """What the hosting service says about the structure."""
+  description: String
+
+  """The service that hosts it."""
+  service: Service!
+
+  """The descriptors of its objects."""
+  descriptors(filters: StructureDescriptorFilter, ordering: [StructureDescriptorOrder!]! = [], pagination: OffsetPaginationInput): [StructureDescriptor!]!
+
+  """The local key (the part after '/')."""
+  key: String!
+
+  """The package it belongs to."""
+  package: StructurePackage!
+
+  """
+  The same structure with what your organization's action ports say about it (usages).
+  """
+  structure: Structure!
+
+  """The signals services declare they emit about it."""
+  signals: [SignalDeclaration!]!
+}
+
+"""A way to filter hosted structures"""
+input HostedStructureFilter {
+  AND: HostedStructureFilter
+  OR: HostedStructureFilter
+  NOT: HostedStructureFilter
+  DISTINCT: Boolean
+
+  """Filter by IDs"""
+  ids: [ID!]
+
+  """
+  Keep structures whose identifier, label or description contains this text
+  """
+  search: String
+
+  """Keep the structures of this package, e.g. 'mikro'"""
+  package: String
+
+  """Keep the structures this service hosts, by its name"""
+  service: String
+
+  """Keep the structures whose objects carry this descriptor key"""
+  descriptor: String
+
+  """
+  Keep the structures that declare descriptors (true), or those that declare none (false)
+  """
+  described: Boolean
+}
+
+input HostedStructureOrder @oneOf {
+  identifier: Ordering
+  label: Ordering
+}
+
+"""
 The `Identifier` scalar is a structure identifier of the form `@package/key` (e.g. `@mikro/image`) that types STRUCTURE, MEMORY_STRUCTURE and INTERFACE ports
 """
 scalar Identifier
@@ -3773,6 +3845,16 @@ type Query {
   """All memory drawers."""
   memoryDrawers(filters: MemoryDrawerFilter, pagination: OffsetPaginationInput): [MemoryDrawer!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
+  """
+  The descriptors the hub's services declare for the objects of the structures they host: searchable by key and description. Hub-wide.
+  """
+  descriptors(filters: StructureDescriptorFilter, ordering: [StructureDescriptorOrder!]! = [], pagination: OffsetPaginationInput): [StructureDescriptor!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """
+  The structures the hub's services host, as rows: searchable, with their descriptors. Hub-wide.
+  """
+  hostedStructures(filters: HostedStructureFilter, ordering: [HostedStructureOrder!]! = [], pagination: OffsetPaginationInput): [HostedStructure!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
   """All tasks."""
   tasks(filters: TaskFilter, ordering: [TaskOrder!]! = [], pagination: OffsetPaginationInput): [Task!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
@@ -3977,6 +4059,12 @@ type Query {
   The services of this hub: what each hosts and emits. Hub-wide; a service is not an agent.
   """
   services(name: String = null): [Service!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """Fetch a descriptor by ID."""
+  descriptor(id: ID!): StructureDescriptor! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """Fetch a hosted structure by ID."""
+  hostedStructure(id: ID!): HostedStructure! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """
   The signals this hub's services declare they emit — what triggers can wait for. Hub-wide.
@@ -5222,6 +5310,11 @@ type Structure {
   description: String
 
   """
+  The hosted structure itself, as its service declares it; null when no service of this hub hosts it.
+  """
+  hosted: HostedStructure
+
+  """
   The descriptors of its objects, as the hosting service declares them. Empty when nobody hosts it.
   """
   descriptors: [StructureDescriptor!]!
@@ -5247,9 +5340,12 @@ type Structure {
 }
 
 """
-A descriptor of a hosted structure's objects: a key action ports can require or provide, and triggers can test.
+A descriptor of a hosted structure's objects: a key action ports can require or provide, and triggers can test. Hub-wide.
 """
 type StructureDescriptor {
+  """Unique ID of the descriptor."""
+  id: ID!
+
   """The descriptor key, e.g. '@mikro/n_channels'."""
   key: String!
 
@@ -5260,6 +5356,54 @@ type StructureDescriptor {
 
   """What the service says the descriptor means."""
   description: String
+
+  """The hosted structure whose objects carry it."""
+  hostedStructure: HostedStructure!
+
+  """The structure whose objects carry it."""
+  structure: Structure!
+
+  """The service that declares it."""
+  service: Service!
+
+  """Other structures whose objects carry a descriptor of the same key."""
+  sharedWith: [HostedStructure!]!
+}
+
+"""A way to filter descriptors"""
+input StructureDescriptorFilter {
+  AND: StructureDescriptorFilter
+  OR: StructureDescriptorFilter
+  NOT: StructureDescriptorFilter
+  DISTINCT: Boolean
+
+  """Filter by IDs"""
+  ids: [ID!]
+
+  """Keep descriptors whose key or description contains this text"""
+  search: String
+
+  """Filter by the exact descriptor key, e.g. '@mikro/n_channels'"""
+  key: String
+
+  """Filter by what the value is: INT, FLOAT, STRING, BOOL, LIST or ANY"""
+  type: [String!]
+
+  """
+  Keep the descriptors of this structure, by its identifier, e.g. '@mikro/arraydataset'
+  """
+  structure: String
+
+  """Keep the descriptors of structures in this package, e.g. 'mikro'"""
+  package: String
+
+  """Keep the descriptors declared by this service, by its name"""
+  service: String
+}
+
+input StructureDescriptorOrder @oneOf {
+  key: Ordering
+  type: Ordering
 }
 
 """

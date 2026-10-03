@@ -23,7 +23,7 @@ import strawberry_django
 from asgiref.sync import sync_to_async
 from strawberry.types import Info
 
-from facade import models
+from facade import filters, models
 
 
 @strawberry.type(description="A usage of a structure or interface by an action's port, derived from the relational port rows.")
@@ -86,7 +86,7 @@ def _distinct_identifiers(info: Info, kind: str, search: str | None = None, pack
 
 def _structures(identifiers: list[str]) -> list["Structure"]:
     """Structures for ``identifiers``, each with its declaration when a service hosts it (one query)."""
-    rows = models.StructureDeclaration.objects.filter(identifier__in=identifiers).select_related("service")
+    rows = models.StructureDeclaration.objects.filter(identifier__in=identifiers).select_related("service").prefetch_related("descriptors")
     declared = {row.identifier.lower(): row for row in rows}
     return [Structure(identifier=identifier, declaration=declared.get(identifier.lower())) for identifier in identifiers]
 
@@ -154,14 +154,66 @@ class Service:
 
     @strawberry_django.field(description="The structures it hosts.")
     def structures(self) -> list["Structure"]:
-        return [Structure(identifier=row.identifier, declaration=row) for row in self.structures.select_related("service").order_by("identifier")]
+        return [Structure(identifier=row.identifier, declaration=row) for row in self.structures.select_related("service").prefetch_related("descriptors").order_by("identifier")]
 
 
-@strawberry.type(description="A descriptor of a hosted structure's objects: a key action ports can require or provide, and triggers can test.")
+@strawberry_django.type(
+    models.Descriptor,
+    filters=filters.StructureDescriptorFilter,
+    ordering=filters.StructureDescriptorOrder,
+    pagination=True,
+    description="A descriptor of a hosted structure's objects: a key action ports can require or provide, and triggers can test. Hub-wide.",
+)
 class StructureDescriptor:
-    key: str = strawberry.field(description="The descriptor key, e.g. '@mikro/n_channels'.")
-    type: str = strawberry.field(description="What its value is: INT, FLOAT, STRING, BOOL, LIST, or ANY when the service does not say.")
-    description: str | None = strawberry.field(description="What the service says the descriptor means.")
+    id: strawberry.ID = strawberry_django.field(description="Unique ID of the descriptor.")
+    key: str = strawberry_django.field(description="The descriptor key, e.g. '@mikro/n_channels'.")
+    type: str = strawberry_django.field(description="What its value is: INT, FLOAT, STRING, BOOL, LIST, or ANY when the service does not say.")
+    description: str | None = strawberry_django.field(description="What the service says the descriptor means.")
+    hosted_structure: "HostedStructure" = strawberry_django.field(field_name="structure", description="The hosted structure whose objects carry it.")
+
+    @strawberry_django.field(description="The structure whose objects carry it.", select_related=["structure__service"])
+    def structure(self) -> "Structure":
+        return Structure(identifier=self.structure.identifier.lower(), declaration=self.structure)
+
+    @strawberry_django.field(description="The service that declares it.", select_related=["structure__service"])
+    def service(self) -> "Service":
+        return self.structure.service
+
+    @strawberry_django.field(description="Other structures whose objects carry a descriptor of the same key.")
+    def shared_with(self) -> list["HostedStructure"]:
+        return list(models.StructureDeclaration.objects.filter(descriptors__key=self.key).exclude(pk=self.structure_id).order_by("identifier"))
+
+
+@strawberry_django.type(
+    models.StructureDeclaration,
+    filters=filters.HostedStructureFilter,
+    ordering=filters.HostedStructureOrder,
+    pagination=True,
+    description="A structure a service of this hub hosts, as that service declares it: a row, with its descriptors. Hub-wide. (`Structure` is the wider notion: it also covers identifiers only action ports reference.)",
+)
+class HostedStructure:
+    id: strawberry.ID = strawberry_django.field(description="Unique ID of the hosted structure.")
+    identifier: str = strawberry_django.field(description="The full identifier, e.g. '@mikro/arraydataset'.")
+    label: str | None = strawberry_django.field(description="What the hosting service calls one such object.")
+    description: str | None = strawberry_django.field(description="What the hosting service says about the structure.")
+    service: "Service" = strawberry_django.field(description="The service that hosts it.")
+    descriptors: list[StructureDescriptor] = strawberry_django.field(description="The descriptors of its objects.")
+
+    @strawberry_django.field(description="The local key (the part after '/').")
+    def key(self) -> str:
+        return _key_of(self.identifier)
+
+    @strawberry_django.field(description="The package it belongs to.")
+    def package(self) -> StructurePackage:
+        return StructurePackage(key=_package_of(self.identifier))
+
+    @strawberry_django.field(description="The same structure with what your organization's action ports say about it (usages).")
+    def structure(self) -> "Structure":
+        return Structure(identifier=self.identifier.lower(), declaration=self)
+
+    @strawberry_django.field(description="The signals services declare they emit about it.")
+    def signals(self) -> list["SignalDeclaration"]:
+        return list(models.SignalDeclaration.objects.filter(identifier__iexact=self.identifier).select_related("service").order_by("kind"))
 
 
 @strawberry.type(description="A structure (data type): referenced by an action's port, hosted by a service of this hub, or both.")
@@ -181,10 +233,13 @@ class Structure:
     def description(self) -> str | None:
         return self.declaration.description if self.declaration is not None else None
 
-    @strawberry.field(description="The descriptors of its objects, as the hosting service declares them. Empty when nobody hosts it.")
+    @strawberry.field(description="The hosted structure itself, as its service declares it; null when no service of this hub hosts it.")
+    def hosted(self) -> Optional["HostedStructure"]:
+        return self.declaration
+
+    @strawberry_django.field(description="The descriptors of its objects, as the hosting service declares them. Empty when nobody hosts it.")
     def descriptors(self) -> list[StructureDescriptor]:
-        declared = self.declaration.descriptors if self.declaration is not None else []
-        return [StructureDescriptor(key=d["key"], type=d.get("type") or "ANY", description=d.get("description")) for d in declared]
+        return list(self.declaration.descriptors.all()) if self.declaration is not None else []
 
     @strawberry.field(description="The signals services declare they emit about this structure.")
     async def signals(self) -> list["SignalDeclaration"]:

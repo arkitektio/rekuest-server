@@ -90,11 +90,29 @@ def _sync_structures(service: models.Service, structures: list[dict[str, Any]] |
             logger.warning("%s declares the structure %s, which %s already hosts; ignored", service.name, identifier, holder.service.name)
             continue
         declared.add(identifier)
-        models.StructureDeclaration.objects.update_or_create(
+        hosted, _ = models.StructureDeclaration.objects.update_or_create(
             identifier=identifier,
-            defaults={"service": service, "label": structure.get("label"), "description": structure.get("description"), "descriptors": list(structure.get("descriptors") or [])},
+            defaults={"service": service, "label": structure.get("label"), "description": structure.get("description")},
         )
+        _sync_descriptors(hosted, list(structure.get("descriptors") or []))
     models.StructureDeclaration.objects.filter(service=service).exclude(identifier__in=declared).delete()
+
+
+def _sync_descriptors(structure: models.StructureDeclaration, descriptors: list[dict[str, Any]]) -> None:
+    """Make the structure's Descriptor rows exactly what its manifest declares, in that order.
+
+    In place: a descriptor that is still declared keeps its row (and its id), so what a client
+    holds on to stays valid across provisioning passes.
+    """
+    declared = set()
+    for position, descriptor in enumerate(descriptors):
+        declared.add(descriptor["key"])
+        models.Descriptor.objects.update_or_create(
+            structure=structure,
+            key=descriptor["key"],
+            defaults={"type": descriptor.get("type") or "ANY", "description": descriptor.get("description"), "position": position},
+        )
+    models.Descriptor.objects.filter(structure=structure).exclude(key__in=declared).delete()
 
 
 def catalogue_all() -> list[str]:

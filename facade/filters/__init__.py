@@ -10,6 +10,7 @@ from . import (
     action,
     agent,
     automation,
+    structure,
     task,
     auth,
     blok,
@@ -24,6 +25,7 @@ from . import (
     toolbox,
 )
 from .action import ActionFilter, ActionOrder
+from .structure import HostedStructureFilter, HostedStructureOrder, StructureDescriptorFilter, StructureDescriptorOrder
 from .automation import FiringFilter, FiringOrder, ScheduleFilter, ScheduleOrder, SignalFilter, SignalOrder, TriggerFilter, TriggerOrder
 from .agent import (
     AgentFilter,
@@ -139,6 +141,10 @@ __all__ = [
     "SignalOrder",
     "FiringFilter",
     "FiringOrder",
+    "StructureDescriptorFilter",
+    "StructureDescriptorOrder",
+    "HostedStructureFilter",
+    "HostedStructureOrder",
 ]
 
 # --- Nested-filter reference resolution -------------------------------------------
@@ -148,6 +154,7 @@ _SUBMODULES = (
     action,
     agent,
     automation,
+    structure,
     task,
     auth,
     blok,

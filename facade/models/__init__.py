@@ -22,7 +22,7 @@ from .agent import (
 from .schedule import Schedule
 from .signal import Firing, Signal, SignalDeclaration, Trigger
 from .wiregram import Wiregram
-from .structure import Service, StructureDeclaration
+from .structure import Descriptor, Service, StructureDeclaration
 from .task import (
     Task,
     TaskEvent,
@@ -67,6 +67,7 @@ __all__ = [
     "Schedule",
     # signals
     "Signal",
+    "Descriptor",
     "Firing",
     "Wiregram",
     "SignalDeclaration",

@@ -64,6 +64,8 @@ class Query:
     base_catalog = field(resolver=types.dashboard.base_catalog, description="The built-in base catalog every definition and blok is validated against before any registered UI catalog (virtual: shipped with the server, not registered).")
     memory_shelves: list[types.MemoryShelve] = field(description="All memory shelves.")
     memory_drawers: list[types.MemoryDrawer] = field(description="All memory drawers.")
+    descriptors: list[types.StructureDescriptor] = field(description="The descriptors the hub's services declare for the objects of the structures they host: searchable by key and description. Hub-wide.")
+    hosted_structures: list[types.HostedStructure] = field(description="The structures the hub's services host, as rows: searchable, with their descriptors. Hub-wide.")
     structures = field(resolver=types.structure.list_structures, description="All structures: those the org's action ports reference, and those a service of this hub hosts.")
     structure_packages = field(resolver=types.structure.list_structure_packages, description="All structure packages referenced by the org's action ports (derived, not registered).")
     interfaces = field(resolver=types.structure.list_interfaces, description="All interfaces referenced by the org's action ports (derived, not registered).")
@@ -169,6 +171,14 @@ class Query:
         if name is not None:
             services = services.filter(name=name)
         return cast(list[types.Service], list(services))
+
+    @field(description="Fetch a descriptor by ID.")
+    def descriptor(self, info: Info, id: strawberry.ID) -> types.StructureDescriptor:
+        return cast(types.StructureDescriptor, models.Descriptor.objects.select_related("structure__service").get(pk=id))
+
+    @field(description="Fetch a hosted structure by ID.")
+    def hosted_structure(self, info: Info, id: strawberry.ID) -> types.HostedStructure:
+        return cast(types.HostedStructure, models.StructureDeclaration.objects.select_related("service").get(pk=id))
 
     @field(description="The signals this hub's services declare they emit — what triggers can wait for. Hub-wide.")
     def signal_declarations(self, info: Info, identifier: str | None = None) -> list[types.SignalDeclaration]:

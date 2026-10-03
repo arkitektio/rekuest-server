@@ -105,9 +105,8 @@ HOSTED_QUERY = """
 def _seed_hosted():
     """A service hosting a structure that no action port references — and no agent anywhere."""
     service = models.Service.objects.create(name="lab", description="The bench.")
-    models.StructureDeclaration.objects.create(
-        service=service, identifier="@lab/sample", label="Sample", description="A sample on the bench.", descriptors=[{"key": "@lab/volume", "type": "FLOAT", "description": "Millilitres"}]
-    )
+    sample = models.StructureDeclaration.objects.create(service=service, identifier="@lab/sample", label="Sample", description="A sample on the bench.")
+    models.Descriptor.objects.create(structure=sample, key="@lab/volume", type="FLOAT", description="Millilitres")
     models.SignalDeclaration.objects.create(service=service, identifier="@lab/sample", kind="CREATED", descriptor_keys=["@lab/volume"])
 
 

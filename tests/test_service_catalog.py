@@ -21,7 +21,7 @@ class TestServiceCatalog:
         assert (service.identifier, service.description) == ("live.arkitekt.housekeeping", "A test service.")
         (hosted,) = service.structures.all()
         assert (hosted.identifier, hosted.label, hosted.description) == ("@housekeeping/room", "Room", "A room to tidy.")
-        assert hosted.descriptors == [{"key": "@housekeeping/area", "type": "FLOAT", "description": "Square metres"}]
+        assert list(hosted.descriptors.values_list("key", "type", "description")) == [("@housekeeping/area", "FLOAT", "Square metres")]
         signals = {(d.identifier, d.kind, tuple(d.descriptor_keys)) for d in service.signals.all()}
         assert signals == {("@housekeeping/room", "CREATED", ("@housekeeping/area",)), ("@housekeeping/room", "DELETED", ("@housekeeping/area",))}
 
