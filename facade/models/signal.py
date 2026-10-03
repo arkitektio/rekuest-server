@@ -90,19 +90,19 @@ class Trigger(models.Model):
 class SignalDeclaration(models.Model):
     """A signal a service says it emits, read from its manifest by provisioning.
 
-    Hub-wide, not organization-scoped: the service agents live in ``rekuest-system``, but every
-    organization's objects flow through them. Triggers are checked against these — the kind and
+    Hub-wide, not organization-scoped: a service emits them about every organization's objects.
+    Triggers are checked against these — the kind and
     identifier exist, the condition keys are ones the service sends — and a UI lists them.
     """
 
-    agent = models.ForeignKey("Agent", on_delete=models.CASCADE, related_name="signal_declarations", help_text="The service's HookAgent")
+    service = models.ForeignKey("Service", on_delete=models.CASCADE, related_name="signals", help_text="The service that emits it")
     identifier = models.CharField(max_length=1000, help_text="The structure identifier of the objects signalled")
     kind = models.CharField(max_length=20, choices=enums.SignalKindChoices.choices, help_text="What happens to them")
     descriptor_keys = models.JSONField(default=list, blank=True, help_text="The descriptor keys each signal carries", db_default=[])
     description = models.TextField(null=True, blank=True, help_text="What the service says about the signal")
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["agent", "identifier", "kind"], name="signal_declaration_unique")]
+        constraints = [models.UniqueConstraint(fields=["service", "identifier", "kind"], name="signal_declaration_unique")]
 
     def __str__(self) -> str:
-        return f"{self.agent} emits {self.kind} {self.identifier}"
+        return f"{self.service} emits {self.kind} {self.identifier}"

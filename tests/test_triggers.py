@@ -76,7 +76,8 @@ class TestTriggerGraphQL:
 
         context_a, context_b = await sync_to_async(lambda: (tenant_context(TEST_TOKEN)[0], tenant_context(OTHER_TOKEN)[0]))()
         impl = await sync_to_async(_target)("gql-trigger", context_a.request.organization)
-        await models.SignalDeclaration.objects.acreate(agent=impl.agent, identifier=IDENTIFIER, kind="CREATED", descriptor_keys=[CHANNELS])
+        service = await models.Service.objects.acreate(name="gql-trigger-service")
+        await models.SignalDeclaration.objects.acreate(service=service, identifier=IDENTIFIER, kind="CREATED", descriptor_keys=[CHANNELS])
 
         def create(port, conditions=None, kind="CREATED", identifier=IDENTIFIER):
             inp = {"name": "t", "kind": kind, "identifier": identifier, "action": str(impl.action_id), "port": port, "args": {"size": 64}}
@@ -104,6 +105,6 @@ class TestTriggerGraphQL:
         assert seen_by_b.data["triggers"] == []
 
         # Declarations are hub-wide: every tenant sees what the services emit.
-        listed = await schema.execute("query { signalDeclarations { identifier kind descriptorKeys service } }", context_value=context_b)
+        listed = await schema.execute("query { signalDeclarations { identifier kind descriptorKeys service { name } } }", context_value=context_b)
         assert listed.errors is None, listed.errors
-        assert listed.data["signalDeclarations"] == [{"identifier": IDENTIFIER, "kind": "CREATED", "descriptorKeys": [CHANNELS], "service": impl.agent.name}]
+        assert listed.data["signalDeclarations"] == [{"identifier": IDENTIFIER, "kind": "CREATED", "descriptorKeys": [CHANNELS], "service": {"name": "gql-trigger-service"}}]

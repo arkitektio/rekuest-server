@@ -1,4 +1,4 @@
 # The migrations takt is written against: it serves once the database has them all.
 # Kept current by tests/test_takt_contract.py; regenerate with that test's hint.
 datalayer 0003_database_defaults
-facade 0006_agent_name_help_text
+facade 0007_services

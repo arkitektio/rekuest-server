@@ -116,7 +116,6 @@ class RekuestBlock(BaseModel):
     trigger_max_depth: int = Field(default=3, description="How many trigger firings may chain (a triggered run's object signalling another trigger …) before a signal stops firing — the loop guard.")
     dependency_max_depth: int = Field(default=8, description="How many levels of dependencies an assign resolves below the assigned implementation before it refuses.")
     signal_retention: int = Field(default=604800, description="Seconds to keep processed signals (the runs they caused keep their link as null afterwards); 0 keeps them forever.")
-    service_agents_organization: str = Field(default="rekuest-system", description="The organization (slug) the service agents, their actions and schedules live in. Its members see and control them.")
     probe_ttl: int = Field(default=3600, description="Lifetime (seconds) of a probe's redis state while live.")
     probe_linger: int = Field(default=300, description="How long (seconds) a terminal call's state lingers for late subscribers.")
     probe_max_inflight: int = Field(default=32, description="Maximum concurrent probes per caller.")

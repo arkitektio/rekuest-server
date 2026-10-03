@@ -84,3 +84,53 @@ async def test_structure_usages_resolved_from_port_rows(authenticated_context: H
     assert len(image["inputUsages"]) == 1
     assert image["inputUsages"][0]["modifiers"] == []
     assert image["inputUsages"][0]["portKey"] == "image"
+
+
+HOSTED_QUERY = """
+    query Hosted($identifier: ID!) {
+        structure(identifier: $identifier) {
+            identifier label description
+            service { name }
+            descriptors { key type description }
+            signals { kind descriptorKeys }
+            package { key service { name } }
+            inputUsages { portKey }
+        }
+        structures { identifier service { name } }
+        services { name description structures { identifier } signals { identifier kind } agent { id } }
+    }
+"""
+
+
+def _seed_hosted():
+    """A service hosting a structure that no action port references — and no agent anywhere."""
+    service = models.Service.objects.create(name="lab", description="The bench.")
+    models.StructureDeclaration.objects.create(
+        service=service, identifier="@lab/sample", label="Sample", description="A sample on the bench.", descriptors=[{"key": "@lab/volume", "type": "FLOAT", "description": "Millilitres"}]
+    )
+    models.SignalDeclaration.objects.create(service=service, identifier="@lab/sample", kind="CREATED", descriptor_keys=["@lab/volume"])
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_hosted_structure_is_listed_though_no_port_references_it(authenticated_context: HttpContext) -> None:
+    await sync_to_async(_seed_hosted)()
+
+    result = await schema.execute(HOSTED_QUERY, variable_values={"identifier": "@lab/sample"}, context_value=authenticated_context)
+    assert result.errors is None, result.errors
+
+    assert result.data["structure"] == {
+        "identifier": "@lab/sample",
+        "label": "Sample",
+        "description": "A sample on the bench.",
+        "service": {"name": "lab"},
+        "descriptors": [{"key": "@lab/volume", "type": "FLOAT", "description": "Millilitres"}],
+        "signals": [{"kind": "CREATED", "descriptorKeys": ["@lab/volume"]}],
+        "package": {"key": "lab", "service": {"name": "lab"}},
+        "inputUsages": [],
+    }
+    assert {"identifier": "@lab/sample", "service": {"name": "lab"}} in result.data["structures"]
+    # The service is a thing of its own: it hosts and emits, and here no agent stands behind it.
+    assert result.data["services"] == [
+        {"name": "lab", "description": "The bench.", "structures": [{"identifier": "@lab/sample"}], "signals": [{"identifier": "@lab/sample", "kind": "CREATED"}], "agent": None}
+    ]

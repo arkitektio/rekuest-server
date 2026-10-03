@@ -21,6 +21,7 @@ from .agent import (
 )
 from .schedule import Schedule
 from .signal import Signal, SignalDeclaration, Trigger
+from .structure import Service, StructureDeclaration
 from .task import (
     Task,
     TaskEvent,
@@ -67,6 +68,9 @@ __all__ = [
     "Signal",
     "SignalDeclaration",
     "Trigger",
+    # structures
+    "Service",
+    "StructureDeclaration",
     # catalog
     "Collection",
     "Protocol",

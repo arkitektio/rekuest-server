@@ -71,6 +71,14 @@ class Agent:
     def active(self) -> bool:
         return liveness.agent_is_live(self.connected, self.last_seen)
 
+    @strawberry_django.field(description="The service this agent belongs to, when it is a HookAgent of one of this hub's services: the service says what exists, this agent what can be done with it.", only=["client_id"])
+    def service(self) -> Optional["Service"]:
+        from facade import service_trust
+
+        client_id = self.client.client_id or ""
+        if not client_id.startswith(service_trust.SERVICE_CLIENT_PREFIX):
+            return None
+        return models.Service.objects.filter(name=client_id[len(service_trust.SERVICE_CLIENT_PREFIX) :]).first()
 
     @strawberry_django.field(description="Check if this agent is pinned by the current user.")
     def pinned(self, info: Info) -> bool:

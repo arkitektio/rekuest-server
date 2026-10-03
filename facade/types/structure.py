@@ -1,11 +1,12 @@
-"""Virtual structure/interface/package types, derived entirely from the port rows.
+"""Virtual structure/interface/package types: what ports reference, and what services host.
 
-There is no catalog table: a "structure" is nothing more than a distinct ``@package/key``
-identifier referenced by some action's port. The types here are plain strawberry types
-(no Django model, no DB id — the identifier IS the identity), enumerated from the indexed
-``identifier`` column of the relational ArgPort/ReturnPort rows and scoped to the
-requesting organization. Registration writes nothing; the enumeration can never drift
-from what ports actually reference.
+A "structure" is a distinct ``@package/key`` identifier. It is known here for either of two
+reasons: some action's port references it (enumerated from the indexed ``identifier`` column of
+the relational ArgPort/ReturnPort rows, scoped to the requesting organization — registration
+writes nothing, so that half can never drift from what ports actually reference), or a service
+of this hub declares that it hosts it (``StructureDeclaration``, hub-wide, from the service's
+manifest). The types here are plain strawberry types (no DB id — the identifier IS the
+identity); a hosted structure also says who hosts it and which descriptors its objects carry.
 
 Usage lookups ("which actions consume @mikro/image?") are likewise answered from the port
 rows. ``modifiers`` (container nesting like ``["list"]``) are reconstructed from the
@@ -15,7 +16,10 @@ extra query fetches all ancestors for all usages.
 
 from __future__ import annotations
 
+from typing import Optional
+
 import strawberry
+import strawberry_django
 from asgiref.sync import sync_to_async
 from strawberry.types import Info
 
@@ -68,8 +72,27 @@ def _distinct_identifiers(info: Info, kind: str, search: str | None = None, pack
         if package_key:
             queryset = queryset.filter(identifier__istartswith=f"@{package_key}/")
         identifiers.update(queryset.values_list("identifier", flat=True).distinct())
+    if kind == "STRUCTURE":
+        # What a service hosts is a structure of this hub, whether or not a port uses it yet.
+        declared = models.StructureDeclaration.objects.all()
+        if search:
+            declared = declared.filter(identifier__icontains=search)
+        if package_key:
+            declared = declared.filter(identifier__istartswith=f"@{package_key}/")
+        identifiers.update(declared.values_list("identifier", flat=True))
     # Identifiers without a package part ('@pkg/key') were never catalogued; keep that rule.
     return sorted({identifier.lower() for identifier in identifiers if "/" in identifier})
+
+
+def _structures(identifiers: list[str]) -> list["Structure"]:
+    """Structures for ``identifiers``, each with its declaration when a service hosts it (one query)."""
+    rows = models.StructureDeclaration.objects.filter(identifier__in=identifiers).select_related("service")
+    declared = {row.identifier.lower(): row for row in rows}
+    return [Structure(identifier=identifier, declaration=declared.get(identifier.lower())) for identifier in identifiers]
+
+
+def _find_structures(info: Info, search: str | None = None, package_key: str | None = None) -> list["Structure"]:
+    return _structures(_distinct_identifiers(info, "STRUCTURE", search=search, package_key=package_key))
 
 
 def _package_of(identifier: str) -> str:
@@ -84,10 +107,15 @@ def _key_of(identifier: str) -> str:
 class StructurePackage:
     key: strawberry.ID = strawberry.field(description="The package key (the part between '@' and '/').")
 
-    @strawberry.field(description="Structures of this package referenced by the org's ports.")
+    @strawberry.field(description="Structures of this package: those the org's ports reference and those a service hosts.")
     async def structures(self, info: Info) -> list["Structure"]:
-        identifiers = await sync_to_async(_distinct_identifiers)(info, "STRUCTURE", package_key=self.key)
-        return [Structure(identifier=identifier) for identifier in identifiers]
+        return await sync_to_async(_find_structures)(info, package_key=self.key)
+
+    @strawberry.field(description="The service of this hub that hosts this package's structures, if one declares any.")
+    async def service(self) -> Optional["Service"]:
+        hosted = models.StructureDeclaration.objects.filter(identifier__istartswith=f"@{self.key}/").select_related("service").order_by("identifier")
+        row = await hosted.afirst()
+        return row.service if row is not None else None
 
     @strawberry.field(description="Interfaces of this package referenced by the org's ports.")
     async def interfaces(self, info: Info) -> list["Interface"]:
@@ -116,9 +144,58 @@ class Interface:
         return await sync_to_async(_port_usages)(info, self.identifier, "INTERFACE", models.ReturnPort)
 
 
-@strawberry.type(description="A structure (data type) referenced by an action's port, derived from the relational port rows.")
+@strawberry_django.type(models.Service, description="A service of this hub (mikro, kabinet, …): the structures it hosts and the signals it emits, the same for every organization. Not an agent — the work a service can be asked to do is offered by its HookAgent.")
+class Service:
+    id: strawberry.ID = strawberry_django.field(description="Unique ID of the service.")
+    name: str = strawberry_django.field(description="The name the service is known by on this hub.")
+    identifier: str | None = strawberry_django.field(description="The identity the service signs as, e.g. live.arkitekt.mikro.")
+    description: str | None = strawberry_django.field(description="What the service says it is.")
+    signals: list["SignalDeclaration"] = strawberry_django.field(description="The signals it declares it emits.")
+
+    @strawberry_django.field(description="The structures it hosts.")
+    def structures(self) -> list["Structure"]:
+        return [Structure(identifier=row.identifier, declaration=row) for row in self.structures.select_related("service").order_by("identifier")]
+
+    @strawberry_django.field(description="Its HookAgent in your organization, when the service offers actions.")
+    def agent(self, info: Info) -> Optional["Agent"]:
+        from facade import service_trust
+
+        return models.Agent.objects.filter(client__client_id=f"{service_trust.SERVICE_CLIENT_PREFIX}{self.name}", organization=info.context.request.organization).first()
+
+
+@strawberry.type(description="A descriptor of a hosted structure's objects: a key action ports can require or provide, and triggers can test.")
+class StructureDescriptor:
+    key: str = strawberry.field(description="The descriptor key, e.g. '@mikro/n_channels'.")
+    type: str = strawberry.field(description="What its value is: INT, FLOAT, STRING, BOOL, LIST, or ANY when the service does not say.")
+    description: str | None = strawberry.field(description="What the service says the descriptor means.")
+
+
+@strawberry.type(description="A structure (data type): referenced by an action's port, hosted by a service of this hub, or both.")
 class Structure:
-    identifier: strawberry.ID = strawberry.field(description="The full identifier, e.g. '@mikro/image'.")
+    identifier: strawberry.ID = strawberry.field(description="The full identifier, e.g. '@mikro/arraydataset'.")
+    declaration: strawberry.Private[models.StructureDeclaration | None] = None
+
+    @strawberry.field(description="The service of this hub that hosts the structure; null when none declares it.")
+    def service(self) -> Optional["Service"]:
+        return self.declaration.service if self.declaration is not None else None
+
+    @strawberry.field(description="What the hosting service calls one such object.")
+    def label(self) -> str | None:
+        return self.declaration.label if self.declaration is not None else None
+
+    @strawberry.field(description="What the hosting service says about the structure.")
+    def description(self) -> str | None:
+        return self.declaration.description if self.declaration is not None else None
+
+    @strawberry.field(description="The descriptors of its objects, as the hosting service declares them. Empty when nobody hosts it.")
+    def descriptors(self) -> list[StructureDescriptor]:
+        declared = self.declaration.descriptors if self.declaration is not None else []
+        return [StructureDescriptor(key=d["key"], type=d.get("type") or "ANY", description=d.get("description")) for d in declared]
+
+    @strawberry.field(description="The signals services declare they emit about this structure.")
+    async def signals(self) -> list["SignalDeclaration"]:
+        declarations = models.SignalDeclaration.objects.filter(identifier__iexact=self.identifier).select_related("service").order_by("kind")
+        return [declaration async for declaration in declarations]
 
     @strawberry.field(description="The local key (the part after '/').")
     def key(self) -> str:
@@ -141,8 +218,7 @@ class Structure:
 # Query resolvers (wired in facade/schema.py)
 # --------------------------------------------------------------------------- #
 async def list_structures(info: Info, search: str | None = None) -> list[Structure]:
-    identifiers = await sync_to_async(_distinct_identifiers)(info, "STRUCTURE", search=search)
-    return [Structure(identifier=identifier) for identifier in identifiers]
+    return await sync_to_async(_find_structures)(info, search=search)
 
 
 async def list_interfaces(info: Info, search: str | None = None) -> list[Interface]:
@@ -163,8 +239,9 @@ async def list_structure_packages(info: Info, search: str | None = None) -> list
 
 async def get_structure(info: Info, identifier: strawberry.ID) -> Structure:
     if str(identifier).lower() not in await sync_to_async(_distinct_identifiers)(info, "STRUCTURE"):
-        raise ValueError(f"No action port references the structure {identifier!r}")
-    return Structure(identifier=str(identifier).lower())
+        raise ValueError(f"No action port references the structure {identifier!r}, and no service hosts it")
+    (structure,) = await sync_to_async(_structures)([str(identifier).lower()])
+    return structure
 
 
 async def get_interface(info: Info, identifier: strawberry.ID) -> Interface:

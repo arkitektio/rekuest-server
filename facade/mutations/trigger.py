@@ -36,7 +36,7 @@ def _check_provenance(action: models.Action, agent: models.Agent | None, interfa
 
 def _check_declared(kind: str, identifier: str, conditions: list[dict]) -> None:
     """The trigger waits for something a service declares it emits, on keys that service sends."""
-    declarations = list(models.SignalDeclaration.objects.filter(identifier=identifier).select_related("agent"))
+    declarations = list(models.SignalDeclaration.objects.filter(identifier=identifier))
     matching = [d for d in declarations if d.kind == kind]
     if not matching:
         if declarations:

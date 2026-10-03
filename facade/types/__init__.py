@@ -81,7 +81,9 @@ from .state import (
 from .structure import (
     Interface,
     PortUsage,
+    Service,
     Structure,
+    StructureDescriptor,
     StructurePackage,
 )
 from .testcase import TestCase, TestResult
@@ -152,7 +154,9 @@ __all__ = [
     "Snapshot",
     "StructurePackage",
     "Interface",
+    "Service",
     "Structure",
+    "StructureDescriptor",
     "PortUsage",
     "TaskBoundary",
     "SessionBoundary",

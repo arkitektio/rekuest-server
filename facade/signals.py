@@ -1,6 +1,7 @@
 from django.db import transaction
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
+from authentikate.models import Organization
 from facade import models, channels, channel_events
 
 import logging
@@ -92,3 +93,13 @@ def implementation_post_del(sender, instance: models.Implementation = None, **kw
             channel_events.ImplementationEvent(delete=instance.id),
             [f"implementation_{instance.id}", f"implementations_agent_{instance.agent_id}"],
         )
+
+
+@receiver(post_save, sender=Organization)
+def organization_post_save(sender, instance: Organization = None, created=None, **kwargs):
+    """A new organization gets every service's HookAgent on the fly (an organization takt was
+    first to see has no such moment; the provisioning pass gives it its agents)."""
+    if created:
+        from facade import service_agents
+
+        transaction.on_commit(lambda: service_agents.provision_new_organization(instance))

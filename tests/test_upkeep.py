@@ -19,7 +19,7 @@ from facade import models, service_agents
 from facade.service_trust import rekuest_identifier
 from rekuest_service import trust
 from tests.models.test_action_embedding import _action
-from tests.test_service_agents import hook_action, hub  # noqa: F401  (fixtures)
+from tests.test_service_agents import hook_action, hub, lab  # noqa: F401  (fixtures)
 
 pytestmark = pytest.mark.usefixtures("fake_takt")
 
@@ -66,7 +66,7 @@ class TestOnlyTaktMayAsk:
 
 @pytest.mark.django_db(transaction=True)
 class TestProvision:
-    def test_it_provisions_the_configured_services(self, hub):
+    def test_it_provisions_the_configured_services(self, hub, lab):
         response = _post("provision")
 
         assert response.status_code == 200
@@ -79,7 +79,7 @@ class TestProvision:
 
         assert _post("provision").json() == {"ok": False, "skipped": False, "failed": ["offline"]}
 
-    def test_a_pass_already_running_elsewhere_is_left_to_it(self, hub):
+    def test_a_pass_already_running_elsewhere_is_left_to_it(self, hub, lab):
         """Another replica holds the lock: this one does nothing, and says so."""
         other = connections.create_connection("default")
         try:
@@ -92,7 +92,7 @@ class TestProvision:
 
         assert _post("provision").json()["skipped"] is False
 
-    def test_passes_racing_from_real_threads_leave_one_schedule(self, hub):
+    def test_passes_racing_from_real_threads_leave_one_schedule(self, hub, lab):
         start = threading.Barrier(4)
         answers: list = []
 

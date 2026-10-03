@@ -470,6 +470,11 @@ type Agent {
   """
   active: Boolean!
 
+  """
+  The service this agent belongs to, when it is a HookAgent of one of this hub's services: the service says what exists, this agent what can be done with it.
+  """
+  service: Service
+
   """Check if this agent is pinned by the current user."""
   pinned: Boolean!
 
@@ -3747,7 +3752,7 @@ type Query {
   baseCatalog: BaseCatalog! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """
-  All structures referenced by the org's action ports (derived, not registered).
+  All structures: those the org's action ports reference, and those a service of this hub hosts.
   """
   structures(search: String = null): [Structure!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
@@ -3787,7 +3792,7 @@ type Query {
   interface(identifier: ID!): Interface! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """
-  Fetch a structure by its '@package/key' identifier (derived from port identifiers).
+  Fetch a structure by its '@package/key' identifier: one a port references or a service hosts.
   """
   structure(identifier: ID!): Structure! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
@@ -3826,6 +3831,11 @@ type Query {
 
   """Get implementation by ID."""
   implementation(id: ID!): Implementation! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """
+  The services of this hub: what each hosts and emits. Hub-wide; a service is not an agent.
+  """
+  services(name: String = null): [Service!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """
   The signals this hub's services declare they emit — what triggers can wait for. Hub-wide.
@@ -4255,6 +4265,32 @@ The `SearchQuery` scalar is a GraphQL query string a search widget executes agai
 scalar SearchQuery
 
 """
+A service of this hub (mikro, kabinet, …): the structures it hosts and the signals it emits, the same for every organization. Not an agent — the work a service can be asked to do is offered by its HookAgent.
+"""
+type Service {
+  """Unique ID of the service."""
+  id: ID!
+
+  """The name the service is known by on this hub."""
+  name: String!
+
+  """The identity the service signs as, e.g. live.arkitekt.mikro."""
+  identifier: String
+
+  """What the service says it is."""
+  description: String
+
+  """The signals it declares it emits."""
+  signals: [SignalDeclaration!]!
+
+  """The structures it hosts."""
+  structures: [Structure!]!
+
+  """Its HookAgent in your organization, when the service offers actions."""
+  agent: Agent
+}
+
+"""
 A session representing a continuous interaction of an agent with the system.
 """
 type Session @key(fields: "id", resolvable: true) {
@@ -4432,7 +4468,7 @@ type SignalDeclaration {
   description: String
 
   """The service that emits it."""
-  service: String!
+  service: Service!
 }
 
 """What happened to the object a service signalled."""
@@ -4833,11 +4869,30 @@ input StringAssignWidgetInput @unionElementOf(union: "AssignWidgetInput", discri
 }
 
 """
-A structure (data type) referenced by an action's port, derived from the relational port rows.
+A structure (data type): referenced by an action's port, hosted by a service of this hub, or both.
 """
 type Structure {
-  """The full identifier, e.g. '@mikro/image'."""
+  """The full identifier, e.g. '@mikro/arraydataset'."""
   identifier: ID!
+
+  """
+  The service of this hub that hosts the structure; null when none declares it.
+  """
+  service: Service
+
+  """What the hosting service calls one such object."""
+  label: String
+
+  """What the hosting service says about the structure."""
+  description: String
+
+  """
+  The descriptors of its objects, as the hosting service declares them. Empty when nobody hosts it.
+  """
+  descriptors: [StructureDescriptor!]!
+
+  """The signals services declare they emit about this structure."""
+  signals: [SignalDeclaration!]!
 
   """The local key (the part after '/')."""
   key: String!
@@ -4857,14 +4912,37 @@ type Structure {
 }
 
 """
+A descriptor of a hosted structure's objects: a key action ports can require or provide, and triggers can test.
+"""
+type StructureDescriptor {
+  """The descriptor key, e.g. '@mikro/n_channels'."""
+  key: String!
+
+  """
+  What its value is: INT, FLOAT, STRING, BOOL, LIST, or ANY when the service does not say.
+  """
+  type: String!
+
+  """What the service says the descriptor means."""
+  description: String
+}
+
+"""
 A package of structures/interfaces, derived from the '@package/' prefix of port identifiers.
 """
 type StructurePackage {
   """The package key (the part between '@' and '/')."""
   key: ID!
 
-  """Structures of this package referenced by the org's ports."""
+  """
+  Structures of this package: those the org's ports reference and those a service hosts.
+  """
   structures: [Structure!]!
+
+  """
+  The service of this hub that hosts this package's structures, if one declares any.
+  """
+  service: Service
 
   """Interfaces of this package referenced by the org's ports."""
   interfaces: [Interface!]!

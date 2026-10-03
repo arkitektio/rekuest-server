@@ -71,6 +71,4 @@ class SignalDeclaration:
     descriptor_keys: list[str] = strawberry_django.field(description="The descriptor keys each signal carries — what trigger conditions may test.")
     description: str | None = strawberry_django.field(description="What the service says about the signal.")
 
-    @strawberry_django.field(description="The service that emits it.")
-    def service(self) -> str:
-        return self.agent.name
+    service: "Service" = strawberry_django.field(description="The service that emits it.")

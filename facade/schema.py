@@ -63,7 +63,7 @@ class Query:
     base_catalog = field(resolver=types.dashboard.base_catalog, description="The built-in base catalog every definition and blok is validated against before any registered UI catalog (virtual: shipped with the server, not registered).")
     memory_shelves: list[types.MemoryShelve] = field(description="All memory shelves.")
     memory_drawers: list[types.MemoryDrawer] = field(description="All memory drawers.")
-    structures = field(resolver=types.structure.list_structures, description="All structures referenced by the org's action ports (derived, not registered).")
+    structures = field(resolver=types.structure.list_structures, description="All structures: those the org's action ports reference, and those a service of this hub hosts.")
     structure_packages = field(resolver=types.structure.list_structure_packages, description="All structure packages referenced by the org's action ports (derived, not registered).")
     interfaces = field(resolver=types.structure.list_interfaces, description="All interfaces referenced by the org's action ports (derived, not registered).")
     tasks: list[types.Task] = field(description="All tasks.")
@@ -108,7 +108,7 @@ class Query:
 
     structure_package = field(resolver=types.structure.get_structure_package, description="Fetch a structure package by its key (derived from port identifiers).")
     interface = field(resolver=types.structure.get_interface, description="Fetch an interface by its '@package/key' identifier (derived from port identifiers).")
-    structure = field(resolver=types.structure.get_structure, description="Fetch a structure by its '@package/key' identifier (derived from port identifiers).")
+    structure = field(resolver=types.structure.get_structure, description="Fetch a structure by its '@package/key' identifier: one a port references or a service hosts.")
 
     @field(description="Fetch a memory shelve by ID.")
     def memory_shelve(self, info: Info, id: strawberry.ID) -> types.MemoryShelve:
@@ -160,9 +160,16 @@ class Query:
     def implementation(self, info: Info, id: strawberry.ID) -> types.Implementation:
         return cast(types.Implementation, scoped_get(models.Implementation, info, id, field="action__organization"))
 
+    @field(description="The services of this hub: what each hosts and emits. Hub-wide; a service is not an agent.")
+    def services(self, info: Info, name: str | None = None) -> list[types.Service]:
+        services = models.Service.objects.order_by("name")
+        if name is not None:
+            services = services.filter(name=name)
+        return cast(list[types.Service], list(services))
+
     @field(description="The signals this hub's services declare they emit — what triggers can wait for. Hub-wide.")
     def signal_declarations(self, info: Info, identifier: str | None = None) -> list[types.SignalDeclaration]:
-        declarations = models.SignalDeclaration.objects.select_related("agent").order_by("identifier", "kind")
+        declarations = models.SignalDeclaration.objects.select_related("service").order_by("identifier", "kind")
         if identifier is not None:
             declarations = declarations.filter(identifier=identifier)
         return cast(list[types.SignalDeclaration], list(declarations))
