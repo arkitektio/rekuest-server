@@ -15,11 +15,11 @@ from django.test import Client as HttpClient
 from django.urls import reverse
 
 from embeddings import engine
-from facade import models, service_agents
+from facade import models, provisioning
 from facade.service_trust import rekuest_identifier
 from rekuest_service import trust
 from tests.models.test_action_embedding import _action
-from tests.test_service_agents import hook_action, hub, lab  # noqa: F401  (fixtures)
+from tests.provisioning_fixtures import declared, hub, lab  # noqa: F401  (fixtures)
 
 pytestmark = pytest.mark.usefixtures("fake_takt")
 
@@ -66,40 +66,41 @@ class TestOnlyTaktMayAsk:
 
 @pytest.mark.django_db(transaction=True)
 class TestProvision:
-    def test_it_provisions_the_configured_services(self, hub, lab):
+    def test_it_catalogues_the_services_and_provisions_the_hook_agents(self, hub, lab):
         response = _post("provision")
 
         assert response.status_code == 200
         assert response.json() == {"ok": True, "skipped": False, "failed": []}
-        assert models.Agent.objects.filter(name="housekeeping").exists()
-        assert models.Schedule.objects.filter(interface="tidy_up").count() == 1
+        assert models.Service.objects.filter(name="housekeeping").exists()
+        assert models.Agent.objects.filter(name="janitor", organization=lab).exists()
 
-    def test_it_says_which_service_failed(self, hub):
-        hub.SERVICE_AGENTS = [{"service": "offline", "hook_url": "http://127.0.0.1:9/_rekuest/hook"}, *hub.SERVICE_AGENTS]
+    def test_it_says_what_failed(self, hub):
+        hub.SERVICES = [{"name": "offline", "url": "http://127.0.0.1:9/_rekuest/service"}, *hub.SERVICES]
+        hub.HOOK_AGENTS = [{"name": "gone", "hook_url": "http://127.0.0.1:9/_rekuest/hook"}, *hub.HOOK_AGENTS]
 
-        assert _post("provision").json() == {"ok": False, "skipped": False, "failed": ["offline"]}
+        assert _post("provision").json() == {"ok": False, "skipped": False, "failed": ["service offline", "hook agent gone"]}
 
     def test_a_pass_already_running_elsewhere_is_left_to_it(self, hub, lab):
         """Another replica holds the lock: this one does nothing, and says so."""
         other = connections.create_connection("default")
         try:
             with other.cursor() as cursor:
-                cursor.execute("SELECT pg_advisory_lock(%s)", [service_agents.PROVISION_LOCK_KEY])
+                cursor.execute("SELECT pg_advisory_lock(%s)", [provisioning.PROVISION_LOCK_KEY])
             assert _post("provision").json() == {"ok": True, "skipped": True, "failed": []}
-            assert not models.Agent.objects.filter(name="housekeeping").exists()
+            assert not models.Agent.objects.filter(name="janitor").exists() and not models.Service.objects.exists()
         finally:
             other.close()
 
         assert _post("provision").json()["skipped"] is False
 
-    def test_passes_racing_from_real_threads_leave_one_schedule(self, hub, lab):
+    def test_passes_racing_from_real_threads_leave_one_of_each(self, hub, lab):
         start = threading.Barrier(4)
         answers: list = []
 
         def run() -> None:
             try:
                 start.wait(timeout=10)
-                answers.append(service_agents.provision_all())
+                answers.append(provisioning.provision_all())
             finally:
                 connection.close()
 
@@ -109,10 +110,11 @@ class TestProvision:
         for thread in threads:
             thread.join(timeout=60)
 
-        assert len(answers) == 4 and [] in answers
-        assert all(answer in ([], None) for answer in answers)
-        assert models.Schedule.objects.filter(interface="tidy_up").count() == 1
-        assert models.Agent.objects.filter(name="housekeeping").count() == 1
+        done = {"services": [], "hook_agents": []}
+        assert len(answers) == 4 and done in answers
+        assert all(answer in (done, None) for answer in answers)
+        assert models.Service.objects.filter(name="housekeeping").count() == 1
+        assert models.Agent.objects.filter(name="janitor").count() == 1
 
 
 @pytest.mark.django_db(transaction=True)

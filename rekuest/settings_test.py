@@ -47,14 +47,14 @@ AGENT_REDIS_PORT = int(os.environ.get("REKUEST_TEST_REDIS_PORT", 6666))
 
 PROBE_MAX_INFLIGHT_PER_CALLER = 8
 
-# The hub trust bundle under test, inline: rekuest's own key plus one key per service the tests
-# play (each a separate ``rekuest_service.Service(key=...)``, as separate processes would be).
+# The hub trust bundle under test, inline: rekuest's own key plus one key per instance the tests
+# play (services and a hook agent, each with its own key, as separate processes would have).
 from joserfc.jwk import OKPKey as _TestOKPKey  # noqa: E402
 from rekuest_service.trust import public_jwk as _public_jwk  # noqa: E402
 
 from .settings import INSTANCE, REKUEST_IDENTIFIER  # noqa: E402
 
-TEST_SERVICE_KEYS = {name: _TestOKPKey.generate_key("Ed25519") for name in ("mikro", "housekeeping", "bank")}
+TEST_SERVICE_KEYS = {name: _TestOKPKey.generate_key("Ed25519") for name in ("mikro", "housekeeping", "bank", "janitor")}
 INSTANCE = {
     **INSTANCE,
     "TRUST_JWKS": {

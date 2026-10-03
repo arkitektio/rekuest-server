@@ -1,7 +1,7 @@
 //! `POST /agi/signal/{service}`: a hub service announces that something happened to one of its
 //! objects (`facade/signals_intake.py`).
 //!
-//! The service is one of `SERVICE_AGENTS`; the request carries a service token signed with that
+//! The service is one of `SERVICES`; the request carries a service token signed with that
 //! service's instance key, bound to this path and body. It is keyed by service NAME, so a service
 //! can signal before it knows its agent id. A task's provenance token in the body is checked
 //! against this rekuest's own key; only then does the signal carry a `causing_task`. The signal is

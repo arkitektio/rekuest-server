@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
             name="Service",
             fields=[
                 ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
-                ("name", models.CharField(help_text="The name the service is configured under (rekuest.service_agents[].service)", max_length=1000, unique=True)),
+                ("name", models.CharField(help_text="The name the service is configured under (rekuest.services[].name)", max_length=1000, unique=True)),
                 ("identifier", models.CharField(blank=True, help_text="The identity the service signs as, e.g. live.arkitekt.mikro", max_length=1000, null=True)),
                 ("description", models.TextField(blank=True, help_text="What the service says it is", null=True)),
             ],
@@ -44,5 +44,10 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="signaldeclaration",
             constraint=models.UniqueConstraint(fields=("service", "identifier", "kind"), name="signal_declaration_unique"),
+        ),
+        migrations.AlterField(
+            model_name="signal",
+            name="service",
+            field=models.CharField(help_text="The service that sent it (its `rekuest.services` name)", max_length=200),
         ),
     ]

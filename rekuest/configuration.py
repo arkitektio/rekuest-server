@@ -70,16 +70,28 @@ class RedisSettings(BaseModel):
     channel_capacity: int = Field(default=5000, description="channels_redis capacity. This bounds the ONE per-process receive queue shared by every socket and subscription in a replica — messages beyond it are dropped silently — so it must be far above the library default of 100.")
 
 
-class ServiceAgent(BaseModel):
-    """One of this hub's services, provisioned by rekuest as a HookAgent (see ``facade.service_agents``).
+class ServiceEntry(BaseModel):
+    """One of this hub's services: what it hosts and emits is catalogued from its manifest (see ``facade.service_catalog``).
 
-    No secret: requests both ways are signed with each side's instance key and checked against
-    the hub's trust bundle (``instance.trust``).
+    A service is not an agent and no agent comes of this entry. No secret: requests both ways are
+    signed with each side's instance key and checked against the hub's trust bundle (``instance.trust``).
     """
 
-    service: str = Field(description="The service's name (e.g. 'bank'); names its agent, app and schedules, and its signal endpoint.")
-    hook_url: str = Field(description="Where rekuest POSTs the service's Assigns — its vendored `rekuest_service` endpoint, e.g. http://bank:80/bank/_rekuest/hook.")
-    identifier: Optional[str] = Field(default=None, description="The service's fakts identifier — what its key is listed under in the trust bundle. Default: live.arkitekt.<service>.")
+    name: str = Field(description="The service's name (e.g. 'mikro'): what it is catalogued under, and its signal endpoint.")
+    url: str = Field(description="The service's `rekuest_service` endpoint, e.g. http://mikro:80/mikro/_rekuest/service; its manifest is read at <url>/manifest.")
+    identifier: Optional[str] = Field(default=None, description="The fakts identifier of the service's instance — what its key is listed under in the trust bundle. Default: live.arkitekt.<name>.")
+
+
+class HookAgentEntry(BaseModel):
+    """One of this hub's hook agents: an agent rekuest reaches over HTTP and gives every organization (see ``facade.hook_agents``).
+
+    Not tied to a service: it may run in a service's process or anywhere else. No secret:
+    requests both ways are signed with instance keys.
+    """
+
+    name: str = Field(description="The agent's name: what every organization sees it as.")
+    hook_url: str = Field(description="Where rekuest POSTs the agent's Assigns — its `rekuest_hook` endpoint, e.g. http://mikro:80/mikro/_rekuest/hook; its manifest is read at <hook_url>/manifest.")
+    identifier: Optional[str] = Field(default=None, description="The fakts identifier of the instance the agent runs in — what its key is listed under in the trust bundle. Default: live.arkitekt.<name>.")
 
 
 class TrustBlock(BaseModel):
@@ -112,7 +124,8 @@ class RekuestBlock(BaseModel):
     ephemeral_task_retention: int = Field(default=86400, description="Seconds to keep terminal EPHEMERAL root task trees (housekeeping runs of schedules with ephemeralRuns); applies even while task_retention is 0. 0 disables.")
     takt_url: Optional[str] = Field(default=None, validation_alias=AliasChoices("takt_url", "agentd_url"), description="takt (the agent protocol and every sweep, in Rust) beside this server, with its script name. Defaults to http://takt:8080/<django.force_script_name>, its name in the usual compose layout. Assigns, controls, registrations, deletes, schedules and probes go through its internal API, signed with the instance key; while it is unreachable each of those raises TaktUnavailable. `agentd_url` is its former name and still read.")
     identifier: str = Field(default="live.arkitekt.rekuest", description="This rekuest's fakts identifier — what its key is listed under in the hub trust bundle, and what services require rekuest's requests to come from.")
-    service_agents: list[ServiceAgent] = Field(default_factory=list, description="This hub's services whose periodic work rekuest schedules: each becomes a HookAgent whose actions and default schedules come from the service's manifest.")
+    services: list[ServiceEntry] = Field(default_factory=list, description="This hub's services: each one's structures and signals are catalogued from its manifest. Says nothing about agents.")
+    hook_agents: list[HookAgentEntry] = Field(default_factory=list, description="This hub's hook agents: each is given to every organization, with the actions its manifest lists. Nothing is scheduled or triggered by itself.")
     trigger_max_depth: int = Field(default=3, description="How many trigger firings may chain (a triggered run's object signalling another trigger …) before a signal stops firing — the loop guard.")
     dependency_max_depth: int = Field(default=8, description="How many levels of dependencies an assign resolves below the assigned implementation before it refuses.")
     signal_retention: int = Field(default=604800, description="Seconds to keep processed signals (the runs they caused keep their link as null afterwards); 0 keeps them forever.")

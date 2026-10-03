@@ -110,7 +110,7 @@ pub struct HookTarget {
     pub id: i64,
     pub hook_url: Option<String>,
     pub hook_url_secret: Option<String>,
-    /// Its client's `client_id`: tells a service agent from any other.
+    /// Its client's `client_id`: tells a configured hook agent from any other.
     pub client_id: String,
 }
 
@@ -140,13 +140,13 @@ pub async fn deliver_to_hook(settings: &Settings, agent: &HookTarget, body: &str
         .post(url)
         .header("Content-Type", "application/json")
         .header(AGENT_HEADER, agent.id.to_string());
-    if let Some(entry) = crate::service_trust::entry_for_client(settings, &agent.client_id) {
+    if let Some(entry) = crate::service_trust::hook_agent_for_client(settings, &agent.client_id) {
         match crate::service_trust::sign_to(settings, entry, url, raw) {
             Ok(authorization) => request = request.header("Authorization", authorization),
             Err(e) => {
                 tracing::error!(
                     agent = agent.id,
-                    "Could not sign a delivery to service agent {}: {e}",
+                    "Could not sign a delivery to hook agent {}: {e}",
                     agent.id
                 );
                 return false;

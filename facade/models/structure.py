@@ -1,9 +1,8 @@
 """The hub's services, and what they say they host: read from their manifests by provisioning.
 
-A service is not an agent. A :class:`Service` says what exists on this hub — the structures it
-hosts, the signals it emits — and that is true for every organization. What can be *done* is an
-agent's to say: a service that offers actions has a HookAgent (an ``Agent`` of kind WEBHOOK,
-running inside the service), provisioned beside it and found through its client.
+A service is not an agent and has none. A :class:`Service` says what exists on this hub — the
+structures it hosts, the signals it emits — and that is true for every organization. What can be
+*done* is an agent's to say, and no row here points at one.
 """
 
 from django.db import models
@@ -12,7 +11,7 @@ from django.db import models
 class Service(models.Model):
     """A service of this hub (mikro, kabinet, …), as its manifest describes it. Hub-wide."""
 
-    name = models.CharField(max_length=1000, unique=True, help_text="The name the service is configured under (rekuest.service_agents[].service)")
+    name = models.CharField(max_length=1000, unique=True, help_text="The name the service is configured under (rekuest.services[].name)")
     identifier = models.CharField(max_length=1000, null=True, blank=True, help_text="The identity the service signs as, e.g. live.arkitekt.mikro")
     description = models.TextField(null=True, blank=True, help_text="What the service says it is")
 

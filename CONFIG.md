@@ -205,10 +205,10 @@ server.
 | Key | Env var | Type | Default | Read by | Description |
 |---|---|---|---|---|---|
 | `takt_url` | `REKUEST__TAKT_URL` | str | `http://takt:8080/<script name>` | server | takt's base URL with the script name. The server POSTs to `<takt_url>/internal/<op>` (`facade/takt.py`) and asks `<takt_url>/ht` for its own health check. While takt is unreachable every assign, control, registration, delete, probe and schedule change is refused. `agentd_url`, its former name, is still read. |
-| `server_url` | `REKUEST__SERVER_URL` | str | `http://rekuest:80/<script name>` | takt | The server's base URL with the script name. takt POSTs the upkeep jobs to `<server_url>/_rekuest/upkeep/<job>` (`takt/crates/facade/src/upkeep.rs`). Empty turns upkeep off: no service agent is provisioned and new actions get no embedding. |
+| `server_url` | `REKUEST__SERVER_URL` | str | `http://rekuest:80/<script name>` | takt | The server's base URL with the script name. takt POSTs the upkeep jobs to `<server_url>/_rekuest/upkeep/<job>` (`takt/crates/facade/src/upkeep.rs`). Empty turns upkeep off: no service is catalogued, no hook agent is provisioned and new actions get no embedding. |
 | `identifier` | `REKUEST__IDENTIFIER` | str | `live.arkitekt.rekuest` | both | This rekuest's fakts identifier: what its key is listed under in the hub trust bundle, and the issuer and audience of the service tokens the server signs its internal requests with. |
-| `service_agents` | — (use YAML) | list | `[]` | both | This hub's services, each `{service, hook_url, identifier?}`. The server provisions each as a HookAgent (when takt asks, `facade/upkeep.py`) with the actions and default schedules of its manifest (`facade/service_agents.py`); takt accepts their signed reports and signals. |
-| `service_agents_organization` | `REKUEST__SERVICE_AGENTS_ORGANIZATION` | str | `rekuest-system` | server | The organization (slug) the service agents, their actions and schedules live in. |
+| `services` | — (use YAML) | list | `[]` | both | This hub's services, each `{name, url, identifier?}`. The server catalogues what each hosts and emits from its manifest at `<url>/manifest` (when takt asks, `facade/service_catalog.py`); takt accepts their signed signals. A service is not an agent: nothing here creates one. |
+| `hook_agents` | — (use YAML) | list | `[]` | both | This hub's hook agents, each `{name, hook_url, identifier?}`. The server gives every organization the agent with the actions of its manifest at `<hook_url>/manifest` (`facade/hook_agents.py`); takt signs deliveries to them and accepts their signed reports. Independent of `services`: a hook agent may run in a service's process or anywhere else. Nothing is scheduled or triggered by itself. |
 | `sweep_interval` | `REKUEST__SWEEP_INTERVAL` | int | `5` | both | How often (seconds) takt's sweeps tick (deadlines, schedules, triggers, delayed tasks). Bounds how late any of them can fire. |
 | `grace_default` | `REKUEST__GRACE_DEFAULT` | int | `30` | takt | Reclaim grace window (seconds) after a disconnect: how long a gone agent's running tasks wait for it before they end `LOST` (a workflow is resumed). |
 | `pickup_deadline` | `REKUEST__PICKUP_DEADLINE` | int | `60` | takt | Seconds a dispatched task may go without **any** report from its live agent (or webhook endpoint) before the Assign is redelivered once, then ended `LOST` (never started); `0` disables. |
@@ -240,8 +240,8 @@ Agent heartbeats are not configuration: takt pings every 10 s, waits 5 s for the
 presumes a `connected` agent dead after 30 s without one
 (`takt/crates/rekuest-server/src/settings.rs`).
 
-The server runs no loop of its own. Two jobs need it — provisioning `service_agents` (their
-manifests are registered through its models) and embedding the actions takt registered (only
+The server runs no loop of its own. Two jobs need it — provisioning (the `services` catalog and the
+`hook_agents`, both written through its models) and embedding the actions takt registered (only
 its image carries the model) — and takt asks for each when it is due, at
 `POST <server_url>/_rekuest/upkeep/{provision,reembed}`, signed with the instance key:
 provisioning at start and every 5 minutes (30 s after a failed pass), embedding every 30 s.

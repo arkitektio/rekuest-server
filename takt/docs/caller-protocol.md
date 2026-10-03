@@ -242,7 +242,7 @@ Set it to `strict` once your HookAgents sign V1.
 
 A hub service announces that something happened to one of its objects with
 **`POST /agi/signal/{service}`** (`signal_intake.rs`). The service is one of
-`rekuest.service_agents`; the request carries a service token signed with that service's
+`rekuest.services`; the request carries a service token signed with that service's
 instance key, bound to the path and the body. The signal is stored and answered `202` at once;
 a resend with the same `id` is a no-op. Matching it to triggers and firing them is the
 `triggers` sweep (see [task-lifecycle.md](task-lifecycle.md)).

@@ -13,7 +13,7 @@
 //! thumbprint, and `iss` and `aud` both the rekuest identifier. Replay beyond the time window is
 //! refused by claiming the `jti` in redis.
 //!
-//! Service agents (the hub's own services, reached as HookAgents) are checked against the hub's
+//! The hub's configured instances (its services, its hook agents) are checked against the hub's
 //! trust bundle instead: the coord-vouched public keys of every instance, each listed under its
 //! service's identifier ([`TrustBundle`], [`verify_from`]); deliveries to them are signed with
 //! this instance's key ([`sign_to`]).
@@ -29,7 +29,7 @@ use sha2::{Digest, Sha256};
 use crate::context::Context;
 use crate::provenance::keys::{segment, InstanceKey, ALGORITHM};
 use crate::redis_keys;
-use crate::settings::{ServiceAgent, Settings};
+use crate::settings::{Settings, TrustedInstance};
 
 pub const SCHEME: &str = "RekuestService";
 pub const TYP: &str = "rekuest-service+jwt";
@@ -350,40 +350,37 @@ fn py_str(value: Option<&str>) -> String {
     value.map_or_else(|| "None".to_owned(), |v| format!("'{v}'"))
 }
 
-/// Service agents' clients are minted by rekuest as `rekuest:service-<name>`
-/// (`SERVICE_CLIENT_PREFIX`): that is how an agent is recognised as one.
-pub const SERVICE_CLIENT_PREFIX: &str = "rekuest:service-";
+/// Configured hook agents' clients are minted by rekuest as `rekuest:hook-<name>`
+/// (`HOOK_CLIENT_PREFIX`): that is how an agent is recognised as one.
+pub const HOOK_CLIENT_PREFIX: &str = "rekuest:hook-";
 
-/// The identifier a service signs as (`identifier_of`).
-pub fn identifier_of(entry: &ServiceAgent) -> String {
+/// The identifier an entry's instance signs as (`identifier_of`).
+pub fn identifier_of(entry: &TrustedInstance) -> String {
     entry
         .identifier
         .clone()
-        .unwrap_or_else(|| format!("live.arkitekt.{}", entry.service))
+        .unwrap_or_else(|| format!("live.arkitekt.{}", entry.name))
 }
 
-/// The `SERVICE_AGENTS` entry of the agent whose client is `client_id`; `None` for any other
-/// agent (`entry_for_agent`).
-pub fn entry_for_client<'a>(settings: &'a Settings, client_id: &str) -> Option<&'a ServiceAgent> {
-    let service = client_id.strip_prefix(SERVICE_CLIENT_PREFIX)?;
-    settings
-        .service_agents
-        .iter()
-        .find(|entry| entry.service == service)
+/// The `HOOK_AGENTS` entry of the agent whose client is `client_id`; `None` for any other
+/// agent (`hook_agent_entry_for`).
+pub fn hook_agent_for_client<'a>(
+    settings: &'a Settings,
+    client_id: &str,
+) -> Option<&'a TrustedInstance> {
+    let name = client_id.strip_prefix(HOOK_CLIENT_PREFIX)?;
+    settings.hook_agents.iter().find(|entry| entry.name == name)
 }
 
-/// The `SERVICE_AGENTS` entry named `service` (`entry_for`).
-pub fn entry_for_service<'a>(settings: &'a Settings, service: &str) -> Option<&'a ServiceAgent> {
-    settings
-        .service_agents
-        .iter()
-        .find(|entry| entry.service == service)
+/// The `SERVICES` entry named `service` (`service_entry`).
+pub fn entry_for_service<'a>(settings: &'a Settings, service: &str) -> Option<&'a TrustedInstance> {
+    settings.services.iter().find(|entry| entry.name == service)
 }
 
 /// The `Authorization` of a request from rekuest to a service (`sign_to`).
 pub fn sign_to(
     settings: &Settings,
-    entry: &ServiceAgent,
+    entry: &TrustedInstance,
     url: &str,
     body: &[u8],
 ) -> Result<String, TrustError> {
@@ -406,7 +403,7 @@ pub fn sign_to(
 /// Check a request claiming to come from `entry`'s service (`verify_from`).
 pub async fn verify_from(
     settings: &Settings,
-    entry: &ServiceAgent,
+    entry: &TrustedInstance,
     method: &str,
     path: &str,
     body: &[u8],

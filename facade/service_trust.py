@@ -1,14 +1,17 @@
-"""Trust between rekuest and this hub's services: instance keys, no shared secrets.
+"""Trust between rekuest and the other instances of this hub: instance keys, no shared secrets.
 
-Every request between rekuest and a service agent (``rekuest.service_agents``) — Assign
-deliveries, manifest fetches, the service's reports, its signals — carries a short-lived JWT
-signed with the sender's instance key (:mod:`rekuest_service.trust`, vendored). The receiver
-checks it against the hub's trust bundle: the coord-vouched public keys of every instance,
-each listed under its service's identifier. A service can therefore only speak as itself, and
-only rekuest can speak as rekuest.
+Every request between rekuest and a configured service (``rekuest.services``: its manifest, its
+signals) or hook agent (``rekuest.hook_agents``: Assign deliveries, its manifest, its reports)
+carries a short-lived JWT signed with the sender's instance key (:mod:`rekuest_service.trust`,
+vendored). The receiver checks it against the hub's trust bundle: the coord-vouched public keys
+of every instance, each listed under its identifier. An instance can therefore only speak as
+itself, and only rekuest can speak as rekuest.
+
+Services and hook agents are separate lists, looked up separately; an entry of either says which
+instance it is (``identifier``, default ``live.arkitekt.<name>``).
 
 Third-party HookAgents (registered through ``ensureAgent`` with a ``hook_url_secret``) keep the
-HMAC scheme (takt's ``hooks``); only the hub's own services use keys.
+HMAC scheme (takt's ``hooks``); only the hub's configured ones use keys.
 """
 
 from __future__ import annotations
@@ -22,39 +25,42 @@ from joserfc import jwt
 from joserfc.jwk import KeySet
 from rekuest_service import trust
 
-#: Service agents' clients are minted by rekuest as ``rekuest:service-<name>`` (see
-#: :mod:`facade.service_agents`); that is how an agent is recognised as one.
-SERVICE_CLIENT_PREFIX = "rekuest:service-"
+#: The identities rekuest mints for configured hook agents are named ``hook-<name>``, so their
+#: clients are ``rekuest:hook-<name>``: that is how an agent is recognised as one.
+HOOK_IDENTITY_PREFIX = "hook-"
+HOOK_CLIENT_PREFIX = f"rekuest:{HOOK_IDENTITY_PREFIX}"
 
 
 def rekuest_identifier() -> str:
     return getattr(settings, "REKUEST_IDENTIFIER", None) or "live.arkitekt.rekuest"
 
 
-def entry_for(service: str) -> dict[str, Any] | None:
-    """The ``service_agents`` entry named ``service``."""
-    for entry in getattr(settings, "SERVICE_AGENTS", None) or []:
-        if entry.get("service") == service:
-            return entry
-    return None
+def service_entry(name: str) -> dict[str, Any] | None:
+    """The ``rekuest.services`` entry named ``name``."""
+    return next((entry for entry in getattr(settings, "SERVICES", None) or [] if entry.get("name") == name), None)
+
+
+def hook_agent_entry(name: str) -> dict[str, Any] | None:
+    """The ``rekuest.hook_agents`` entry named ``name``."""
+    return next((entry for entry in getattr(settings, "HOOK_AGENTS", None) or [] if entry.get("name") == name), None)
+
+
+def hook_agent_entry_for(agent: Any) -> dict[str, Any] | None:
+    """The ``rekuest.hook_agents`` entry of a configured hook agent; None for any other agent."""
+    client = getattr(agent, "client", None)
+    client_id = getattr(client, "client_id", "") or ""
+    if not client_id.startswith(HOOK_CLIENT_PREFIX):
+        return None
+    return hook_agent_entry(client_id[len(HOOK_CLIENT_PREFIX) :])
 
 
 def identifier_of(entry: dict[str, Any]) -> str:
-    """The identifier a service signs as (and is listed under in the trust bundle)."""
-    return entry.get("identifier") or f"live.arkitekt.{entry['service']}"
-
-
-def entry_for_agent(agent: Any) -> dict[str, Any] | None:
-    """The ``service_agents`` entry of a service agent; None for any other agent."""
-    client = getattr(agent, "client", None)
-    client_id = getattr(client, "client_id", "") or ""
-    if not client_id.startswith(SERVICE_CLIENT_PREFIX):
-        return None
-    return entry_for(client_id[len(SERVICE_CLIENT_PREFIX) :])
+    """The identifier an entry's instance signs as (and is listed under in the trust bundle)."""
+    return entry.get("identifier") or f"live.arkitekt.{entry['name']}"
 
 
 def sign_to(entry: dict[str, Any], method: str, url: str, body: bytes) -> str:
-    """The ``Authorization`` value of a request from rekuest to this service."""
+    """The ``Authorization`` value of a request from rekuest to this entry's instance (a service or a hook agent)."""
     return trust.sign(method, urlparse(url).path, body, issuer=rekuest_identifier(), audience=identifier_of(entry))
 
 

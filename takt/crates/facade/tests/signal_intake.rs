@@ -10,7 +10,7 @@ use axum::http::HeaderMap;
 use facade::consumers::connections::Connections;
 use facade::provenance::keys::InstanceKey;
 use facade::service_trust::{self, TrustBundle};
-use facade::settings::{ServiceAgent, Settings};
+use facade::settings::{Settings, TrustedInstance};
 use facade::signal_intake::signal_intake;
 use facade::Context;
 use serde_json::{json, Value};
@@ -27,8 +27,8 @@ async fn context() -> Option<(Context, Arc<InstanceKey>)> {
     jwk["service"] = json!("live.arkitekt.bank");
     let settings = Settings {
         instance_key: Some(key.clone()),
-        service_agents: vec![ServiceAgent {
-            service: "bank".into(),
+        services: vec![TrustedInstance {
+            name: "bank".into(),
             identifier: None,
         }],
         trust_bundle: Arc::new(TrustBundle::new(None, Some(&json!({"keys": [jwk]})))),

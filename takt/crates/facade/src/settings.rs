@@ -66,16 +66,20 @@ pub struct Settings {
     /// `DEPENDENCY_MAX_DEPTH`: how many levels of dependencies an assign resolves below the
     /// assigned implementation before it refuses.
     pub dependency_max_depth: usize,
-    /// `SERVICE_AGENTS`: this hub's services, whose agents sign with their instance keys.
-    pub service_agents: Vec<ServiceAgent>,
+    /// `SERVICES`: this hub's services, whose signals are signed with their instance keys.
+    pub services: Vec<TrustedInstance>,
+    /// `HOOK_AGENTS`: this hub's hook agents, reached and answering with instance keys. A
+    /// separate list: a hook agent is not a service's.
+    pub hook_agents: Vec<TrustedInstance>,
     /// The hub's trust bundle (`INSTANCE["TRUST_JWKS_URI"]` / `["TRUST_JWKS"]`).
     pub trust_bundle: Arc<crate::service_trust::TrustBundle>,
 }
 
-/// One entry of `SERVICE_AGENTS`, as far as trust needs it.
+/// One entry of `SERVICES` or `HOOK_AGENTS`, as far as trust needs it: its name there, and the
+/// identifier its instance signs as (default `live.arkitekt.<name>`).
 #[derive(Debug, Clone, PartialEq)]
-pub struct ServiceAgent {
-    pub service: String,
+pub struct TrustedInstance {
+    pub name: String,
     pub identifier: Option<String>,
 }
 
@@ -131,7 +135,8 @@ impl Default for Settings {
             signal_retention: Duration::from_secs(604_800),
             trigger_max_depth: 3,
             dependency_max_depth: 8,
-            service_agents: vec![],
+            services: vec![],
+            hook_agents: vec![],
             trust_bundle: Arc::default(),
         }
     }

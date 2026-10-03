@@ -97,7 +97,7 @@ HOSTED_QUERY = """
             inputUsages { portKey }
         }
         structures { identifier service { name } }
-        services { name description structures { identifier } signals { identifier kind } agent { id } }
+        services { name description structures { identifier } signals { identifier kind } }
     }
 """
 
@@ -130,7 +130,7 @@ async def test_a_hosted_structure_is_listed_though_no_port_references_it(authent
         "inputUsages": [],
     }
     assert {"identifier": "@lab/sample", "service": {"name": "lab"}} in result.data["structures"]
-    # The service is a thing of its own: it hosts and emits, and here no agent stands behind it.
+    # The service is a thing of its own: it hosts and emits, and that is all it does.
     assert result.data["services"] == [
-        {"name": "lab", "description": "The bench.", "structures": [{"identifier": "@lab/sample"}], "signals": [{"identifier": "@lab/sample", "kind": "CREATED"}], "agent": None}
+        {"name": "lab", "description": "The bench.", "structures": [{"identifier": "@lab/sample"}], "signals": [{"identifier": "@lab/sample", "kind": "CREATED"}]}
     ]

@@ -79,8 +79,9 @@ flowchart LR
 over HTTP and its subscriptions over WebSocket, served from `facade.schema.schema` (a
 `kante.Schema` with `Query` / `Mutation` / `Subscription` roots). There is no agent route.
 `run.sh` migrates the database, then starts daphne. The server runs no loop: when takt asks
-(`facade/upkeep.py`, a signed internal endpoint), it provisions this hub's services as
-HookAgents (`facade/service_agents.py`) and re-embeds actions whose embedding is stale
+(`facade/upkeep.py`, a signed internal endpoint), it catalogues this hub's services
+(`facade/service_catalog.py`), gives every organization its hook agents
+(`facade/hook_agents.py`) and re-embeds actions whose embedding is stale
 (`embeddings/healer.py`). Its health check answers for takt too (`rekuest/health.py`).
 
 **takt.** The `takt` binary (`takt/crates/rekuest-server/src/main.rs`) reads the same

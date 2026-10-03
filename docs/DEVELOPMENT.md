@@ -88,8 +88,10 @@ rekuest-server-next/
 │   ├── backend.py          # The control backend the mutations call; delegates to takt.py
 │   ├── schedules.py        # Schedule calls to takt (validate, plan, run now)
 │   ├── triggers.py         # What a trigger is checked against when it is written
-│   ├── service_agents.py   # Provisions this hub's services as HookAgents
-│   ├── upkeep.py           # The jobs takt asks for: service agents + stale embeddings
+│   ├── service_catalog.py  # Catalogues this hub's services: structures + signals
+│   ├── hook_agents.py      # Gives every organization this hub's hook agents
+│   ├── provisioning.py     # The pass that runs both, one replica at a time
+│   ├── upkeep.py           # The jobs takt asks for: provisioning + stale embeddings
 │   ├── descriptors.py      # requires/provides → JSONPath compiler
 │   ├── managers.py         # Relational port-matching engine
 │   ├── channels.py         # Realtime channels

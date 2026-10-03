@@ -48,8 +48,10 @@ AGENT_REDIS_PORT = conf.redis.port
 # Namespace of every first-party redis key — see ``facade.redis_keys``.
 REDIS_KEY_PREFIX = conf.redis.key_prefix
 
-# This hub's services, provisioned as HookAgents when takt asks (``facade.upkeep``).
-SERVICE_AGENTS = [agent.model_dump() for agent in conf.rekuest.service_agents]
+# This hub's services (catalogued) and hook agents (given to every organization): two separate
+# lists, provisioned when takt asks (``facade.upkeep``).
+SERVICES = [entry.model_dump() for entry in conf.rekuest.services]
+HOOK_AGENTS = [entry.model_dump() for entry in conf.rekuest.hook_agents]
 
 # Every deadline, sweep interval, retention horizon and the trigger loop guard are takt's: it
 # reads them from the same ``rekuest`` configuration block.

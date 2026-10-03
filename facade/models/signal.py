@@ -22,7 +22,7 @@ from facade import enums
 class Signal(models.Model):
     """One event a service announced. Best-effort: nothing redelivers a signal that never arrived."""
 
-    service = models.CharField(max_length=200, help_text="The service that sent it (its `rekuest.service_agents` name)")
+    service = models.CharField(max_length=200, help_text="The service that sent it (its `rekuest.services` name)")
     signal_id = models.CharField(max_length=200, help_text="The service's id for the signal; a resend with the same id is a no-op")
     kind = models.CharField(max_length=20, choices=enums.SignalKindChoices.choices, help_text="What happened to the object")
     identifier = models.CharField(max_length=1000, help_text="The object's structure identifier, e.g. @mikro/arraydataset")

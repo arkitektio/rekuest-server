@@ -2,7 +2,7 @@
 //! (`facade/mutations/agent.py`: `ensureAgent`, `implementAgent`).
 //!
 //! A socket agent does both itself on REGISTER; these serve the callers that have no socket:
-//! dashboards, HookAgents bootstrapping, and the service agents rekuest provisions.
+//! dashboards, HookAgents bootstrapping, and the hook agents rekuest provisions.
 
 use rekuest_core::inputs::ImplementAgentInputModel;
 use serde::{Deserialize, Deserializer};

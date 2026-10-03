@@ -1,4 +1,4 @@
-"""The server's upkeep jobs, run when takt asks: service agents and embeddings.
+"""The server's upkeep jobs, run when takt asks: provisioning and embeddings.
 
 Everything periodic in this deployment is on takt's clock. Two jobs need this server — service
 manifests are registered through its models, and embeddings run the model, which only this
@@ -8,7 +8,7 @@ image carries — so takt calls them here, signed with the instance key (it read
 ==========================  ===============================  =================================
 ``POST _rekuest/upkeep/…``  does                             takt calls it
 ==========================  ===============================  =================================
-``provision``               ``service_agents.provision_all``  at start, then every 5 minutes
+``provision``               ``provisioning.provision_all``     at start, then every 5 minutes
                                                              (sooner after a failure)
 ``reembed``                 ``reembed_stale(Action)``         every 30 seconds, and again at
                                                              once while there is more
@@ -31,7 +31,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from embeddings import healer
-from facade import models, redis_keys, service_agents, service_trust
+from facade import models, provisioning, redis_keys, service_trust
 from rekuest_service import trust
 
 logger = logging.getLogger(__name__)
@@ -48,10 +48,11 @@ def _claim(verified: trust.Verified) -> bool:
 
 
 def provision() -> dict[str, Any]:
-    """One provisioning pass over ``rekuest.service_agents``; which services failed."""
-    failed = service_agents.provision_all()
-    if failed is None:
+    """One provisioning pass — the service catalog, then the hook agents; which of them failed."""
+    outcome = provisioning.provision_all()
+    if outcome is None:
         return {"ok": True, "skipped": True, "failed": []}
+    failed = [*(f"service {name}" for name in outcome["services"]), *(f"hook agent {name}" for name in outcome["hook_agents"])]
     return {"ok": not failed, "skipped": False, "failed": failed}
 
 

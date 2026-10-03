@@ -38,7 +38,7 @@ struct HookAgent {
 }
 
 /// `(ok, digest)`: whether the request is the agent's, and what names it for the replay guard
-/// (`_authenticate`). A service agent's report carries a service token (its `jti` is the digest);
+/// (`_authenticate`). A configured hook agent's report carries a service token (its `jti` is the digest);
 /// any other a V1 signature, or in `compat` mode the legacy one, which has no digest.
 async fn authenticate(
     ctx: &Context,
@@ -48,7 +48,7 @@ async fn authenticate(
     path: &str,
 ) -> (bool, Option<String>) {
     let header = |name: &str| headers.get(name).and_then(|v| v.to_str().ok());
-    if let Some(entry) = service_trust::entry_for_client(&ctx.settings, &agent.client_id) {
+    if let Some(entry) = service_trust::hook_agent_for_client(&ctx.settings, &agent.client_id) {
         return match service_trust::verify_from(
             &ctx.settings,
             entry,
@@ -61,7 +61,7 @@ async fn authenticate(
         {
             Ok(verified) => (true, Some(format!("jwt:{}", verified.jti))),
             Err(e) => {
-                tracing::info!("Service agent {}: refused a report: {e}", agent.id);
+                tracing::info!("Hook agent {}: refused a report: {e}", agent.id);
                 (false, None)
             }
         };

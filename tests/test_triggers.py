@@ -10,7 +10,7 @@ import pytest
 from tests import registered
 
 from facade import enums, models, triggers
-from facade.service_agents import _identity
+from facade.hook_agents import _identity
 
 IDENTIFIER = "@mikro/arraydataset"
 CHANNELS = "@mikro/n_channels"
@@ -18,7 +18,7 @@ CHANNELS = "@mikro/n_channels"
 
 @pytest.fixture
 def mikro_service(settings):
-    settings.SERVICE_AGENTS = [{"service": "mikro", "hook_url": "http://127.0.0.1:9/_rekuest/hook"}]
+    settings.SERVICES = [{"name": "mikro", "url": "http://127.0.0.1:9/_rekuest/service"}]
     return settings
 
 

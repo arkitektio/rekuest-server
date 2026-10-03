@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use facade::provenance::keys::InstanceKey;
 use facade::service_trust::TrustBundle;
-use facade::settings::{ProvenanceSettings, ServiceAgent, Settings};
+use facade::settings::{ProvenanceSettings, Settings, TrustedInstance};
 
 use crate::Configuration;
 
@@ -67,11 +67,19 @@ pub fn from_configuration(configuration: &Configuration) -> anyhow::Result<Setti
         signal_retention: Duration::from_secs(rekuest.signal_retention),
         trigger_max_depth: rekuest.trigger_max_depth,
         dependency_max_depth: rekuest.dependency_max_depth,
-        service_agents: rekuest
-            .service_agents
+        services: rekuest
+            .services
             .iter()
-            .map(|entry| ServiceAgent {
-                service: entry.service.clone(),
+            .map(|entry| TrustedInstance {
+                name: entry.name.clone(),
+                identifier: entry.identifier.clone(),
+            })
+            .collect(),
+        hook_agents: rekuest
+            .hook_agents
+            .iter()
+            .map(|entry| TrustedInstance {
+                name: entry.name.clone(),
                 identifier: entry.identifier.clone(),
             })
             .collect(),

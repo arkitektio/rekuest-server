@@ -146,8 +146,9 @@ actions are assigned (`facade::triggers`). `rekuest.trigger_max_depth` bounds ch
 
 ## Upkeep
 
-Two periodic jobs need the Python server, which runs no loop: provisioning this hub's services
-(`rekuest.service_agents`) and embedding the actions takt registered (only the server's image
+Two periodic jobs need the Python server, which runs no loop: provisioning (cataloguing this hub's
+services, `rekuest.services`, and giving every organization its hook agents,
+`rekuest.hook_agents`) and embedding the actions takt registered (only the server's image
 carries the model). `facade::upkeep` asks for each when it is due, with
 `POST <rekuest.server_url>/_rekuest/upkeep/<job>`, signed with the instance key: `provision` at
 start and every 5 minutes (30 s after a failed pass), `reembed` every 30 s and again at once

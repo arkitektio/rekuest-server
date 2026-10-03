@@ -144,7 +144,7 @@ class Interface:
         return await sync_to_async(_port_usages)(info, self.identifier, "INTERFACE", models.ReturnPort)
 
 
-@strawberry_django.type(models.Service, description="A service of this hub (mikro, kabinet, …): the structures it hosts and the signals it emits, the same for every organization. Not an agent — the work a service can be asked to do is offered by its HookAgent.")
+@strawberry_django.type(models.Service, description="A service of this hub (mikro, kabinet, …): the structures it hosts and the signals it emits, the same for every organization. Not an agent, and it has none: a service says what exists, agents say what can be done.")
 class Service:
     id: strawberry.ID = strawberry_django.field(description="Unique ID of the service.")
     name: str = strawberry_django.field(description="The name the service is known by on this hub.")
@@ -155,12 +155,6 @@ class Service:
     @strawberry_django.field(description="The structures it hosts.")
     def structures(self) -> list["Structure"]:
         return [Structure(identifier=row.identifier, declaration=row) for row in self.structures.select_related("service").order_by("identifier")]
-
-    @strawberry_django.field(description="Its HookAgent in your organization, when the service offers actions.")
-    def agent(self, info: Info) -> Optional["Agent"]:
-        from facade import service_trust
-
-        return models.Agent.objects.filter(client__client_id=f"{service_trust.SERVICE_CLIENT_PREFIX}{self.name}", organization=info.context.request.organization).first()
 
 
 @strawberry.type(description="A descriptor of a hosted structure's objects: a key action ports can require or provide, and triggers can test.")

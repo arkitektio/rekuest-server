@@ -131,9 +131,13 @@ pub struct RekuestBlock {
     /// How many levels of dependencies an assign resolves below the assigned implementation.
     #[serde(default = "d8")]
     pub dependency_max_depth: usize,
-    /// This hub's services, provisioned by the Python server as HookAgents.
+    /// This hub's services, catalogued by the Python server; takt takes their signals.
     #[serde(default)]
-    pub service_agents: Vec<ServiceAgentBlock>,
+    pub services: Vec<ServiceBlock>,
+    /// This hub's hook agents, provisioned by the Python server; takt delivers to them and
+    /// takes their reports. A separate list: a hook agent is not a service's.
+    #[serde(default)]
+    pub hook_agents: Vec<HookAgentBlock>,
     /// The Python server beside this takt, with its script name: takt asks it for the upkeep
     /// jobs (`facade::upkeep`). Defaults to `http://rekuest:80/<django.force_script_name>`, its
     /// name in the usual compose layout; empty turns upkeep off.
@@ -141,10 +145,19 @@ pub struct RekuestBlock {
     pub server_url: Option<String>,
 }
 
-/// One of this hub's services, reached as a HookAgent (`ServiceAgentSettings`).
+/// One of this hub's services (`ServiceEntry`): what exists. Its manifest is at `<url>/manifest`.
 #[derive(Debug, Clone, Deserialize)]
-pub struct ServiceAgentBlock {
-    pub service: String,
+pub struct ServiceBlock {
+    pub name: String,
+    pub url: String,
+    #[serde(default)]
+    pub identifier: Option<String>,
+}
+
+/// One of this hub's hook agents (`HookAgentEntry`): what can be done, reached over HTTP.
+#[derive(Debug, Clone, Deserialize)]
+pub struct HookAgentBlock {
+    pub name: String,
     pub hook_url: String,
     #[serde(default)]
     pub identifier: Option<String>,

@@ -97,9 +97,9 @@ def implementation_post_del(sender, instance: models.Implementation = None, **kw
 
 @receiver(post_save, sender=Organization)
 def organization_post_save(sender, instance: Organization = None, created=None, **kwargs):
-    """A new organization gets every service's HookAgent on the fly (an organization takt was
+    """A new organization gets every hook agent on the fly (an organization takt was
     first to see has no such moment; the provisioning pass gives it its agents)."""
     if created:
-        from facade import service_agents
+        from facade import hook_agents
 
-        transaction.on_commit(lambda: service_agents.provision_new_organization(instance))
+        transaction.on_commit(lambda: hook_agents.provision_new_organization(instance))
