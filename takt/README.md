@@ -65,8 +65,12 @@ takt reads the rekuest server's `config.yaml`
   server (`POSTGRES__PASSWORD`, `REKUEST__PICKUP_DEADLINE`, `DJANGO__DEBUG`). They apply to the
   blocks takt reads: `django`, `postgres`, `redis`, `authentikate`, `rekuest`, `provenance`,
   `instance`.
-- **The `instance` block is required.** takt refuses to start without it: the server signs
-  every internal request with the instance key, and takt verifies with the same key.
+- **The `instance` block is required.** takt refuses to start without it: it signs what it
+  asks of the server (the upkeep jobs) and of HookAgents with the instance key.
+- **`TAKT_INTERNAL_BIND`** is where the internal API is served, apart from the address agents
+  and services reach: `unix:<path>` (a socket the server mounts too; `rekuest.takt_socket` on
+  its side) or an address (default `127.0.0.1:8081`: this machine alone, so a deployment
+  sets it). Nothing on it is authenticated: whoever reaches it is taken for the server.
 - **`TAKT_BIND`** is the listen address (default `0.0.0.0:8080`). Routes are served under the
   config's `django.force_script_name`.
 - **`RUST_LOG`** sets the log filter (default `info`).
@@ -85,7 +89,7 @@ All under the script-name prefix (`crates/rekuest-server/src/urls.rs`):
 | `POST /agent/http/{agent_id}` | the HookAgent intake: the frames a socket agent would send, signed |
 | `POST /agent/signal/{service}` | a hub service's signal |
 | `/agi`, `/agi/http/…`, `/agi/signal/…` | the same three under their former name, which released agents and services ask for |
-| `POST /internal/<op>` | the internal API |
+| `POST /internal/<op>` | the internal API, on the internal listener only (with a `GET /ht` of its own) |
 | `GET /ht` | 200 when Postgres and Redis answer |
 
 `takt healthcheck` requests `/ht` on the local port and exits non-zero unless it answers 200.
@@ -94,14 +98,20 @@ The image uses it as its `HEALTHCHECK`, since it carries no HTTP client.
 ## The internal API
 
 The rekuest server calls `POST {prefix}/internal/<op>` with a JSON body (`facade/takt.py` on
-the server's side, `rekuest.takt_url` in its configuration). The route table, the request and
-answer shapes and the authentication are documented at the top of
-`crates/rekuest-server/src/internal.rs`.
+the server's side, `rekuest.takt_url` and `rekuest.takt_socket` in its configuration). It is
+served on a listener of its own (`TAKT_INTERNAL_BIND`), not on the one agents and services
+reach. The route table, the request and answer shapes and the authentication are documented at
+the top of `crates/rekuest-server/src/internal.rs`.
 
-Requests are signed with the instance key: a service token (`Authorization: RekuestService
-<jwt>`) whose issuer and audience are both `rekuest.identifier`, bound to the method, the full
-path and the body, valid for 60 seconds and accepted once. A refused operation answers `400` or
-`403` with a message, which the server raises as the GraphQL error.
+A created, changed or deleted schedule is not a request. The server says so with a Postgres
+`NOTIFY` in the transaction that writes the row, which takt hears when that commits
+(`crates/facade/src/schedule_notices.rs`); nothing is answered, and the reaper plans whatever a
+lost notice left unplanned.
+
+Requests are not signed. Reaching the internal listener is the gate, so it must be one only
+the server reaches: the unix socket the two mount, or an address nothing else is routed to. A
+refused operation answers `400` or `403` with a message, which the server raises as the GraphQL
+error.
 
 Nothing here is public API: only the rekuest server beside takt may call it.
 

@@ -12,7 +12,7 @@ use chrono::{DateTime, Utc};
 use facade::backend::{self, BackendError, Control};
 use facade::consumers::connections::Connections;
 use facade::settings::Settings;
-use facade::{retention, schedules, triggers, Context};
+use facade::{retention, schedule_notices, schedules, triggers, Context};
 use serde_json::{json, Value};
 
 const IDENTIFIER: &str = "@mikro/arraydataset";
@@ -337,6 +337,147 @@ async fn two_replicas_refilling_plan_one_run() {
     );
 
     assert_eq!(usize::from(one.unwrap()) + usize::from(other.unwrap()), 1);
+    the_open_run(&ctx, schedule).await;
+}
+
+fn notice(body: Value) -> String {
+    let mut body = body;
+    body["id"] = json!(unique("notice"));
+    body.to_string()
+}
+
+#[tokio::test]
+async fn a_notice_plans_and_a_replan_replaces_the_waiting_run_once() {
+    let _serial = SERIAL.lock().await;
+    let Some(ctx) = context(Settings::default()).await else {
+        return;
+    };
+    let (schedule, _) = schedule(&ctx, 60, true).await;
+
+    schedule_notices::handle(&ctx, &notice(json!({"schedule": schedule}))).await;
+    let first = the_open_run(&ctx, schedule).await;
+    // Nothing changed about its run: the waiting one stays.
+    schedule_notices::handle(&ctx, &notice(json!({"schedule": schedule}))).await;
+    assert_eq!(the_open_run(&ctx, schedule).await.id, first.id);
+
+    let replan = notice(json!({"schedule": schedule, "replan": true}));
+    schedule_notices::handle(&ctx, &replan).await;
+    let second = the_open_run(&ctx, schedule).await;
+    assert_ne!(second.id, first.id, "the run of the old terms went");
+
+    // Every replica hears every notice: the one that hears it second leaves the new run alone.
+    schedule_notices::handle(&ctx, &replan).await;
+    assert_eq!(the_open_run(&ctx, schedule).await.id, second.id);
+}
+
+/// A schedule given other args keeps running: the slot its cancelled run held is skipped, not
+/// assigned again under the same reference (which names the old assignment, and is refused).
+#[tokio::test]
+async fn a_schedule_changed_under_its_waiting_run_plans_the_following_slot() {
+    let _serial = SERIAL.lock().await;
+    let Some(ctx) = context(Settings::default()).await else {
+        return;
+    };
+    let (schedule, _) = schedule(&ctx, 60, true).await;
+    schedule_notices::handle(&ctx, &notice(json!({"schedule": schedule}))).await;
+    let first = the_open_run(&ctx, schedule).await;
+
+    sqlx::query("UPDATE facade_schedule SET args = $2 WHERE id = $1")
+        .bind(schedule)
+        .bind(json!({"image": {"__identifier": IDENTIFIER, "object": "8"}}))
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    schedule_notices::handle(&ctx, &notice(json!({"schedule": schedule, "replan": true}))).await;
+
+    let second = the_open_run(&ctx, schedule).await;
+    assert!(second.not_before > first.not_before, "the slot after");
+    let (failures, error, _) = bookkeeping(&ctx, schedule).await;
+    assert_eq!((failures, error), (0, None), "nothing was refused");
+}
+
+#[tokio::test]
+async fn a_deleted_schedules_run_is_dropped_only_while_it_waits() {
+    let _serial = SERIAL.lock().await;
+    let Some(ctx) = context(Settings::default()).await else {
+        return;
+    };
+    let (waiting, _) = schedule(&ctx, 60, true).await;
+    let (executing, _) = schedule(&ctx, 60, true).await;
+    schedules::refill_one(&ctx, waiting).await.unwrap();
+    schedules::refill_one(&ctx, executing).await.unwrap();
+    let handed_over = the_open_run(&ctx, executing).await;
+    sqlx::query("UPDATE facade_task SET dispatch_attempts = 1 WHERE id = $1")
+        .bind(handed_over.id)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+
+    let run = the_open_run(&ctx, waiting).await.id;
+    schedule_notices::handle(&ctx, &notice(json!({"run": run}))).await;
+    schedule_notices::handle(&ctx, &notice(json!({"run": handed_over.id}))).await;
+    // An unreadable notice is dropped, not a reason to stop listening.
+    schedule_notices::handle(&ctx, "not json").await;
+
+    assert!(open_runs(&ctx, waiting).await.is_empty());
+    assert_eq!(the_open_run(&ctx, executing).await.id, handed_over.id);
+}
+
+/// The whole path: a `NOTIFY` in a transaction reaches the listener when it commits, and never
+/// if it rolls back.
+#[tokio::test]
+async fn takt_hears_a_notice_when_its_transaction_commits() {
+    let _serial = SERIAL.lock().await;
+    let Some(ctx) = context(Settings::default()).await else {
+        return;
+    };
+    let (schedule, _) = schedule(&ctx, 60, true).await;
+    let listener = tokio::spawn(schedule_notices::run_forever(ctx.clone()));
+    // Listening is a statement on the listener's own connection: wait until it is in place.
+    for _ in 0..100 {
+        let listening: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE query ILIKE 'LISTEN%rekuest_schedule%')",
+        )
+        .fetch_one(&ctx.db)
+        .await
+        .unwrap();
+        if listening {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let notify = "SELECT pg_notify($1, $2)";
+
+    let mut rolled_back = ctx.db.begin().await.unwrap();
+    sqlx::query(notify)
+        .bind(schedule_notices::CHANNEL)
+        .bind(notice(json!({"schedule": schedule})))
+        .execute(&mut *rolled_back)
+        .await
+        .unwrap();
+    rolled_back.rollback().await.unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert!(open_runs(&ctx, schedule).await.is_empty());
+
+    let mut committed = ctx.db.begin().await.unwrap();
+    sqlx::query(notify)
+        .bind(schedule_notices::CHANNEL)
+        .bind(notice(json!({"schedule": schedule})))
+        .execute(&mut *committed)
+        .await
+        .unwrap();
+    assert!(
+        open_runs(&ctx, schedule).await.is_empty(),
+        "not before it commits"
+    );
+    committed.commit().await.unwrap();
+    for _ in 0..100 {
+        if !open_runs(&ctx, schedule).await.is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    listener.abort();
     the_open_run(&ctx, schedule).await;
 }
 

@@ -1,6 +1,8 @@
-//! The routes (`rekuest/urls.py` and `asgi.py`): health, the agent socket, and the internal API
-//! (`/internal/…`, [`crate::internal`]) the HookAgent intake (`/agi/http/{agent}`) and hub services' signals (`/agi/signal/{service}`). Everything is served
-//! under the configuration's `force_script_name`, as Django serves it.
+//! The routes (`rekuest/urls.py` and `asgi.py`), on two listeners. What agents and services
+//! reach ([`router`]): health, the agent socket, the HookAgent intake (`/agi/http/{agent}`) and
+//! hub services' signals (`/agi/signal/{service}`). What only the rekuest server reaches
+//! ([`internal_router`]): health and the internal API (`/internal/…`, [`crate::internal`]).
+//! Everything is served under the configuration's `force_script_name`, as Django serves it.
 
 use std::sync::Arc;
 
@@ -23,13 +25,32 @@ pub struct AppState {
 
 pub type Shared = Arc<AppState>;
 
-pub fn router(state: Shared) -> Router {
+/// `routes` under the configuration's prefix.
+fn prefixed(state: Shared, routes: Router<Shared>) -> Router {
     let prefix = state
         .configuration
         .django
         .force_script_name
         .trim_matches('/')
         .to_owned();
+    let routes = if prefix.is_empty() {
+        routes
+    } else {
+        Router::new().nest(&format!("/{prefix}"), routes)
+    };
+    routes.with_state(state)
+}
+
+/// The internal listener's routes: the internal API, and health for the server's own `ht`.
+pub fn internal_router(state: Shared) -> Router {
+    let routes = Router::new()
+        .route("/ht", get(health))
+        .merge(crate::internal::routes());
+    prefixed(state, routes)
+}
+
+/// The public listener's routes. The internal API is not among them.
+pub fn router(state: Shared) -> Router {
     let routes = Router::new()
         .route("/ht", get(health))
         // `agent` is the endpoint's name; `agi` is its former one, which every released agent
@@ -40,14 +61,8 @@ pub fn router(state: Shared) -> Router {
         .route("/agent/signal/{service}", post(signal_intake))
         .route("/agi", get(agent_socket))
         .route("/agi/http/{agent_id}", post(hook_intake))
-        .route("/agi/signal/{service}", post(signal_intake))
-        .merge(crate::internal::routes());
-    let routes = if prefix.is_empty() {
-        routes
-    } else {
-        Router::new().nest(&format!("/{prefix}"), routes)
-    };
-    routes.with_state(state)
+        .route("/agi/signal/{service}", post(signal_intake));
+    prefixed(state, routes)
 }
 
 /// The agent websocket (`re_dynamicpath(r"agi", AgentConsumer.as_asgi())`).

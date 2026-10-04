@@ -35,6 +35,7 @@ pub mod registration;
 pub mod registration_lock;
 pub mod removal;
 pub mod retention;
+pub mod schedule_notices;
 pub mod schedules;
 pub mod schema;
 pub mod service_trust;

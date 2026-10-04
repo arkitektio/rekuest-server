@@ -1,25 +1,15 @@
 //! The internal API: the Python server's GraphQL mutations, handed to takt.
 //!
 //! Every route is `POST {force_script_name}/internal/<op>` with a JSON body, and answers JSON.
-//! Nothing here is public API: only the rekuest server beside takt may call it.
+//! Nothing here is public API: only the rekuest server beside takt may call it. It is served on
+//! a listener of its own (`TAKT_INTERNAL_BIND`: a unix socket both mount, or an address), not on
+//! the one agents and services reach.
 //!
-//! # Authentication
+//! # Who may call
 //!
-//! A service token, exactly as `rekuest_service.trust.sign` makes one:
-//!
-//! ```text
-//! Authorization: RekuestService <jwt>
-//! header  {"alg": "Ed25519", "kid": <RFC 7638 thumbprint of instance.private_key>, "typ": "rekuest-service+jwt"}
-//! claims  {"iss": <rekuest.identifier>, "aud": <rekuest.identifier>, "iat", "exp" (iat + 60),
-//!          "jti", "htm": "POST", "htu": <the full request path, prefix included>,
-//!          "bh": <base64url sha256 of the body, unpadded>}
-//! ```
-//!
-//! The rekuest server and takt read the same `config.yaml`, so they hold the same instance key:
-//! in Python, `trust.sign("POST", path, body, issuer=rekuest_identifier(),
-//! audience=rekuest_identifier())`. A token is accepted once (its `jti` is claimed in redis) and
-//! only within ±30 s of its window. Refusals: `401 {"error"}` (no or bad token), `409 {"error"}`
-//! (a replayed token).
+//! Whoever can reach the listener, and that is the whole gate: a request that arrives here is
+//! the server's. Nothing is signed and nothing is checked, so the listener must be one only the
+//! server reaches: the unix socket the two mount, or an address nothing else is routed to.
 //!
 //! # The principal
 //!
@@ -39,8 +29,8 @@
 //! | `resolve` | `{"principal", "input": {"implementation", "dependencies"?}}` (a dry run of an assign's dependency tree) | `{"dependencies", "meta", "satisfied"}` |
 //! | `cancel`, `interrupt`, `pause` | `{"principal"?, "task"}` | `{"task"}` |
 //! | `resume` | `{"principal"?, "task", "step"?}` | `{"task"}` |
-//! | `bounce`, `kick`, `unblock` | `{"principal", "agent"}` | `{"agent"}` |
-//! | `block` | `{"principal", "agent", "reason"?}` | `{"agent"}` |
+//! | `bounce`, `unblock` | `{"principal", "agent"}` | `{"agent"}` |
+//! | `kick`, `block` | `{"principal", "agent", "reason"?}` (the reason goes to the agent in its Kick frame) | `{"agent"}` |
 //! | `collect` | `{"principal", "drawers": [id, …]}` | `{"drawers"}` |
 //! | `probe` | `{"principal", "input": ProbeInput}` | the probe's state, with `id` |
 //! | `probe/cancel`, `probe/pause`, `probe/resume` | `{"principal", "probe"}` | the probe's state, with `id` |
@@ -50,10 +40,8 @@
 //! | `implementation/delete` | `{"principal", "implementation"}` | `{"implementation"}` |
 //! | `action/cleanup` | `{"principal", "actions"?: [id, …]}` (the organization's actions nothing implements) | `{"deleted"}` |
 //! | `schedule/validate` | `{"interval_seconds"?, "cron"?, "timezone"}` | `{}`, or `400` saying what is wrong with the timing |
-//! | `schedule/plan` | `{"schedule", "replan"?, "principal"?}` (plans the next run now; `replan` cancels the waiting one first) | `{"planned"}` |
-//! | `schedule/cancel-waiting` | `{"schedule", "principal"?}` | `{}` |
 //! | `schedule/trigger` | `{"schedule"}` (run now) | `{"task"}` |
-//! | `schedule/upcoming` | `{"interval_seconds"?, "cron"?, "timezone", "created_at", "count"}` (the timing's next slots after now) | `{"slots": [RFC 3339, …]}` |
+//! | `schedule/upcoming` | `{"timings": [{"interval_seconds"?, "cron"?, "timezone", "created_at", "count"}, …]}` (each timing's next slots after now) | `{"upcoming": [{"slots": [RFC 3339, …]} or {"error"}, …]}`, in the order asked |
 //! | `trigger/fire` | `{"principal", "trigger", "signal"}` (a replay: fires the trigger on a stored signal, whatever its conditions) | `{"firing"}` |
 //! | `drawer/shelve` | `{"principal", "identifier", "resource_id", "label"?, "description"?}` | `{"drawer"}` |
 //! | `drawer/unshelve` | `{"principal", "id"}` (a resource id, else a drawer id) | `{"drawer"}` |
@@ -69,11 +57,14 @@
 //! trusted one (`caller=None`); with one, the task must be in the principal's organization.
 //! Refused ops answer `400 {"error"}` (the Python `ValueError`) or `403 {"error"}` (its
 //! `PermissionError`), with the Python server's messages.
+//!
+//! A changed schedule is not a route: the server says so with a `NOTIFY` in the transaction that
+//! changes it ([`facade::schedule_notices`]).
 
 use axum::{
     body::Bytes,
-    extract::{OriginalUri, State},
-    http::{HeaderMap, Method, StatusCode},
+    extract::State,
+    http::StatusCode,
     response::{IntoResponse, Response},
     routing::post,
     Json, Router,
@@ -81,7 +72,6 @@ use axum::{
 use facade::backend::{self, AssignInput, AssignOrigin, BackendError};
 use facade::caller_context::CallerContext;
 use facade::probes::backend::{self as probe_backend, ProbeControl, ProbeInput};
-use facade::service_trust;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -110,11 +100,6 @@ pub fn routes() -> Router<Shared> {
         .route("/internal/agent/implement", post(implement_agent))
         .route("/internal/agent/delete", post(delete_agent))
         .route("/internal/schedule/validate", post(validate_schedule))
-        .route("/internal/schedule/plan", post(plan_schedule))
-        .route(
-            "/internal/schedule/cancel-waiting",
-            post(cancel_waiting_run),
-        )
         .route("/internal/schedule/trigger", post(trigger_schedule))
         .route("/internal/schedule/upcoming", post(upcoming_slots))
         .route("/internal/trigger/fire", post(fire_trigger))
@@ -243,64 +228,16 @@ impl Principal {
     }
 }
 
-/// Verify the service token and parse the body.
-async fn authorize<T: for<'de> Deserialize<'de>>(
-    state: &Shared,
-    method: &Method,
-    uri: &axum::http::Uri,
-    headers: &HeaderMap,
-    body: &Bytes,
-) -> Result<T, Refusal> {
-    let facade = &state.facade;
-    let Some(key) = facade.settings.instance_key.as_deref() else {
-        return Err(Refusal(
-            StatusCode::UNAUTHORIZED,
-            "No instance key configured".into(),
-        ));
-    };
-    let authorization = headers
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok());
-    let verified = service_trust::verify(
-        key,
-        method.as_str(),
-        uri.path(),
-        body,
-        authorization,
-        &facade.settings.rekuest_identifier,
-    )
-    .map_err(|e| Refusal(StatusCode::UNAUTHORIZED, e.0))?;
-    match service_trust::claim(facade, &verified).await {
-        Ok(true) => {}
-        Ok(false) => {
-            return Err(Refusal(
-                StatusCode::CONFLICT,
-                "Replayed service token".into(),
-            ))
-        }
-        // Fail closed: without the guard, knocking redis over would allow replays.
-        Err(e) => {
-            tracing::error!("internal API replay guard unavailable: {e}");
-            return Err(Refusal(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Replay guard unavailable".into(),
-            ));
-        }
-    }
+/// The request, read from its body.
+fn parse<T: for<'de> Deserialize<'de>>(body: &Bytes) -> Result<T, Refusal> {
     serde_json::from_slice(body).map_err(|e| Refusal(StatusCode::BAD_REQUEST, e.to_string()))
 }
 
 /// The handler signature every route shares.
 macro_rules! internal {
     ($name:ident, $body:ty, |$state:ident, $request:ident| $run:expr) => {
-        async fn $name(
-            State($state): State<Shared>,
-            method: Method,
-            OriginalUri(uri): OriginalUri,
-            headers: HeaderMap,
-            body: Bytes,
-        ) -> Answer {
-            let $request: $body = authorize(&$state, &method, &uri, &headers, &body).await?;
+        async fn $name(State($state): State<Shared>, body: Bytes) -> Answer {
+            let $request: $body = parse(&body)?;
             $run
         }
     };
@@ -423,7 +360,13 @@ internal!(bounce, AgentRequest, |state, request| {
 });
 internal!(kick, AgentRequest, |state, request| {
     let organization = request.principal.organization()?;
-    let agent = backend::kick(&state.facade, organization, &request.agent.text()).await?;
+    let agent = backend::kick(
+        &state.facade,
+        organization,
+        &request.agent.text(),
+        request.reason.clone(),
+    )
+    .await?;
     Ok(Json(json!({"agent": agent.to_string()})))
 });
 internal!(block, AgentRequest, |state, request| {
@@ -513,49 +456,15 @@ internal!(validate_schedule, TimingRequest, |_state, request| {
 #[derive(Debug, Deserialize)]
 struct ScheduleRequest {
     schedule: Id,
-    #[serde(default)]
-    replan: bool,
-    #[serde(default)]
-    principal: Option<Principal>,
 }
 
-/// The caller a schedule's run is cancelled as: the principal's, or none (the server itself).
-async fn schedule_caller(
-    state: &Shared,
-    request: &ScheduleRequest,
-) -> Result<Option<i64>, Refusal> {
-    Ok(match &request.principal {
-        Some(principal) => {
-            let principal = principal.context(state).await?;
-            Some(backend::get_caller_for_context(&state.facade.db, &principal).await?)
-        }
-        None => None,
-    })
-}
-
-internal!(plan_schedule, ScheduleRequest, |state, request| {
-    let caller = schedule_caller(&state, &request).await?;
-    let planned = facade::schedules::plan(
-        &state.facade,
-        request.schedule.get()?,
-        request.replan,
-        caller,
-    )
-    .await?;
-    Ok(Json(json!({"planned": planned})))
-});
-internal!(cancel_waiting_run, ScheduleRequest, |state, request| {
-    let caller = schedule_caller(&state, &request).await?;
-    facade::schedules::cancel_waiting_run(&state.facade, request.schedule.get()?, caller).await?;
-    Ok(Json(json!({})))
-});
 internal!(trigger_schedule, ScheduleRequest, |state, request| {
     let task = facade::schedules::trigger(&state.facade, request.schedule.get()?).await?;
     Ok(Json(json!({"task": task.to_string()})))
 });
 
 #[derive(Debug, Deserialize)]
-struct UpcomingRequest {
+struct UpcomingTiming {
     #[serde(default)]
     interval_seconds: Option<i64>,
     #[serde(default)]
@@ -565,19 +474,37 @@ struct UpcomingRequest {
     count: usize,
 }
 
+#[derive(Debug, Deserialize)]
+struct UpcomingRequest {
+    timings: Vec<UpcomingTiming>,
+}
+
+// One request for every schedule a query lists. A timing takt cannot read fails alone: its
+// neighbours still get their slots.
 internal!(upcoming_slots, UpcomingRequest, |_state, request| {
-    let timing = facade::timing::Timing {
-        interval_seconds: request.interval_seconds,
-        cron: request.cron.clone(),
-        timezone: request.timezone.clone(),
-    };
-    timing
-        .validate()
-        .map_err(|message| Refusal(StatusCode::BAD_REQUEST, message))?;
-    let slots = facade::schedules::upcoming(&timing, request.created_at, request.count.min(50))
-        .map_err(|message| Refusal(StatusCode::BAD_REQUEST, message))?;
-    let slots: Vec<String> = slots.iter().map(chrono::DateTime::to_rfc3339).collect();
-    Ok(Json(json!({"slots": slots})))
+    let upcoming: Vec<Value> = request
+        .timings
+        .iter()
+        .map(|asked| {
+            let timing = facade::timing::Timing {
+                interval_seconds: asked.interval_seconds,
+                cron: asked.cron.clone(),
+                timezone: asked.timezone.clone(),
+            };
+            let slots = timing.validate().and_then(|()| {
+                facade::schedules::upcoming(&timing, asked.created_at, asked.count.min(50))
+            });
+            match slots {
+                Ok(slots) => {
+                    let slots: Vec<String> =
+                        slots.iter().map(chrono::DateTime::to_rfc3339).collect();
+                    json!({"slots": slots})
+                }
+                Err(message) => json!({"error": message}),
+            }
+        })
+        .collect();
+    Ok(Json(json!({"upcoming": upcoming})))
 });
 
 #[derive(Debug, Deserialize)]

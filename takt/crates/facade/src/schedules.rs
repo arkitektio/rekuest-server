@@ -21,7 +21,8 @@
 //! planned from then on, and nothing is written to say so (the columns say it).
 //!
 //! The rekuest server owns the schedule rows (its GraphQL creates and changes them); what plans,
-//! moves and cancels their runs is here, asked through the internal API.
+//! moves and cancels their runs is here. A changed row is heard of on `NOTIFY`
+//! ([`crate::schedule_notices`]); "run now" is asked through the internal API.
 
 use chrono::{DateTime, Duration, Utc};
 use serde_json::{Map, Value};
@@ -303,6 +304,17 @@ pub async fn refill_one(ctx: &Context, schedule_id: i64) -> Result<bool, sqlx::E
     Ok(true)
 }
 
+/// Whether the slot named by `reference` already has its run (waiting, executing, or over).
+async fn slot_has_run(ctx: &Context, schedule: i64, reference: &str) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM facade_task WHERE schedule_id = $1 AND reference = $2)",
+    )
+    .bind(schedule)
+    .bind(reference)
+    .fetch_one(&ctx.db)
+    .await
+}
+
 /// Create the run of the schedule's next free slot, as the schedule's caller; the slot it took,
 /// or `None` when that slot lies past the schedule's end.
 async fn plan_next(
@@ -318,10 +330,21 @@ async fn plan_next(
         if schedule.ends_at.is_some_and(|end| slot > end) {
             return Ok(None);
         }
+        let reference = slot_reference(schedule.id, slot);
+        // A slot has one run, whatever the schedule ran then: once it was retargeted or given
+        // other args, assigning the slot's reference again would be refused as naming another
+        // assignment, and the schedule would stand still until the slot has passed.
+        if slot_has_run(ctx, schedule.id, &reference)
+            .await
+            .map_err(|e| e.to_string())?
+        {
+            after = slot;
+            continue;
+        }
         let assigned = backend::assign_with_status(
             ctx,
             &principal,
-            &schedule.assign_input(slot_reference(schedule.id, slot), Some(slot)),
+            &schedule.assign_input(reference, Some(slot)),
             AssignOrigin {
                 schedule: Some(schedule.id),
                 ..AssignOrigin::default()
@@ -410,7 +433,26 @@ pub async fn cancel_waiting_run(
     Ok(())
 }
 
-/// Plan a schedule now, not on the next tick, so its next run exists when the mutation answers.
+/// The waiting run of a schedule that was deleted, dropped unless it was handed over meanwhile
+/// (`cancel_run_if_waiting`). The run is named, not its schedule: that row is gone.
+pub async fn cancel_run_if_waiting(
+    ctx: &Context,
+    run: i64,
+    caller: Option<i64>,
+) -> BackendResult<()> {
+    let waiting: Option<i64> = sqlx::query_scalar(
+        "SELECT id FROM facade_task WHERE id = $1 AND NOT is_done AND dispatch_attempts = 0",
+    )
+    .bind(run)
+    .fetch_optional(&ctx.db)
+    .await?;
+    if waiting.is_some() {
+        backend::request_control(ctx, &run.to_string(), Control::Cancel, caller).await?;
+    }
+    Ok(())
+}
+
+/// Plan a schedule now, not on the next tick: the server changed its row.
 /// `replan`: its timing, target or switch changed, so the waiting run is cancelled first and the
 /// backoff of the old settings forgotten. True when a run was created.
 pub async fn plan(

@@ -16,13 +16,18 @@ async fn main() -> anyhow::Result<()> {
         .or_else(|_| std::env::var("ARKITEKT_CONFIG_FILE"))
         .unwrap_or_else(|_| "config.yaml".into());
     let configuration = Configuration::load(&path)?;
-    // The server signs every internal request with the instance key, and takt verifies with
-    // it: without one, nothing the server asks for would be accepted.
+    // takt signs what it asks of the server (the upkeep jobs) and of HookAgents with the
+    // instance key: without one, none of that would be accepted.
     anyhow::ensure!(
         configuration.instance.is_some(),
-        "{path} has no `instance` block: takt needs the instance key the rekuest server signs its requests with"
+        "{path} has no `instance` block: takt needs the instance key it signs its requests with"
     );
     let bind = std::env::var("TAKT_BIND").unwrap_or_else(|_| "0.0.0.0:8080".into());
+    // The internal API has a listener of its own, which only the rekuest server reaches: a unix
+    // socket both mount (`unix:/run/takt/internal.sock`), or an address. Reaching it is the only
+    // gate, so by default it is this machine alone: a deployment says where the server is.
+    let internal_bind =
+        std::env::var("TAKT_INTERNAL_BIND").unwrap_or_else(|_| "127.0.0.1:8081".into());
     // `takt healthcheck`: is the takt of this configuration serving? For the container's
     // HEALTHCHECK, in an image that carries no HTTP client.
     if std::env::args().nth(1).as_deref() == Some("healthcheck") {
@@ -70,10 +75,13 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("reaper running every {:?}", facade.settings.sweep_interval);
     // The two jobs only the Python server can do, asked for when they are due.
     tokio::spawn(facade::upkeep::run_forever(facade.clone()));
+    // What the server says about its schedules (a NOTIFY in the transaction that changes one).
+    tokio::spawn(facade::schedule_notices::run_forever(facade.clone()));
     let state = Arc::new(urls::AppState {
         configuration,
         facade,
     });
+    serve_internal(&internal_bind, urls::internal_router(state.clone())).await?;
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     tracing::info!("takt listening on {bind}");
     axum::serve(listener, urls::router(state))
@@ -81,6 +89,29 @@ async fn main() -> anyhow::Result<()> {
             let _ = tokio::signal::ctrl_c().await;
         })
         .await?;
+    Ok(())
+}
+
+/// Serve the internal API on `bind`: `unix:<path>` is a socket file (a stale one, left by a
+/// takt that was killed, is replaced), anything else an address.
+async fn serve_internal(bind: &str, router: axum::Router) -> anyhow::Result<()> {
+    if let Some(path) = bind.strip_prefix("unix:") {
+        match std::fs::remove_file(path) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                return Err(e).context(format!("replacing the socket at {path}"))
+            }
+            _ => {}
+        }
+        let listener = tokio::net::UnixListener::bind(path)
+            .with_context(|| format!("binding the internal socket at {path}"))?;
+        tokio::spawn(async move { axum::serve(listener, router).await });
+    } else {
+        let listener = tokio::net::TcpListener::bind(bind)
+            .await
+            .with_context(|| format!("binding the internal API to {bind}"))?;
+        tokio::spawn(async move { axum::serve(listener, router).await });
+    }
+    tracing::info!("takt's internal API listening on {bind}");
     Ok(())
 }
 

@@ -24,6 +24,8 @@ services:
     - "${REKUEST_HOST_PORT:-5690}:80"
     volumes:
     - ./configs/rekuest.yaml:/workspace/config.yaml
+    # takt's internal listener is a socket in this volume: the server reaches it, nobody else.
+    - takt_run:/run/takt
   takt:
     depends_on:
     - redis
@@ -35,10 +37,13 @@ services:
     # The hook scenarios' receiver runs in the test process, on the host.
     extra_hosts:
     - "host.docker.internal:host-gateway"
+    environment:
+      TAKT_INTERNAL_BIND: unix:/run/takt/internal.sock
     ports:
     - "${TAKT_HOST_PORT:-5692}:8080"
     volumes:
     - ./configs/rekuest.yaml:/workspace/config.yaml
+    - takt_run:/run/takt
   rustfs:
     environment:
       RUSTFS_VOLUMES: /data
@@ -59,5 +64,5 @@ services:
     image: jhnnsrs/init:latest
     volumes:
     - ./configs/rustfs.yaml:/workspace/config.yaml
-
-
+volumes:
+  takt_run:

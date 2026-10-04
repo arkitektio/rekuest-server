@@ -1,12 +1,9 @@
-//! The internal API's service-token gate, served as takt serves it (under the configuration's
-//! prefix). Needs `TAKT_TEST_DATABASE_URL` and `TAKT_TEST_REDIS_URL`.
+//! The two listeners' routes, served as takt serves them (under the configuration's prefix). Needs `TAKT_TEST_DATABASE_URL` and `TAKT_TEST_REDIS_URL`.
 
 use std::sync::Arc;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use facade::provenance::keys::InstanceKey;
-use facade::service_trust;
 use http_body_util::BodyExt;
 use rekuest_server::{settings, urls, Configuration};
 use serde_json::{json, Value};
@@ -15,9 +12,9 @@ use tower::ServiceExt;
 const PEM: &str = "-----BEGIN PRIVATE KEY-----\n\
     MC4CAQAwBQYDK2VwBCIEILK+rl9gVEjfKGiye+mLLjfEUGIdoP0WPC8lMZS3NYK2\n\
     -----END PRIVATE KEY-----\n";
-const ME: &str = "live.arkitekt.rekuest";
 
-async fn app() -> Option<axum::Router> {
+/// The public listener's router, and the internal one's.
+async fn apps() -> Option<(axum::Router, axum::Router)> {
     let db_url = std::env::var("TAKT_TEST_DATABASE_URL").ok()?;
     let redis_url = std::env::var("TAKT_TEST_REDIS_URL").ok()?;
     let configuration: Configuration = serde_yaml::from_value(serde_yaml::to_value(json!({
@@ -47,10 +44,11 @@ async fn app() -> Option<axum::Router> {
         )),
         connections: facade::consumers::connections::Connections::default(),
     };
-    Some(urls::router(Arc::new(urls::AppState {
+    let state = Arc::new(urls::AppState {
         configuration,
         facade,
-    })))
+    });
+    Some((urls::router(state.clone()), urls::internal_router(state)))
 }
 
 async fn post(
@@ -76,50 +74,18 @@ async fn post(
     )
 }
 
+/// Reaching the internal listener is the gate: a request there needs no token.
 #[tokio::test]
-async fn only_a_token_signed_for_this_very_request_gets_through_once() {
-    let Some(app) = app().await else { return };
-    let key = InstanceKey::from_pem(PEM).unwrap();
-    let path = "/rekuest/internal/cancel";
+async fn the_internal_listener_asks_for_no_token() {
+    let Some((_, app)) = apps().await else { return };
     let body = json!({"task": "999999999999"});
-    let sign = |path: &str, body: &Value| {
-        service_trust::sign(&key, "POST", path, body.to_string().as_bytes(), ME, ME)
-    };
 
-    let (status, answer) = post(&app, path, &body, None).await;
-    assert_eq!(
-        (status, answer),
-        (
-            StatusCode::UNAUTHORIZED,
-            json!({"error": "No service token"})
-        )
-    );
-
-    // The signer signs the full path, prefix included.
-    let (status, answer) = post(&app, path, &body, Some(sign("/internal/cancel", &body))).await;
-    assert_eq!(
-        (status, answer),
-        (
-            StatusCode::UNAUTHORIZED,
-            json!({"error": "Service token was signed for another request"})
-        )
-    );
-
-    let token = sign(path, &body);
-    let (status, answer) = post(&app, path, &body, Some(token.clone())).await;
+    let (status, answer) = post(&app, "/rekuest/internal/cancel", &body, None).await;
     assert_eq!(
         (status, answer),
         (
             StatusCode::BAD_REQUEST,
             json!({"error": "Task matching query does not exist."})
-        )
-    );
-    let (status, answer) = post(&app, path, &body, Some(token)).await;
-    assert_eq!(
-        (status, answer),
-        (
-            StatusCode::CONFLICT,
-            json!({"error": "Replayed service token"})
         )
     );
 }
@@ -128,7 +94,7 @@ async fn only_a_token_signed_for_this_very_request_gets_through_once() {
 /// of its own, since a service token is signed for the path it was sent to.
 #[tokio::test]
 async fn the_agent_endpoint_answers_under_both_its_names() {
-    let Some(app) = app().await else { return };
+    let Some((app, _)) = apps().await else { return };
     for name in ["agent", "agi"] {
         // No websocket handshake: refused by the socket handler, not as an unknown path.
         let response = app
@@ -159,4 +125,39 @@ async fn the_agent_endpoint_answers_under_both_its_names() {
     }
     let (status, answer) = post(&app, "/rekuest/agents/http/1", &json!({}), None).await;
     assert_eq!((status, answer), (StatusCode::NOT_FOUND, Value::Null));
+}
+
+/// The internal API is on its own listener: where agents and services connect there is no such
+/// path, and where the server connects there is no agent endpoint.
+#[tokio::test]
+async fn each_listener_serves_only_its_own_routes() {
+    let Some((public, internal)) = apps().await else {
+        return;
+    };
+    let path = "/rekuest/internal/schedule/upcoming";
+    let body = json!({"timings": [
+        {"interval_seconds": 60, "timezone": "UTC", "created_at": "2026-01-01T00:00:00Z", "count": 2},
+        {"cron": "whenever", "timezone": "UTC", "created_at": "2026-01-01T00:00:00Z", "count": 2},
+    ]});
+
+    let (status, answer) = post(&public, path, &body, None).await;
+    assert_eq!((status, answer), (StatusCode::NOT_FOUND, Value::Null));
+
+    // One request for several timings; one takt cannot read fails alone.
+    let (status, answer) = post(&internal, path, &body, None).await;
+    assert_eq!(status, StatusCode::OK, "{answer}");
+    let upcoming = answer["upcoming"].as_array().unwrap();
+    assert_eq!(upcoming[0]["slots"].as_array().unwrap().len(), 2);
+    assert!(upcoming[1]["error"].as_str().unwrap().contains("whenever"));
+
+    for (app, health) in [(&public, StatusCode::OK), (&internal, StatusCode::OK)] {
+        let response = app
+            .clone()
+            .oneshot(Request::get("/rekuest/ht").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), health);
+    }
+    let (status, _) = post(&internal, "/rekuest/agent/signal/nobody", &json!({}), None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }

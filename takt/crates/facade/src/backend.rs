@@ -1859,9 +1859,18 @@ async fn set_blocked(ctx: &Context, agent: i64, blocked: bool) -> BackendResult<
 }
 
 /// Tell the agent to disconnect and stay away (`kick`).
-pub async fn kick(ctx: &Context, organization: i64, agent: &str) -> BackendResult<i64> {
+pub async fn kick(
+    ctx: &Context,
+    organization: i64,
+    agent: &str,
+    reason: Option<String>,
+) -> BackendResult<i64> {
     let agent = agent_in_org(ctx, organization, agent).await?;
-    transport::broadcast(ctx, agent, ToAgent::Kick { reason: None }, false).await;
+    tracing::info!(
+        "Agent {agent} is kicked: {}",
+        reason.as_deref().unwrap_or("no reason given")
+    );
+    transport::broadcast(ctx, agent, ToAgent::Kick { reason }, false).await;
     Ok(agent)
 }
 
