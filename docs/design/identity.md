@@ -85,7 +85,7 @@ make it a provider, and a pile of connection/liveness state:
 | Identity | `client`, `user`, `organization` | The same triple, owned directly. |
 | Runtime | `app`, `release`, `hash` | What code runs; `hash` detects definition changes. |
 | Naming | `name`, `display_name`, `description` | `name` is what the agent declares at registration; `display_name` is what a user called it, and wins. |
-| Connection | `connected`, `last_seen`, `active_connection_id`, `active_session_id`, `lease_epoch` | The executor lease. Written only by takt. |
+| Connection | `connected`, `last_seen`, `active_connection_id`, `active_session_id` | The executor lease. Written only by takt. |
 | Transport | `kind`, `hook_url`, `hook_url_secret` | `WEBSOCKET`, or `WEBHOOK` with where and how to reach it. |
 | Admin | `blocked`, `pinned_by` | A blocked agent is refused at registration. |
 

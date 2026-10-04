@@ -59,25 +59,13 @@ class Agent(models.Model):
         max_length=1000,
         null=True,
         blank=True,
-        help_text="Identifies the websocket connection currently owning this Agent. Used to reject/displace duplicate connections and to guard disconnect handling against a displaced connection.",
+        help_text="Identifies the websocket connection currently owning this Agent, and is the fencing token of the executor write-lease: written on every claim (connect), cleared on every revoke (stale sweep). A connection renews its lease with a compare-and-set on it, so a displaced or revoked connection's heartbeat matches no row and the connection terminates itself.",
     )
     active_session_id = models.CharField(
         max_length=1000,
         null=True,
         blank=True,
         help_text="The executor process's volatile session id from the last connect. On reconnect, a matching session means the same process survived (reclaim in-flight work); a different session means a fresh process (fail-and-cascade the orphaned work).",
-    )
-    lease_epoch = models.BigIntegerField(
-        default=0,
-        help_text=(
-            "Monotonic fencing token for the executor write-lease. Bumped on every claim (connect) "
-            "and on every revoke (stale sweep). A connection carries the epoch it claimed and renews "
-            "its lease with a compare-and-set on it, so a displaced or revoked connection's heartbeat "
-            "matches no row and the connection terminates itself. Distinct from active_connection_id "
-            "(a socket *name*, unique but not revocable) and active_session_id (the client-supplied "
-            "*process* identity, which must stay equal across a reclaiming reconnect)."
-        ),
-        db_default=0,
     )
     kind = models.CharField(
         max_length=1000,
@@ -124,7 +112,7 @@ class Agent(models.Model):
 
     # The executor lease. takt's (``takt/crates/facade/src/persist/leases.rs``): its claim,
     # renew, release and revoke are the only writers.
-    LEASE_FIELDS = frozenset({"connected", "last_seen", "lease_epoch", "active_connection_id", "active_session_id"})
+    LEASE_FIELDS = frozenset({"connected", "last_seen", "active_connection_id", "active_session_id"})
 
     def save(self, *args, **kwargs):
         """A save that names no fields never touches the lease.
@@ -132,7 +120,7 @@ class Agent(models.Model):
         ``agent.save()`` writes EVERY column from whatever snapshot the instance was loaded with.
         With several backends that snapshot is routinely stale: an operator renames or unblocks an
         agent on one process while another claims or revokes its lease, and the late full-row
-        save silently restores the old ``lease_epoch`` — un-fencing a connection whose in-flight
+        save silently restores the old ``active_connection_id`` — un-fencing a connection whose in-flight
         work was already failed — or flips ``connected`` back. So a bare save of an existing row
         is narrowed to everything *except* :attr:`LEASE_FIELDS`. Lease writers are unaffected:
         they always pass ``update_fields``.

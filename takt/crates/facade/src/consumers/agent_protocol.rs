@@ -94,7 +94,6 @@ impl Refused {
 pub struct Registered {
     pub agent: i64,
     pub caller: i64,
-    pub epoch: i64,
     pub session_id: Option<String>,
     /// This connection's channel in the caller group, and what arrives on it.
     pub mirror: Mirror,
@@ -308,12 +307,12 @@ async fn register(
     )
     .await
     .map_err(|e| refuse(&e))?;
-    let Some(epoch) = claim.epoch.filter(|_| claim.claimed) else {
+    if !claim.claimed {
         return Err(Refused::explained(
             codes::AGENT_ALREADY_CONNECTED_CODE,
             "Another connection is already registered for this agent. Reconnect with force to take over.",
         ));
-    };
+    }
     if claim.displaced_incumbent {
         ctx.connections.kick_others(agent, connection_id);
     }
@@ -355,7 +354,6 @@ async fn register(
     Ok(Registered {
         agent,
         caller,
-        epoch,
         session_id,
         mirror,
     })
@@ -414,11 +412,16 @@ async fn run_session(
     ctx.connections.join(agent, connection_id, control_tx);
 
     let waiter: HeartbeatWaiter = Arc::default();
-    let drain = tokio::spawn(drain(ctx.clone(), agent, registered.epoch, sender.clone()));
+    let drain = tokio::spawn(drain(
+        ctx.clone(),
+        agent,
+        connection_id.to_owned(),
+        sender.clone(),
+    ));
     let heartbeat = tokio::spawn(heartbeat(
         ctx.clone(),
         agent,
-        registered.epoch,
+        connection_id.to_owned(),
         sender.clone(),
         waiter.clone(),
         drain.abort_handle(),
@@ -711,11 +714,11 @@ async fn leave_caller_group(ctx: &Context, caller: i64, channel: &str) {
 }
 
 /// Ping, wait for the answer, renew the lease. No answer: close `HEARTBEAT_NOT_RESPONDED`; a
-/// renewal that finds the epoch moved: close `AGENT_REPLACED`. Either way, stop executing first.
+/// renewal that finds the lease gone: close `AGENT_REPLACED`. Either way, stop executing first.
 async fn heartbeat(
     ctx: Context,
     agent: i64,
-    epoch: i64,
+    connection_id: String,
     sender: Sender,
     waiter: HeartbeatWaiter,
     drain: tokio::task::AbortHandle,
@@ -735,12 +738,12 @@ async fn heartbeat(
             sender.close(codes::HEARTBEAT_NOT_RESPONDED_CODE);
             return;
         }
-        match leases::renew_agent_lease(&ctx.db, agent, epoch).await {
+        match leases::renew_agent_lease(&ctx.db, agent, &connection_id).await {
             Ok(true) => {}
             Ok(false) => {
                 tracing::warn!(
                     agent,
-                    epoch,
+                    connection_id,
                     "lost the lease: closing the displaced connection"
                 );
                 drain.abort();
@@ -777,7 +780,7 @@ async fn is_stale_assign(ctx: &Context, frame: &str) -> bool {
 /// Deliver the agent's queue (`listen_for_tasks`): recover what a previous holder popped but
 /// never acked, then pop, check the lease, drop stale Assigns, send, ack. A queue failure is
 /// survived with a backoff; a socket that cannot be written closes so the agent reconnects.
-async fn drain(ctx: Context, agent: i64, epoch: i64, sender: Sender) {
+async fn drain(ctx: Context, agent: i64, connection_id: String, sender: Sender) {
     let mut backoff = Duration::from_millis(500);
     loop {
         let mut queue = match AgentQueue::open(&ctx.redis_client, &ctx.settings, agent).await {
@@ -789,7 +792,7 @@ async fn drain(ctx: Context, agent: i64, epoch: i64, sender: Sender) {
                 continue;
             }
         };
-        match drain_once(&ctx, agent, epoch, &sender, &mut queue).await {
+        match drain_once(&ctx, agent, &connection_id, &sender, &mut queue).await {
             Ok(()) => return,
             Err(e) => {
                 tracing::error!(agent, "task queue failed: {e}; retrying");
@@ -803,7 +806,7 @@ async fn drain(ctx: Context, agent: i64, epoch: i64, sender: Sender) {
 async fn drain_once(
     ctx: &Context,
     agent: i64,
-    epoch: i64,
+    connection_id: &str,
     sender: &Sender,
     queue: &mut AgentQueue,
 ) -> Result<(), anyhow::Error> {
@@ -817,10 +820,10 @@ async fn drain_once(
             queue.recover().await?;
             continue;
         };
-        if !leases::holds_lease(&ctx.db, agent, epoch).await? {
+        if !leases::holds_lease(&ctx.db, agent, connection_id).await? {
             tracing::warn!(
                 agent,
-                epoch,
+                connection_id,
                 "lost the lease: returning an undelivered frame and closing"
             );
             queue.requeue(&frame).await?;

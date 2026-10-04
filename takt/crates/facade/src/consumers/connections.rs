@@ -1,7 +1,7 @@
 //! This process's live agent connections, by agent: what the Python side's `agent-{id}`
 //! channel-layer group is for. A connection that wins the lease tells the others of its agent
 //! to stop (`kick_others`). A connection on another replica is fenced by the lease itself: its
-//! next delivery or renewal finds the epoch moved and it closes.
+//! next delivery or renewal finds it is no longer the active connection and closes.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

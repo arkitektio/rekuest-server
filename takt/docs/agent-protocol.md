@@ -74,10 +74,10 @@ sequenceDiagram
         PB-->>P: LeaseClaim{claimed=false}
         P-->>AG: ProtocolError + close(AGENT_ALREADY_CONNECTED)
     else claimed
-        PB-->>P: LeaseClaim{epoch, inquiries, orphaned, displaced_incumbent}
+        PB-->>P: LeaseClaim{inquiries, orphaned, displaced_incumbent}
     end
     opt displaced_incumbent
-        P->>P: connections.kick_others() (best-effort; the epoch bump already fenced them)
+        P->>P: connections.kick_others() (best-effort; the new connection id already fenced them)
     end
     P-->>AG: Init{agent, hash, diagnostics, inquiries=[AssignInquiry...]}
     par session tasks
@@ -88,7 +88,7 @@ sequenceDiagram
         AG->>P: HeartbeatAnswer / Yield / Completed / StatePatch ...
         P->>PB: message_router::route(frame)
         opt after each answered Heartbeat
-            P->>PB: renew_agent_lease(agent, epoch)
+            P->>PB: renew_agent_lease(agent, connection_id)
             PB-->>P: no row matched → close(AGENT_REPLACED)
         end
     end
@@ -198,20 +198,21 @@ asymmetry between the two halves is deliberate and is why the predicate needs no
 One consequence worth stating: a stuck `connected = True` is harmless (the lease overrides it), but
 a wrong `connected = False` would not be — so only the three transition paths below may write it.
 
-## The three identifiers, and why there are three
+## The two identifiers
 
 | Column | Chosen by | Lifetime | Answers |
 | --- | --- | --- | --- |
 | `active_session_id` | the **client** (`Register.session_id`) | the executor **process** — deliberately survives reconnects | "is the same process back?" → reclaim vs. cascade |
-| `active_connection_id` | the server (uuid4 per socket) | one **socket** | "which socket is this?" → routing, disconnect guard |
-| `lease_epoch` | the server (monotonic `+1`) | one **ownership generation** | "may you still write?" |
+| `active_connection_id` | the server (uuid4 per socket) | one **socket** = one ownership generation | "may you still write?" → the fencing token, and the disconnect guard |
+
+`active_connection_id` is the fencing token. A claim writes the new socket's id, a revoke sets it
+to `NULL`, and a uuid is never reused, so "the row still carries my id and is `connected`" is
+exactly "nobody claimed or revoked since I did".
 
 `session_id` cannot double as the fencing token: it is *required to match* on precisely the case
 that needs fencing — a process blips, its old socket is wedged but alive, and it reconnects with
 the same session to reclaim its work. A compare-and-set on the session would let the wedged socket
-keep matching. It is also client-supplied and optional. `active_connection_id` is closer, but a
-UUID is a *name*, not a *generation*: there is no value meaning "nobody owns this", so the sweep
-cannot revoke without naming a successor. With an integer, revoke is `+1`.
+keep matching. It is also client-supplied and optional.
 
 ## Single live connection per agent
 
@@ -227,15 +228,16 @@ in-flight work as `Init` inquiries.
    connection (same `session_id`). A **stale** incumbent — `connected` stuck true with an expired
    lease — is displaced **without** `force`, so a dead connection never wedges the agent behind
    a `--force` reconnect.
-3. On success the claim bumps `lease_epoch` and returns it; `connections.kick_others()` then
+3. On success the claim writes this socket's `active_connection_id`; `connections.kick_others()` then
    tells every other connection of that agent **in this process** to stop (`Control::Displace` →
    close with `AGENT_REPLACED`, 4005).
 
 `kick_others` is an **optimization, not a correctness dependency**. It reaches only connections
 in the same takt process (`consumers/connections.rs`). A connection on another replica, or one
-whose worker is wedged, is fenced by the epoch bump: its next delivery or renewal finds the epoch
-moved and it closes. The displaced connection's `on_agent_disconnected` is guarded on
-`active_connection_id`, so a departing stale connection cannot clobber the live one's state.
+whose worker is wedged, is fenced by the new connection id: its next delivery or renewal finds it
+is no longer the active connection and it closes. The displaced connection's
+`on_agent_disconnected` is guarded on `active_connection_id`, so a departing stale connection
+cannot clobber the live one's state.
 
 ## Heartbeats and the write-lease
 
@@ -250,7 +252,8 @@ does not queue behind the reports the worker is still persisting. The heartbeat 
 the lease (`renew_agent_lease`, `persist/leases.rs`):
 
 ```sql
-UPDATE facade_agent SET last_seen = $now WHERE id = $agent AND lease_epoch = $my_epoch
+UPDATE facade_agent SET last_seen = $now
+ WHERE id = $agent AND active_connection_id = $my_connection AND connected
 -- no row matched: close(AGENT_REPLACED), this connection may no longer execute
 ```
 
@@ -269,7 +272,7 @@ in-flight work.
 | | Path | Mechanism |
 | --- | --- | --- |
 | **Transition** | claim (connect), release (disconnect), revoke (sweep) | a row lock (`SELECT … FOR UPDATE`), then the update |
-| **Renewal** | heartbeat | lock-free compare-and-set on `lease_epoch` |
+| **Renewal** | heartbeat | lock-free compare-and-set on `active_connection_id` |
 
 Renewal publishes nothing: no org-wide `AgentChange` is broadcast per heartbeat. A revoke
 publishes the agent's change to the GraphQL agent feeds (`signals::agent_saved`).
@@ -278,7 +281,7 @@ publishes the agent's change to the GraphQL agent feeds (`signals::agent_saved`)
 
 `reconcile_stale_agents` (`persist/reconcile.rs`, driven by the sweep loop in `reaper.rs`, which
 runs inside every takt replica) finds agents that are stuck-connected past the stale window and
-revokes them: `connected = false` plus an epoch bump, under a row lock that re-checks staleness
+revokes them: `connected = false` and `active_connection_id = NULL`, under a row lock that re-checks staleness
 (`revoke_lease`). That lock is also the **claim** — several replicas sweep side by side, so only
 the one that actually flips a row goes on to `reconcile_orphaned_executor_work`. The task transitions inside
 that reconcile are claimed by the same rowcount discipline, so concurrent sweeps produce exactly
@@ -331,7 +334,7 @@ At-least-once means an agent can see the same task id twice; agents dedupe an As
 
 Two connections can briefly contend for one agent's queue, because the displacement hint
 reaches only connections in the same process. So ownership is not taken on trust: the drain asks
-`holds_lease(agent, epoch)` — one primary-key lookup — immediately before every send. A
+`holds_lease(agent, connection_id)` — one primary-key lookup — immediately before every send. A
 connection that has been fenced hands the frame back with `queue.requeue` (atomic: `LREM` from
 in-flight, `RPUSH` to the head, so a concurrent `recover` by the new holder cannot duplicate it)
 and closes itself. That narrows the window from one heartbeat interval to a single frame; it

@@ -412,11 +412,86 @@ async fn a_stuck_connected_agent_is_revoked_and_its_work_lost() {
     let live_task = task(&ctx, live, live_action).await;
     start(&ctx, live_task).await;
     seen(&ctx, live, true, 1).await;
-    let epoch = |agent| {
+    sqlx::query("UPDATE facade_agent SET active_connection_id = 'wedged' WHERE id = $1")
+        .bind(stuck)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+
+    reconcile::reconcile_stale_agents(&ctx).await.unwrap();
+
+    assert_eq!(
+        lease(&ctx, stuck).await,
+        (false, None),
+        "revoked and fenced"
+    );
+    assert_eq!(state(&ctx, running).await, ("LOST".into(), true));
+    assert!(lease(&ctx, live).await.0, "a live agent is not touched");
+    assert_eq!(state(&ctx, live_task).await, ("STARTED".into(), false));
+
+    // Another backend's sweep finds nothing stale any more.
+    assert!(!leases::revoke_lease(&ctx, stuck).await.unwrap());
+    reconcile::reconcile_stale_agents(&ctx).await.unwrap();
+    assert_eq!(lease(&ctx, stuck).await, (false, None));
+}
+
+/// The agent's `(connected, active_connection_id)`.
+async fn lease(ctx: &Context, agent: i64) -> (bool, Option<String>) {
+    sqlx::query_as("SELECT connected, active_connection_id FROM facade_agent WHERE id = $1")
+        .bind(agent)
+        .fetch_one(&ctx.db)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_displaced_connection_no_longer_holds_the_lease() {
+    let _serial = serial().await;
+    let Some(ctx) = context(settings()).await else {
+        return;
+    };
+    let (agent, _) = agent(&ctx).await;
+    leases::on_agent_connected(&ctx.db, &ctx.settings, agent, "c1", Some("S1"), false)
+        .await
+        .unwrap();
+    assert!(leases::holds_lease(&ctx.db, agent, "c1").await.unwrap());
+    assert!(leases::renew_agent_lease(&ctx.db, agent, "c1")
+        .await
+        .unwrap());
+
+    // The same process reconnects on a new socket: the old one is wedged, not closed.
+    let claim = leases::on_agent_connected(&ctx.db, &ctx.settings, agent, "c2", Some("S1"), false)
+        .await
+        .unwrap();
+    assert!(claim.claimed);
+
+    assert!(!leases::holds_lease(&ctx.db, agent, "c1").await.unwrap());
+    assert!(!leases::renew_agent_lease(&ctx.db, agent, "c1")
+        .await
+        .unwrap());
+    assert!(leases::holds_lease(&ctx.db, agent, "c2").await.unwrap());
+    assert!(leases::renew_agent_lease(&ctx.db, agent, "c2")
+        .await
+        .unwrap());
+}
+
+#[tokio::test]
+async fn a_revoked_connection_cannot_renew_or_release() {
+    let _serial = serial().await;
+    let Some(ctx) = context(settings()).await else {
+        return;
+    };
+    let (agent, _) = agent(&ctx).await;
+    leases::on_agent_connected(&ctx.db, &ctx.settings, agent, "c1", Some("S1"), false)
+        .await
+        .unwrap();
+    seen(&ctx, agent, true, 3600).await;
+    assert!(leases::revoke_lease(&ctx, agent).await.unwrap());
+    let last_seen = |agent| {
         let db = ctx.db.clone();
         async move {
-            sqlx::query_as::<_, (bool, i64)>(
-                "SELECT connected, lease_epoch FROM facade_agent WHERE id = $1",
+            sqlx::query_scalar::<_, Option<chrono::DateTime<chrono::Utc>>>(
+                "SELECT last_seen FROM facade_agent WHERE id = $1",
             )
             .bind(agent)
             .fetch_one(&db)
@@ -424,23 +499,17 @@ async fn a_stuck_connected_agent_is_revoked_and_its_work_lost() {
             .unwrap()
         }
     };
-    let (_, before) = epoch(stuck).await;
+    let before = last_seen(agent).await;
 
-    reconcile::reconcile_stale_agents(&ctx).await.unwrap();
-
-    assert_eq!(
-        epoch(stuck).await,
-        (false, before + 1),
-        "revoked and fenced"
-    );
-    assert_eq!(state(&ctx, running).await, ("LOST".into(), true));
-    assert!(epoch(live).await.0, "a live agent is not touched");
-    assert_eq!(state(&ctx, live_task).await, ("STARTED".into(), false));
-
-    // Another backend's sweep finds nothing stale any more.
-    assert!(!leases::revoke_lease(&ctx, stuck).await.unwrap());
-    reconcile::reconcile_stale_agents(&ctx).await.unwrap();
-    assert_eq!(epoch(stuck).await, (false, before + 1));
+    // The wedged worker resumes: its heartbeat does not resurrect the agent, and its close
+    // does not pass for a fresh disconnect.
+    assert!(!leases::holds_lease(&ctx.db, agent, "c1").await.unwrap());
+    assert!(!leases::renew_agent_lease(&ctx.db, agent, "c1")
+        .await
+        .unwrap());
+    assert!(!leases::release_lease(&ctx.db, agent, "c1").await.unwrap());
+    assert_eq!(last_seen(agent).await, before);
+    assert_eq!(lease(&ctx, agent).await, (false, None));
 }
 
 // -- the pickup watchdog (test_pickup_watchdog.py) ---------------------------------------------

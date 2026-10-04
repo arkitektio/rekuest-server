@@ -1,9 +1,9 @@
 //! The executor lease: one live connection per agent (`facade/persist/leases.py`).
 //!
 //! Transitions (claim, release, revoke) take the agent's row lock; renewal (the heartbeat) is a
-//! lock-free compare-and-set on `lease_epoch`, whose row count is the answer to "am I still the
-//! owner?". Bumping the epoch is what fences a previous connection: its next renewal matches no
-//! row, and it closes.
+//! lock-free compare-and-set on `active_connection_id`, whose row count is the answer to "am I
+//! still the owner?". A claim writes the new socket's id and a revoke clears it, which is what
+//! fences a previous connection: its next renewal matches no row, and it closes.
 
 use chrono::Utc;
 use sqlx::PgPool;
@@ -30,8 +30,6 @@ pub fn fresh_process(prior: Option<&str>, session: Option<&str>) -> bool {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct LeaseClaim {
     pub claimed: bool,
-    /// The fencing token this connection presents on every renewal.
-    pub epoch: Option<i64>,
     /// Tasks the agent may still hold: asked about in `INIT` (same process reconnecting).
     pub inquiries: Vec<i64>,
     /// In-flight work a previous process orphaned (a fresh process took over): for
@@ -78,18 +76,19 @@ async fn claim_lease(
         });
     }
 
-    let epoch: i64 = sqlx::query_scalar(
+    // The connection id is the fencing token: a fresh one per socket, so writing it displaces
+    // whoever held the lease before.
+    sqlx::query(
         "UPDATE facade_agent
-            SET lease_epoch = lease_epoch + 1, connected = true, last_seen = $2,
+            SET connected = true, last_seen = $2,
                 active_connection_id = $3, active_session_id = $4
-          WHERE id = $1
-      RETURNING lease_epoch",
+          WHERE id = $1",
     )
     .bind(agent)
     .bind(Utc::now())
     .bind(connection_id)
     .bind(session_id)
-    .fetch_one(&mut *tx)
+    .execute(&mut *tx)
     .await?;
 
     // The memory shelf lives in the agent process: unless the same process is reconnecting,
@@ -101,7 +100,6 @@ async fn claim_lease(
 
     Ok(LeaseClaim {
         claimed: true,
-        epoch: Some(epoch),
         inquiries: vec![],
         orphaned: vec![],
         displaced_incumbent: connected,
@@ -192,10 +190,10 @@ pub async fn release_lease(
 /// Re-checks staleness under the lock, so this is also the claim that makes the stale sweep
 /// multi-worker safe: the first backend flips `connected`, the others find a row that is no
 /// longer stale and back off. A reconnect that landed between the scan and the lock lands here
-/// too. Bumping `lease_epoch` fences the wedged connection: if its worker ever resumes, its
-/// renewal matches no row and it closes instead of resurrecting the agent. `last_seen` and
-/// `active_connection_id` are left alone: the first is the true last contact the orphan cutoff
-/// depends on, and clearing the second could let the wedged socket's disconnect pass the guard.
+/// too. Clearing `active_connection_id` fences the wedged connection: if its worker ever
+/// resumes, its renewal matches no row and it closes instead of resurrecting the agent, and its
+/// disconnect releases nothing. `last_seen` is left alone: it is the true last contact the
+/// orphan cutoff depends on.
 pub async fn revoke_lease(ctx: &Context, agent: i64) -> Result<bool, sqlx::Error> {
     let mut tx = ctx.db.begin().await?;
     let (connected, last_seen): (bool, Option<chrono::DateTime<Utc>>) =
@@ -208,7 +206,7 @@ pub async fn revoke_lease(ctx: &Context, agent: i64) -> Result<bool, sqlx::Error
         return Ok(false); // healed or reconnected while we waited for the lock
     }
     sqlx::query(
-        "UPDATE facade_agent SET connected = false, lease_epoch = lease_epoch + 1 WHERE id = $1",
+        "UPDATE facade_agent SET connected = false, active_connection_id = NULL WHERE id = $1",
     )
     .bind(agent)
     .execute(&mut *tx)
@@ -220,25 +218,37 @@ pub async fn revoke_lease(ctx: &Context, agent: i64) -> Result<bool, sqlx::Error
 
 /// Renew the lease: the heartbeat's compare-and-set. False when this connection was displaced
 /// or revoked, and must close (`renew_agent_lease`).
-pub async fn renew_agent_lease(db: &PgPool, agent: i64, epoch: i64) -> Result<bool, sqlx::Error> {
-    let rows =
-        sqlx::query("UPDATE facade_agent SET last_seen = $3 WHERE id = $1 AND lease_epoch = $2")
-            .bind(agent)
-            .bind(epoch)
-            .bind(Utc::now())
-            .execute(db)
-            .await?
-            .rows_affected();
+pub async fn renew_agent_lease(
+    db: &PgPool,
+    agent: i64,
+    connection_id: &str,
+) -> Result<bool, sqlx::Error> {
+    let rows = sqlx::query(
+        "UPDATE facade_agent SET last_seen = $3
+          WHERE id = $1 AND active_connection_id = $2 AND connected",
+    )
+    .bind(agent)
+    .bind(connection_id)
+    .bind(Utc::now())
+    .execute(db)
+    .await?
+    .rows_affected();
     Ok(rows == 1)
 }
 
-/// Whether `epoch` is still the agent's lease: asked before every delivery (`holds_lease`).
-pub async fn holds_lease(db: &PgPool, agent: i64, epoch: i64) -> Result<bool, sqlx::Error> {
+/// Whether this connection still holds the agent's lease: asked before every delivery
+/// (`holds_lease`).
+pub async fn holds_lease(
+    db: &PgPool,
+    agent: i64,
+    connection_id: &str,
+) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM facade_agent WHERE id = $1 AND lease_epoch = $2)",
+        "SELECT EXISTS (SELECT 1 FROM facade_agent
+                         WHERE id = $1 AND active_connection_id = $2 AND connected)",
     )
     .bind(agent)
-    .bind(epoch)
+    .bind(connection_id)
     .fetch_one(db)
     .await
 }

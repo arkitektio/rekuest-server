@@ -8,7 +8,7 @@
 //!
 //! Correctness lives in the write discipline (`facade::persist::leases`): transitions (claim,
 //! release, revoke) take a row lock; renewal (the heartbeat) is a lock-free compare-and-set on
-//! `lease_epoch`. All timestamps use the application clock.
+//! `active_connection_id`. All timestamps use the application clock.
 
 use chrono::{DateTime, Utc};
 
