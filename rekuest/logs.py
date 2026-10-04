@@ -12,8 +12,14 @@ Two rules keep the dev console readable (a flooded console also stalls the serve
   (permission denied, not found, invalid input) is one line, never a traceback.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from graphql import GraphQLError
 
 logger = logging.getLogger("strawberry.execution")
 
@@ -75,11 +81,11 @@ def _expected_errors() -> tuple[type[BaseException], ...]:
     return (GraphQLError, PermissionError, PermissionDenied, ObjectDoesNotExist, ValidationError, ValueError, LookupError)
 
 
-def log_graphql_errors(errors: Iterable[Any]) -> None:
+def log_graphql_errors(errors: Iterable[GraphQLError]) -> None:
     """Log resolver errors: one line for an expected refusal, a traceback for a bug."""
     expected = _expected_errors()
     for error in errors:
-        original = getattr(error, "original_error", None)
+        original = error.original_error
         path = ".".join(str(p) for p in (error.path or ())) or "-"
         if original is None or isinstance(original, expected):
             # Parse/validation errors (no original) and deliberate refusals: the client already has the message.
@@ -91,5 +97,5 @@ def log_graphql_errors(errors: Iterable[Any]) -> None:
 class QuietErrorsSchema:
     """Mix in before the strawberry schema class: ``class Schema(QuietErrorsSchema, kante.Schema)``."""
 
-    def process_errors(self, errors: list, execution_context: Any = None) -> None:
+    def process_errors(self, errors: list[GraphQLError], execution_context: object = None) -> None:
         log_graphql_errors(errors)

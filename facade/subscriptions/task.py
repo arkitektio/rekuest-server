@@ -1,11 +1,12 @@
 import datetime
-
-from kante.types import Info
-import strawberry
-from facade import channel_events, models, enums
-from rekuest_core import scalars as rscalars
 from typing import AsyncGenerator
-from facade.channels import task_event_channel, child_task_channel, agent_task_channel
+
+import strawberry
+from kante.types import Info
+
+from facade import channel_events, enums, models
+from facade.channels import agent_task_channel, child_task_channel, task_event_channel
+from rekuest_core import scalars as rscalars
 
 
 @strawberry.type(description="Slim, non-traversable snapshot of a task for change feeds.")
@@ -28,7 +29,7 @@ class TaskChange:
     @classmethod
     def from_model(cls, t: models.Task) -> "TaskChange":
         return cls(
-            id=strawberry.ID(str(t.id)),
+            id=strawberry.ID(str(t.pk)),
             reference=t.reference,
             is_done=t.is_done,
             latest_event_kind=enums.TaskEventKind(t.latest_event_kind),
@@ -78,7 +79,7 @@ class TaskEventChange:
     @classmethod
     def from_model(cls, e: models.TaskEvent) -> "TaskEventChange":
         return cls(
-            id=strawberry.ID(str(e.id)),
+            id=strawberry.ID(str(e.pk)),
             task=strawberry.ID(str(e.task_id)),
             kind=enums.TaskEventKind(e.kind),
             message=e.message,
@@ -96,8 +97,8 @@ class TaskEventChange:
             kind=enums.TaskEventKind(p.kind),
             message=p.message,
             progress=p.progress,
-            returns=p.returns,
-            value=p.value,
+            returns=rscalars.AnyDefault(p.returns) if p.returns is not None else None,
+            value=rscalars.AnyDefault(p.value) if p.value is not None else None,
             created_at=p.created_at,
         )
 
@@ -114,15 +115,17 @@ class ChildTaskEvent:
     update: TaskChange | None
 
 
-def _build_change(message) -> TaskChangeEvent:
+def _build_change(message: channel_events.TaskEventCreatedEvent) -> TaskChangeEvent:
     """Build a slim TaskChangeEvent from a payload-carrying channel message — no lookups."""
     if message.create:
         return TaskChangeEvent(create=TaskChange.from_payload(message.create), event=None)
+    if message.event is None:
+        raise ValueError("A task feed message carries neither a new task nor an event")
     return TaskChangeEvent(event=TaskEventChange.from_payload(message.event), create=None)
 
 
 async def mytasks(
-    self,
+    self: object,
     info: Info,
 ) -> AsyncGenerator[TaskChangeEvent, None]:
     """Subscribe to root tasks (and their events) created by this client (caller-scoped)."""
@@ -133,19 +136,19 @@ async def mytasks(
         organization=info.context.request.organization,
     )
 
-    async for message in task_event_channel.listen(info.context, [f"root_tasks_caller_{caller.id}"]):
+    async for message in task_event_channel.listen(info, [f"root_tasks_caller_{caller.pk}"]):
         yield _build_change(message)
 
 
 async def tasks(
-    self,
+    self: object,
     info: Info,
 ) -> AsyncGenerator[TaskChangeEvent, None]:
     """Subscribe to root task changes (and their events) across the whole organization."""
 
     organization = info.context.request.organization
 
-    async for message in task_event_channel.listen(info.context, [f"root_tasks_org_{organization.id}"]):
+    async for message in task_event_channel.listen(info, [f"root_tasks_org_{organization.id}"]):
         yield _build_change(message)
 
 
@@ -156,13 +159,13 @@ class AgentTaskUpdate:
 
 
 async def agent_tasks(
-    self,
+    self: object,
     info: Info,
     agent: strawberry.ID,
 ) -> AsyncGenerator[AgentTaskUpdate, None]:
     """Subscribe to task create/update for a single agent (its detail-page "latest tasks" feed)."""
 
-    async for message in agent_task_channel.listen(info.context, [f"agent_tasks_{agent}"]):
+    async for message in agent_task_channel.listen(info, [f"agent_tasks_{agent}"]):
         if message.create:
             yield AgentTaskUpdate(create=TaskChange.from_payload(message.create), update=None)
         elif message.update:
@@ -170,7 +173,7 @@ async def agent_tasks(
 
 
 async def child_tasks(
-    self,
+    self: object,
     info: Info,
     id: strawberry.ID,
 ) -> AsyncGenerator[ChildTaskEvent, None]:
@@ -178,7 +181,7 @@ async def child_tasks(
 
     task = await models.Task.objects.aget(id=id)
 
-    async for message in child_task_channel.listen(info.context, [f"child_tasks_{task.id}"]):
+    async for message in child_task_channel.listen(info, [f"child_tasks_{task.pk}"]):
         if message.create:
             yield ChildTaskEvent(create=TaskChange.from_payload(message.create), update=None)
         elif message.update:

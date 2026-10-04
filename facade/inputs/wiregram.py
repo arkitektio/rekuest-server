@@ -9,15 +9,16 @@ organization that has those agents.
 from __future__ import annotations
 
 import datetime
-from typing import Any, Self
+from typing import Self
 
 import strawberry
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from rekuest_core.inputs import models as rimodels
-from rekuest_core.inputs import types as ritypes
 from strawberry.experimental import pydantic
 
 from facade import enums, scalars
+from facade.json_types import JSON
+from rekuest_core.inputs import models as rimodels
+from rekuest_core.inputs import types as ritypes
 
 
 class _WireRuleModel(BaseModel):
@@ -32,11 +33,10 @@ class _WireRuleModel(BaseModel):
     interface: str = Field(min_length=1, description="The interface of that agent to run (e.g. 'sync_all_mailboxes').")
     # Optional rather than defaulting to {}: an object-valued default on a custom scalar is not
     # something every GraphQL client can read out of the schema.
-    args: dict[str, Any] | None = Field(default=None, description="The args every run is assigned with.")
+    args: dict[str, JSON] | None = Field(default=None, description="The args every run is assigned with.")
     enabled: bool = Field(default=True, description="Whether the rule starts out enabled. An organization's own later switch is kept on re-import.")
     ends_at: datetime.datetime | None = Field(default=None, description="The rule stops after this moment.")
     max_runs: int | None = Field(default=None, ge=1, description="The rule stops once it created this many runs.")
-
 
     @model_validator(mode="after")
     def args_are_a_dict(self) -> Self:

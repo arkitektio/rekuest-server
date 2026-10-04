@@ -6,10 +6,9 @@ from kante.context import HttpContext
 
 from facade.models import Agent
 from facade.schema import schema
-
 from tests.graphql_ops import DELETE_AGENT, ENSURE_AGENT, GET_AGENT, GET_AGENTS
 
-pytestmark = pytest.mark.usefixtures("fake_takt")
+pytestmark = pytest.mark.usefixtures("takt")
 
 #: ``ENSURE_AGENT`` selects only id/name/connected, and is shared with tests that predate this
 #: field. A local operation rather than a widened shared one, so those keep asserting what they
@@ -164,7 +163,7 @@ class TestGraphQLAgents:
         taken_back = await schema.execute(rename, context_value=authenticated_context, variable_values={"input": {"id": agent_id, "name": " "}})
         assert taken_back.data["updateAgent"] == {"name": "microscope:1.1", "declaredName": "microscope:1.1"}
 
-    async def test_delete_agent_mutation(self, authenticated_context: HttpContext, fake_takt):
+    async def test_delete_agent_mutation(self, authenticated_context: HttpContext):
         """Test deleting an agent via mutation."""
         # First create an agent
         create_result = await schema.execute(ENSURE_AGENT, context_value=authenticated_context, variable_values={"input": {"name": "Agent To Delete"}})
@@ -177,9 +176,6 @@ class TestGraphQLAgents:
 
         assert delete_result.data is not None
         assert delete_result.data["deleteAgent"] == agent_id
-        # takt owns the rows: the server asks it, with who is asking.
-        (deleted,) = [payload for op, payload in fake_takt.calls if op == "agent/delete"]
-        assert deleted["agent"] == agent_id and deleted["principal"]["organization"] is not None
 
         # Verify agent is deleted by trying to query it
         query_result = await schema.execute(GET_AGENT, context_value=authenticated_context, variable_values={"id": agent_id})

@@ -51,7 +51,7 @@ class Caller(models.Model):
 ```
 
 A `Caller` is **`get_or_create`d on every request that needs to record who is asking**, via
-`get_caller_for_context` (`facade/backend.py`):
+`CallerContext.caller()` (`facade/caller_context.py`):
 
 ```python
 def get_caller_for_context(ctx: CallerContext) -> models.Caller:

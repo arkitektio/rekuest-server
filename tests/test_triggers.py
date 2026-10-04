@@ -4,13 +4,12 @@ Receiving signals, matching them to triggers and firing them are takt's and test
 (``takt/crates/facade/tests/scheduling.rs``, ``signal_intake.rs``). Real postgres.
 """
 
-
 import pytest
-
-from tests import registered
 
 from facade import enums, models, triggers
 from facade.hook_agents import _identity
+from rekuest.configuration import ServiceEntry
+from tests import registered
 
 IDENTIFIER = "@mikro/arraydataset"
 CHANNELS = "@mikro/n_channels"
@@ -18,7 +17,7 @@ CHANNELS = "@mikro/n_channels"
 
 @pytest.fixture
 def mikro_service(settings):
-    settings.SERVICES = [{"name": "mikro", "url": "http://127.0.0.1:9/_rekuest/service"}]
+    settings.SERVICES = [ServiceEntry(name="mikro", url="http://127.0.0.1:9/_rekuest/service")]
     return settings
 
 
@@ -30,7 +29,7 @@ def _org(slug: str):
 
 def _target(prefix: str, org, *, needs_token: bool = False) -> models.Implementation:
     """An agent in ``org`` implementing an action whose ``image`` port takes a multi-channel dataset."""
-    from facade.mutations.agent import ImplementAgentInputModel
+    from facade.inputs import ImplementAgentInputModel
     from rekuest_core.enums import ActionKind
     from rekuest_core.inputs.models import DefinitionInputModel, ImplementationInputModel
 
@@ -54,8 +53,17 @@ def _trigger(impl: models.Implementation, *, conditions=None, owner_prefix: str 
     caller, _ = models.Caller.objects.get_or_create(client=client, user=user, organization=impl.agent.organization)
     stored, compiled = triggers.compile_conditions(conditions or [])
     return models.Trigger.objects.create(
-        name="thumbnail new images", caller=caller, kind="CREATED", identifier=IDENTIFIER, conditions=stored, compiled_jsonpath=compiled,
-        action=impl.action, agent=impl.agent, interface=impl.interface, port="image", args={"size": 128},
+        name="thumbnail new images",
+        caller=caller,
+        kind="CREATED",
+        identifier=IDENTIFIER,
+        conditions=stored,
+        compiled_jsonpath=compiled,
+        action=impl.action,
+        agent=impl.agent,
+        interface=impl.interface,
+        port="image",
+        args={"size": 128},
     )
 
 

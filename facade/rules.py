@@ -46,12 +46,12 @@ def check_policies(*, max_runs: int | None = None, debounce_seconds: int | None 
     if debounce_seconds is not None:
         if debounce_seconds < 1:
             raise ValueError("debounceSeconds must be at least 1")
-        retention = getattr(settings, "SIGNAL_RETENTION_SECONDS", 0)
+        retention: int = settings.SIGNAL_RETENTION_SECONDS
         if retention and debounce_seconds > retention:
             raise ValueError(f"debounceSeconds cannot exceed the signal retention ({retention} s)")
 
 
-def exhausted(rule) -> bool:
+def exhausted(rule: models.Schedule | models.Trigger) -> bool:
     """Whether a rule stopped by itself: its end passed, or it created its last allowed run."""
     from django.utils import timezone
 

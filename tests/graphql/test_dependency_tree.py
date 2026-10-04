@@ -1,6 +1,7 @@
 """The dependency tree, as GraphQL reads it: a task's frozen snapshot and an assign's dry run.
 
-takt resolves the tree (its tests cover that); this pins the readers of what it answers: a
+takt resolves the tree (its tests cover that; the dry run here asks the real one); this pins
+the readers of what it answers: a
 level is ``{"dependencies": {key: agents}}``, each bound implementation carries its own level,
 and a dry run adds ``meta`` (the declared dependency and why it is unmet) beside each level.
 """
@@ -9,10 +10,9 @@ import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
-from rekuest_core.inputs.models import ImplementationInputModel
-
-from facade import models, takt
+from facade import models
 from facade.schema import schema
+from rekuest_core.inputs.models import ImplementationInputModel
 from tests.factories import create_agent_for_registry, create_registry_bundle
 from tests.registered import create_implementation
 
@@ -44,13 +44,18 @@ def _definition(key: str) -> dict:
 
 
 def _seed(context: HttpContext):
-    """A workflow that depends on a relay, which depends (optionally) on a leaf."""
+    """A workflow that depends on a relay, which depends (optionally) on a leaf.
+
+    Both agents are HookAgents: takt only binds an agent that can receive work.
+    """
     request = context.request
     org = request.organization
 
     def agent(prefix: str) -> models.Agent:
         user, _, _, caller = create_registry_bundle(prefix)
-        return create_agent_for_registry(caller, user, org, prefix)
+        created = create_agent_for_registry(caller, user, org, prefix)
+        models.Agent.objects.filter(pk=created.pk).update(kind="WEBHOOK", hook_url="https://hook.example/in")
+        return created
 
     workflow = create_implementation(
         ImplementationInputModel.model_validate({"interface": "workflow", "definition": _definition("workflow"), "dependencies": [{"key": "relay", "action_dependencies": [{"key": "relay"}]}]}),
@@ -65,48 +70,28 @@ def _seed(context: HttpContext):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_dry_run_is_read_level_by_level(authenticated_context: HttpContext, monkeypatch: pytest.MonkeyPatch):
+async def test_a_dry_run_is_read_level_by_level(authenticated_context: HttpContext, takt: str):
     await schema.execute("query { __typename }", context_value=authenticated_context)
     workflow, relay = await sync_to_async(_seed)(authenticated_context)
     declared = await models.Dependency.objects.aget(implementation=workflow, key="relay")
     below = await models.Dependency.objects.aget(implementation=relay, key="leaf")
-    asked: list[tuple[str, dict]] = []
 
-    def answer(op: str, payload: dict) -> dict:
-        asked.append((op, payload))
-        return {
-            "satisfied": False,
-            "meta": {"relay": {"dependency": str(declared.pk), "unmet": None}},
-            "dependencies": {
-                "relay": [
-                    {
-                        "agent": str(relay.agent_id),
-                        "actions": {
-                            "relay": {
-                                "implementation": str(relay.pk),
-                                "dependencies": {"leaf": []},
-                                "meta": {"leaf": {"dependency": str(below.pk), "unmet": "Dependency leaf is not met"}},
-                            }
-                        },
-                    }
-                ]
-            },
-        }
+    async def dry_run(pins: list[dict] | None) -> dict:
+        result = await schema.execute(TREE_QUERY, context_value=authenticated_context, variable_values={"input": {"implementation": str(workflow.pk), "dependencies": pins}})
+        assert result.errors is None, result.errors
+        return result.data["dependencyTree"]
 
-    monkeypatch.setattr(takt, "call", answer)
-    pins = [{"key": "relay", "mappedAgents": [{"key": "relay", "agent": str(relay.agent_id), "dependencies": [{"key": "leaf", "mappedAgents": []}]}]}]
-    result = await schema.execute(TREE_QUERY, context_value=authenticated_context, variable_values={"input": {"implementation": str(workflow.pk), "dependencies": pins}})
+    # As it stands, the relay is bound to nobody: takt says why an assign would be refused.
+    unbound = await dry_run(None)
+    assert unbound["satisfied"] is False
+    (root,) = unbound["dependencies"]
+    assert (root["key"], root["dependency"], root["mappedAgents"]) == ("relay", {"id": str(declared.pk), "key": "relay", "optional": False}, [])
+    assert "was not provided with an overwrite" in root["unmet"]
 
-    assert result.errors is None, result.errors
-    # takt is asked exactly what an assign would send it, the pins nested under their agent.
-    ((op, payload),) = asked
-    assert op == "resolve"
-    assert payload["input"] == {
-        "implementation": str(workflow.pk),
-        "dependencies": [{"key": "relay", "auto_resolve": False, "mapped_agents": [{"key": "relay", "agent": str(relay.agent_id), "dependencies": [{"key": "leaf", "mapped_agents": [], "auto_resolve": False}]}]}],
-    }
-    tree = result.data["dependencyTree"]
-    assert tree["satisfied"] is False
+    # Pinned to the relay's agent, it binds that agent's implementation, and below it the leaf:
+    # optional and bound to nobody, which is fine.
+    tree = await dry_run([{"key": "relay", "mappedAgents": [{"key": "relay", "agent": str(relay.agent_id)}]}])
+    assert tree["satisfied"] is True
     (root,) = tree["dependencies"]
     assert (root["key"], root["unmet"], root["dependency"]) == ("relay", None, {"id": str(declared.pk), "key": "relay", "optional": False})
     (bound,) = root["mappedAgents"]
@@ -114,7 +99,7 @@ async def test_a_dry_run_is_read_level_by_level(authenticated_context: HttpConte
     (implementation,) = bound["mappedImplementations"]
     assert (implementation["key"], implementation["implementation"]["id"]) == ("relay", str(relay.pk))
     (leaf,) = implementation["resolvedDependencies"]
-    assert leaf == {"key": "leaf", "unmet": "Dependency leaf is not met", "dependency": {"id": str(below.pk), "key": "leaf", "optional": True}, "mappedAgents": []}
+    assert leaf == {"key": "leaf", "unmet": None, "dependency": {"id": str(below.pk), "key": "leaf", "optional": True}, "mappedAgents": []}
 
 
 @pytest.mark.django_db(transaction=True)

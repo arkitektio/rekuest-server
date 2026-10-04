@@ -10,15 +10,15 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
-from pathlib import Path
 import os
+from pathlib import Path
+
 from .configuration import Settings
 from .logs import build_logging
 
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-conf = Settings()
+conf = Settings()  # pyright: ignore[reportCallIssue]  its fields come from the config file and the environment
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -50,8 +50,8 @@ REDIS_KEY_PREFIX = conf.redis.key_prefix
 
 # This hub's services (catalogued) and hook agents (given to every organization): two separate
 # lists, provisioned when takt asks (``facade.upkeep``).
-SERVICES = [entry.model_dump() for entry in conf.rekuest.services]
-HOOK_AGENTS = [entry.model_dump() for entry in conf.rekuest.hook_agents]
+SERVICES = list(conf.rekuest.services)
+HOOK_AGENTS = list(conf.rekuest.hook_agents)
 
 # Every deadline, sweep interval, retention horizon and the trigger loop guard are takt's: it
 # reads them from the same ``rekuest`` configuration block. This one is read here too, only to
@@ -109,7 +109,10 @@ INSTANCE = {
     "TRUST_JWKS": conf.instance.trust.jwks,
 }
 REKUEST_IDENTIFIER = conf.rekuest.identifier
-TAKT_URL = conf.rekuest.takt_url or f"http://takt:8080/{conf.django.force_script_name.strip('/')}".rstrip("/")
+TAKT_URL = conf.rekuest.takt_url or f"http://takt:8081/{conf.django.force_script_name.strip('/')}".rstrip("/")
+# takt's internal listener as a unix socket both containers mount. With it, only the path of
+# TAKT_URL is used.
+TAKT_SOCKET = conf.rekuest.takt_socket
 
 PROVENANCE = {
     "KID": _OKPKey.import_key(conf.instance.private_key).thumbprint(),

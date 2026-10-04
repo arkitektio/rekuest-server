@@ -27,13 +27,16 @@ services:
       - db
       - redis
     environment:
-      # Where the server reaches takt's internal API. config.yaml sets no
-      # django.force_script_name, so there is no path prefix.
-      REKUEST__TAKT_URL: http://takt:8080
+      # Where the server reaches takt's internal API: the socket takt binds in the volume both
+      # mount. The URL only gives the path, and config.yaml sets no django.force_script_name,
+      # so there is no path prefix.
+      REKUEST__TAKT_URL: http://takt
+      REKUEST__TAKT_SOCKET: /run/takt/internal.sock
     ports:
       - "8234:80"
     volumes:
       - ./config.yaml:/workspace/config.yaml:ro
+      - takt_run:/run/takt
 
   # takt: the agent websocket, the HookAgent and signal intakes, the internal API and every
   # sweep. It never migrates: it waits until the server has applied the migrations listed in
@@ -44,7 +47,14 @@ services:
       - db
       - redis
       - rekuest
+    environment:
+      # The internal API is not on the published port: only the server reaches this socket.
+      TAKT_INTERNAL_BIND: unix:/run/takt/internal.sock
     ports:
       - "8235:8080"
     volumes:
       - ./config.yaml:/workspace/config.yaml:ro
+      - takt_run:/run/takt
+
+volumes:
+  takt_run:

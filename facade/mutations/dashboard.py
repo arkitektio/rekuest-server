@@ -1,6 +1,9 @@
-from kante.types import Info
-from facade import types, models, inputs
 import logging
+from typing import cast
+
+from kante.types import Info
+
+from facade import inputs, models, types
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +14,7 @@ def create_dashboard(info: Info, input: inputs.CreateDashboardInput) -> types.Da
         organization=info.context.request.organization,
     )
 
-    return dashboard
+    return cast("types.Dashboard", dashboard)
 
 
 def delete_dashboard(info: Info, input: inputs.DeleteDashboardInput) -> bool:
@@ -43,4 +46,4 @@ def update_dashboard(info: Info, input: inputs.UpdateDashboardInput) -> types.Da
 
     dashboard.save()
 
-    return dashboard
+    return cast("types.Dashboard", dashboard)

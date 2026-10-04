@@ -1,59 +1,61 @@
 """The identity of whoever is originating a task, transport-independent.
 
-The postman ``assign`` path historically read identity straight off a Strawberry
-``Info`` (``info.context.request.{user,client,organization,membership}``). The agent
-WebSocket has no ``Info`` — it has the registered ``Agent``. ``CallerContext`` is the
-small value object both transports build, so the backend never has to know which one it
-came from.
-
-Use :meth:`CallerContext.coerce` at public entry points: it passes a ``CallerContext``
-through untouched and wraps a legacy ``Info`` via :meth:`from_info`, so existing GraphQL
-call sites (and their tests) keep working unchanged.
+A GraphQL resolver reads identity off its ``Info`` (``info.context.request``); the hub's own
+provisioning has the rows of a service agent and no request. ``CallerContext`` is the small value
+both build, so what acts on an identity never has to know where it came from. Resolvers build
+it at their edge with :meth:`CallerContext.from_info`.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
 
-from kante.context import Client, Organization, User
+from authentikate.models import Client, Membership, Organization, User
+from kante.types import Info
+
+from facade import models
 
 
 @dataclass(frozen=True)
 class CallerContext:
-    """Who is originating work: the user/client/organization plus their roles.
-
-    The identity fields are the structural ``kante`` Protocols (``.sub`` / ``.client_id`` /
-    ``.slug``), satisfied by both the GraphQL request models and the authentikate ``Agent``
-    relations, so the same context serves both transports.
-    """
+    """Who is originating work: the user, client and organization rows, plus the roles."""
 
     user: User
-    client: Optional[Client]
-    organization: Optional[Organization]
-    roles: List[str] = field(default_factory=list)
+    client: Client | None
+    organization: Organization | None
+    roles: list[str] = field(default_factory=list)
+
+    def caller(self) -> models.Caller:
+        """The Caller row of this identity: the requester recorded on work it originates."""
+        return models.Caller.objects.get_or_create(user=self.user, client=self.client, organization=self.organization)[0]
 
     @classmethod
-    def from_info(cls, info: Any) -> "CallerContext":
-        """Build from a Strawberry ``Info`` (the GraphQL postman path)."""
+    def from_info(cls, info: Info) -> CallerContext:
+        """The identity of a GraphQL request.
+
+        A request promises only protocols (``kante.context``); what authentikate puts on it are
+        its own rows, and that is checked here once instead of assumed everywhere else.
+        """
         request = info.context.request
+        user = request.user
+        if not isinstance(user, User):
+            raise TypeError(f"The request's user is a {type(user).__name__}, not an authentikate user")
+        # A request says "not set" by raising: a token may carry no client or organization.
         try:
-            roles = list(request.membership.roles or [])
-        except Exception:
-            # Mirrors ``provenance.mint._current_roles``: roles are best-effort.
-            roles = []
-        # client/organization are read defensively: the provenance mint path only needs
-        # ``user``/``roles``, and some request doubles omit the rest.
+            client = request.client
+        except ValueError:
+            client = None
+        try:
+            organization = request.organization
+        except ValueError:
+            organization = None
+        try:
+            membership = request.membership
+        except ValueError:
+            membership = None
         return cls(
-            user=request.user,
-            client=getattr(request, "client", None),
-            organization=getattr(request, "organization", None),
-            roles=roles,
+            user=user,
+            client=client if isinstance(client, Client) else None,
+            organization=organization if isinstance(organization, Organization) else None,
+            roles=[str(role) for role in membership.roles or []] if isinstance(membership, Membership) else [],
         )
-
-    @classmethod
-    def coerce(cls, value: Any) -> "CallerContext":
-        """Return ``value`` if it is already a ``CallerContext``, else wrap a legacy ``Info``."""
-        if isinstance(value, cls):
-            return value
-        return cls.from_info(value)

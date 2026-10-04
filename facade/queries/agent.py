@@ -1,6 +1,9 @@
+from typing import cast
+
 import strawberry
-from facade import models, types
 from kante.types import Info
+
+from facade import models, types
 
 
 def agent(
@@ -11,7 +14,7 @@ def agent(
     device_id: str | None = None,
 ) -> types.Agent:
     if id:
-        return models.Agent.objects.get(id=id)
+        return cast("types.Agent", models.Agent.objects.get(id=id))
 
     if app:
         agents = models.Agent.objects.filter(
@@ -26,7 +29,7 @@ def agent(
             agents = agents.filter(client__device__device_id=device_id)
 
         if agents.count() == 1:
-            return agents.first()
+            return cast("types.Agent", agents.get())
         elif agents.count() > 1:
             raise ValueError("Multiple agents found with the provided app, version and device_id. Please provide the agent id to identify the agent.")
         else:

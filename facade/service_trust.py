@@ -17,12 +17,13 @@ HMAC scheme (takt's ``hooks``); only the hub's configured ones use keys.
 from __future__ import annotations
 
 import time
-from typing import Any
 from urllib.parse import urlparse
 
 from django.conf import settings
 from joserfc import jwt
 from joserfc.jwk import KeySet
+
+from rekuest.configuration import HookAgentEntry, ServiceEntry
 from rekuest_service import trust
 
 #: The identities rekuest mints for configured hook agents are named ``hook-<name>``, so their
@@ -32,34 +33,15 @@ HOOK_CLIENT_PREFIX = f"rekuest:{HOOK_IDENTITY_PREFIX}"
 
 
 def rekuest_identifier() -> str:
-    return getattr(settings, "REKUEST_IDENTIFIER", None) or "live.arkitekt.rekuest"
+    return settings.REKUEST_IDENTIFIER
 
 
-def service_entry(name: str) -> dict[str, Any] | None:
-    """The ``rekuest.services`` entry named ``name``."""
-    return next((entry for entry in getattr(settings, "SERVICES", None) or [] if entry.get("name") == name), None)
-
-
-def hook_agent_entry(name: str) -> dict[str, Any] | None:
-    """The ``rekuest.hook_agents`` entry named ``name``."""
-    return next((entry for entry in getattr(settings, "HOOK_AGENTS", None) or [] if entry.get("name") == name), None)
-
-
-def hook_agent_entry_for(agent: Any) -> dict[str, Any] | None:
-    """The ``rekuest.hook_agents`` entry of a configured hook agent; None for any other agent."""
-    client = getattr(agent, "client", None)
-    client_id = getattr(client, "client_id", "") or ""
-    if not client_id.startswith(HOOK_CLIENT_PREFIX):
-        return None
-    return hook_agent_entry(client_id[len(HOOK_CLIENT_PREFIX) :])
-
-
-def identifier_of(entry: dict[str, Any]) -> str:
+def identifier_of(entry: ServiceEntry | HookAgentEntry) -> str:
     """The identifier an entry's instance signs as (and is listed under in the trust bundle)."""
-    return entry.get("identifier") or f"live.arkitekt.{entry['name']}"
+    return entry.identifier or f"live.arkitekt.{entry.name}"
 
 
-def sign_to(entry: dict[str, Any], method: str, url: str, body: bytes) -> str:
+def sign_to(entry: ServiceEntry | HookAgentEntry, method: str, url: str, body: bytes) -> str:
     """The ``Authorization`` value of a request from rekuest to this entry's instance (a service or a hook agent)."""
     return trust.sign(method, urlparse(url).path, body, issuer=rekuest_identifier(), audience=identifier_of(entry))
 

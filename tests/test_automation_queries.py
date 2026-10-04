@@ -1,6 +1,6 @@
 """Reading and changing the automation rules: filters, reverse links, the dry run, re-pointing.
 
-Real postgres; ``fake_takt`` stands in for takt where a schedule is planned. What a signal does
+Real postgres and a real takt (``takt``) where a schedule is planned. What a signal does
 when it arrives is takt's and tested there.
 """
 
@@ -9,12 +9,13 @@ from asgiref.sync import sync_to_async
 
 from facade import models
 from facade.schema import schema
+from tests.conftest import settled_run, waiting_run
 from tests.factories import TEST_TOKEN
 from tests.graphql.test_cross_tenant_isolation import OTHER_TOKEN, tenant_context
 from tests.test_schedules import CREATE_SCHEDULE, _schedulable
 from tests.test_triggers import CHANNELS, CREATE_TRIGGER, IDENTIFIER, _target
 
-pytestmark = [pytest.mark.usefixtures("fake_takt"), pytest.mark.django_db(transaction=True), pytest.mark.asyncio]
+pytestmark = [pytest.mark.usefixtures("takt"), pytest.mark.django_db(transaction=True), pytest.mark.asyncio]
 
 
 async def _contexts():
@@ -40,6 +41,11 @@ async def _run(query: str, context, **variables):
 async def _trigger(context, impl, **fields) -> str:
     values = {"name": "thumbnail", "kind": "CREATED", "identifier": IDENTIFIER, "action": str(impl.action_id), "port": "image", "args": {"size": 64}, **fields}
     return (await _run(CREATE_TRIGGER, context, input=values))["createTrigger"]["id"]
+
+
+async def _waiting(schedule: str) -> int:
+    """The run takt planned for the schedule. A mutation's answer does not wait for it."""
+    return await waiting_run(schedule)
 
 
 class TestFilters:
@@ -107,16 +113,15 @@ class TestReverseLinks:
         context, _ = await _contexts()
         await _declared("link-service", "CREATED")
         scheduled = await _schedulable("link-sched", context)
-        schedule = (await _run(CREATE_SCHEDULE, context, input={"name": "hourly", "action": str(scheduled.action_id), "intervalSeconds": 3600, "agent": str(scheduled.agent_id), "interface": scheduled.interface}))[
-            "createSchedule"
-        ]
+        schedule = (await _run(CREATE_SCHEDULE, context, input={"name": "hourly", "action": str(scheduled.action_id), "intervalSeconds": 3600, "agent": str(scheduled.agent_id), "interface": scheduled.interface}))["createSchedule"]
         triggered = await sync_to_async(_target)("link-trig", context.request.organization)
         trigger = await _trigger(context, triggered, agent=str(triggered.agent_id), interface=triggered.interface)
 
-        run = await _run("query($id: ID!) { task(id: $id) { schedule { id name } } }", context, id=schedule["nextRun"]["id"])
+        planned = str(await _waiting(schedule["id"]))
+        run = await _run("query($id: ID!) { task(id: $id) { schedule { id name } } }", context, id=planned)
         assert run["task"]["schedule"] == {"id": schedule["id"], "name": "hourly"}
         runs = await _run("query($filters: TaskFilter) { tasks(filters: $filters) { id } }", context, filters={"schedule": schedule["id"]})
-        assert [t["id"] for t in runs["tasks"]] == [schedule["nextRun"]["id"]]
+        assert [t["id"] for t in runs["tasks"]] == [planned]
 
         rules = "query($action: ID!, $agent: ID!) { action(id: $action) { schedules { id } triggers { id } } agent(id: $agent) { schedules { id } triggers { id } } }"
         of_schedule = await _run(rules, context, action=str(scheduled.action_id), agent=str(scheduled.agent_id))
@@ -144,7 +149,7 @@ class TestDryRun:
         one, three = await _signal(organization, "one", 1), await _signal(organization, "three", 3)
         await _signal(organization, "gone", 3, kind="DELETED")
         await _signal(other.request.organization, "theirs", 3)
-        query = "query($conditions: AnyDefault) { matchingSignals(kind: CREATED, identifier: \"%s\", conditions: $conditions) { id } }" % IDENTIFIER
+        query = 'query($conditions: AnyDefault) { matchingSignals(kind: CREATED, identifier: "%s", conditions: $conditions) { id } }' % IDENTIFIER
 
         async def matching(conditions=None):
             return [row["id"] for row in (await _run(query, context, conditions=conditions))["matchingSignals"]]
@@ -174,7 +179,7 @@ class TestDryRun:
 
 
 UPDATE_TRIGGER = "mutation($input: UpdateTriggerInput!) { updateTrigger(input: $input) { id kind port conditions agent { id } interface action { id } } }"
-UPDATE_SCHEDULE = "mutation($input: UpdateScheduleInput!) { updateSchedule(input: $input) { id ephemeralRuns agent { id } interface action { id } nextRun { id } } }"
+UPDATE_SCHEDULE = "mutation($input: UpdateScheduleInput!) { updateSchedule(input: $input) { id ephemeralRuns agent { id } interface action { id } } }"
 
 
 class TestRepointing:
@@ -210,20 +215,20 @@ class TestRepointing:
         kept = await models.Trigger.objects.aget(pk=trigger)
         assert (kept.port, kept.consecutive_failures, kept.last_error) == ("image", 3, "earlier")
 
-    async def test_a_retargeted_schedule_is_replanned(self, authenticated_context, fake_takt):
+    async def test_a_retargeted_schedule_is_replanned(self, authenticated_context, schedule_notices):
         context, _ = await _contexts()
         first = await _schedulable("retarget-a", context)
         second = await _schedulable("retarget-b", context)
-        schedule = (await _run(CREATE_SCHEDULE, context, input={"name": "hourly", "action": str(first.action_id), "intervalSeconds": 3600, "agent": str(first.agent_id), "interface": first.interface}))[
-            "createSchedule"
-        ]
-        fake_takt.calls.clear()
+        schedule = (await _run(CREATE_SCHEDULE, context, input={"name": "hourly", "action": str(first.action_id), "intervalSeconds": 3600, "agent": str(first.agent_id), "interface": first.interface}))["createSchedule"]
+        first_run = await _waiting(schedule["id"])
+        schedule_notices.sent()
 
         moved = await _run(UPDATE_SCHEDULE, context, input={"id": schedule["id"], "action": str(second.action_id), "agent": str(second.agent_id), "interface": second.interface, "ephemeralRuns": True})
         assert moved["updateSchedule"]["action"]["id"] == str(second.action_id) and moved["updateSchedule"]["ephemeralRuns"] is True
         # The waiting run was planned for the old target: it is cancelled, not dispatched once more.
-        assert [payload.get("replan") for op, payload in fake_takt.calls if op == "schedule/plan"] == [True]
-        assert moved["updateSchedule"]["nextRun"]["id"] != schedule["nextRun"]["id"]
+        assert [notice["replan"] for notice in schedule_notices.sent()] == [True]
+        assert await waiting_run(schedule["id"], other_than=first_run) != first_run
+        assert (await settled_run(first_run)).latest_event_kind == "CANCELLED"
 
         mismatched = await schema.execute(UPDATE_SCHEDULE, variable_values={"input": {"id": schedule["id"], "action": str(first.action_id)}}, context_value=context)
         assert mismatched.errors is not None and "no implementation" in str(mismatched.errors[0])
@@ -249,9 +254,7 @@ class TestBrokenRules:
     async def test_a_schedule_whose_implementation_is_gone(self, authenticated_context):
         context, _ = await _contexts()
         impl = await _schedulable("gone-sched", context)
-        schedule = (await _run(CREATE_SCHEDULE, context, input={"name": "hourly", "action": str(impl.action_id), "intervalSeconds": 3600, "agent": str(impl.agent_id), "interface": impl.interface}))[
-            "createSchedule"
-        ]["id"]
+        schedule = (await _run(CREATE_SCHEDULE, context, input={"name": "hourly", "action": str(impl.action_id), "intervalSeconds": 3600, "agent": str(impl.agent_id), "interface": impl.interface}))["createSchedule"]["id"]
         await models.Implementation.objects.filter(pk=impl.pk).adelete()
         update = "mutation($input: UpdateScheduleInput!) { updateSchedule(input: $input) { name enabled } }"
 
@@ -263,13 +266,17 @@ class TestBrokenRules:
     async def test_an_edit_does_not_use_up_a_schedules_run_limit(self, authenticated_context):
         context, _ = await _contexts()
         impl = await _schedulable("limit-sched", context)
-        created = (await _run("mutation($input: CreateScheduleInput!) { createSchedule(input: $input) { id runCount exhausted nextRun { id } } }", context, input={"name": "once", "action": str(impl.action_id), "intervalSeconds": 3600, "maxRuns": 1}))[
-            "createSchedule"
-        ]
+        # The mutations answer with the row as they wrote it; what takt made of it is read afterwards.
+        read = "query($id: ID!) { schedule(id: $id) { id runCount exhausted nextRun { id } } }"
+        schedule = (await _run("mutation($input: CreateScheduleInput!) { createSchedule(input: $input) { id } }", context, input={"name": "once", "action": str(impl.action_id), "intervalSeconds": 3600, "maxRuns": 1}))["createSchedule"]["id"]
+        first_run = await _waiting(schedule)
+        created = (await _run(read, context, id=schedule))["schedule"]
         # Its one allowed run is planned and waiting: not over yet.
         assert (created["runCount"], created["exhausted"]) == (1, False) and created["nextRun"] is not None
 
-        retimed = (await _run("mutation($input: UpdateScheduleInput!) { updateSchedule(input: $input) { runCount exhausted nextRun { id } } }", context, input={"id": created["id"], "intervalSeconds": 60}))["updateSchedule"]
+        await _run("mutation($input: UpdateScheduleInput!) { updateSchedule(input: $input) { id } }", context, input={"id": schedule, "intervalSeconds": 60})
+        await waiting_run(schedule, other_than=first_run)
+        retimed = (await _run(read, context, id=schedule))["schedule"]
         assert retimed["runCount"] == 1 and retimed["exhausted"] is False
         assert retimed["nextRun"] is not None and retimed["nextRun"]["id"] != created["nextRun"]["id"]
 
@@ -313,8 +320,12 @@ class TestPoliciesAndTheFiringLog:
         assert (schedule["overlap"], schedule["catchUp"], schedule["exhausted"]) == ("ALLOW", True, False)
         assert len(schedule["upcoming"]) == 3 and schedule["upcoming"] == sorted(schedule["upcoming"])
 
-        ended = await _run("mutation($input: UpdateScheduleInput!) { updateSchedule(input: $input) { exhausted overlap } }", context, input={"id": schedule["id"], "endsAt": "2000-01-01T00:00:00+00:00", "overlap": "SKIP"})
-        assert ended["updateSchedule"] == {"exhausted": True, "overlap": "SKIP"}
+        waiting = await _waiting(schedule["id"])
+        ended = await _run("mutation($input: UpdateScheduleInput!) { updateSchedule(input: $input) { overlap } }", context, input={"id": schedule["id"], "endsAt": "2000-01-01T00:00:00+00:00", "overlap": "SKIP"})
+        assert ended["updateSchedule"] == {"overlap": "SKIP"}
+        # Its end passed: takt drops the run that was waiting, and with that it is over.
+        await settled_run(waiting)
+        assert (await _run("query($id: ID!) { schedule(id: $id) { exhausted } }", context, id=schedule["id"]))["schedule"] == {"exhausted": True}
 
     async def test_the_firing_log_is_read_and_a_trigger_is_replayed(self, authenticated_context):
         context, other = await _contexts()
@@ -327,9 +338,7 @@ class TestPoliciesAndTheFiringLog:
         await models.Firing.objects.acreate(signal=silent, trigger_id=trigger, outcome="REJECTED", reason="the port's requires not met")
 
         log = "query($filters: FiringFilter) { firings(filters: $filters) { outcome reason replay signal { object } trigger { id } task { id } } }"
-        assert (await _run(log, context, filters={"outcome": ["REJECTED"]}))["firings"] == [
-            {"outcome": "REJECTED", "reason": "the port's requires not met", "replay": False, "signal": {"object": "one"}, "trigger": {"id": trigger}, "task": None}
-        ]
+        assert (await _run(log, context, filters={"outcome": ["REJECTED"]}))["firings"] == [{"outcome": "REJECTED", "reason": "the port's requires not met", "replay": False, "signal": {"object": "one"}, "trigger": {"id": trigger}, "task": None}]
         assert (await _run(log, other))["firings"] == []  # another tenant sees none of it
 
         fire = "mutation($input: FireTriggerInput!) { fireTrigger(input: $input) { outcome replay task { id trigger { id } signal { id } } } }"
@@ -339,7 +348,7 @@ class TestPoliciesAndTheFiringLog:
         foreign = await schema.execute(fire, variable_values={"input": {"trigger": trigger, "signal": str(loud.pk)}}, context_value=other)
         assert foreign.errors is not None
 
-        seen = await _run("query($id: ID!) { signal(id: $id) { firings { outcome } } trigger(id: \"%s\") { firings { outcome } } }" % trigger, context, id=str(silent.pk))
+        seen = await _run('query($id: ID!) { signal(id: $id) { firings { outcome } } trigger(id: "%s") { firings { outcome } } }' % trigger, context, id=str(silent.pk))
         assert seen["signal"]["firings"] == [{"outcome": "REJECTED"}]
         assert [f["outcome"] for f in seen["trigger"]["firings"]] == ["FIRED", "REJECTED"]  # newest first
 

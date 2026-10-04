@@ -1,5 +1,8 @@
+from typing import cast
+
 from kante.types import Info
-from facade import types, models, inputs, logic
+
+from facade import inputs, logic, models, types
 
 
 def auto_resolve(info: Info, input: inputs.AutoResolveInput) -> types.Resolution:
@@ -12,6 +15,4 @@ def auto_resolve(info: Info, input: inputs.AutoResolveInput) -> types.Resolution
     )
 
     logic.auto_resolve(info, implementation, resolution)
-    return resolution
-
-
+    return cast("types.Resolution", resolution)

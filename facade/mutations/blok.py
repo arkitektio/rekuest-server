@@ -5,7 +5,7 @@ for a wrong-tenant id so it is indistinguishable from a missing one; deletes use
 for the same reason.
 """
 
-from typing import Iterable
+from typing import Iterable, cast
 
 from django.db import transaction
 from kante.types import Info
@@ -84,7 +84,7 @@ def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
     # but this one does not are stale and go too.
     _sync_blok_dependencies(blok, model.dependencies, replace=True)
 
-    return blok
+    return cast("types.Blok", blok)
 
 
 def delete_blok(info: Info, input: inputs.DeleteBlokInput) -> bool:
@@ -122,4 +122,4 @@ def update_blok(info: Info, input: inputs.UpdateBlokInput) -> types.Blok:
     if model.dependencies is not None:
         _sync_blok_dependencies(blok, model.dependencies, replace=True)
 
-    return blok
+    return cast("types.Blok", blok)

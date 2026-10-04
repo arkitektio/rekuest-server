@@ -702,8 +702,8 @@ type AgentSnapshotEvent {
   agentId: ID!
   values: Args!
   globalRevision: Int!
-  sessionId: String!
-  timestamp: DateTime!
+  sessionId: String
+  timestamp: DateTime
 }
 
 union AgentSnapshotEventStatePatchEvent = AgentSnapshotEvent | StatePatchEvent
@@ -5233,8 +5233,8 @@ type StatePatchEvent {
   path: String!
   value: Args!
   globalRevision: Int!
-  sessionId: String!
-  timestamp: DateTime!
+  sessionId: String
+  timestamp: DateTime
 }
 
 """A plain snapshot of a state's current value."""
@@ -5244,8 +5244,8 @@ type StateSnapshotEvent {
   interface: String!
   value: Args!
   globalRevision: Int!
-  sessionId: String!
-  timestamp: DateTime!
+  sessionId: String
+  timestamp: DateTime
 }
 
 union StateSnapshotEventStatePatchEvent = StateSnapshotEvent | StatePatchEvent
@@ -5709,7 +5709,7 @@ type TaskEvent {
   level: LogLevel!
 
   """Reference string for the event."""
-  reference: String!
+  reference: String
 }
 
 """Slim, non-traversable task event for change feeds."""

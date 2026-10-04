@@ -13,14 +13,23 @@ trigger × signal (the run's reference is ``trigger:<id>:<signal>``). A run caus
 that task's child, so it joins the causing tree — lineage, cancellation, retention, provenance.
 """
 
-from django.db.models.functions import Now
+from typing import TYPE_CHECKING
+
 from django.db import models
+from django.db.models.functions import Now
 
 from facade import enums
+
+if TYPE_CHECKING:
+    from facade.models.task import Task
 
 
 class Signal(models.Model):
     """One event a service announced. Best-effort: nothing redelivers a signal that never arrived."""
+
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    tasks: "models.Manager[Task]"
 
     service = models.CharField(max_length=200, help_text="The service that sent it (its `rekuest.services` name)")
     signal_id = models.CharField(max_length=200, help_text="The service's id for the signal; a resend with the same id is a no-op")
@@ -54,6 +63,13 @@ class Signal(models.Model):
 
 class Trigger(models.Model):
     """A user's rule: on signals of this kind and structure, whose descriptors match, run this action."""
+
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    action_id: int
+    agent_id: int | None
+    caller_id: int
+    tasks: "models.Manager[Task]"
 
     name = models.CharField(max_length=200, help_text="A human-readable name for the trigger")
     caller = models.ForeignKey(
@@ -107,6 +123,11 @@ class Firing(models.Model):
     one nobody listened for (that one has no firings at all), and a rule that never fires says why.
     A row lives as long as its signal (signal retention removes both).
     """
+
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    signal_id: int
+    trigger_id: int
 
     signal = models.ForeignKey(Signal, on_delete=models.CASCADE, related_name="firings", help_text="The signal")
     trigger = models.ForeignKey(Trigger, on_delete=models.CASCADE, related_name="firings", help_text="The trigger that was tried on it")

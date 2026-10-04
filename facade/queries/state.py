@@ -1,23 +1,29 @@
-from typing import Optional, List, Dict, Any
 import datetime
+from typing import List, Optional, TypedDict, cast
 
 import jsonpatch  # type: ignore[import-untyped]
 import strawberry
-from django.db.models import Min, Max, QuerySet
 from django.core.exceptions import ObjectDoesNotExist
-
-from facade import models, types, managers
-from rekuest_core.inputs import types as ritypes
+from django.db.models import Max, Min, QuerySet
 from kante.types import Info
-from facade.logic import get_latest_state
 
+from facade import managers, models, types
+from facade.logic import get_latest_state
+from rekuest_core.inputs import types as ritypes
 
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
 
 
-def _get_boundary_aggregates(queryset: QuerySet) -> Optional[Dict[str, Any]]:
+class _Boundaries(TypedDict):
+    start_global_revision: int
+    end_global_revision: int
+    start_time: datetime.datetime
+    end_time: datetime.datetime
+
+
+def _get_boundary_aggregates(queryset: QuerySet[models.Patch] | QuerySet[models.Snapshot]) -> _Boundaries | None:
     """Helper to extract common start/end aggregations for boundary calculations.
 
     ``global_rev`` is the revision *after* a patch applies, so the range a patch set spans runs
@@ -39,7 +45,7 @@ def _get_boundary_aggregates(queryset: QuerySet) -> Optional[Dict[str, Any]]:
     }
 
 
-def _get_state_ids(session_id: str | None, organization) -> List[str]:
+def _get_state_ids(session_id: str | None, organization: int) -> List[str]:
     """Get distinct state_ids from both Snapshots and Patches, within one organization.
 
     Unscoped, and with no ``session_id``, this enumerated every Snapshot and Patch in the
@@ -86,7 +92,7 @@ def _get_state_at_revision(
     state_data = anchor_snapshot.value
     last_snapshot = anchor_snapshot
     patch_docs = []
-    last_patch = None
+    last_patch: models.Patch | None = None
 
     for patch in patch_qs:
         patch_doc = {"op": patch.op, "path": patch.path}
@@ -95,7 +101,7 @@ def _get_state_at_revision(
         patch_docs.append(patch_doc)
         last_patch = patch
 
-    if patch_docs:
+    if last_patch is not None:
         state_data = jsonpatch.apply_patch(state_data, patch_docs, in_place=False)
         last_snapshot = models.Snapshot(
             value=state_data,
@@ -106,7 +112,7 @@ def _get_state_at_revision(
             agent=last_patch.agent,
         )
 
-    return last_snapshot
+    return cast("Optional[types.Snapshot]", last_snapshot)
 
 
 # -----------------------------------------------------------------------------
@@ -124,10 +130,10 @@ def state_for(
     agent_inst = models.Agent.objects.get(id=agent)
 
     if demand:
-        return models.State.objects.get(agent=agent_inst, **managers.state_demand_state_filters(demand))
+        return cast("types.State", models.State.objects.get(agent=agent_inst, **managers.state_demand_state_filters(demand.to_pydantic())))
 
     if state_hash:
-        return models.State.objects.get(agent=agent_inst, definition__hash=state_hash)
+        return cast("types.State", models.State.objects.get(agent=agent_inst, definition__hash=state_hash))
 
     raise ValueError("Either state_hash or a valid demand must be provided")
 
@@ -172,7 +178,7 @@ def state_at_global_rev(
     state_id: strawberry.ID | None = None,
     session_id: str | None = None,
 ) -> List[types.Snapshot]:
-    state_ids = [str(state_id)] if state_id else _get_state_ids(session_id, info.context.request.organization)
+    state_ids = [str(state_id)] if state_id else _get_state_ids(session_id, info.context.request.organization.id)
 
     results = []
     for sid in state_ids:
@@ -197,7 +203,7 @@ def forward_events_after_rev(
     if session_id:
         queryset = queryset.filter(session__session_id=session_id)
 
-    return list(queryset.order_by("global_rev", "state_id")[:count])
+    return cast("List[types.Patch]", list(queryset.order_by("global_rev", "state_id")[:count]))
 
 
 def patch_events_between_global_revs(
@@ -220,7 +226,7 @@ def patch_events_between_global_revs(
     if session_id:
         queryset = queryset.filter(session__session_id=session_id)
 
-    return list(queryset.order_by("global_rev", "state_id"))
+    return cast("List[types.Patch]", list(queryset.order_by("global_rev", "state_id")))
 
 
 def snapshots_around_rev(
@@ -231,8 +237,8 @@ def snapshots_around_rev(
     before: int = 1,
     after: int = 1,
 ) -> List[types.Snapshot]:
-    target_state_ids = [str(state_id)] if state_id else _get_state_ids(session_id, info.context.request.organization)
-    collected: List[types.Snapshot] = []
+    target_state_ids = [str(state_id)] if state_id else _get_state_ids(session_id, info.context.request.organization.id)
+    collected: list[models.Snapshot] = []
 
     for sid in target_state_ids:
         qs_before = models.Snapshot.objects.filter(state_id=sid, global_rev__lte=revision)
@@ -247,7 +253,7 @@ def snapshots_around_rev(
 
         collected.extend(before_list + after_list)
 
-    return collected
+    return cast("List[types.Snapshot]", collected)
 
 
 # -----------------------------------------------------------------------------
@@ -371,7 +377,6 @@ def checkout_agent(
         or {}
     )
 
-    agent_values = {}
     result_map = result_payload.get("states", {})
     max_global_revision = result_payload.get("global_revision", 0)
 

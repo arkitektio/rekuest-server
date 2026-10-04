@@ -11,12 +11,13 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Any, Dict
 
 from cryptography.hazmat.primitives import serialization
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from joserfc.jwk import OKPKey
+
+from facade.json_types import JSON, json_object
 
 logger = logging.getLogger(__name__)
 
@@ -77,14 +78,14 @@ def get_public_key() -> OKPKey:
     return _public_key
 
 
-def get_public_jwk() -> Dict[str, Any]:
+def get_public_jwk() -> dict[str, JSON]:
     """The public key as a JWK dict, with ``kid``/``use``/``alg`` set."""
     jwk = get_public_key().as_dict(kid=_kid())
     jwk.setdefault("use", "sig")
     jwk.setdefault("alg", ALGORITHM)
-    return jwk
+    return json_object(dict(jwk))
 
 
-def get_jwks_document() -> Dict[str, Any]:
+def get_jwks_document() -> dict[str, JSON]:
     """The JWKS document published at the JWKS endpoint for offline verification."""
     return {"keys": [get_public_jwk()]}

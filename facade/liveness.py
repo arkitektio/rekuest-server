@@ -14,6 +14,7 @@ GraphQL ``active`` field, with the same window takt uses (``AGENT_STALE_AFTER``:
 heartbeat intervals).
 """
 
+import datetime
 from datetime import timedelta
 
 from django.conf import settings
@@ -27,10 +28,10 @@ def stale_after_seconds() -> float:
     so a live agent (which refreshes ``last_seen`` every ``AGENT_HEARTBEAT_INTERVAL``) has to
     miss two full heartbeats before it is considered stale.
     """
-    return float(getattr(settings, "AGENT_STALE_AFTER", 3 * settings.AGENT_HEARTBEAT_INTERVAL))
+    return float(settings.AGENT_STALE_AFTER)
 
 
-def agent_is_live(connected: bool, last_seen) -> bool:
+def agent_is_live(connected: bool, last_seen: datetime.datetime | None) -> bool:
     """Whether a websocket connection is genuinely alive: connected AND a fresh heartbeat."""
     if not connected or last_seen is None:
         return False

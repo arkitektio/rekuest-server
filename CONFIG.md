@@ -62,14 +62,14 @@ takt reads the same file. It looks for it at `TAKT_CONFIG`, then at
 
 takt reads these blocks: `django` (`debug`, `force_script_name`), `postgres`, `redis`,
 `authentikate`, `rekuest`, `provenance` and `instance`. The `instance` block is required: takt
-refuses to start without it, because the server signs every internal request with the instance
-key and takt verifies with it.
+refuses to start without it, because takt signs what it asks of the server (the upkeep jobs) and
+of HookAgents with the instance key.
 
 The environment overrides below apply to takt too, for keys in those seven blocks
 (`POSTGRES__PASSWORD`, `REKUEST__PICKUP_DEADLINE`, …). A secret given only as an environment
 variable therefore has to be set on both containers.
 
-Two variables are takt's alone: `TAKT_BIND` (the listen address, default `0.0.0.0:8080`)
+Three variables are takt's alone: `TAKT_INTERNAL_BIND` (where the internal API is served, apart from what agents reach: `unix:<path>` for a socket the server mounts too, or an address; default `127.0.0.1:8081`. Nothing on it is authenticated, so it must be reachable by the server alone), `TAKT_BIND` (the listen address, default `0.0.0.0:8080`)
 and `RUST_LOG` (the log filter, default `info`).
 
 ### Environment variables (the `__` rule)
@@ -204,7 +204,8 @@ server.
 
 | Key | Env var | Type | Default | Read by | Description |
 |---|---|---|---|---|---|
-| `takt_url` | `REKUEST__TAKT_URL` | str | `http://takt:8080/<script name>` | server | takt's base URL with the script name. The server POSTs to `<takt_url>/internal/<op>` (`facade/takt.py`) and asks `<takt_url>/ht` for its own health check. While takt is unreachable every assign, control, registration, delete, probe and schedule change is refused. `agentd_url`, its former name, is still read. |
+| `takt_url` | `REKUEST__TAKT_URL` | str | `http://takt:8081/<script name>` | server | takt's internal listener (`TAKT_INTERNAL_BIND`) with the script name: not the address agents connect to. The server POSTs to `<takt_url>/internal/<op>` (`facade/takt.py`) and asks `<takt_url>/ht` for its own health check. While takt is unreachable every assign, control, registration, delete, probe and "run now" is refused; a created or changed schedule is still written, and takt's reaper plans it once it is back. `agentd_url`, its former name, is still read. |
+| `takt_socket` | `REKUEST__TAKT_SOCKET` | str | unset | server | takt's internal listener as a unix socket the server and takt both mount (takt: `TAKT_INTERNAL_BIND=unix:<path>`). When set, the internal API is reached through it and only the path of `takt_url` is used. |
 | `server_url` | `REKUEST__SERVER_URL` | str | `http://rekuest:80/<script name>` | takt | The server's base URL with the script name. takt POSTs the upkeep jobs to `<server_url>/_rekuest/upkeep/<job>` (`takt/crates/facade/src/upkeep.rs`). Empty turns upkeep off: no service is catalogued, no hook agent is provisioned and new actions get no embedding. |
 | `identifier` | `REKUEST__IDENTIFIER` | str | `live.arkitekt.rekuest` | both | This rekuest's fakts identifier: what its key is listed under in the hub trust bundle, and the issuer and audience of the service tokens the server signs its internal requests with. |
 | `services` | — (use YAML) | list | `[]` | both | This hub's services, each `{name, url, identifier?}`. The server catalogues what each hosts and emits from its manifest at `<url>/manifest` (when takt asks, `facade/service_catalog.py`); takt accepts their signed signals. A service is not an agent: nothing here creates one. |
@@ -287,8 +288,8 @@ does need attention:
 
 ### `instance` — this instance's key and whom it trusts
 
-One Ed25519 key per rekuest instance. It signs provenance tokens, the server's requests to
-takt's internal API, and every request to the hub's services. The server and takt must hold
+One Ed25519 key per rekuest instance. It signs provenance tokens, takt's upkeep requests to
+the server, and every request to the hub's services. The server and takt must hold
 the same key, which they do by reading the same file. Required by both.
 
 | Key | Env var | Type | Default | Description |
@@ -401,7 +402,8 @@ instance:
 rekuest:
   # Only where the pair is not named `rekuest` and `takt` (with django.force_script_name
   # appended if one is set):
-  # takt_url: http://takt:8080
+  # takt_url: http://takt:8081
+  # takt_socket: /run/takt/internal.sock
   # server_url: http://rekuest:80
 # Optional — everything defaults; shown for the one knob worth tuning.
 embeddings:

@@ -17,14 +17,26 @@ Everything else falls out of that invariant:
   to now.
 """
 
-from django.db.models.functions import Now
+from typing import TYPE_CHECKING
+
 from django.db import models
+from django.db.models.functions import Now
 
 from facade import enums
+
+if TYPE_CHECKING:
+    from facade.models.task import Task
 
 
 class Schedule(models.Model):
     """A recurring assignment: the action, its args, and when (an interval or a cron line)."""
+
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    action_id: int
+    agent_id: int | None
+    caller_id: int
+    tasks: "models.Manager[Task]"
 
     name = models.CharField(max_length=200, help_text="A human-readable name for the schedule")
     caller = models.ForeignKey(
@@ -62,9 +74,7 @@ class Schedule(models.Model):
     last_error_at = models.DateTimeField(null=True, blank=True, help_text="When `last_error` was written")
     wiregram = models.ForeignKey("Wiregram", on_delete=models.CASCADE, null=True, blank=True, related_name="schedules", help_text="The wiregram that owns this rule, if it was imported with one")
     wire_key = models.CharField(max_length=200, null=True, blank=True, help_text="What the wiregram's document calls this rule")
-    overlap = models.CharField(
-        max_length=20, choices=enums.ScheduleOverlapChoices.choices, default="SKIP", db_default="SKIP", help_text="SKIP: the next run waits for the previous to finish. ALLOW: runs may overlap."
-    )
+    overlap = models.CharField(max_length=20, choices=enums.ScheduleOverlapChoices.choices, default="SKIP", db_default="SKIP", help_text="SKIP: the next run waits for the previous to finish. ALLOW: runs may overlap.")
     catch_up = models.BooleanField(default=False, db_default=False, help_text="Run the slots missed while takt was down or a run was open, late and in order, instead of skipping them")
     last_slot_at = models.DateTimeField(null=True, blank=True, help_text="The slot of the run planned last: where catch-up continues from")
 

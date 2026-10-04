@@ -59,40 +59,27 @@ extend-exclude = ["takt"]
 [tool.ruff.lint]
 # Updated Ruff config format (new versions of Ruff prefer tool.ruff.lint)
 extend-select = ["ANN", "D1", "I"] # Added 'I' for import sorting (speedup)
-extend-ignore = ["ANN002", "ANN003", "D100", "ANN401"]
+extend-ignore = ["ANN002", "ANN003", "D100"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["rekuest", "embeddings"]
 
-# Type gate for the refactored real-time / protocol plumbing. Run: `basedpyright`.
-# Scoped to the typed plumbing modules; the ORM/pydantic dynamic-inference rules are relaxed
-# (pyright can't see Django's descriptor/manager magic or pydantic defaults without a mypy
-# plugin), so the gate enforces the things that matter here — untyped params, wrong types,
-# bad calls, unreachable code — without drowning in Django false positives.
+# The type gate. Run: `basedpyright`. It covers the whole server. Writing `Any` is an error
+# (`reportExplicitAny`), and so is an attribute a type does not declare. An `Any` that is only
+# inferred is not reported: Django's settings, `pk` and JSON fields and strawberry's decorators
+# and `UNSET` are all `Any` in their own stubs, which is theirs to fix and fires on every line
+# that touches them. The "unknown" rules stay off for the same reason.
 [tool.basedpyright]
 typeCheckingMode = "standard"
 pythonVersion = "3.12"
-include = [
-    "facade/ports.py",
-    "facade/transport.py",
-    "facade/message_router.py",
-    "facade/grace.py",
-    "facade/caller_context.py",
-    "facade/caller_events.py",
-    "facade/hooks.py",
-    "facade/consumers/agent_protocol.py",
-    "facade/probes/backend.py",
-    "facade/probes/store.py",
-    "facade/probes/persist.py",
-    "facade/probes/ids.py",
-]
+include = ["facade", "rekuest"]
 exclude = ["**/migrations", "**/__pycache__", ".venv", "tests"]
-# Django models / pydantic models defeat structural inference without a plugin.
-reportAttributeAccessIssue = false
+reportAny = false
+reportExplicitAny = true
+reportAttributeAccessIssue = true
 reportUnknownMemberType = false
 reportUnknownVariableType = false
 reportUnknownArgumentType = false
-reportAny = false
 reportUnusedCallResult = false
 reportMissingTypeStubs = false
 

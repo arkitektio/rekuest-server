@@ -1,9 +1,10 @@
 import datetime
-
-from kante.types import Info
-import strawberry
-from facade import models, enums
 from typing import AsyncGenerator
+
+import strawberry
+from kante.types import Info
+
+from facade import enums, models
 from facade.channels import agent_updated_channel
 
 
@@ -24,7 +25,7 @@ class AgentChange:
     @classmethod
     def from_model(cls, a: models.Agent) -> "AgentChange":
         return cls(
-            id=strawberry.ID(str(a.id)),
+            id=strawberry.ID(str(a.pk)),
             name=a.display_name or a.name,
             kind=enums.AgentKind(a.kind),
             connected=a.connected,
@@ -46,14 +47,14 @@ class AgentChangeEvent:
 
 
 async def agents(
-    self,
+    self: object,
     info: Info,
 ) -> AsyncGenerator[AgentChangeEvent, None]:
     """Subscribe to slim agent changes across the whole organization."""
 
     organization = info.context.request.organization
 
-    async for message in agent_updated_channel.listen(info.context, [f"agents_for_{organization.id}"]):
+    async for message in agent_updated_channel.listen(info, [f"agents_for_{organization.id}"]):
         if message.create:
             yield AgentChangeEvent(create=AgentChange.from_model(await models.Agent.objects.aget(id=message.create)))
         elif message.update:

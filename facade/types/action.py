@@ -3,20 +3,30 @@
 from __future__ import annotations
 
 import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional, cast
 
 import strawberry
 import strawberry_django
+from django.db.models import QuerySet
 from kante.types import Info
+
+from embeddings.strawberry import Embedding, embedding_of
+from facade import enums, filters, models
+from facade.types.base import build_prescoped_queryset, row_of
 from rekuest_core import enums as renums
 from rekuest_core import scalars as rscalars
 from rekuest_core.objects import models as rmodels
 from rekuest_core.objects import types as rtypes
 
-from facade import enums, filters, models
-from facade.type_gen import create_stats_type
-from facade.types.base import build_prescoped_queryset, build_prescoper
-from embeddings.strawberry import Embedding, embedding_of
+if TYPE_CHECKING:
+    # Named in annotations only: strawberry resolves them when it builds the schema.
+    from facade.types.auth import App, Organization
+    from facade.types.implementation import Implementation
+    from facade.types.schedule import Schedule
+    from facade.types.task import Task
+    from facade.types.testcase import TestCase
+    from facade.types.toolbox import Collection, Protocol
+    from facade.types.trigger import Trigger
 
 
 @strawberry_django.type(models.Action, filters=filters.ActionFilter, pagination=True, ordering=filters.ActionOrder, description="Represents an executable action in the system.")
@@ -51,45 +61,35 @@ class Action:
     def embedding(self) -> Embedding | None:
         return embedding_of(self)
 
-    @strawberry_django.field(description="Actions whose name and description mean roughly what this one's do, nearest first (cosine distance between embeddings, this action excluded). `filters` narrows the candidates like `actions` does; `maxDistance` (0 identical, 1 unrelated) cuts the tail, otherwise the nearest `limit` come back. Empty while this action has no vector yet or embeddings are off.")
+    @strawberry_django.field(
+        description="Actions whose name and description mean roughly what this one's do, nearest first (cosine distance between embeddings, this action excluded). `filters` narrows the candidates like `actions` does; `maxDistance` (0 identical, 1 unrelated) cuts the tail, otherwise the nearest `limit` come back. Empty while this action has no vector yet or embeddings are off."
+    )
     def similar_actions(self, info: Info, filters: Optional[filters.ActionFilter] = None, limit: int = 10, max_distance: Optional[float] = None) -> list["Action"]:
+        row = row_of(self, models.Action)
         from facade.queries.action import similar_actions_queryset
 
-        return list(similar_actions_queryset(info, self, filters, limit, max_distance))
+        return cast("list[Action]", list(similar_actions_queryset(info, row, filters, limit, max_distance)))
 
     @strawberry_django.field(description="Get the latest completed task for this action.")
     def latest_task(self) -> Optional["Task"]:
-        return models.Task.objects.filter(action=self, is_done=True).order_by("-created_at").first()
+        return cast("Optional[Task]", models.Task.objects.filter(action=self, is_done=True).order_by("-created_at").first())
 
     @strawberry_django.field(description="Retrieve tasks where this action has run.")
     def runs(self) -> list["Task"] | None:
-        return models.Task.objects.filter(action=self).order_by("-created_at")
+        return cast("list[Task] | None", models.Task.objects.filter(action=self).order_by("-created_at"))
 
     @strawberry_django.field(description="Input arguments (ports) for the action.")
     def args(self) -> list[rtypes.ArgPort]:
-        return [rmodels.ArgPortModel(**i) for i in self.args]
+        return cast("list[rtypes.ArgPort]", [rmodels.ArgPortModel(**i) for i in self.args])
 
     @strawberry_django.field(description="Output values (ports) returned by the action.")
     def returns(self) -> list[rtypes.ReturnPort]:
-        return [rmodels.ReturnPortModel(**i) for i in self.returns]
+        return cast("list[rtypes.ReturnPort]", [rmodels.ReturnPortModel(**i) for i in self.returns])
 
     @strawberry_django.field(description="Port groups used in the action for organizing ports.")
     def port_groups(self) -> list[rtypes.PortGroup]:
-        return [rmodels.PortGroupModel(**i) for i in self.port_groups]
-
+        return cast("list[rtypes.PortGroup]", [rmodels.PortGroupModel(**i) for i in self.port_groups])
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(cls, queryset: QuerySet[models.Action], info: Info, **kwargs: object) -> QuerySet[models.Action]:
         return build_prescoped_queryset(info, queryset, field="organization")
-
-
-ActionStats, ActionStatsResolver = create_stats_type(
-    models.Action,
-    filters=filters.ActionFilter,
-    # Action has no created_at; its creation timestamp is defined_at
-    allowed_fields={
-        "created_at": "defined_at",
-    },
-    allowed_datetime_fields={"created_at": "defined_at"},
-    prescope=build_prescoper(field="organization"),
-)

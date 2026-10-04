@@ -1,14 +1,14 @@
 """Inputs for implementations and action/schema/port demands."""
 
-
 import strawberry
 from pydantic import BaseModel, Field
-from rekuest_core import scalars as rscalars
-from rekuest_core.inputs import models as rimodels
-from rekuest_core.inputs import types as ritypes
 from strawberry.experimental import pydantic
 
 from facade import enums
+from facade.json_types import JSON
+from rekuest_core import scalars as rscalars
+from rekuest_core.inputs import models as rimodels
+from rekuest_core.inputs import types as ritypes
 
 
 @strawberry.input(description="The input for creating a port demand.")
@@ -40,7 +40,7 @@ class CreateHigherOrderImplementationInputModel(BaseModel):
     lower: str = Field(description="The implementation to wrap; its agent hosts the wrapper.")
     interface: str = Field(description="The wrapper's interface, unique on that agent (e.g. 'flow:123').")
     definition: rimodels.DefinitionInputModel = Field(description="The wrapper's typed contract, derived by the caller.")
-    config: dict | None = Field(default=None, description="Projection config: bound params + arg/dependency/return maps (see Implementation.higher_order_config).")
+    config: dict[str, JSON] | None = Field(default=None, description="Projection config: bound params + arg/dependency/return maps (see Implementation.higher_order_config).")
     dependencies: list[rimodels.AgentDependencyInputModel] | None = Field(default=None, description="Dependencies the wrapper declares, for a dependency_map sourcing 'from: caller'.")
 
 

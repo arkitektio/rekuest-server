@@ -3,13 +3,22 @@
 from __future__ import annotations
 
 import datetime
+from typing import TYPE_CHECKING
 
 import strawberry
 import strawberry_django
-from rekuest_core import scalars as rscalars
+from django.db.models import QuerySet
+from kante.types import Info
 
 from facade import models
 from facade.types.base import build_prescoped_queryset
+from rekuest_core import scalars as rscalars
+
+if TYPE_CHECKING:
+    # Named in annotations only: strawberry resolves them when it builds the schema.
+    from facade.types.auth import Caller
+    from facade.types.schedule import Schedule
+    from facade.types.trigger import Trigger
 
 
 @strawberry_django.type(models.Wiregram, pagination=True, description="An automation document an organization imported, and the owner of the schedules and triggers it created.")
@@ -26,5 +35,5 @@ class Wiregram:
     triggers: list["Trigger"] = strawberry_django.field(description="The triggers it owns.")
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(cls, queryset: QuerySet[models.Wiregram], info: Info, **kwargs: object) -> QuerySet[models.Wiregram]:
         return build_prescoped_queryset(info, queryset, field="organization")

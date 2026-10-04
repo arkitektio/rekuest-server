@@ -11,10 +11,11 @@ import json
 from typing import Optional
 
 import strawberry
-from rekuest_core import scalars as rscalars
 
 from facade import enums
 from facade.channel_events import ProbeEventBroadcast
+from facade.takt_api import ProbeState
+from rekuest_core import scalars as rscalars
 
 
 @strawberry.type(description="A probe — a zero-persistence invocation. Redis-held under a TTL; never appears in task history.")
@@ -33,22 +34,21 @@ class Probe:
     created_at: Optional[datetime.datetime] = strawberry.field(description="When the probe was created.")
 
     @classmethod
-    def from_state(cls, state: dict) -> "Probe":
-        """Build from the redis state hash (must include the ``id`` key)."""
-        created = state.get("created")
+    def from_state(cls, state: ProbeState) -> "Probe":
+        """Build from the probe's state: the redis hash takt keeps, with its id."""
         return cls(
-            id=strawberry.ID(state["id"]),
-            agent=strawberry.ID(state.get("agent", "")),
-            action=strawberry.ID(state.get("action", "")),
-            implementation=strawberry.ID(state.get("impl", "")),
-            interface=state.get("iface", ""),
-            reference=state.get("ref") or None,
-            kind=enums.TaskEventKind(state.get("kind", "QUEUED")),
-            seq=int(state.get("seq", "0")),
-            is_done=bool(state.get("done")),
-            returns=json.loads(state["last_returns"]) if state.get("last_returns") else None,
-            error=state.get("err") or None,
-            created_at=datetime.datetime.fromisoformat(created) if created else None,
+            id=strawberry.ID(state.id),
+            agent=strawberry.ID(state.agent),
+            action=strawberry.ID(state.action),
+            implementation=strawberry.ID(state.impl),
+            interface=state.iface,
+            reference=state.ref or None,
+            kind=enums.TaskEventKind(state.kind),
+            seq=state.seq,
+            is_done=bool(state.done),
+            returns=json.loads(state.last_returns) if state.last_returns else None,
+            error=state.err or None,
+            created_at=datetime.datetime.fromisoformat(state.created) if state.created else None,
         )
 
 
@@ -70,7 +70,7 @@ class ProbeEvent:
             seq=b.seq,
             message=b.message,
             progress=b.progress,
-            returns=b.returns,
+            returns=rscalars.AnyDefault(b.returns) if b.returns is not None else None,
             created_at=b.created_at,
         )
 

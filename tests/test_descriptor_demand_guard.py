@@ -9,6 +9,11 @@ the guard raises while the SQL is being built.
 
 from types import SimpleNamespace
 
+from facade.managers import PortDemand
+
+from rekuest_core.inputs.models import ActionDemandInputModel, DescriptorInputModel, PortMatchInputModel, StateDemandInputModel
+from rekuest_core.enums import PortKind
+
 import pytest
 
 from facade.managers import get_action_ids_by_port_demands, get_action_port_demand_subquery
@@ -17,14 +22,14 @@ from facade.managers import get_action_ids_by_port_demands, get_action_port_dema
 def match(**overrides):
     base = dict(at=None, key=None, kind=None, identifier=None, nullable=None, dimension=None, descriptors=None, children=None)
     base.update(overrides)
-    return SimpleNamespace(**base)
+    return PortMatchInputModel(**base)
 
 
 def demand(*matches):
-    return SimpleNamespace(kind="args", matches=list(matches), force_length=None, force_non_nullable_length=None, force_structure_length=None)
+    return PortDemand(kind="args", matches=list(matches))
 
 
-DESCRIPTORS = [SimpleNamespace(key="axes", value="c")]
+DESCRIPTORS = [DescriptorInputModel(key="axes", value="c")]
 
 
 def test_descriptor_only_root_match_is_rejected():
@@ -38,7 +43,7 @@ def test_descriptor_only_root_match_is_rejected_in_subquery_form():
 
 
 def test_root_descriptors_with_structural_narrowing_are_allowed():
-    for narrowing in (dict(identifier="@mikro/image"), dict(kind=SimpleNamespace(value="STRUCTURE")), dict(key="image"), dict(at=0), dict(dimension="length")):
+    for narrowing in (dict(identifier="@mikro/image"), dict(kind=PortKind.STRUCTURE), dict(key="image"), dict(at=0), dict(dimension="length")):
         get_action_port_demand_subquery([demand(match(descriptors=DESCRIPTORS, **narrowing))])
 
 

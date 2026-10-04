@@ -1,13 +1,12 @@
 """Inputs for probes (see :mod:`facade.probes`)."""
 
-from typing import Any
-
 import strawberry
 from pydantic import BaseModel, Field
-from rekuest_core import scalars as rscalars
 from strawberry.experimental import pydantic
 
 from facade import scalars
+from facade.json_types import JSON
+from rekuest_core import scalars as rscalars
 
 
 class ProbeInputModel(BaseModel):
@@ -21,7 +20,7 @@ class ProbeInputModel(BaseModel):
     action: str | None = Field(default=None, description="The action ID to probe")
     implementation: str | None = Field(default=None, description="The implementation ID to probe directly")
     action_hash: str | None = Field(default=None, description="The hash of the action to probe")
-    args: dict[str, Any] = Field(description="The args of the probe. A dictionary of ports and values")
+    args: dict[str, JSON] = Field(description="The args of the probe. A dictionary of ports and values")
     reference: str | None = Field(default=None, description="An optional caller-side reference echoed to the agent")
 
 

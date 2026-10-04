@@ -3,13 +3,21 @@
 from __future__ import annotations
 
 import datetime
+from typing import TYPE_CHECKING
 
 import strawberry
 import strawberry_django
-from rekuest_core import scalars as rscalars
+from django.db.models import QuerySet
+from kante.types import Info
 
 from facade import filters, models
 from facade.types.base import build_prescoped_queryset
+from rekuest_core import scalars as rscalars
+
+if TYPE_CHECKING:
+    # Named in annotations only: strawberry resolves them when it builds the schema.
+    from facade.types.action import Action
+    from facade.types.implementation import Implementation
 
 
 @strawberry_django.type(models.TestCase, filters=filters.TestCaseFilter, pagination=True, description="Defines a test case comparing expected behavior for actions.")
@@ -23,7 +31,7 @@ class TestCase:
     results: list["TestResult"] = strawberry_django.field(description="Results from running this test case.")
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(cls, queryset: QuerySet[models.TestCase], info: Info, **kwargs: object) -> QuerySet[models.TestCase]:
         return build_prescoped_queryset(info, queryset, field="action__organization")
 
 
@@ -38,7 +46,5 @@ class TestResult:
     created_at: datetime.datetime = strawberry_django.field(description="When the test was executed.")
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(cls, queryset: QuerySet[models.TestResult], info: Info, **kwargs: object) -> QuerySet[models.TestResult]:
         return build_prescoped_queryset(info, queryset, field="case__action__organization")
-
-

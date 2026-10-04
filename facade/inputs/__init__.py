@@ -9,6 +9,7 @@ from .agent import (
     BlockInputModel,
     BounceInput,
     BounceInputModel,
+    ImplementAgentInputModel,
     KickInput,
     KickInputModel,
     PinInput,
@@ -154,6 +155,7 @@ __all__ = [
     "UnblockInputModel",
     "UpdateAgentInput",
     "UpdateAgentInputModel",
+    "ImplementAgentInputModel",
     # task
     "AssignInput",
     "AssignInputModel",

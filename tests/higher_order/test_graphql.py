@@ -2,20 +2,16 @@
 
 ``createHigherOrderImplementation`` is served by takt (``internal/higher-order/create``):
 the checks and the writes are judged there (rekuest-takt ``tests/higher_order.rs``). Here:
-that the mutation hands the request over and answers with the row takt created, that
-takt's refusals reach GraphQL as they are, and that re-registering an agent keeps the
+that the mutation hands the request to the real takt and answers with the row it created,
+that takt's refusals reach GraphQL as they are, and that re-registering an agent keeps the
 wrappers deployed onto it: takt's (tests/higher_order.rs), where registration lives.
 """
 
-import json
-from collections.abc import Callable
-
-import httpx
 import pytest
 from asgiref.sync import sync_to_async
+from authentikate.models import Organization
 from kante.context import HttpContext
 
-from facade import takt
 from facade.models import Action, Implementation
 from facade.schema import schema
 from tests.factories import create_agent_for_registry, create_registry_bundle
@@ -33,8 +29,9 @@ CREATE = """
 DEFINITION = {"key": "flow_123", "version": "1", "name": "A flow", "kind": "FUNCTION", "args": [{"key": "x", "kind": "INT", "nullable": False}]}
 
 
-def _build_impls(prefix: str, lower_kind: str = "FUNCTION", higher_kind: str = "FUNCTION") -> tuple[str, str]:
+def _build_impls(prefix: str, lower_kind: str = "FUNCTION", higher_kind: str = "FUNCTION", organization: Organization | None = None) -> tuple[str, str]:
     user, _, org, registry = create_registry_bundle(prefix)
+    org = organization or org
     agent = create_agent_for_registry(registry=registry, user=user, organization=org, prefix=prefix)
 
     lower_action = Action.objects.create(
@@ -67,40 +64,15 @@ def _build_impls(prefix: str, lower_kind: str = "FUNCTION", higher_kind: str = "
 build_impls = sync_to_async(_build_impls)
 
 
-def _link(higher_id: str, lower_id: str) -> None:
-    Implementation.objects.filter(pk=higher_id).update(higher_order_for_id=lower_id, higher_order_config={"args_key": "args"})
-
-
-link = sync_to_async(_link)
-
-
-@pytest.fixture
-def takt_answers(monkeypatch: pytest.MonkeyPatch, settings: object) -> Callable[..., list[dict]]:
-    """takt answered by ``handler``; the JSON bodies it received."""
-    settings.TAKT_URL = "http://takt:8080/rekuest"
-    seen: list[dict] = []
-
-    def install(handler: Callable[[httpx.Request], httpx.Response]) -> list[dict]:
-        def record(request: httpx.Request) -> httpx.Response:
-            seen.append(json.loads(request.content))
-            return handler(request)
-
-        monkeypatch.setattr(takt, "_client", httpx.Client(transport=httpx.MockTransport(record)))
-        return seen
-
-    return install
-
-
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("takt")
 class TestCreateHigherOrderImplementation:
-    """The mutation hands over to takt."""
+    """The mutation hands over to takt, the real one."""
 
-    async def test_the_request_goes_to_takt_and_the_wrapper_comes_back(self, authenticated_context: HttpContext, takt_answers: Callable[..., list[dict]]) -> None:
-        """The request takt receives, and the row the mutation answers with."""
-        higher_id, lower_id = await build_impls("ho-ok")
-        await link(higher_id, lower_id)  # what takt would have written
-        seen = takt_answers(lambda request: httpx.Response(200, json={"implementation": higher_id, "diagnostics": []}))
+    async def test_takt_deploys_the_wrapper_and_it_comes_back(self, authenticated_context: HttpContext) -> None:
+        """The wrapper takt registered on the lower implementation's agent is what the mutation answers with."""
+        _, lower_id = await build_impls("ho-ok", organization=authenticated_context.request.organization)
 
         result = await schema.execute(
             CREATE,
@@ -110,24 +82,23 @@ class TestCreateHigherOrderImplementation:
 
         assert result.errors is None, result.errors
         payload = result.data["createHigherOrderImplementation"]
-        assert payload == {"id": higher_id, "higherOrderConfig": {"args_key": "args"}, "higherOrderFor": {"id": lower_id}}
-        (body,) = seen
-        assert body["input"]["lower"] == lower_id and body["input"]["interface"] == "flow:123"
-        assert body["input"]["definition"]["key"] == "flow_123"
-        assert body["input"]["config"] == {"args_key": "args"}
-        assert body["principal"]["organization"] is not None
+        assert (payload["higherOrderConfig"], payload["higherOrderFor"]) == ({"args_key": "args"}, {"id": lower_id})
+        wrapper = await Implementation.objects.select_related("action").aget(pk=payload["id"])
+        lower = await Implementation.objects.aget(pk=lower_id)
+        assert (wrapper.interface, wrapper.action.key, wrapper.agent_id) == ("flow:123", "flow_123", lower.agent_id)
 
-    async def test_a_refusal_reaches_graphql_as_takt_worded_it(self, authenticated_context: HttpContext, takt_answers: Callable[..., list[dict]]) -> None:
-        """takt's message is the GraphQL error."""
-        takt_answers(lambda request: httpx.Response(400, json={"error": "An implementation cannot wrap itself"}))
+    async def test_a_refusal_reaches_graphql_as_takt_worded_it(self, authenticated_context: HttpContext) -> None:
+        """takt's message is the GraphQL error: here, an implementation of another organization."""
+        _, foreign = await build_impls("ho-foreign")
 
         result = await schema.execute(
             CREATE,
             context_value=authenticated_context,
-            variable_values={"input": {"lower": "1", "interface": "flow:1", "definition": DEFINITION}},
+            variable_values={"input": {"lower": foreign, "interface": "flow:1", "definition": DEFINITION}},
         )
 
-        assert result.errors is not None and result.errors[0].message == "An implementation cannot wrap itself"
+        assert result.errors is not None and result.errors[0].message
+        assert "takt" not in result.errors[0].message  # the refusal itself, not "takt is unavailable"
 
     async def test_without_takt_it_says_so(self, authenticated_context: HttpContext, settings: object) -> None:
         """No takt configured: a clear error, no in-process fallback."""

@@ -1,16 +1,20 @@
-from facade.types.base import scoped_get
-from kante.types import Info
-import strawberry
-from facade import types, models, inputs
 import logging
+from typing import cast
+
+import strawberry
+from kante.types import Info
+
+from facade import inputs, models, types
+from facade.types.base import scoped_get
 
 logger = logging.getLogger(__name__)
 
 
 def create_shortcut(info: Info, input: inputs.CreateShortcutInput) -> types.Shortcut:
+    data = input.to_pydantic()
     toolbox = (
-        scoped_get(models.Toolbox, info, input.toolbox)
-        if input.toolbox
+        scoped_get(models.Toolbox, info, data.toolbox)
+        if data.toolbox
         else models.Toolbox.objects.get_or_create(
             name="default",
             defaults=dict(
@@ -22,31 +26,32 @@ def create_shortcut(info: Info, input: inputs.CreateShortcutInput) -> types.Shor
         )[0]
     )
 
-    action = models.Action.objects.get(id=input.action)
+    action = models.Action.objects.get(id=data.action)
 
-    args = [arg for arg in action.args if arg["key"] not in input.args]
+    args = [arg for arg in action.args if arg["key"] not in data.args]
     returns = [arg for arg in action.returns if arg["key"] not in []]
 
     shortcut = models.Shortcut.objects.create(
-        name=input.name,
-        description=input.description,
-        action_id=input.action,
+        name=data.name,
+        description=data.description,
+        action_id=data.action,
         creator=info.context.request.user,
-        saved_args=input.args,
+        saved_args=data.args,
         toolbox=toolbox,
         args=args,
         returns=returns,
-        allow_quick=input.allow_quick,
-        use_returns=input.use_returns,
-        bind_number=input.bind_number,
+        allow_quick=data.allow_quick,
+        use_returns=data.use_returns,
+        bind_number=data.bind_number,
     )
 
     logger.debug("Shortcut created: %s", shortcut)
 
-    return shortcut
+    return cast("types.Shortcut", shortcut)
 
 
 def delete_shortcut(info: Info, input: inputs.DeleteShortcutInput) -> strawberry.ID:
-    shortcut = models.Shortcut.objects.get(id=input.id)
+    data = input.to_pydantic()
+    shortcut = models.Shortcut.objects.get(id=data.id)
     shortcut.delete()
-    return input.id
+    return strawberry.ID(data.id)

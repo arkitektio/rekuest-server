@@ -83,9 +83,7 @@ class TestQuantityValidation:
         assert "[current] ** 2" in farad.dimension
 
     def test_nested_quantity_under_list(self):
-        port = ArgPortInputModel.model_validate(
-            {"key": "voltages", "kind": "LIST", "nullable": False, "children": [q(key="v")]}
-        )
+        port = ArgPortInputModel.model_validate({"key": "voltages", "kind": "LIST", "nullable": False, "children": [q(key="v")]})
         assert port.children[0].dimension == VOLT_DIM
 
     def test_return_port_derives_dimension(self):
@@ -127,9 +125,7 @@ class TestQuantityRejections:
 
     def test_quantity_under_list_is_validated_too(self):
         with pytest.raises(ValidationError, match="must declare a reference_unit"):
-            ArgPortInputModel.model_validate(
-                {"key": "voltages", "kind": "LIST", "nullable": False, "children": [q(reference_unit=None)]}
-            )
+            ArgPortInputModel.model_validate({"key": "voltages", "kind": "LIST", "nullable": False, "children": [q(reference_unit=None)]})
 
     def test_list_without_children_raises_clean_error(self):
         with pytest.raises(ValidationError, match="exactly one child"):

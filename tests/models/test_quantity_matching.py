@@ -8,6 +8,10 @@ same physical dimension, while dimension-less demands keep matching on kind alon
 
 from types import SimpleNamespace
 
+from facade.managers import PortDemand
+
+from rekuest_core.inputs.models import ActionDemandInputModel, DescriptorInputModel, PortMatchInputModel, StateDemandInputModel
+
 import pytest
 
 from facade import managers
@@ -23,12 +27,12 @@ FARAD_DIM = "[current] ** 2 * [time] ** 4 / [length] ** 2 / [mass]"
 
 def qpm(dimension=None, kind=PortKind.QUANTITY):
     """A PortMatchInput-shaped structural demand for a quantity port."""
-    return SimpleNamespace(at=None, key=None, kind=kind, identifier=None, descriptors=None, nullable=None, children=None, dimension=dimension)
+    return PortMatchInputModel(kind=kind, dimension=dimension)
 
 
 def port_demand_ids(matches, type="args"):
     """Single port demand through the consolidated matcher entry point."""
-    demand = SimpleNamespace(kind=type, matches=matches, force_length=None, force_non_nullable_length=None, force_structure_length=None)
+    demand = PortDemand(kind=type, matches=matches)
     return managers.get_action_ids_by_port_demands([demand])
 
 

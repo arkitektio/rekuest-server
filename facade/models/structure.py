@@ -27,6 +27,10 @@ class StructureDeclaration(models.Model):
     that declared it first.
     """
 
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    descriptors: "models.Manager[Descriptor]"
+
     service = models.ForeignKey(Service, on_delete=models.CASCADE, related_name="structures", help_text="The service that hosts it")
     identifier = models.CharField(max_length=1000, unique=True, help_text="The structure identifier, e.g. @mikro/arraydataset")
     label = models.CharField(max_length=1000, null=True, blank=True, help_text="What the service calls one such object")
@@ -43,6 +47,10 @@ class Descriptor(models.Model):
     exist, what they mean, which structures carry them. Action ports ``require`` and ``provide``
     these keys, and triggers test them.
     """
+
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    structure_id: int
 
     structure = models.ForeignKey(StructureDeclaration, on_delete=models.CASCADE, related_name="descriptors", help_text="The hosted structure whose objects carry it")
     key = models.CharField(max_length=1000, help_text="The descriptor key, e.g. @mikro/n_channels")

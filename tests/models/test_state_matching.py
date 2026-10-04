@@ -8,6 +8,8 @@ resolves real StateDefinition ids by their port descriptors.
 
 from types import SimpleNamespace
 
+from rekuest_core.inputs.models import ActionDemandInputModel, DescriptorInputModel, PortMatchInputModel, StateDemandInputModel
+
 import pytest
 
 from facade import managers, models
@@ -21,9 +23,8 @@ def _org(slug="test-org-scope"):
     return Organization.objects.get_or_create(slug=slug)[0]
 
 
-
 def pm(at=None, key=None, kind=None, identifier=None, nullable=None, children=None):
-    return SimpleNamespace(at=at, key=key, kind=kind, identifier=identifier, nullable=nullable, children=children)
+    return PortMatchInputModel(at=at, key=key, kind=kind, identifier=identifier, nullable=nullable, children=children)
 
 
 @pytest.fixture

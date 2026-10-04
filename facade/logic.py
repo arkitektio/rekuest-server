@@ -1,11 +1,12 @@
-from django.db.models import Exists, OuterRef
-from rekuest_core.inputs.models import ActionDemandInputModel
-
-from facade import models, managers
-from kante.types import Info
 import logging
 import uuid
+
 import jsonpatch
+from django.db.models import Exists, OuterRef
+from kante.types import Info
+
+from facade import managers, models
+from rekuest_core.inputs.models import ActionDemandInputModel
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +64,11 @@ def auto_resolve(info: Info, implementation: models.Implementation, resolution: 
             count = 0
 
             for impl in implementations:
-                if impl.id in visited_implementations:
+                if impl.pk in visited_implementations:
                     continue
                 else:
                     if impl.dependencies.exists():
-                        visited_implementations.add(impl.id)
+                        visited_implementations.add(impl.pk)
                         sresolution = models.Resolution.objects.create(
                             name=f"Auto-resolve for {dependency}{key} on {implementation}",
                             implementation=impl,
@@ -92,7 +93,7 @@ def auto_resolve(info: Info, implementation: models.Implementation, resolution: 
                             resolution_key=str(uuid.uuid4()),
                             implementation=impl,
                         )
-                        visited_implementations.add(impl.id)
+                        visited_implementations.add(impl.pk)
 
                     count += 1
                 # No preference means no limit: every viable instance is resolved.

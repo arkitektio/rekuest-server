@@ -19,7 +19,7 @@ from pydantic import ValidationError
 from rich.console import Console
 from rich.tree import Tree
 
-from rekuest.configuration import Settings, _DEFAULT_CONFIG
+from rekuest.configuration import _DEFAULT_CONFIG, Settings
 
 # Leaf keys whose values are secrets and must never be printed in the clear.
 SECRET_HINTS = ("password", "secret_key", "secret", "private_key", "access_key")
@@ -66,13 +66,13 @@ class Command(BaseCommand):
     help = "Validate the service configuration (YAML + env) and print the resolved, redacted settings."
     # A config validator needs no model/URL/DB system checks (and they may fail
     # independently of config); skip them so only configuration is exercised.
-    requires_system_checks: list = []
+    requires_system_checks = []
 
     def handle(self, *args, **options) -> None:
         console = Console()
         path = os.environ.get("ARKITEKT_CONFIG_FILE", _DEFAULT_CONFIG)
         try:
-            settings = Settings()
+            settings = Settings()  # pyright: ignore[reportCallIssue]  its fields come from the config file and the environment
         except ValidationError as exc:
             console.print(f"[bold red]Invalid configuration[/bold red] (source: {path})")
             for err in exc.errors():

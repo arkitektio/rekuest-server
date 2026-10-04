@@ -16,7 +16,7 @@ extra query fetches all ancestors for all usages.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional, cast
 
 import strawberry
 import strawberry_django
@@ -24,6 +24,12 @@ from asgiref.sync import sync_to_async
 from strawberry.types import Info
 
 from facade import filters, models
+from facade.types.base import row_of
+
+if TYPE_CHECKING:
+    # Named in annotations only: strawberry resolves them when it builds the schema.
+    from facade.types.action import Action
+    from facade.types.trigger import SignalDeclaration
 
 
 @strawberry.type(description="A usage of a structure or interface by an action's port, derived from the relational port rows.")
@@ -88,7 +94,7 @@ def _structures(identifiers: list[str]) -> list["Structure"]:
     """Structures for ``identifiers``, each with its declaration when a service hosts it (one query)."""
     rows = models.StructureDeclaration.objects.filter(identifier__in=identifiers).select_related("service").prefetch_related("descriptors")
     declared = {row.identifier.lower(): row for row in rows}
-    return [Structure(identifier=identifier, declaration=declared.get(identifier.lower())) for identifier in identifiers]
+    return [Structure(identifier=strawberry.ID(identifier), declaration=declared.get(identifier.lower())) for identifier in identifiers]
 
 
 def _find_structures(info: Info, search: str | None = None, package_key: str | None = None) -> list["Structure"]:
@@ -120,7 +126,7 @@ class StructurePackage:
     @strawberry.field(description="Interfaces of this package referenced by the org's ports.")
     async def interfaces(self, info: Info) -> list["Interface"]:
         identifiers = await sync_to_async(_distinct_identifiers)(info, "INTERFACE", package_key=self.key)
-        return [Interface(identifier=identifier) for identifier in identifiers]
+        return [Interface(identifier=strawberry.ID(identifier)) for identifier in identifiers]
 
 
 @strawberry.type(description="An interface referenced by an action's port, derived from the relational port rows.")
@@ -133,7 +139,7 @@ class Interface:
 
     @strawberry.field(description="The package this interface belongs to.")
     def package(self) -> StructurePackage:
-        return StructurePackage(key=_package_of(self.identifier))
+        return StructurePackage(key=strawberry.ID(_package_of(self.identifier)))
 
     @strawberry.field(description="Usages of this interface as an input in actions (derived from the relational arg ports).")
     async def input_usages(self, info: Info) -> list[PortUsage]:
@@ -181,7 +187,8 @@ class StructureDescriptor:
 
     @strawberry_django.field(description="Other structures whose objects carry a descriptor of the same key.")
     def shared_with(self) -> list["HostedStructure"]:
-        return list(models.StructureDeclaration.objects.filter(descriptors__key=self.key).exclude(pk=self.structure_id).order_by("identifier"))
+        row = row_of(self, models.Descriptor)
+        return cast("list[HostedStructure]", list(models.StructureDeclaration.objects.filter(descriptors__key=row.key).exclude(pk=row.structure_id).order_by("identifier")))
 
 
 @strawberry_django.type(
@@ -205,15 +212,16 @@ class HostedStructure:
 
     @strawberry_django.field(description="The package it belongs to.")
     def package(self) -> StructurePackage:
-        return StructurePackage(key=_package_of(self.identifier))
+        return StructurePackage(key=strawberry.ID(_package_of(self.identifier)))
 
     @strawberry_django.field(description="The same structure with what your organization's action ports say about it (usages).")
     def structure(self) -> "Structure":
-        return Structure(identifier=self.identifier.lower(), declaration=self)
+        row = row_of(self, models.StructureDeclaration)
+        return Structure(identifier=row.identifier.lower(), declaration=row)
 
     @strawberry_django.field(description="The signals services declare they emit about it.")
     def signals(self) -> list["SignalDeclaration"]:
-        return list(models.SignalDeclaration.objects.filter(identifier__iexact=self.identifier).select_related("service").order_by("kind"))
+        return cast("list[SignalDeclaration]", list(models.SignalDeclaration.objects.filter(identifier__iexact=self.identifier).select_related("service").order_by("kind")))
 
 
 @strawberry.type(description="A structure (data type): referenced by an action's port, hosted by a service of this hub, or both.")
@@ -235,16 +243,16 @@ class Structure:
 
     @strawberry.field(description="The hosted structure itself, as its service declares it; null when no service of this hub hosts it.")
     def hosted(self) -> Optional["HostedStructure"]:
-        return self.declaration
+        return cast("Optional[HostedStructure]", self.declaration)
 
     @strawberry_django.field(description="The descriptors of its objects, as the hosting service declares them. Empty when nobody hosts it.")
     def descriptors(self) -> list[StructureDescriptor]:
-        return list(self.declaration.descriptors.all()) if self.declaration is not None else []
+        return cast("list[StructureDescriptor]", list(self.declaration.descriptors.all()) if self.declaration is not None else [])
 
     @strawberry.field(description="The signals services declare they emit about this structure.")
     async def signals(self) -> list["SignalDeclaration"]:
         declarations = models.SignalDeclaration.objects.filter(identifier__iexact=self.identifier).select_related("service").order_by("kind")
-        return [declaration async for declaration in declarations]
+        return cast("list[SignalDeclaration]", [declaration async for declaration in declarations])
 
     @strawberry.field(description="The local key (the part after '/').")
     def key(self) -> str:
@@ -252,7 +260,7 @@ class Structure:
 
     @strawberry.field(description="The package this structure belongs to.")
     def package(self) -> StructurePackage:
-        return StructurePackage(key=_package_of(self.identifier))
+        return StructurePackage(key=strawberry.ID(_package_of(self.identifier)))
 
     @strawberry.field(description="Usages of this structure as an input in actions (derived from the relational arg ports).")
     async def input_usages(self, info: Info) -> list[PortUsage]:
@@ -272,7 +280,7 @@ async def list_structures(info: Info, search: str | None = None) -> list[Structu
 
 async def list_interfaces(info: Info, search: str | None = None) -> list[Interface]:
     identifiers = await sync_to_async(_distinct_identifiers)(info, "INTERFACE", search=search)
-    return [Interface(identifier=identifier) for identifier in identifiers]
+    return [Interface(identifier=strawberry.ID(identifier)) for identifier in identifiers]
 
 
 def _known_packages(info: Info) -> set[str]:
@@ -296,11 +304,11 @@ async def get_structure(info: Info, identifier: strawberry.ID) -> Structure:
 async def get_interface(info: Info, identifier: strawberry.ID) -> Interface:
     if str(identifier).lower() not in await sync_to_async(_distinct_identifiers)(info, "INTERFACE"):
         raise ValueError(f"No action port references the interface {identifier!r}")
-    return Interface(identifier=str(identifier).lower())
+    return Interface(identifier=strawberry.ID(str(identifier).lower()))
 
 
 async def get_structure_package(info: Info, key: strawberry.ID) -> StructurePackage:
     known = await sync_to_async(_known_packages)(info)
     if str(key) not in known:
         raise ValueError(f"No action port references the package {key!r}")
-    return StructurePackage(key=str(key))
+    return StructurePackage(key=strawberry.ID(str(key)))

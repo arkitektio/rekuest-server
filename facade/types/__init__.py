@@ -34,7 +34,8 @@ from . import (
     threed,
     toolbox,
 )
-from .action import Action, ActionStats, ActionStatsResolver
+from .action import Action
+from .stats import ActionStats, TaskStats, action_stats, task_stats
 from .agent import Agent, Lock
 from .schedule import Schedule
 from .wiregram import Wiregram
@@ -43,12 +44,10 @@ from .task import (
     Task,
     TaskEvent,
     TaskInstruct,
-    TaskStats,
-    TaskStatsResolver,
 )
 from .probe import Probe, ProbeEvent, ProbeStats
 from .auth import App, Caller, Client, Device, Organization, Release, User
-from .base import build_prescoped_queryset, build_prescoper
+from .base import build_prescoped_queryset
 from .blok import Blok, BlokAgentMapping, BlokDependency, MaterializedBlok
 from .dashboard import BaseCatalog, Dashboard, DashboardPlacement, UICatalog
 from .demand import (
@@ -95,10 +94,9 @@ from .toolbox import Collection, Protocol, Shortcut, Toolbox
 
 __all__ = [
     "build_prescoped_queryset",
-    "build_prescoper",
     "Action",
     "ActionStats",
-    "ActionStatsResolver",
+    "action_stats",
     "ActionDemand",
     "ActionDependency",
     "ActionDemandModel",
@@ -139,7 +137,7 @@ __all__ = [
     "ProbeEvent",
     "ProbeStats",
     "TaskStats",
-    "TaskStatsResolver",
+    "task_stats",
     "TaskEvent",
     "TaskInstruct",
     "TestCase",

@@ -1,7 +1,9 @@
 import strawberry
 from kante.types import Info
 
-from facade import takt
+from facade import takt, takt_api
+from facade.caller_context import CallerContext
+from facade.takt_api import Principal
 
 
 def cleanup_actions(info: Info, action_ids: list[strawberry.ID] | None = None) -> int:
@@ -10,7 +12,5 @@ def cleanup_actions(info: Info, action_ids: list[strawberry.ID] | None = None) -
     Always organization-scoped. takt owns the rows: it deletes them with their task history.
     Returns how many actions went.
     """
-    payload: dict = {"principal": takt._principal(info)}
-    if action_ids:
-        payload["actions"] = [str(action) for action in action_ids]
-    return int(takt.call("action/cleanup", payload)["deleted"])
+    request = takt_api.CleanupActionsRequest(principal=Principal.of(CallerContext.from_info(info)), actions=[str(action) for action in action_ids] if action_ids else None)
+    return takt.call(takt_api.CLEANUP_ACTIONS, request).deleted

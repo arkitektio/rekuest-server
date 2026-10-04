@@ -11,6 +11,12 @@ class Caller(models.Model):
 
     """
 
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    user_id: int
+    client_id: int
+    organization_id: int
+
     client = models.ForeignKey(Client, on_delete=models.CASCADE, help_text="The Associated Client")
     user = models.ForeignKey(
         User,

@@ -1,3 +1,5 @@
+# pyright: reportExplicitAny=false
+# strawberry-django's `auto` (a field whose type comes from the model) is itself spelled `Any`.
 """Filters and orders for authentication/organization models."""
 
 from __future__ import annotations
@@ -7,12 +9,13 @@ from typing import Optional
 import strawberry
 import strawberry_django
 from authentikate.models import Client, Organization, User
-from django.db.models import Q
-from rekuest_core import scalars as rscalars
+from django.db.models import Q, QuerySet
 from strawberry import auto
 from strawberry.types import Info
 from strawberry_django.fields.filter_order import filter_field
 from strawberry_django.filters import FilterLookup
+
+from rekuest_core import scalars as rscalars
 
 
 @strawberry_django.filter_type(User)
@@ -20,7 +23,7 @@ class UserFilter:
     name: Optional[FilterLookup[str]]
 
     @filter_field
-    def ids(self, info: Info, queryset, value: list[strawberry.ID], prefix: str):
+    def ids(self, info: Info, queryset: QuerySet[User], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[User], Q]:
         return queryset.filter(**{f"{prefix}id__in": value}), Q()
 
 
@@ -42,7 +45,7 @@ class OrganizationFilter:
     slug: Optional[FilterLookup[str]]
 
     @filter_field
-    def ids(self, info: Info, queryset, value: list[strawberry.ID], prefix: str):
+    def ids(self, info: Info, queryset: QuerySet[Organization], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[Organization], Q]:
         return queryset.filter(**{f"{prefix}id__in": value}), Q()
 
 
@@ -56,13 +59,13 @@ class ClientFilter:
     interface: Optional[FilterLookup[str]]
 
     @filter_field
-    def ids(self, info: Info, queryset, value: list[strawberry.ID], prefix: str):
+    def ids(self, info: Info, queryset: QuerySet[Client], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[Client], Q]:
         return queryset.filter(**{f"{prefix}id__in": value}), Q()
 
     @filter_field
-    def has_implementations_for(self, info: Info, queryset, value: list[rscalars.ActionHash], prefix: str):
+    def has_implementations_for(self, info: Info, queryset: QuerySet[Client], value: list[rscalars.ActionHash], prefix: str) -> tuple[QuerySet[Client], Q]:
         return queryset.filter(**{f"{prefix}agents__implementations__action__hash__in": value}).distinct(), Q()
 
     @filter_field
-    def mine(self, info: Info, queryset, value: bool, prefix: str):
+    def mine(self, info: Info, queryset: QuerySet[Client], value: bool, prefix: str) -> tuple[QuerySet[Client], Q]:
         return queryset.filter(**{f"{prefix}user_id": info.context.user.id}), Q()

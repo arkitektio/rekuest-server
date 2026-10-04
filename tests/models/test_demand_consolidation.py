@@ -10,6 +10,8 @@ be met by a different implementation.
 
 from types import SimpleNamespace
 
+from facade.managers import PortDemand
+
 import pytest
 from django.db.models import Exists, OuterRef
 
@@ -27,10 +29,9 @@ def _org(slug="test-org-scope"):
     return Organization.objects.get_or_create(slug=slug)[0]
 
 
-
 def pd(matches=None, kind="args", force_length=None, force_non_nullable_length=None, force_structure_length=None):
     """A PortDemandInput-shaped object (attribute access is all the manager needs)."""
-    return SimpleNamespace(kind=kind, matches=matches, force_length=force_length, force_non_nullable_length=force_non_nullable_length, force_structure_length=force_structure_length)
+    return PortDemand(kind=kind, matches=matches, force_length=force_length, force_non_nullable_length=force_non_nullable_length, force_structure_length=force_structure_length)
 
 
 @pytest.fixture

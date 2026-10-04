@@ -1,6 +1,6 @@
 """Wiregrams: one document of automation, imported by an organization's user.
 
-Real postgres; ``fake_takt`` stands in for takt (it plans and cancels the schedules' runs and
+Real postgres and a real takt (``takt``: it plans and cancels the schedules' runs and
 records every request).
 """
 
@@ -9,18 +9,19 @@ from asgiref.sync import sync_to_async
 
 from facade import models
 from facade.schema import schema
+from tests.conftest import settled_run, waiting_run
 from tests.factories import TEST_TOKEN
 from tests.graphql.test_cross_tenant_isolation import OTHER_TOKEN, tenant_context
 from tests.test_schedules import _schedulable
 from tests.test_triggers import CHANNELS, IDENTIFIER, _target
 
-pytestmark = [pytest.mark.usefixtures("fake_takt"), pytest.mark.django_db(transaction=True), pytest.mark.asyncio]
+pytestmark = [pytest.mark.usefixtures("takt"), pytest.mark.django_db(transaction=True), pytest.mark.asyncio]
 
 IMPORT = """
     mutation($input: WiregramInput!) {
         importWiregram(input: $input) {
             id key name
-            schedules { id name wireKey enabled intervalSeconds cron overlap nextRun { id } wiregram { key } }
+            schedules { id name wireKey enabled intervalSeconds cron overlap wiregram { key } }
             triggers { id name wireKey kind port conditions debounceSeconds }
         }
     }
@@ -73,6 +74,11 @@ async def _import(context, document):
     return await schema.execute(IMPORT, variable_values={"input": document}, context_value=context)
 
 
+async def _waiting(schedule: str) -> int:
+    """The run takt planned for the schedule. An import's answer does not wait for it."""
+    return await waiting_run(schedule)
+
+
 async def test_importing_creates_the_rules_and_plans_the_schedules(authenticated_context):
     context, other = await _contexts()
     sweep, thumbs = await _hub(context, "wg-create")
@@ -83,7 +89,7 @@ async def test_importing_creates_the_rules_and_plans_the_schedules(authenticated
     (schedule,) = wiregram["schedules"]
     (trigger,) = wiregram["triggers"]
     assert (schedule["wireKey"], schedule["intervalSeconds"], schedule["overlap"], schedule["wiregram"]) == ("sync", 300, "SKIP", {"key": "housekeeping"})
-    assert schedule["nextRun"] is not None  # planned once the import committed
+    assert await _waiting(schedule["id"]) is not None  # takt planned it on hearing of the import
     assert (trigger["wireKey"], trigger["port"], trigger["debounceSeconds"]) == ("thumbnail", "image", 60)
     assert trigger["conditions"] == [{"key": CHANNELS, "operator": "GTE", "value": 2}]
 
@@ -94,14 +100,15 @@ async def test_importing_creates_the_rules_and_plans_the_schedules(authenticated
     assert elsewhere.data == {"wiregrams": [], "schedules": [], "triggers": []}
 
 
-async def test_importing_again_updates_in_place_and_removes_what_is_no_longer_listed(authenticated_context, fake_takt):
+async def test_importing_again_updates_in_place_and_removes_what_is_no_longer_listed(authenticated_context, schedule_notices):
     context, _ = await _contexts()
     sweep, thumbs = await _hub(context, "wg-again")
     first = (await _import(context, _document(sweep, thumbs))).data["importWiregram"]
-    schedule_id, waiting = first["schedules"][0]["id"], first["schedules"][0]["nextRun"]["id"]
+    schedule_id = first["schedules"][0]["id"]
+    waiting = await _waiting(schedule_id)
     # The organization switched the schedule off, and takt counted a failure on it.
     await models.Schedule.objects.filter(pk=schedule_id).aupdate(enabled=False, consecutive_failures=2)
-    fake_takt.calls.clear()
+    schedule_notices.sent()
 
     document = _document(sweep, thumbs, name="Housekeeping v2", triggers=[])
     document["schedules"][0].update({"name": "Sync mail hourly", "intervalSeconds": 3600})
@@ -115,9 +122,9 @@ async def test_importing_again_updates_in_place_and_removes_what_is_no_longer_li
     kept = await models.Schedule.objects.aget(pk=schedule_id)
     assert (kept.enabled, kept.consecutive_failures) == (False, 2)  # the organization's switch and takt's bookkeeping stay
     assert wiregram["triggers"] == [] and not await models.Trigger.objects.filter(pk=first["triggers"][0]["id"]).aexists()
-    # The run planned on the old interval was cancelled before the change was written, and a new one planned after.
-    assert [op for op, _ in fake_takt.calls if op != "schedule/validate"] == ["schedule/cancel-waiting", "schedule/plan"]
-    assert (await models.Task.objects.aget(pk=waiting)).is_done is True
+    # One notice, sent with the change: the run planned on the old interval goes, and a new one is planned.
+    assert [notice["replan"] for notice in schedule_notices.sent()] == [True]
+    assert (await settled_run(waiting)).latest_event_kind == "CANCELLED"
 
 
 async def test_a_document_that_cannot_be_is_refused_whole(authenticated_context):
@@ -170,7 +177,7 @@ async def test_deleting_a_wiregram_removes_its_rules_and_cancels_their_waiting_r
     context, other = await _contexts()
     sweep, thumbs = await _hub(context, "wg-delete")
     wiregram = (await _import(context, _document(sweep, thumbs))).data["importWiregram"]
-    waiting = wiregram["schedules"][0]["nextRun"]["id"]
+    waiting = await _waiting(wiregram["schedules"][0]["id"])
     delete = "mutation($input: WiregramIdInput!) { deleteWiregram(input: $input) }"
 
     foreign = await schema.execute(delete, variable_values={"input": {"id": wiregram["id"]}}, context_value=other)
@@ -179,8 +186,8 @@ async def test_deleting_a_wiregram_removes_its_rules_and_cancels_their_waiting_r
     deleted = await schema.execute(delete, variable_values={"input": {"id": wiregram["id"]}}, context_value=context)
     assert deleted.errors is None, deleted.errors
     assert not await models.Schedule.objects.aexists() and not await models.Trigger.objects.aexists()
-    run = await models.Task.objects.aget(pk=waiting)
-    assert run.is_done is True and run.schedule_id is None  # cancelled, and kept as history
+    run = await settled_run(waiting)
+    assert run.latest_event_kind == "CANCELLED" and run.schedule_id is None  # cancelled, and kept as history
 
 
 async def test_rules_are_exported_as_a_document_another_organization_can_import(authenticated_context):
@@ -206,7 +213,7 @@ async def test_rules_are_exported_as_a_document_another_organization_can_import(
     await models.Implementation.objects.filter(agent__organization=other.request.organization, agent__name="thumbs").aupdate(interface=thumbs.interface)
     imported = await _import(other, {key: value for key, value in document.items()} | {"schedules": [_camel(s) for s in document["schedules"]], "triggers": [_camel(t) for t in document["triggers"]]})
     assert imported.errors is None, imported.errors
-    assert imported.data["importWiregram"]["schedules"][0]["nextRun"] is not None
+    assert await _waiting(imported.data["importWiregram"]["schedules"][0]["id"]) is not None
 
     # A rule that names an action but no agent cannot be written down as a wiregram.
     unpinned = await models.Schedule.objects.acreate(name="loose", caller_id=(await models.Schedule.objects.afirst()).caller_id, action_id=sweep.action_id, interval_seconds=60)

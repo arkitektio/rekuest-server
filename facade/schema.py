@@ -1,35 +1,38 @@
-import strawberry
-from rekuest.logs import QuietErrorsSchema
-import strawberry_django
-from facade import enums, models, mutations, queries, subscriptions, types
-from rekuest_core import scalars as rscalars
-from kante.types import Info
-from rekuest_core.constants import interface_types, input_union_types
-from kante.unions import unionElementOf
-from strawberry_django.optimizer import DjangoOptimizerExtension
-from authentikate.strawberry import AuthentikateExtension, AuthExtension, AuthSubscribeExtension
 from typing import cast
+
+import kante
+import strawberry
+import strawberry_django
+from authentikate.strawberry import AuthentikateExtension, AuthExtension, AuthSubscribeExtension
+from kante.types import Info
+from kante.unions import unionElementOf
+from strawberry.schema.config import StrawberryConfig
+from strawberry_django.optimizer import DjangoOptimizerExtension
+
 from datalayer import mutations as datalayer_mutations
 from datalayer.scalars import scalar_map as dscalar_map
-from rekuest_core.scalars import scalar_map as rscalar_map
-from facade.scalars import scalar_map as fscalar_map
-import kante
-from facade.types.base import scoped_get
-from strawberry.schema.config import StrawberryConfig
 from embeddings.strawberry import scalar_map as escalar_map
+from facade import enums, models, mutations, queries, subscriptions, types
+from facade.json_types import json_value
+from facade.scalars import scalar_map as fscalar_map
+from facade.types.base import scoped_get
+from rekuest.logs import QuietErrorsSchema
+from rekuest_core import scalars as rscalars
+from rekuest_core.constants import input_union_types, interface_types
+from rekuest_core.scalars import scalar_map as rscalar_map
 
 
-def field(**kwargs):
+def field(**kwargs):  # noqa: ANN201  strawberry types a field as whatever it is assigned to
     """A wrapper for field that attaches the auth extension."""
     return strawberry_django.field(extensions=[AuthExtension()], **kwargs)
 
 
-def mutation(**kwargs):
+def mutation(**kwargs):  # noqa: ANN201  as above
     """A wrapper for mutation that attaches the auth extension."""
     return strawberry_django.mutation(extensions=[AuthExtension()], **kwargs)
 
 
-def subscription(**kwargs) -> strawberry.subscription:
+def subscription(**kwargs):  # noqa: ANN201  as above
     """A wrapper for subscription that attaches the auth-subscribe extension."""
     return strawberry.subscription(extensions=[AuthSubscribeExtension()], **kwargs)
 
@@ -46,7 +49,10 @@ class Query:
     shortcuts: list[types.Shortcut] = field(description="List of shortcuts.")
     toolboxes: list[types.Toolbox] = field(description="List of toolboxes containing shortcuts.")
     action = field(resolver=queries.action, description="Fetch a specific action.")
-    similar_actions = field(resolver=queries.similar_actions, description="Actions whose name and description mean roughly what this action's do, nearest first: the org's other actions ranked by cosine distance between their embeddings. `filters` narrows the candidates like `actions` does; `maxDistance` (0 identical, 1 unrelated) cuts the tail, otherwise the nearest `limit` come back. Empty while the action has no vector yet or embeddings are off.")
+    similar_actions = field(
+        resolver=queries.similar_actions,
+        description="Actions whose name and description mean roughly what this action's do, nearest first: the org's other actions ranked by cosine distance between their embeddings. `filters` narrows the candidates like `actions` does; `maxDistance` (0 identical, 1 unrelated) cuts the tail, otherwise the nearest `limit` come back. Empty while the action has no vector yet or embeddings are off.",
+    )
     my_tasks = field(resolver=queries.my_tasks, description="Fetch the root tasks this client created (caller-scoped).")
     probe = field(resolver=queries.probe, description="Fetch a live (or lingering) probe by ID. Expired probes are gone — probes are never persisted.")
     probe_stats = field(resolver=queries.probe_stats, description="Live probe counts: instance-wide total plus your in-flight count and cap.")
@@ -91,8 +97,8 @@ class Query:
     session: types.Session = field(description="Fetch a specific session by ID.")
 
     # Stats
-    actionStats: types.ActionStats = field(resolver=types.ActionStatsResolver, description="Statistics about actions and their implementations.")
-    taskStats: types.TaskStats = field(resolver=types.TaskStatsResolver, description="Statistics about tasks and their states.")
+    actionStats: types.ActionStats = field(resolver=types.action_stats, description="Statistics about actions and their implementations.")
+    taskStats: types.TaskStats = field(resolver=types.task_stats, description="Statistics about tasks and their states.")
 
     state_for = field(resolver=queries.state_for, description="Retrieve state for a specific context.")
 
@@ -135,7 +141,6 @@ class Query:
     def ui_catalog(self, info: Info, id: strawberry.ID) -> types.UICatalog:
         return cast(types.UICatalog, scoped_get(models.UICatalog, info, id, field="organization"))
 
-
     @field(description="Get toolbox by ID.")
     def toolbox(self, info: Info, id: strawberry.ID) -> types.Toolbox:
         return cast(types.Toolbox, scoped_get(models.Toolbox, info, id, field="organization"))
@@ -143,7 +148,6 @@ class Query:
     @field(description="Retrieve shortcut by ID.")
     def shortcut(self, info: Info, id: strawberry.ID) -> types.Shortcut:
         return cast(types.Shortcut, scoped_get(models.Shortcut, info, id, field="toolbox__organization"))
-
 
     @field(description="Get dashboard by ID.")
     def dashboard(self, info: Info, id: strawberry.ID) -> types.Dashboard:
@@ -204,8 +208,8 @@ class Query:
     def matching_signals(self, info: Info, kind: enums.SignalKind, identifier: str, conditions: rscalars.AnyDefault | None = None, limit: int = 20) -> list[types.Signal]:
         from facade import triggers
 
-        _, compiled = triggers.compile_conditions(conditions or [])
-        return cast(list[types.Signal], list(triggers.matching_signals(info.context.request.organization, kind.value, identifier, [compiled], limit)))
+        _, compiled = triggers.compile_conditions(json_value(conditions or []))
+        return cast(list[types.Signal], list(triggers.matching_signals(info.context.request.organization.id, kind.value, identifier, [compiled], limit)))
 
     @field(description="Fetch a wiregram by ID.")
     def wiregram(self, info: Info, id: strawberry.ID) -> types.Wiregram:

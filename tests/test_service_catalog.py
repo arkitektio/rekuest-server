@@ -6,10 +6,11 @@ Nothing here is about agents: a service has none, and cataloguing one creates no
 import pytest
 
 from facade import models, provisioning, service_catalog
+from rekuest.configuration import ServiceEntry
 from tests.hook_urls import housekeeping
 from tests.provisioning_fixtures import declared, hub  # noqa: F401  (fixtures)
 
-pytestmark = pytest.mark.usefixtures("fake_takt")
+pytestmark = pytest.mark.usefixtures("takt")
 
 
 @pytest.mark.django_db(transaction=True)
@@ -27,7 +28,7 @@ class TestServiceCatalog:
 
     def test_cataloguing_a_service_creates_no_agent(self, hub):
         hub.HOOK_AGENTS = []
-        assert provisioning.provision_all() == {"services": [], "hook_agents": []}
+        assert provisioning.provision_all() == provisioning.Failed(services=[], hook_agents=[])
         assert models.Service.objects.filter(name="housekeeping").exists()
         assert not models.Agent.objects.exists()
 
@@ -60,13 +61,13 @@ class TestServiceCatalog:
         service_catalog.catalogue_all()
         claimant = models.Service.objects.create(name="claimant")
 
-        service_catalog._sync_structures(claimant, [{"identifier": "@housekeeping/room", "label": "Stolen"}, {"identifier": "@claimant/thing"}])
+        service_catalog._sync_structures(claimant, [service_catalog.StructureManifest(identifier="@housekeeping/room", label="Stolen"), service_catalog.StructureManifest(identifier="@claimant/thing")])
 
         assert models.StructureDeclaration.objects.get(identifier="@housekeeping/room").service.name == "housekeeping"
         assert models.StructureDeclaration.objects.get(identifier="@claimant/thing").service == claimant
 
     def test_an_unreachable_service_is_reported_and_the_others_still_catalogued(self, hub):
-        hub.SERVICES = [{"name": "offline", "url": "http://127.0.0.1:9/_rekuest/service"}, *hub.SERVICES]
+        hub.SERVICES = [ServiceEntry(name="offline", url="http://127.0.0.1:9/_rekuest/service"), *hub.SERVICES]
 
         assert service_catalog.catalogue_all() == ["offline"]
         assert models.Service.objects.filter(name="housekeeping").exists()

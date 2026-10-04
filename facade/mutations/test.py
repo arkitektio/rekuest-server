@@ -1,6 +1,7 @@
 """Test cases (an action tested by another) and their results."""
 
 import logging
+from typing import cast
 
 import strawberry
 from kante.types import Info
@@ -28,7 +29,7 @@ def create_test_case(info: Info, input: CreateTestCaseInput) -> types.TestCase:
         tester=scoped_get(models.Action, info, input.tester),
         defaults=dict(description=input.description, name=input.name, is_benchmark=input.is_benchmark),
     )
-    return test_case
+    return cast("types.TestCase", test_case)
 
 
 @strawberry.input(description="Record one run of a test case.")
@@ -42,10 +43,13 @@ class CreateTestResultInput:
 
 def create_test_result(info: Info, input: CreateTestResultInput) -> types.TestResult:
     """Record a result; the case and both implementations must be in the caller's organization."""
-    return models.TestResult.objects.create(
-        case=scoped_get(models.TestCase, info, input.case, field="action__organization"),
-        implementation=scoped_get(models.Implementation, info, input.implementation, field="agent__organization"),
-        tester=scoped_get(models.Implementation, info, input.tester, field="agent__organization"),
-        passed=input.passed,
-        result=input.result,
+    return cast(
+        "types.TestResult",
+        models.TestResult.objects.create(
+            case=scoped_get(models.TestCase, info, input.case, field="action__organization"),
+            implementation=scoped_get(models.Implementation, info, input.implementation, field="agent__organization"),
+            tester=scoped_get(models.Implementation, info, input.tester, field="agent__organization"),
+            passed=input.passed,
+            result=input.result,
+        ),
     )

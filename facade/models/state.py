@@ -1,7 +1,5 @@
-
-from django.db.models.functions import Now
 from django.db import models
-
+from django.db.models.functions import Now
 
 
 class StateDefinition(models.Model):
@@ -40,6 +38,10 @@ class State(models.Model):
     state of a action. States are used to represent the current
 
     """
+
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    agent_id: int
 
     definition = models.ForeignKey(StateDefinition, on_delete=models.CASCADE, related_name="states")
     interface = models.CharField(
@@ -103,6 +105,12 @@ class Session(models.Model):
 class Patch(models.Model):
     """A Patch is a representation of a change to a state. Patches are used to represent the changes that happen to a state over time. They are stored as a log of changes to a state and can be used to reconstruct the state at any point in time."""
 
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    session_id: int | None
+    state_id: int
+    agent_id: int | None
+
     state = models.ForeignKey(State, on_delete=models.CASCADE, related_name="patches")
     agent = models.ForeignKey("Agent", on_delete=models.CASCADE, related_name="patches_created", null=True, blank=True)
     interface = models.CharField(max_length=1000, help_text="The interface of the state in the agent")
@@ -128,6 +136,11 @@ class Patch(models.Model):
 
 
 class Snapshot(models.Model):
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    session_id: int | None
+    state_id: int
+    agent_id: int | None
     state = models.ForeignKey(State, on_delete=models.CASCADE, related_name="snapshots")
     agent = models.ForeignKey("Agent", on_delete=models.CASCADE, related_name="snapshots_created", null=True, blank=True)
     session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name="snapshots", null=True, blank=True)

@@ -1,10 +1,14 @@
+from typing import TYPE_CHECKING
 
-from django.db.models.functions import Now
 from authentikate.models import App, Client, Organization, Release, User
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.db.models.functions import Now
 
 from facade import enums
+
+if TYPE_CHECKING:
+    from facade.models.implementation import Implementation
 
 
 class Lock(models.Model):
@@ -38,6 +42,14 @@ class Lock(models.Model):
 
 
 class Agent(models.Model):
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    app_id: int
+    client_id: int
+    organization_id: int
+    release_id: int
+    user_id: int
+    implementations: "models.Manager[Implementation]"
     app = models.ForeignKey(
         App,
         on_delete=models.CASCADE,
@@ -114,7 +126,7 @@ class Agent(models.Model):
     # renew, release and revoke are the only writers.
     LEASE_FIELDS = frozenset({"connected", "last_seen", "active_connection_id", "active_session_id"})
 
-    def save(self, *args, **kwargs):
+    def save(self, *args, **kwargs) -> None:
         """A save that names no fields never touches the lease.
 
         ``agent.save()`` writes EVERY column from whatever snapshot the instance was loaded with.
@@ -129,8 +141,9 @@ class Agent(models.Model):
             kwargs["update_fields"] = [f.name for f in self._meta.concrete_fields if not f.primary_key and f.name not in self.LEASE_FIELDS]
         super().save(*args, **kwargs)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name}"
+
 
 class MemoryShelve(models.Model):
     """A shelve is a collection of shelved items that are

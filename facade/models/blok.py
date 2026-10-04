@@ -1,11 +1,14 @@
 from django.contrib.auth import get_user_model
-from django.db.models.functions import Now
 from django.db import models
+from django.db.models.functions import Now
+
 from rekuest_core.inputs.models import ActionDependencyInputModel, StateDependencyInputModel
 
 
-
 class Dashboard(models.Model):
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    placements: "models.Manager[DashboardPlacement]"
     organization = models.ForeignKey(
         "authentikate.Organization",
         on_delete=models.CASCADE,
@@ -16,6 +19,9 @@ class Dashboard(models.Model):
 
 
 class Blok(models.Model):
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    dependencies: "models.Manager[BlokDependency]"
     organization = models.ForeignKey(
         "authentikate.Organization",
         on_delete=models.CASCADE,
@@ -106,19 +112,22 @@ class BlokDependency(models.Model):
         help_text="The maximal viable instance count for this dependency",
     )
 
-
     class Meta:
         constraints = [models.UniqueConstraint(fields=["blok", "key"], name="unique_dependency_key_per_blok")]
 
-    def get_action_dependencies(self):
+    def get_action_dependencies(self) -> list[ActionDependencyInputModel]:
         return [ActionDependencyInputModel(**demand) for demand in self.action_demands]
 
-    def get_state_dependencies(self):
+    def get_state_dependencies(self) -> list[StateDependencyInputModel]:
         return [StateDependencyInputModel(**demand) for demand in self.state_demands]
 
 
 class MaterializedBlok(models.Model):
     """A Blok Implementation is a specific implementation of a Blok"""
+
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    agent_mappings: "models.Manager[BlokAgentMapping]"
 
     blok = models.ForeignKey(Blok, on_delete=models.CASCADE, related_name="materialized_bloks")
     declared_by = models.ForeignKey(

@@ -3,14 +3,24 @@
 from __future__ import annotations
 
 import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional, cast
 
 import strawberry
 import strawberry_django
+from django.db.models import QuerySet
+from kante.types import Info
+
+from facade import enums, filters, loaders, models, rules
+from facade.types.base import build_prescoped_queryset, row_of
 from rekuest_core import scalars as rscalars
 
-from facade import enums, filters, models, rules
-from facade.types.base import build_prescoped_queryset
+if TYPE_CHECKING:
+    # Named in annotations only: strawberry resolves them when it builds the schema.
+    from facade.types.action import Action
+    from facade.types.agent import Agent
+    from facade.types.auth import Caller
+    from facade.types.task import Task
+    from facade.types.wiregram import Wiregram
 
 
 @strawberry_django.type(models.Schedule, filters=filters.ScheduleFilter, ordering=filters.ScheduleOrder, pagination=True, description="A recurring assignment of one action. It owns at most one waiting run at a time: the next one, a delayed task.")
@@ -45,27 +55,31 @@ class Schedule:
     @strawberry_django.field(description="Whether it stopped by itself: its end passed, or its last allowed run is over.")
     def exhausted(self) -> bool:
         # A run is counted when it is planned: the last allowed one may still be waiting or running.
-        return rules.exhausted(self) and not self.tasks.filter(is_done=False).exists()
+        row = row_of(self, models.Schedule)
+        return rules.exhausted(row) and not row.tasks.filter(is_done=False).exists()
 
     @strawberry_django.field(description="The next run: the one waiting for its slot, else the newest one still executing. Null while the next run is being planned, or when disabled or ended.")
     def next_run(self) -> Optional["Task"]:
         # Waiting = not handed over yet. With ALLOW overlap several runs may be open; the waiting one is the next.
-        return self.tasks.filter(is_done=False).order_by("dispatch_attempts", "-created_at").first()
+        row = row_of(self, models.Schedule)
+        return cast("Optional[Task]", row.tasks.filter(is_done=False).order_by("dispatch_attempts", "-created_at").first())
 
     @strawberry_django.field(description="The next slots of its timing after now. What the timing says, not a promise: a disabled or ended schedule runs none, and without overlap a slot that passes while a run is open is skipped.")
-    def upcoming(self, count: int = 5) -> list[datetime.datetime]:
-        from facade import schedules
-
-        return [datetime.datetime.fromisoformat(slot) for slot in schedules.upcoming(self, count)]
+    async def upcoming(self, info: Info, count: int = 5) -> list[datetime.datetime]:
+        # Batched: a list of schedules asks takt once, not once per row.
+        row = row_of(self, models.Schedule)
+        return await loaders.upcoming_loader(info).load((row, count))
 
     @strawberry_django.field(description="When its newest run was created; null when it never ran (or its runs were since deleted by retention).")
     def last_run_at(self) -> datetime.datetime | None:
-        return self.tasks.order_by("-created_at").values_list("created_at", flat=True).first()
+        row = row_of(self, models.Schedule)
+        return row.tasks.order_by("-created_at").values_list("created_at", flat=True).first()
 
     @strawberry_django.field(description="The most recent runs, newest first.")
     def runs(self, limit: int = 20) -> list["Task"]:
-        return list(self.tasks.order_by("-created_at")[: max(0, min(limit, 200))])
+        row = row_of(self, models.Schedule)
+        return cast("list[Task]", list(row.tasks.order_by("-created_at")[: max(0, min(limit, 200))]))
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(cls, queryset: QuerySet[models.Schedule], info: Info, **kwargs: object) -> QuerySet[models.Schedule]:
         return build_prescoped_queryset(info, queryset, field="caller__organization")

@@ -45,7 +45,7 @@ and are released under the same version.
 
 The server has no websocket route for agents and no agent code: `rekuest/asgi.py` serves GraphQL
 only. Whatever a mutation needs done to a task or an agent, the server asks takt for, through
-takt's internal API (`facade/takt.py`, signed with the instance key).
+takt's internal API (`facade/takt.py`), on a listener only the server reaches.
 
 The server owns the schema and migrates it. takt writes the same tables with its own SQL, never
 migrates, and waits at startup until the database has the migrations listed in
@@ -74,7 +74,7 @@ reading [`config.yaml`](./config.yaml). Tokens are verified against the issuers 
 What a deployment has to get right:
 
 - **The pair finds each other by name.** The server reaches takt at `rekuest.takt_url`
-  (default `http://takt:8080/<script name>`), takt reaches the server at `rekuest.server_url`
+  (its internal listener: default `http://takt:8081/<script name>`, or the socket named by `rekuest.takt_socket`), takt reaches the server at `rekuest.server_url`
   (default `http://rekuest:80/<script name>`). Set them where the services are named
   otherwise; while takt is unreachable every assign, control, registration, delete and probe
   is refused and the server's `ht` is unhealthy.

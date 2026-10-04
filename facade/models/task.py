@@ -1,9 +1,9 @@
 import uuid
 
-from django.db.models.functions import Now
 from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
+from django.db.models.functions import Now
 from django_choices_field import TextChoicesField
 
 from facade import enums
@@ -11,6 +11,18 @@ from facade import enums
 
 class Task(models.Model):
     """A constant log of a tasks transition through finding a Action, Implementation and finally Pod , also a store for its results"""
+
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    action_id: int
+    agent_id: int
+    caller_id: int | None
+    implementation_id: int | None
+    parent_id: int | None
+    root_id: int | None
+    schedule_id: int | None
+    signal_id: int | None
+    trigger_id: int | None
 
     acted_on = ArrayField(base_field=models.CharField(max_length=1000), help_text="Which structures were acted on in this task", default=list, db_default=[])
     implementation = models.ForeignKey(
@@ -128,12 +140,12 @@ class Task(models.Model):
     )
     latest_event_kind = TextChoicesField(
         max_length=1000,
-        choices_enum=enums.TaskEventChoices,
+        choices_enum=enums.TaskEventChoices,  # pyright: ignore[reportCallIssue]  django-choices-field's stub predates db_default
         help_text="The latest Status of this Provision (transitioned by events)",
     )
     latest_instruct_kind = TextChoicesField(
         max_length=1000,
-        choices_enum=enums.TaskInstructChoices,
+        choices_enum=enums.TaskInstructChoices,  # pyright: ignore[reportCallIssue]  django-choices-field's stub predates db_default
         help_text="The latest Instruct of this Provision (transitioned by events)",
     )
     is_done = models.BooleanField(
@@ -212,10 +224,10 @@ class Task(models.Model):
         help_text="Deadline after which an unconfirmed cancel is escalated to an interrupt (auto_interrupt / control deadline).",
     )
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.latest_event_kind} for {self.action_id}"
 
-    def save(self, *args, **kwargs):
+    def save(self, *args, **kwargs) -> None:
         """Every update bumps ``revision`` — atomically, in the database.
 
         ``F("revision") + 1`` rather than ``self.revision + 1``: the latter is only right when the
@@ -316,6 +328,9 @@ class Task(models.Model):
 
 
 class TaskEvent(models.Model):
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    task_id: int
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     task = models.ForeignKey(
         Task,
@@ -345,12 +360,12 @@ class TaskEvent(models.Model):
     # Status Field
     kind = TextChoicesField(
         max_length=1000,
-        choices_enum=enums.TaskEventChoices,
+        choices_enum=enums.TaskEventChoices,  # pyright: ignore[reportCallIssue]  django-choices-field's stub predates db_default
         help_text="The event kind",
     )
     level = TextChoicesField(
         max_length=1000,
-        choices_enum=enums.LogLevelChoices,
+        choices_enum=enums.LogLevelChoices,  # pyright: ignore[reportCallIssue]  django-choices-field's stub predates db_default
         help_text="The log level (LOG events)",
         null=True,
         blank=True,
@@ -419,8 +434,6 @@ class TaskInstruct(models.Model):
     # Status Field
     kind = TextChoicesField(
         max_length=1000,
-        choices_enum=enums.TaskInstructChoices,
+        choices_enum=enums.TaskInstructChoices,  # pyright: ignore[reportCallIssue]  django-choices-field's stub predates db_default
         help_text="The event kind",
     )
-
-

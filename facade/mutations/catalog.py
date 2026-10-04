@@ -1,5 +1,7 @@
 """UI catalog registration."""
 
+from typing import cast
+
 from kante.types import Info
 
 from facade import inputs, models, types
@@ -32,4 +34,4 @@ def register_ui_catalog(info: Info, input: inputs.RegisterUiCatalogInput) -> typ
             registered_by=info.context.request.client,
         ),
     )
-    return catalog
+    return cast("types.UICatalog", catalog)

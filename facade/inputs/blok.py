@@ -1,7 +1,5 @@
 """Inputs for bloks and materialized bloks."""
 
-from typing import Any
-
 import strawberry
 from pydantic import BaseModel, Field, model_validator
 from strawberry.experimental import pydantic
@@ -9,6 +7,7 @@ from typing_extensions import Self
 
 from facade import scalars
 from facade.inputs.dependency import MappedAgentInput
+from facade.json_types import JSON
 from rekuest_core.inputs import models as rimodels
 from rekuest_core.inputs import types as ritypes
 
@@ -56,7 +55,7 @@ class CreateBlokInputModel(BaseModel):
         default=None,
         description="The schema of the blok. This can be used to validate the blok input and output.",
     )
-    demo_state: dict[str, Any] | None = Field(
+    demo_state: dict[str, JSON] | None = Field(
         default=None,
         description="The initial state of the blok. This is used to set the initial state of the blok when it is materialized.",
     )
@@ -88,7 +87,7 @@ class UpdateBlokInputModel(BaseModel):
         default=None,
         description="The full component tree of the blok. Replaces the existing tree when provided.",
     )
-    demo_state: dict[str, Any] | None = Field(
+    demo_state: dict[str, JSON] | None = Field(
         default=None,
         description="The demo state used to preview this blok. Replaces the existing demo state when provided.",
     )

@@ -1,15 +1,15 @@
 """Inputs for tasks and the postman lifecycle controls."""
 
 import datetime
-from typing import Any
 
 import strawberry
 from pydantic import BaseModel, Field
-from rekuest_core import scalars as rscalars
 from strawberry.experimental import pydantic
 
 from facade import enums, scalars
 from facade.inputs.dependency import ResolvedDependencyInput, ResolvedDependencyInputModel
+from facade.json_types import JSON
+from rekuest_core import scalars as rscalars
 
 
 class HookInputModel(BaseModel):
@@ -76,7 +76,7 @@ class AssignInputModel(BaseModel):
         default=None,
         description="The hooks of the task. This is used to identify the task in the system.",
     )
-    args: dict[str, Any] = Field(description="The args of the task. Its a dictionary of ports and values")
+    args: dict[str, JSON] = Field(description="The args of the task. Its a dictionary of ports and values")
     reference: str | None = Field(
         default=None,
         description="The reference of the task. This is used to identify the task in the system.",
@@ -105,7 +105,10 @@ class AssignInputModel(BaseModel):
     )
 
 
-@pydantic.input(AssignInputModel, description="The input for assigning args to a action. A GraphQL assign is a ROOT by definition — children are created only over the agent socket (AssignRequest, where parent is mandatory) and by server-internal paths like init hooks, so parent/dependency/method are deliberately absent here.")
+@pydantic.input(
+    AssignInputModel,
+    description="The input for assigning args to a action. A GraphQL assign is a ROOT by definition — children are created only over the agent socket (AssignRequest, where parent is mandatory) and by server-internal paths like init hooks, so parent/dependency/method are deliberately absent here.",
+)
 class AssignInput:
     action: strawberry.ID | None = None
     implementation: strawberry.ID | None = None

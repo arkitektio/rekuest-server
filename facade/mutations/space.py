@@ -1,18 +1,22 @@
-from kante.types import Info
-from facade import types, models, inputs
+from typing import cast
+
 import strawberry
+from kante.types import Info
+
+from facade import inputs, models, types
 
 
 def create_space(info: Info, input: inputs.CreateSpaceInput) -> types.Space:
+    data = input.to_pydantic()
     x, _ = models.Space.objects.update_or_create(
-        name=input.name,
+        name=data.name,
         organization=info.context.request.organization,
         defaults=dict(
             creator=info.context.request.user,
         ),
     )
 
-    for placement_input in input.placements or []:
+    for placement_input in data.placements or []:
         if not placement_input.agent or not placement_input.model:
             raise ValueError("Both agent and model must be provided for each placement.")
 
@@ -28,55 +32,60 @@ def create_space(info: Info, input: inputs.CreateSpaceInput) -> types.Space:
             ),
         )
 
-    return x
+    return cast("types.Space", x)
 
 
 def update_space(info: Info, input: inputs.UpdateSpaceInput) -> types.Space:
-    x = models.Space.objects.get(id=input.id)
-    if input.name is not None:
-        x.name = input.name
-    if input.description is not None:
-        x.description = input.description
+    data = input.to_pydantic()
+    x = models.Space.objects.get(id=data.id)
+    if data.name is not None:
+        x.name = data.name
+    if data.description is not None:
+        x.description = data.description
     x.save()
-    return x
+    return cast("types.Space", x)
 
 
 def delete_space(info: Info, input: inputs.DeleteSpaceInput) -> strawberry.ID:
-    x = models.Space.objects.get(id=input.id)
+    data = input.to_pydantic()
+    x = models.Space.objects.get(id=data.id)
     x.delete()
-    return input.id
+    return strawberry.ID(data.id)
 
 
 def create_placement(info: Info, input: inputs.CreatePlacementInput) -> types.Placement:
-    space = models.Space.objects.get(id=input.space)
+    data = input.to_pydantic()
+    space = models.Space.objects.get(id=data.space)
 
     placement, _ = models.Placement.objects.update_or_create(
         space=space,
-        agent_id=input.agent,
+        agent_id=data.agent,
         defaults=dict(
             role="just a member",
-            model_id=input.model,
-            blok_id=input.materialized_blok,
-            affine_matrix=input.affine_matrix,
+            model_id=data.model,
+            blok_id=data.materialized_blok,
+            affine_matrix=data.affine_matrix,
         ),
     )
 
-    return placement
+    return cast("types.Placement", placement)
 
 
 def update_placement(info: Info, input: inputs.UpdatePlacementInput) -> types.Placement:
-    x = models.Placement.objects.get(id=input.id)
-    if input.role is not None:
-        x.role = input.role
-    if input.affine_matrix is not None:
-        x.affine_matrix = input.affine_matrix
-    if input.model is not None:
-        x.model = input.model
+    data = input.to_pydantic()
+    x = models.Placement.objects.get(id=data.id)
+    if data.role is not None:
+        x.role = data.role
+    if data.affine_matrix is not None:
+        x.affine_matrix = data.affine_matrix
+    if data.model is not None:
+        x.model = data.model
     x.save()
-    return x
+    return cast("types.Placement", x)
 
 
 def delete_placement(info: Info, input: inputs.DeletePlacementInput) -> strawberry.ID:
-    x = models.Placement.objects.get(id=input.id)
+    data = input.to_pydantic()
+    x = models.Placement.objects.get(id=data.id)
     x.delete()
-    return input.id
+    return strawberry.ID(data.id)

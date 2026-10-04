@@ -104,8 +104,9 @@ expiry, and retention.
 
 **Between the two.** A gateway routes `<prefix>/agent*` and `<prefix>/agi*` to takt and everything else to the
 server. A mutation that assigns, controls, registers or deletes calls
-`POST <rekuest.takt_url>/internal/<op>`, signed with the instance key (a service token whose
-issuer and audience are both `rekuest.identifier`). takt publishes task and agent changes on
+`POST <rekuest.takt_url>/internal/<op>` on takt's internal listener, which only the server
+reaches (a unix socket the two mount, or an address of its own); nothing is signed there. A
+changed schedule is a Postgres `NOTIFY` in the transaction that writes it. takt publishes task and agent changes on
 the same `channels_redis` layer the server's subscriptions listen on.
 
 Configuration is a typed pydantic-settings schema (`rekuest/configuration.py`) loaded from
@@ -115,7 +116,8 @@ shape runtime behaviour the most:
 | Setting | Read by | Role |
 | --- | --- | --- |
 | `rekuest.takt_url` | server | Where the server reaches takt's internal API. |
-| `instance.private_key` | both | Signs internal requests and provenance tokens. |
+| `rekuest.takt_socket` | server | takt's internal listener as a unix socket both mount. |
+| `instance.private_key` | both | Signs provenance tokens and takt's upkeep requests to the server. |
 | `rekuest.grace_default`, `pickup_deadline`, `disconnected_expiry`, `control_deadline` | takt | The deadlines the sweeps enforce. |
 | `rekuest.sweep_interval` | takt | How often takt's sweeps tick. |
 | `redis.key_prefix` | both | Namespace of the agent queues and every other redis key. |

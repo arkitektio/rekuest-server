@@ -8,6 +8,10 @@ the ``force_*`` count constraints, and organization isolation.
 
 from types import SimpleNamespace
 
+from facade.managers import PortDemand
+
+from rekuest_core.inputs.models import ActionDemandInputModel, DescriptorInputModel, PortMatchInputModel, StateDemandInputModel
+
 import pytest
 
 from facade import managers, models
@@ -19,7 +23,7 @@ from tests.factories import create_action_for_organization, create_registry_bund
 
 def port_demand_ids(matches, type="args", force_length=None, force_non_nullable_length=None, force_structure_length=None, organization_id=None):
     """Single port demand through the consolidated matcher entry point."""
-    demand = SimpleNamespace(kind=type, matches=matches, force_length=force_length, force_non_nullable_length=force_non_nullable_length, force_structure_length=force_structure_length)
+    demand = PortDemand(kind=type, matches=matches, force_length=force_length, force_non_nullable_length=force_non_nullable_length, force_structure_length=force_structure_length)
     return managers.get_action_ids_by_port_demands([demand], organization_id=organization_id)
 
 
@@ -30,12 +34,12 @@ def pm(at=None, key=None, kind=None, identifier=None, descriptors=None, nullable
     ``[{key, value}]`` shape the runtime matcher (PortMatchInput.descriptors) consumes; omitting it yields a
     purely structural (PortMatchInput-style) match.
     """
-    descriptor_list = [SimpleNamespace(key=k, value=v) for k, v in (descriptors or {}).items()] or None
-    return SimpleNamespace(at=at, key=key, kind=kind, identifier=identifier, descriptors=descriptor_list, nullable=nullable, children=children)
+    descriptor_list = [DescriptorInputModel(key=k, value=v) for k, v in (descriptors or {}).items()] or None
+    return PortMatchInputModel(at=at, key=key, kind=kind, identifier=identifier, descriptors=descriptor_list, nullable=nullable, children=children)
 
 
 def action_demand(hash=None, name=None, arg_matches=None, return_matches=None, force_arg_length=None, force_return_length=None, protocols=None):
-    return SimpleNamespace(
+    return ActionDemandInputModel(
         hash=hash,
         name=name,
         arg_matches=arg_matches,

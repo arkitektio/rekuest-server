@@ -3,15 +3,25 @@
 from __future__ import annotations
 
 import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional, cast
 
 import strawberry
 import strawberry_django
+from django.db.models import QuerySet
 from kante.types import Info
-from rekuest_core import scalars as rscalars
 
 from facade import enums, filters, models, rules
-from facade.types.base import build_prescoped_queryset
+from facade.types.base import build_prescoped_queryset, row_of
+from rekuest_core import scalars as rscalars
+
+if TYPE_CHECKING:
+    # Named in annotations only: strawberry resolves them when it builds the schema.
+    from facade.types.action import Action
+    from facade.types.agent import Agent
+    from facade.types.auth import Caller
+    from facade.types.structure import Service
+    from facade.types.task import Task
+    from facade.types.wiregram import Wiregram
 
 
 @strawberry_django.type(models.Signal, filters=filters.SignalFilter, ordering=filters.SignalOrder, pagination=True, description="Something a service announced: an object of a structure was created, updated or deleted.")
@@ -21,7 +31,7 @@ class Signal:
 
     @strawberry_django.field(description="The service that sent it, as the hub catalogues it; null when it is no longer catalogued.")
     def service(self) -> Optional["Service"]:
-        return models.Service.objects.filter(name=self.service).first()
+        return cast("Optional[Service]", models.Service.objects.filter(name=self.service).first())
 
     kind: enums.SignalKind = strawberry_django.field(description="What happened to the object.")
     identifier: str = strawberry_django.field(description="The object's structure identifier, e.g. @mikro/arraydataset.")
@@ -34,14 +44,15 @@ class Signal:
 
     @strawberry_django.field(description="The runs this signal fired.")
     def runs(self) -> list["Task"]:
-        return list(self.tasks.order_by("created_at"))
+        row = row_of(self, models.Signal)
+        return cast("list[Task]", list(row.tasks.order_by("created_at")))
 
     @strawberry_django.field(description="What became of every trigger that listened for it. Empty once processed: nobody listened.")
     def firings(self) -> list["Firing"]:
         return list(self.firings.select_related("trigger").order_by("created_at"))
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(cls, queryset: QuerySet[models.Signal], info: Info, **kwargs: object) -> QuerySet[models.Signal]:
         return build_prescoped_queryset(info, queryset, field="organization")
 
 
@@ -75,7 +86,8 @@ class Trigger:
 
     @strawberry_django.field(description="Whether it stopped by itself: its end passed, or it created its last allowed run.")
     def exhausted(self) -> bool:
-        return rules.exhausted(self)
+        row = row_of(self, models.Trigger)
+        return rules.exhausted(row)
 
     @strawberry_django.field(description="What became of it for the most recent signals it listened for, newest first.")
     def firings(self, limit: int = 20) -> list["Firing"]:
@@ -83,22 +95,25 @@ class Trigger:
 
     @strawberry_django.field(description="The most recent runs, newest first.")
     def runs(self, limit: int = 20) -> list["Task"]:
-        return list(self.tasks.order_by("-created_at")[: max(0, min(limit, 200))])
+        row = row_of(self, models.Trigger)
+        return cast("list[Task]", list(row.tasks.order_by("-created_at")[: max(0, min(limit, 200))]))
 
     @strawberry_django.field(description="When its newest run was created; null when it never fired (or its runs were since deleted by retention).")
     def last_run_at(self) -> datetime.datetime | None:
-        return self.tasks.order_by("-created_at").values_list("created_at", flat=True).first()
+        row = row_of(self, models.Trigger)
+        return row.tasks.order_by("-created_at").values_list("created_at", flat=True).first()
 
     @strawberry_django.field(description="A dry run: the stored signals this trigger would fire on as it is now, newest first. Applies its conditions and its port's requires, like a real firing; fires nothing.")
     def matching_signals(self, limit: int = 20) -> list["Signal"]:
+        row = row_of(self, models.Trigger)
         from facade import triggers
 
-        port = models.ArgPort.objects.filter(action_id=self.action_id, parent__isnull=True, key=self.port).first()
-        paths = [self.compiled_jsonpath, port.compiled_jsonpath if port is not None else None]
-        return list(triggers.matching_signals(self.caller.organization_id, self.kind, self.identifier, paths, limit))
+        port = models.ArgPort.objects.filter(action_id=row.action_id, parent__isnull=True, key=row.port).first()
+        paths = [row.compiled_jsonpath, port.compiled_jsonpath if port is not None else None]
+        return cast("list[Signal]", list(triggers.matching_signals(row.caller.organization_id, row.kind, row.identifier, paths, limit)))
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(cls, queryset: QuerySet[models.Trigger], info: Info, **kwargs: object) -> QuerySet[models.Trigger]:
         return build_prescoped_queryset(info, queryset, field="caller__organization")
 
 
@@ -120,7 +135,7 @@ class Firing:
     created_at: datetime.datetime = strawberry_django.field(description="When the trigger was tried.")
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(cls, queryset: QuerySet[models.Firing], info: Info, **kwargs: object) -> QuerySet[models.Firing]:
         return build_prescoped_queryset(info, queryset, field="signal__organization")
 
 
@@ -136,4 +151,4 @@ class SignalDeclaration:
 
     @strawberry_django.field(description="Your organization's triggers that wait for this signal.")
     def triggers(self, info: Info) -> list["Trigger"]:
-        return list(models.Trigger.objects.filter(kind=self.kind, identifier=self.identifier, caller__organization=info.context.request.organization).order_by("name"))
+        return cast("list[Trigger]", list(models.Trigger.objects.filter(kind=self.kind, identifier=self.identifier, caller__organization=info.context.request.organization).order_by("name")))

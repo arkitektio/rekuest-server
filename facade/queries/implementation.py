@@ -1,7 +1,10 @@
+from typing import cast
+
 import strawberry
-from facade import inputs, models, types, managers
-from rekuest_core.inputs import types as ritypes
 from kante.types import Info
+
+from facade import inputs, managers, models, types
+from rekuest_core.inputs import types as ritypes
 
 
 def implementation_at(
@@ -12,13 +15,13 @@ def implementation_at(
     demand: ritypes.ActionDemandInput | None = None,
 ) -> types.Implementation:
     if action_hash:
-        return models.Implementation.objects.get(agent_id=agent, action__hash=action_hash)
+        return cast("types.Implementation", models.Implementation.objects.get(agent_id=agent, action__hash=action_hash))
 
     if demand:
-        action_ids = managers.get_action_ids_by_action_demands([demand])[0]
-        return models.Implementation.objects.get(agent_id=agent, action_id__in=action_ids)
+        action_ids = managers.get_action_ids_by_action_demands([demand.to_pydantic()])[0]
+        return cast("types.Implementation", models.Implementation.objects.get(agent_id=agent, action_id__in=action_ids))
 
-    return models.Implementation.objects.get(agent_id=agent, interface=interface)
+    return cast("types.Implementation", models.Implementation.objects.get(agent_id=agent, interface=interface))
 
 
 async def my_implementation_at(
@@ -35,10 +38,10 @@ async def my_implementation_at(
     )
 
     if action_id:
-        return await models.Implementation.objects.aget(agent=agent, action_id=action_id)
+        return cast("types.Implementation", await models.Implementation.objects.aget(agent=agent, action_id=action_id))
 
     if interface:
-        return await models.Implementation.objects.aget(agent=agent, interface=interface)
+        return cast("types.Implementation", await models.Implementation.objects.aget(agent=agent, interface=interface))
 
     raise ValueError("Either action_id or interface must be provided")
 
@@ -60,7 +63,8 @@ def resolved_implementations(
 
 def dependency_tree(info: Info, input: inputs.DependencyTreeInput) -> types.DependencyTree:
     """What an assign would bind. takt resolves it exactly as it would for the assign."""
-    from facade.backend import controll_backend
+    from facade import takt
+    from facade.caller_context import CallerContext
 
     model = input.to_pydantic()
-    return types.DependencyTree(_value=controll_backend.resolve_dependencies(info, model), _implementation=model.implementation)
+    return types.DependencyTree(_value=takt.resolve_dependencies(CallerContext.from_info(info), model), _implementation=model.implementation)

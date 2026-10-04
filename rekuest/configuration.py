@@ -8,8 +8,9 @@ with a ``ValidationError`` if they are not supplied via config or environment.
 """
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
+from authentikate.base_models import AuthentikateSettings
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from pydantic_settings import (
     BaseSettings,
@@ -18,7 +19,7 @@ from pydantic_settings import (
     YamlConfigSettingsSource,
 )
 
-from authentikate.base_models import AuthentikateSettings
+from facade.json_types import JSON
 
 _DEFAULT_CONFIG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.yaml")
 
@@ -98,7 +99,7 @@ class TrustBlock(BaseModel):
     """Where the hub's instance public keys come from: the coord's bundle, or inline."""
 
     jwks_uri: Optional[str] = Field(default=None, description="The coord's hub-keys URL (the fakts `self.hub_keys_url`).")
-    jwks: Optional[Dict[str, Any]] = Field(default=None, description="The bundle inline (a JWKS whose keys carry `service`), for a hub not enrolled yet.")
+    jwks: Optional[dict[str, JSON]] = Field(default=None, description="The bundle inline (a JWKS whose keys carry `service`), for a hub not enrolled yet.")
 
 
 class InstanceBlock(BaseModel):
@@ -117,12 +118,20 @@ class RekuestBlock(BaseModel):
     sweep_interval: int = Field(default=5, description="How often (seconds) takt sweeps the DB-held deadlines. Bounds how late a deadline can fire.")
     pickup_deadline: int = Field(default=60, description="Seconds a dispatched task may go without any report from its (live) agent before the Assign is redelivered once, then failed; 0 disables.")
     disconnected_expiry: int = Field(default=3600, description="Seconds a DISCONNECTED (fate unknown) task stays recoverable before it is finalized as terminal; 0 = never.")
-    control_deadline: int = Field(default=60, description="Seconds an unconfirmed cancel may wait before it escalates to an interrupt (and an unconfirmed interrupt before it is finalized); 0 disables. On by default: a Cancel/Interrupt frame lost in transit (a displaced connection, a redis restart) is otherwise never noticed — the DB says CANCELLING while the agent never heard of it.")
+    control_deadline: int = Field(
+        default=60,
+        description="Seconds an unconfirmed cancel may wait before it escalates to an interrupt (and an unconfirmed interrupt before it is finalized); 0 disables. On by default: a Cancel/Interrupt frame lost in transit (a displaced connection, a redis restart) is otherwise never noticed — the DB says CANCELLING while the agent never heard of it.",
+    )
     hook_signature_mode: str = Field(default="compat", description="HookAgent HTTP signatures. 'compat': accept the timestamped V1 signature or the legacy body-only one, send both. 'strict': V1 only (replay-protected).")
     hook_max_skew: int = Field(default=300, description="Maximum age/clock skew (seconds) accepted for a V1-signed HookAgent request; also bounds the replay-guard window.")
     task_retention: int = Field(default=0, description="Seconds to keep terminal root task trees; 0 disables deletion. Deleting past runs also removes them from replay (reusable_task_for). Suggested production value: 2592000 (30 days).")
     ephemeral_task_retention: int = Field(default=86400, description="Seconds to keep terminal EPHEMERAL root task trees (housekeeping runs of schedules with ephemeralRuns); applies even while task_retention is 0. 0 disables.")
-    takt_url: Optional[str] = Field(default=None, validation_alias=AliasChoices("takt_url", "agentd_url"), description="takt (the agent protocol and every sweep, in Rust) beside this server, with its script name. Defaults to http://takt:8080/<django.force_script_name>, its name in the usual compose layout. Assigns, controls, registrations, deletes, schedules and probes go through its internal API, signed with the instance key; while it is unreachable each of those raises TaktUnavailable. `agentd_url` is its former name and still read.")
+    takt_url: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("takt_url", "agentd_url"),
+        description="takt's internal listener (`TAKT_INTERNAL_BIND`), with its script name: not the address agents connect to. Defaults to http://takt:8081/<django.force_script_name>. Assigns, controls, registrations, deletes, probes and running a schedule now go through its internal API; while it is unreachable each of those raises TaktUnavailable. `agentd_url` is its former name and still read.",
+    )
+    takt_socket: Optional[str] = Field(default=None, description="takt's internal listener as a unix socket this server and takt both mount (takt: `TAKT_INTERNAL_BIND=unix:<path>`). When set, the internal API is reached through it and only the path of `takt_url` is used.")
     identifier: str = Field(default="live.arkitekt.rekuest", description="This rekuest's fakts identifier — what its key is listed under in the hub trust bundle, and what services require rekuest's requests to come from.")
     services: list[ServiceEntry] = Field(default_factory=list, description="This hub's services: each one's structures and signals are catalogued from its manifest. Says nothing about agents.")
     hook_agents: list[HookAgentEntry] = Field(default_factory=list, description="This hub's hook agents: each is given to every organization, with the actions its manifest lists. Nothing is scheduled or triggered by itself.")

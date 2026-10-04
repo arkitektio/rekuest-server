@@ -13,21 +13,32 @@ subscription's catch-up:
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import weakref
-from typing import Dict, Optional, Tuple
+from dataclasses import dataclass
 
 import redis
 import redis.asyncio as aredis
 from django.conf import settings
 
 from facade import redis_keys
+from facade.takt_api import ProbeState
 
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class ProbeCounts:
+    """Live probe counts: the whole instance's, and one caller's against its cap."""
+
+    total_live: int
+    my_inflight: int
+    max_inflight: int
+
+
 def probe_max_inflight_per_caller() -> int:
-    return int(getattr(settings, "PROBE_MAX_INFLIGHT_PER_CALLER", 32))
+    return int(settings.PROBE_MAX_INFLIGHT_PER_CALLER)
 
 
 # All probe keys live under the service's redis namespace (``facade.redis_keys``). Probe state
@@ -42,7 +53,7 @@ def _inflight_key(caller_pk: int | str) -> str:
 
 # One decoding pool per (host, port), mirroring the agent queue's pooling so the
 # short-lived per-request store objects don't churn TCP connections.
-_sync_pools: Dict[Tuple[str, int], "redis.ConnectionPool"] = {}
+_sync_pools: dict[tuple[str, int], "redis.ConnectionPool"] = {}
 
 
 def _sync_pool(host: str, port: int) -> "redis.ConnectionPool":
@@ -74,9 +85,12 @@ class ProbeStore:
     def _sync(self) -> "redis.Redis":
         return redis.Redis(connection_pool=_sync_pool(self.host, self.port))
 
-    def get(self, probe_id: str) -> Optional[Dict[str, str]]:
+    def get(self, probe_id: str) -> ProbeState | None:
         state = self._sync().hgetall(_call_key(probe_id))
-        return state or None
+        # redis-py types a command as its value or an awaitable of it; this client is the sync one.
+        if not isinstance(state, dict):
+            raise TypeError("The sync redis client answered with an awaitable")
+        return ProbeState.model_validate({**state, "id": probe_id}) if state else None
 
     # ------------------------------------------------------------------ #
     # async — the message-router handler path
@@ -90,11 +104,12 @@ class ProbeStore:
             self._async_connections[loop] = connection
         return connection
 
-    async def aget(self, probe_id: str) -> Optional[Dict[str, str]]:
-        state = await self._async().hgetall(_call_key(probe_id))
-        return state or None
+    async def aget(self, probe_id: str) -> ProbeState | None:
+        pending = self._async().hgetall(_call_key(probe_id))
+        state = await pending if inspect.isawaitable(pending) else pending
+        return ProbeState.model_validate({**state, "id": probe_id}) if state else None
 
-    def stats_sync(self, caller_pk: int | str) -> Dict[str, int]:
+    def stats_sync(self, caller_pk: int | str) -> ProbeCounts:
         """Live probe counts for the stats query.
 
         ``total_live`` counts the self-expiring probe hashes via SCAN — chosen over a
@@ -108,14 +123,11 @@ class ProbeStore:
         for _ in connection.scan_iter(match=_call_key("p-*"), count=500):
             total += 1
         raw = connection.get(_inflight_key(caller_pk))
-        inflight = max(0, int(raw)) if raw is not None else 0
-        return {
-            "total_live": total,
-            "my_inflight": inflight,
-            "max_inflight": probe_max_inflight_per_caller(),
-        }
+        inflight = max(0, int(raw)) if isinstance(raw, (str, bytes, int)) else 0
+        return ProbeCounts(total_live=total, my_inflight=inflight, max_inflight=probe_max_inflight_per_caller())
 
-_default_store: Optional[ProbeStore] = None
+
+_default_store: ProbeStore | None = None
 
 
 def get_probe_store() -> ProbeStore:

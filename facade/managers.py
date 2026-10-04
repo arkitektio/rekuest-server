@@ -1,16 +1,49 @@
+"""The matching engine: which actions and states satisfy a demand.
+
+It works on the demands' pydantic models (``rekuest_core.inputs.models``). A GraphQL input is
+converted at the resolver's edge (``input.to_pydantic()``, or :meth:`PortDemand.of` for the one
+demand that is a plain strawberry input).
+"""
+
+from __future__ import annotations
+
 import json
 import re
 import typing as t
+from dataclasses import dataclass
 
 from django.db import connection
 from django.db.models.expressions import RawSQL
 
-from rekuest_core.inputs.types import ActionDemandInput, PortMatchInput
+from rekuest_core.inputs.models import ActionDemandInputModel, PortMatchInputModel, StateDemandInputModel
 
-# A match is duck-typed: ``PortMatchInput`` (structural fields plus optional runtime
-# ``descriptors``) and test ``SimpleNamespace`` stand-ins are both accepted — only attribute
-# access is used.
-MatchInput = PortMatchInput
+if t.TYPE_CHECKING:
+    from facade.inputs import PortDemandInput
+
+#: The named bind parameters of a statement built here.
+Params = dict[str, int | str | bool]
+
+
+@dataclass(frozen=True)
+class PortDemand:
+    """What the ports on one side of an action (its args, or its returns) must look like."""
+
+    kind: t.Literal["args", "returns"]
+    matches: list[PortMatchInputModel] | None = None
+    force_length: int | None = None
+    force_non_nullable_length: int | None = None
+    force_structure_length: int | None = None
+
+    @classmethod
+    def of(cls, demand: PortDemandInput) -> PortDemand:
+        """The demand a GraphQL ``PortDemandInput`` states."""
+        return cls(
+            kind=_demand_kind(demand.kind.value),
+            matches=[match.to_pydantic() for match in demand.matches] if demand.matches is not None else None,
+            force_length=demand.force_length,
+            force_non_nullable_length=demand.force_non_nullable_length,
+            force_structure_length=demand.force_structure_length,
+        )
 
 
 # =========================================================================
@@ -31,17 +64,16 @@ PORT_TABLE = {"args": "facade_argport", "returns": "facade_returnport"}
 
 
 def _build_match_exists(
-    match: MatchInput,
+    match: PortMatchInputModel,
     table: str,
     action_alias: str,
     parent_alias: str | None,
     id_path: str,
-    params: dict[str, t.Any],
+    params: Params,
 ) -> str:
     """Build one correlated ``EXISTS`` clause for a single match.
 
-    A match is a ``PortMatchInput``-shaped object, handled purely via attribute access:
-    structural fields target the port shape, and the optional ``descriptors`` activate the
+    Structural fields target the port shape, and the optional ``descriptors`` activate the
     object-level ``jsonb_path_match`` branch.
 
     Root matches correlate to the outer action row (``action_id = <action>.id`` and
@@ -77,12 +109,9 @@ def _build_match_exists(
         params[key] = match.identifier
         conditions.append(f"{alias}.identifier = %({key})s")
 
-    # getattr: demand objects are duck-typed (SimpleNamespace in tests, PortMatchInput at
-    # runtime) and not all shapes carry the QUANTITY dimension field.
-    dimension = getattr(match, "dimension", None)
-    if dimension is not None:
+    if match.dimension is not None:
         key = f"dim_{id_path}"
-        params[key] = dimension
+        params[key] = match.dimension
         conditions.append(f"{alias}.dimension = %({key})s")
 
     if match.nullable is not None:
@@ -90,13 +119,13 @@ def _build_match_exists(
         params[key] = match.nullable
         conditions.append(f"{alias}.nullable = %({key})s")
 
-    descriptors = getattr(match, "descriptors", None)
+    descriptors = match.descriptors
     if descriptors and parent_alias is None:
         # A root match with ONLY descriptors would evaluate jsonb_path_match against every
         # root port in the organization — the compiled predicate is unindexable in that
         # direction, so a structural field must narrow the candidate set first. Nested
         # children are exempt: their parent already narrows.
-        has_structural_narrowing = any(value is not None for value in (match.at, match.key, match.kind, match.identifier, dimension))
+        has_structural_narrowing = any(value is not None for value in (match.at, match.key, match.kind, match.identifier, match.dimension))
         if not has_structural_narrowing:
             raise ValueError("A root port match with descriptors must also narrow structurally (identifier, kind, key, at or dimension) — descriptor-only matches would scan every port in the organization.")
     if descriptors:
@@ -118,47 +147,48 @@ def _build_match_exists(
     return f"EXISTS (SELECT 1 FROM {table} {alias} WHERE {inner})"
 
 
-def _root_count_subquery(table: str, action_alias: str, extra_condition: str, param_key: str, value: int, params: dict[str, t.Any]) -> str:
+def _root_count_subquery(table: str, action_alias: str, extra_condition: str, param_key: str, value: int, params: Params) -> str:
     """Build a ``(SELECT COUNT(*) ...) = N`` clause over an action's root ports."""
     params[param_key] = value
     return f"(SELECT COUNT(*) FROM {table} pc WHERE pc.action_id = {action_alias}.id AND pc.parent_id IS NULL AND {extra_condition}) = %({param_key})s"
 
 
-def _execute_ids(sql: str, params: dict[str, t.Any]) -> list[t.Any]:
+def _execute_ids(sql: str, params: Params) -> list[int]:
     with connection.cursor() as cursor:
         cursor.execute(sql, params)
-        return [row[0] for row in cursor.fetchall()]
+        return [int(row[0]) for row in cursor.fetchall()]
 
 
-def _execute_rows(sql: str, params: dict[str, t.Any]) -> list[tuple[t.Any, ...]]:
+def _execute_pairs(sql: str, params: Params) -> list[tuple[int, int]]:
     with connection.cursor() as cursor:
         cursor.execute(sql, params)
-        return cursor.fetchall()
+        return [(int(first), int(second)) for first, second in cursor.fetchall()]
 
 
-def _demand_kind_value(kind: t.Any) -> t.Literal["args", "returns"]:
-    """Normalize a demand kind (DemandKind enum, raw "args"/"returns" string) to the table key."""
-    kind_value = kind.value if hasattr(kind, "value") else kind
-    if kind_value not in PORT_TABLE:
-        raise ValueError("Type must be either 'args' or 'returns'")
-    return t.cast(t.Literal["args", "returns"], kind_value)
+def _demand_kind(kind: str) -> t.Literal["args", "returns"]:
+    """Which side of an action a demand is about."""
+    if kind == "args":
+        return "args"
+    if kind == "returns":
+        return "returns"
+    raise ValueError("Type must be either 'args' or 'returns'")
 
 
 def _port_demand_sql(
-    demands: t.Sequence[t.Any],
-    organization_id: str | None = None,
-) -> tuple[str, dict[str, t.Any]]:
+    demands: t.Sequence[PortDemand],
+    organization_id: int | str | None = None,
+) -> tuple[str, Params]:
     """Build the (sql, named params) selecting facade_action ids satisfying EVERY demand."""
     action_alias = "a"
     clauses: list[str] = []
-    params: dict[str, t.Any] = {}
+    params: Params = {}
 
     if organization_id is not None:
         params["org"] = organization_id
         clauses.append(f"{action_alias}.organization_id = %(org)s")
 
     for demand_index, demand in enumerate(demands):
-        table = PORT_TABLE[_demand_kind_value(demand.kind)]
+        table = PORT_TABLE[demand.kind]
 
         for match_index, match in enumerate(demand.matches or []):
             clauses.append(_build_match_exists(match, table, action_alias, None, f"{demand_index}_{match_index}", params))
@@ -185,7 +215,7 @@ def _port_demand_sql(
 _NAMED_PARAM_RE = re.compile(r"%\((\w+)\)s")
 
 
-def _to_positional(sql: str, params: dict[str, t.Any]) -> tuple[str, list[t.Any]]:
+def _to_positional(sql: str, params: Params) -> tuple[str, list[int | str | bool]]:
     """Convert pyformat named placeholders to positional ``%s`` ones.
 
     ``RawSQL`` params are combined with the rest of the query's params into one flat
@@ -197,8 +227,8 @@ def _to_positional(sql: str, params: dict[str, t.Any]) -> tuple[str, list[t.Any]
 
 
 def get_action_port_demand_subquery(
-    demands: t.Sequence[t.Any],
-    organization_id: str | None = None,
+    demands: t.Sequence[PortDemand],
+    organization_id: int | str | None = None,
 ) -> RawSQL:
     """The port-demand statement as a ``RawSQL`` id subquery for ``filter(id__in=...)``.
 
@@ -213,17 +243,14 @@ def get_action_port_demand_subquery(
 
 
 def get_action_ids_by_port_demands(
-    demands: t.Sequence[t.Any],
+    demands: t.Sequence[PortDemand],
     model: str = "facade_action",
-    organization_id: str | None = None,
-) -> list[t.Any]:
+    organization_id: int | str | None = None,
+) -> list[int]:
     """Return ids of rows in ``model`` whose ports satisfy EVERY demand, in one query.
 
-    Each demand is duck-typed (``PortDemandInput``/test stand-ins):
-    ``kind`` ("args"/"returns"), ``matches``, ``force_length``, ``force_non_nullable_length``,
-    ``force_structure_length``. All demands' clauses are conjunctive, so ANDing them into a
-    single statement is exactly the set intersection of per-demand results — without the
-    N round trips.
+    All demands' clauses are conjunctive, so ANDing them into a single statement is exactly
+    the set intersection of per-demand results — without the N round trips.
 
     For ``facade_action`` this uses the indexed relational port engine. Other models
     (e.g. ``facade_shortcut``) keep their own ``args``/``returns`` JSONB and fall back to
@@ -232,11 +259,11 @@ def get_action_ids_by_port_demands(
     materialization); this id-list form serves callers that consume the ids in Python.
     """
     if model != "facade_action":
-        ids: set[t.Any] | None = None
+        ids: set[int] | None = None
         for demand in demands:
             new_ids = _json_scan_ids(
                 demand.matches,
-                type=_demand_kind_value(demand.kind),
+                type=demand.kind,
                 force_length=demand.force_length,
                 force_non_nullable_length=demand.force_non_nullable_length,
                 force_structure_length=demand.force_structure_length,
@@ -250,40 +277,33 @@ def get_action_ids_by_port_demands(
 
 
 def _action_demand_clauses(
-    action_demand: ActionDemandInput | t.Any,
+    action_demand: ActionDemandInputModel,
     action_alias: str,
     prefix: str,
-    params: dict[str, t.Any],
+    params: Params,
 ) -> list[str]:
     """Build the WHERE clauses for one action demand (args + returns together).
 
-    Demands are duck-typed via attribute access — ``ActionDemandInput`` (query filters and
-    dependency declarations) and test ``SimpleNamespace`` stand-ins both work. The matching
-    core is ``hash`` / ``key`` / ``app`` / ``version`` / ``name`` / ``arg_matches`` /
-    ``return_matches`` / ``force_arg_length`` / ``force_return_length`` / ``protocols``.
-    ``app`` + ``key`` are the preferred identification ("imagej/open_image"); the structural
-    matches loosen the demand to equivalent actions of other apps.
+    A ``hash`` names the action outright. Otherwise ``app`` + ``key`` are the preferred
+    identification ("imagej/open_image"), and the structural matches loosen the demand to
+    equivalent actions of other apps.
     ``prefix`` namespaces every param key so several demands can share one statement.
     """
     clauses: list[str] = []
 
-    # getattr: demands are duck-typed — ActionDependencyInput (facade/queries/action.py,
-    # facade/logic.py) carries the same match fields but no ``hash``.
-    demand_hash = getattr(action_demand, "hash", None)
-    if demand_hash:
-        params[f"{prefix}_hash"] = demand_hash
+    if action_demand.hash:
+        params[f"{prefix}_hash"] = action_demand.hash
         clauses.append(f"{action_alias}.hash = %({prefix}_hash)s")
     else:
-        # getattr: SimpleNamespace test stand-ins may omit the identity fields.
-        if getattr(action_demand, "key", None):
+        if action_demand.key:
             params[f"{prefix}_key"] = action_demand.key
             clauses.append(f"{action_alias}.key = %({prefix}_key)s")
 
-        if getattr(action_demand, "app", None):
+        if action_demand.app:
             params[f"{prefix}_app"] = action_demand.app
             clauses.append(f"{action_alias}.app_id IN (SELECT id FROM authentikate_app WHERE identifier = %({prefix}_app)s)")
 
-        if getattr(action_demand, "version", None):
+        if action_demand.version:
             params[f"{prefix}_version"] = action_demand.version
             clauses.append(f"{action_alias}.version = %({prefix}_version)s")
 
@@ -305,17 +325,15 @@ def _action_demand_clauses(
             params[f"{prefix}_force_return_length"] = action_demand.force_return_length
             clauses.append(f"{action_alias}.return_count = %({prefix}_force_return_length)s")
 
-        # getattr: only the newer demand shapes carry ``protocols``. The action must
-        # implement ALL requested protocols (one EXISTS per name, ANDed) — mirrors the
-        # name-based matching of ``ActionFilter.protocols``.
-        for protocol_index, protocol_name in enumerate(getattr(action_demand, "protocols", None) or []):
+        # The action must implement ALL requested protocols (one EXISTS per name, ANDed) —
+        # mirrors the name-based matching of ``ActionFilter.protocols``.
+        for protocol_index, protocol_name in enumerate(action_demand.protocols or []):
             key = f"{prefix}_protocol_{protocol_index}"
             params[key] = protocol_name
             clauses.append(f"EXISTS (SELECT 1 FROM facade_action_protocols ap_{key} JOIN facade_protocol p_{key} ON p_{key}.id = ap_{key}.protocol_id WHERE ap_{key}.action_id = {action_alias}.id AND p_{key}.name = %({key})s)")
 
         # Semantic qualifiers: tri-state — None matches either.
-        for qualifier in ("pure", "idempotent", "stateful"):
-            value = getattr(action_demand, qualifier, None)
+        for qualifier, value in (("pure", action_demand.pure), ("idempotent", action_demand.idempotent), ("stateful", action_demand.stateful)):
             if value is not None:
                 params[f"{prefix}_{qualifier}"] = value
                 clauses.append(f"{action_alias}.{qualifier} = %({prefix}_{qualifier})s")
@@ -327,9 +345,9 @@ def _action_demand_clauses(
 
 
 def get_action_ids_by_action_demands(
-    action_demands: t.Sequence[ActionDemandInput | t.Any],
-    organization_id: str | None = None,
-) -> list[list[t.Any]]:
+    action_demands: t.Sequence[ActionDemandInputModel],
+    organization_id: int | str | None = None,
+) -> list[list[int]]:
     """Return the matching Action ids for EACH demand, index-aligned, in one round trip.
 
     The demands stay independent — a caller enforcing "must satisfy all demands" (e.g. the
@@ -338,7 +356,7 @@ def get_action_ids_by_action_demands(
     per demand.
     """
     action_alias = "a"
-    params: dict[str, t.Any] = {}
+    params: Params = {}
     selects: list[str] = []
 
     if organization_id is not None:
@@ -354,8 +372,8 @@ def get_action_ids_by_action_demands(
     if not selects:
         return []
 
-    results: list[list[t.Any]] = [[] for _ in action_demands]
-    for demand_index, action_id in _execute_rows("\nUNION ALL\n".join(selects), params):
+    results: list[list[int]] = [[] for _ in action_demands]
+    for demand_index, action_id in _execute_pairs("\nUNION ALL\n".join(selects), params):
         results[demand_index].append(action_id)
     return results
 
@@ -370,7 +388,7 @@ def get_action_ids_by_action_demands(
 # =========================================================================
 
 
-def _reject_unsupported_legacy_match_fields(matches: t.Sequence[MatchInput] | None, model: str) -> None:
+def _reject_unsupported_legacy_match_fields(matches: t.Sequence[PortMatchInputModel] | None, model: str) -> None:
     """Refuse demands the JSONB scanner cannot express instead of silently degrading them.
 
     The legacy scanner only compares key/kind/identifier (children positionally, one level
@@ -379,14 +397,14 @@ def _reject_unsupported_legacy_match_fields(matches: t.Sequence[MatchInput] | No
     matches — results that look right and aren't.
     """
     for match in matches or []:
-        if getattr(match, "descriptors", None):
+        if match.descriptors:
             raise ValueError(f"Descriptor matching (requires/provides) is not supported for {model}: only Actions have relational port rows with compiled constraints. Remove 'descriptors' from the demand.")
-        if getattr(match, "nullable", None) is not None:
+        if match.nullable is not None:
             raise ValueError(f"'nullable' matching is not supported for {model}: the legacy JSONB scanner only compares key/kind/identifier. Remove 'nullable' from the demand.")
-        _reject_unsupported_legacy_match_fields(getattr(match, "children", None), model)
+        _reject_unsupported_legacy_match_fields(match.children, model)
 
 
-def build_child_recursively(item: MatchInput, prefix, value_path, parts, params):
+def build_child_recursively(item: PortMatchInputModel, prefix: str, value_path: str, parts: list[str], params: Params) -> None:
     if item.key:
         parts.append(f"{prefix}->>'key' = %({value_path}_key)s")
         params[f"{value_path}_key"] = item.key
@@ -400,9 +418,9 @@ def build_child_recursively(item: MatchInput, prefix, value_path, parts, params)
         params[f"{value_path}_identifier"] = item.identifier
 
 
-def build_sql_for_item_recursive(item: MatchInput, index: int, at_value: int | None = None, prefix: str = "arg"):
-    sql_parts = []
-    params = {}
+def build_sql_for_item_recursive(item: PortMatchInputModel, index: int, at_value: int | None = None, prefix: str = "arg") -> tuple[str, Params]:
+    sql_parts: list[str] = []
+    params: Params = {}
 
     if at_value is not None:
         sql_parts.append(f"idx = %({prefix}_at_{index})s")
@@ -421,8 +439,8 @@ def build_sql_for_item_recursive(item: MatchInput, index: int, at_value: int | N
         params[f"{prefix}_identifier_{index}"] = item.identifier
 
     if item.children:
-        child_parts = []
-        child_params = {}
+        child_parts: list[str] = []
+        child_params: Params = {}
         for idx, child in enumerate(item.children):
             build_child_recursively(
                 child,
@@ -439,15 +457,15 @@ def build_sql_for_item_recursive(item: MatchInput, index: int, at_value: int | N
 
 
 def _json_scan_params(
-    search_params: t.Sequence[MatchInput] | None,
+    search_params: t.Sequence[PortMatchInputModel] | None,
     type: t.Literal["args", "returns"] = "args",
     force_length: t.Optional[int] = None,
     force_non_nullable_length: t.Optional[int] = None,
     force_structure_length: t.Optional[int] = None,
     model: str = "facade_shortcut",
-):
-    individual_queries = []
-    all_params = {}
+) -> tuple[str, Params]:
+    individual_queries: list[str] = []
+    all_params: Params = {}
     if search_params:
         _reject_unsupported_legacy_match_fields(search_params, model)
         for index, item in enumerate(search_params):
@@ -457,15 +475,18 @@ def _json_scan_params(
             all_params.update(params)
 
     if force_length is not None:
-        individual_queries.append(f"jsonb_array_length({type}) = {force_length}")
+        all_params["force_length"] = force_length
+        individual_queries.append(f"jsonb_array_length({type}) = %(force_length)s")
 
     if force_non_nullable_length is not None:
         sql_part = "item->>'nullable'::text = 'false'"
-        individual_queries.append(f"""(SELECT COUNT(*) FROM jsonb_array_elements({type}) AS j(item) WHERE {sql_part}) = {force_non_nullable_length}""")
+        all_params["force_non_nullable_length"] = force_non_nullable_length
+        individual_queries.append(f"""(SELECT COUNT(*) FROM jsonb_array_elements({type}) AS j(item) WHERE {sql_part}) = %(force_non_nullable_length)s""")
 
     if force_structure_length is not None:
         sql_part = "item->>'kind' = 'STRUCTURE'"
-        individual_queries.append(f"""(SELECT COUNT(*) FROM jsonb_array_elements({type}) AS j(item) WHERE {sql_part}) = {force_structure_length}""")
+        all_params["force_structure_length"] = force_structure_length
+        individual_queries.append(f"""(SELECT COUNT(*) FROM jsonb_array_elements({type}) AS j(item) WHERE {sql_part}) = %(force_structure_length)s""")
 
     if not individual_queries:
         raise ValueError("No search params provided")
@@ -475,13 +496,13 @@ def _json_scan_params(
 
 
 def _json_scan_ids(
-    demands: t.Sequence[MatchInput] | None = None,
+    demands: t.Sequence[PortMatchInputModel] | None = None,
     type: t.Literal["args", "returns"] = "args",
     force_length: t.Optional[int] = None,
     force_non_nullable_length: t.Optional[int] = None,
     force_structure_length: t.Optional[int] = None,
     model: str = "facade_shortcut",
-) -> list[t.Any]:
+) -> list[int]:
     full_sql, all_params = _json_scan_params(
         demands,
         type=type,
@@ -494,11 +515,11 @@ def _json_scan_ids(
 
 
 def build_state_params(
-    search_params: t.Sequence[MatchInput] | None,
+    search_params: t.Sequence[PortMatchInputModel] | None,
     model: str = "facade_statedefinition",
-):
-    individual_queries = []
-    all_params = {}
+) -> tuple[str, Params]:
+    individual_queries: list[str] = []
+    all_params: Params = {}
     if search_params:
         _reject_unsupported_legacy_match_fields(search_params, model)
         for index, item in enumerate(search_params):
@@ -515,14 +536,14 @@ def build_state_params(
 
 
 def get_state_ids_by_demands(
-    matches: t.Sequence[MatchInput] | None = None,
+    matches: t.Sequence[PortMatchInputModel] | None = None,
     model: str = "facade_statedefinition",
-) -> list[t.Any]:
+) -> list[int]:
     full_sql, all_params = build_state_params(matches, model=model)
     return _execute_ids(full_sql, all_params)
 
 
-def state_demand_state_filters(demand: t.Any) -> dict[str, t.Any]:
+def state_demand_state_filters(demand: StateDemandInputModel) -> dict[str, str | list[int]]:
     """State-queryset filter kwargs for one state demand.
 
     ``app`` + ``key`` match the State's own identity columns (the preferred identification);
@@ -530,12 +551,12 @@ def state_demand_state_filters(demand: t.Any) -> dict[str, t.Any]:
     agent filter, dependency resolution and the ``state_for`` query so their semantics stay
     in lockstep. Raises when the demand carries no criteria at all.
     """
-    filters: dict[str, t.Any] = {}
-    if getattr(demand, "key", None):
+    filters: dict[str, str | list[int]] = {}
+    if demand.key:
         filters["key"] = demand.key
-    if getattr(demand, "app", None):
+    if demand.app:
         filters["app_identifier"] = demand.app
-    if getattr(demand, "hash", None):
+    if demand.hash:
         filters["definition__hash"] = demand.hash
     if demand.matches:
         filters["definition_id__in"] = get_state_ids_by_demands(demand.matches)

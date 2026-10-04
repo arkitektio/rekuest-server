@@ -16,6 +16,7 @@ import socket
 
 _DB_PORT_VAR = "REKUEST_TEST_DB_PORT"
 _REDIS_PORT_VAR = "REKUEST_TEST_REDIS_PORT"
+_TAKT_PORT_VAR = "REKUEST_TEST_TAKT_PORT"
 
 
 def _reserve_free_ports(count: int) -> list[int]:
@@ -38,7 +39,8 @@ def _reserve_free_ports(count: int) -> list[int]:
 
 # An explicit port from the environment always wins, so a developer can still
 # point the suite at a stack they brought up themselves.
-if _DB_PORT_VAR not in os.environ or _REDIS_PORT_VAR not in os.environ:
-    _db_port, _redis_port = _reserve_free_ports(2)
+if _DB_PORT_VAR not in os.environ or _REDIS_PORT_VAR not in os.environ or _TAKT_PORT_VAR not in os.environ:
+    _db_port, _redis_port, _takt_port = _reserve_free_ports(3)
     os.environ.setdefault(_DB_PORT_VAR, str(_db_port))
     os.environ.setdefault(_REDIS_PORT_VAR, str(_redis_port))
+    os.environ.setdefault(_TAKT_PORT_VAR, str(_takt_port))

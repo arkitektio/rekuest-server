@@ -131,8 +131,10 @@ and every sweep (deadlines, workflow resume, schedules, triggers, retention) are
 `takt/crates/facade/src/`.
 
 A mutation that touches a task or an agent calls takt's internal API through
-`facade/takt.py` (`POST <rekuest.takt_url>/internal/<op>`, signed with the instance key).
-The route table is at the top of `takt/crates/rekuest-server/src/internal.rs`.
+`facade/takt.py` (`POST <rekuest.takt_url>/internal/<op>`, on takt's internal listener; unsigned).
+The route table is at the top of `takt/crates/rekuest-server/src/internal.rs`. A schedule the
+server wrote is not asked for there: `facade/schedules.py` sends a `NOTIFY` inside the
+transaction that writes the row, and takt plans it when that commits.
 
 The server owns the schema. takt writes the same tables with its own SQL, so two tests guard
 the contract from this side:
@@ -249,9 +251,14 @@ class MyNewType:
 
 ### Testing
 
-The server's suite does not start takt. Tests that reach the agent path use the `fake_takt`
-fixture (`tests/conftest.py`), which answers the internal API in-process from
-`tests/takt_fake.py`. takt's real behaviour is tested in `takt/`.
+The server's suite runs against a real takt: dokker builds it from `./takt` (or uses the image
+`TAKT_IMAGE` names) and starts it in the test database once that is migrated
+(`tests/conftest.py::takt_stack`). A test that reaches takt takes the `takt` fixture and must
+commit its rows (`django_db(transaction=True)`): takt reads them from its own connection. What
+takt does on a schedule notice happens after the mutation answered, so such tests wait for it
+(`waiting_run`, `settled_run`). takt runs with its sweeps off there (one at start), so a test's
+rows are only touched by what the test asks for; the sweeps themselves are tested in `takt/`.
+`REKUEST_TEST_TAKT_LOG=<file>` keeps what takt logged during the run.
 
 #### Running Tests
 

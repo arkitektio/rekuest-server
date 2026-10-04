@@ -3,15 +3,26 @@
 from __future__ import annotations
 
 import datetime
+from typing import TYPE_CHECKING, cast
 
 import strawberry
 import strawberry_django
+from django.db.models import QuerySet
+from kante.types import Info
+
+from facade import filters, models, scalars
+from facade.types.base import build_prescoped_queryset, row_of
+from facade.types.demand import ActionDependencyModel, StateDependencyModel
 from rekuest_core.objects import models as rmodels
 from rekuest_core.objects import types as rtypes
 
-from facade import filters, models, scalars
-from facade.types.demand import ActionDependencyModel, StateDependencyModel
-from facade.types.base import build_prescoped_queryset
+if TYPE_CHECKING:
+    # Named in annotations only: strawberry resolves them when it builds the schema.
+    from facade.types.agent import Agent
+    from facade.types.auth import User
+    from facade.types.dashboard import DashboardPlacement, UICatalog
+    from facade.types.demand import ActionDependency, StateDependency
+    from facade.types.threed import Placement
 
 
 @strawberry_django.type(models.Blok)
@@ -30,7 +41,7 @@ class Blok:
 
     @strawberry_django.field(description="The typed component tree of this blok.")
     def components(self) -> list[rtypes.ComponentNode]:
-        return [rmodels.ComponentNodeModel(**i) for i in self.components]
+        return cast("list[rtypes.ComponentNode]", [rmodels.ComponentNodeModel(**i) for i in self.components])
 
     @strawberry_django.field(description="Demo state used to render a preview of this blok without agents.")
     def demo_state(self) -> scalars.Props:
@@ -38,10 +49,10 @@ class Blok:
 
     @strawberry_django.field(description="Non-fatal registration findings, e.g. manifest util calls naming operations that neither the base catalog nor this blok's catalog provides.")
     def diagnostics(self) -> list[rtypes.Diagnostic]:
-        return [rmodels.DiagnosticModel(**i) for i in self.diagnostics]
+        return cast("list[rtypes.Diagnostic]", [rmodels.DiagnosticModel(**i) for i in self.diagnostics])
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(cls, queryset: QuerySet[models.Blok], info: Info, **kwargs: object) -> QuerySet[models.Blok]:
         return build_prescoped_queryset(info, queryset, field="organization")
 
 
@@ -81,11 +92,13 @@ class BlokDependency:
     @strawberry_django.field(description="The named action requirements of this dependency.")
     def action_dependencies(self) -> list["ActionDependency"]:
         # get_action_dependencies normalizes legacy flat JSON into the demand wrapper.
-        return [ActionDependencyModel(**d.model_dump()) for d in self.get_action_dependencies()]
+        row = row_of(self, models.BlokDependency)
+        return cast("list[ActionDependency]", [ActionDependencyModel(**d.model_dump()) for d in row.get_action_dependencies()])
 
     @strawberry_django.field(description="The named state requirements of this dependency.")
     def state_dependencies(self) -> list["StateDependency"]:
-        return [StateDependencyModel(**d.model_dump()) for d in self.get_state_dependencies()]
+        row = row_of(self, models.BlokDependency)
+        return cast("list[StateDependency]", [StateDependencyModel(**d.model_dump()) for d in row.get_state_dependencies()])
 
 
 @strawberry_django.type(models.MaterializedBlok, filters=filters.MaterializedBlokFilter, pagination=True, ordering=filters.MaterializedBlokOrder, description="A materialized instance of a Blok that can be placed on dashboards and linked to agent states.")
@@ -107,7 +120,7 @@ class MaterializedBlok:
     )
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(cls, queryset: QuerySet[models.MaterializedBlok], info: Info, **kwargs: object) -> QuerySet[models.MaterializedBlok]:
         return build_prescoped_queryset(info, queryset, field="blok__organization")
 
 

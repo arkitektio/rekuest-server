@@ -1,7 +1,9 @@
-from kante.types import Info
+from typing import AsyncGenerator, Optional, cast
+
 import strawberry
-from facade import types, models
-from typing import AsyncGenerator, Optional
+from kante.types import Info
+
+from facade import models, types
 from facade.channels import new_implementation_channel
 
 
@@ -13,29 +15,29 @@ class ImplementationUpdate:
 
 
 async def implementations(
-    self,
+    self: object,
     info: Info,
     agent: strawberry.ID,
 ) -> AsyncGenerator[ImplementationUpdate, None]:
     """Subscribe to implementation create/update/delete for one agent."""
-    async for message in new_implementation_channel.listen(info.context, [f"implementations_agent_{agent}"]):
+    async for message in new_implementation_channel.listen(info, [f"implementations_agent_{agent}"]):
         if message.create:
-            yield ImplementationUpdate(create=await models.Implementation.objects.aget(id=message.create))
+            yield ImplementationUpdate(create=cast("types.Implementation", await models.Implementation.objects.aget(id=message.create)))
         elif message.update:
-            yield ImplementationUpdate(update=await models.Implementation.objects.aget(id=message.update))
+            yield ImplementationUpdate(update=cast("types.Implementation", await models.Implementation.objects.aget(id=message.update)))
         elif message.delete:
             yield ImplementationUpdate(delete=strawberry.ID(str(message.delete)))
 
 
 async def implementation_change(
-    self,
+    self: object,
     info: Info,
     implementation: strawberry.ID,
 ) -> AsyncGenerator[types.Implementation, None]:
     """Subscribe to updates of one implementation."""
     x = await models.Implementation.objects.aget(id=implementation)
 
-    async for message in new_implementation_channel.listen(info.context, [f"implementation_{x.id}"]):
+    async for message in new_implementation_channel.listen(info, [f"implementation_{x.pk}"]):
         # Deletes end the row — nothing to yield for this row-typed stream.
         if message.update:
-            yield await models.Implementation.objects.aget(id=message.update)
+            yield cast("types.Implementation", await models.Implementation.objects.aget(id=message.update))

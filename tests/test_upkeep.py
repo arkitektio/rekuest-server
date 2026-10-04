@@ -9,7 +9,6 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
-from django.conf import settings as django_settings
 from django.db import connection, connections
 from django.test import Client as HttpClient
 from django.urls import reverse
@@ -17,11 +16,12 @@ from django.urls import reverse
 from embeddings import engine
 from facade import models, provisioning
 from facade.service_trust import rekuest_identifier
+from rekuest.configuration import HookAgentEntry, ServiceEntry
 from rekuest_service import trust
 from tests.models.test_action_embedding import _action
 from tests.provisioning_fixtures import declared, hub, lab  # noqa: F401  (fixtures)
 
-pytestmark = pytest.mark.usefixtures("fake_takt")
+pytestmark = pytest.mark.usefixtures("takt")
 
 
 def _post(job: str, authorization: str | None = "sign", body: bytes = b"{}"):
@@ -75,8 +75,8 @@ class TestProvision:
         assert models.Agent.objects.filter(name="janitor", organization=lab).exists()
 
     def test_it_says_what_failed(self, hub):
-        hub.SERVICES = [{"name": "offline", "url": "http://127.0.0.1:9/_rekuest/service"}, *hub.SERVICES]
-        hub.HOOK_AGENTS = [{"name": "gone", "hook_url": "http://127.0.0.1:9/_rekuest/hook"}, *hub.HOOK_AGENTS]
+        hub.SERVICES = [ServiceEntry(name="offline", url="http://127.0.0.1:9/_rekuest/service"), *hub.SERVICES]
+        hub.HOOK_AGENTS = [HookAgentEntry(name="gone", hook_url="http://127.0.0.1:9/_rekuest/hook"), *hub.HOOK_AGENTS]
 
         assert _post("provision").json() == {"ok": False, "skipped": False, "failed": ["service offline", "hook agent gone"]}
 
@@ -110,7 +110,7 @@ class TestProvision:
         for thread in threads:
             thread.join(timeout=60)
 
-        done = {"services": [], "hook_agents": []}
+        done = provisioning.Failed(services=[], hook_agents=[])
         assert len(answers) == 4 and done in answers
         assert all(answer in (done, None) for answer in answers)
         assert models.Service.objects.filter(name="housekeeping").count() == 1
@@ -155,7 +155,8 @@ class _TaktHealth(BaseHTTPRequestHandler):
 
 @pytest.fixture
 def takt_health(settings):
-    """Something answering takt's ``ht`` on a real socket, as healthy as ``status`` says."""
+    """Something answering takt's ``ht`` on a real socket, as unhealthy as ``status`` says: a real
+    takt only says so when its database or redis is gone."""
     server = ThreadingHTTPServer(("127.0.0.1", 0), _TaktHealth)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -168,7 +169,7 @@ def takt_health(settings):
 
 @pytest.mark.django_db
 class TestHealthAnswersForTakt:
-    def test_healthy_with_takt_healthy(self, takt_health):
+    def test_healthy_with_takt_healthy(self, takt):
         assert HttpClient().get(reverse("health_check")).status_code == 200
 
     def test_unhealthy_when_takt_says_so(self, takt_health):

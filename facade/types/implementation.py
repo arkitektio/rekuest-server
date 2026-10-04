@@ -2,18 +2,27 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional, cast
 
 import strawberry
 import strawberry_django
+from django.db.models import QuerySet
 from kante.types import Info
+
+from facade import filters, models
+from facade.types.base import build_prescoped_queryset, row_of
 from rekuest_core import enums as renums
 from rekuest_core import scalars as rscalars
 from rekuest_core.objects import models as rmodels
 from rekuest_core.objects import types as rtypes
 
-from facade import filters, models
-from facade.types.base import build_prescoped_queryset
+if TYPE_CHECKING:
+    # Named in annotations only: strawberry resolves them when it builds the schema.
+    from facade.types.action import Action
+    from facade.types.agent import Agent, Lock
+    from facade.types.dependency import Dependency, Resolution
+    from facade.types.state import State
+    from facade.types.task import Task
 
 
 @strawberry_django.type(models.Implementation, filters=filters.ImplementationFilter, ordering=filters.ImplementationOrder, pagination=True, description="Represents a concrete implementation of an action.")
@@ -40,32 +49,36 @@ class Implementation:
     def name(self) -> str:
         return self.interface + "@" + self.agent.name
 
-
     @strawberry_django.field(description="Implementations on this agent whose action is a test for this implementation's action.")
     def tests(self, info: Info) -> list["Implementation"]:
-        return list(models.Implementation.objects.filter(agent=self.agent, action__in=self.action.tests.all()))
+        row = row_of(self, models.Implementation)
+        return cast("list[Implementation]", list(models.Implementation.objects.filter(agent=row.agent, action__in=row.action.tests.all())))
 
     @strawberry_django.field(description="List of action demands")
     def tracks(self) -> list[rtypes.Track]:
-        return [rmodels.TrackModel(**i) for i in self.tracks]
+        return cast("list[rtypes.Track]", [rmodels.TrackModel(**i) for i in self.tracks])
 
     @strawberry_django.field(description="Non-fatal registration findings, e.g. validator/effect calls naming operations that neither the base catalog nor the definition's catalog provides.")
     def diagnostics(self) -> list[rtypes.Diagnostic]:
-        return [rmodels.DiagnosticModel(**i) for i in self.diagnostics]
+        return cast("list[rtypes.Diagnostic]", [rmodels.DiagnosticModel(**i) for i in self.diagnostics])
 
     @strawberry_django.field(description="Get the latest completed task created by the current user.")
     def my_latest_task(self, info: Info) -> Optional["Task"]:
+        row = row_of(self, models.Implementation)
         user = info.context.request.user
-        return (
-            self.tasks.filter(
-                implementation=self.id,
-                is_done=True,
-                caller__user=user,
-            )
-            .order_by("-created_at")
-            .first()
+        return cast(
+            "Optional[Task]",
+            (
+                row.tasks.filter(
+                    implementation=row.pk,
+                    is_done=True,
+                    caller__user=user,
+                )
+                .order_by("-created_at")
+                .first()
+            ),
         )
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(cls, queryset: QuerySet[models.Implementation], info: Info, **kwargs: object) -> QuerySet[models.Implementation]:
         return build_prescoped_queryset(info, queryset, field="action__organization")

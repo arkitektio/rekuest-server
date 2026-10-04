@@ -9,6 +9,10 @@ semantics as the action demands).
 
 from types import SimpleNamespace
 
+from rekuest_core.enums import PortKind
+
+from rekuest_core.inputs.models import ActionDemandInputModel, DescriptorInputModel, PortMatchInputModel, StateDemandInputModel
+
 import pytest
 
 from rekuest_core.inputs.models import ImplementationInputModel, StateDependencyInputModel
@@ -132,14 +136,12 @@ def test_auto_resolve_raises_when_no_state_definition_matches(setup):
         auto_resolve(setup.info, main_impl, resolution)
 
 
-
-
 def test_state_demand_by_key_only_selects_matching_agent(setup):
     """A demand can pin a state purely by its identity key (no port matches) — the old
     'state_key-only demands' TODO."""
     from facade import managers
 
-    demand = SimpleNamespace(hash=None, key="counter", app=None, matches=None, protocols=None)
+    demand = StateDemandInputModel(key="counter")
     filters = managers.state_demand_state_filters(demand)
     assert filters == {"key": "counter"}
 
@@ -149,7 +151,7 @@ def test_state_demand_by_key_only_selects_matching_agent(setup):
     assert set(queryset.values_list("pk", flat=True)) == {setup.agent_with_state.pk}
 
     # Pinning by app identifier works the same way.
-    app_filters = managers.state_demand_state_filters(SimpleNamespace(hash=None, key=None, app="statedep-stateful-app", matches=None, protocols=None))
+    app_filters = managers.state_demand_state_filters(StateDemandInputModel(app="statedep-stateful-app"))
     queryset = models.Agent.objects.filter(Exists(models.State.objects.filter(agent=OuterRef("pk"), **app_filters)))
     assert set(queryset.values_list("pk", flat=True)) == {setup.agent_with_state.pk}
 
@@ -161,7 +163,7 @@ def test_agent_state_demand_exists_semantics(setup):
 
     from facade import managers
 
-    matches = [SimpleNamespace(at=None, key=None, kind=SimpleNamespace(value="INT"), identifier=None, nullable=None, children=None)]
+    matches = [PortMatchInputModel(kind=PortKind.INT)]
     fitting_ids = managers.get_state_ids_by_demands(matches)
     assert setup.counter_definition.id in fitting_ids
 

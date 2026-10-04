@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Dict
+
+from facade.json_types import JSON
 
 CANONICALIZATION_VERSION = 1
 
 
-def canonicalize_args(args: Dict[str, Any]) -> bytes:
+def canonicalize_args(args: dict[str, JSON]) -> bytes:
     """Serialize args to the canonical byte form (v1)."""
     return json.dumps(
         args or {},
@@ -29,6 +30,6 @@ def canonicalize_args(args: Dict[str, Any]) -> bytes:
     ).encode("utf-8")
 
 
-def args_hash(args: Dict[str, Any]) -> str:
+def args_hash(args: dict[str, JSON]) -> str:
     """SHA-256 hex digest of the canonicalized args."""
     return hashlib.sha256(canonicalize_args(args)).hexdigest()

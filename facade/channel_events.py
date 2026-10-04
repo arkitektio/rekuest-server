@@ -1,7 +1,15 @@
+from __future__ import annotations
+
 import datetime
-from typing import Any, Optional
+from enum import Enum
+from typing import TYPE_CHECKING, Optional
 
 from pydantic import BaseModel, Field
+
+from facade.json_types import JSON
+
+if TYPE_CHECKING:
+    from facade import models
 
 
 class StateUpdateEvent(BaseModel):
@@ -20,19 +28,19 @@ class PatchEvent(BaseModel):
 
     create: int = Field(..., description="The patch ID that was created.")
     state: int = Field(..., description="The state ID related to the patch.")
-    agent: int | None = Field(None, description="The agent ID related to the patch.")
-    interface: str = Field("", description="The interface of the state in the agent.")
-    op: str = Field("", description="The patch operation (add, remove, replace, …).")
-    path: str = Field("", description="The path the patch applies to.")
-    value: Optional[Any] = Field(None, description="The patch value.")
-    global_rev: int = Field(0, description="The global revision after this patch.")
-    session: Optional[int] = Field(None, description="The session ID related to the patch.")
-    timestamp: Optional[datetime.datetime] = Field(None, description="When the patch was created.")
+    agent: int | None = Field(default=None, description="The agent ID related to the patch.")
+    interface: str = Field(default="", description="The interface of the state in the agent.")
+    op: str = Field(default="", description="The patch operation (add, remove, replace, …).")
+    path: str = Field(default="", description="The path the patch applies to.")
+    value: JSON = Field(default=None, description="The patch value.")
+    global_rev: int = Field(default=0, description="The global revision after this patch.")
+    session: Optional[int] = Field(default=None, description="The session ID related to the patch.")
+    timestamp: Optional[datetime.datetime] = Field(default=None, description="When the patch was created.")
 
     @classmethod
-    def from_patch(cls, p) -> "PatchEvent":
+    def from_patch(cls, p: models.Patch) -> "PatchEvent":
         return cls(
-            create=p.id,
+            create=p.pk,
             state=p.state_id,
             agent=p.agent_id,
             interface=p.interface,
@@ -45,10 +53,10 @@ class PatchEvent(BaseModel):
         )
 
 
-def _kind_value(kind: Any) -> str:
+def _kind_value(kind: Enum | str) -> str:
     """Normalize a kind that may be a TextChoices/str-enum member (whose ``str()`` is
     ``"Cls.NAME"``) or a plain string to the raw choices value."""
-    return kind.value if hasattr(kind, "value") else str(kind)
+    return str(kind.value) if isinstance(kind, Enum) else kind
 
 
 class TaskChangePayload(BaseModel):
@@ -78,9 +86,9 @@ class TaskChangePayload(BaseModel):
     revision: int = 0
 
     @classmethod
-    def from_task(cls, t) -> "TaskChangePayload":
+    def from_task(cls, t: models.Task) -> "TaskChangePayload":
         return cls(
-            id=str(t.id),
+            id=str(t.pk),
             # ``Task.reference`` defaults to the ``uuid.uuid4`` callable, so an in-memory
             # instance can carry a UUID object rather than its persisted string form.
             reference=str(t.reference) if t.reference is not None else None,
@@ -112,16 +120,16 @@ class TaskEventPayload(BaseModel):
     kind: str
     message: Optional[str] = None
     progress: Optional[int] = None
-    returns: Optional[Any] = None
+    returns: JSON = None
     level: Optional[str] = None
     # EFFECT: the value taken; LOST: what is known (started, last progress, effects).
-    value: Optional[Any] = None
+    value: JSON = None
     created_at: datetime.datetime
 
     @classmethod
-    def from_event(cls, e) -> "TaskEventPayload":
+    def from_event(cls, e: models.TaskEvent) -> "TaskEventPayload":
         return cls(
-            id=str(e.id),
+            id=str(e.pk),
             task=str(e.task_id),
             kind=_kind_value(e.kind),
             message=e.message,
@@ -136,15 +144,15 @@ class TaskEventPayload(BaseModel):
 class TaskEventCreatedEvent(BaseModel):
     """A task feed message: either a persisted event or a freshly created root task."""
 
-    event: TaskEventPayload | None = Field(None, description="The event that was created.")
-    create: TaskChangePayload | None = Field(None, description="The task created.")
+    event: TaskEventPayload | None = Field(default=None, description="The event that was created.")
+    create: TaskChangePayload | None = Field(default=None, description="The task created.")
 
 
 class ChildTaskEvent(BaseModel):
     """A model representing a child task event."""
 
-    create: TaskChangePayload | None = Field(None, description="The task that was created.")
-    update: TaskChangePayload | None = Field(None, description="The task that was updated.")
+    create: TaskChangePayload | None = Field(default=None, description="The task that was created.")
+    update: TaskChangePayload | None = Field(default=None, description="The task that was updated.")
 
 
 class ProbeEventBroadcast(BaseModel):
@@ -158,39 +166,39 @@ class ProbeEventBroadcast(BaseModel):
     probe: str = Field(..., description="The probe id (p-…).")
     kind: str = Field(..., description="The TaskEventKind value of this event.")
     seq: int = Field(..., description="Per-probe monotonic sequence number.")
-    message: Optional[str] = Field(None, description="Optional human-readable message / error.")
-    level: Optional[str] = Field(None, description="Log level for LOG events.")
-    progress: Optional[int] = Field(None, description="Progress (0-100) for PROGRESS events.")
-    returns: Optional[Any] = Field(None, description="Returns payload for YIELD events.")
+    message: Optional[str] = Field(default=None, description="Optional human-readable message / error.")
+    level: Optional[str] = Field(default=None, description="Log level for LOG events.")
+    progress: Optional[int] = Field(default=None, description="Progress (0-100) for PROGRESS events.")
+    returns: JSON = Field(default=None, description="Returns payload for YIELD events.")
     created_at: datetime.datetime = Field(..., description="Server-side time the event was recorded.")
 
 
 class AgentEvent(BaseModel):
     """A model representing an agent event."""
 
-    create: int | None = Field(None, description="The agent that was created.")
-    update: int | None = Field(None, description="The agent that was updated.")
-    delete: int | None = Field(None, description="The agent that was deleted.")
+    create: int | None = Field(default=None, description="The agent that was created.")
+    update: int | None = Field(default=None, description="The agent that was updated.")
+    delete: int | None = Field(default=None, description="The agent that was deleted.")
 
 
 class ImplementationEvent(BaseModel):
     """A model representing a template event."""
 
-    create: int | None = Field(None, description="The template that was created.")
-    update: int | None = Field(None, description="The template that was updated.")
-    delete: int | None = Field(None, description="The template that was deleted.")
+    create: int | None = Field(default=None, description="The template that was created.")
+    update: int | None = Field(default=None, description="The template that was updated.")
+    delete: int | None = Field(default=None, description="The template that was deleted.")
 
 
 class SignalFeedEvent(BaseModel):
     """A signal arrived (``create``) or was matched against the triggers (``update``); ids only."""
 
-    create: int | None = Field(None, description="The signal that arrived.")
-    update: int | None = Field(None, description="The signal that was processed.")
+    create: int | None = Field(default=None, description="The signal that arrived.")
+    update: int | None = Field(default=None, description="The signal that was processed.")
 
 
 class RuleFeedEvent(BaseModel):
     """A schedule or trigger was created, changed or deleted; ids only."""
 
-    schedule: int | None = Field(None, description="The schedule concerned.")
-    trigger: int | None = Field(None, description="The trigger concerned.")
+    schedule: int | None = Field(default=None, description="The schedule concerned.")
+    trigger: int | None = Field(default=None, description="The trigger concerned.")
     change: str = Field(..., description="create, update or delete")

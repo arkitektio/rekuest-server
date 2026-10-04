@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import datetime
+from typing import TYPE_CHECKING
 
 import strawberry
 import strawberry_django
+from django.db.models import QuerySet
+from kante.types import Info
 
 from facade import filters, models
 from facade.types.base import build_prescoped_queryset
+
+if TYPE_CHECKING:
+    # Named in annotations only: strawberry resolves them when it builds the schema.
+    from facade.types.agent import Agent
 
 
 @strawberry_django.type(models.MemoryShelve, filters=filters.MemoryShelveFilter, ordering=filters.MemoryShelveOrder, pagination=True, description="A shelve for storing memory-based resources on an agent.")
@@ -20,7 +27,7 @@ class MemoryShelve:
     drawers: list["MemoryDrawer"] = strawberry_django.field(description="List of memory drawers within the shelve.")
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(cls, queryset: QuerySet[models.MemoryShelve], info: Info, **kwargs: object) -> QuerySet[models.MemoryShelve]:
         return build_prescoped_queryset(info, queryset, field="organization")
 
 
@@ -39,7 +46,5 @@ class MemoryDrawer:
         return self.label or self.identifier + "@" + self.resource_id
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(cls, queryset: QuerySet[models.MemoryDrawer], info: Info, **kwargs: object) -> QuerySet[models.MemoryDrawer]:
         return build_prescoped_queryset(info, queryset, field="shelve__organization")
-
-

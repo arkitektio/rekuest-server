@@ -6,23 +6,31 @@ transaction, so a failed materialization leaves no ``MaterializedBlok``, mapping
 behind. All lookups are scoped to the caller's organization.
 """
 
+from typing import cast
+
 from authentikate.models import Organization
 from django.db import transaction
 from kante.types import Info
 
 from facade import inputs, models, types
-from facade.inputs.dependency import MappedAgentInput
+from facade.caller_context import CallerContext
 from facade.types.base import scoped_get
 
 
-def _resolve_agent_mappings(organization: Organization, blok: models.Blok, agent_mappings: list[inputs.BlokAgentMappingInput] | list[MappedAgentInput] | None) -> dict[models.BlokDependency, models.Agent]:
-    """Validate ``agent_mappings`` against the blok's declared dependencies without writing.
+def _organization(info: Info) -> Organization:
+    organization = CallerContext.from_info(info).organization
+    if organization is None:
+        raise PermissionError("This request is not made for an organization.")
+    return organization
+
+
+def _resolve_agent_mappings(organization: Organization, blok: models.Blok, wanted: dict[str, str]) -> dict[models.BlokDependency, models.Agent]:
+    """Validate the wanted bindings (dependency key → agent id) against the blok's declared dependencies without writing.
 
     Rules: every mapped key must be a declared dependency; every non-optional dependency must be
     mapped; every mapped agent must belong to ``organization`` and satisfy the dependency's
     ``app_filter`` / ``version_filter`` when set. Returns ``{dependency: agent}``.
     """
-    wanted = {mapping.key: mapping.agent for mapping in agent_mappings or []}
     declared = {dep.key: dep for dep in blok.dependencies.all()}
 
     unknown = sorted(set(wanted) - set(declared))
@@ -43,9 +51,9 @@ def _resolve_agent_mappings(organization: Organization, blok: models.Blok, agent
             raise PermissionError(f"No Agent {agent_id} in this organization.")
 
         if dep.app_filter and agent.app.identifier != dep.app_filter:
-            raise ValueError(f"Agent {agent.id} runs app '{agent.app.identifier}' but dependency '{key}' requires '{dep.app_filter}'.")
+            raise ValueError(f"Agent {agent.pk} runs app '{agent.app.identifier}' but dependency '{key}' requires '{dep.app_filter}'.")
         if dep.version_filter and dep.version_filter != "*" and agent.release.version != dep.version_filter:
-            raise ValueError(f"Agent {agent.id} runs version '{agent.release.version}' but dependency '{key}' requires '{dep.version_filter}'.")
+            raise ValueError(f"Agent {agent.pk} runs version '{agent.release.version}' but dependency '{key}' requires '{dep.version_filter}'.")
 
         resolved[dep] = agent
 
@@ -63,11 +71,11 @@ def _write_mappings(mblok: models.MaterializedBlok, resolved: dict[models.BlokDe
 @transaction.atomic
 def materialize_blok(info: Info, input: inputs.MaterializeBlokInput) -> types.MaterializedBlok:
     """Create a materialization of a blok with validated agent bindings, optionally placed on a dashboard."""
-    organization = info.context.request.organization
+    organization = _organization(info)
     blok = scoped_get(models.Blok, info, input.blok, field="organization")
     dashboard = scoped_get(models.Dashboard, info, input.dashboard, field="organization") if input.dashboard else None
 
-    resolved = _resolve_agent_mappings(organization, blok, input.agent_mappings)
+    resolved = _resolve_agent_mappings(organization, blok, {mapping.key: str(mapping.agent) for mapping in input.agent_mappings or []})
 
     # Each materialization is its own instance: the same blok can live on several dashboards
     # with different agent bindings.
@@ -81,7 +89,7 @@ def materialize_blok(info: Info, input: inputs.MaterializeBlokInput) -> types.Ma
     if dashboard is not None:
         models.DashboardPlacement.objects.create(dashboard=dashboard, blok=mblok)
 
-    return mblok
+    return cast("types.MaterializedBlok", mblok)
 
 
 def delete_materialized_blok(info: Info, input: inputs.DeleteMaterializedBlokInput) -> bool:
@@ -97,9 +105,10 @@ def update_materialized_blok(info: Info, input: inputs.UpdateMaterializedBlokInp
 
     if input.agent_mappings is not None:
         # Full replacement, validated before the old mappings are dropped.
-        resolved = _resolve_agent_mappings(info.context.request.organization, mblok.blok, input.agent_mappings)
+        wanted = {mapping.key: mapping.agent for mapping in (given.to_pydantic() for given in input.agent_mappings)}
+        resolved = _resolve_agent_mappings(_organization(info), mblok.blok, wanted)
         mblok.agent_mappings.all().delete()
         _write_mappings(mblok, resolved)
 
     mblok.save()
-    return mblok
+    return cast("types.MaterializedBlok", mblok)

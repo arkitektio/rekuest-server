@@ -1,11 +1,16 @@
+from typing import TYPE_CHECKING
+
 from authentikate.models import Organization
-from django.db.models.functions import Now
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.db.models.functions import Now
 from django_choices_field import TextChoicesField
-from rekuest_core.inputs.models import ActionDependencyInputModel, StateDependencyInputModel
 
 from facade import enums
+from rekuest_core.inputs.models import ActionDependencyInputModel, StateDependencyInputModel
+
+if TYPE_CHECKING:
+    from facade.models.task import Task
 
 
 class Dependency(models.Model):
@@ -75,10 +80,10 @@ class Dependency(models.Model):
         help_text="The prefered instance count for this dependency",
     )
 
-    def get_action_dependencies(self):
+    def get_action_dependencies(self) -> list[ActionDependencyInputModel]:
         return [ActionDependencyInputModel(**demand) for demand in self.action_demands]
 
-    def get_state_dependencies(self):
+    def get_state_dependencies(self) -> list[StateDependencyInputModel]:
         return [StateDependencyInputModel(**demand) for demand in self.state_demands]
 
 
@@ -124,6 +129,13 @@ class ResolvedDependency(models.Model):
 
 class Implementation(models.Model):
     """A Implementation is a conceptual implementation of A Action. It represents its implementation as well as its performance"""
+
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    agent_id: int
+    action_id: int
+    dependencies: "models.Manager[Dependency]"
+    tasks: "models.Manager[Task]"
 
     interface = models.CharField(max_length=1000, help_text="Interface (think Function)")
     action = models.ForeignKey(
@@ -177,14 +189,14 @@ class Implementation(models.Model):
         blank=True,
         help_text="Optional declared audience (list of downstream service names) for the provenance token's `aud`. If null, the audience is derived at dispatch from the structures the assignment acts on.",
     )
-    effects = TextChoicesField(
-        choices_enum=enums.EffectsChoices,
+    effects = TextChoicesField(  # pyright: ignore[reportCallIssue]  django-choices-field's stub predates db_default
+        choices_enum=enums.EffectsChoices,  # pyright: ignore[reportCallIssue]  django-choices-field's stub predates db_default
         default=enums.EffectsChoices.UNKNOWN.value,
         help_text="What running this implementation again would do to the world. Informational: shown to whoever decides about a lost task.",
         db_default="UNKNOWN",
     )
-    execution = TextChoicesField(
-        choices_enum=enums.ExecutionChoices,
+    execution = TextChoicesField(  # pyright: ignore[reportCallIssue]  django-choices-field's stub predates db_default
+        choices_enum=enums.ExecutionChoices,  # pyright: ignore[reportCallIssue]  django-choices-field's stub predates db_default
         default=enums.ExecutionChoices.PLAIN.value,
         help_text="How this implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies.",
         db_default="PLAIN",
@@ -209,5 +221,5 @@ class Implementation(models.Model):
             ),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.action} implemented by {self.agent}"

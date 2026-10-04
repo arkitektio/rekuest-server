@@ -98,7 +98,7 @@ def _check_call(call: rimodels.UtilCallInputModel, operations: dict[str, rimodel
         )
     accepted = {argument.key: argument for argument in spec.arguments}
     passed = {argument.key for argument in call.arguments or []}
-    unknown = sorted(passed - set(accepted))
+    unknown = sorted(key for key in passed - set(accepted) if key is not None)
     if unknown:
         raise ValueError(f"{owner}: operation {call.operation!r} does not accept arguments {unknown}")
     missing = sorted(key for key, argument in accepted.items() if argument.required and key not in passed)
@@ -209,7 +209,7 @@ def validate_widgets_against_catalogs(catalogs: Sequence[models.UICatalog], widg
     catalog_label = _catalog_label(catalogs)
     diagnostics: list[DiagnosticModel] = []
     for owner, widget in widgets:
-        if widget.kind == "CUSTOM":
+        if isinstance(widget, (rimodels.CustomAssignWidgetInputModel, rimodels.CustomReturnWidgetInputModel)):
             node = rimodels.ComponentNodeInputModel(id="widget", component=widget.component, props=widget.props)
             diagnostics.extend(_check_component(node, component_specs, operations, catalog_label, f"widget of {owner}"))
         diagnostics.extend(_check_calls(iter_widget_calls(widget), operations, catalog_label, f"widget of {owner}"))

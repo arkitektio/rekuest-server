@@ -1,10 +1,13 @@
+from typing import cast
+
 import strawberry
-from facade import models, types
 from kante.types import Info
+
+from facade import models, types
 
 
 def event(
     info: Info,
     id: strawberry.ID,
 ) -> types.TaskEvent:
-    return models.TaskEvent.objects.get(id=id)
+    return cast("types.TaskEvent", models.TaskEvent.objects.get(id=id))

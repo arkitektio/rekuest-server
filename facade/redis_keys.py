@@ -15,7 +15,7 @@ from django.conf import settings
 
 
 def prefix() -> str:
-    return str(getattr(settings, "REDIS_KEY_PREFIX", "rekuest") or "rekuest")
+    return str(settings.REDIS_KEY_PREFIX or "rekuest")
 
 
 def key(*parts: object) -> str:

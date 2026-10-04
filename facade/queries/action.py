@@ -1,6 +1,8 @@
 import logging
+from typing import cast
 
 import strawberry
+from django.db.models import QuerySet
 from kante.types import Info
 from pgvector.django import CosineDistance
 from strawberry_django.filters import apply as apply_filters
@@ -30,26 +32,29 @@ def action(
         return models.Implementation.objects.get(id=implementation).action
 
     if hash:
-        return models.Action.objects.get(hash=hash, organization=info.context.request.organization)
+        return cast("types.Action", models.Action.objects.get(hash=hash, organization=info.context.request.organization))
 
     if matching:
         ids = managers.get_action_ids_by_action_demands(
-            [matching],
+            [matching.to_pydantic()],
             organization_id=info.context.request.organization.id,
         )[0]
 
-        return models.Action.objects.get(id=ids[0])
+        return cast("types.Action", models.Action.objects.get(id=ids[0]))
 
     if agent:
         if interface:
-            return models.Implementation.objects.filter(action__hash=hash, interface=interface).first().action
+            found = models.Implementation.objects.filter(action__hash=hash, interface=interface).first()
+            if found is None:
+                raise ValueError(f"No implementation of {hash} under the interface {interface!r}")
+            return cast("types.Action", found.action)
         else:
             raise ValueError("You need to provide either, action_hash or action_id, if you want to inspect the action of an agent")
 
-    return models.Action.objects.get(id=id)
+    return cast("types.Action", models.Action.objects.get(id=id))
 
 
-def similar_actions_queryset(info: Info, origin: models.Action, filters_: "filters.ActionFilter | None" = None, limit: int = 10, max_distance: float | None = None):
+def similar_actions_queryset(info: Info, origin: models.Action, filters_: "filters.ActionFilter | None" = None, limit: int = 10, max_distance: float | None = None) -> QuerySet[models.Action]:
     """The org's other actions ranked by how close their name + description is to ``origin``'s.
 
     Cosine distance between ``origin``'s stored embedding and every other action's, nearest
@@ -81,4 +86,4 @@ def similar_actions(
 ) -> list[types.Action]:
     """Actions semantically similar to ``action``, nearest first (see ``similar_actions_queryset``)."""
     origin = scoped_get(models.Action, info, action)
-    return list(similar_actions_queryset(info, origin, filters, limit, max_distance))
+    return cast("list[types.Action]", list(similar_actions_queryset(info, origin, filters, limit, max_distance)))

@@ -21,3 +21,27 @@ services:
       image: redis
       ports:
          - "${REKUEST_TEST_REDIS_PORT:-6666}:6379"
+   takt:
+      # rekuest's other half, built from this checkout (TAKT_IMAGE names a prebuilt one instead).
+      # It is started once the test database exists and is migrated (tests/conftest.py) and
+      # works in that database: the tests' rows are its rows.
+      image: ${TAKT_IMAGE:-rekuest-test-takt}
+      build: ../../takt
+      environment:
+         TAKT_CONFIG: /workspace/config.yaml
+         # The internal API, published for the test process (nothing else can reach it).
+         TAKT_INTERNAL_BIND: 0.0.0.0:8081
+         POSTGRES__HOST: db
+         POSTGRES__DB_NAME: test_testdb
+         POSTGRES__USERNAME: test
+         POSTGRES__PASSWORD: test
+         REDIS__HOST: redis
+         # No server to ask for upkeep jobs: the tests run in-process.
+         REKUEST__SERVER_URL: ""
+         # One sweep at start, then none: a test's rows are only touched by what the test asks
+         # for. A schedule is planned when its notice arrives, as in production.
+         REKUEST__SWEEP_INTERVAL: "86400"
+      ports:
+         - "${REKUEST_TEST_TAKT_PORT:-7777}:8081"
+      volumes:
+         - ../../config.yaml:/workspace/config.yaml:ro

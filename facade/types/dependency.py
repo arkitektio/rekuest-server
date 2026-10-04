@@ -3,15 +3,24 @@
 from __future__ import annotations
 
 import datetime
-from typing import Any, Dict, List
+from typing import TYPE_CHECKING, cast
 
 import strawberry
 import strawberry_django
+from django.db.models import QuerySet
+from kante.types import Info
 
 from facade import filters, loaders, models
-from kante.types import Info
+from facade.takt_api import BoundAgent, BoundImplementation, DependencyLevel, DependencyNote, ResolveAnswer
+from facade.types.base import build_prescoped_queryset, row_of
 from facade.types.demand import ActionDependencyModel, StateDependencyModel
-from facade.types.base import build_prescoped_queryset
+
+if TYPE_CHECKING:
+    # Named in annotations only: strawberry resolves them when it builds the schema.
+    from facade.types.agent import Agent
+    from facade.types.auth import Organization, User
+    from facade.types.demand import ActionDependency, StateDependency
+    from facade.types.implementation import Implementation
 
 
 @strawberry_django.type(models.Dependency, filters=filters.DependencyFilter, pagination=True, description="Represents a dependency between implementations and actions.")
@@ -50,14 +59,16 @@ class Dependency:
     @strawberry_django.field(description="The named action requirements of this dependency.")
     def action_dependencies(self) -> list["ActionDependency"]:
         # get_action_dependencies normalizes legacy flat JSON into the demand wrapper.
-        return [ActionDependencyModel(**d.model_dump()) for d in self.get_action_dependencies()]
+        row = row_of(self, models.Dependency)
+        return cast("list[ActionDependency]", [ActionDependencyModel(**d.model_dump()) for d in row.get_action_dependencies()])
 
     @strawberry_django.field(description="The named state requirements of this dependency.")
     def state_dependencies(self) -> list["StateDependency"]:
-        return [StateDependencyModel(**d.model_dump()) for d in self.get_state_dependencies()]
+        row = row_of(self, models.Dependency)
+        return cast("list[StateDependency]", [StateDependencyModel(**d.model_dump()) for d in row.get_state_dependencies()])
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(cls, queryset: QuerySet[models.Dependency], info: Info, **kwargs: object) -> QuerySet[models.Dependency]:
         return build_prescoped_queryset(info, queryset, field="implementation__action__organization")
 
 
@@ -82,14 +93,14 @@ class Resolution:
     organization: Organization = strawberry_django.field(description="Organization that owns this resolution.")
 
     @classmethod
-    def get_queryset(cls, queryset, info, **kwargs):
+    def get_queryset(cls, queryset: QuerySet[models.Resolution], info: Info, **kwargs: object) -> QuerySet[models.Resolution]:
         return build_prescoped_queryset(info, queryset, field="organization")
 
 
 @strawberry.type
 class ImplementationMapping:
     _key: strawberry.Private[str]
-    _value: strawberry.Private[Dict[str, Any]]
+    _value: strawberry.Private[BoundImplementation]
 
     @strawberry_django.field(description="Get the key of the implementation mapping.")
     def key(self) -> str:
@@ -97,75 +108,73 @@ class ImplementationMapping:
 
     @strawberry_django.field(description="Get the key of the implementation mapping.")
     async def implementation(self, info: Info) -> Implementation:
-        return await loaders.implementation_loader(info).load(self._value.get("implementation"))
+        if self._value.implementation is None:
+            raise ValueError(f"{self._key} is bound to no implementation")
+        implementation = await loaders.implementation_loader(info).load(self._value.implementation)
+        if implementation is None:
+            raise ValueError(f"The implementation {self._value.implementation} no longer exists")
+        return cast("Implementation", implementation)
 
     @strawberry_django.field(description="What the bound implementation's own dependencies resolve to: the level below.")
     def resolved_dependencies(self) -> list["ResolvedAgentDependency"]:
-        return resolved_level(self._value, self._value.get("implementation"))
+        return resolved_level(self._value, self._value.implementation)
 
 
 @strawberry.type
 class AgentMapping:
-    _value: strawberry.Private[Dict[str, Any]]
+    _value: strawberry.Private[BoundAgent]
 
     @strawberry_django.field(description="Get the agent's name from the mapping.")
     async def agent(self, info: Info) -> Agent:
-        return await loaders.agent_loader(info).load(self._value.get("agent"))
+        agent = await loaders.agent_loader(info).load(self._value.agent)
+        if agent is None:
+            raise ValueError(f"The agent {self._value.agent} no longer exists")
+        return cast("Agent", agent)
 
     @strawberry_django.field(description="Get the agent's ID from the mapping.")
     def agent_id(self) -> str:
-        return self._value.get("agent")
+        return self._value.agent
 
     @strawberry_django.field(description="Get a specific argument by key.")
     def mapped_implementations(self) -> list[ImplementationMapping]:
-        mappings: list[ImplementationMapping] = []
-        for key, value in self._value.get("actions").items():
-            mappings.append(ImplementationMapping(_key=key, _value=value))
-
-        return mappings
+        return [ImplementationMapping(_key=key, _value=bound) for key, bound in self._value.actions.items()]
 
 
-def resolved_level(level: Dict[str, Any] | None, implementation: Any) -> list["ResolvedAgentDependency"]:
-    """One level of a dependency tree: ``{"dependencies": {key: agents}, "meta"?: {key: notes}}``.
+def resolved_level(level: DependencyLevel, implementation: str | int | None) -> list["ResolvedAgentDependency"]:
+    """One level of a dependency tree, per dependency key.
 
     ``implementation`` is whose dependencies these are; ``meta`` is only there on a dry run.
     """
-    level = level or {}
-    meta = level.get("meta") or {}
-    return [ResolvedAgentDependency(_key=key, _value=agents or [], _implementation=implementation, _meta=meta.get(key)) for key, agents in (level.get("dependencies") or {}).items()]
+    return [ResolvedAgentDependency(_key=key, _value=agents or [], _implementation=implementation, _meta=level.meta.get(key)) for key, agents in level.dependencies.items()]
 
 
 @strawberry.type
 class ResolvedAgentDependency:
     _key: strawberry.Private[str]
-    _value: strawberry.Private[List[Dict[str, Any]]]
-    _implementation: strawberry.Private[Any] = None
-    _meta: strawberry.Private[Dict[str, Any] | None] = None
+    _value: strawberry.Private[list[BoundAgent]]
+    _implementation: strawberry.Private[str | int | None] = None
+    _meta: strawberry.Private[DependencyNote | None] = None
 
     @strawberry_django.field(description="The dependency as its implementation declares it, while it still declares it.")
     async def dependency(self) -> Dependency | None:
-        declared = (self._meta or {}).get("dependency")
+        declared = self._meta.dependency if self._meta is not None else None
         if declared is not None:
-            return await models.Dependency.objects.filter(pk=declared).afirst()
+            return cast("Dependency | None", await models.Dependency.objects.filter(pk=declared).afirst())
         if self._implementation is None:
             return None
-        return await models.Dependency.objects.filter(implementation_id=self._implementation, key=self._key).order_by("id").afirst()
+        return cast("Dependency | None", await models.Dependency.objects.filter(implementation_id=self._implementation, key=self._key).order_by("id").afirst())
 
     @strawberry_django.field(description="Why an assign would refuse this dependency as it is bound here. Only a dry run (dependencyTree) says so; null when it is met.")
     def unmet(self) -> str | None:
-        return (self._meta or {}).get("unmet")
+        return self._meta.unmet if self._meta is not None else None
 
     @strawberry_django.field(description="Get a specific argument by key.")
     def values(self) -> str | None:
-        return str(self._value)
+        return str([agent.model_dump(mode="json") for agent in self._value])
 
     @strawberry_django.field(description="Get a specific argument by key.")
     def mapped_agents(self) -> list[AgentMapping]:
-        mappings: list[AgentMapping] = []
-        for value in self._value:
-            mappings.append(AgentMapping(_value=value))
-
-        return mappings
+        return [AgentMapping(_value=agent) for agent in self._value]
 
     @strawberry_django.field(description="Get the key of the resolved dependency.")
     def key(self) -> str:
@@ -174,8 +183,8 @@ class ResolvedAgentDependency:
 
 @strawberry.type(description="What assigning an implementation would bind: its dependency tree, resolved without assigning.")
 class DependencyTree:
-    _value: strawberry.Private[Dict[str, Any]]
-    _implementation: strawberry.Private[Any]
+    _value: strawberry.Private[ResolveAnswer]
+    _implementation: strawberry.Private[str]
 
     @strawberry_django.field(description="The implementation's dependencies, each with the agents it would bind and, below those, their own.")
     def dependencies(self) -> list[ResolvedAgentDependency]:
@@ -183,4 +192,4 @@ class DependencyTree:
 
     @strawberry_django.field(description="Whether an assign with these overwrites would go through: nothing in the tree is unmet.")
     def satisfied(self) -> bool:
-        return bool(self._value.get("satisfied"))
+        return self._value.satisfied

@@ -23,12 +23,13 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from collections.abc import Callable
 
 import redis
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from pydantic import BaseModel
 
 from embeddings import healer
 from facade import models, provisioning, redis_keys, service_trust
@@ -47,24 +48,37 @@ def _claim(verified: trust.Verified) -> bool:
     return bool(connection.set(redis_keys.key("service-jti", verified.jti), 1, nx=True, ex=ttl))
 
 
-def provision() -> dict[str, Any]:
+class Provisioned(BaseModel):
+    """What a provisioning pass came to (``takt/crates/facade/src/upkeep.rs`` reads it)."""
+
+    ok: bool
+    skipped: bool
+    failed: list[str]
+
+
+class Reembedded(BaseModel):
+    embedded: int
+    more: bool
+
+
+def provision() -> Provisioned:
     """One provisioning pass — the service catalog, then the hook agents; which of them failed."""
     outcome = provisioning.provision_all()
     if outcome is None:
-        return {"ok": True, "skipped": True, "failed": []}
-    failed = [*(f"service {name}" for name in outcome["services"]), *(f"hook agent {name}" for name in outcome["hook_agents"])]
-    return {"ok": not failed, "skipped": False, "failed": failed}
+        return Provisioned(ok=True, skipped=True, failed=[])
+    failed = [*(f"service {name}" for name in outcome.services), *(f"hook agent {name}" for name in outcome.hook_agents)]
+    return Provisioned(ok=not failed, skipped=False, failed=failed)
 
 
-def reembed() -> dict[str, Any]:
+def reembed() -> Reembedded:
     """A bounded pass over the actions without a current vector; how many it embedded."""
     embedded = healer.reembed_stale(models.Action, max_batches=REEMBED_MAX_BATCHES)
     # ``more`` only after progress: with embeddings off (or the model unreachable) the stale
     # rows stay, and takt must not call again at once for them.
-    return {"embedded": embedded, "more": embedded > 0 and healer.stale_queryset(models.Action).exists()}
+    return Reembedded(embedded=embedded, more=embedded > 0 and healer.stale_queryset(models.Action).exists())
 
 
-JOBS = {"provision": provision, "reembed": reembed}
+JOBS: dict[str, Callable[[], Provisioned | Reembedded]] = {"provision": provision, "reembed": reembed}
 
 
 @csrf_exempt
@@ -87,4 +101,4 @@ def upkeep_view(request: HttpRequest, job: str) -> HttpResponse:
         # Fail closed: without the guard, knocking redis over would allow replays.
         logger.error("Upkeep replay guard unavailable: %s", error)
         return JsonResponse({"error": "Replay guard unavailable"}, status=503)
-    return JsonResponse(run())
+    return JsonResponse(run().model_dump(mode="json"))

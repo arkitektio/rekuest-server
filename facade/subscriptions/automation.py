@@ -80,10 +80,10 @@ class RuleChangeEvent:
     delete: strawberry.ID | None = None
 
 
-async def signals(self, info: Info) -> AsyncGenerator[SignalChangeEvent, None]:
+async def signals(self: object, info: Info) -> AsyncGenerator[SignalChangeEvent, None]:
     """Subscribe to the signals services send about the organization's objects."""
     organization = info.context.request.organization
-    async for message in signal_channel.listen(info.context, [f"signals_org_{organization.id}"]):
+    async for message in signal_channel.listen(info, [f"signals_org_{organization.id}"]):
         try:
             if message.create is not None:
                 yield SignalChangeEvent(create=await SignalChange.load(message.create))
@@ -93,10 +93,11 @@ async def signals(self, info: Info) -> AsyncGenerator[SignalChangeEvent, None]:
             continue  # gone again (retention) before this subscriber got to it
 
 
-async def _rules(info: Info, model, which: str) -> AsyncGenerator[RuleChangeEvent, None]:
+async def _rules(info: Info, model: type[models.Schedule] | type[models.Trigger]) -> AsyncGenerator[RuleChangeEvent, None]:
     organization = info.context.request.organization
-    async for message in rule_channel.listen(info.context, [f"rules_org_{organization.id}"]):
-        pk = getattr(message, which)
+    async for message in rule_channel.listen(info, [f"rules_org_{organization.id}"]):
+        # The feed carries both kinds of rule; a message names the one it is about.
+        pk = message.schedule if model is models.Schedule else message.trigger
         if pk is None:
             continue
         if message.change == "delete":
@@ -109,13 +110,13 @@ async def _rules(info: Info, model, which: str) -> AsyncGenerator[RuleChangeEven
         yield RuleChangeEvent(create=snapshot) if message.change == "create" else RuleChangeEvent(update=snapshot)
 
 
-async def schedules(self, info: Info) -> AsyncGenerator[RuleChangeEvent, None]:
+async def schedules(self: object, info: Info) -> AsyncGenerator[RuleChangeEvent, None]:
     """Subscribe to the organization's schedules being created, changed or deleted."""
-    async for event in _rules(info, models.Schedule, "schedule"):
+    async for event in _rules(info, models.Schedule):
         yield event
 
 
-async def triggers(self, info: Info) -> AsyncGenerator[RuleChangeEvent, None]:
+async def triggers(self: object, info: Info) -> AsyncGenerator[RuleChangeEvent, None]:
     """Subscribe to the organization's triggers being created, changed or deleted."""
-    async for event in _rules(info, models.Trigger, "trigger"):
+    async for event in _rules(info, models.Trigger):
         yield event

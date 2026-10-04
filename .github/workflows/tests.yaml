@@ -9,8 +9,8 @@ on:
 jobs:
   test_suit:
     name: Tests (py${{ matrix.python-version }})
-    # Ubuntu only: the suite spins up a docker-compose stack (postgres + redis)
-    # itself via dokker (see tests/conftest.py::backend_stack). Docker is
+    # Ubuntu only: the suite spins up a docker-compose stack (postgres, redis and takt,
+    # which it builds from ./takt) itself via dokker (see tests/conftest.py). Docker is
     # preinstalled on ubuntu runners but not on macOS/Windows, so those legs
     # cannot run. Add more OS/versions here once they gain Docker support.
     strategy:

@@ -1,17 +1,19 @@
-from kante.types import Info
-import strawberry
 import datetime
-from facade import types, models, scalars, logic
-from typing import AsyncGenerator
-from facade.channels import (
-    state_update_channel,
-    patch_channel,
-)
+from typing import AsyncGenerator, cast
+
+import strawberry
 from asgiref.sync import sync_to_async
+from kante.types import Info
+
+from facade import logic, models, scalars, types
+from facade.channels import (
+    patch_channel,
+    state_update_channel,
+)
 
 
 async def state_update_events(
-    self,
+    self: object,
     info: Info,
     state_id: strawberry.ID,
 ) -> AsyncGenerator[types.State, None]:
@@ -19,8 +21,8 @@ async def state_update_events(
 
     state = await models.State.objects.aget(id=state_id)
 
-    async for message in state_update_channel.listen(info.context, [f"state_{state.id}"]):
-        yield await models.State.objects.aget(id=message.state)
+    async for message in state_update_channel.listen(info, [f"state_{state.pk}"]):
+        yield cast("types.State", await models.State.objects.aget(id=message.state))
 
 
 # Plain types for watch subscriptions (no model cross-references)
@@ -33,8 +35,8 @@ class StateSnapshotEvent:
     interface: str
     value: scalars.Args
     global_revision: int
-    session_id: str
-    timestamp: datetime.datetime
+    session_id: str | None
+    timestamp: datetime.datetime | None
 
 
 @strawberry.type(description="A plain patch event with no model cross-references.")
@@ -46,12 +48,12 @@ class StatePatchEvent:
     path: str
     value: scalars.Args
     global_revision: int
-    session_id: str
-    timestamp: datetime.datetime
+    session_id: str | None
+    timestamp: datetime.datetime | None
 
 
 async def watch_state(
-    self,
+    self: object,
     info: Info,
     state_id: strawberry.ID | None = None,
     agent_id: strawberry.ID | None = None,
@@ -67,7 +69,7 @@ async def watch_state(
             interface=interface,
         )
 
-    returned = await sync_to_async(logic.get_latest_state)(state.agent, state_id=state.id)
+    returned = await sync_to_async(logic.get_latest_state)(state.agent, state_id=state.pk)
 
     yield StateSnapshotEvent(
         state_id=strawberry.ID(str(state_id)),
@@ -80,20 +82,20 @@ async def watch_state(
     )
 
     topics = [
-        f"state_{state.id}",
-        f"patches_state_{state.id}",
+        f"state_{state.pk}",
+        f"patches_state_{state.pk}",
     ]
 
-    async for message in patch_channel.listen(info.context, topics):
+    async for message in patch_channel.listen(info, topics):
         # Payload-carrying: the PatchEvent brings the whole patch — no per-subscriber fetch.
         yield StatePatchEvent(
             state_id=strawberry.ID(str(message.state)),
             agent_id=strawberry.ID(str(message.agent)) if message.agent else strawberry.ID(""),
             op=message.op,
             path=message.path,
-            value=message.value,
+            value=scalars.Args(message.value),
             global_revision=message.global_rev,
-            session_id=message.session,
+            session_id=str(message.session) if message.session is not None else None,
             timestamp=message.timestamp,
             interface=message.interface,
         )
@@ -104,12 +106,12 @@ class AgentSnapshotEvent:
     agent_id: strawberry.ID
     values: scalars.Args
     global_revision: int
-    session_id: str
-    timestamp: datetime.datetime
+    session_id: str | None
+    timestamp: datetime.datetime | None
 
 
 async def watch_agent(
-    self,
+    self: object,
     info: Info,
     agent_id: strawberry.ID,
 ) -> AsyncGenerator[AgentSnapshotEvent | StatePatchEvent, None]:
@@ -123,16 +125,16 @@ async def watch_agent(
     topics = [f"patches_agent_{agent.pk}"]
 
     yield AgentSnapshotEvent(
-        agent_id=strawberry.ID(str(agent.id)),
+        agent_id=strawberry.ID(str(agent.pk)),
         values=state.get("states", {}),
         global_revision=state.get("global_revision", 0),
         session_id=state.get("session_id"),
         timestamp=state.get("timestamp"),
     )
 
-    async for message in patch_channel.listen(info.context, topics):
+    async for message in patch_channel.listen(info, topics):
         # Payload-carrying: no per-subscriber fetch; the topic already scopes to the agent.
-        if not message.agent or str(message.agent) != str(agent.id):
+        if not message.agent or str(message.agent) != str(agent.pk):
             continue
 
         yield StatePatchEvent(
@@ -140,9 +142,9 @@ async def watch_agent(
             agent_id=strawberry.ID(str(message.agent)),
             op=message.op,
             path=message.path,
-            value=message.value,
+            value=scalars.Args(message.value),
             global_revision=message.global_rev,
-            session_id=message.session,
+            session_id=str(message.session) if message.session is not None else None,
             timestamp=message.timestamp,
             interface=message.interface,
         )

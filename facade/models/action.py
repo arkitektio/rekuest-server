@@ -1,10 +1,9 @@
 from authentikate.models import App, Organization
-from django.db.models.functions import Now
 from django.db import models
-from django.db.models.functions import Upper
+from django.db.models.functions import Now, Upper
 from django_choices_field import TextChoicesField
-from embeddings.models import EmbeddedDescriptionMixin, embedding_indexes
 
+from embeddings.models import EmbeddedDescriptionMixin, embedding_indexes
 from facade import enums
 
 
@@ -15,6 +14,10 @@ class Action(EmbeddedDescriptionMixin, models.Model):
     catalog's ``search`` finds actions by what they do, not only by a substring of their name.
 
     See online Documentation"""
+
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    tests: "models.Manager[Action]"
 
     app = models.ForeignKey(
         App,
@@ -45,9 +48,9 @@ class Action(EmbeddedDescriptionMixin, models.Model):
         help_text="Is this function stateful. e.g does it inherently depend on or change state (think physical devices)?",
         db_default=False,
     )
-    kind = TextChoicesField(
+    kind = TextChoicesField(  # pyright: ignore[reportCallIssue]  django-choices-field's stub predates db_default
         max_length=1000,
-        choices_enum=enums.ActionKindChoices,
+        choices_enum=enums.ActionKindChoices,  # pyright: ignore[reportCallIssue]  django-choices-field's stub predates db_default
         default=enums.ActionKindChoices.FUNCTION.value,
         help_text="Function, generator? Will this function generate multiple results?",
         db_default="FUNCTION",
@@ -97,7 +100,7 @@ class Action(EmbeddedDescriptionMixin, models.Model):
     def __str__(self) -> str:
         return f"{self.name}"
 
-    class Meta:
+    class Meta(EmbeddedDescriptionMixin.Meta):
         constraints = [
             models.UniqueConstraint(
                 fields=["organization", "app", "key", "version"],
@@ -159,20 +162,26 @@ class BasePort(models.Model):
 class ArgPort(BasePort):
     """Inputs for the Action"""
 
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    action_id: int
+
     action = models.ForeignKey(Action, on_delete=models.CASCADE, related_name="arg_ports")
     parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children", help_text="If this port is nested inside a LIST or DICT")
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Arg: {self.key_path} ({self.identifier})"
 
 
 class ReturnPort(BasePort):
     """Outputs for the Action"""
 
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    action_id: int
+
     action = models.ForeignKey(Action, on_delete=models.CASCADE, related_name="return_ports")
     parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children", help_text="If this port is nested inside a LIST or DICT")
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Return: {self.key_path} ({self.identifier})"
-
-

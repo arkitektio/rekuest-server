@@ -27,14 +27,18 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Any
 
 import httpx
 from authentikate.models import App, Client, Membership, Organization, Release, User
 from django.conf import settings
+from pydantic import BaseModel
 
-from facade import enums, models, takt
+from facade import enums, inputs, models, takt, takt_api
 from facade.caller_context import CallerContext
+from facade.takt_api import Principal
+from rekuest.configuration import HookAgentEntry
+from rekuest_core.enums import ActionKind
+from rekuest_core.inputs.models import DefinitionInputModel, ImplementationInputModel
 
 logger = logging.getLogger(__name__)
 
@@ -60,31 +64,39 @@ def _identity(name: str, organization: Organization) -> tuple[User, Client]:
     return user, client
 
 
-def fetch_manifest(entry: dict[str, Any]) -> dict[str, Any]:
+class HookAction(BaseModel):
+    interface: str
+    name: str | None = None
+    description: str | None = None
+
+
+class HookManifest(BaseModel):
+    """What a hook agent says it is (``rekuest_hook``'s ``/manifest``), and its actions."""
+
+    description: str | None = None
+    actions: list[HookAction] | None = None
+
+
+def fetch_manifest(entry: HookAgentEntry) -> HookManifest:
     """A hook agent's manifest: what it says it is, and its actions. Signed, so the agent can
     refuse strangers."""
     from facade import service_trust
 
-    url = entry["hook_url"].rstrip("/") + "/manifest"
+    url = entry.hook_url.rstrip("/") + "/manifest"
     response = httpx.get(url, headers={"Authorization": service_trust.sign_to(entry, "GET", url, b"")}, timeout=_TIMEOUT)
     response.raise_for_status()
-    manifest = response.json()
-    return {"description": manifest.get("description"), "actions": list(manifest.get("actions") or [])}
+    return HookManifest.model_validate_json(response.content)
 
 
-def _implementations(actions: list[dict[str, Any]]):
-    from facade.mutations.agent import ImplementAgentInputModel
-    from rekuest_core.enums import ActionKind
-    from rekuest_core.inputs.models import DefinitionInputModel, ImplementationInputModel
-
+def _implementations(actions: list[HookAction]) -> list[ImplementationInputModel]:
     return [
         ImplementationInputModel(
-            interface=action["interface"],
+            interface=action.interface,
             needs_token=False,
             definition=DefinitionInputModel(
-                key=action["interface"],
-                name=action.get("name") or action["interface"],
-                description=action.get("description"),
+                key=action.interface,
+                name=action.name or action.interface,
+                description=action.description,
                 kind=ActionKind.FUNCTION,
                 # A hook action must be safe to run twice (rekuest-hook's contract), which also
                 # lets rekuest redeliver it after an ambiguous loss.
@@ -92,37 +104,41 @@ def _implementations(actions: list[dict[str, Any]]):
             ),
         )
         for action in actions
-    ], ImplementAgentInputModel
+    ]
 
 
-def provision_agent(entry: dict[str, Any], manifest: dict[str, Any], organization: Organization) -> models.Agent | None:
+def provision_agent(entry: HookAgentEntry, manifest: HookManifest, organization: Organization) -> models.Agent | None:
     """Bring ``organization``'s agent and its actions in line with the manifest. An agent that
     offers nothing (and never did) is not created."""
     from facade import service_trust
 
-    name = entry["name"]
-    user, client = _identity(f"{service_trust.HOOK_IDENTITY_PREFIX}{name}", organization)
-    actions = manifest["actions"]
+    user, client = _identity(f"{service_trust.HOOK_IDENTITY_PREFIX}{entry.name}", organization)
+    actions = manifest.actions or []
     if not actions and not models.Agent.objects.filter(client=client, user=user, organization=organization).exists():
         return None
 
-    principal = takt._principal(CallerContext(user=user, client=client, organization=organization))
-    # No secret: requests both ways are signed with instance keys (facade.service_trust).
+    principal = Principal.of(CallerContext(user=user, client=client, organization=organization))
+    # No secret: requests both ways are signed with instance keys (facade.service_trust). The
+    # secret is given as null, which clears whatever the agent had.
     ensured = takt.call(
-        "agent/ensure",
-        {"principal": principal, "name": name, "kind": enums.AgentKind.WEBHOOK.value, "hook_url": entry["hook_url"], "hook_url_secret": None},
+        takt_api.ENSURE_AGENT,
+        takt_api.EnsureAgentRequest(principal=principal, name=entry.name, kind=enums.AgentKind.WEBHOOK.value, hook_url=entry.hook_url, hook_url_secret=None),
     )
-    implementations, payload_model = _implementations(actions)
-    payload = payload_model(name=name, description=manifest.get("description") or f"The {name} hook agent.", implementations=implementations)
-    takt.call("agent/implement", {"principal": principal, "input": payload.model_dump(mode="json", exclude_none=True)})
-    return models.Agent.objects.get(pk=ensured["agent"])
+    declared = inputs.ImplementAgentInputModel(name=entry.name, description=manifest.description or f"The {entry.name} hook agent.", implementations=_implementations(actions))
+    takt.call(takt_api.IMPLEMENT_AGENT, takt_api.ImplementAgentRequest(principal=principal, input=declared))
+    return models.Agent.objects.get(pk=ensured.agent)
 
 
-def provision(entry: dict[str, Any], organizations: list[Organization] | None = None) -> None:
+def provision(entry: HookAgentEntry, organizations: list[Organization] | None = None) -> None:
     """One hook agent, in every organization (or just ``organizations``)."""
     manifest = fetch_manifest(entry)
     for organization in Organization.objects.exclude(slug=RETIRED_ORGANIZATION) if organizations is None else organizations:
         provision_agent(entry, manifest, organization)
+
+
+def configured() -> list[HookAgentEntry]:
+    """The hub's hook agents (``rekuest.hook_agents``)."""
+    return settings.HOOK_AGENTS
 
 
 def retire_former_agents() -> None:
@@ -133,24 +149,24 @@ def retire_former_agents() -> None:
     """
     stale = models.Agent.objects.filter(client__client_id__startswith=FORMER_CLIENT_PREFIX)
     for agent in stale.select_related("user", "client", "organization"):
-        principal = takt._principal(CallerContext(user=agent.user, client=agent.client, organization=agent.organization))
-        takt.call("agent/delete", {"principal": principal, "agent": str(agent.pk)})
+        principal = Principal.of(CallerContext(user=agent.user, client=agent.client, organization=agent.organization))
+        takt.call(takt_api.DELETE_AGENT, takt_api.AgentRequest(principal=principal, agent=str(agent.pk)))
         logger.info("Retired the former service agent %s of %s", agent.name, agent.organization.slug)
 
 
 def provision_all(organizations: list[Organization] | None = None) -> list[str]:
     """Provision every configured hook agent once; the names of those that could not be."""
-    failed = []
+    failed: list[str] = []
     try:
         retire_former_agents()
     except Exception as error:  # noqa: BLE001  retried on the next pass
         logger.warning("Could not retire the former service agents: %s", error)
-    for entry in getattr(settings, "HOOK_AGENTS", None) or []:
+    for entry in configured():
         try:
             provision(entry, organizations)
         except Exception as error:  # one unreachable agent must not keep the others unprovisioned
-            logger.warning("Could not provision the hook agent %r: %s", entry.get("name"), error)
-            failed.append(str(entry.get("name")))
+            logger.warning("Could not provision the hook agent %r: %s", entry.name, error)
+            failed.append(entry.name)
     return failed
 
 
@@ -164,7 +180,7 @@ def provision_new_organization(organization: Organization) -> None:
 
     from facade import provisioning
 
-    if not (getattr(settings, "HOOK_AGENTS", None) or []) or organization.slug == RETIRED_ORGANIZATION:
+    if not configured() or organization.slug == RETIRED_ORGANIZATION:
         return
 
     def run() -> None:

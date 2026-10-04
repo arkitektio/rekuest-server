@@ -13,15 +13,15 @@ from typing import AsyncGenerator
 
 import strawberry
 from django.utils import timezone
+from kante.types import Info
 
 from facade import enums, models, types
-from facade.probes.store import get_probe_store
 from facade.channels import probe_event_channel
-from kante.types import Info
+from facade.probes.store import get_probe_store
 
 
 async def probe_events(
-    self,
+    self: object,
     info: Info,
     probe: strawberry.ID,
 ) -> AsyncGenerator[types.ProbeEvent, None]:
@@ -36,22 +36,21 @@ async def probe_events(
         user=info.context.request.user,
         organization=info.context.request.organization,
     )
-    if state.get("caller") != str(caller.pk):
+    if state.caller != str(caller.pk):
         raise PermissionError("Not authorized to watch this probe (not its caller).")
 
-    seq = int(state.get("seq", "0"))
-    if seq > 0:
+    if state.seq > 0:
         # Snapshot: the latest state as a synthetic event, so terminal outcomes and the
         # last yield survive the subscribe race. Full replay is deliberately out of scope.
         yield types.ProbeEvent(
             probe=strawberry.ID(probe_id),
-            kind=enums.TaskEventKind(state.get("kind", "QUEUED")),
-            seq=seq,
-            message=state.get("err") or None,
+            kind=enums.TaskEventKind(state.kind),
+            seq=state.seq,
+            message=state.err or None,
             progress=None,
-            returns=json.loads(state["last_returns"]) if state.get("last_returns") else None,
+            returns=json.loads(state.last_returns) if state.last_returns else None,
             created_at=timezone.now(),
         )
 
-    async for message in probe_event_channel.listen(info.context, [f"probe_events_{probe_id}"]):
+    async for message in probe_event_channel.listen(info, [f"probe_events_{probe_id}"]):
         yield types.ProbeEvent.from_broadcast(message)

@@ -4,7 +4,7 @@ A hook agent is not a service's: the one under test (``janitor``) runs as its ow
 the hub in :class:`TestWithoutAnyService` has no service configured at all. Provisioning wires
 nothing — no schedule, no trigger.
 
-The agent row and its implementations are takt's (``fake_takt`` stands in for it); a run
+The agent row and its implementations are takt's (the real one registers them here); a run
 travelling the whole way — Assign to the agent, reports back — is takt's path too, judged by
 rekuest-takt's conformance suite.
 """
@@ -17,13 +17,14 @@ from authentikate.models import Organization
 from django.test import Client as HttpClient
 
 from facade import enums, hook_agents, models, provisioning
-from facade.mutations.agent import ImplementAgentInputModel
-from tests import registered
+from facade.inputs import ImplementAgentInputModel
+from rekuest.configuration import HookAgentEntry
 from rekuest_service import trust
+from tests import registered
 from tests.hook_urls import janitor
 from tests.provisioning_fixtures import an_organization, declared, hub, lab  # noqa: F401  (fixtures)
 
-pytestmark = pytest.mark.usefixtures("fake_takt")
+pytestmark = pytest.mark.usefixtures("takt")
 
 
 @pytest.mark.django_db(transaction=True)
@@ -78,7 +79,7 @@ class TestHookAgents:
         assert models.Agent.objects.filter(name="janitor", organization=lab).exists()
 
     def test_an_unreachable_agent_is_reported_and_the_others_still_provisioned(self, hub, lab):
-        hub.HOOK_AGENTS = [{"name": "offline", "hook_url": "http://127.0.0.1:9/_rekuest/hook"}, *hub.HOOK_AGENTS]
+        hub.HOOK_AGENTS = [HookAgentEntry(name="offline", hook_url="http://127.0.0.1:9/_rekuest/hook"), *hub.HOOK_AGENTS]
 
         assert hook_agents.provision_all() == ["offline"]
         assert models.Agent.objects.filter(client__client_id="rekuest:hook-janitor").exists()
@@ -96,7 +97,7 @@ class TestHookAgents:
 class TestWithoutAnyService:
     def test_a_hub_with_no_service_still_has_its_hook_agents(self, hub, lab):
         hub.SERVICES = []
-        assert provisioning.provision_all() == {"services": [], "hook_agents": []}
+        assert provisioning.provision_all() == provisioning.Failed(services=[], hook_agents=[])
         assert models.Agent.objects.filter(name="janitor", organization=lab).exists()
         assert not models.Service.objects.exists()
 
@@ -105,7 +106,7 @@ class TestWithoutAnyService:
 class TestHookEndpoint:
     def test_an_unsigned_or_forged_request_is_refused(self, hub):
         client = HttpClient()
-        url = urlparse(hub.HOOK_AGENTS[0]["hook_url"]).path
+        url = urlparse(hub.HOOK_AGENTS[0].hook_url).path
         body = b'{"type": "ASSIGN", "task": "1", "interface": "tidy_up", "args": {}}'
 
         def post(authorization):

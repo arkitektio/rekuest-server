@@ -1,12 +1,11 @@
 """Inputs for toolboxes and shortcuts."""
 
-from typing import Any, Dict
-
 import strawberry
 from pydantic import BaseModel, Field
 from strawberry.experimental import pydantic
 
 from facade import scalars
+from facade.json_types import JSON
 
 
 class CreateToolboxInputModel(BaseModel):
@@ -33,7 +32,7 @@ class CreateShortcutInputModel(BaseModel):
     name: str = Field(description="The name of the shortcut. This is used to identify the shortcut in the system.")
     description: str | None = Field(default=None, description="The description of the shortcut.This can described the shortcut and its purpose.")
     action: str = Field(description="The action ID to create a shortcut for")
-    args: Dict[str, Any] = Field(description="The arguments to pre-pass to the shortcut. This is used to identify the shortcut in the system.")
+    args: dict[str, JSON] = Field(description="The arguments to pre-pass to the shortcut. This is used to identify the shortcut in the system.")
     allow_quick: bool = Field(default=False, description="Whether to allow quick shortcuts. Quick shorts are shortcuts that can be autorun without scpeific assignment")
     use_returns: bool = Field(default=False, description="Whether when running the short the returns should be used further. Allows to create mini pipelines")
     bind_number: int | None = Field(default=None, description="The bind number of the shortcut. This is used to identify the shortcut in the system.")

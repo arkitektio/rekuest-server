@@ -3,7 +3,7 @@
 Planning, moving and cancelling runs, cron lines and the refill sweep are takt's and tested
 there (``takt/crates/facade/tests/scheduling.rs``, ``src/timing.rs``). Here: the GraphQL
 mutations scope and check what they are given, write the row, and ask takt for the right
-thing (``fake_takt`` stands in for it, and records every request).
+thing: takt is the real one (``takt``), and what it is told is read off its notice channel.
 """
 
 import pytest
@@ -11,10 +11,11 @@ from asgiref.sync import sync_to_async
 
 from facade import models
 from facade.schema import schema
+from tests.conftest import waiting_run
 from tests.factories import TEST_TOKEN, build_implementation_for_agent, build_webhook_agent
 from tests.graphql.test_cross_tenant_isolation import OTHER_TOKEN, tenant_context
 
-pytestmark = pytest.mark.usefixtures("fake_takt")
+pytestmark = pytest.mark.usefixtures("takt")
 
 
 async def _schedulable(prefix: str, context, *, needs_token: bool = False) -> models.Implementation:
@@ -29,7 +30,7 @@ async def _schedulable(prefix: str, context, *, needs_token: bool = False) -> mo
 
 CREATE_SCHEDULE = """
     mutation CreateSchedule($input: CreateScheduleInput!) {
-        createSchedule(input: $input) { id name enabled nextRun { id notBefore } }
+        createSchedule(input: $input) { id name enabled }
     }
 """
 
@@ -59,7 +60,8 @@ class TestScheduleGraphQL:
         )
         assert result.errors is None, result.errors
         created = result.data["createSchedule"]
-        assert created["nextRun"] is not None and created["nextRun"]["notBefore"] is not None
+        # The mutation does not wait for takt: what takt planned on hearing of the row is read afterwards.
+        assert (await models.Task.objects.aget(pk=await waiting_run(created["id"]))).not_before is not None
 
         seen_by_a = await schema.execute("query { schedules { id } }", context_value=context_a)
         seen_by_b = await schema.execute("query { schedules { id } }", context_value=context_b)
@@ -99,7 +101,7 @@ class TestScheduleGraphQL:
 
 UPDATE_SCHEDULE = """
     mutation UpdateSchedule($input: UpdateScheduleInput!) {
-        updateSchedule(input: $input) { id name enabled cron intervalSeconds nextRun { id } }
+        updateSchedule(input: $input) { id name enabled cron intervalSeconds }
     }
 """
 
@@ -114,37 +116,40 @@ class TestScheduleChanges:
         assert result.errors is None, result.errors
         return result.data["createSchedule"]["id"], impl
 
-    async def test_a_retimed_schedule_is_replanned_and_a_renamed_one_is_not(self, authenticated_context, fake_takt):
+    async def test_a_retimed_schedule_is_replanned_and_a_renamed_one_is_not(self, authenticated_context, schedule_notices):
         context = (await sync_to_async(tenant_context)(TEST_TOKEN))[0]
         schedule_id, _ = await self._created("sch-retime", context)
-        first_run = (await models.Task.objects.aget(schedule_id=schedule_id, is_done=False)).pk
+        first_run = await waiting_run(schedule_id)
         # takt's bookkeeping on the row: a rename must not write over it.
         await models.Schedule.objects.filter(pk=schedule_id).aupdate(consecutive_failures=2, last_error="earlier")
-        fake_takt.calls.clear()
+        schedule_notices.sent()
 
         renamed = await schema.execute(UPDATE_SCHEDULE, variable_values={"input": {"id": schedule_id, "name": "every hour"}}, context_value=context)
         assert renamed.errors is None, renamed.errors
-        assert renamed.data["updateSchedule"]["nextRun"]["id"] == str(first_run)
-        assert [(op, payload.get("replan")) for op, payload in fake_takt.calls if op == "schedule/plan"] == [("schedule/plan", False)]
+        # takt is told of the change, and that nothing about the waiting run changed: it stays.
+        assert [notice["replan"] for notice in schedule_notices.sent()] == [False]
+        assert (await models.Task.objects.aget(schedule_id=schedule_id, is_done=False)).pk == first_run
         kept = await models.Schedule.objects.aget(pk=schedule_id)
         assert (kept.name, kept.consecutive_failures, kept.last_error) == ("every hour", 2, "earlier")
 
         retimed = await schema.execute(UPDATE_SCHEDULE, variable_values={"input": {"id": schedule_id, "cron": "0 2 * * *"}}, context_value=context)
         assert retimed.errors is None, retimed.errors
         assert retimed.data["updateSchedule"]["cron"] == "0 2 * * *" and retimed.data["updateSchedule"]["intervalSeconds"] is None
-        (replanned,) = [payload for op, payload in fake_takt.calls if op == "schedule/plan" and payload.get("replan")]
-        assert replanned["principal"]["organization"] == context.request.organization.pk
-        assert retimed.data["updateSchedule"]["nextRun"]["id"] != str(first_run)  # the waiting run of the old timing went
+        (replanned,) = [notice for notice in schedule_notices.sent() if notice["replan"]]
+        assert (await models.Caller.objects.aget(pk=replanned["caller"])).organization_id == context.request.organization.pk
+        # The waiting run of the old timing went, and takt planned one on the new.
+        assert await waiting_run(schedule_id, other_than=first_run) != first_run
+        assert (await models.Task.objects.aget(pk=first_run)).is_done is True
 
         bad = await schema.execute(UPDATE_SCHEDULE, variable_values={"input": {"id": schedule_id, "cron": "whenever"}}, context_value=context)
         assert bad.errors is not None and "cron line" in str(bad.errors[0])
         assert (await models.Schedule.objects.aget(pk=schedule_id)).cron == "0 2 * * *"
 
-    async def test_run_now_and_delete_go_through_takt(self, authenticated_context, fake_takt):
+    async def test_run_now_and_delete_go_through_takt(self, authenticated_context, schedule_notices):
         context = (await sync_to_async(tenant_context)(TEST_TOKEN))[0]
         other = (await sync_to_async(tenant_context)(OTHER_TOKEN))[0]
         schedule_id, _ = await self._created("sch-now", context)
-        waiting = await models.Task.objects.aget(schedule_id=schedule_id, is_done=False)
+        waiting = await models.Task.objects.aget(pk=await waiting_run(schedule_id))
         run_now = "mutation($input: ScheduleIdInput!) { triggerSchedule(input: $input) { id } }"
         delete = "mutation($input: ScheduleIdInput!) { deleteSchedule(input: $input) }"
 
@@ -159,9 +164,9 @@ class TestScheduleChanges:
         executing = await schema.execute(run_now, variable_values={"input": {"id": schedule_id}}, context_value=context)
         assert executing.errors is not None and "already executing" in str(executing.errors[0])
 
-        fake_takt.calls.clear()
+        schedule_notices.sent()
         deleted = await schema.execute(delete, variable_values={"input": {"id": schedule_id}}, context_value=context)
         assert deleted.errors is None, deleted.errors
-        assert [op for op, _ in fake_takt.calls] == ["schedule/cancel-waiting"]
+        assert schedule_notices.sent() == []  # its run is executing: nothing waits, so takt is told nothing
         assert not await models.Schedule.objects.filter(pk=schedule_id).aexists()
         assert (await models.Task.objects.aget(pk=waiting.pk)).schedule_id is None  # the history is kept

@@ -11,8 +11,9 @@ They share only the lock: one pass at a time, across every replica.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
+from dataclasses import dataclass
 
 from authentikate.models import Organization
 from django.db import connection
@@ -38,7 +39,15 @@ def _locked() -> Iterator[bool]:
                 cursor.execute("SELECT pg_advisory_unlock(%s)", [PROVISION_LOCK_KEY])
 
 
-def provision_all() -> dict[str, list[str]] | None:
+@dataclass(frozen=True)
+class Failed:
+    """The names a provisioning pass could not do."""
+
+    services: list[str]
+    hook_agents: list[str]
+
+
+def provision_all() -> Failed | None:
     """Catalogue the services and provision the hook agents; which of each could not be.
 
     ``None`` when another replica is provisioning right now (nothing was done here).
@@ -46,7 +55,7 @@ def provision_all() -> dict[str, list[str]] | None:
     with _locked() as held:
         if not held:
             return None
-        return {"services": service_catalog.catalogue_all(), "hook_agents": hook_agents.provision_all()}
+        return Failed(services=service_catalog.catalogue_all(), hook_agents=hook_agents.provision_all())
 
 
 def provision_hook_agents(organizations: list[Organization]) -> list[str] | None:
