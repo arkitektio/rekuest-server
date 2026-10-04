@@ -25,7 +25,7 @@ import django  # noqa: E402
 django.setup()
 from pydantic import ValidationError  # noqa: E402
 
-from facade.mutations.agent import ImplementAgentInputModel  # noqa: E402
+from facade.inputs import ImplementAgentInputModel  # noqa: E402
 
 HERE = Path(__file__).parent
 
