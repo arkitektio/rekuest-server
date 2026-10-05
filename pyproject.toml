@@ -72,7 +72,7 @@ known-first-party = ["rekuest", "embeddings"]
 [tool.basedpyright]
 typeCheckingMode = "standard"
 pythonVersion = "3.12"
-include = ["facade", "rekuest"]
+include = ["facade", "rekuest", "hub_contract"]
 exclude = ["**/migrations", "**/__pycache__", ".venv", "tests"]
 reportAny = false
 reportExplicitAny = true
