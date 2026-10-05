@@ -1,4 +1,4 @@
-"""What this image answers a hub's installer: ``python -m hub_contract <verb>`` (see ``hub_contract``).
+"""What this image answers a hub's installer: ``python -m arkitekt_service <verb>`` (see ``arkitekt_service.contract``).
 
 The installer knows the hub; how this release spells its config is written here, with the
 settings it is read by. A key renamed in ``configuration.py`` is renamed in :func:`render` in
@@ -7,11 +7,27 @@ the same commit, and no installer has to learn of it.
 
 from __future__ import annotations
 
-from hub_contract import JSON, Contract, Description, Facts, Needs, Offers, Refused, blocks
+from arkitekt_service.contract import JSON, Contract, Description, Facts, Needs, Offers, Refused, Scope, blocks
+
 from rekuest.configuration import Settings
 
 #: The peer that is this server's other half: the agents' endpoint and the internal API.
 TAKT = "takt"
+
+#: What a token may be allowed to do here: defined at the coordination server when the hub enrols.
+SCOPES = [
+    Scope(key="rekuest_agent", description="Act as an agent"),
+    Scope(key="rekuest_call", description="Call other apps with rekuest"),
+    Scope(key="read", description="Read access to rekuest resources"),
+    Scope(key="write", description="Write access to rekuest resources"),
+]
+
+#: The roles a member of an organization can hold here.
+ROLES = [
+    Scope(key="agent", description="Can act as a workflow agent"),
+    Scope(key="caller", description="Can call remote procedures"),
+    Scope(key="admin", description="Full administrative access"),
+]
 
 
 def render(facts: Facts) -> dict[str, JSON]:
@@ -44,7 +60,7 @@ contract = Contract(
     description=Description(
         name="rekuest",
         summary="Assigns work to agents and keeps the record of it.",
-        needs=Needs(storage=["media"], instance_key=True, peers=[TAKT]),
+        needs=Needs(scopes=SCOPES, roles=ROLES, storage=["media"], instance_key=True, peers=[TAKT]),
         offers=Offers(health="ht"),
         upgrade_from="5.0.0",
     ),

@@ -20,7 +20,7 @@ from kante.path import dynamicpath
 from django.http import HttpRequest, JsonResponse
 from health_check.views import HealthCheckView
 from django.views.decorators.csrf import csrf_exempt
-from rekuest_service.views import answers_challenge
+from arkitekt_service.service.views import answers_challenge
 from facade.upkeep import upkeep_view
 
 def jwks_view(request: HttpRequest) -> JsonResponse:

@@ -19,7 +19,7 @@ from django.test import Client as HttpClient
 from facade import enums, hook_agents, models, provisioning
 from facade.inputs import ImplementAgentInputModel
 from rekuest.configuration import HookAgentEntry
-from rekuest_service import trust
+from arkitekt_service import trust
 from tests import registered
 from tests.hook_urls import janitor
 from tests.provisioning_fixtures import an_organization, declared, hub, lab  # noqa: F401  (fixtures)

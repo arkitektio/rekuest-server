@@ -99,7 +99,7 @@ AUTHENTIKATE = conf.authentikate.model_dump()
 # ``provenance`` block of config.yaml; a static ``provenance.private_key`` is
 # required — the facade refuses to start without it (see facade/provenance/keys.py).
 # This instance's key signs provenance tokens (and every request to the hub's services, via the
-# vendored ``rekuest_service.trust``); its kid is the RFC 7638 thumbprint — what the coord's trust
+# ``arkitekt_service.trust``); its kid is the RFC 7638 thumbprint — what the coord's trust
 # bundle lists it under.
 from joserfc.jwk import OKPKey as _OKPKey  # noqa: E402
 

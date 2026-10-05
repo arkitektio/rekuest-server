@@ -27,6 +27,7 @@ dependencies = [
     "pint>=0.24",
     "pgvector>=0.5",
     "model2vec>=0.9",
+    "arkitekt-service>=1.0.0",
 ]
 
 [dependency-groups]
@@ -72,7 +73,7 @@ known-first-party = ["rekuest", "embeddings"]
 [tool.basedpyright]
 typeCheckingMode = "standard"
 pythonVersion = "3.12"
-include = ["facade", "rekuest", "hub_contract"]
+include = ["facade", "rekuest"]
 exclude = ["**/migrations", "**/__pycache__", ".venv", "tests"]
 reportAny = false
 reportExplicitAny = true

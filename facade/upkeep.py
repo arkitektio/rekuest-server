@@ -33,7 +33,7 @@ from pydantic import BaseModel
 
 from embeddings import healer
 from facade import models, provisioning, redis_keys, service_trust
-from rekuest_service import trust
+from arkitekt_service import trust
 
 logger = logging.getLogger(__name__)
 

@@ -2,7 +2,7 @@
 
 Every request between rekuest and a configured service (``rekuest.services``: its manifest, its
 signals) or hook agent (``rekuest.hook_agents``: Assign deliveries, its manifest, its reports)
-carries a short-lived JWT signed with the sender's instance key (:mod:`rekuest_service.trust`,
+carries a short-lived JWT signed with the sender's instance key (:mod:`arkitekt_service.trust`,
 vendored). The receiver checks it against the hub's trust bundle: the coord-vouched public keys
 of every instance, each listed under its identifier. An instance can therefore only speak as
 itself, and only rekuest can speak as rekuest.
@@ -24,7 +24,7 @@ from joserfc import jwt
 from joserfc.jwk import KeySet
 
 from rekuest.configuration import HookAgentEntry, ServiceEntry
-from rekuest_service import trust
+from arkitekt_service import trust
 
 #: The identities rekuest mints for configured hook agents are named ``hook-<name>``, so their
 #: clients are ``rekuest:hook-<name>``: that is how an agent is recognised as one.

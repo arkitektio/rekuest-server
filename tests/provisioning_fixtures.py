@@ -6,7 +6,7 @@ from django.conf import settings as django_settings
 from django.test import override_settings
 
 from rekuest.configuration import HookAgentEntry, ServiceEntry
-from rekuest_service import Descriptor
+from arkitekt_service.service import Descriptor
 from tests.hook_urls import housekeeping, janitor
 
 

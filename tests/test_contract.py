@@ -10,8 +10,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-
-from hub_contract import cli
+from arkitekt_service.contract import cli
 
 PEM = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEILK+rl9gVEjfKGiye+mLLjfEUGIdoP0WPC8lMZS3NYK2\n-----END PRIVATE KEY-----\n"
 
@@ -34,7 +33,7 @@ FACTS: dict[str, object] = {
 @pytest.fixture(autouse=True)
 def this_image(monkeypatch: pytest.MonkeyPatch) -> None:
     """The contract is this service's."""
-    monkeypatch.setenv("HUB_CONTRACT", "rekuest.contract")
+    monkeypatch.setenv("ARKITEKT_SERVICE", "rekuest.contract")
 
 
 def rendered(tmp_path: Path, capsys: pytest.CaptureFixture[str], facts: dict[str, object], overrides: dict[str, object] | None = None) -> tuple[int, str, str]:

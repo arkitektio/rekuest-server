@@ -17,7 +17,7 @@ from embeddings import engine
 from facade import models, provisioning
 from facade.service_trust import rekuest_identifier
 from rekuest.configuration import HookAgentEntry, ServiceEntry
-from rekuest_service import trust
+from arkitekt_service import trust
 from tests.models.test_action_embedding import _action
 from tests.provisioning_fixtures import declared, hub, lab  # noqa: F401  (fixtures)
 
