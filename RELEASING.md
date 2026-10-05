@@ -65,6 +65,16 @@ release has to keep working:
 
 What takt needs from its container (`TAKT_INTERNAL_BIND`, a mounted socket) counts as config.
 
+### Data that has to change between versions
+
+Schema changes are Django migrations and run when the server starts. What a migration cannot
+express — a rewrite that must not overlap with the previous release still serving — goes into
+`facade/upgrades.py`, keyed by the major it leads to. An installer runs
+`python manage.py upgrade --from <old> --to <new>` in the new image, after it stopped the
+previous server and before it starts this one; on a non-zero exit it starts the previous
+server again and stops the update. So an upgrade has to be repeatable, and a release that
+needs one is a major.
+
 ## Branches
 
 | Branch | Releases | Docker tags |
