@@ -8,8 +8,8 @@ server's repository and is released with it, under the same version, as the
 
 The whole agent protocol:
 
-- the agent websocket `/agi`, the HookAgent HTTP intake `/agi/http/{agent_id}` and the signal
-  intake `/agi/signal/{service}`;
+- the agent websocket `/agent`, the HookAgent HTTP intake `/agent/http/{agent_id}` and the
+  signal intake `/agent/signal/{service}` (each also under its former name, `/agi`);
 - registration: an agent's `REGISTER` carries its declaration, and takt reconciles its
   implementations, states, locks and bloks;
 - assign, cancel, interrupt, pause, resume, and probes;
@@ -38,13 +38,13 @@ querying GraphQL at the rate):
 ## Shape
 
 ```
-agents ──ws /agi──────────────┐
-hook agents ──POST /agi/http──┤
-hub services ─POST /agi/signal┤
-                              ▼
-                   takt (N replicas) ◀── POST /internal/<op> ── rekuest server (GraphQL)
-                              │                                        │
-                              └──────── Postgres · Redis ──────────────┘
+agents ──ws /agent──────────────┐
+hook agents ──POST /agent/http──┤
+hub services ─POST /agent/signal┤
+                                ▼
+                     takt (N replicas) ◀── POST /internal/<op> ── rekuest server (GraphQL)
+                                │                                        │
+                                └──────── Postgres · Redis ──────────────┘
 ```
 
 Postgres holds the schema the rekuest server migrates; takt never migrates. Redis holds the

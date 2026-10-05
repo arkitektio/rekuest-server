@@ -1,24 +1,13 @@
-# Rekuest-Server (Next)
+# rekuest-server
 
-[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/arkitektio/rekuest-server/)
-![Maintainer](https://img.shields.io/badge/maintainer-jhnnsrs-blue)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+The task service of an [Arkitekt](https://arkitekt.live) hub. Rekuest is the central
+repository of the connected apps and the functionality they provide, their
+[actions](https://arkitekt.live/docs/terminology/actions). Apps and users assign tasks to
+it; rekuest routes each one to an app that implements the action, and routes the result back
+to the caller. It is registered as `live.arkitekt.rekuest` and has a python client,
+[`rekuest`](https://github.com/arkitektio/rekuest).
 
-
-Rekuest is one of the core services of Arkitekt. It represents a central repository of
-all the connected apps and their provided functionality, their [Actions](https://arkitekt.live/docs/terminology/actions).
-It also provides ways of interacting with the apps, by providing a central access point, that
-apps and users can assign tasks to. Rekuest then takes care of routing the requests to the
-appropriate app, which executres the task and returns the result to rekuest, which in turn routes it back
-to the caller. Similar to all other Arkitekt ervices, Rekuest exposes a GraphQL API, that can be used to interact with it.
-You can find the interactive documentation for the API [here](https://arkitekt.live/explorer).
-
-> [!NOTE]  
-> What you are currently looking at is the next version of rekuest. It is currently under development and not ready for production. If you are looking for the current version of Rekeust, you can find it [here](https://github.com/arkitektio/rekuest-server).
-
-
-
-## Rekuest Design
+## Design
 
 Rekuest itself is designed as a stateless service (in order to be able to scale horizontally), and
 interfaces with proven open-source technologies, such as [Redis](https://redis.io/) and
@@ -47,18 +36,21 @@ The server has no websocket route for agents and no agent code: `rekuest/asgi.py
 only. Whatever a mutation needs done to a task or an agent, the server asks takt for, through
 takt's internal API (`facade/takt.py`), on a listener only the server reaches.
 
-The server owns the schema and migrates it. takt writes the same tables with its own SQL, never
+The server owns the schema and its migrations. takt writes the same tables with its own SQL, never
 migrates, and waits at startup until the database has the migrations listed in
 `takt/schema-migrations.txt`.
 
-## Running it: three processes
+## Running it: one step, two processes
 
 | process | command | role |
 |---|---|---|
-| web (any number of replicas) | `bash run.sh` (daphne) | Migrates on boot, then serves GraphQL and its subscriptions. Runs no loop: takt asks it to provision this hub's services and to embed new actions when those are due. Its health check (`ht`) answers for takt too. |
+| migrate (once per release, before anything starts) | `python -m arkitekt_service migrate` | Waits for the database and applies the migrations, under an advisory lock. |
+| web (any number of replicas) | `bash run.sh` (daphne) | Serves GraphQL and its subscriptions, and nothing else. Runs no loop: takt asks it to provision this hub's services and to embed new actions when those are due. Its health check (`ht`) answers for takt too. |
 | takt (any number of replicas) | the `jhnnsrs/rekuest-takt` image, same `config.yaml` | The agent protocol (`agent`, formerly `agi`), every sweep, and the clock of the server's upkeep jobs. Healthcheck: `takt healthcheck`. |
 
-The web process runs from the `jhnnsrs/rekuest` image. Always run the same version of both images.
+The migrate step and the web process run from the `jhnnsrs/rekuest` image, which has no
+default command. Always run the same version of both images. `run-debug.sh` migrates and
+serves in one go with Django's autoreloading server, for development.
 
 To run the pair locally from this checkout:
 
@@ -89,15 +81,57 @@ The server holds no state and runs no loop. Every takt replica runs the sweeps a
 server for its upkeep jobs; a tick token in redis lets one of them sweep per tick. While no takt runs,
 deadlines, schedules and triggers are late, never lost.
 
-## Developmental Notices
+**Transport is Redis.** Agent commands travel through a per-agent Redis list that takt drains
+(chosen over the Channels layer so a message pushed while an agent is briefly offline survives
+its reconnect), and GraphQL subscriptions fan out through `channels_redis`, which takt speaks
+too. There is no RabbitMQ and no Kafka; see
+[Why Not?](https://arkitekt.live/docs/design/why-not) for the reasoning.
 
-Transport is Redis: agent commands travel through a per-agent Redis list that takt drains (chosen
-over the Channels layer so a message pushed while an agent is briefly offline survives its
-reconnect), and GraphQL subscriptions fan out through `channels_redis`, which takt speaks too. There is no RabbitMQ and no Kafka. To learn more
-about this design decision, please refer to the
-[Why Not?](https://arkitekt.live/docs/design/why-not) section.
+## API
 
-You can find the current developmental action of Rekuest [here](https://github.com/arkitektio/rekuest-server-next)
-Efforts from this new repository will be merged into this repository once the new version is ready for production.
+GraphQL is served at `/graphql` (HTTP and WebSocket), with the SDL at `/schema`. The schema
+is committed as [`schema.graphql`](./schema.graphql). The agent protocol is takt's and is
+documented in [`takt/docs/`](./takt/docs/).
 
+## Hub integration
 
+Declared in [`rekuest/contract.py`](./rekuest/contract.py):
+
+- **Scopes**: `rekuest_agent`, `rekuest_call`, `read`, `write`.
+- **Roles**: `agent`, `caller`, `admin`.
+- **Needs**: takt beside it, an instance key, `media` storage, tokens issued by lok.
+
+Other hub services register with rekuest as a *service* (the structures they host and the
+signals they emit) and, separately, as a *hook agent* (the actions they offer). Both lists
+are part of the configuration (`rekuest.services`, `rekuest.hook_agents`).
+
+## Configuration
+
+Both programs read `config.yaml`, or the file named by `ARKITEKT_CONFIG_FILE`; any value can
+be overridden by an environment variable (`POSTGRES__HOST`). `python manage.py
+validate_settings` prints the configuration as the server reads it, with secrets redacted.
+
+See [CONFIG.md](./CONFIG.md) for every value.
+
+## Development
+
+```sh
+uv sync
+uv run pytest
+```
+
+The suite runs against a real stack, brought up by [dokker](https://github.com/jhnnsrs/dokker)
+from `tests/integration/docker-compose.yaml`: Postgres with pgvector (`jhnnsrs/daten:next`,
+override with `DATEN_IMAGE`), Redis, and a real takt built from `./takt` (or the image named
+by `TAKT_IMAGE`). It needs a running Docker daemon, and the first run builds the Rust image.
+takt's own tests are described in [`takt/README.md`](./takt/README.md).
+
+## Releases
+
+Releases are tags: a push to `main` cuts a stable version, a push to `next` a release
+candidate. Each one publishes `jhnnsrs/rekuest` and `jhnnsrs/rekuest-takt` under the same
+version (`X.Y.Z`, `X.Y`, `X`), plus `latest` from `main` and `next` from `next`. The
+`version` in `pyproject.toml` is a placeholder. [RELEASING.md](./RELEASING.md) has the
+rules, including what counts as a breaking change. Release notes are on
+[GitHub Releases](https://github.com/arkitektio/rekuest-server/releases); `CHANGELOG.md` is
+frozen.
