@@ -1,15 +1,10 @@
 #!/bin/bash
+# Serve, and nothing else.
+#
+# The database is brought to this release before the service is started, by whoever starts
+# it: `python -m arkitekt_service migrate` waits for the database, applies the migrations
+# and runs the service's setup. Konstruktor runs it once per build — before a hub's first
+# start and before an update's — so a container that merely restarts does none of it.
+# `run-debug.sh` does both in one go, for development.
 set -euo pipefail
-echo "=> Waiting for DB to be online"
-python manage.py wait_for_database -s 6
-
-echo "=> Performing database migrations..."
-python manage.py migrate
-
-# No reconcile step: this process serves GraphQL only. Agent and task state is takt's, and its
-# sweeps heal whatever a previous process left behind (stuck agents, orphaned or undelivered
-# work) on their first tick. See takt/crates/facade/src/reaper.rs.
-
-# Start the first process
-echo "=> Starting Server"
-daphne -b 0.0.0.0 -p 80 --websocket_timeout -1 rekuest.asgi:application
+exec daphne -b 0.0.0.0 -p 80 --websocket_timeout -1 rekuest.asgi:application

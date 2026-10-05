@@ -167,7 +167,9 @@ async fn each_listener_serves_only_its_own_routes() {
 /// A server pointed at the address agents reach must not take that for its takt.
 #[tokio::test]
 async fn the_listeners_are_told_apart_by_an_internal_route() {
-    let Some((public, internal)) = apps().await else { return };
+    let Some((public, internal)) = apps().await else {
+        return;
+    };
     let ask = |app: &axum::Router| {
         app.clone().oneshot(
             Request::get("/rekuest/internal/assign")
