@@ -7,9 +7,13 @@ then the YAML file (the mount's ``config.yaml`` by default; override with
 with a ``ValidationError`` if they are not supplied via config or environment.
 """
 
+import dataclasses
 import os
+import typing
+from collections.abc import Mapping
 from typing import List, Optional
 
+import yaml
 from authentikate.base_models import AuthentikateSettings
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from pydantic_settings import (
@@ -110,9 +114,11 @@ class InstanceBlock(BaseModel):
 
 
 class RekuestBlock(BaseModel):
-    """Rekuest assignment grace + capability tuning."""
+    """Rekuest assignment grace + capability tuning.
 
-    model_config = ConfigDict(extra="allow")
+    Closed: a key here that no field claims is reported (see :func:`unread`), since this is
+    the block a release renames keys in.
+    """
 
     grace_default: int = Field(default=30, description="Default reclaim grace window (seconds) after a disconnect.")
     sweep_interval: int = Field(default=5, description="How often (seconds) takt sweeps the DB-held deadlines. Bounds how late a deadline can fire.")
@@ -131,6 +137,7 @@ class RekuestBlock(BaseModel):
         validation_alias=AliasChoices("takt_url", "agentd_url"),
         description="takt's internal listener (`TAKT_INTERNAL_BIND`), with its script name: not the address agents connect to. Defaults to http://takt:8081/<django.force_script_name>. Assigns, controls, registrations, deletes, probes and running a schedule now go through its internal API; while it is unreachable each of those raises TaktUnavailable. `agentd_url` is its former name and still read.",
     )
+    server_url: Optional[str] = Field(default=None, description="Read by takt, not by this server: where takt reaches this server for the upkeep jobs, with its script name. Defaults to http://rekuest:80/<django.force_script_name>; empty turns upkeep off.")
     takt_socket: Optional[str] = Field(default=None, description="takt's internal listener as a unix socket this server and takt both mount (takt: `TAKT_INTERNAL_BIND=unix:<path>`). When set, the internal API is reached through it and only the path of `takt_url` is used.")
     identifier: str = Field(default="live.arkitekt.rekuest", description="This rekuest's fakts identifier — what its key is listed under in the hub trust bundle, and what services require rekuest's requests to come from.")
     services: list[ServiceEntry] = Field(default_factory=list, description="This hub's services: each one's structures and signals are catalogued from its manifest. Says nothing about agents.")
@@ -145,8 +152,6 @@ class RekuestBlock(BaseModel):
 
 class ProvenanceBlock(BaseModel):
     """Rekuest provenance (attestation) policy. Tokens are signed with the instance key (`instance`), `kid` its thumbprint."""
-
-    model_config = ConfigDict(extra="allow")
 
     issuer: str = Field(default="rekuest", description="Provenance token issuer (iss).")
     token_ttl_seconds: int = Field(default=3600, description="Provenance token lifetime (seconds).")
@@ -229,3 +234,84 @@ class Settings(BaseSettings):
             YamlConfigSettingsSource(settings_cls, yaml_file=path),
             file_secret_settings,
         )
+
+
+@dataclasses.dataclass(frozen=True)
+class Unread:
+    """What a config file says that this release does not read as written."""
+
+    unknown: list[str]
+    """Keys no setting claims, as dotted paths: a misspelling, or a key of another release."""
+    renamed: list[tuple[str, str]]
+    """Keys still read under a former name, with the name they have now."""
+
+    def __bool__(self) -> bool:
+        """Whether there is anything to say."""
+        return bool(self.unknown or self.renamed)
+
+
+def config_path() -> str:
+    """The YAML file the settings are read from."""
+    return os.environ.get("ARKITEKT_CONFIG_FILE", _DEFAULT_CONFIG)
+
+
+def _models_of(annotation: object) -> list[type[BaseModel]]:
+    """This module's settings models an annotation holds: itself, or inside ``Optional[...]`` / ``list[...]``.
+
+    Only this module's: a block another package defines (``authentikate``) is that package's to
+    judge, and its aliases are spellings, not former names.
+    """
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        return [annotation] if annotation.__module__ == __name__ else []
+    return [model for inner in typing.get_args(annotation) for model in _models_of(inner)]
+
+
+def _names(model: type[BaseModel]) -> dict[str, str]:
+    """Every key ``model`` reads, to the field's own name: its fields and their former names."""
+    names: dict[str, str] = {}
+    for name, field in model.model_fields.items():
+        names[name] = name
+        alias = field.validation_alias
+        for former in alias.choices if isinstance(alias, AliasChoices) else [alias]:
+            if isinstance(former, str):
+                names[former] = name
+    return names
+
+
+def _unread(model: type[BaseModel], written: Mapping[str, JSON], path: str, into: Unread) -> None:
+    # A block that passes its extras on (a connection's driver options) and the top level,
+    # which every service of a hub shares the shape of, are open: nothing there is unknown.
+    closed = model.model_config.get("extra") != "allow" and not issubclass(model, BaseSettings)
+    names = _names(model)
+    for key, value in written.items():
+        where = f"{path}{key}"
+        name = names.get(key)
+        if name is None:
+            if closed:
+                into.unknown.append(where)
+            continue
+        if name != key:
+            into.renamed.append((where, f"{path}{name}"))
+        for inner in _models_of(model.model_fields[name].annotation):
+            for index, item in enumerate(value) if isinstance(value, list) else [(None, value)]:
+                if isinstance(item, dict):
+                    _unread(inner, item, f"{where}." if index is None else f"{where}[{index}].", into)
+
+
+def unread(written: Mapping[str, JSON] | None = None) -> Unread:
+    """What the config file (or ``written``) says that this release does not read as written.
+
+    A setting nobody reads is silent by nature: the service starts, with the default. This is
+    what makes it loud — a system check at boot, and ``validate_settings --strict``, which an
+    installer runs against a release before it moves a hub to it.
+    """
+    if written is None:
+        try:
+            with open(config_path(), encoding="utf-8") as file:
+                loaded: object = yaml.safe_load(file)
+        except OSError:
+            loaded = None
+        written = loaded if isinstance(loaded, dict) else {}
+    found = Unread(unknown=[], renamed=[])
+    _unread(Settings, written, "", found)
+    return found

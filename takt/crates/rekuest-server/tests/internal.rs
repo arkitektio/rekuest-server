@@ -161,3 +161,23 @@ async fn each_listener_serves_only_its_own_routes() {
     let (status, _) = post(&internal, "/rekuest/agent/signal/nobody", &json!({}), None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+/// The server's health check tells the listeners apart by a route only the internal one has:
+/// asked with the wrong method it is refused there (405) and unknown on the public one (404).
+/// A server pointed at the address agents reach must not take that for its takt.
+#[tokio::test]
+async fn the_listeners_are_told_apart_by_an_internal_route() {
+    let Some((public, internal)) = apps().await else { return };
+    let ask = |app: &axum::Router| {
+        app.clone().oneshot(
+            Request::get("/rekuest/internal/assign")
+                .body(Body::empty())
+                .unwrap(),
+        )
+    };
+    assert_eq!(
+        ask(&internal).await.unwrap().status(),
+        StatusCode::METHOD_NOT_ALLOWED
+    );
+    assert_eq!(ask(&public).await.unwrap().status(), StatusCode::NOT_FOUND);
+}

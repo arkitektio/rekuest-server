@@ -12,3 +12,4 @@ class FacadeConfig(AppConfig):
         # column's width) register on import; ``migrate`` runs the database-tagged one at
         # every boot, so a mismatch stops the service before it serves a wrong search.
         import embeddings.checks  # noqa: F401
+        import rekuest.checks  # noqa: F401

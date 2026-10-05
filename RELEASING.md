@@ -48,6 +48,23 @@ The pair is tested on every push and pull request to `main` and `next` by
 Commits that aren't releasable (`chore:`, `docs:`, `refactor:` …) don't trigger
 a release on their own.
 
+### A changed config key is a breaking change
+
+A hub's files are written by an installer for one **major** of this service, and a hub follows
+that major's tag (`jhnnsrs/rekuest:6`). So within a major, a config written for its first
+release has to keep working:
+
+- **Adding** a key with a default that keeps the old behaviour is a `feat:`.
+- **Renaming** a key within a major keeps the old name read (`validation_alias=AliasChoices(new,
+  old)`, as `takt_url` / `agentd_url`; takt's `configuration.rs` reads the same file and needs
+  the same). `validate_settings` and a boot-time warning report the old name without
+  failing, and the next major drops it.
+- **Removing** a key, changing what one means, or needing a new one to work at all is a
+  `feat!:` with a `BREAKING CHANGE:` footer that **names the keys** — the footer is what the
+  release notes carry, and what whoever writes the installer's next layout reads.
+
+What takt needs from its container (`TAKT_INTERNAL_BIND`, a mounted socket) counts as config.
+
 ## Branches
 
 | Branch | Releases | Docker tags |
