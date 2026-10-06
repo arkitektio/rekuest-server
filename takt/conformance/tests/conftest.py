@@ -55,7 +55,8 @@ async def target() -> AsyncIterator[Target]:
 
     # A gitignored ``stack/docker-compose.local.yml`` layers local changes on the stack.
     local = STACK.with_name("docker-compose.local.yml")
-    setup = testing([str(STACK), *([str(local)] if local.exists() else [])])
+    # The teardown's wall clock is there to catch a hang, not to fail a green run on a slow runner.
+    setup = testing([str(STACK), *([str(local)] if local.exists() else [])], teardown_timeout=60)
 
     def published(service: str, internal: int):  # noqa: ANN202
         return lambda spec: spec.find_service(service).get_port_for_internal(internal).published

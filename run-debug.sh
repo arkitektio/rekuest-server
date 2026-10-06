@@ -11,4 +11,4 @@ python manage.py migrate
 
 # GraphQL and its subscriptions only: the agent protocol (`/agi`) is served by takt.
 echo "=> Starting Server"
-python manage.py runserver 0.0.0.0:80
+exec python manage.py runserver 0.0.0.0:80

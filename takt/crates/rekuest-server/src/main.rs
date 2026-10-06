@@ -84,12 +84,28 @@ async fn main() -> anyhow::Result<()> {
     serve_internal(&internal_bind, urls::internal_router(state.clone())).await?;
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     tracing::info!("takt listening on {bind}");
-    axum::serve(listener, urls::router(state))
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
-        .await?;
+    // Asked to stop, takt exits at once: an agent's socket never ends on its own, so waiting
+    // for the open connections would only wait for the kill.
+    tokio::select! {
+        served = axum::serve(listener, urls::router(state)) => served?,
+        () = shutdown_signal() => tracing::info!("takt stopping"),
+    }
     Ok(())
+}
+
+/// What stops takt: SIGTERM (`docker stop`, an orchestrator) or SIGINT (ctrl-c). takt is PID 1
+/// in its container, where a signal nobody listens for is ignored.
+async fn shutdown_signal() {
+    use tokio::signal::unix::{signal, SignalKind};
+    match signal(SignalKind::terminate()) {
+        Ok(mut terminate) => tokio::select! {
+            _ = terminate.recv() => {}
+            _ = tokio::signal::ctrl_c() => {}
+        },
+        Err(_) => {
+            let _ = tokio::signal::ctrl_c().await;
+        }
+    }
 }
 
 /// Serve the internal API on `bind`: `unix:<path>` is a socket file (a stale one, left by a
