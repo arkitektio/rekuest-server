@@ -254,7 +254,8 @@ def get_action_ids_by_port_demands(
 
     For ``facade_action`` this uses the indexed relational port engine. Other models
     (e.g. ``facade_shortcut``) keep their own ``args``/``returns`` JSONB and fall back to
-    the JSONB-scan matcher per demand, since only Actions own relational port rows.
+    the JSONB-scan matcher per demand, since only Actions own relational port rows; a
+    shortcut's descriptors are checked on its action's rows (``ACTION_COLUMN``).
     Queryset filters should prefer ``get_action_port_demand_subquery`` (no id
     materialization); this id-list form serves callers that consume the ids in Python.
     """
@@ -388,20 +389,66 @@ def get_action_ids_by_action_demands(
 # =========================================================================
 
 
-def _reject_unsupported_legacy_match_fields(matches: t.Sequence[PortMatchInputModel] | None, model: str) -> None:
+#: Models whose JSONB ports are a subset of their Action's ports (a shortcut's args are the
+#: action's args it has not saved). The JSONB itself carries no compiled constraints, but the
+#: action's relational port rows do: a descriptor is checked on the row with the same key.
+ACTION_COLUMN = {"facade_shortcut": "action_id"}
+
+#: How deep below a root port the JSONB scanner looks at children.
+_JSON_SCAN_CHILD_DEPTH = 1
+
+
+def _reject_unsupported_legacy_match_fields(matches: t.Sequence[PortMatchInputModel] | None, model: str, depth: int = 0) -> None:
     """Refuse demands the JSONB scanner cannot express instead of silently degrading them.
 
     The legacy scanner only compares key/kind/identifier (children positionally, one level
     deep). ``descriptors`` and ``nullable`` used to be dropped without a word, so a
-    descriptor-bearing demand against e.g. shortcuts would quietly return purely structural
-    matches — results that look right and aren't.
+    descriptor-bearing demand would quietly return purely structural matches — results that
+    look right and aren't. Descriptors are expressible for a model that names its action
+    (``ACTION_COLUMN``), down to the depth the scanner reaches.
     """
     for match in matches or []:
         if match.descriptors:
-            raise ValueError(f"Descriptor matching (requires/provides) is not supported for {model}: only Actions have relational port rows with compiled constraints. Remove 'descriptors' from the demand.")
+            if model not in ACTION_COLUMN:
+                raise ValueError(f"Descriptor matching (requires/provides) is not supported for {model}: it has no action whose relational port rows carry the compiled constraints. Remove 'descriptors' from the demand.")
+            if depth > _JSON_SCAN_CHILD_DEPTH:
+                raise ValueError(f"Descriptor matching (requires/provides) is not supported for {model} below the first level of children: the JSONB scanner does not look deeper. Remove 'descriptors' from the nested match.")
         if match.nullable is not None:
             raise ValueError(f"'nullable' matching is not supported for {model}: the legacy JSONB scanner only compares key/kind/identifier. Remove 'nullable' from the demand.")
-        _reject_unsupported_legacy_match_fields(match.children, model)
+        _reject_unsupported_legacy_match_fields(match.children, model, depth + 1)
+
+
+def _json_scan_descriptor_clauses(item: PortMatchInputModel, index: int, type: t.Literal["args", "returns"], model: str, params: Params) -> list[str]:
+    """The descriptor checks of one root match (and its children) against the action's port rows.
+
+    Evaluated inside the scan's ``jsonb_array_elements`` subquery, where ``item`` is the
+    candidate JSONB port: the action's root port row with the same key must accept the
+    candidate object, and a child's row (same position under that root) its own. Same
+    predicate as the relational engine — a NULL ``compiled_jsonpath`` accepts anything. A row
+    without an action (or whose action lost the port) has nothing to accept it, so it does
+    not match.
+    """
+    table = PORT_TABLE[type]
+    action_column = f"{model}.{ACTION_COLUMN[model]}"
+    clauses: list[str] = []
+
+    def accepts(alias: str, match: PortMatchInputModel, key: str) -> str:
+        params[key] = json.dumps({descriptor.key: descriptor.value for descriptor in match.descriptors or []})
+        return f"({alias}.compiled_jsonpath IS NULL OR jsonb_path_match(%({key})s::jsonb, {alias}.compiled_jsonpath::jsonpath, '{{}}'::jsonb, true))"
+
+    root = f"dp_{type}_{index}"
+    root_conditions = f"{root}.action_id = {action_column} AND {root}.parent_id IS NULL AND {root}.key = item->>'key'"
+
+    if item.descriptors:
+        clauses.append(f"EXISTS (SELECT 1 FROM {table} {root} WHERE {root_conditions} AND {accepts(root, item, f'{type}_obj_{index}')})")
+
+    for child_index, child in enumerate(item.children or []):
+        if not child.descriptors:
+            continue
+        alias = f"dc_{type}_{index}_{child_index}"
+        clauses.append(f"EXISTS (SELECT 1 FROM {table} {root} JOIN {table} {alias} ON {alias}.parent_id = {root}.id WHERE {root_conditions} AND {alias}.index = {child_index} AND {accepts(alias, child, f'{type}_obj_{index}_{child_index}')})")
+
+    return clauses
 
 
 def build_child_recursively(item: PortMatchInputModel, prefix: str, value_path: str, parts: list[str], params: Params) -> None:
@@ -470,6 +517,8 @@ def _json_scan_params(
         _reject_unsupported_legacy_match_fields(search_params, model)
         for index, item in enumerate(search_params):
             sql_part, params = build_sql_for_item_recursive(item, index, at_value=item.at)
+            if model in ACTION_COLUMN:
+                sql_part = " AND ".join([part for part in [sql_part, *_json_scan_descriptor_clauses(item, index, type, model, params)] if part])
             subquery = f"EXISTS (SELECT 1 FROM jsonb_array_elements({type}) WITH ORDINALITY AS j(item, idx) WHERE {sql_part})"
             individual_queries.append(subquery)
             all_params.update(params)
