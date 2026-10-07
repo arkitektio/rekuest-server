@@ -41,8 +41,8 @@ pub async fn missing(db: &PgPool) -> Result<Vec<String>, sqlx::Error> {
     Ok(missing)
 }
 
-/// Wait until the database has every required migration (the server migrates on its own start,
-/// which may be after takt's).
+/// Wait until the database has every required migration (the server's migration job may run
+/// after takt's start).
 pub async fn wait_until_migrated(db: &PgPool) {
     loop {
         match missing(db).await {

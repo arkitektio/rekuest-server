@@ -1,22 +1,19 @@
-"""The server's upkeep jobs, run when takt asks: provisioning and embeddings.
+"""The server's upkeep job, run when takt asks: provisioning.
 
-Everything periodic in this deployment is on takt's clock. Two jobs need this server — service
-manifests are registered through its models, and embeddings run the model, which only this
-image carries — so takt calls them here, signed with the instance key (it reads the same
-``config.yaml``, so it holds the same key):
+Everything periodic in this deployment is on takt's clock. One job needs this server — service
+manifests are registered through its models — so takt calls it here, signed with the instance
+key (it reads the same ``config.yaml``, so it holds the same key):
 
 ==========================  ===============================  =================================
 ``POST _rekuest/upkeep/…``  does                             takt calls it
 ==========================  ===============================  =================================
 ``provision``               ``provisioning.provision_all``     at start, then every 5 minutes
                                                              (sooner after a failure)
-``reembed``                 ``reembed_stale(Action)``         every 30 seconds, and again at
-                                                             once while there is more
 ==========================  ===============================  =================================
 
 Nothing here loops and nothing is remembered between requests: a job runs once per call, any
 replica may answer, and two calls at once are safe (provisioning is serialized by an advisory
-lock, the re-embed claims its rows). ``_rekuest`` paths are not routed at the edge.
+lock). ``_rekuest`` paths are not routed at the edge.
 """
 
 from __future__ import annotations
@@ -31,15 +28,10 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from pydantic import BaseModel
 
-from embeddings import healer
-from facade import models, provisioning, redis_keys, service_trust
+from facade import provisioning, redis_keys, service_trust
 from arkitekt_service import trust
 
 logger = logging.getLogger(__name__)
-
-#: Batches one ``reembed`` call drains at most, so a request stays short.
-REEMBED_MAX_BATCHES = 5
-
 
 def _claim(verified: trust.Verified) -> bool:
     """Claim the token's ``jti`` once, across every replica (takt's ``service_trust::claim``)."""
@@ -56,11 +48,6 @@ class Provisioned(BaseModel):
     failed: list[str]
 
 
-class Reembedded(BaseModel):
-    embedded: int
-    more: bool
-
-
 def provision() -> Provisioned:
     """One provisioning pass — the service catalog, then the hook agents; which of them failed."""
     outcome = provisioning.provision_all()
@@ -70,15 +57,7 @@ def provision() -> Provisioned:
     return Provisioned(ok=not failed, skipped=False, failed=failed)
 
 
-def reembed() -> Reembedded:
-    """A bounded pass over the actions without a current vector; how many it embedded."""
-    embedded = healer.reembed_stale(models.Action, max_batches=REEMBED_MAX_BATCHES)
-    # ``more`` only after progress: with embeddings off (or the model unreachable) the stale
-    # rows stay, and takt must not call again at once for them.
-    return Reembedded(embedded=embedded, more=embedded > 0 and healer.stale_queryset(models.Action).exists())
-
-
-JOBS: dict[str, Callable[[], Provisioned | Reembedded]] = {"provision": provision, "reembed": reembed}
+JOBS: dict[str, Callable[[], Provisioned]] = {"provision": provision}
 
 
 @csrf_exempt

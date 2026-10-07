@@ -9,7 +9,7 @@ compose=(docker compose -p takt-testdb -f conformance/stack/docker-compose.yml -
 if [ "${1:-}" = "down" ]; then "${compose[@]}" down -v >&2; exit 0; fi
 port="${TAKT_TEST_DB_PORT:-5694}"
 "${compose[@]}" up -d --build db redis rustfs rekuest >&2
-# The server migrates on boot; its GraphQL answering means the schema is in place.
+# The server is started after its migration job; its GraphQL answering means the schema is in place.
 for _ in $(seq 1 90); do
   if "${compose[@]}" exec -T rekuest python -c "import urllib.request; urllib.request.urlopen('http://localhost:80/graphql', timeout=2)" >/dev/null 2>&1; then
     echo "export TAKT_TEST_DATABASE_URL=postgres://hello_django:hello_django@localhost:${port}/rekuest"

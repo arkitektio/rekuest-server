@@ -46,10 +46,10 @@ async def _warm(context: HttpContext) -> None:
     await schema.execute("query { __typename }", context_value=context)
 
 
-def _seed(context: HttpContext, prefix: str, name: str, *, e0: np.ndarray | None = None, distance: float | None = None, embedding_model: str | None = None, **overrides) -> Action:
+def _seed(context: HttpContext, prefix: str, name: str, *, e0: np.ndarray | None = None, distance: float | None = None, **overrides) -> Action:
     action = create_action_for_organization(context.request.organization, prefix, name=name, description=f"{prefix} description", **overrides)
     if e0 is not None:
-        Action.objects.filter(pk=action.pk).update(embedding=_vec(e0, distance) if distance is not None else None, embedding_model=embedding_model or engine.model_id())
+        Action.objects.filter(pk=action.pk).update(embedding=_vec(e0, distance) if distance is not None else None)
     return action
 
 
@@ -99,11 +99,10 @@ class TestSimilarActions:
         assert await _names(authenticated_context, ROOT, action=str(origin.pk), filters={"ids": [str(mid.pk)]}) == ["Mid"]
         assert await _names(authenticated_context, ROOT, action=str(origin.pk), filters={"search": "mid"}) == ["Mid"]
 
-    async def test_unembedded_and_stale_rows_are_skipped(self, authenticated_context: HttpContext) -> None:
+    async def test_unembedded_rows_are_skipped(self, authenticated_context: HttpContext) -> None:
         await _warm(authenticated_context)
         origin, e0 = await _origin_and_e0(authenticated_context)
         await sync_to_async(_seed)(authenticated_context, "near", "Near", e0=e0, distance=0.1)
-        await sync_to_async(_seed)(authenticated_context, "stale", "Stale", e0=e0, distance=0.05, embedding_model="some/older-model")
         blank = await sync_to_async(_seed)(authenticated_context, "blank", "Blank", e0=e0, distance=0.05)
         await sync_to_async(Action.objects.filter(pk=blank.pk).update)(embedding=None)
 
@@ -161,9 +160,9 @@ async def test_action_publishes_its_vector_with_the_model_id(authenticated_conte
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_unindexed_action_publishes_null(authenticated_context: HttpContext) -> None:
+async def test_an_action_without_a_vector_publishes_null(authenticated_context: HttpContext) -> None:
     action = await sync_to_async(create_action_for_organization)(authenticated_context.request.organization, "emb-null", name="Nameless")
-    await Action.objects.filter(pk=action.pk).aupdate(embedding=None, embedding_model="")
+    await Action.objects.filter(pk=action.pk).aupdate(embedding=None)
 
     result = await schema.execute(EMBEDDING, context_value=authenticated_context, variable_values={"action": str(action.id)})
     assert not result.errors, result.errors

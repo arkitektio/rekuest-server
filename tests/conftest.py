@@ -32,7 +32,8 @@ def embedding_model_warm():
     """Load the embedding model once per session, outside any test's DB transaction.
 
     Every save of an Action embeds its text, so the first one would otherwise pay the model
-    load (a one-time download into the Hugging Face cache on a cold box) inside a test.
+    load (a one-time download into the Hugging Face cache on a cold box) inside a test. The
+    server does the same at start (``rekuest/asgi.py``), which the tests do not come through.
     """
     from embeddings import engine
 

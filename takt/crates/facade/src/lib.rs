@@ -16,6 +16,7 @@ pub mod consumers;
 pub mod context;
 pub mod deletion;
 pub mod descriptors;
+pub mod embeddings;
 pub mod guards;
 pub mod higher_order;
 pub mod hooks;

@@ -12,4 +12,6 @@ __pycache__/
 .env
 # The Rust workspace builds its own image (takt/Dockerfile).
 takt
-
+# pytest's own; nothing in the image reads it. `tests/` stays: takt's test stack seeds its rows
+# with the factories there (takt/crates/facade/tests/signals_contract.rs).
+conftest.py

@@ -1,4 +1,4 @@
-//! Upkeep: takt asks the Python server for its two jobs when they are due (`facade::upkeep`).
+//! Upkeep: takt asks the Python server for its job when it is due (`facade::upkeep`).
 //! The server here is a stand-in on a real socket that checks the service token as the Python
 //! one does. Needs `TAKT_TEST_DATABASE_URL` and `TAKT_TEST_REDIS_URL`.
 
@@ -120,8 +120,12 @@ async fn a_done_job_is_not_due_again_for_any_replica() {
 
     // Another replica shares the redis: for it the job is not due either.
     assert!(!upkeep::take(&ctx, &upkeep::PROVISION).await);
+    let another = upkeep::Job {
+        name: "another",
+        ..upkeep::PROVISION
+    };
     assert!(
-        upkeep::take(&ctx, &upkeep::REEMBED).await,
+        upkeep::take(&ctx, &another).await,
         "each job has its own time"
     );
     assert_eq!(asked(&server), ["provision"]);
@@ -157,7 +161,7 @@ async fn an_unreachable_or_refusing_server_is_a_failed_pass() {
         return;
     };
     assert!(matches!(
-        upkeep::run(&ctx, &upkeep::REEMBED).await,
+        upkeep::run(&ctx, &upkeep::PROVISION).await,
         Outcome::Failed(why) if why.contains("unreachable")
     ));
 
@@ -168,27 +172,9 @@ async fn an_unreachable_or_refusing_server_is_a_failed_pass() {
         json!({"error": "Replay guard unavailable"}),
     ));
     assert!(matches!(
-        upkeep::run(&ctx, &upkeep::REEMBED).await,
+        upkeep::run(&ctx, &upkeep::PROVISION).await,
         Outcome::Failed(why) if why.contains("Replay guard unavailable")
     ));
-}
-
-#[tokio::test]
-async fn more_work_is_asked_for_at_once() {
-    let (server, url) = serve().await;
-    let Some(ctx) = context(Some(url)).await else {
-        return;
-    };
-    {
-        let mut answers = server.answers.lock().unwrap();
-        answers.push((StatusCode::OK, json!({"embedded": 1000, "more": true})));
-        answers.push((StatusCode::OK, json!({"embedded": 1000, "more": true})));
-        answers.push((StatusCode::OK, json!({"embedded": 12, "more": false})));
-    }
-
-    assert_eq!(upkeep::run(&ctx, &upkeep::REEMBED).await, Outcome::Done);
-
-    assert_eq!(asked(&server), ["reembed", "reembed", "reembed"]);
 }
 
 #[tokio::test]
@@ -197,7 +183,7 @@ async fn without_a_server_url_nothing_is_asked() {
         return;
     };
     assert!(upkeep::call(&ctx.settings, "provision").await.is_err());
-    // Returns at once instead of keeping the jobs.
+    // Returns at once instead of keeping the job.
     tokio::time::timeout(std::time::Duration::from_secs(2), upkeep::run_forever(ctx))
         .await
         .expect("upkeep is off");

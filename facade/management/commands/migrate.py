@@ -1,18 +1,18 @@
 """``migrate``, serialized across replicas.
 
-Every replica runs ``python manage.py migrate`` when its container boots (``run.sh``) — there
-is deliberately no separate migration job to operate. Django does not serialize that: two
-replicas starting together both read ``django_migrations``, both decide the same migration is
-unapplied and both run it. One of them dies on ``relation already exists`` (or deadlocks on the
-DDL), and under ``set -e`` that replica never starts.
+The migration job (``arkitekt-service run migrate``) runs this once per build, before
+the service starts; a start script never migrates. Nothing keeps two such jobs from running
+at once, and Django does not serialize them: both read ``django_migrations``, both decide the
+same migration is unapplied and both run it. One of them dies on ``relation already exists``
+(or deadlocks on the DDL).
 
 This command shadows Django's own (an app's command overrides a core one, the way daphne
 overrides ``runserver``), so ``manage.py migrate`` is safe wherever it is typed. It takes a
 Postgres **session-level advisory lock** on the connection the migration runs on, then hands
 over to the stock implementation:
 
-* the first replica migrates; the others block here, then build their migration plan — which
-  happens inside ``handle``, i.e. *after* the lock — find nothing to apply, and start serving;
+* the first job migrates; the others block here, then build their migration plan — which
+  happens inside ``handle``, i.e. *after* the lock — and find nothing to apply;
 * the lock also serializes ``post_migrate`` (permissions, content types), which races too;
 * session-level, not transaction-level: a migrate spans many transactions (some non-atomic);
 * if the holder crashes its session ends and Postgres releases the lock — nothing to clean up;

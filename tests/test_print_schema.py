@@ -95,12 +95,12 @@ def test_only_the_embedded_types_publish_a_vector():
 
 
 def test_no_input_accepts_an_embedding():
-    """Read-only: a client may not write a vector, or the healer's contract is a fiction."""
+    """Read-only: a client may not write a vector; every vector comes from the release's model."""
     assert _fields_named_embedding(str(schema))["input"] == set()
 
 
-def test_the_raw_model_column_is_never_published():
-    """`embeddingModel` is carried inside the `Embedding` string, never as its own field."""
+def test_the_model_id_is_never_its_own_field():
+    """The model id is carried inside the `Embedding` string, never as its own field."""
     assert "embeddingModel" not in str(schema)
 
 

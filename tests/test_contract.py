@@ -17,7 +17,7 @@ PEM = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEILK+rl9gVEjfKGiye+mLLjfE
 FACTS: dict[str, object] = {
     "me": {"name": "rekuest", "path": "rekuest", "url": "http://rekuest:80/rekuest", "identifier": "live.arkitekt.rekuest", "secret_key": "s3cret", "admin": {"username": "admin", "password": "pw"}},
     "hub": {"origins": ["https://lab.example"], "auth": {"audience": "*", "issuers": [{"kind": "jwks_uri", "iss": "lok", "jwks_uri": "http://lok/.well-known/jwks.json"}], "static_tokens": {}}},
-    "database": {"host": "db", "name": "rekuest", "username": "hub", "password": "pw"},
+    "databases": {"main": {"host": "db", "name": "rekuest", "username": "hub", "password": "pw"}},
     "redis": {"host": "redis"},
     "storage": {"host": "rustfs", "port": 9000, "access_key": "a", "secret_key": "s", "buckets": {"media": "rekuestmedia"}},
     "instance": {"private_key": PEM, "trust": {"jwks_uri": "http://lok/.well-known/hub-keys/1"}},
@@ -74,6 +74,29 @@ def test_its_config_is_written_from_what_the_hub_says(tmp_path: Path, capsys: py
     assert config["datalayer"]["media"] == {"bucket": "rekuestmedia"}
     assert config["django"]["force_script_name"] == "rekuest" and config["django"]["csrf_trusted_origins"] == ["https://lab.example"]
     assert config["instance"]["trust"] == {"jwks_uri": "http://lok/.well-known/hub-keys/1"}
+
+
+def test_what_a_peer_hosts_goes_into_its_services_entry(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """A hub that knows what a service hosts (its image said) hands it over: rekuest catalogues it unasked."""
+    hosts = {
+        "structures": [{"identifier": "@mikro/file", "label": "File", "description": "A file.", "descriptors": [{"key": "@mikro/content_type", "type": "STRING", "description": "Its media type"}]}],
+        "signals": [{"identifier": "@mikro/file", "kinds": ["CREATED", "DELETED"], "descriptors": ["@mikro/content_type"], "description": "A file was uploaded or deleted."}],
+    }
+    facts = {**FACTS, "peers": {**FACTS["peers"], "mikro": {**FACTS["peers"]["mikro"], "hosts": hosts}}}  # type: ignore[dict-item]
+    code, out, err = rendered(tmp_path, capsys, facts)
+    assert code == 0, err
+
+    (service,) = yaml.safe_load(out)["rekuest"]["services"]
+    assert service == {"name": "mikro", "url": "http://mikro:80/mikro/_rekuest/service", "identifier": "live.arkitekt.mikro", "hosts": hosts}
+
+
+def test_cataloguing_is_a_job_and_part_of_the_setup(capsys: pytest.CaptureFixture[str]) -> None:
+    """``run migrate`` writes the catalog, and an installer can ask for it again by name."""
+    assert cli.main(["describe"]) == 0
+
+    jobs = json.loads(capsys.readouterr().out)["jobs"]
+    assert jobs["catalogue"]["command"] == ["arkitekt-service", "run", "catalogue"]
+    assert jobs["migrate"]["includes"] == ["catalogue"]
 
 
 def test_what_the_operator_set_is_in_it_and_what_this_release_does_not_read_is_refused(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

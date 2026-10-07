@@ -109,8 +109,8 @@ python manage.py validate_settings
 
 A valid config can still say things this release does not read: a misspelt key, or a key of
 another release, is not an error to the loader — the service starts, with the default. Those are
-listed under the tree, and warned about at every boot (system checks `rekuest.W001`, a key no
-setting claims, and `rekuest.W002`, a key still read under a former name). To ask for a verdict:
+listed under the tree, and warned about at every boot (system checks `arkitekt.W001`, a key no
+setting claims, and `arkitekt.W002`, a key still read under a former name). To ask for a verdict:
 
 ```bash
 python manage.py validate_settings --strict
@@ -224,7 +224,7 @@ server.
 | `takt_socket` | `REKUEST__TAKT_SOCKET` | str | unset | server | takt's internal listener as a unix socket the server and takt both mount (takt: `TAKT_INTERNAL_BIND=unix:<path>`). When set, the internal API is reached through it and only the path of `takt_url` is used. |
 | `server_url` | `REKUEST__SERVER_URL` | str | `http://rekuest:80/<script name>` | takt | The server's base URL with the script name. takt POSTs the upkeep jobs to `<server_url>/_rekuest/upkeep/<job>` (`takt/crates/facade/src/upkeep.rs`). Empty turns upkeep off: no service is catalogued, no hook agent is provisioned and new actions get no embedding. |
 | `identifier` | `REKUEST__IDENTIFIER` | str | `live.arkitekt.rekuest` | both | This rekuest's fakts identifier: what its key is listed under in the hub trust bundle, and the issuer and audience of the service tokens the server signs its internal requests with. |
-| `services` | — (use YAML) | list | `[]` | both | This hub's services, each `{name, url, identifier?}`. The server catalogues what each hosts and emits from its manifest at `<url>/manifest` (when takt asks, `facade/service_catalog.py`); takt accepts their signed signals. A service is not an agent: nothing here creates one. |
+| `services` | — (use YAML) | list | `[]` | both | This hub's services, each `{name, url, identifier?, hosts?}`. The server catalogues what each hosts and emits (`facade/service_catalog.py`): from the entry's own `hosts` (`{structures, signals}`, what the service's image says, written here by an installer) when it has one, else from the service's manifest at `<url>/manifest`. The pass runs when takt asks and as the `catalogue` job (`arkitekt-service run catalogue`, part of `run migrate`), which an installer runs again without restarting rekuest; takt accepts the services' signed signals and ignores `hosts`. A service is not an agent: nothing here creates one. |
 | `hook_agents` | — (use YAML) | list | `[]` | both | This hub's hook agents, each `{name, hook_url, identifier?}`. The server gives every organization the agent with the actions of its manifest at `<hook_url>/manifest` (`facade/hook_agents.py`); takt signs deliveries to them and accepts their signed reports. Independent of `services`: a hook agent may run in a service's process or anywhere else. Nothing is scheduled or triggered by itself. |
 | `sweep_interval` | `REKUEST__SWEEP_INTERVAL` | int | `5` | both | How often (seconds) takt's sweeps tick (deadlines, schedules, triggers, delayed tasks). Bounds how late any of them can fire. |
 | `grace_default` | `REKUEST__GRACE_DEFAULT` | int | `30` | takt | Reclaim grace window (seconds) after a disconnect: how long a gone agent's running tasks wait for it before they end `LOST` (a workflow is resumed). |
@@ -257,11 +257,10 @@ Agent heartbeats are not configuration: takt pings every 10 s, waits 5 s for the
 presumes a `connected` agent dead after 30 s without one
 (`takt/crates/rekuest-server/src/settings.rs`).
 
-The server runs no loop of its own. Two jobs need it — provisioning (the `services` catalog and the
-`hook_agents`, both written through its models) and embedding the actions takt registered (only
-its image carries the model) — and takt asks for each when it is due, at
-`POST <server_url>/_rekuest/upkeep/{provision,reembed}`, signed with the instance key:
-provisioning at start and every 5 minutes (30 s after a failed pass), embedding every 30 s.
+The server runs no loop of its own. One job needs it — provisioning (the `services` catalog and the
+`hook_agents`, both written through its models) — and takt asks for it when it is due, at
+`POST <server_url>/_rekuest/upkeep/provision`, signed with the instance key: at start and
+every 5 minutes (30 s after a failed pass).
 `_rekuest` paths must not be routed at the edge. The server's `ht` answers for takt as well
 (it asks takt's `ht`), so one health check covers the pair; takt's own is `takt healthcheck`,
 which the takt image runs as its `HEALTHCHECK`.
@@ -352,31 +351,28 @@ then matches a substring of the name **or** a description whose meaning is close
 query, ranking substring matches first and the rest by similarity. Every key has a default;
 the block may be omitted.
 
+The model is not configuration. Which model embeds (`minishlab/potion-base-8M`, 256 wide) is
+a constant of the release (`embeddings/engine.py`), and the image carries its weights under
+`/opt/models/embeddings` (with `HF_HUB_OFFLINE=1`). Another model is another image, whose
+migration job re-embeds. Outside the image (a developer's machine, CI) the weights come from
+the Hugging Face cache. The server loads the model when it starts; `migrate` and the other
+management commands never load it.
+
 | Key | Env var | Type | Default | Description |
 |---|---|---|---|---|
-| `enabled` | `EMBEDDINGS__ENABLED` | bool | `true` | Embed rows on save and give `search` a semantic leg. Off: `search` is substring-only and the columns stay `NULL`. |
-| `model` | `EMBEDDINGS__MODEL` | str | `minishlab/potion-base-8M` | model2vec model id. Recorded on every row (`embedding_model`); rows embedded by another model are re-embedded in-process and skipped by vector search until then. |
-| `model_path` | `EMBEDDINGS__MODEL_PATH` | str | `null` | Directory holding the weights of `model`. The Docker image bakes them under `/opt/models/embeddings` and sets this itself (with `HF_HUB_OFFLINE=1`); unset, model2vec downloads from Hugging Face on first use. |
-| `dimensions` | `EMBEDDINGS__DIMENSIONS` | int | `256` | Vector width of `model` — and of the database column. Checked against both at startup (`embeddings.E001` / `E002`). |
+| `enabled` | `EMBEDDINGS__ENABLED` | bool | `true` | Embed rows on save and give `search` a semantic leg. Off: `search` is substring-only and the column stays `NULL`. |
 | `distance_threshold` | `EMBEDDINGS__DISTANCE_THRESHOLD` | float | `0.55` | Cosine distance (0 identical, 1 unrelated) above which a row no longer counts as a semantic hit. Lower is stricter. |
-| `sweep_interval` | `EMBEDDINGS__SWEEP_INTERVAL` | int | `30` | Unused by rekuest: stale rows are re-embedded when takt asks (every 30 s). Kept for parity with the other services' config. |
-| `sweep_batch_size` | `EMBEDDINGS__SWEEP_BATCH_SIZE` | int | `200` | Rows re-embedded per batch. |
 
-Rows that were written before embeddings were enabled, while the model could not be loaded,
-or by a previous `model` are healed by the `reembed` upkeep job (`facade/upkeep.py`, asked for by takt) in row-locked
-batches — no command, no cron, any number of replicas. Until healed, such rows are found by
-the substring leg only.
+A row is embedded when the server saves it, and again when the server saves a changed name
+or description. A row saved while the model could not be loaded has no vector until the
+server saves it again. Rows without a vector are found by the substring leg only.
 
-**Changing the model.** Same `dimensions`: change `model`, restart, and the upkeep job re-embeds
-every row within a few passes. Different `dimensions`: the column type changes, so write a
-migration that first nulls the column (`UPDATE facade_action SET embedding = NULL,
-embedding_model = ''` — Postgres refuses to retype non-empty vectors), then `AlterField`s it
-to the new width, then change the config; the upkeep job refills it after boot. `migrate` refuses
-to run while the column, the setting and the model disagree.
-
-The Docker image bakes the default model; a different `model` needs a rebuild with
-`--build-arg EMBEDDINGS_MODEL=<id>` (or a `model_path` of your own), because the running
-image is offline.
+Actions are written by takt, with SQL of its own, so takt embeds them itself: its image
+carries the same weights, it loads the same model (`takt/crates/facade/src/embeddings.rs`),
+and it writes the vector in the statement that registers the action or changes its name or
+description. `embeddings.enabled` is the one key of this block takt reads. The two have to
+give the same vector for the same text, which the conformance suite holds them to; the model
+is therefore a constant in both, and changing it is a release of both images together.
 
 ---
 

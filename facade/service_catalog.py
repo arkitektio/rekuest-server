@@ -1,6 +1,6 @@
-"""This hub's services: what each says it hosts and emits, catalogued from its manifest.
+"""This hub's services: what each says it hosts and emits, catalogued from its declaration.
 
-A service (``rekuest.services``: a name and where its manifest is) says what exists on the hub:
+A service (``rekuest.services``: a name, where it is, and what it hosts if the hub said) says what exists on the hub:
 the structures it hosts, with their descriptors, and the signals it emits. Those become catalog
 rows (:class:`facade.models.Service` and its declarations), hub-wide and the same for every
 organization. Users' triggers are checked against them.
@@ -8,8 +8,11 @@ organization. Users' triggers are checked against them.
 That is all a service is here. It offers no work and no agent comes out of this pass: agents are
 something else (:mod:`facade.hook_agents`), configured and provisioned on their own.
 
-The manifest is fetched signed (``GET <url>/manifest``, served by the service's
-``rekuest_service`` package). The pass is idempotent and updates rows in place.
+The declaration is the entry's own ``hosts`` when an installer wrote it there (it read it from
+the service's image, so the service need not be running). For an entry without, the service's
+manifest is fetched signed (``GET <url>/manifest``, served by ``arkitekt_service.service``).
+The pass is idempotent and updates rows in place; it runs when takt asks
+(:mod:`facade.upkeep`) and as the ``catalogue`` job (``manage.py catalogue``).
 """
 
 from __future__ import annotations
@@ -21,31 +24,11 @@ from django.conf import settings
 from pydantic import BaseModel
 
 from facade import models
-from rekuest.configuration import ServiceEntry
+from rekuest.configuration import DescriptorManifest, ServiceEntry, SignalManifest, StructureManifest
 
 logger = logging.getLogger(__name__)
 
 _TIMEOUT = 5.0
-
-
-class DescriptorManifest(BaseModel):
-    key: str
-    type: str | None = None
-    description: str | None = None
-
-
-class StructureManifest(BaseModel):
-    identifier: str
-    label: str | None = None
-    description: str | None = None
-    descriptors: list[DescriptorManifest] | None = None
-
-
-class SignalManifest(BaseModel):
-    identifier: str
-    kinds: list[str] | None = None
-    descriptors: list[str] | None = None
-    description: str | None = None
 
 
 class ServiceManifest(BaseModel):
@@ -71,10 +54,32 @@ def fetch_manifest(entry: ServiceEntry) -> ServiceManifest:
     return ServiceManifest.model_validate_json(response.content)
 
 
+def declared_inline(entry: ServiceEntry) -> ServiceManifest | None:
+    """What the entry itself says the service hosts and emits (``hosts``), in the manifest's shape; None when it says nothing.
+
+    It carries no description of the service: an image's ``hosts`` has none.
+    """
+    from facade import service_trust
+
+    if entry.hosts is None:
+        return None
+    return ServiceManifest(identifier=service_trust.identifier_of(entry), structures=entry.hosts.structures, signals=entry.hosts.signals)
+
+
 def catalogue(entry: ServiceEntry) -> models.Service:
-    """Bring one service's catalog rows — itself, its structures, its signals — in line with its manifest."""
-    manifest = fetch_manifest(entry)
-    service, _ = models.Service.objects.update_or_create(name=entry.name, defaults={"identifier": manifest.identifier, "description": manifest.description})
+    """Bring one service's catalog rows — itself, its structures, its signals — in line with what it declares.
+
+    The declaration is the entry's own when it carries one (the installer read it from the
+    service's image); only an entry without is asked for its manifest. Same rows either way,
+    but for the service's description, which only a manifest states and an inline declaration
+    therefore leaves as it is.
+    """
+    manifest = declared_inline(entry)
+    defaults: dict[str, str | None] = {}
+    if manifest is None:
+        manifest = fetch_manifest(entry)
+        defaults["description"] = manifest.description
+    service, _ = models.Service.objects.update_or_create(name=entry.name, defaults={"identifier": manifest.identifier, **defaults})
     _sync_structures(service, manifest.structures)
     _sync_signals(service, manifest.signals or [])
     return service

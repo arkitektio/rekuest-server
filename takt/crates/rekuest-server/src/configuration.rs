@@ -23,6 +23,28 @@ pub struct Configuration {
     #[serde(default)]
     pub provenance: ProvenanceBlock,
     pub instance: Option<InstanceBlock>,
+    #[serde(default)]
+    pub embeddings: EmbeddingsBlock,
+}
+
+/// `embeddings`: the one key of it takt reads. The model is not configuration: it is the
+/// release's, and in the image.
+#[derive(Debug, Clone, Deserialize)]
+pub struct EmbeddingsBlock {
+    /// Whether rows are embedded at all. Off, actions are registered without a vector, as
+    /// the server saves every other row without one.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for EmbeddingsBlock {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -139,7 +161,7 @@ pub struct RekuestBlock {
     #[serde(default)]
     pub hook_agents: Vec<HookAgentBlock>,
     /// The Python server beside this takt, with its script name: takt asks it for the upkeep
-    /// jobs (`facade::upkeep`). Defaults to `http://rekuest:80/<django.force_script_name>`, its
+    /// job (`facade::upkeep`). Defaults to `http://rekuest:80/<django.force_script_name>`, its
     /// name in the usual compose layout; empty turns upkeep off.
     #[serde(default)]
     pub server_url: Option<String>,

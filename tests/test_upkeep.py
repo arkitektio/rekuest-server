@@ -1,8 +1,8 @@
-"""Upkeep: the two jobs takt asks this server for (``facade/upkeep.py``), and the health check
+"""Upkeep: the job takt asks this server for (``facade/upkeep.py``), and the health check
 that answers for takt.
 
 There is no reaper process: takt keeps the time and calls ``_rekuest/upkeep/<job>``, signed with
-the instance key the pair shares. That takt really calls them (and when) is judged in takt.
+the instance key the pair shares. That takt really calls it (and when) is judged in takt.
 """
 
 import threading
@@ -13,12 +13,10 @@ from django.db import connection, connections
 from django.test import Client as HttpClient
 from django.urls import reverse
 
-from embeddings import engine
 from facade import models, provisioning
 from facade.service_trust import rekuest_identifier
 from rekuest.configuration import HookAgentEntry, ServiceEntry
 from arkitekt_service import trust
-from tests.models.test_action_embedding import _action
 from tests.provisioning_fixtures import declared, hub, lab  # noqa: F401  (fixtures)
 
 pytestmark = pytest.mark.usefixtures("takt")
@@ -47,17 +45,19 @@ class TestOnlyTaktMayAsk:
 
     def test_a_token_for_another_request_is_refused(self):
         identity = rekuest_identifier()
-        elsewhere = trust.sign("POST", reverse("upkeep", kwargs={"job": "reembed"}), b"{}", issuer=identity, audience=identity)
+        elsewhere = trust.sign("POST", reverse("upkeep", kwargs={"job": "vacuum"}), b"{}", issuer=identity, audience=identity)
         assert _post("provision", authorization=elsewhere).status_code == 401
         other_body = trust.sign("POST", reverse("upkeep", kwargs={"job": "provision"}), b'{"x": 1}', issuer=identity, audience=identity)
         assert _post("provision", authorization=other_body).status_code == 401
 
-    def test_a_token_is_good_once(self):
-        path = reverse("upkeep", kwargs={"job": "reembed"})
+    def test_a_token_is_good_once(self, monkeypatch):
+        # Only the guard is judged here: the pass itself has its own tests below.
+        monkeypatch.setattr(provisioning, "provision_all", lambda: None)
+        path = reverse("upkeep", kwargs={"job": "provision"})
         identity = rekuest_identifier()
         token = trust.sign("POST", path, b"{}", issuer=identity, audience=identity)
-        assert _post("reembed", authorization=token).status_code == 200
-        assert _post("reembed", authorization=token).status_code == 409
+        assert _post("provision", authorization=token).status_code == 200
+        assert _post("provision", authorization=token).status_code == 409
 
     def test_an_unknown_job_or_method_is_refused(self):
         assert _post("vacuum").status_code == 404
@@ -115,31 +115,6 @@ class TestProvision:
         assert all(answer in (done, None) for answer in answers)
         assert models.Service.objects.filter(name="housekeeping").count() == 1
         assert models.Agent.objects.filter(name="janitor").count() == 1
-
-
-@pytest.mark.django_db(transaction=True)
-class TestReembed:
-    def test_it_embeds_what_takt_registered_without_a_vector(self):
-        action = _action("upkeep-heal", name="Blur", description="Gaussian blur of an image")
-        models.Action.objects.filter(pk=action.pk).update(embedding=None, embedding_model="")
-
-        assert _post("reembed").json() == {"embedded": 1, "more": False}
-
-        action.refresh_from_db()
-        assert action.embedding is not None and action.embedding_model == engine.model_id()
-        assert _post("reembed").json() == {"embedded": 0, "more": False}
-
-    def test_it_says_when_a_call_did_not_finish_the_work(self, settings, monkeypatch):
-        from facade import upkeep
-
-        settings.EMBEDDINGS = {**engine._settings(), "SWEEP_BATCH_SIZE": 1}
-        monkeypatch.setattr(upkeep, "REEMBED_MAX_BATCHES", 1)
-        for index in range(2):
-            action = _action(f"upkeep-more-{index}", name=f"Blur {index}", description="Gaussian blur")
-            models.Action.objects.filter(pk=action.pk).update(embedding=None, embedding_model="")
-
-        assert _post("reembed").json() == {"embedded": 1, "more": True}
-        assert _post("reembed").json() == {"embedded": 1, "more": False}
 
 
 class _TaktHealth(BaseHTTPRequestHandler):

@@ -15,8 +15,8 @@
 //! | `expire_disconnected_tasks`       | `Task.dispatched_at` | `disconnected_expiry` |
 //! | `retention::sweep` (every 60th tick) | `Task.finished_at`, `Signal.processed_at` | `task_retention`, `ephemeral_task_retention`, `signal_retention` |
 //!
-//! The rekuest server's own loop keeps what needs the server: provisioning the hub's services
-//! as agents, and re-embedding actions.
+//! What needs the rekuest server is asked of it when due (`upkeep`): provisioning the hub's
+//! services as agents.
 //!
 //! Deliberately: a reaper that starts heals whatever an earlier one left behind on its first
 //! tick, which runs at once; a reaper may die at any instant and nothing pending dies with it; any

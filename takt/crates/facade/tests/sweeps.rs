@@ -94,10 +94,10 @@ async fn agent(ctx: &Context) -> (i64, i64) {
     .await
     .unwrap();
     let action: i64 = sqlx::query_scalar(
-        "INSERT INTO facade_action (defined_at, embedding_model, key, version, pure, idempotent, allow_probe, stateful,
+        "INSERT INTO facade_action (defined_at, key, version, pure, idempotent, allow_probe, stateful,
                                     kind, port_groups, name, description, scope, is_dev, hash, args, returns,
                                     arg_count, return_count, app_id, organization_id)
-         SELECT now(), '', $2, '1', false, false, false, false, 'FUNCTION', '[]', 'act', '', 'GLOBAL', false, $2,
+         SELECT now(), $2, '1', false, false, false, false, 'FUNCTION', '[]', 'act', '', 'GLOBAL', false, $2,
                 '[]', '[]', 0, 0, a.app_id, a.organization_id FROM facade_agent a WHERE a.id = $1
          RETURNING id",
     )

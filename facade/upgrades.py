@@ -1,10 +1,10 @@
 """What this service does to its own data when a deployment moves from one version to another.
 
-Schema changes are Django migrations, and those run when the server starts. This is for what
-a migration cannot express, or must not do while the previous release still serves: a rewrite
-that needs the old and the new code not to overlap, a one-off pass over rows another program
-(takt) also writes. An installer runs it once, between stopping the old server and starting
-the new one::
+Schema changes are Django migrations, and those run in the migration job, before the server
+starts. This is for what a migration cannot express, or must not do while the previous release
+still serves: a rewrite that needs the old and the new code not to overlap, a one-off pass over
+rows another program (takt) also writes. An installer runs it once, between stopping the old
+server and starting the new one::
 
     python manage.py upgrade --from 5.2.0 --to 6.0.0
 

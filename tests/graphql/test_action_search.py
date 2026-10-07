@@ -49,13 +49,11 @@ async def _warm(context: HttpContext) -> None:
     await schema.execute("query { __typename }", context_value=context)
 
 
-def _seed(context: HttpContext, prefix: str, name: str, description: str = "", *, distance: float | None = None, e0: np.ndarray | None = None, embedding_model: str | None = None) -> Action:
+def _seed(context: HttpContext, prefix: str, name: str, description: str = "", *, distance: float | None = None, e0: np.ndarray | None = None) -> Action:
     """An action in the request's org; optionally with a vector pinned at ``distance`` from ``e0``."""
     action = create_action_for_organization(context.request.organization, prefix, name=name, description=description or f"{prefix} description")
     if distance is not None:
-        Action.objects.filter(pk=action.pk).update(embedding=_vec(e0, distance), embedding_model=embedding_model or engine.model_id())
-    elif embedding_model is not None:
-        Action.objects.filter(pk=action.pk).update(embedding_model=embedding_model)
+        Action.objects.filter(pk=action.pk).update(embedding=_vec(e0, distance))
     return action
 
 
@@ -122,14 +120,14 @@ class TestActionSearch:
 
         assert await _names(authenticated_context, QUERY) == ["In"]
 
-    async def test_stale_embedding_model_is_not_a_vector_hit(self, authenticated_context: HttpContext) -> None:
-        """A row embedded by another model is skipped by the vector leg, still found by substring."""
+    async def test_a_row_without_a_vector_is_not_a_vector_hit(self, authenticated_context: HttpContext) -> None:
+        """A row that was saved without a vector is skipped by the vector leg, still found by substring."""
         await _warm(authenticated_context)
-        e0 = np.asarray(engine.embed_query(QUERY))
-        await sync_to_async(_seed)(authenticated_context, "stale-a", "Old model near", distance=0.05, e0=e0, embedding_model="some/older-model")
-        await sync_to_async(_seed)(authenticated_context, "stale-b", "Old model detect cells", distance=0.05, e0=e0, embedding_model="some/older-model")
+        for prefix, name in (("null-a", "Unembedded near"), ("null-b", "Unembedded detect cells")):
+            action = await sync_to_async(_seed)(authenticated_context, prefix, name)
+            await Action.objects.filter(pk=action.pk).aupdate(embedding=None)
 
-        assert await _names(authenticated_context, QUERY) == ["Old model detect cells"]
+        assert await _names(authenticated_context, QUERY) == ["Unembedded detect cells"]
 
     async def test_explicit_ordering_replaces_the_ranking(self, authenticated_context: HttpContext) -> None:
         """A client's ``ordering`` wins over the distance ranking."""
@@ -148,19 +146,18 @@ class TestActionSearch:
 
         assert await _names(authenticated_context, "") == ["Anything"]
 
-    async def test_unloadable_model_degrades_to_substring(self, authenticated_context: HttpContext) -> None:
+    async def test_unloadable_model_degrades_to_substring(self, authenticated_context: HttpContext, monkeypatch: pytest.MonkeyPatch) -> None:
         """When the weights cannot be loaded the query still answers, substring-only."""
         await _warm(authenticated_context)
         e0 = np.asarray(engine.embed_query(QUERY))
         await sync_to_async(_seed)(authenticated_context, "deg-near", "Near", distance=0.05, e0=e0)
         await sync_to_async(_seed)(authenticated_context, "deg-sub", "Detect cells")
 
-        try:
-            with override_settings(EMBEDDINGS={**engine._settings(), "MODEL_PATH": "/nonexistent/embeddings"}):
-                engine.reset()
-                assert await _names(authenticated_context, QUERY) == ["Detect cells"]
-        finally:
-            engine.reset()
+        def unloadable() -> None:
+            raise OSError("no weights")
+
+        monkeypatch.setattr(engine, "_load_model_cached", unloadable)
+        assert await _names(authenticated_context, QUERY) == ["Detect cells"]
 
     async def test_nested_action_search_is_substring_only(self, authenticated_context: HttpContext) -> None:
         """``implementations(filters: { action: { search } })`` keeps its substring semantics."""

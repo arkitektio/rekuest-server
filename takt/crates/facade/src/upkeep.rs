@@ -1,13 +1,12 @@
-//! The server's upkeep jobs, on takt's clock (the Python server's `facade/upkeep.py`).
+//! The server's upkeep job, on takt's clock (the Python server's `facade/upkeep.py`).
 //!
-//! Two periodic jobs need the Python server: provisioning this hub's services (their manifests
-//! are registered through its models) and embedding the actions takt registered (the model is
-//! in its image only). The server does not loop; takt asks for each when it is due:
+//! One periodic job needs the Python server: provisioning this hub's services (their manifests
+//! are registered through its models). The server does not loop; takt asks for it when it is
+//! due:
 //!
 //! | job         | due                                                        |
 //! |-------------|------------------------------------------------------------|
 //! | `provision` | at start, then every 5 minutes; 30 s after a failed pass   |
-//! | `reembed`   | every 30 s, and again at once while the server has more    |
 //!
 //! The request is `POST {server_url}/_rekuest/upkeep/<job>`, signed with the instance key as a
 //! service token from rekuest to itself: the mirror of the internal API the server calls here.
@@ -15,7 +14,7 @@
 //! Any number of replicas run this. When a job is next due is a redis key that expires then,
 //! taken by whichever replica asks first, so no replica holds a deadline of its own and a
 //! replica dying costs nothing. If redis is unreachable every replica asks: wasteful, still
-//! correct, since the server serializes a provisioning pass and the re-embed claims its rows.
+//! correct, since the server serializes a provisioning pass.
 
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -41,18 +40,10 @@ pub const PROVISION: Job = Job {
     retry: Duration::from_secs(30),
 };
 
-pub const REEMBED: Job = Job {
-    name: "reembed",
-    every: Duration::from_secs(30),
-    retry: Duration::from_secs(30),
-};
-
 /// How often a replica looks whether a job is due.
 const POLL: Duration = Duration::from_secs(10);
-/// A provisioning pass fetches every service's manifest; a re-embed runs the model.
+/// A provisioning pass fetches every service's manifest.
 const TIMEOUT: Duration = Duration::from_secs(120);
-/// How many `more` answers one turn follows before it yields to the next poll.
-const MAX_FOLLOW_UPS: usize = 20;
 
 fn client() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
@@ -69,8 +60,6 @@ fn client() -> &'static reqwest::Client {
 pub enum Outcome {
     /// Everything was done (or another replica's pass is doing it).
     Done,
-    /// Done, and the server has more of the same right now.
-    More,
     /// The server could not be asked, or said the pass failed.
     Failed(String),
 }
@@ -119,9 +108,6 @@ fn outcome(answer: &Value) -> Outcome {
             .unwrap_or_default();
         return Outcome::Failed(format!("could not provision {failed}"));
     }
-    if answer.get("more").and_then(Value::as_bool) == Some(true) {
-        return Outcome::More;
-    }
     Outcome::Done
 }
 
@@ -167,19 +153,13 @@ async fn rest(ctx: &Context, job: &Job, duration: Duration) {
 
 /// Run `job` now and note when it is next due; what it came to.
 pub async fn run(ctx: &Context, job: &Job) -> Outcome {
-    let mut result = Outcome::Done;
-    for _ in 0..MAX_FOLLOW_UPS {
-        result = match call(&ctx.settings, job.name).await {
-            Ok(answer) => {
-                tracing::debug!("upkeep {}: {answer}", job.name);
-                outcome(&answer)
-            }
-            Err(e) => Outcome::Failed(e),
-        };
-        if result != Outcome::More {
-            break;
+    let result = match call(&ctx.settings, job.name).await {
+        Ok(answer) => {
+            tracing::debug!("upkeep {}: {answer}", job.name);
+            outcome(&answer)
         }
-    }
+        Err(e) => Outcome::Failed(e),
+    };
     match &result {
         Outcome::Failed(why) => {
             tracing::warn!(
@@ -189,8 +169,6 @@ pub async fn run(ctx: &Context, job: &Job) -> Outcome {
             );
             rest(ctx, job, job.retry).await;
         }
-        // Still more after every follow-up: due at the next poll.
-        Outcome::More => rest(ctx, job, Duration::from_millis(1)).await,
         Outcome::Done => rest(ctx, job, job.every).await,
     }
     result
@@ -208,7 +186,7 @@ async fn keep(ctx: Context, job: Job) {
     }
 }
 
-/// Keep every job, forever. Never inside the reaper's pass: a slow server must not hold a
+/// Keep the job, forever. Never inside the reaper's pass: a slow server must not hold a
 /// deadline sweep back.
 pub async fn run_forever(ctx: Context) {
     if ctx.settings.server_url.is_none() || ctx.settings.instance_key.is_none() {
@@ -217,5 +195,5 @@ pub async fn run_forever(ctx: Context) {
     }
     let jitter = uuid::Uuid::new_v4().as_u128() % 500;
     tokio::time::sleep(Duration::from_millis(jitter as u64)).await;
-    tokio::join!(keep(ctx.clone(), PROVISION), keep(ctx, REEMBED));
+    keep(ctx, PROVISION).await;
 }

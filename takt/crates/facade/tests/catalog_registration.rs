@@ -534,3 +534,136 @@ async fn a_dependency_no_longer_declared_is_deleted() {
     t.register(declaration(json!([]))).await.unwrap();
     assert!(keys().await.is_empty());
 }
+
+/// Declare, as a service's manifest would, that `identifier` is hosted and its objects carry `keys`.
+async fn declare_structure(db: &PgPool, identifier: &str, keys: &[&str]) {
+    sqlx::query(
+        "WITH service AS (
+             INSERT INTO facade_service (name) VALUES ('takt-tests')
+             ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id),
+         structure AS (
+             INSERT INTO facade_structuredeclaration (service_id, identifier)
+             SELECT id, $1 FROM service
+             ON CONFLICT (identifier) DO UPDATE SET identifier = EXCLUDED.identifier RETURNING id)
+         INSERT INTO facade_descriptor (structure_id, key, position)
+         SELECT structure.id, key, position
+           FROM structure, unnest($2::varchar[]) WITH ORDINALITY AS declared(key, position)
+         ON CONFLICT (structure_id, key) DO NOTHING",
+    )
+    .bind(identifier)
+    .bind(keys)
+    .execute(db)
+    .await
+    .unwrap();
+}
+
+/// One action taking `port`, and returning `returns`.
+fn constrained(port: Value, returns: Value) -> Value {
+    json!({"implementations": [{"interface": "scan", "definition": {
+        "key": "measure", "version": "1", "name": "Measure", "kind": "FUNCTION",
+        "args": [port], "returns": returns}}]})
+}
+
+/// A port constrains only what the service hosting its structure declares: a mistyped key is
+/// refused with what is declared, instead of never matching anything.
+#[tokio::test]
+async fn a_descriptor_no_service_declares_is_refused() {
+    let Some(t) = tenant().await else { return };
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let image = format!("@d{unique}/image");
+    let spaces = format!("@d{unique}/n_space_axes");
+    let kind = format!("@d{unique}/value_kind");
+    declare_structure(&t.db, &image, &[&spaces, &kind]).await;
+    let port = |key: &str| {
+        json!({"key": "image", "kind": "STRUCTURE", "identifier": image, "nullable": false,
+                                  "requires": [{"key": key, "operator": "EQUALS", "value": 2}]})
+    };
+
+    let refused = t
+        .register(constrained(
+            port(&format!("@d{unique}/n_spce_axes")),
+            json!([]),
+        ))
+        .await
+        .unwrap_err();
+    assert!(
+        refused.contains(&format!("Port 'image' of 'measure' constrains the descriptor '@d{unique}/n_spce_axes', which no service declares for {image}. Declared: {spaces}, {kind}")),
+        "{refused}"
+    );
+    assert_eq!(t.count("facade_implementation").await, 0);
+
+    // Declared keys pass, on arguments and on returns; a declared key nothing computes
+    // (provenance) is a key like any other here.
+    let returns = json!([{"key": "labels", "kind": "STRUCTURE", "identifier": image, "nullable": false,
+                          "provides": [{"key": kind, "operator": "EQUALS", "value": "categorical"}]}]);
+    t.register(constrained(port(&spaces), returns))
+        .await
+        .unwrap();
+    assert_eq!(t.count("facade_implementation").await, 1);
+}
+
+/// A key is declared per structure: another structure's key does not count, a structure no
+/// service hosts has none, and a nested port is named by its path.
+#[tokio::test]
+async fn a_descriptor_is_declared_for_its_structure() {
+    let Some(t) = tenant().await else { return };
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let (image, table) = (format!("@d{unique}/image"), format!("@d{unique}/table"));
+    let (spaces, rows) = (
+        format!("@d{unique}/n_space_axes"),
+        format!("@d{unique}/n_rows"),
+    );
+    declare_structure(&t.db, &image, &[&spaces]).await;
+    declare_structure(&t.db, &table, &[&rows]).await;
+    let structure = |identifier: &str, key: &str| {
+        json!({"key": "...", "kind": "STRUCTURE", "identifier": identifier, "nullable": false,
+                                                        "requires": [{"key": key, "operator": "GTE", "value": 1}]})
+    };
+    let list = |child: Value, requires: Value| json!({"key": "items", "kind": "LIST", "nullable": false, "children": [child], "requires": requires});
+
+    let refused = t
+        .register(constrained(
+            list(structure(&image, &rows), json!(null)),
+            json!([]),
+        ))
+        .await
+        .unwrap_err();
+    assert!(refused.contains(&format!("Port 'items....' of 'measure' constrains the descriptor '{rows}', which no service declares for {image}")), "{refused}");
+
+    let unhosted = format!("@d{unique}/nothing");
+    let refused = t
+        .register(constrained(
+            list(structure(&unhosted, &spaces), json!(null)),
+            json!([]),
+        ))
+        .await
+        .unwrap_err();
+    assert!(
+        refused.contains("Declared: none (no service hosts this structure"),
+        "{refused}"
+    );
+
+    // A list constrained as a whole is not one structure's: any declared key will do, an
+    // undeclared one will not.
+    let plain = json!({"key": "...", "kind": "STRUCTURE", "identifier": image, "nullable": false});
+    let refused = t
+        .register(constrained(
+            list(
+                plain.clone(),
+                json!([{"key": format!("@d{unique}/made_up"), "operator": "EXISTS"}]),
+            ),
+            json!([]),
+        ))
+        .await
+        .unwrap_err();
+    assert!(
+        refused.contains("which no service declares for any structure"),
+        "{refused}"
+    );
+    t.register(constrained(
+        list(plain, json!([{"key": rows, "operator": "EXISTS"}])),
+        json!([]),
+    ))
+    .await
+    .unwrap();
+}

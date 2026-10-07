@@ -22,7 +22,7 @@ services:
   # The server: migrates the schema on boot, then serves GraphQL and its subscriptions.
   rekuest:
     build: .
-    command: sh -c "python -m arkitekt_service migrate && bash run.sh"
+    command: arkitekt-service standalone
     depends_on:
       - db
       - redis

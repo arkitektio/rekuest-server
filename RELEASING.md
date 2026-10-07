@@ -5,7 +5,7 @@ package:
 
 | Image | Built from | What it is |
 | --- | --- | --- |
-| `jhnnsrs/rekuest` | the repository root (`Dockerfile`) | the rekuest server: GraphQL, migrations, the upkeep jobs takt asks for |
+| `jhnnsrs/rekuest` | the repository root (`Dockerfile`) | the rekuest server: GraphQL, migrations, the upkeep job takt asks for |
 | `jhnnsrs/rekuest-takt` | `takt/` (`takt/Dockerfile`) | takt: the agent protocol and every sweep |
 
 Every release pushes both images with the same set of tags. takt writes the
@@ -67,7 +67,7 @@ What takt needs from its container (`TAKT_INTERNAL_BIND`, a mounted socket) coun
 
 ### Data that has to change between versions
 
-Schema changes are Django migrations and run when the server starts. What a migration cannot
+Schema changes are Django migrations and run in the migration job (`arkitekt-service run migrate`), before the server starts. What a migration cannot
 express — a rewrite that must not overlap with the previous release still serving — goes into
 `facade/upgrades.py`, keyed by the major it leads to. An installer runs
 `python manage.py upgrade --from <old> --to <new>` in the new image, after it stopped the
@@ -128,9 +128,9 @@ fix to `main`/`next` if it also applies there.
 - **Pin both images to the same tag.** `jhnnsrs/rekuest:X` beside
   `jhnnsrs/rekuest-takt:X`, and pull them together: a moving tag pulled for
   one image only leaves takt on another release than the server.
-- **Order on upgrade.** The server migrates on boot. takt waits at startup
+- **Order on upgrade.** The migration job runs before the server starts. takt waits at startup
   until the database has the migrations it was written against
-  (`takt/schema-migrations.txt`), so bring up the new server first, or both
+  (`takt/schema-migrations.txt`), so run the new image's migration job first; the server and takt may then start
   at once.
 - **Staging** (`deployments/next`) pins `:next` — it rides the rc work.
 - **Stable production** should pin the **major** tag (`jhnnsrs/rekuest:1`), not

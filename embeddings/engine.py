@@ -1,8 +1,9 @@
-"""The embedding model: loading, text -> vector, and the settings that describe it.
+"""The embedding model: which one, loading it, text -> vector.
 
-The only module that imports ``model2vec``. Everything reads ``settings.EMBEDDINGS`` at call
-time (never at import), so ``override_settings`` works in tests and a process picks up its
-configuration when Django is ready, not when this module happens to be imported.
+The only module that imports ``model2vec``. The model and its width are constants of the
+release: a new embedder ships with a new image, whose migration re-embeds. What stays
+configuration (``settings.EMBEDDINGS``: on/off and the distance threshold) is read at call
+time, never at import, so ``override_settings`` works in tests.
 """
 
 from __future__ import annotations
@@ -23,19 +24,27 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Written next to baked weights by the Dockerfile so a process can tell which model a
-#: ``model_path`` directory holds, and refuse a configuration that names another one.
+#: The model2vec model every vector of this release comes from.
+MODEL = "minishlab/potion-base-8M"
+#: The width of :data:`MODEL`'s vectors, and of every ``vector(N)`` column.
+DIMENSIONS = 256
+#: Where the image carries the weights of :data:`MODEL` (``save_pretrained`` layout, baked by
+#: the Dockerfile). Absent on a developer's machine and in CI, where the weights come from the
+#: Hugging Face cache.
+MODEL_PATH = "/opt/models/embeddings"
+#: Written next to baked weights by the Dockerfile so a process can tell which model the
+#: directory holds, and refuse an image baked with another one.
 MODEL_ID_FILENAME = "MODEL_ID"
 
 _load_lock = threading.Lock()
 
 
 class EmbeddingsUnavailable(RuntimeError):
-    """The configured model cannot be loaded (missing weights, no network, wrong width).
+    """The model cannot be loaded (missing weights, no network, corrupt files).
 
     Raised from :func:`embed_texts` / :func:`embed_query` so a caller that can degrade (the
     ``search`` filter) does so explicitly, and one that cannot (the row's ``save()``) can log
-    and leave the row for the healer.
+    and store the row without a vector.
     """
 
 
@@ -49,19 +58,13 @@ def enabled() -> bool:
 
 
 def model_id() -> str:
-    """The configured model2vec model id, verbatim; the value written to ``embedding_model``."""
-    return str(_settings()["MODEL"])
-
-
-def model_path() -> str | None:
-    """Directory holding the weights of :func:`model_id` (``save_pretrained`` layout), if baked."""
-    value = _settings().get("MODEL_PATH")
-    return str(value) if value else None
+    """The model2vec model id of this release, verbatim."""
+    return MODEL
 
 
 def dimensions() -> int:
-    """The configured vector width. Must match both the model and the ``vector(N)`` column."""
-    return int(_settings()["DIMENSIONS"])
+    """The vector width of this release. The model's, and the ``vector(N)`` column's."""
+    return DIMENSIONS
 
 
 def distance_threshold() -> float:
@@ -69,55 +72,45 @@ def distance_threshold() -> float:
     return float(_settings()["DISTANCE_THRESHOLD"])
 
 
-def sweep_batch_size() -> int:
-    """Rows the healer re-embeds per batch."""
-    return int(_settings().get("SWEEP_BATCH_SIZE", 200))
-
-
-def sweep_interval() -> float:
-    """Seconds between healer passes (services without their own sweep loop)."""
-    return float(_settings().get("SWEEP_INTERVAL", 30))
-
-
 @lru_cache(maxsize=1)
-def _load_model_cached(path: str | None, name: str, width: int) -> StaticModel:
-    """Load once per (path, model, width); the arguments make a config change a cache miss."""
+def _load_model_cached() -> StaticModel:
+    """Load :data:`MODEL` once per process: from the baked directory when the image has one."""
     from model2vec import StaticModel
 
-    if path is not None:
-        stamp = os.path.join(path, MODEL_ID_FILENAME)
+    baked_path = MODEL_PATH if os.path.isdir(MODEL_PATH) else None
+    if baked_path is not None:
+        stamp = os.path.join(baked_path, MODEL_ID_FILENAME)
         if os.path.exists(stamp):
             with open(stamp, encoding="utf-8") as handle:
                 baked = handle.read().strip()
-            if baked != name:
-                raise ImproperlyConfigured(f"EMBEDDINGS.MODEL_PATH {path!r} holds the weights of {baked!r} but EMBEDDINGS.MODEL is {name!r}. Rebuild the image for the new model, or point MODEL_PATH elsewhere.")
-        model = StaticModel.from_pretrained(path)
+            if baked != MODEL:
+                raise ImproperlyConfigured(f"{baked_path!r} holds the weights of {baked!r} but this release embeds with {MODEL!r}. Rebuild the image.")
+        model = StaticModel.from_pretrained(baked_path)
     else:
         # ``force_download`` defaults to True upstream, which would re-fetch the weights on
         # every process start; the hub cache is exactly what a dev box or CI runner wants.
-        model = StaticModel.from_pretrained(name, force_download=False)
-    if int(model.dim) != width:
-        raise ImproperlyConfigured(f"Embedding model {name!r} produces {model.dim}-wide vectors but EMBEDDINGS.DIMENSIONS is {width}. The vector column is that width too: changing the model's width is a migration (see CONFIG.md).")
-    logger.info("Embedding model %s loaded (%d dims)%s", name, width, f" from {path}" if path else "")
+        model = StaticModel.from_pretrained(MODEL, force_download=False)
+    if int(model.dim) != DIMENSIONS:
+        raise ImproperlyConfigured(f"Embedding model {MODEL!r} produces {model.dim}-wide vectors but this release stores {DIMENSIONS}-wide ones. The two are constants of `embeddings.engine` and change together, with a migration of the vector column.")
+    logger.info("Embedding model %s loaded (%d dims)%s", MODEL, DIMENSIONS, f" from {baked_path}" if baked_path else "")
     return model
 
 
 def _model() -> StaticModel:
     """The loaded model, or :class:`EmbeddingsUnavailable` with the cause chained."""
-    key = (model_path(), model_id(), dimensions())
     try:
         # ``lru_cache`` is not atomic: two worker threads would both load. The lock is only
         # contended during the first load of a process.
         with _load_lock:
-            return _load_model_cached(*key)
+            return _load_model_cached()
     except ImproperlyConfigured:
         raise
     except Exception as exc:  # weights missing, no network, corrupt files, ...
-        raise EmbeddingsUnavailable(f"Embedding model {key[1]!r} could not be loaded: {exc}") from exc
+        raise EmbeddingsUnavailable(f"Embedding model {MODEL!r} could not be loaded: {exc}") from exc
 
 
 def reset() -> None:
-    """Drop the loaded model so the next call reloads from the current settings (tests)."""
+    """Drop the loaded model so the next call loads it again (tests)."""
     with _load_lock:
         _load_model_cached.cache_clear()
 
@@ -125,8 +118,9 @@ def reset() -> None:
 def warm_up() -> None:
     """Load the model now rather than on the first row or query.
 
-    Raises :class:`django.core.exceptions.ImproperlyConfigured` on a width mismatch and
-    :class:`EmbeddingsUnavailable` when the weights cannot be loaded. A no-op when disabled.
+    Raises :class:`django.core.exceptions.ImproperlyConfigured` when the image carries another
+    model's weights or the width is not the model's, and :class:`EmbeddingsUnavailable` when the
+    weights cannot be loaded. A no-op when disabled.
     """
     if enabled():
         _model()

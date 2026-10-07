@@ -155,6 +155,10 @@ async fn upsert_action(
     let args = dump(&definition.args);
     let returns = dump(&definition.returns);
     let port_groups = dump(&definition.port_groups);
+    // Written with the row, by the model the server embeds a search with: no `save()` runs
+    // for a row written here, so nothing else would (`Action.embedding_source_fields`).
+    let embedding =
+        crate::embeddings::embedding(&[Some(definition.name.as_str()), Some(description.as_str())]);
 
     if let Some(action) = prefetch.actions.get(&lookup).cloned() {
         if action.hash == hash {
@@ -168,7 +172,7 @@ async fn upsert_action(
         }
         let action: ActionRow = sqlx::query_as(&format!(
             "UPDATE facade_action SET hash = $2, args = $3, returns = $4, port_groups = $5, stateful = $6, scope = $7,
-                    kind = $8, description = $9, name = $10
+                    kind = $8, description = $9, name = $10, embedding = $11::vector
               WHERE id = $1 RETURNING {ACTION_COLUMNS}"
         ))
         .bind(action.id)
@@ -181,6 +185,7 @@ async fn upsert_action(
         .bind(definition.kind.value())
         .bind(&description)
         .bind(&definition.name)
+        .bind(&embedding)
         .fetch_one(&mut *conn)
         .await?;
         prefetch.actions.insert(lookup, action.clone());
@@ -191,8 +196,8 @@ async fn upsert_action(
     let inserted: Option<ActionRow> = sqlx::query_as(&format!(
         "INSERT INTO facade_action
              (key, version, app_id, organization_id, hash, description, args, scope, stateful, pure,
-              idempotent, allow_probe, is_dev, kind, port_groups, returns, name)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+              idempotent, allow_probe, is_dev, kind, port_groups, returns, name, embedding)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::vector)
          ON CONFLICT (organization_id, app_id, key, version) DO NOTHING
          RETURNING {ACTION_COLUMNS}"
     ))
@@ -213,6 +218,7 @@ async fn upsert_action(
     .bind(&port_groups)
     .bind(&returns)
     .bind(&definition.name)
+    .bind(&embedding)
     .fetch_optional(&mut *conn)
     .await?;
     let action = match inserted {
@@ -278,6 +284,91 @@ macro_rules! relational_port {
 
 relational_port!(ArgPortInputModel, requires);
 relational_port!(ReturnPortInputModel, provides);
+
+/// Every constrained port of a tree: (its key path, its kind, its identifier, its constraints).
+fn constrained_ports<'a, P: RelationalPort>(
+    ports: &'a [P],
+    prefix: &str,
+    found: &mut Vec<(
+        String,
+        &'static str,
+        Option<&'a str>,
+        &'a [DescriptorConstraint],
+    )>,
+) {
+    for port in ports {
+        let path = if prefix.is_empty() {
+            port.key().to_owned()
+        } else {
+            format!("{prefix}.{}", port.key())
+        };
+        if let Some(descriptors) = port.descriptors().filter(|d| !d.is_empty()) {
+            found.push((path.clone(), port.kind(), port.identifier(), descriptors));
+        }
+        constrained_ports(port.children(), &path, found);
+    }
+}
+
+/// A port may only constrain a descriptor a service declares.
+///
+/// A key nobody declares is a key nobody sends or computes: the constraint could never be
+/// tested, so the port would match everything or nothing without anyone learning why. A
+/// STRUCTURE port constrains what the service hosting that structure declares for it; a port of
+/// another kind (a list of structures constrained as a whole) any key some structure carries.
+async fn check_descriptor_keys(
+    conn: &mut PgConnection,
+    definition: &DefinitionInputModel,
+) -> Result<(), Refusal> {
+    let mut constrained = Vec::new();
+    constrained_ports(&definition.args, "", &mut constrained);
+    constrained_ports(&definition.returns, "", &mut constrained);
+    if constrained.is_empty() {
+        return Ok(());
+    }
+    // A malformed constraint is refused as malformed, before it is looked up as undeclared.
+    for (.., descriptors) in &constrained {
+        compile_descriptors_to_jsonpath(Some(descriptors)).map_err(Refusal::Invalid)?;
+    }
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT s.identifier, d.key
+           FROM facade_descriptor d
+           JOIN facade_structuredeclaration s ON s.id = d.structure_id
+          ORDER BY s.identifier, d.position",
+    )
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut declared: HashMap<&str, Vec<&str>> = HashMap::new();
+    for (identifier, key) in &rows {
+        declared.entry(identifier).or_default().push(key);
+    }
+    for (path, kind, identifier, descriptors) in constrained {
+        let structure = identifier.filter(|_| kind == "STRUCTURE");
+        for key in descriptors.iter().map(|d| d.key.as_str()) {
+            let known = match structure {
+                Some(identifier) => declared.get(identifier).is_some_and(|d| d.contains(&key)),
+                None => rows.iter().any(|(_, declared)| declared == key),
+            };
+            if known {
+                continue;
+            }
+            return Err(Refusal::Invalid(match structure {
+                Some(identifier) => format!(
+                    "Port '{path}' of '{}' constrains the descriptor '{key}', which no service declares for {identifier}. Declared: {}",
+                    definition.key,
+                    declared.get(identifier).map_or_else(
+                        || "none (no service hosts this structure, or it is not catalogued yet)".to_owned(),
+                        |keys| keys.join(", "),
+                    ),
+                ),
+                None => format!(
+                    "Port '{path}' of '{}' constrains the descriptor '{key}', which no service declares for any structure",
+                    definition.key,
+                ),
+            }));
+        }
+    }
+    Ok(())
+}
 
 /// Flatten a port tree into rows, one insert per depth level (`_bulk_create_ports_level_by_level`).
 async fn create_ports_level_by_level<P: RelationalPort>(
@@ -554,6 +645,7 @@ pub async fn create_implementation(
     let definition = &input.definition;
     let scope = infer_action_scope(definition).value();
     let idempotent = validate_qualifiers(definition, input.effects)?;
+    check_descriptor_keys(conn, definition).await?;
     let diagnostics = collect_diagnostics(
         conn,
         definition,

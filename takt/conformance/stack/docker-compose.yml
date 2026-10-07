@@ -10,15 +10,30 @@ services:
       POSTGRES_MULTIPLE_DATABASES: rekuest
       POSTGRES_PASSWORD: hello_django
       POSTGRES_USER: hello_django
+  # Brings the database to this checkout's schema, once, before the server and takt start: a
+  # service's own start only serves, so the job is one of its own, as an installer runs it.
+  rekuest-migrate:
+    depends_on:
+    - db
+    build:
+      context: ../../..
+    command: arkitekt-service run migrate
+    volumes:
+    - ./configs/rekuest.yaml:/workspace/config.yaml
   rekuest:
     depends_on:
-    - redis
-    - db
-    - rustfs
+      redis:
+        condition: service_started
+      db:
+        condition: service_started
+      rustfs:
+        condition: service_started
+      rekuest-migrate:
+        condition: service_completed_successfully
     # The server of this repository: the schema takt writes is the one this checkout migrates.
     build:
       context: ../../..
-    command: bash run-debug.sh
+    command: arkitekt-service debug
     stop_grace_period: 1s
     ports:
     - "${REKUEST_HOST_PORT:-5690}:80"

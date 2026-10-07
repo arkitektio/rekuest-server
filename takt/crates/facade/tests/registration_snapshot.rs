@@ -299,6 +299,29 @@ fn diff(path: &str, got: &Value, expected: &Value, out: &mut Vec<String>) {
     }
 }
 
+/// Declare, as a service's manifest would, that `identifier` is hosted and its objects carry
+/// `keys`: registration refuses a port constraining a descriptor no service declares.
+async fn declare_structure(db: &PgPool, identifier: &str, keys: &[&str]) {
+    sqlx::query(
+        "WITH service AS (
+             INSERT INTO facade_service (name) VALUES ('takt-tests')
+             ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id),
+         structure AS (
+             INSERT INTO facade_structuredeclaration (service_id, identifier)
+             SELECT id, $1 FROM service
+             ON CONFLICT (identifier) DO UPDATE SET identifier = EXCLUDED.identifier RETURNING id)
+         INSERT INTO facade_descriptor (structure_id, key, position)
+         SELECT structure.id, key, position
+           FROM structure, unnest($2::varchar[]) WITH ORDINALITY AS declared(key, position)
+         ON CONFLICT (structure_id, key) DO NOTHING",
+    )
+    .bind(identifier)
+    .bind(keys)
+    .execute(db)
+    .await
+    .unwrap();
+}
+
 fn for_side(payload: &Value, side: &str) -> Value {
     serde_json::from_str(&payload.to_string().replace("{side}", side)).unwrap()
 }
@@ -312,6 +335,41 @@ async fn registration_writes_the_recorded_rows() {
     let db = PgPool::connect(&url).await.unwrap();
     let org = format!("parity-{}", uuid::Uuid::new_v4().simple());
     let agent = agent(&db, &org, "rs").await;
+    // What the declarations below constrain on: the vocabularies of the two array services,
+    // and the made-up keys of the synthetic steps.
+    let mikro = [
+        "n_space_axes",
+        "n_time_axes",
+        "n_channel_axes",
+        "n_spectrum_axes",
+        "n_microtime_axes",
+        "n_channels",
+        "n_timepoints",
+        "value_kind",
+    ]
+    .map(|key| format!("@mikro/{key}"));
+    let elektro = [
+        "n_space_axes",
+        "n_time_axes",
+        "n_channel_axes",
+        "n_frequency_axes",
+        "n_index_axes",
+        "n_channels",
+        "n_samples",
+        "n_indices",
+        "value_dimension",
+        "value_kind",
+    ]
+    .map(|key| format!("@elektro/{key}"));
+    declare_structure(&db, "@mikro/lens", &mikro.each_ref().map(String::as_str)).await;
+    declare_structure(
+        &db,
+        "@elektro/lens",
+        &elektro.each_ref().map(String::as_str),
+    )
+    .await;
+    declare_structure(&db, "@mikro/image", &["axes", "$.@mikro/n", "x"]).await;
+    declare_structure(&db, "@mikro/labels", &["dtype"]).await;
 
     let apps: serde_json::Map<String, Value> = serde_json::from_str(include_str!(
         "../../rekuest-server-core/tests/fixtures/app_declarations.json"

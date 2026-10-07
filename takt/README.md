@@ -66,7 +66,7 @@ takt reads the rekuest server's `config.yaml`
   blocks takt reads: `django`, `postgres`, `redis`, `authentikate`, `rekuest`, `provenance`,
   `instance`.
 - **The `instance` block is required.** takt refuses to start without it: it signs what it
-  asks of the server (the upkeep jobs) and of HookAgents with the instance key.
+  asks of the server (the upkeep job) and of HookAgents with the instance key.
 - **`TAKT_INTERNAL_BIND`** is where the internal API is served, apart from the address agents
   and services reach: `unix:<path>` (a socket the server mounts too; `rekuest.takt_socket` on
   its side) or an address (default `127.0.0.1:8081`: this machine alone, so a deployment
@@ -160,14 +160,28 @@ chains.
 
 ## Upkeep
 
-Two periodic jobs need the Python server, which runs no loop: provisioning (cataloguing this hub's
+One periodic job needs the Python server, which runs no loop: provisioning (cataloguing this hub's
 services, `rekuest.services`, and giving every organization its hook agents,
-`rekuest.hook_agents`) and embedding the actions takt registered (only the server's image
-carries the model). `facade::upkeep` asks for each when it is due, with
-`POST <rekuest.server_url>/_rekuest/upkeep/<job>`, signed with the instance key: `provision` at
-start and every 5 minutes (30 s after a failed pass), `reembed` every 30 s and again at once
-while the server has more. When a job is next due is a redis key that expires then, so any
-number of replicas may run and none holds a deadline of its own.
+`rekuest.hook_agents`). `facade::upkeep` asks for it when it is due, with
+`POST <rekuest.server_url>/_rekuest/upkeep/provision`, signed with the instance key: at
+start and every 5 minutes (30 s after a failed pass). When the job is next due is a redis key
+that expires then, so any number of replicas may run and none holds a deadline of its own.
+
+## Embeddings
+
+takt writes actions with SQL of its own, so no model of the server's embeds them. takt does:
+`facade::embeddings` loads the model the server embeds a search with (model2vec, through
+`model2vec-rs`) and the vector goes into the statement that registers an action or changes
+its name or description. Nothing fills a vector in afterwards.
+
+The model is a constant of the release in both halves (`embeddings::MODEL` here,
+`embeddings.engine.MODEL` in the server), and its weights are baked into both images
+(`scripts/bake-embeddings.sh`, under `/opt/models/embeddings`): a new model is a release of
+the pair. A build whose baked model is not the source's fails, and a start on another
+model's weights is refused. `embeddings.enabled: false` in the config turns it off; outside
+the image, `TAKT_EMBEDDINGS_PATH` names a directory of weights, and without one actions are
+registered without a vector. That the two halves give the same vector for the same text is
+held by the conformance suite (`conformance/tests/test_upkeep.py`).
 
 ## Layout
 
@@ -218,7 +232,7 @@ cargo clippy --all-targets -- -D warnings
 scripts/test-db.sh down
 ```
 
-`scripts/test-db.sh` builds the rekuest server from this checkout, lets it migrate, and exports
+`scripts/test-db.sh` builds the rekuest server from this checkout, runs its migration job, and exports
 `TAKT_TEST_DATABASE_URL` and `TAKT_TEST_REDIS_URL`. Tests that need a database or redis are
 skipped without them.
 

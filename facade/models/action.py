@@ -3,7 +3,7 @@ from django.db import models
 from django.db.models.functions import Now, Upper
 from django_choices_field import TextChoicesField
 
-from embeddings.models import EmbeddedDescriptionMixin, embedding_indexes
+from embeddings.models import EmbeddedDescriptionMixin
 from facade import enums
 
 
@@ -115,8 +115,6 @@ class Action(EmbeddedDescriptionMixin, models.Model):
             models.Index(fields=["hash"], name="action_hash_idx"),
             models.Index(fields=["organization", "key"], name="action_org_key_idx"),
             models.Index(fields=["name"], name="action_name_idx"),
-            # The embedding healer's "any row not by the current model?" probe.
-            *embedding_indexes("action"),
         ]
 
 

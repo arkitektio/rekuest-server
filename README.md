@@ -29,7 +29,7 @@ and are released under the same version.
 
 | program | where | what it does |
 |---|---|---|
-| **the rekuest server** (Python/Django) | the repository root | GraphQL (queries, mutations, subscriptions), the database migrations, and the two upkeep jobs takt asks it for (service agents, embeddings). |
+| **the rekuest server** (Python/Django) | the repository root | GraphQL (queries, mutations, subscriptions), the database migrations, and the upkeep job takt asks it for (service agents). |
 | **takt** (Rust) | [`takt/`](./takt/README.md) | The whole agent protocol: the agent websocket `/agent`, the HookAgent intake `/agent/http/{agent_id}`, the signal intake `/agent/signal/{service}` (each also under its former name, `/agi`), registration, assign and control, probes, and every sweep (stale agents, deadlines, workflow resume, schedules, triggers, retention). |
 
 The server has no websocket route for agents and no agent code: `rekuest/asgi.py` serves GraphQL
@@ -44,13 +44,13 @@ migrates, and waits at startup until the database has the migrations listed in
 
 | process | command | role |
 |---|---|---|
-| migrate (once per release, before anything starts) | `python -m arkitekt_service migrate` | Waits for the database and applies the migrations, under an advisory lock. |
-| web (any number of replicas) | `bash run.sh` (daphne) | Serves GraphQL and its subscriptions, and nothing else. Runs no loop: takt asks it to provision this hub's services and to embed new actions when those are due. Its health check (`ht`) answers for takt too. |
-| takt (any number of replicas) | the `jhnnsrs/rekuest-takt` image, same `config.yaml` | The agent protocol (`agent`, formerly `agi`), every sweep, and the clock of the server's upkeep jobs. Healthcheck: `takt healthcheck`. |
+| migrate (once per release, before anything starts) | `arkitekt-service run migrate` | Waits for the database and applies the migrations, under an advisory lock. |
+| web (any number of replicas) | `arkitekt-service serve` (daphne) | Serves GraphQL and its subscriptions, and nothing else. Runs no loop: takt asks it to provision this hub's services when that is due. Loads the embedding model at start. Its health check (`ht`) answers for takt too. |
+| takt (any number of replicas) | the `jhnnsrs/rekuest-takt` image, same `config.yaml` | The agent protocol (`agent`, formerly `agi`), every sweep, and the clock of the server's upkeep job. Healthcheck: `takt healthcheck`. |
 
 The migrate step and the web process run from the `jhnnsrs/rekuest` image, which has no
-default command. Always run the same version of both images. `run-debug.sh` migrates and
-serves in one go with Django's autoreloading server, for development.
+default command. Always run the same version of both images. `arkitekt-service debug` serves
+with Django's autoreloading server, for development: it does not migrate either.
 
 To run the pair locally from this checkout:
 

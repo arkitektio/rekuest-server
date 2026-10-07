@@ -1,5 +1,8 @@
 """The provisioning pass: what takt asks for at start and every five minutes (:mod:`facade.upkeep`).
 
+Its first half alone is also a job of the image (``manage.py catalogue``, run by ``migrate`` as
+setup and by an installer whenever it likes): :func:`catalogue_services`.
+
 Two independent things happen in it, and neither reads what the other wrote:
 
 * the **catalog**: each configured service's structures and signals (:mod:`facade.service_catalog`);
@@ -56,6 +59,18 @@ def provision_all() -> Failed | None:
         if not held:
             return None
         return Failed(services=service_catalog.catalogue_all(), hook_agents=hook_agents.provision_all())
+
+
+def catalogue_services() -> list[str] | None:
+    """The catalog alone, under the same lock: the services that could not be catalogued.
+
+    What the ``catalogue`` job runs (``manage.py catalogue``): it needs the database and
+    nothing else, so it can run before anything serves. ``None`` when another pass holds the lock.
+    """
+    with _locked() as held:
+        if not held:
+            return None
+        return service_catalog.catalogue_all()
 
 
 def provision_hook_agents(organizations: list[Organization]) -> list[str] | None:

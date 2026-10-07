@@ -38,12 +38,9 @@ authentikate:
 embeddings:
   # Semantic `search` over actions: name + description are embedded on save by a small
   # static model that runs inside the service (no GPU, no extra service) and stored in a
-  # pgvector column. All keys have defaults; the block may be omitted. `dimensions` is also
-  # the width of the database column -- changing the model's width is a migration, see
-  # CONFIG.md. The Docker image bakes the weights and sets EMBEDDINGS__MODEL_PATH itself.
+  # pgvector column. All keys have defaults; the block may be omitted. The model is not a
+  # setting: it is a constant of the release and the Docker image carries its weights.
   enabled: true
-  model: minishlab/potion-base-8M
-  dimensions: 256
   distance_threshold: 0.55
 postgres:
   db_name: rekuest_db

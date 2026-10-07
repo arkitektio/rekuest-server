@@ -16,7 +16,7 @@ async fn main() -> anyhow::Result<()> {
         .or_else(|_| std::env::var("ARKITEKT_CONFIG_FILE"))
         .unwrap_or_else(|_| "config.yaml".into());
     let configuration = Configuration::load(&path)?;
-    // takt signs what it asks of the server (the upkeep jobs) and of HookAgents with the
+    // takt signs what it asks of the server (the upkeep job) and of HookAgents with the
     // instance key: without one, none of that would be accepted.
     anyhow::ensure!(
         configuration.instance.is_some(),
@@ -60,6 +60,15 @@ async fn main() -> anyhow::Result<()> {
     )
     .await
     .context("connecting the channel layer")?;
+    // Before anything is registered: an action is embedded in the statement that writes it.
+    // `TAKT_EMBEDDINGS_PATH` is for a process outside the image, which has none baked.
+    let weights = std::env::var("TAKT_EMBEDDINGS_PATH")
+        .unwrap_or_else(|_| facade::embeddings::MODEL_PATH.to_owned());
+    facade::embeddings::start(
+        configuration.embeddings.enabled,
+        std::path::Path::new(&weights),
+    )
+    .context("loading the embedding model")?;
     let facade = facade::Context {
         db,
         redis,

@@ -83,6 +83,10 @@ INSTALLED_APPS = [
     "kante",
     "facade",
     "health_check",  # required
+    # What every service is as a Django server: `ensureadmin`, `validate_settings`, and the
+    # check that warns about config keys this release does not read. Last, so that a command
+    # of the service's own with the same name is the one that runs.
+    "arkitekt_service.server",
 ]
 
 # Authentikate section
@@ -102,6 +106,10 @@ AUTHENTIKATE = conf.authentikate.model_dump()
 # ``arkitekt_service.trust``); its kid is the RFC 7638 thumbprint — what the coord's trust
 # bundle lists it under.
 from joserfc.jwk import OKPKey as _OKPKey  # noqa: E402
+
+# Where this service's contract is: what the image's environment says, and the same here for a
+# checkout, so that `manage.py validate_settings` and the configuration check work in both.
+os.environ.setdefault("ARKITEKT_SERVICE", "rekuest.contract")
 
 INSTANCE = {
     "PRIVATE_KEY": conf.instance.private_key,
@@ -163,18 +171,12 @@ STRAWBERRY_DJANGO = {
 # Semantic search (the vendored ``embeddings`` package). Actions embed their name +
 # description into a pgvector column on save, with a model2vec static model that runs in this
 # process (no service, no GPU, ~1 ms per row). ``ActionFilter.search`` ORs "cosine distance
-# below DISTANCE_THRESHOLD" onto its substring match. DIMENSIONS is also the width of the
-# database column: the ``embeddings`` system checks refuse to start when the model, this
-# setting and the column disagree. Rows filled by another model are re-embedded when takt
-# asks (``facade.upkeep``), never by a command.
+# below DISTANCE_THRESHOLD" onto its substring match. The model and its width are not
+# settings: they are constants of the release (``embeddings.engine``) and the image carries
+# the weights.
 EMBEDDINGS = {
     "ENABLED": conf.embeddings.enabled,
-    "MODEL": conf.embeddings.model,
-    "MODEL_PATH": conf.embeddings.model_path,
-    "DIMENSIONS": conf.embeddings.dimensions,
     "DISTANCE_THRESHOLD": conf.embeddings.distance_threshold,
-    "SWEEP_INTERVAL": conf.embeddings.sweep_interval,
-    "SWEEP_BATCH_SIZE": conf.embeddings.sweep_batch_size,
 }
 
 

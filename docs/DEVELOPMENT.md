@@ -63,8 +63,8 @@ python manage.py createsuperuser
 # Start the development server
 python manage.py runserver
 
-# Or use the debug script
-./run-debug.sh
+# Or use the debug script (it serves only: migrate first, `arkitekt-service run migrate`)
+./arkitekt-service debug
 ```
 
 The server will be available at `http://localhost:8000`
@@ -77,7 +77,7 @@ rekuest-server-next/
 ├── docker-compose.yaml      # The pair for local use: db, redis, server, takt
 ├── manage.py                # Django management script
 ├── pyproject.toml           # Project dependencies and settings
-├── run.sh                   # Web process: migrate, then daphne
+├── arkitekt-service serve                   # Web process: daphne, and nothing else
 ├── facade/                  # Main application package
 │   ├── models/             # Database models (package: caller, agent, action, …)
 │   ├── schema.py           # GraphQL schema definition (Query/Mutation/Subscription)
@@ -93,7 +93,7 @@ rekuest-server-next/
 │   ├── service_catalog.py  # Catalogues this hub's services: structures + signals
 │   ├── hook_agents.py      # Gives every organization this hub's hook agents
 │   ├── provisioning.py     # The pass that runs both, one replica at a time
-│   ├── upkeep.py           # The jobs takt asks for: provisioning + stale embeddings
+│   ├── upkeep.py           # The job takt asks for: provisioning
 │   ├── descriptors.py      # requires/provides → JSONPath compiler
 │   ├── managers.py         # Relational port-matching engine
 │   ├── channels.py         # Realtime channels
@@ -111,7 +111,7 @@ rekuest-server-next/
 │   └── urls.py             # URL routing (admin, JWKS, health)
 ├── rekuest_core/           # Shared core: enums, inputs, scalars, objects
 ├── rekuest_service/        # Vendored package the hub's services use to act as HookAgents
-├── embeddings/             # Semantic search: the model, the pgvector column, the healer
+├── embeddings/             # Semantic search: the model, the pgvector column, the search
 ├── datalayer/              # Secondary app: media/data layer
 ├── tests/                  # The server's test suite
 ├── takt/                 # takt (Rust): the agent protocol

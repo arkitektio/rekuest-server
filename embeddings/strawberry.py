@@ -1,8 +1,8 @@
 """Handing a stored vector to the API as one opaque, self-describing string.
 
 A vector is meaningless without the model that produced it -- two lists of 256 floats from
-two different models are not comparable, and a client that cached one across a model change
-would be quietly comparing noise. So the field is not a list of floats: it is
+two different models are not comparable, and a client that cached one across a release that
+changed the model would be quietly comparing noise. So the field is not a list of floats: it is
 ``<model id>:<floats>``, and the descriptor is part of the value rather than a sibling field
 a client may forget to read.
 
@@ -16,6 +16,8 @@ from typing import Any, NewType
 
 import strawberry
 
+from embeddings import engine
+
 #: What separates the model id from the numbers. A model id never contains it.
 DESCRIPTOR_SEPARATOR = ":"
 
@@ -28,7 +30,7 @@ scalar_map: dict[Any, Any] = {
             "A stored vector, as `<model id>:<comma-separated floats>` -- e.g. "
             "`potion-base-8M:0.0123,-0.0456,...`. The model id is part of the value because "
             "vectors from different models are not comparable. Null when the row has no "
-            "vector yet (it carries no text, or indexing has not caught up with it)."
+            "vector (it carries no text, or the model could not be loaded when it was saved)."
         ),
         serialize=lambda value: value,
         parse_value=lambda value: value,
@@ -47,4 +49,4 @@ def format_embedding(vector: Any, model_id: str | None) -> Embedding | None:
 
 def embedding_of(instance: Any) -> Embedding | None:
     """The formatted vector of a row carrying :class:`embeddings.models.EmbeddedDescriptionMixin`."""
-    return format_embedding(getattr(instance, "embedding", None), getattr(instance, "embedding_model", ""))
+    return format_embedding(getattr(instance, "embedding", None), engine.model_id())

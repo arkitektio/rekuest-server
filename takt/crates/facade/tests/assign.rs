@@ -98,10 +98,10 @@ async fn action(ctx: &Context, agent: i64, allow_probe: bool) -> (i64, i64) {
     let ports =
         json!([{"key": "x", "kind": "INT", "nullable": false, "effects": [], "validators": []}]);
     let action: i64 = sqlx::query_scalar(
-        "INSERT INTO facade_action (defined_at, embedding_model, key, version, pure, idempotent, allow_probe, stateful,
+        "INSERT INTO facade_action (defined_at, key, version, pure, idempotent, allow_probe, stateful,
                                     kind, port_groups, name, description, scope, is_dev, hash, args, returns,
                                     arg_count, return_count, app_id, organization_id)
-         SELECT now(), '', 'echo', '1', false, false, $3, false, 'FUNCTION', '[]', 'Echo', '', 'GLOBAL', false, $2,
+         SELECT now(), 'echo', '1', false, false, $3, false, 'FUNCTION', '[]', 'Echo', '', 'GLOBAL', false, $2,
                 $4, '[]', 1, 0, a.app_id, a.organization_id FROM facade_agent a WHERE a.id = $1
          RETURNING id",
     )

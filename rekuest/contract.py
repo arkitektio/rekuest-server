@@ -1,4 +1,4 @@
-"""What this image answers a hub's installer: ``python -m arkitekt_service <verb>`` (see ``arkitekt_service.contract``).
+"""What this image answers a hub's installer: ``arkitekt-service <verb>`` (see ``arkitekt_service.contract``).
 
 The installer knows the hub; how this release spells its config is written here, with the
 settings it is read by. A key renamed in ``configuration.py`` is renamed in :func:`render` in
@@ -7,7 +7,7 @@ the same commit, and no installer has to learn of it.
 
 from __future__ import annotations
 
-from arkitekt_service.contract import JSON, Contract, Description, Facts, Needs, Offers, Refused, Scope, blocks
+from arkitekt_service.contract import JSON, Contract, Description, Facts, Job, Needs, Offers, Peer, Refused, Scope, Sidecar, Start, blocks
 
 from rekuest.configuration import Settings
 
@@ -30,6 +30,16 @@ ROLES = [
 ]
 
 
+def _service(name: str, peer: Peer) -> dict[str, JSON]:
+    """One ``rekuest.services`` entry: where the service is, who it signs as, and what it hosts when the hub says."""
+    return {
+        "name": name,
+        "url": peer.offers["rekuest_service"],
+        **({"identifier": peer.identifier} if peer.identifier else {}),
+        **({"hosts": peer.hosts.model_dump(mode="json")} if peer.hosts is not None else {}),
+    }
+
+
 def render(facts: Facts) -> dict[str, JSON]:
     """This release's config for the hub ``facts`` describes."""
     takt = facts.peers.get(TAKT)
@@ -43,7 +53,9 @@ def render(facts: Facts) -> dict[str, JSON]:
         "rekuest": {
             # A service and a hook agent are separate entries: one catalogues what exists
             # there, the other what can be done there. A peer may offer either or both.
-            "services": [{"name": name, "url": peer.offers["rekuest_service"], **({"identifier": peer.identifier} if peer.identifier else {})} for name, peer in facts.offering("rekuest_service").items()],
+            # What a service hosts goes in with it when the hub knows it (its image said so):
+            # the catalog is then written from here, and the service is not asked.
+            "services": [_service(name, peer) for name, peer in facts.offering("rekuest_service").items()],
             "hook_agents": [{"name": name, "hook_url": peer.offers["rekuest_hook"], **({"identifier": peer.identifier} if peer.identifier else {})} for name, peer in facts.offering("rekuest_hook").items()],
             "identifier": facts.me.identifier,
             "server_url": facts.me.url,
@@ -59,12 +71,25 @@ def render(facts: Facts) -> dict[str, JSON]:
 contract = Contract(
     description=Description(
         name="rekuest",
+        identifier="live.arkitekt.rekuest",
         summary="Assigns work to agents and keeps the record of it.",
         needs=Needs(scopes=SCOPES, roles=ROLES, storage=["media"], instance_key=True, peers=[TAKT]),
         offers=Offers(health="ht"),
+        # Its other half: every agent connects to takt, not to this server, and the two are
+        # released together under the same tag (takt even names the migrations it expects).
+        sidecars=[Sidecar(name="takt", image="{repository}-takt:{tag}", summary="The agent protocol: registration, assignment, liveness.")],
         upgrade_from="5.0.0",
     ),
     settings=Settings,
     render=render,
+    # How this service is started: there is no script beside it. `arkitekt-service serve`
+    # (and `debug`) become these, so they get the container's signals themselves.
+    serve=Start(("daphne", "-b", "0.0.0.0", "-p", "80", "--websocket_timeout", "-1", "rekuest.asgi:application")),
+    debug=Start(("python", "manage.py", "runserver", "0.0.0.0:80")),
     upgrades=True,
+    # The catalog of what the hub's services host is written with the database, from what the
+    # config says of each (`rekuest.services[].hosts`): there before anything serves, and an
+    # installer runs it again by name when a service was added, without restarting rekuest.
+    jobs={"catalogue": Job(("catalogue",), "Catalogue what the hub's services host, from the config")},
+    setup=("catalogue",),
 )

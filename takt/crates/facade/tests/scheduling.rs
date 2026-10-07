@@ -80,6 +80,29 @@ async fn caller(ctx: &Context, org: &str) -> i64 {
     .unwrap()
 }
 
+/// Declare, as a service's manifest would, that `identifier` is hosted and its objects carry
+/// `keys`: registration refuses a port constraining a descriptor no service declares.
+async fn declare_structure(db: &sqlx::PgPool, identifier: &str, keys: &[&str]) {
+    sqlx::query(
+        "WITH service AS (
+             INSERT INTO facade_service (name) VALUES ('takt-tests')
+             ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id),
+         structure AS (
+             INSERT INTO facade_structuredeclaration (service_id, identifier)
+             SELECT id, $1 FROM service
+             ON CONFLICT (identifier) DO UPDATE SET identifier = EXCLUDED.identifier RETURNING id)
+         INSERT INTO facade_descriptor (structure_id, key, position)
+         SELECT structure.id, key, position
+           FROM structure, unnest($2::varchar[]) WITH ORDINALITY AS declared(key, position)
+         ON CONFLICT (structure_id, key) DO NOTHING",
+    )
+    .bind(identifier)
+    .bind(keys)
+    .execute(db)
+    .await
+    .unwrap();
+}
+
 /// What a schedule or trigger runs: a HookAgent of `org` (always a valid assign target,
 /// connected or not) implementing `thumbnail`, whose `image` port takes a multi-channel dataset.
 struct Target {
@@ -91,6 +114,7 @@ struct Target {
 
 async fn target(ctx: &Context, org: &str) -> Target {
     let (client, user, organization) = identity(ctx, org).await;
+    declare_structure(&ctx.db, IDENTIFIER, &[CHANNELS]).await;
     let agent = facade::registration::ensure_agent(&ctx.db, client, user, organization)
         .await
         .unwrap();

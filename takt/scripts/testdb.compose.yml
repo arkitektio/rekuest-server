@@ -1,5 +1,5 @@
 # The conformance stack's database and redis, published, for takt's tests. The rekuest service
-# is started so the Python server migrates the schema: takt never migrates.
+# is started so its migration job brings the schema up first: takt never migrates.
 services:
   db:
     ports:

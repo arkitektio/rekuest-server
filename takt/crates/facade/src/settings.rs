@@ -40,7 +40,7 @@ pub struct Settings {
     /// `REKUEST_IDENTIFIER`: what this rekuest signs as, and what service tokens are for.
     pub rekuest_identifier: String,
     /// Where the Python server answers, script name included (`rekuest.server_url`): takt asks
-    /// it for the upkeep jobs. `None` turns upkeep off (tests).
+    /// it for the upkeep job. `None` turns upkeep off (tests).
     pub server_url: Option<String>,
     /// `PROBE_TTL_SECONDS`: a live probe's redis state expires this long after its last write.
     pub probe_ttl: Duration,
