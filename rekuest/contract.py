@@ -86,10 +86,12 @@ contract = Contract(
     # (and `debug`) become these, so they get the container's signals themselves.
     serve=Start(("daphne", "-b", "0.0.0.0", "-p", "80", "--websocket_timeout", "-1", "rekuest.asgi:application")),
     debug=Start(("python", "manage.py", "runserver", "0.0.0.0:80")),
-    upgrades=True,
     # The catalog of what the hub's services host is written with the database, from what the
     # config says of each (`rekuest.services[].hosts`): there before anything serves, and an
     # installer runs it again by name when a service was added, without restarting rekuest.
-    jobs={"catalogue": Job(("catalogue",), "Catalogue what the hub's services host, from the config")},
-    setup=("catalogue",),
+    jobs={
+        "ensureadmin": Job(("ensureadmin",), "Create the operator account the config names"),
+        "catalogue": Job(("catalogue",), "Catalogue what the hub's services host, from the config"),
+    },
+    setup=("ensureadmin", "catalogue"),
 )

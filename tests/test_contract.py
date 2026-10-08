@@ -96,7 +96,7 @@ def test_cataloguing_is_a_job_and_part_of_the_setup(capsys: pytest.CaptureFixtur
 
     jobs = json.loads(capsys.readouterr().out)["jobs"]
     assert jobs["catalogue"]["command"] == ["arkitekt-service", "run", "catalogue"]
-    assert jobs["migrate"]["includes"] == ["catalogue"]
+    assert jobs["migrate"]["includes"] == ["ensureadmin", "catalogue"]
 
 
 def test_what_the_operator_set_is_in_it_and_what_this_release_does_not_read_is_refused(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

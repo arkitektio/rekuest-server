@@ -67,13 +67,15 @@ What takt needs from its container (`TAKT_INTERNAL_BIND`, a mounted socket) coun
 
 ### Data that has to change between versions
 
-Schema changes are Django migrations and run in the migration job (`arkitekt-service run migrate`), before the server starts. What a migration cannot
-express — a rewrite that must not overlap with the previous release still serving — goes into
-`facade/upgrades.py`, keyed by the major it leads to. An installer runs
-`python manage.py upgrade --from <old> --to <new>` in the new image, after it stopped the
-previous server and before it starts this one; on a non-zero exit it starts the previous
-server again and stops the update. So an upgrade has to be repeatable, and a release that
-needs one is a major.
+The rules a migration and a job are held to are every service's, and written once:
+[arkitekt-service/docs/migrations-and-jobs.md](https://github.com/arkitektio/arkitekt-service/blob/main/docs/migrations-and-jobs.md).
+
+An installer stops the server and takt, runs `arkitekt-service run migrate` in the new image —
+the migrations, then the setup — and only then starts the new pair; on a non-zero exit it
+starts the previous pair again and stops the update. There is no separate upgrade step. A
+rewrite of existing rows that needs only the database is a data migration; one that needs the
+server's code is a re-runnable job named in the contract's `setup`. A migration the previous
+release cannot run on is a major.
 
 ## Branches
 
@@ -128,7 +130,7 @@ fix to `main`/`next` if it also applies there.
 - **Pin both images to the same tag.** `jhnnsrs/rekuest:X` beside
   `jhnnsrs/rekuest-takt:X`, and pull them together: a moving tag pulled for
   one image only leaves takt on another release than the server.
-- **Order on upgrade.** The migration job runs before the server starts. takt waits at startup
+- **Order on update.** The migration job runs before the server starts. takt waits at startup
   until the database has the migrations it was written against
   (`takt/schema-migrations.txt`), so run the new image's migration job first; the server and takt may then start
   at once.
