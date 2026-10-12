@@ -24,6 +24,9 @@ AUTHENTIKATE = {
         # extension always derives the request's organization from the bearer token, so a
         # second tenant can only be expressed as a second token.
         "test-other": {"sub": "3", "client_id": "oinsoins3", "app": "test-app", "org": "other_org"},
+        # A member of the default organization without the admin role a static token otherwise
+        # carries, for the mutations only an admin may run.
+        "test-member": {"sub": "4", "client_id": "oinsoins4", "app": "test-app", "roles": []},
     },
 }
 

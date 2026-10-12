@@ -8532,7 +8532,7 @@
         {
           "level": "WARNING",
           "code": "unknown_operation",
-          "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + default); the UI cannot evaluate this call until it is registered",
+          "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered",
           "path": "prop 'onClick' of component 'root'"
         }
       ]
@@ -8548,7 +8548,7 @@
         {
           "blok": {
             "name": "panel-<side>",
-            "catalog": "default",
+            "catalog": "orkestrator",
             "components": [
               {
                 "id": "root",
@@ -8594,7 +8594,7 @@
                 "code": "unknown_operation",
                 "path": "prop 'onClick' of component 'root'",
                 "level": "WARNING",
-                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + default); the UI cannot evaluate this call until it is registered"
+                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered"
               }
             ],
             "dependencies": [
@@ -9052,7 +9052,7 @@
         {
           "level": "WARNING",
           "code": "unknown_operation",
-          "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + default); the UI cannot evaluate this call until it is registered",
+          "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered",
           "path": "prop 'onClick' of component 'root'"
         }
       ]
@@ -9068,7 +9068,7 @@
         {
           "blok": {
             "name": "panel-<side>",
-            "catalog": "default",
+            "catalog": "orkestrator",
             "components": [
               {
                 "id": "root",
@@ -9114,7 +9114,7 @@
                 "code": "unknown_operation",
                 "path": "prop 'onClick' of component 'root'",
                 "level": "WARNING",
-                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + default); the UI cannot evaluate this call until it is registered"
+                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered"
               }
             ],
             "dependencies": [
@@ -9562,7 +9562,7 @@
         {
           "level": "WARNING",
           "code": "unknown_operation",
-          "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + default); the UI cannot evaluate this call until it is registered",
+          "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered",
           "path": "prop 'onClick' of component 'root'"
         }
       ]
@@ -9578,7 +9578,7 @@
         {
           "blok": {
             "name": "panel-<side>",
-            "catalog": "default",
+            "catalog": "orkestrator",
             "components": [
               {
                 "id": "root",
@@ -9624,7 +9624,7 @@
                 "code": "unknown_operation",
                 "path": "prop 'onClick' of component 'root'",
                 "level": "WARNING",
-                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + default); the UI cannot evaluate this call until it is registered"
+                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered"
               }
             ],
             "dependencies": [
@@ -9985,7 +9985,7 @@
         {
           "blok": {
             "name": "panel-<side>",
-            "catalog": "default",
+            "catalog": "orkestrator",
             "components": [
               {
                 "id": "root",
@@ -10031,7 +10031,7 @@
                 "code": "unknown_operation",
                 "path": "prop 'onClick' of component 'root'",
                 "level": "WARNING",
-                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + default); the UI cannot evaluate this call until it is registered"
+                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered"
               }
             ],
             "dependencies": [
@@ -10189,7 +10189,7 @@
         {
           "blok": {
             "name": "panel-<side>",
-            "catalog": "default",
+            "catalog": "orkestrator",
             "components": [
               {
                 "id": "root",
@@ -10235,7 +10235,7 @@
                 "code": "unknown_operation",
                 "path": "prop 'onClick' of component 'root'",
                 "level": "WARNING",
-                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + default); the UI cannot evaluate this call until it is registered"
+                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered"
               }
             ],
             "dependencies": [
@@ -10393,7 +10393,7 @@
         {
           "blok": {
             "name": "panel-<side>",
-            "catalog": "default",
+            "catalog": "orkestrator",
             "components": [
               {
                 "id": "root",
@@ -10439,7 +10439,7 @@
                 "code": "unknown_operation",
                 "path": "prop 'onClick' of component 'root'",
                 "level": "WARNING",
-                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + default); the UI cannot evaluate this call until it is registered"
+                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered"
               }
             ],
             "dependencies": [
@@ -10597,7 +10597,7 @@
         {
           "blok": {
             "name": "panel-<side>",
-            "catalog": "default",
+            "catalog": "orkestrator",
             "components": [
               {
                 "id": "root",
@@ -10643,7 +10643,7 @@
                 "code": "unknown_operation",
                 "path": "prop 'onClick' of component 'root'",
                 "level": "WARNING",
-                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + default); the UI cannot evaluate this call until it is registered"
+                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered"
               }
             ],
             "dependencies": [
@@ -10801,7 +10801,7 @@
         {
           "blok": {
             "name": "panel-<side>",
-            "catalog": "default",
+            "catalog": "orkestrator",
             "components": [
               {
                 "id": "root",
@@ -10847,7 +10847,7 @@
                 "code": "unknown_operation",
                 "path": "prop 'onClick' of component 'root'",
                 "level": "WARNING",
-                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + default); the UI cannot evaluate this call until it is registered"
+                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered"
               }
             ],
             "dependencies": [

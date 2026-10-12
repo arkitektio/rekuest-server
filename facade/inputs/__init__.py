@@ -87,6 +87,7 @@ from .implementation import (
     DeleteImplementationInputModel,
     PortDemandInput,
 )
+from .asset_store import CreateAssetInput, RequestAssetUploadInput
 from .threed import (
     CreatePlacementInput,
     CreatePlacementInputModel,
@@ -210,6 +211,8 @@ __all__ = [
     "PortDemandInput",
     # state
     # threed
+    "CreateAssetInput",
+    "RequestAssetUploadInput",
     "CreatePlacementInput",
     "CreatePlacementInputModel",
     "CreateSpaceInput",

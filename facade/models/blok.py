@@ -44,6 +44,9 @@ class Blok(models.Model):
     )
     components = models.JSONField(help_text="The UI schema for this Blok", default=list, db_default=[])
     demo_state = models.JSONField(help_text="The initial state for this Blok (to display in the ui a fake version)", default=dict, db_default={})
+    context = models.CharField(max_length=16, default="HTML", db_default="HTML", help_text="The renderer for this Blok's root (rekuest_core ComponentContext): HTML, or SCENE for a full 3D view.")
+    for_model = models.CharField(max_length=71, null=True, blank=True, db_index=True, help_text="The model reference ('sha256:...') this Blok decorates, if any. Viewers showing that model offer the Blok at `for_node`.")
+    for_node = models.CharField(max_length=1000, null=True, blank=True, help_text="The node of `for_model` this Blok attaches to; the model's root when NULL.")
     diagnostics = models.JSONField(default=list, help_text="Non-fatal registration findings (rekuest_core Diagnostic), e.g. manifest util calls naming operations that neither the base catalog nor this blok's catalog provides. Replaced on every write.", db_default=[])
 
     class Meta:
@@ -140,6 +143,7 @@ class MaterializedBlok(models.Model):
     )
     name = models.CharField(max_length=1000, help_text="The name of this Blok Implementation")
     description = models.TextField(help_text="A description for this Blok Implementation")
+    is_default = models.BooleanField(default=False, db_default=False, help_text="Whether this is its declaring agent's default Blok for the Blok's context. At most one per agent and context: declaring a new default clears the previous one.")
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
 

@@ -395,6 +395,10 @@ class CatalogComponent:
     description: Optional[str] = strawberry.field(default=None, description="Human-readable description of the component.")
     props: List[CatalogProp] = strawberry.field(description="The props this component accepts.")
     accepts_children: bool = strawberry.field(description="Whether children may be nested under this component.")
+    context: enums.ComponentContext = strawberry.field(description="The context this component may be placed in.")
+    children_context: Optional[enums.ComponentContext] = strawberry.field(default=None, description="The context in force for this component's children, when it differs from its own.")
+    downstream_of: List[str] = strawberry.field(description="Component names of which at least one must be an ancestor, at any depth.")
+    not_downstream_of: List[str] = strawberry.field(description="Component names of which none may be an ancestor.")
 
 
 @pydantic.type(models.CatalogArgumentModel, description="An argument a catalog operation accepts.")

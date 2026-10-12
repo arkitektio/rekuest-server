@@ -92,3 +92,10 @@ def test_prop_needs_a_binding_or_a_declaration_and_at_most_one_binding() -> None
         imodels.ComponentPropInputModel(key="x", static_value=1, dynamic_value={"path": "/a"})
     imodels.ComponentPropInputModel(key="x", declares_value="sel")
     imodels.ComponentPropInputModel(key="x", static_value="40x")
+
+
+def test_a_handler_argument_may_read_the_event() -> None:
+    """``$event`` is what triggered the handler; it is a root beside demo state and dependencies."""
+    call = {"dependency": "stage", "operation": "move", "arguments": [{"key": "x", "value_path": "$event.value"}]}
+    components = [{"id": "root", "component": "Slider", "props": [{"key": "onChange", "agent_call": call}]}]
+    _manifest(components, dependencies=["stage"], demo_state={"exposure": 1})

@@ -1,5 +1,7 @@
 """UI catalog registry: registration, tenant isolation, and validation of bloks against it."""
 
+import itertools
+
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
@@ -53,10 +55,10 @@ async def _register(context: HttpContext, catalog: dict = CATALOG) -> dict:
     return result.data["registerUiCatalog"]
 
 
-async def _create_blok(context: HttpContext, components: list[dict], catalog: str = "electron", **extra: object):
+async def _create_blok(http: HttpContext, components: list[dict], catalog: str = "electron", **extra: object):
     return await schema.execute(
         CREATE_BLOK,
-        context_value=context,
+        context_value=http,
         variable_values={"input": {"name": "catalogued", "catalog": catalog, "components": components, "demoState": {"exposure": 1}, **extra}},
     )
 
@@ -143,6 +145,100 @@ class TestUiCatalog:
         )
         assert not accepted.errors, accepted.errors
         assert await _blok_diagnostics() == []
+
+    async def test_a_blok_naming_no_catalog_is_checked_against_the_standard_one(self, authenticated_context: HttpContext) -> None:
+        """Without a catalog name a blok is held to ``orkestrator``, the name the client checks against offline."""
+        await _register(authenticated_context, {**CATALOG, "name": "orkestrator"})
+        unnamed = {"name": "catalogued", "demoState": {"exposure": 1}}
+
+        refused = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**unnamed, "components": [{"id": "root", "component": "Knob"}]}})
+        assert refused.errors and "component 'Knob' is not registered" in refused.errors[0].message
+
+        accepted = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**unnamed, "components": [{"id": "root", "component": "Box"}]}})
+        assert not accepted.errors, accepted.errors
+
+    async def test_components_are_held_to_their_declared_placement(self, authenticated_context: HttpContext) -> None:
+        """A component is refused outside its context, without a required ancestor, or under a forbidden one."""
+        scene = [
+            {"name": "Box"},
+            {"name": "Label", "acceptsChildren": False},
+            {"name": "Scene", "childrenContext": "SCENE", "notDownstreamOf": ["Scene"]},
+            {"name": "Model", "context": "SCENE", "downstreamOf": ["Scene"]},
+            {"name": "Move", "context": "SCENE", "downstreamOf": ["Model", "Robot"], "acceptsChildren": False},
+            {"name": "Popout", "context": "SCENE", "childrenContext": "HTML", "downstreamOf": ["Model", "Robot"]},
+        ]
+        await _register(authenticated_context, {**CATALOG, "components": scene})
+
+        ids = itertools.count()
+
+        def node(component: str, *children: dict) -> dict:
+            return {"id": f"{component}{next(ids)}", "component": component, "children": list(children)}
+
+        accepted = await _create_blok(authenticated_context, [node("Box", node("Scene", node("Model", node("Move"), node("Popout", node("Box", node("Label"))))))])
+        assert not accepted.errors, accepted.errors
+
+        for tree, message in (
+            (node("Model"), "component 'Model' is a scene component and cannot be placed in the html context"),
+            (node("Scene", node("Label")), "component 'Label' is a html component and cannot be placed in the scene context"),
+            (node("Scene", node("Move")), "component 'Move' must be inside one of ['Model', 'Robot']"),
+            (node("Scene", node("Model", node("Popout", node("Scene")))), "component 'Scene' must not be inside ['Scene']"),
+        ):
+            refused = await _create_blok(authenticated_context, [tree])
+            assert refused.errors and message in refused.errors[0].message, refused.errors
+
+    async def test_a_scene_blok_opens_a_scene_and_names_its_models_properly(self, authenticated_context: HttpContext) -> None:
+        """The root of a scene blok opens a scene; a model names an asset of a declared dependency."""
+        await _register(
+            authenticated_context,
+            {
+                **CATALOG,
+                "components": [
+                    {"name": "Box"},
+                    {"name": "Scene", "childrenContext": "SCENE", "notDownstreamOf": ["Scene"]},
+                    {"name": "Model", "context": "SCENE", "downstreamOf": ["Scene"], "props": [{"key": "src", "kind": "ASSET", "required": True}]},
+                ],
+            },
+        )
+
+        def scene(src: dict) -> list[dict]:
+            return [{"id": "scene", "component": "Scene", "children": [{"id": "model", "component": "Model", "props": [{"key": "src", **src}]}]}]
+
+        named = {"dynamicValue": {"path": "self.assets.scope"}}
+        own = [{"key": "self"}]
+
+        ref = "sha256:" + "9f" * 32
+        accepted = await _create_blok(authenticated_context, scene(named), context="SCENE", dependencies=own)
+        assert not accepted.errors, accepted.errors
+        from facade.models import Blok
+
+        assert await sync_to_async(lambda: Blok.objects.get(name="catalogued").context)() == "SCENE"
+
+        boxed = await _create_blok(authenticated_context, [{"id": "root", "component": "Box"}], context="SCENE")
+        assert boxed.errors and "the root of a scene blok must be a 'Scene', not 'Box'" in boxed.errors[0].message
+        wrapped = await _create_blok(authenticated_context, [{"id": "root", "component": "Box", "children": scene(named)}], context="SCENE", dependencies=own)
+        assert wrapped.errors and "the root of a scene blok must be a 'Scene', not 'Box'" in wrapped.errors[0].message
+        # No component is registered in this catalog, so nothing else could tell a scene from a box.
+        uncatalogued = await _create_blok(authenticated_context, [{"id": "root", "component": "Box"}], catalog="unregistered", context="SCENE")
+        assert uncatalogued.errors and "the root of a scene blok must be a 'Scene', not 'Box'" in uncatalogued.errors[0].message
+        twice = scene(named) + [{"id": "other", "component": "Scene"}]
+        for roots, count in ((twice, 2), ([], 0)):
+            refused = await _create_blok(authenticated_context, roots, context="SCENE", dependencies=own)
+            assert refused.errors and f"a scene blok has exactly one root, a 'Scene', not {count} roots" in refused.errors[0].message, refused.errors
+        by_hash = await _create_blok(authenticated_context, scene({"staticValue": ref}), context="SCENE")
+        assert by_hash.errors and "is an ASSET prop and must name an asset" in by_hash.errors[0].message
+        misspelt = await _create_blok(authenticated_context, scene({"dynamicValue": {"path": "self.assets"}}), context="SCENE", dependencies=own)
+        assert misspelt.errors and "is an ASSET prop and must name an asset" in misspelt.errors[0].message
+        of_nobody = await _create_blok(authenticated_context, scene(named), context="SCENE")
+        assert of_nobody.errors and "references 'self' but it is neither a demo_state key, a declared value nor a dependency key" in of_nobody.errors[0].message
+
+        decorating_scene = await _create_blok(authenticated_context, scene(named), context="SCENE", dependencies=own, forModel=ref)
+        assert decorating_scene.errors and "only an html blok can decorate a model" in decorating_scene.errors[0].message
+        decorating = await _create_blok(authenticated_context, [{"id": "root", "component": "Box"}], forModel=ref, forNode="turret")
+        assert not decorating.errors, decorating.errors
+        found = await schema.execute("query($ref: String!) { bloksForModel(ref: $ref) { name forNode context componentTree } }", context_value=authenticated_context, variable_values={"ref": ref})
+        assert not found.errors, found.errors
+        assert [(blok["name"], blok["forNode"], blok["context"]) for blok in found.data["bloksForModel"]] == [("catalogued", "turret", "HTML")]
+        assert found.data["bloksForModel"][0]["componentTree"][0]["component"] == "Box"
 
     async def test_unregistered_catalog_still_validates_base(self, authenticated_context: HttpContext) -> None:
         """A catalog that only exists because a blok named it checks no components, but base operations still apply."""

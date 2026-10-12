@@ -58,6 +58,7 @@ from .state import (
     StateDefinition,
 )
 from .testcase import TestCase, TestResult
+from .asset import AgentAsset, Asset
 from .threed import Placement, Space, ThreeDModel
 
 __all__ = [
@@ -118,6 +119,8 @@ __all__ = [
     "BlokAgentMapping",
     # threed
     "ThreeDModel",
+    "Asset",
+    "AgentAsset",
     "Space",
     "Placement",
     # signals (connected on import)

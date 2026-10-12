@@ -11,9 +11,9 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use rekuest_core::catalogs::{
     base_operations, base_version_named, BASE_CATALOG_ID, BASE_CATALOG_VERSION,
 };
-use rekuest_core::enums::CatalogValueKind;
+use rekuest_core::enums::{CatalogValueKind, ComponentContext};
 use rekuest_core::inputs::{
-    iter_component_nodes, iter_util_calls, ArgPortInputModel, AssignWidgetInputModel,
+    blok_asset_path, iter_util_calls, ArgPortInputModel, AssignWidgetInputModel,
     CatalogComponentInputModel, CatalogOperationInputModel, ComponentNodeInputModel,
     ComponentPropInputModel, DefinitionInputModel, OptimisticInputModel, ReturnPortInputModel,
     ReturnWidgetInputModel, UtilCallInputModel,
@@ -25,6 +25,8 @@ use sqlx::PgConnection;
 
 pub const UNKNOWN_OPERATION: &str = "unknown_operation";
 pub const UNKNOWN_CATALOG: &str = "unknown_catalog";
+/// The one component a scene blok may have as its root.
+pub const SCENE_ROOT_COMPONENT: &str = "Scene";
 
 /// A non-fatal registration finding (`DiagnosticModel`), dumped as stored on the row.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -348,6 +350,7 @@ fn check_component(
                     "{prop_owner} is a CALLBACK prop and must be bound via agent_call or util_call"
                 ));
             }
+            check_asset_prop(kind, prop, &prop_owner)?;
         }
         diagnostics.extend(check_calls(
             prop_calls(prop),
@@ -359,35 +362,177 @@ fn check_component(
     Ok(diagnostics)
 }
 
+/// An ASSET prop names a file an app registered: it is bound to `<dependency>.assets.<name>`
+/// (`_check_asset_prop`).
+fn check_asset_prop(
+    kind: Option<CatalogValueKind>,
+    prop: &ComponentPropInputModel,
+    prop_owner: &str,
+) -> Result<(), String> {
+    if kind != Some(CatalogValueKind::ASSET) {
+        return Ok(());
+    }
+    let named = prop
+        .dynamic_value
+        .as_ref()
+        .and_then(|d| d.path.as_deref())
+        .and_then(blok_asset_path);
+    if named.is_none() {
+        return Err(format!(
+            "{prop_owner} is an ASSET prop and must name an asset the app registered, as in {}=\"@self.assets.<name>\"",
+            prop.key
+        ));
+    }
+    Ok(())
+}
+
 /// Every component, prop and operation a tree uses is provided (`validate_components_against_catalogs`).
+/// `context` is the blok's own: a scene blok has one root, the scene, whatever is registered.
 pub fn validate_components_against_catalogs(
     catalogs: &[Catalog],
     components: Option<&[ComponentNodeInputModel]>,
+    context: ComponentContext,
 ) -> Result<Vec<Diagnostic>, String> {
     let operations = resolve_operations(catalogs)?;
     let specs = resolve_components(catalogs)?;
     let label = catalog_label(catalogs);
+    if context == ComponentContext::SCENE {
+        let roots = components.unwrap_or_default();
+        let [root] = roots else {
+            return Err(format!(
+                "a scene blok has exactly one root, a {}, not {} roots",
+                repr_str(SCENE_ROOT_COMPONENT),
+                roots.len()
+            ));
+        };
+        if root.component != SCENE_ROOT_COMPONENT {
+            return Err(format!(
+                "component {}: the root of a scene blok must be a {}, not {}",
+                repr_str(&root.id),
+                repr_str(SCENE_ROOT_COMPONENT),
+                repr_str(&root.component)
+            ));
+        }
+    }
     let mut diagnostics = vec![];
-    for node in iter_component_nodes(components) {
+    let mut ancestors = vec![];
+    visit_components(
+        components.unwrap_or_default(),
+        &mut ancestors,
+        ComponentContext::HTML,
+        specs.as_ref(),
+        &operations,
+        &label,
+        &mut diagnostics,
+    )?;
+    Ok(diagnostics)
+}
+
+/// The tree in pre-order, carrying each node's ancestors and the context in force for it.
+fn visit_components<'a>(
+    nodes: &'a [ComponentNodeInputModel],
+    ancestors: &mut Vec<&'a str>,
+    context: ComponentContext,
+    specs: Option<&Components>,
+    operations: &Operations,
+    label: &str,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Result<(), String> {
+    for node in nodes {
+        let owner = format!("component {}", repr_str(&node.id));
         diagnostics.extend(check_component(
             &node.component,
             node.props.as_deref(),
             node.children.as_ref().is_some_and(|c| !c.is_empty()),
-            specs.as_ref(),
-            &operations,
-            &label,
-            &format!("component {}", repr_str(&node.id)),
+            specs,
+            operations,
+            label,
+            &owner,
         )?);
+        let inner = check_placement(&node.component, ancestors, context, specs, &owner)?;
+        ancestors.push(&node.component);
+        visit_components(
+            node.children.as_deref().unwrap_or_default(),
+            ancestors,
+            inner,
+            specs,
+            operations,
+            label,
+            diagnostics,
+        )?;
+        ancestors.pop();
     }
-    Ok(diagnostics)
+    Ok(())
+}
+
+fn context_name(context: ComponentContext) -> &'static str {
+    match context {
+        ComponentContext::HTML => "html",
+        ComponentContext::SCENE => "scene",
+    }
+}
+
+/// Where a component sits in the tree, against what it declares; the context of its children
+/// (`_check_placement`). A tree starts in the html context, and a component whose
+/// `children_context` differs from its own bridges two renderers.
+fn check_placement(
+    component: &str,
+    ancestors: &[&str],
+    context: ComponentContext,
+    specs: Option<&Components>,
+    owner: &str,
+) -> Result<ComponentContext, String> {
+    let Some(spec) = specs.and_then(|specs| specs.get(component)) else {
+        return Ok(context);
+    };
+    if spec.context != context {
+        return Err(format!(
+            "{owner}: component {} is a {} component and cannot be placed in the {} context",
+            repr_str(component),
+            context_name(spec.context),
+            context_name(context)
+        ));
+    }
+    if !spec.downstream_of.is_empty()
+        && !spec
+            .downstream_of
+            .iter()
+            .any(|name| ancestors.contains(&name.as_str()))
+    {
+        let mut required: Vec<&str> = spec.downstream_of.iter().map(String::as_str).collect();
+        required.sort();
+        required.dedup();
+        return Err(format!(
+            "{owner}: component {} must be inside one of {}",
+            repr_str(component),
+            py_list(&required)
+        ));
+    }
+    let mut forbidden: Vec<&str> = spec
+        .not_downstream_of
+        .iter()
+        .map(String::as_str)
+        .filter(|name| ancestors.contains(name))
+        .collect();
+    forbidden.sort();
+    forbidden.dedup();
+    if !forbidden.is_empty() {
+        return Err(format!(
+            "{owner}: component {} must not be inside {}",
+            repr_str(component),
+            py_list(&forbidden)
+        ));
+    }
+    Ok(spec.children_context.unwrap_or(spec.context))
 }
 
 /// `validate_manifest_against_catalog`: a blok manifest against its one catalog.
 pub fn validate_manifest_against_catalog(
     catalog: &Catalog,
     components: Option<&[ComponentNodeInputModel]>,
+    context: ComponentContext,
 ) -> Result<Vec<Diagnostic>, String> {
-    validate_components_against_catalogs(std::slice::from_ref(catalog), components)
+    validate_components_against_catalogs(std::slice::from_ref(catalog), components, context)
 }
 
 /// A widget of a definition, assign or return side.

@@ -15,6 +15,7 @@ from facade.types.base import build_prescoped_queryset, row_of
 
 if TYPE_CHECKING:
     # Named in annotations only: strawberry resolves them when it builds the schema.
+    from facade.types.asset import AgentAsset
     from facade.types.auth import App, Client, Device, Organization, Release, User
     from facade.types.blok import BlokAgentMapping
     from facade.types.implementation import Implementation
@@ -56,6 +57,7 @@ class Agent:
 
     implementations: list["Implementation"] = strawberry_django.field(description="Implementations the agent can run.")
     locks: list["Lock"] = strawberry_django.field(description="The agent's locks, and which task holds each.")
+    assets: list["AgentAsset"] = strawberry_django.field(description="The files the agent brings, by the name its bloks call them.")
     memory_shelve: Optional["MemoryShelve"] = strawberry_django.field(description="Agent's associated memory shelve.")
     last_seen: datetime.datetime | None = strawberry_django.field(description="Last timestamp this agent was seen.")
     installed_at: datetime.datetime = strawberry_django.field(description="When this agent first registered.")

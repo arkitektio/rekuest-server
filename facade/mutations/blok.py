@@ -13,6 +13,7 @@ from kante.types import Info
 from facade import inputs, models, types
 from facade.catalog_validation import dump_diagnostics, validate_manifest_against_catalog
 from facade.types.base import scoped_get
+from rekuest_core import enums as renums
 from rekuest_core.inputs import models as rimodels
 
 
@@ -52,9 +53,16 @@ def _sync_blok_dependencies(blok: models.Blok, dependencies: Iterable[rimodels.A
     return synced
 
 
+STANDARD_CATALOG_NAME = "orkestrator"
+"""The catalog a blok naming none is checked against: the one the Orkestrator app registers.
+
+The client's offline check uses the same name, and takt's ``register_blok`` falls back to it too.
+"""
+
+
 def _catalog_for(info: Info, name: str | None) -> models.UICatalog:
     """The named catalog in the caller's organization, created empty if it does not exist yet."""
-    return models.UICatalog.objects.get_or_create(name=name or "default", organization=info.context.request.organization)[0]
+    return models.UICatalog.objects.get_or_create(name=name or STANDARD_CATALOG_NAME, organization=info.context.request.organization)[0]
 
 
 @transaction.atomic
@@ -63,7 +71,7 @@ def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
     model = input.to_pydantic()
     organization = info.context.request.organization
     catalog = _catalog_for(info, model.catalog)
-    diagnostics = validate_manifest_against_catalog(catalog, model.components)
+    diagnostics = validate_manifest_against_catalog(catalog, model.components, model.context)
 
     # ``organization`` is part of the lookup, not the defaults: keyed on name alone this was a
     # global upsert, so any user could overwrite another organization's blok by name.
@@ -77,6 +85,9 @@ def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
             catalog=catalog,
             demo_state=model.demo_state or {},
             diagnostics=dump_diagnostics(diagnostics),
+            context=model.context.value,
+            for_model=model.for_model,
+            for_node=model.for_node,
         ),
     )
 
@@ -115,7 +126,7 @@ def update_blok(info: Info, input: inputs.UpdateBlokInput) -> types.Blok:
     dependency_keys = {dep.key for dep in model.dependencies} if model.dependencies is not None else set(blok.dependencies.values_list("key", flat=True))
     components = [rimodels.ComponentNodeInputModel(**c) for c in blok.components]
     rimodels.check_blok_manifest(components, dependency_keys, set(blok.demo_state or {}))
-    blok.diagnostics = dump_diagnostics(validate_manifest_against_catalog(blok.catalog, components))
+    blok.diagnostics = dump_diagnostics(validate_manifest_against_catalog(blok.catalog, components, renums.ComponentContext(blok.context)))
 
     blok.save()
 

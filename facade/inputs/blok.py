@@ -1,13 +1,14 @@
 """Inputs for bloks and materialized bloks."""
 
 import strawberry
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from strawberry.experimental import pydantic
 from typing_extensions import Self
 
 from facade import scalars
 from facade.inputs.dependency import MappedAgentInput
 from facade.json_types import JSON
+from rekuest_core import enums as renums
 from rekuest_core.inputs import models as rimodels
 from rekuest_core.inputs import types as ritypes
 
@@ -59,11 +60,21 @@ class CreateBlokInputModel(BaseModel):
         default=None,
         description="The initial state of the blok. This is used to set the initial state of the blok when it is materialized.",
     )
+    context: renums.ComponentContext = Field(default=renums.ComponentContext.HTML, description="The renderer for the blok's root: HTML, or SCENE for a full 3D view.")
+    for_model: str | None = Field(default=None, description="The model ('sha256:...') this blok decorates. HTML bloks only.")
+    for_node: str | None = Field(default=None, description="The node of `for_model` this blok attaches to; the model's root when absent.")
+
+    @field_validator("context", mode="before")
+    @classmethod
+    def _html_when_absent(cls, context: object) -> object:
+        """A blok that names no context is an html one: the argument is optional on the wire."""
+        return renums.ComponentContext.HTML if context is None else context
 
     @model_validator(mode="after")
     def check_manifest(self) -> Self:
         """The component tree is coherent with the declared dependencies and demo state."""
         rimodels.check_blok_manifest(self.components, {dep.key for dep in self.dependencies or []}, None if self.demo_state is None else set(self.demo_state))
+        rimodels.check_blok_target(self.context, self.for_model, self.for_node)
         return self
 
 
@@ -75,6 +86,10 @@ class CreateBlokInput:
     catalog: str | None = None
     components: list[ritypes.ComponentNodeInput] | None = None
     demo_state: scalars.Args | None = None
+    # Nullable, not defaulted: a client generated from the schema must not have to pass it.
+    context: renums.ComponentContext | None = None
+    for_model: str | None = None
+    for_node: str | None = None
 
 
 class UpdateBlokInputModel(BaseModel):

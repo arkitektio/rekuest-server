@@ -16,7 +16,10 @@ use super::ports::{
     ReturnPortInputModel, ReturnWidgetInputModel,
 };
 use super::{min_length, ValidationError};
-use crate::enums::{ActionKind, CatalogValueKind, Effects, Execution, PortKind, WindowFunction};
+use crate::enums::{
+    ActionKind, AssetKind, CatalogValueKind, ComponentContext, Effects, Execution, PortKind,
+    WindowFunction,
+};
 use crate::pyjson::{dumps, repr_str};
 
 /// A check of a list of port-path dependencies, named for its owner.
@@ -728,6 +731,68 @@ pub struct LockImplementationInputModel {
     pub definition: LockDefinitionInputModel,
 }
 
+/// The root a handler's arguments read the value that triggered them from (`$event/value`).
+pub const BLOK_EVENT_ROOT: &str = "$event";
+
+/// What follows a dependency's key in the path of one of its assets (`self.assets.scope`).
+pub const BLOK_ASSETS_SEGMENT: &str = "assets";
+
+/// The `(dependency key, asset name)` of `<dependency>.assets.<name>`, or `None` if `path` is
+/// not exactly that (`blok_asset_path`).
+pub fn blok_asset_path(path: &str) -> Option<(&str, &str)> {
+    let mut parts = path.split('.');
+    match (parts.next(), parts.next(), parts.next(), parts.next()) {
+        (Some(dependency), Some(BLOK_ASSETS_SEGMENT), Some(name), None)
+            if !dependency.is_empty() && !name.is_empty() =>
+        {
+            Some((dependency, name))
+        }
+        _ => None,
+    }
+}
+
+/// A file an agent brings with it: the name its bloks call it by, and what the bytes are
+/// (`AssetInputModel`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AssetInputModel {
+    pub name: String,
+    pub kind: AssetKind,
+    #[serde(rename = "ref")]
+    pub reference: String,
+    pub size: i64,
+}
+
+impl AssetInputModel {
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        let mut letters = self.name.chars();
+        let identifier = letters
+            .next()
+            .is_some_and(|first| first == '_' || first.is_alphabetic())
+            && letters.all(|letter| letter == '_' || letter.is_alphanumeric());
+        if !identifier {
+            return Err(ValidationError(format!(
+                "Asset: the name {} is not an identifier",
+                repr_str(&self.name)
+            )));
+        }
+        if !is_model_ref(&self.reference) {
+            return Err(ValidationError(format!(
+                "Asset {}: the reference must be 'sha256:' and 64 lowercase hex characters, not {}",
+                repr_str(&self.name),
+                repr_str(&self.reference)
+            )));
+        }
+        if self.size <= 0 {
+            return Err(ValidationError(format!(
+                "Asset {}: an asset has a size",
+                repr_str(&self.name)
+            )));
+        }
+        Ok(())
+    }
+}
+
 /// Coherence of a blok component tree (`check_blok_manifest`): unique component ids and
 /// declared values, agent calls only to declared dependencies, and (with a demo state) every
 /// path rooted in a demo-state key, a declared value or a dependency key.
@@ -761,10 +826,19 @@ pub fn check_blok_manifest(
             .chain(declared.iter())
             .chain(dependency_keys.iter())
             .cloned()
+            .chain(std::iter::once(BLOK_EVENT_ROOT.to_owned()))
             .collect()
     });
     let check_root = |path: Option<&str>, owner: &str| -> Result<(), ValidationError> {
-        let (Some(path), Some(roots)) = (path, roots.as_ref()) else {
+        let Some(path) = path else {
+            return Ok(());
+        };
+        // A file of a declared dependency: there is no value at this path to resolve.
+        if blok_asset_path(path).is_some_and(|(dependency, _)| dependency_keys.contains(dependency))
+        {
+            return Ok(());
+        }
+        let Some(roots) = roots.as_ref() else {
             return Ok(());
         };
         let root = blok_path_root(path);
@@ -868,6 +942,56 @@ pub struct BlokImplementationInputModel {
     pub description: Option<String>,
     #[serde(default)]
     pub demo_state: Option<serde_json::Map<String, Value>>,
+    /// The renderer for the blok's root: HTML, or SCENE for a full 3D view.
+    #[serde(default = "html_")]
+    pub context: ComponentContext,
+    /// Whether this is its agent's default blok for its context.
+    #[serde(default)]
+    pub default: bool,
+    /// The model (`sha256:...`) this blok decorates. HTML bloks only.
+    #[serde(default)]
+    pub for_model: Option<String>,
+    /// The node of `for_model` this blok attaches to; the model's root when absent.
+    #[serde(default)]
+    pub for_node: Option<String>,
+}
+
+/// Whether `value` is `sha256:` and 64 lowercase hex characters (`MODEL_REF_PATTERN`).
+pub fn is_model_ref(value: &str) -> bool {
+    value.strip_prefix("sha256:").is_some_and(|hex| {
+        hex.len() == 64
+            && hex
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    })
+}
+
+/// A blok that decorates a model names it by reference, and is an html blok (`check_blok_target`).
+pub fn check_blok_target(
+    context: ComponentContext,
+    for_model: Option<&str>,
+    for_node: Option<&str>,
+) -> Result<(), ValidationError> {
+    let Some(for_model) = for_model else {
+        if for_node.is_some() {
+            return Err(ValidationError(
+                "Blok manifest: for_node needs a for_model".into(),
+            ));
+        }
+        return Ok(());
+    };
+    if !is_model_ref(for_model) {
+        return Err(ValidationError(format!(
+            "Blok manifest: for_model must be 'sha256:' and 64 lowercase hex characters, not {}",
+            repr_str(for_model)
+        )));
+    }
+    if context != ComponentContext::HTML {
+        return Err(ValidationError(
+            "Blok manifest: only an html blok can decorate a model".into(),
+        ));
+    }
+    Ok(())
 }
 
 impl BlokImplementationInputModel {
@@ -885,6 +1009,11 @@ impl BlokImplementationInputModel {
             Some(&self.components),
             &dependency_keys,
             state_keys.as_ref(),
+        )?;
+        check_blok_target(
+            self.context,
+            self.for_model.as_deref(),
+            self.for_node.as_deref(),
         )
     }
 }
@@ -945,6 +1074,22 @@ pub struct CatalogComponentInputModel {
     pub props: Vec<CatalogPropInputModel>,
     #[serde(default = "true_")]
     pub accepts_children: bool,
+    /// The context this component may be placed in.
+    #[serde(default = "html_")]
+    pub context: ComponentContext,
+    /// The context of its children when it differs from its own: the component bridges two renderers.
+    #[serde(default)]
+    pub children_context: Option<ComponentContext>,
+    /// At least one of these must be an ancestor, at any depth. Empty means no requirement.
+    #[serde(default)]
+    pub downstream_of: Vec<String>,
+    /// None of these may be an ancestor.
+    #[serde(default)]
+    pub not_downstream_of: Vec<String>,
+}
+
+fn html_() -> ComponentContext {
+    ComponentContext::HTML
 }
 
 impl CatalogComponentInputModel {
@@ -1012,6 +1157,9 @@ pub struct ImplementAgentInputModel {
     pub locks: Option<Vec<LockImplementationInputModel>>,
     #[serde(default)]
     pub bloks: Option<Vec<BlokImplementationInputModel>>,
+    /// The files the agent brings, by name. It uploads the ones the server does not hold.
+    #[serde(default)]
+    pub assets: Option<Vec<AssetInputModel>>,
 }
 
 impl ImplementAgentInputModel {
@@ -1025,6 +1173,44 @@ impl ImplementAgentInputModel {
         for blok in self.bloks.iter_mut().flatten() {
             blok.validate()?;
         }
+        let mut names = HashSet::new();
+        for asset in self.assets.iter().flatten() {
+            asset.validate()?;
+            if !names.insert(asset.name.as_str()) {
+                return Err(ValidationError(format!(
+                    "Asset {} is declared twice",
+                    repr_str(&asset.name)
+                )));
+            }
+        }
+        // Every dependency key of a declared blok is mapped to the declaring agent, so an
+        // asset a blok names is one of this declaration's, whatever key it is named under.
+        for blok in self.bloks.iter().flatten() {
+            for node in iter_component_nodes(Some(&blok.components)) {
+                for prop in node.props.iter().flatten() {
+                    let Some(path) = prop.dynamic_value.as_ref().and_then(|d| d.path.as_deref())
+                    else {
+                        continue;
+                    };
+                    let Some((dependency, name)) = blok_asset_path(path) else {
+                        continue;
+                    };
+                    if blok.dependencies.iter().any(|d| d.key == dependency)
+                        && !names.contains(name)
+                    {
+                        let mut declared: Vec<&str> = names.iter().copied().collect();
+                        declared.sort_unstable();
+                        return Err(ValidationError(format!(
+                            "Blok {}: prop {} of component {} names the asset {}, which the agent does not declare (declares {declared:?})",
+                            repr_str(&blok.key),
+                            repr_str(&prop.key),
+                            repr_str(&node.id),
+                            repr_str(name)
+                        )));
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
@@ -1035,5 +1221,6 @@ impl ImplementAgentInputModel {
             || self.states.is_some()
             || self.locks.is_some()
             || self.bloks.is_some()
+            || self.assets.is_some()
     }
 }

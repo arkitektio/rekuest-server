@@ -66,7 +66,15 @@ wire_enum!(
 );
 wire_enum!(
     /// What a catalog component prop accepts, or an operation argument carries.
-    CatalogValueKind { STRING, INT, FLOAT, BOOL, DICT, LIST, ANY, CALLBACK }
+    CatalogValueKind { STRING, INT, FLOAT, BOOL, DICT, LIST, ANY, CALLBACK, ASSET }
+);
+wire_enum!(
+    /// What a file an agent brings with it is.
+    AssetKind { MODEL_3D, IMAGE }
+);
+wire_enum!(
+    /// The renderer a catalog component lives in; it may only be placed where its context is in force.
+    ComponentContext { HTML, SCENE }
 );
 wire_enum!(
     /// Severity of a registration finding: errors abort registration, so only WARNING is stored.

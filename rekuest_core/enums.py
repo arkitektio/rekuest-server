@@ -131,6 +131,19 @@ class CatalogValueKind(str, Enum):
     LIST = "LIST"
     ANY = "ANY"
     CALLBACK = "CALLBACK"
+    ASSET = "ASSET"
+
+
+@strawberry.enum(description="What a file an agent brings with it is: a 3D model (a binary glTF file) or an image (PNG, JPEG or WebP).")
+class AssetKind(str, Enum):
+    MODEL_3D = "MODEL_3D"
+    IMAGE = "IMAGE"
+
+
+@strawberry.enum(description="The renderer a catalog component lives in. A component may only be placed where its context is in force.")
+class ComponentContext(str, Enum):
+    HTML = "HTML"
+    SCENE = "SCENE"
 
 
 @strawberry.enum(description="Severity of a registration finding. Errors are never stored (they abort registration), so only WARNING exists.")

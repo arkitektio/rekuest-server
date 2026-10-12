@@ -9,7 +9,7 @@ use serde_json::Value;
 pub use rekuest_protocol::messages::*;
 
 /// What a `REGISTER` declares besides the token: the agent's name and, when it declares at all,
-/// its implementations, states, locks and bloks (validated by `facade::registration`).
+/// its implementations, states, locks, bloks and assets (validated by `facade::registration`).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RegisterDeclaration {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -26,6 +26,8 @@ pub struct RegisterDeclaration {
     pub locks: Option<Vec<Value>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bloks: Option<Vec<Value>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assets: Option<Vec<Value>>,
 }
 
 impl RegisterDeclaration {
@@ -36,6 +38,7 @@ impl RegisterDeclaration {
             || self.states.is_some()
             || self.locks.is_some()
             || self.bloks.is_some()
+            || self.assets.is_some()
     }
 }
 

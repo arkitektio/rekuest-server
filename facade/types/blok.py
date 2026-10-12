@@ -13,6 +13,8 @@ from kante.types import Info
 from facade import filters, models, scalars
 from facade.types.base import build_prescoped_queryset, row_of
 from facade.types.demand import ActionDependencyModel, StateDependencyModel
+from rekuest_core import enums as renums
+from rekuest_core import scalars as rscalars
 from rekuest_core.objects import models as rmodels
 from rekuest_core.objects import types as rtypes
 
@@ -38,6 +40,17 @@ class Blok:
     dependencies: list["BlokDependency"] = strawberry_django.field(
         description="Dependencies that need to be resolved for this blok.",
     )
+
+    @strawberry_django.field(description="The renderer for this blok's root.")
+    def context(self) -> renums.ComponentContext:
+        return renums.ComponentContext(self.context)
+
+    for_model: str | None = strawberry_django.field(description="The model reference this blok decorates, if any.")
+    for_node: str | None = strawberry_django.field(description="The node of `forModel` this blok attaches to; the model's root when null.")
+
+    @strawberry_django.field(description="The whole component tree as one JSON value, in the wire spelling (snake_case keys). Unlike `components` it has no depth limit, which a selection set always has.")
+    def component_tree(self) -> rscalars.AnyDefault:
+        return cast("rscalars.AnyDefault", self.components)
 
     @strawberry_django.field(description="The typed component tree of this blok.")
     def components(self) -> list[rtypes.ComponentNode]:
@@ -107,6 +120,7 @@ class MaterializedBlok:
     blok: Blok
     name: str | None
     description: str | None
+    is_default: bool = strawberry_django.field(description="Whether this is its declaring agent's default blok for the blok's context.")
     created_at: datetime.datetime
     updated_at: datetime.datetime
     agent_mappings: list["BlokAgentMapping"] = strawberry_django.field(

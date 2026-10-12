@@ -9,7 +9,7 @@ from facade import enums, inputs, models, signals, takt, takt_api, types
 from facade.caller_context import CallerContext
 from facade.takt_api import Principal
 from facade.types.base import scoped_get
-from rekuest_core.inputs.types import BlokImplementationInput, ImplementationInput, LockImplementationInput, StateImplementationInput
+from rekuest_core.inputs.types import AssetInput, BlokImplementationInput, ImplementationInput, LockImplementationInput, StateImplementationInput
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,7 @@ class ImplementAgentInput:
     locks: list[LockImplementationInput] | None = None
     states: list[StateImplementationInput] | None = None
     bloks: list[BlokImplementationInput] | None = None
+    assets: list[AssetInput] | None = None
     implementations: list[ImplementationInput] | None = None
     hash: str | None = None
 

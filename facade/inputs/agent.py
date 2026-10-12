@@ -4,7 +4,7 @@ import strawberry
 from pydantic import BaseModel, Field
 from strawberry.experimental import pydantic
 
-from rekuest_core.inputs.models import BlokImplementationInputModel, ImplementationInputModel, LockImplementationInputModel, StateImplementationInputModel
+from rekuest_core.inputs.models import AssetInputModel, BlokImplementationInputModel, ImplementationInputModel, LockImplementationInputModel, StateImplementationInputModel
 
 
 class PinInputModel(BaseModel):
@@ -114,6 +114,7 @@ class ImplementAgentInputModel(BaseModel):
     implementations: list[ImplementationInputModel] | None = Field(default=None, description="The implementations of the agent. This is used to specify the initial implementations of the agent")
     locks: list[LockImplementationInputModel] | None = Field(default=None, description="The locks of the agent. This is used to specify which resources the agent needs to run")
     bloks: list[BlokImplementationInputModel] | None = Field(default=None, description="The blocks of the agent. This is used to specify the initial blocks of the agent")
+    assets: list[AssetInputModel] | None = Field(default=None, description="The files the agent brings with it, by name. The agent uploads the ones the server does not hold yet.")
     hash: str | None = Field(
         default=None,
         description="A unique hash of the agent definition. An agent can use this hash to check if its definition has changed and if it needs to update its implementations and states. This is used to optimize the update process by only updating the implementations and states that have changed.",

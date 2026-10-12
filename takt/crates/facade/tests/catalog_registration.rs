@@ -283,6 +283,292 @@ async fn agent_declared_bloks_are_validated_against_their_catalog() {
 }
 
 #[tokio::test]
+async fn a_blok_naming_no_catalog_is_checked_against_the_standard_one() {
+    let Some(t) = tenant().await else { return };
+    t.catalog("orkestrator", json!([]), json!([{"name": "Box"}]))
+        .await;
+    let knob = json!([{"key": "panel", "components": [{"id": "root", "component": "Knob"}]}]);
+    let refused = t
+        .register(payload(&[], "gt", ("a", "b"), knob))
+        .await
+        .unwrap_err();
+    assert!(
+        refused.contains("component 'Knob' is not registered"),
+        "{refused}"
+    );
+
+    let boxed = json!([{"key": "panel", "components": [{"id": "root", "component": "Box"}]}]);
+    t.register(payload(&[], "gt", ("a", "b"), boxed))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn components_are_held_to_their_declared_placement() {
+    let Some(t) = tenant().await else { return };
+    t.catalog(
+        "electron",
+        json!([]),
+        json!([
+            {"name": "Box"},
+            {"name": "Label", "accepts_children": false},
+            {"name": "Scene", "children_context": "SCENE", "not_downstream_of": ["Scene"]},
+            {"name": "Model", "context": "SCENE", "downstream_of": ["Scene"]},
+            {"name": "Move", "context": "SCENE", "downstream_of": ["Model", "Robot"], "accepts_children": false},
+            {"name": "Popout", "context": "SCENE", "children_context": "HTML", "downstream_of": ["Model", "Robot"]},
+        ]),
+    )
+    .await;
+    fn node(component: &str, children: Vec<Value>) -> Value {
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        json!({"id": format!("{component}{id}"), "component": component, "children": children})
+    }
+    let blok = |tree: Value| json!([{"key": "panel", "catalog": "electron", "components": [tree]}]);
+
+    let accepted = node(
+        "Box",
+        vec![node(
+            "Scene",
+            vec![node(
+                "Model",
+                vec![
+                    node("Move", vec![]),
+                    node("Popout", vec![node("Box", vec![node("Label", vec![])])]),
+                ],
+            )],
+        )],
+    );
+    t.register(payload(&[], "gt", ("a", "b"), blok(accepted)))
+        .await
+        .unwrap();
+
+    for (tree, message) in [
+        (
+            node("Model", vec![]),
+            "component 'Model' is a scene component and cannot be placed in the html context",
+        ),
+        (
+            node("Scene", vec![node("Label", vec![])]),
+            "component 'Label' is a html component and cannot be placed in the scene context",
+        ),
+        (
+            node("Scene", vec![node("Move", vec![])]),
+            "component 'Move' must be inside one of ['Model', 'Robot']",
+        ),
+        (
+            node(
+                "Scene",
+                vec![node(
+                    "Model",
+                    vec![node("Popout", vec![node("Scene", vec![])])],
+                )],
+            ),
+            "component 'Scene' must not be inside ['Scene']",
+        ),
+    ] {
+        let refused = t
+            .register(payload(&[], "gt", ("a", "b"), blok(tree)))
+            .await
+            .unwrap_err();
+        assert!(refused.contains(message), "{refused}");
+    }
+}
+
+#[tokio::test]
+async fn a_scene_blok_opens_a_scene_names_its_models_and_may_be_the_default() {
+    let Some(t) = tenant().await else { return };
+    t.catalog(
+        "electron",
+        json!([]),
+        json!([
+            {"name": "Box"},
+            {"name": "Scene", "children_context": "SCENE", "not_downstream_of": ["Scene"]},
+            {"name": "Model", "context": "SCENE", "downstream_of": ["Scene"], "props": [
+                {"key": "src", "kind": "ASSET", "required": true}]},
+        ]),
+    )
+    .await;
+    let reference = format!("sha256:{}", "9f".repeat(32));
+    // A model named by an asset path, in a blok that declares the dependency the path names.
+    let scene = |key: &str, path: &str, extra: Value| {
+        let mut blok = json!({"key": key, "catalog": "electron", "context": "SCENE",
+            "dependencies": [{"key": "self"}], "components": [
+            {"id": "scene", "component": "Scene", "children": [
+                {"id": "model", "component": "Model", "props": [
+                    {"key": "src", "dynamic_value": {"path": path}}]}]}]});
+        blok.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        blok
+    };
+    let named = "self.assets.scope";
+    let with_assets = |mut payload: Value| {
+        payload["assets"] =
+            json!([{"name": "scope", "kind": "MODEL_3D", "ref": reference, "size": 1024}]);
+        payload
+    };
+
+    for (bloks, message) in [
+        (
+            json!([{"key": "view", "catalog": "electron", "context": "SCENE", "components": [{"id": "root", "component": "Box"}]}]),
+            "the root of a scene blok must be a 'Scene', not 'Box'",
+        ),
+        (
+            json!([{"key": "view", "catalog": "electron", "context": "SCENE", "components": [
+                {"id": "root", "component": "Box", "children": [{"id": "scene", "component": "Scene"}]}]}]),
+            "the root of a scene blok must be a 'Scene', not 'Box'",
+        ),
+        (
+            // No component is registered in this catalog, so nothing else could tell a scene from a box.
+            json!([{"key": "view", "catalog": "unregistered", "context": "SCENE", "components": [{"id": "root", "component": "Box"}]}]),
+            "the root of a scene blok must be a 'Scene', not 'Box'",
+        ),
+        (
+            json!([{"key": "view", "catalog": "electron", "context": "SCENE", "components": [
+                {"id": "scene", "component": "Scene"}, {"id": "other", "component": "Scene"}]}]),
+            "a scene blok has exactly one root, a 'Scene', not 2 roots",
+        ),
+        (
+            json!([{"key": "view", "catalog": "electron", "context": "SCENE", "components": []}]),
+            "a scene blok has exactly one root, a 'Scene', not 0 roots",
+        ),
+        (
+            json!([{"key": "view", "catalog": "electron", "context": "SCENE", "components": [
+                {"id": "scene", "component": "Scene", "children": [
+                    {"id": "model", "component": "Model", "props": [{"key": "src", "static_value": reference}]}]}]}]),
+            "is an ASSET prop and must name an asset",
+        ),
+        (
+            json!([scene("view", "self.assets", json!({}))]),
+            "is an ASSET prop and must name an asset",
+        ),
+        (
+            json!([scene("view", "self.assets.absent", json!({}))]),
+            "names the asset 'absent', which the agent does not declare (declares [\"scope\"])",
+        ),
+        (
+            json!([scene("view", named, json!({"for_model": reference}))]),
+            "only an html blok can decorate a model",
+        ),
+    ] {
+        let refused = t
+            .register(with_assets(payload(&[], "gt", ("a", "b"), bloks)))
+            .await
+            .unwrap_err();
+        assert!(refused.contains(message), "{refused}");
+    }
+    for (assets, message) in [
+        (
+            json!([{"name": "my-scope", "kind": "MODEL_3D", "ref": reference, "size": 1}]),
+            "is not an identifier",
+        ),
+        (
+            json!([{"name": "scope", "kind": "MODEL_3D", "ref": "9f2c", "size": 1}]),
+            "the reference must be 'sha256:'",
+        ),
+        (
+            json!([{"name": "scope", "kind": "MODEL_3D", "ref": reference, "size": 1},
+                {"name": "scope", "kind": "IMAGE", "ref": reference, "size": 1}]),
+            "is declared twice",
+        ),
+    ] {
+        let mut declaration = payload(&[], "gt", ("a", "b"), json!([]));
+        declaration["assets"] = assets;
+        let refused = t.register(declaration).await.unwrap_err();
+        assert!(refused.contains(message), "{refused}");
+    }
+
+    let defaults = |t: &Tenant| {
+        let db = t.db.clone();
+        let organization = t.organization;
+        async move {
+            sqlx::query_as::<_, (String, String, Option<String>)>(
+                "SELECT b.name, b.context, b.for_node FROM facade_materializedblok m JOIN facade_blok b ON b.id = m.blok_id
+                  WHERE b.organization_id = $1 AND m.is_default ORDER BY b.name",
+            )
+            .bind(organization)
+            .fetch_all(&db)
+            .await
+            .unwrap()
+        }
+    };
+    let first = json!([
+        scene("view", named, json!({"default": true})),
+        {"key": "panel", "catalog": "electron", "default": true, "for_model": reference, "for_node": "turret",
+         "components": [{"id": "root", "component": "Box"}]},
+    ]);
+    t.register(with_assets(payload(&[], "gt", ("a", "b"), first)))
+        .await
+        .unwrap();
+    let assets = |t: &Tenant| {
+        let (db, agent) = (t.db.clone(), t.agent);
+        async move {
+            sqlx::query_as::<_, (String, String, String, i64)>(
+                "SELECT name, kind, ref, size FROM facade_agentasset WHERE agent_id = $1 ORDER BY name",
+            )
+            .bind(agent)
+            .fetch_all(&db)
+            .await
+            .unwrap()
+        }
+    };
+    assert_eq!(
+        assets(&t).await,
+        [(
+            "scope".to_owned(),
+            "MODEL_3D".to_owned(),
+            reference.clone(),
+            1024
+        )]
+    );
+    // The blok's only use of its agent is the asset, and the key is still mapped to it.
+    let mapped: Vec<String> = sqlx::query_scalar(
+        "SELECT m.key FROM facade_blokagentmapping m JOIN facade_materializedblok b ON b.id = m.materialized_blok_id
+          WHERE m.agent_id = $1 AND b.name = 'view'",
+    )
+    .bind(t.agent)
+    .fetch_all(&t.db)
+    .await
+    .unwrap();
+    assert_eq!(mapped, ["self"]);
+    assert_eq!(
+        defaults(&t).await,
+        [
+            (
+                "panel".to_owned(),
+                "HTML".to_owned(),
+                Some("turret".to_owned())
+            ),
+            ("view".to_owned(), "SCENE".to_owned(), None)
+        ]
+    );
+
+    // A newly declared default replaces the previous one of its context, and only that one.
+    let second = json!([
+        scene("view", "self.assets.stage", json!({})),
+        scene("other_view", "self.assets.stage", json!({"default": true})),
+        {"key": "panel", "catalog": "electron", "default": true, "components": [{"id": "root", "component": "Box"}]},
+    ]);
+    // A re-registration that names its file differently: the old name is gone, not kept.
+    let mut renamed = payload(&[], "lt", ("a", "b"), second);
+    renamed["assets"] =
+        json!([{"name": "stage", "kind": "MODEL_3D", "ref": reference, "size": 2048}]);
+    t.register(renamed).await.unwrap();
+    let names: Vec<String> = defaults(&t).await.into_iter().map(|row| row.0).collect();
+    assert_eq!(names, ["other_view", "panel"]);
+    assert_eq!(
+        assets(&t).await,
+        [(
+            "stage".to_owned(),
+            "MODEL_3D".to_owned(),
+            reference.clone(),
+            2048
+        )]
+    );
+}
+
+#[tokio::test]
 async fn multiple_catalogs_are_unioned_with_base() {
     let Some(t) = tenant().await else { return };
     t.catalog(

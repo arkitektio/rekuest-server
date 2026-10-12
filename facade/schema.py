@@ -92,6 +92,9 @@ class Query:
     placement: types.Placement = field(description="Fetch a specific placement by ID.")
     threed_models: list[types.ThreeDModel] = field(description="List all 3D models.")
     threed_model: types.ThreeDModel = field(description="Fetch a specific 3D model by ID.")
+    asset = field(resolver=mutations.asset, description="The stored asset of this reference ('sha256:...') in the caller's organization, or null if no agent has uploaded it.")
+    asset_policy = field(resolver=mutations.asset_policy, description="The limits each kind of asset is held to when it is added.")
+    bloks_for_model = field(resolver=mutations.bloks_for_model, description="The html bloks registered to decorate the model of this reference.")
 
     sessions: list[types.Session] = field(description="List all sessions.")
     session: types.Session = field(description="Fetch a specific session by ID.")
@@ -302,7 +305,9 @@ class Mutation:
     # Implement Agent
     implement_agent = mutation(resolver=mutations.implement_agent, description="Implement an agent with given states and implementations. This is used to set up an agent with its initial configuration and capabilities.")
 
-    # 3D Model
+    # Assets
+    request_asset_upload = mutation(resolver=mutations.request_asset_upload, description="A media upload grant for one asset. Issued only for a file the caller's own agent declares (it registered with it), and only if its size passes the policy.")
+    create_asset = mutation(resolver=mutations.create_asset, description="Verify an asset uploaded with a grant from `requestAssetUpload` (its hash and the rules of its kind) and record it. Returns the existing asset if the hash is stored already; a refusal carries its code in `extensions.code` and deletes the upload.")
     create_threed_model = mutation(resolver=mutations.create_threed_model, description="Create a new 3D model.")
     update_threed_model = mutation(resolver=mutations.update_threed_model, description="Update an existing 3D model.")
     delete_threed_model = mutation(resolver=mutations.delete_threed_model, description="Delete a 3D model.")

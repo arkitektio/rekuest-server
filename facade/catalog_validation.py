@@ -27,10 +27,12 @@ from facade import models
 from rekuest_core import enums
 from rekuest_core.catalogs import BASE_CATALOG_ID, base_operation_names, base_operations
 from rekuest_core.inputs import models as rimodels
-from rekuest_core.inputs.models import iter_component_nodes, iter_util_calls
+from rekuest_core.inputs.models import iter_util_calls
 from rekuest_core.objects.models import DiagnosticModel
 
 UNKNOWN_OPERATION = "unknown_operation"
+# The one component a scene blok may have as its root.
+SCENE_ROOT_COMPONENT = "Scene"
 Widget = rimodels._AssignWidgetBase | rimodels._ReturnWidgetBase
 
 
@@ -162,24 +164,83 @@ def _check_component(
             kind = next((p.kind for p in spec.props if p.key == prop.key), None)
             if kind == enums.CatalogValueKind.CALLBACK and prop.agent_call is None and prop.util_call is None:
                 raise ValueError(f"{prop_owner} is a CALLBACK prop and must be bound via agent_call or util_call")
+            _check_asset_prop(kind, prop, prop_owner)
         diagnostics.extend(_check_calls(_prop_calls(prop), operations, catalog_label, prop_owner))
     return diagnostics
 
 
-def validate_components_against_catalogs(catalogs: Sequence[models.UICatalog], components: list[rimodels.ComponentNodeInputModel] | None) -> list[DiagnosticModel]:
-    """Every component, prop and operation a component tree uses is provided by base plus ``catalogs``."""
+def _check_asset_prop(kind: enums.CatalogValueKind | None, prop: rimodels.ComponentPropInputModel, prop_owner: str) -> None:
+    """An ASSET prop names a file an app registered: it is bound to ``<dependency>.assets.<name>``."""
+    if kind != enums.CatalogValueKind.ASSET:
+        return
+    path = prop.dynamic_value.path if prop.dynamic_value is not None else None
+    if path is None or rimodels.blok_asset_path(path) is None:
+        raise ValueError(f"{prop_owner} is an ASSET prop and must name an asset the app registered, as in {prop.key}=\"@self.assets.<name>\"")
+
+
+def validate_components_against_catalogs(
+    catalogs: Sequence[models.UICatalog],
+    components: list[rimodels.ComponentNodeInputModel] | None,
+    context: enums.ComponentContext = enums.ComponentContext.HTML,
+) -> list[DiagnosticModel]:
+    """Every component, prop and operation a component tree uses is provided by base plus ``catalogs``.
+
+    ``context`` is the blok's own: a scene blok has one root, the scene, whatever is registered.
+    """
     operations = resolve_operations(catalogs)
     component_specs = resolve_components(catalogs)
     catalog_label = _catalog_label(catalogs)
     diagnostics: list[DiagnosticModel] = []
-    for node in iter_component_nodes(components):
-        diagnostics.extend(_check_component(node, component_specs, operations, catalog_label, f"component {node.id!r}"))
+
+    def visit(nodes: list[rimodels.ComponentNodeInputModel] | None, ancestors: tuple[str, ...], context: enums.ComponentContext) -> None:
+        for node in nodes or []:
+            owner = f"component {node.id!r}"
+            diagnostics.extend(_check_component(node, component_specs, operations, catalog_label, owner))
+            inner = _check_placement(node.component, ancestors, context, component_specs, owner)
+            visit(node.children, (*ancestors, node.component), inner)
+
+    if context == enums.ComponentContext.SCENE:
+        roots = components or []
+        if len(roots) != 1:
+            raise ValueError(f"a scene blok has exactly one root, a {SCENE_ROOT_COMPONENT!r}, not {len(roots)} roots")
+        if roots[0].component != SCENE_ROOT_COMPONENT:
+            raise ValueError(f"component {roots[0].id!r}: the root of a scene blok must be a {SCENE_ROOT_COMPONENT!r}, not {roots[0].component!r}")
+    visit(components, (), enums.ComponentContext.HTML)
     return diagnostics
 
 
-def validate_manifest_against_catalog(catalog: models.UICatalog, components: list[rimodels.ComponentNodeInputModel] | None) -> list[DiagnosticModel]:
+def _check_placement(
+    component: str,
+    ancestors: tuple[str, ...],
+    context: enums.ComponentContext,
+    component_specs: dict[str, rimodels.CatalogComponentInputModel] | None,
+    owner: str,
+) -> enums.ComponentContext:
+    """Where a component sits in the tree, against what it declares; returns the context of its children.
+
+    A tree starts in the html context. A component whose ``children_context`` differs from its
+    own bridges two renderers, and everything below it is checked in the new one.
+    """
+    spec = component_specs.get(component) if component_specs is not None else None
+    if spec is None:
+        return context
+    if spec.context != context:
+        raise ValueError(f"{owner}: component {component!r} is a {spec.context.value.lower()} component and cannot be placed in the {context.value.lower()} context")
+    if spec.downstream_of and not set(spec.downstream_of) & set(ancestors):
+        raise ValueError(f"{owner}: component {component!r} must be inside one of {sorted(spec.downstream_of)}")
+    forbidden = sorted(set(spec.not_downstream_of) & set(ancestors))
+    if forbidden:
+        raise ValueError(f"{owner}: component {component!r} must not be inside {forbidden}")
+    return spec.children_context or spec.context
+
+
+def validate_manifest_against_catalog(
+    catalog: models.UICatalog,
+    components: list[rimodels.ComponentNodeInputModel] | None,
+    context: enums.ComponentContext = enums.ComponentContext.HTML,
+) -> list[DiagnosticModel]:
     """Single-catalog form of :func:`validate_components_against_catalogs` for blok manifests."""
-    return validate_components_against_catalogs([catalog], components)
+    return validate_components_against_catalogs([catalog], components, context)
 
 
 def _prop_calls(prop: rimodels.ComponentPropInputModel) -> Iterator[rimodels.UtilCallInputModel]:

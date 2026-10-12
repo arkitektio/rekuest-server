@@ -555,6 +555,14 @@ class LockImplementationInput:
     definition: LockDefinitionInput
 
 
+@pydantic.input(models.AssetInputModel, description="A file an agent brings with it: the name its bloks call it by, and what the bytes are.")
+class AssetInput:
+    name: str
+    kind: enums.AssetKind
+    ref: str
+    size: int
+
+
 @pydantic.input(models.DynamicValueInputModel, description="A bound state pointer referencing a variable inside a Blok state instance.")
 class DynamicValueInput:
     literal: Optional[str] = None
@@ -617,6 +625,10 @@ class BlokImplementationInput:
     catalog: Optional[str] = None
     demo_state: Optional[scalars.JSONSerializable] = None
     description: Optional[str] = None
+    context: enums.ComponentContext = enums.ComponentContext.HTML
+    default: bool = False
+    for_model: Optional[str] = None
+    for_node: Optional[str] = None
 
 
 @pydantic.input(models.CatalogPropInputModel, description="A prop a catalog component accepts.")
@@ -633,6 +645,10 @@ class CatalogComponentInput:
     description: Optional[str] = None
     props: List[CatalogPropInput] = strawberry.field(default_factory=list)
     accepts_children: bool = True
+    context: enums.ComponentContext = enums.ComponentContext.HTML
+    children_context: Optional[enums.ComponentContext] = None
+    downstream_of: List[str] = strawberry.field(default_factory=list)
+    not_downstream_of: List[str] = strawberry.field(default_factory=list)
 
 
 @pydantic.input(models.CatalogArgumentInputModel, description="An argument a catalog operation accepts.")

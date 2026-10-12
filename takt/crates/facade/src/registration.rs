@@ -223,6 +223,10 @@ async fn register_state(
     .await
 }
 
+/// The catalog a blok naming none is checked against: the one the Orkestrator app registers.
+/// The client's offline check and Django's `createBlok` use the same name.
+const STANDARD_CATALOG_NAME: &str = "orkestrator";
+
 /// One declared blok: its catalog, manifest check, row, auto-materialization bound to the
 /// declaring agent, and a mapping per dependency. Its diagnostics.
 async fn register_blok(
@@ -234,16 +238,19 @@ async fn register_blok(
         .catalog
         .as_deref()
         .filter(|c| !c.is_empty())
-        .unwrap_or("default");
+        .unwrap_or(STANDARD_CATALOG_NAME);
     let catalog = Catalog::get_or_create(conn, catalog_name, agent.organization).await?;
-    let diagnostics = validate_manifest_against_catalog(&catalog, Some(&blok.components))?;
+    let diagnostics =
+        validate_manifest_against_catalog(&catalog, Some(&blok.components), blok.context)?;
 
     let (id, name, description): (i64, String, Option<String>) = sqlx::query_as(
-        "INSERT INTO facade_blok (name, description, components, demo_state, diagnostics, creator_id, organization_id, catalog_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        "INSERT INTO facade_blok (name, description, components, demo_state, diagnostics, creator_id, organization_id, catalog_id,
+                                  context, for_model, for_node)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          ON CONFLICT (organization_id, name) DO UPDATE SET
              description = excluded.description, components = excluded.components, demo_state = excluded.demo_state,
-             diagnostics = excluded.diagnostics, creator_id = excluded.creator_id, catalog_id = excluded.catalog_id
+             diagnostics = excluded.diagnostics, creator_id = excluded.creator_id, catalog_id = excluded.catalog_id,
+             context = excluded.context, for_model = excluded.for_model, for_node = excluded.for_node
          RETURNING id, name, description",
     )
     .bind(&blok.key)
@@ -254,11 +261,28 @@ async fn register_blok(
     .bind(agent.user)
     .bind(agent.organization)
     .bind(catalog.id)
+    .bind(blok.context.value())
+    .bind(&blok.for_model)
+    .bind(&blok.for_node)
     .fetch_one(&mut *conn)
     .await?;
 
+    if blok.default {
+        // At most one default per agent and context: a newly declared default replaces the previous one.
+        sqlx::query(
+            "UPDATE facade_materializedblok m SET is_default = false
+               FROM facade_blok b
+              WHERE b.id = m.blok_id AND m.declared_by_id = $1 AND m.is_default AND b.context = $2 AND b.id <> $3",
+        )
+        .bind(agent.id)
+        .bind(blok.context.value())
+        .bind(id)
+        .execute(&mut *conn)
+        .await?;
+    }
+
     let materialized: Option<i64> = sqlx::query_scalar(
-        "UPDATE facade_materializedblok SET name = $3, description = $4, updated_at = now()
+        "UPDATE facade_materializedblok SET name = $3, description = $4, is_default = $5, updated_at = now()
           WHERE id = (SELECT id FROM facade_materializedblok WHERE blok_id = $1 AND declared_by_id = $2 ORDER BY id LIMIT 1)
          RETURNING id",
     )
@@ -266,19 +290,21 @@ async fn register_blok(
     .bind(agent.id)
     .bind(&name)
     .bind(description.as_deref().unwrap_or(""))
+    .bind(blok.default)
     .fetch_optional(&mut *conn)
     .await?;
     let materialized =
         match materialized {
             Some(materialized) => materialized,
             None => sqlx::query_scalar(
-                "INSERT INTO facade_materializedblok (name, description, blok_id, declared_by_id)
-                 VALUES ($3, $4, $1, $2) RETURNING id",
+                "INSERT INTO facade_materializedblok (name, description, blok_id, declared_by_id, is_default)
+                 VALUES ($3, $4, $1, $2, $5) RETURNING id",
             )
             .bind(id)
             .bind(agent.id)
             .bind(&name)
             .bind(description.as_deref().unwrap_or(""))
+            .bind(blok.default)
             .fetch_one(&mut *conn)
             .await?,
         };
@@ -449,6 +475,30 @@ pub async fn implement_agent(
     for blok in payload.bloks.iter().flatten() {
         diagnostics.extend(register_blok(conn, &identity, blok).await?);
     }
+
+    // The names the agent gives its files. The files themselves are the organization's
+    // `facade_asset` rows of the same ref, which the agent uploads after it registered.
+    let mut declared_assets = vec![];
+    for asset in payload.assets.iter().flatten() {
+        sqlx::query(
+            "INSERT INTO facade_agentasset (agent_id, name, kind, ref, size) VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (agent_id, name) DO UPDATE SET kind = excluded.kind, ref = excluded.ref,
+                                                        size = excluded.size, updated_at = now()",
+        )
+        .bind(agent)
+        .bind(&asset.name)
+        .bind(asset.kind.value())
+        .bind(&asset.reference)
+        .bind(asset.size)
+        .execute(&mut *conn)
+        .await?;
+        declared_assets.push(asset.name.clone());
+    }
+    sqlx::query("DELETE FROM facade_agentasset WHERE agent_id = $1 AND NOT (name = ANY($2))")
+        .bind(agent)
+        .bind(&declared_assets)
+        .execute(&mut *conn)
+        .await?;
 
     Ok(Implemented {
         hash,

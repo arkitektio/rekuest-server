@@ -20,7 +20,7 @@ class ThreeDModel(models.Model):
         related_name="threedmodels",
         help_text="The media file containing this 3D model",
     )
-    transfer_function = models.CharField(max_length=10000, help_text="The function used to transfer the state of the model to properties of the model")
+    transfer_function = models.CharField(max_length=10000, default="", db_default="", help_text="Unused: scene bloks bind a model's nodes to state. Kept so the previous release still runs on this schema.")
     dependency = models.JSONField(help_text="The protocol of the agent that we need to show this model", null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())

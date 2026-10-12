@@ -58,6 +58,21 @@ def _value_path_root(value_path: str) -> str:
     return value_path.lstrip("/").split("/", 1)[0]
 
 
+#: The root a handler's arguments read the value that triggered them from (``$event/value``).
+BLOK_EVENT_ROOT = "$event"
+
+#: What follows a dependency's key in the path of one of its assets (``self.assets.scope``).
+BLOK_ASSETS_SEGMENT = "assets"
+
+
+def blok_asset_path(path: str) -> tuple[str, str] | None:
+    """The ``(dependency key, asset name)`` of ``<dependency>.assets.<name>``, or None if ``path`` is not exactly that."""
+    parts = path.split(".")
+    if len(parts) == 3 and parts[1] == BLOK_ASSETS_SEGMENT and all(parts):
+        return parts[0], parts[2]
+    return None
+
+
 def _blok_path_root(path: str) -> str:
     """First segment of a blok path, split on '/' and '.' like the renderer's splitPathSegments ('self.scope.x' -> 'self', '/exposure/current' -> 'exposure')."""
     return next((segment for segment in re.split(r"[/.]", path) if segment), "")
@@ -976,6 +991,27 @@ class LockImplementationInputModel(BaseModel):
     definition: LockDefinitionInputModel = Field(description="The lock definition this implementation fulfills.")
 
 
+class AssetInputModel(BaseModel):
+    """A file an agent brings with it: the name its bloks call it by, and what the bytes are."""
+
+    name: str = Field(description="The name bloks refer to the asset by, as in `@self.assets.<name>`. Unique within the agent.")
+    kind: enums.AssetKind = Field(description="What the file is.")
+    ref: str = Field(description="'sha256:' and the hex SHA-256 of the file's exact bytes.")
+    size: int = Field(description="The size of the file in bytes.")
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _well_formed(self) -> "AssetInputModel":
+        if not self.name.isidentifier():
+            raise ValueError(f"Asset: the name {self.name!r} is not an identifier")
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", self.ref):
+            raise ValueError(f"Asset {self.name!r}: the reference must be 'sha256:' and 64 lowercase hex characters, not {self.ref!r}")
+        if self.size <= 0:
+            raise ValueError(f"Asset {self.name!r}: an asset has a size")
+        return self
+
+
 # A two-field `BlokImplementationInputModel` stub used to sit here. The real one is
 # declared further down and shadowed it at import time, so the stub was never reachable
 # -- and its `definition: LockDefinitionInputModel` named a lock, not a blok.
@@ -1118,7 +1154,8 @@ def check_blok_manifest(components: Optional[List[ComponentNodeInputModel]], dep
     * ``declares_value`` names are unique
     * every ``agent_call.dependency`` names a declared blok dependency
     * every ``value_path`` / ``dynamic_value.path`` root resolves to a demo-state key, a declared
-      value or a dependency key -- skipped when ``state_keys`` is ``None`` (no demo state given)
+      value, a dependency key or ``$event`` -- skipped when ``state_keys`` is ``None`` (no demo state given)
+    * ``<dependency>.assets.<name>`` names a file of a declared dependency, not a value
     """
     ids: set[str] = set()
     declared: set[str] = set()
@@ -1132,10 +1169,16 @@ def check_blok_manifest(components: Optional[List[ComponentNodeInputModel]], dep
                     raise ValueError(f"Blok manifest: value {prop.declares_value!r} declared twice")
                 declared.add(prop.declares_value)
 
-    roots = None if state_keys is None else (state_keys | declared | dependency_keys)
+    roots = None if state_keys is None else (state_keys | declared | dependency_keys | {BLOK_EVENT_ROOT})
 
     def check_root(path: Optional[str], owner: str) -> None:
-        if path is None or roots is None:
+        if path is None:
+            return
+        named = blok_asset_path(path)
+        if named is not None and named[0] in dependency_keys:
+            # A file of a declared dependency: there is no value at this path to resolve.
+            return
+        if roots is None:
             return
         root = _blok_path_root(path)
         if root not in roots:
@@ -1167,6 +1210,21 @@ def check_blok_manifest(components: Optional[List[ComponentNodeInputModel]], dep
                 walk_arguments(prop.util_call.arguments, owner)
 
 
+MODEL_REF_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
+
+
+def check_blok_target(context: enums.ComponentContext, for_model: Optional[str], for_node: Optional[str]) -> None:
+    """A blok that decorates a model names it by reference, and is an html blok."""
+    if for_node is not None and for_model is None:
+        raise ValueError("Blok manifest: for_node needs a for_model")
+    if for_model is None:
+        return
+    if not MODEL_REF_PATTERN.fullmatch(for_model):
+        raise ValueError(f"Blok manifest: for_model must be 'sha256:' and 64 lowercase hex characters, not {for_model!r}")
+    if context != enums.ComponentContext.HTML:
+        raise ValueError("Blok manifest: only an html blok can decorate a model")
+
+
 class BlokImplementationInputModel(BaseModel):
     "Base model for a Blok implementation manifest, which compiles all necessary information to materialize a Blok instance in the Arkitekt ecosystem."
 
@@ -1176,11 +1234,16 @@ class BlokImplementationInputModel(BaseModel):
     catalog: Optional[str] = Field(default=None, description="The optional catalog name if this Blok should be registered inside a specific namespace in your Electron app's UI component registry.")
     description: Optional[str] = Field(default=None, description="A human-readable description about this Blok's purpose and functionality.")
     demo_state: Optional[dict] = Field(default=None, description="An optional JSON-serializable object providing demo state values for this Blok's internal reactive data model, useful for testing and development purposes.")
+    context: enums.ComponentContext = Field(default=enums.ComponentContext.HTML, description="The renderer for this Blok's root: HTML for panels and dashboards, SCENE for a full 3D view whose root opens a scene.")
+    default: bool = Field(default=False, description="Whether this Blok is its agent's default for its context. A newly declared default replaces the previous one.")
+    for_model: Optional[str] = Field(default=None, description="The model ('sha256:...') this Blok decorates: viewers showing that model offer this Blok at `for_node`. HTML bloks only.")
+    for_node: Optional[str] = Field(default=None, description="The node of `for_model` this Blok attaches to; the model's root when absent.")
 
     @model_validator(mode="after")
     def check_manifest(self) -> Self:
         """The component tree is coherent with the declared dependencies and demo state."""
         check_blok_manifest(self.components, {dep.key for dep in self.dependencies}, None if self.demo_state is None else set(self.demo_state))
+        check_blok_target(self.context, self.for_model, self.for_node)
         return self
 
 
@@ -1237,6 +1300,10 @@ class CatalogComponentInputModel(BaseModel):
     description: str | None = Field(default=None, description="Human-readable description of the component.")
     props: list[CatalogPropInputModel] = Field(default_factory=list, description="The props this component accepts.")
     accepts_children: bool = Field(default=True, description="Whether ComponentNode.children may be nested under this component.")
+    context: enums.ComponentContext = Field(default=enums.ComponentContext.HTML, description="The context this component may be placed in.")
+    children_context: enums.ComponentContext | None = Field(default=None, description="The context in force for this component's children, when it differs from its own: such a component bridges two renderers.")
+    downstream_of: list[str] = Field(default_factory=list, description="Component names of which at least one must be an ancestor, at any depth. Empty means no requirement.")
+    not_downstream_of: list[str] = Field(default_factory=list, description="Component names of which none may be an ancestor.")
 
     @model_validator(mode="after")
     def check_unique_props(self) -> Self:

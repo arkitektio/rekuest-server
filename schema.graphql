@@ -410,6 +410,9 @@ type Agent {
   """The agent's locks, and which task holds each."""
   locks: [Lock!]!
 
+  """The files the agent brings, by the name its bloks call them."""
+  assets: [AgentAsset!]!
+
   """Agent's associated memory shelve."""
   memoryShelve: MemoryShelve
 
@@ -487,6 +490,30 @@ type Agent {
 
   """Get the count of implementations available on this agent."""
   blocked: Boolean!
+}
+
+"""
+A file an agent brings, under the name its bloks call it by (`@<dependency>.assets.<name>`).
+"""
+type AgentAsset {
+  id: ID!
+
+  """The name bloks refer to the asset by."""
+  name: String!
+
+  """What the agent says the file is."""
+  kind: AssetKind!
+
+  """
+  'sha256:' and the hex SHA-256 of the file's exact bytes, as the agent declares it.
+  """
+  ref: String!
+
+  """The size of the file in bytes, as the agent declares it."""
+  size: Int!
+
+  """The stored file, once the agent has uploaded it; null until then."""
+  asset: Asset
 }
 
 """
@@ -840,6 +867,71 @@ input ArgPortInput {
 """The `Args` scalar type represents a Dictionary of arguments"""
 scalar Args
 
+"""A verified file the organization holds, stored once by its content."""
+type Asset {
+  id: ID!
+
+  """'sha256:' and the hex SHA-256 of the file's exact bytes."""
+  ref: String!
+
+  """What the file is."""
+  kind: AssetKind!
+  file: MediaStore!
+
+  """The size of the file in bytes, measured by the server."""
+  size: Int!
+  createdAt: DateTime!
+
+  """
+  A 3D model's node names: what blok bindings can address. Empty for other kinds.
+  """
+  nodes: [String!]!
+
+  """
+  A 3D model's node, triangle, texture and animation counts. Null for other kinds.
+  """
+  stats: ModelStats
+
+  """An image's width in pixels. Null for other kinds."""
+  width: Int
+
+  """An image's height in pixels. Null for other kinds."""
+  height: Int
+}
+
+"""
+A file an agent brings with it: the name its bloks call it by, and what the bytes are.
+"""
+input AssetInput {
+  """
+  The name bloks refer to the asset by, as in `@self.assets.<name>`. Unique within the agent.
+  """
+  name: String!
+
+  """What the file is."""
+  kind: AssetKind!
+
+  """'sha256:' and the hex SHA-256 of the file's exact bytes."""
+  ref: String!
+
+  """The size of the file in bytes."""
+  size: Int!
+}
+
+"""
+What a file an agent brings with it is: a 3D model (a binary glTF file) or an image (PNG, JPEG or WebP).
+"""
+enum AssetKind {
+  MODEL_3D
+  IMAGE
+}
+
+"""The limits each kind of asset is held to."""
+type AssetPolicy {
+  model: ModelPolicy!
+  image: ImagePolicy!
+}
+
 """
 The input for assigning args to a action. A GraphQL assign is a ROOT by definition — children are created only over the agent socket (AssignRequest, where parent is mandatory) and by server-internal paths like init hooks, so parent/dependency/method are deliberately absent here.
 """
@@ -1057,6 +1149,22 @@ type Blok {
   """Dependencies that need to be resolved for this blok."""
   dependencies(filters: BlokDependencyFilter, pagination: OffsetPaginationInput): [BlokDependency!]!
 
+  """The model reference this blok decorates, if any."""
+  forModel: String
+
+  """
+  The node of `forModel` this blok attaches to; the model's root when null.
+  """
+  forNode: String
+
+  """The renderer for this blok's root."""
+  context: ComponentContext!
+
+  """
+  The whole component tree as one JSON value, in the wire spelling (snake_case keys). Unlike `components` it has no depth limit, which a selection set always has.
+  """
+  componentTree: AnyDefault!
+
   """The typed component tree of this blok."""
   components: [ComponentNode!]!
 
@@ -1169,6 +1277,26 @@ input BlokImplementationInput {
   An optional JSON-serializable object providing demo state values for this Blok's internal reactive data model, useful for testing and development purposes.
   """
   demoState: JSONSerializable = null
+
+  """
+  The renderer for this Blok's root: HTML for panels and dashboards, SCENE for a full 3D view whose root opens a scene.
+  """
+  context: ComponentContext! = HTML
+
+  """
+  Whether this Blok is its agent's default for its context. A newly declared default replaces the previous one.
+  """
+  default: Boolean! = false
+
+  """
+  The model ('sha256:...') this Blok decorates: viewers showing that model offer this Blok at `for_node`. HTML bloks only.
+  """
+  forModel: String = null
+
+  """
+  The node of `for_model` this Blok attaches to; the model's root when absent.
+  """
+  forNode: String = null
 }
 
 """The input for bouncing an agent."""
@@ -1235,6 +1363,10 @@ type CatalogComponent {
   description: String
   props: [CatalogProp!]!
   acceptsChildren: Boolean!
+  context: ComponentContext!
+  childrenContext: ComponentContext
+  downstreamOf: [String!]!
+  notDownstreamOf: [String!]!
 }
 
 """A component a UI catalog can render."""
@@ -1252,6 +1384,22 @@ input CatalogComponentInput {
 
   """Whether ComponentNode.children may be nested under this component."""
   acceptsChildren: Boolean! = true
+
+  """The context this component may be placed in."""
+  context: ComponentContext! = HTML
+
+  """
+  The context in force for this component's children, when it differs from its own: such a component bridges two renderers.
+  """
+  childrenContext: ComponentContext = null
+
+  """
+  Component names of which at least one must be an ancestor, at any depth. Empty means no requirement.
+  """
+  downstreamOf: [String!]! = []
+
+  """Component names of which none may be an ancestor."""
+  notDownstreamOf: [String!]! = []
 }
 
 """A pure operation a UI catalog can evaluate for UtilCalls."""
@@ -1316,6 +1464,7 @@ enum CatalogValueKind {
   LIST
   ANY
   CALLBACK
+  ASSET
 }
 
 type ChildTaskEvent {
@@ -1438,6 +1587,14 @@ type Collection {
 }
 
 """
+The renderer a catalog component lives in. A component may only be placed where its context is in force.
+"""
+enum ComponentContext {
+  HTML
+  SCENE
+}
+
+"""
 An abstract structural visual element inside a Blok blueprint manifest.
 """
 type ComponentNode {
@@ -1511,6 +1668,17 @@ input ComponentPropInput {
   utilCall: UtilCallInput = null
 }
 
+"""
+Record an asset that was uploaded with a grant from `requestAssetUpload`.
+"""
+input CreateAssetInput {
+  """The reference the uploaded bytes must hash to."""
+  ref: String!
+
+  """The store the grant was issued for."""
+  store: MediaLike!
+}
+
 """The input for creating a blok."""
 input CreateBlokInput {
   """The name of the Blok, used for identification in the system."""
@@ -1538,6 +1706,17 @@ input CreateBlokInput {
   The initial state of the blok. This is used to set the initial state of the blok when it is materialized.
   """
   demoState: Args = null
+
+  """The renderer for the blok's root: HTML, or SCENE for a full 3D view."""
+  context: ComponentContext = HTML
+
+  """The model ('sha256:...') this blok decorates. HTML bloks only."""
+  forModel: String = null
+
+  """
+  The node of `for_model` this blok attaches to; the model's root when absent.
+  """
+  forNode: String = null
 }
 
 """
@@ -2461,6 +2640,18 @@ The `Identifier` scalar is a structure identifier of the form `@package/key` (e.
 """
 scalar Identifier
 
+"""The limits an image is held to when it is added to the store."""
+type ImagePolicy {
+  """Largest file, in bytes."""
+  maxSize: Float!
+
+  """Largest width or height, in pixels."""
+  maxSide: Int!
+
+  """The formats an image may be in."""
+  formats: [String!]!
+}
+
 """
 Implement an agent with the given implementations, states and locks. This will create the agent if it doesn't exist and update it if it does exist.
 """
@@ -2494,6 +2685,11 @@ input ImplementAgentInput {
   The blocks of the agent. This is used to specify the initial blocks of the agent
   """
   bloks: [BlokImplementationInput!] = null
+
+  """
+  The files the agent brings with it, by name. The agent uploads the ones the server does not hold yet.
+  """
+  assets: [AssetInput!] = null
 
   """
   A unique hash of the agent definition. An agent can use this hash to check if its definition has changed and if it needs to update its implementations and states. This is used to optimize the update process by only updating the implementations and states that have changed.
@@ -2892,6 +3088,11 @@ type MaterializedBlok {
   blok: Blok!
   name: String
   description: String
+
+  """
+  Whether this is its declaring agent's default blok for the blok's context.
+  """
+  isDefault: Boolean!
   createdAt: DateTime!
   updatedAt: DateTime!
 
@@ -3052,6 +3253,39 @@ type MessageEffect implements Effect {
   dependencies: [String!]!
   source: String
   message: String!
+}
+
+"""The limits a 3D model is held to when it is added to the store."""
+type ModelPolicy {
+  """Largest file, in bytes."""
+  maxSize: Float!
+
+  """Largest JSON chunk, in bytes."""
+  maxJson: Int!
+  maxNodes: Int!
+  maxTriangles: Int!
+
+  """
+  Largest texture side, in pixels. Checked by clients, which decode the images.
+  """
+  maxTextureSize: Int!
+
+  """
+  Decoded texture memory in bytes (width x height x 4, summed). Checked by clients.
+  """
+  maxTextureMemory: Float!
+  maxAnimations: Int!
+
+  """The glTF extensions a model may require."""
+  extensions: [String!]!
+}
+
+"""What validation counted in a 3D model."""
+type ModelStats {
+  nodes: Int!
+  triangles: Int!
+  textures: Int!
+  animations: Int!
 }
 
 """Root mutation type for executing write operations on the API."""
@@ -3244,6 +3478,16 @@ type Mutation {
   Implement an agent with given states and implementations. This is used to set up an agent with its initial configuration and capabilities.
   """
   implementAgent(input: ImplementAgentInput!): Agent! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """
+  A media upload grant for one asset. Issued only for a file the caller's own agent declares (it registered with it), and only if its size passes the policy.
+  """
+  requestAssetUpload(input: RequestAssetUploadInput!): MediaUploadGrant! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """
+  Verify an asset uploaded with a grant from `requestAssetUpload` (its hash and the rules of its kind) and record it. Returns the existing asset if the hash is stored already; a refusal carries its code in `extensions.code` and deletes the upload.
+  """
+  createAsset(input: CreateAssetInput!): Asset! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
   """Create a new 3D model."""
   createThreedModel(input: CreateThreeDModelInput!): ThreeDModel! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
@@ -3997,6 +4241,17 @@ type Query {
   """
   dependencyTree(input: DependencyTreeInput!): DependencyTree! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
+  """
+  The stored asset of this reference ('sha256:...') in the caller's organization, or null if no agent has uploaded it.
+  """
+  asset(ref: String!): Asset @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """The limits each kind of asset is held to when it is added."""
+  assetPolicy: AssetPolicy! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
+  """The html bloks registered to decorate the model of this reference."""
+  bloksForModel(ref: String!): [Blok!]! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
+
   """Retrieve state for a specific context."""
   stateFor(agent: ID!, stateHash: String = null, demand: StateDemandInput = null): State! @auth(required_scopes: null, required_roles: null, required_org_roles: null)
 
@@ -4132,6 +4387,14 @@ type Release {
 
   """Version string of the release."""
   version: String!
+}
+
+"""Ask for a grant to upload one asset the caller's agent declares."""
+input RequestAssetUploadInput {
+  """
+  The asset's reference, as the agent declared it: 'sha256:' and the hex SHA-256 of its exact bytes.
+  """
+  ref: String!
 }
 
 input RequestMediaAccessInput {

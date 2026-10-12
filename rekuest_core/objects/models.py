@@ -358,6 +358,10 @@ class CatalogComponentModel(BaseModel):
     description: str | None = None
     props: list[CatalogPropModel] = []
     accepts_children: bool = True
+    context: enums.ComponentContext = enums.ComponentContext.HTML
+    children_context: enums.ComponentContext | None = None
+    downstream_of: list[str] = []
+    not_downstream_of: list[str] = []
 
 
 class CatalogArgumentModel(BaseModel):
