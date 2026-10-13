@@ -560,7 +560,8 @@ class AssetInput:
     name: str
     kind: enums.AssetKind
     ref: str
-    size: int
+    size: int | None = None
+    source: str | None = None
 
 
 @pydantic.input(models.DynamicValueInputModel, description="A bound state pointer referencing a variable inside a Blok state instance.")

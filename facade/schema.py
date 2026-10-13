@@ -306,7 +306,7 @@ class Mutation:
     implement_agent = mutation(resolver=mutations.implement_agent, description="Implement an agent with given states and implementations. This is used to set up an agent with its initial configuration and capabilities.")
 
     # Assets
-    request_asset_upload = mutation(resolver=mutations.request_asset_upload, description="A media upload grant for one asset. Issued only for a file the caller's own agent declares (it registered with it), and only if its size passes the policy.")
+    request_asset_upload = mutation(resolver=mutations.request_asset_upload, description="A media upload grant for one asset. Issued for a file the caller's own agent declares (it registered with it), or, to an admin, for a file an agent of the organization names a source for; and only if its size passes the policy.")
     create_asset = mutation(resolver=mutations.create_asset, description="Verify an asset uploaded with a grant from `requestAssetUpload` (its hash and the rules of its kind) and record it. Returns the existing asset if the hash is stored already; a refusal carries its code in `extensions.code` and deletes the upload.")
     create_threed_model = mutation(resolver=mutations.create_threed_model, description="Create a new 3D model.")
     update_threed_model = mutation(resolver=mutations.update_threed_model, description="Update an existing 3D model.")

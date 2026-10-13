@@ -85,9 +85,10 @@ class AgentAsset:
     name: str = strawberry_django.field(description="The name bloks refer to the asset by.")
     kind: enums.AssetKind = strawberry_django.field(description="What the agent says the file is.")
     ref: str = strawberry_django.field(description="'sha256:' and the hex SHA-256 of the file's exact bytes, as the agent declares it.")
-    size: int = strawberry_django.field(description="The size of the file in bytes, as the agent declares it.")
+    size: int | None = strawberry_django.field(description="The size of the file in bytes, as the agent declares it; null for a file it does not hold.")
+    source: str | None = strawberry_django.field(description="The https URL the file can be fetched from, for a file the agent does not hold: an admin's client fetches and uploads it.")
 
-    @strawberry_django.field(description="The stored file, once the agent has uploaded it; null until then.", only=["ref", "agent__organization_id"], select_related=["agent"])
+    @strawberry_django.field(description="The stored file, once it was uploaded; null until then.", only=["ref", "agent__organization_id"], select_related=["agent"])
     def asset(self) -> Asset | None:
         row = row_of(self, models.AgentAsset)
         return models.Asset.objects.filter(organization_id=row.agent.organization_id, ref=row.ref).first()  # type: ignore[return-value]

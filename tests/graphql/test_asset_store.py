@@ -18,7 +18,8 @@ from tests.models.test_glb_validation import glb, triangle
 REQUEST = "mutation($input: RequestAssetUploadInput!) { requestAssetUpload(input: $input) { store bucket key } }"
 CREATE = "mutation($input: CreateAssetInput!) { createAsset(input: $input) { id ref kind size nodes stats { nodes triangles } width height } }"
 ASSET = "query($ref: String!) { asset(ref: $ref) { id ref } }"
-AGENT_ASSETS = "query($id: ID!) { agent(id: $id) { assets { name kind ref size asset { id ref } } } }"
+AGENT_ASSETS = "query($id: ID!) { agent(id: $id) { assets { name kind ref size source asset { id ref } } } }"
+SOURCE = "https://vendor.example/models/scope.glb"
 POLICY = "query { assetPolicy { model { maxSize maxNodes extensions } image { maxSize maxSide formats } } }"
 
 
@@ -46,6 +47,12 @@ def stranger(db, backend_stack) -> tuple[HttpContext, Agent]:
 
 
 @pytest.fixture
+def admin(db, backend_stack) -> tuple[HttpContext, Agent]:
+    """An admin of the caller's organization (a static token is one unless it says otherwise), with an agent of their own."""
+    return _caller("test")
+
+
+@pytest.fixture
 def media_bucket(s3, settings):
     """A datalayer with a media bucket, on moto."""
     from datalayer import datalayer as module
@@ -64,9 +71,14 @@ async def _declare(agent: Agent, name: str, data: bytes, kind: str, ref: str | N
     return ref
 
 
-async def _upload(context: HttpContext, data: bytes, ref: str) -> str:
-    """Ask for a grant and put ``data`` where it points, as an agent's client does; the store id."""
-    granted = await schema.execute(REQUEST, context_value=context, variable_values={"input": {"ref": ref}})
+async def _name_source(agent: Agent, name: str, ref: str, kind: str = "MODEL_3D") -> None:
+    """What registration writes for an agent that holds no file and names where to fetch it."""
+    await sync_to_async(AgentAsset.objects.create)(agent=agent, name=name, kind=kind, ref=ref, size=None, source=SOURCE)
+
+
+async def _upload(context: HttpContext, data: bytes, ref: str, size: int | None = None) -> str:
+    """Ask for a grant and put ``data`` where it points, as an uploading client does; the store id."""
+    granted = await schema.execute(REQUEST, context_value=context, variable_values={"input": {"ref": ref, **({"size": size} if size is not None else {})}})
     assert not granted.errors, granted.errors
     grant = granted.data["requestAssetUpload"]
     await sync_to_async(get_current_datalayer()._s3.put_object)(Bucket=grant["bucket"], Key=grant["key"], Body=data)
@@ -99,7 +111,7 @@ class TestAssetStore:
         assert not await sync_to_async(MediaStore.objects.filter(id=again).exists)(), "the surplus upload was kept"
 
         listed = await schema.execute(AGENT_ASSETS, context_value=context, variable_values={"id": str(agent.pk)})
-        assert listed.data["agent"]["assets"] == [{"name": "scope", "kind": "MODEL_3D", "ref": ref, "size": len(data), "asset": {"id": asset["id"], "ref": ref}}]
+        assert listed.data["agent"]["assets"] == [{"name": "scope", "kind": "MODEL_3D", "ref": ref, "size": len(data), "source": None, "asset": {"id": asset["id"], "ref": ref}}]
 
     async def test_an_image_is_an_asset_too(self, caller: tuple[HttpContext, Agent], media_bucket: None) -> None:
         context, agent = caller
@@ -119,8 +131,9 @@ class TestAssetStore:
         ref = await _declare(agent, "scope", data, "MODEL_3D")
         store = await _upload(context, data, ref)
         # Another organization's agent declares nothing of the kind, and may not record this one's upload.
+        # Its token is an admin's, so the refusal names what an admin may upload.
         theirs = await schema.execute(REQUEST, context_value=stranger[0], variable_values={"input": {"ref": ref}})
-        assert theirs.errors and theirs.errors[0].extensions == {"code": "not_declared"}
+        assert theirs.errors and theirs.errors[0].extensions == {"code": "not_sourced"}
         assert (await _create(stranger[0], ref, store)).errors
 
         assert not (await _create(context, ref, store)).errors
@@ -167,6 +180,61 @@ class TestAssetStore:
         assert too_large.errors and too_large.errors[0].extensions == {"code": "too_large"}
         bad_ref = await schema.execute(REQUEST, context_value=context, variable_values={"input": {"ref": "md5:abc"}})
         assert bad_ref.errors and bad_ref.errors[0].extensions == {"code": "bad_reference"}
+
+    async def test_an_admin_uploads_the_file_an_agent_names_a_source_for(self, caller: tuple[HttpContext, Agent], admin: tuple[HttpContext, Agent], media_bucket: None) -> None:
+        member, agent = caller
+        data = glb(*triangle())
+        ref = model_ref(data)
+        await _name_source(agent, "scope", ref)
+
+        declared = (await schema.execute(AGENT_ASSETS, context_value=member, variable_values={"id": str(agent.pk)})).data["agent"]["assets"]
+        assert declared == [{"name": "scope", "kind": "MODEL_3D", "ref": ref, "size": None, "source": SOURCE, "asset": None}]
+
+        # The declaration has no size: whoever fetched the file says how large it is.
+        unsized = await schema.execute(REQUEST, context_value=admin[0], variable_values={"input": {"ref": ref}})
+        assert unsized.errors and unsized.errors[0].extensions == {"code": "bad_header"}
+
+        store = await _upload(admin[0], data, ref, size=len(data))
+        created = await _create(admin[0], ref, store)
+        assert not created.errors, created.errors
+        assert created.data["createAsset"]["ref"] == ref and created.data["createAsset"]["size"] == len(data)
+
+        stored = (await schema.execute(AGENT_ASSETS, context_value=member, variable_values={"id": str(agent.pk)})).data["agent"]["assets"]
+        assert stored[0]["asset"]["ref"] == ref
+
+    async def test_only_an_admin_uploads_for_another_agent_and_only_a_sourced_file(self, caller: tuple[HttpContext, Agent], admin: tuple[HttpContext, Agent], stranger: tuple[HttpContext, Agent], media_bucket: None) -> None:
+        member, _ = caller
+        data, held = glb(*triangle()), png()
+        sourced, unsourced = model_ref(data), model_ref(held)
+        await _name_source(admin[1], "scope", sourced)
+        await _declare(admin[1], "logo", held, "IMAGE")
+
+        # A member who is no admin uploads only what their own agent declares.
+        refused = await schema.execute(REQUEST, context_value=member, variable_values={"input": {"ref": sourced, "size": len(data)}})
+        assert refused.errors and refused.errors[0].extensions == {"code": "not_declared"}
+
+        # An admin of another organization sees no source here.
+        theirs = await schema.execute(REQUEST, context_value=stranger[0], variable_values={"input": {"ref": sourced, "size": len(data)}})
+        assert theirs.errors and theirs.errors[0].extensions == {"code": "not_sourced"}
+
+        # A file an agent holds is that agent's to upload, an admin's or not.
+        other_admin, _ = await sync_to_async(_caller)("test2")
+        held_by_agent = await schema.execute(REQUEST, context_value=other_admin, variable_values={"input": {"ref": unsourced, "size": len(held)}})
+        assert held_by_agent.errors and held_by_agent.errors[0].extensions == {"code": "not_sourced"}
+
+    async def test_a_fetched_file_is_held_to_the_same_rules(self, caller: tuple[HttpContext, Agent], admin: tuple[HttpContext, Agent], media_bucket: None) -> None:
+        _, agent = caller
+        data = glb(*triangle())
+        claimed = "sha256:" + "d" * 64
+        await _name_source(agent, "scope", claimed)
+
+        too_large = await schema.execute(REQUEST, context_value=admin[0], variable_values={"input": {"ref": claimed, "size": 51 * 1024 * 1024}})
+        assert too_large.errors and too_large.errors[0].extensions == {"code": "too_large"}
+
+        store = await _upload(admin[0], data, claimed, size=len(data))
+        refused = await _create(admin[0], claimed, store)
+        assert refused.errors and refused.errors[0].extensions == {"code": "hash_mismatch"}
+        assert not await sync_to_async(MediaStore.objects.filter(id=store).exists)()
 
     async def test_the_policy_names_the_limits_of_each_kind(self, caller: tuple[HttpContext, Agent]) -> None:
         policy = (await schema.execute(POLICY, context_value=caller[0])).data["assetPolicy"]

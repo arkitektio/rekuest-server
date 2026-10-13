@@ -121,11 +121,34 @@ VALID_EXTRA = {
     ),
 }
 
+REF = "sha256:" + "a" * 64
+
+
+def asset(**fields) -> dict:
+    return {"name": "scope", "kind": "MODEL_3D", "ref": REF, **fields}
+
+
+ASSETS = {
+    "asset held by the agent": asset(size=1024),
+    "asset named by a source": asset(source="https://vendor.example/scope.glb?v=2"),
+    "asset with a source and a size": asset(source="https://vendor.example/scope.glb", size=1024),
+    "asset without size or source": asset(),
+    "asset of no size": asset(size=0),
+    "asset source not https": asset(source="http://vendor.example/scope.glb"),
+    "asset source without a host": asset(source="https://"),
+    "asset source too long": asset(source="https://vendor.example/" + "a" * 2000),
+    "asset name not an identifier": asset(name="my scope", size=1),
+    "asset bad reference": asset(ref="md5:abc", size=1),
+}
+
 cases = {}
 for name, declaration in json.loads((HERE / "app_declarations.json").read_text()).items():
     cases[f"app {name}"] = record(declaration)
 for name, implementation in {**VALID_EXTRA, **BROKEN}.items():
     cases[name] = record({"implementations": [implementation]})
+
+for name, declared in ASSETS.items():
+    cases[name] = record({"assets": [declared]})
 
 (HERE / "declarations.json").write_text(json.dumps(cases, indent=1, ensure_ascii=False) + "\n")
 valid = sum(1 for c in cases.values() if "dump" in c)

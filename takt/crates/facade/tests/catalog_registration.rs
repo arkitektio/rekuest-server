@@ -472,6 +472,14 @@ async fn a_scene_blok_opens_a_scene_names_its_models_and_may_be_the_default() {
                 {"name": "scope", "kind": "IMAGE", "ref": reference, "size": 1}]),
             "is declared twice",
         ),
+        (
+            json!([{"name": "scope", "kind": "MODEL_3D", "ref": reference}]),
+            "an asset has a size",
+        ),
+        (
+            json!([{"name": "scope", "kind": "MODEL_3D", "ref": reference, "source": "http://vendor.example/scope.glb"}]),
+            "a source is an https URL",
+        ),
     ] {
         let mut declaration = payload(&[], "gt", ("a", "b"), json!([]));
         declaration["assets"] = assets;
@@ -498,7 +506,7 @@ async fn a_scene_blok_opens_a_scene_names_its_models_and_may_be_the_default() {
         {"key": "panel", "catalog": "electron", "default": true, "for_model": reference, "for_node": "turret",
          "components": [{"id": "root", "component": "Box"}]},
     ]);
-    t.register(with_assets(payload(&[], "gt", ("a", "b"), first)))
+    t.register(with_assets(payload(&[], "gt", ("a", "b"), first.clone())))
         .await
         .unwrap();
     let assets = |t: &Tenant| {
@@ -522,6 +530,26 @@ async fn a_scene_blok_opens_a_scene_names_its_models_and_may_be_the_default() {
             1024
         )]
     );
+    // A file the agent does not hold: it names where to fetch it, and no size.
+    let mut sourced = payload(&[], "gt", ("a", "b"), first.clone());
+    sourced["assets"] = json!([{"name": "scope", "kind": "MODEL_3D", "ref": reference,
+        "source": "https://vendor.example/scope.glb"}]);
+    t.register(sourced).await.unwrap();
+    let named_source: (Option<i64>, Option<String>) = sqlx::query_as(
+        "SELECT size, source FROM facade_agentasset WHERE agent_id = $1 AND name = 'scope'",
+    )
+    .bind(t.agent)
+    .fetch_one(&t.db)
+    .await
+    .unwrap();
+    assert_eq!(
+        named_source,
+        (None, Some("https://vendor.example/scope.glb".to_owned()))
+    );
+    t.register(with_assets(payload(&[], "gt", ("a", "b"), first.clone())))
+        .await
+        .unwrap();
+    assert_eq!(assets(&t).await[0].3, 1024);
     // The blok's only use of its agent is the asset, and the key is still mapped to it.
     let mapped: Vec<String> = sqlx::query_scalar(
         "SELECT m.key FROM facade_blokagentmapping m JOIN facade_materializedblok b ON b.id = m.materialized_blok_id

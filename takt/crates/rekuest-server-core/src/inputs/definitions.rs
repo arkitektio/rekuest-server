@@ -760,8 +760,16 @@ pub struct AssetInputModel {
     pub kind: AssetKind,
     #[serde(rename = "ref")]
     pub reference: String,
-    pub size: i64,
+    /// Required unless the asset names a `source`: an agent knows the size of a file it holds.
+    #[serde(default)]
+    pub size: Option<i64>,
+    /// The https URL the file can be fetched from, given instead of holding the file.
+    #[serde(default)]
+    pub source: Option<String>,
 }
+
+/// The longest `source` an asset may name (`ASSET_SOURCE_MAX_LENGTH`).
+pub const ASSET_SOURCE_MAX_LENGTH: usize = 2000;
 
 impl AssetInputModel {
     pub fn validate(&self) -> Result<(), ValidationError> {
@@ -783,7 +791,20 @@ impl AssetInputModel {
                 repr_str(&self.reference)
             )));
         }
-        if self.size <= 0 {
+        if let Some(source) = &self.source {
+            let length = source.chars().count();
+            if !(source.starts_with("https://")
+                && length > "https://".len()
+                && length <= ASSET_SOURCE_MAX_LENGTH)
+            {
+                return Err(ValidationError(format!(
+                    "Asset {}: a source is an https URL of at most {} characters",
+                    repr_str(&self.name),
+                    ASSET_SOURCE_MAX_LENGTH
+                )));
+            }
+        }
+        if self.size.map_or(self.source.is_none(), |size| size <= 0) {
             return Err(ValidationError(format!(
                 "Asset {}: an asset has a size",
                 repr_str(&self.name)

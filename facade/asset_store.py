@@ -2,8 +2,9 @@
 
 An agent names its files at registration (``AgentAsset``). It may then upload the ones
 the organization does not hold: with an ordinary media grant, issued only for a file its
-own declaration names. Nothing about that upload is trusted. ``create_asset`` reads the
-stored object back and holds it to the rules of its kind.
+own declaration names. A file it does not hold it names a ``source`` for instead, and an
+admin's client fetches and uploads that one. Nothing about either upload is trusted.
+``create_asset`` reads the stored object back and holds it to the rules of its kind.
 """
 
 from __future__ import annotations
@@ -75,13 +76,24 @@ def declared_asset(*, organization_id: int, client_id: int | None, user_id: int,
     return declared
 
 
-def check_upload(declared: models.AgentAsset) -> None:
-    """Whether a file as it is declared may be uploaded at all."""
+def sourced_asset(*, organization_id: int, ref: str) -> models.AgentAsset:
+    """What any agent of the organization declares for ``ref`` with a source: the files an admin may upload for it."""
+    _check_ref(ref)
+    declared = models.AgentAsset.objects.filter(agent__organization_id=organization_id, ref=ref, source__isnull=False).order_by("id").first()
+    if declared is None:
+        raise AssetRefused("not_sourced", f"no agent of your organization names a source for the asset {ref}: an admin uploads only the files an app says where to fetch")
+    return declared
+
+
+def upload_size(declared: models.AgentAsset, measured: int | None) -> int:
+    """The size a grant is issued for: the declared one, else what the uploader measured. Refused if over the limit."""
+    size = declared.size if declared.size is not None else measured
     limit = asset_policy().max_size(declared.kind)
-    if declared.size <= 0:
+    if size is None or size <= 0:
         raise AssetRefused("bad_header", "an asset has a size")
-    if declared.size > limit:
-        raise AssetRefused("too_large", f"the asset '{declared.name}' is {declared.size} bytes, over the limit of {limit}")
+    if size > limit:
+        raise AssetRefused("too_large", f"the asset '{declared.name}' is {size} bytes, over the limit of {limit}")
+    return size
 
 
 def _read_object(datalayer: Datalayer, store: MediaStore, limit: int) -> bytes:

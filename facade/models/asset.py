@@ -27,14 +27,16 @@ class AgentAsset(models.Model):
     """A name an agent gives one of its files: what `@<dependency>.assets.<name>` resolves to.
 
     Written at registration from the agent's declaration. The file itself is the
-    organization's ``Asset`` of the same ``ref``, once the agent has uploaded it.
+    organization's ``Asset`` of the same ``ref``, once it was uploaded: by the agent, or,
+    for a file the agent only names a ``source`` for, by an admin.
     """
 
     agent = models.ForeignKey("Agent", on_delete=models.CASCADE, related_name="assets", help_text="The agent that declares the asset.")
     name = models.CharField(max_length=200, help_text="The name bloks refer to the asset by.")
     kind = models.CharField(max_length=32, help_text="What the agent says the file is (rekuest_core AssetKind).")
     ref = models.CharField(max_length=71, help_text="'sha256:' and the hex SHA-256 of the file's exact bytes, as the agent declares it.")
-    size = models.BigIntegerField(help_text="The size of the file in bytes, as the agent declares it.")
+    size = models.BigIntegerField(null=True, blank=True, help_text="The size of the file in bytes, as the agent declares it. NULL for a file the agent does not hold (it names a source).")
+    source = models.CharField(max_length=2000, null=True, blank=True, help_text="The https URL the file can be fetched from. Set when the agent does not hold the file: an admin's client fetches and uploads it.")
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
 

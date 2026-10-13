@@ -3,6 +3,7 @@
 from dataclasses import asdict
 from typing import cast
 
+from authentikate.strawberry.directives import has_org_role
 from graphql import GraphQLError
 from kante.types import Info
 
@@ -25,25 +26,35 @@ def _refusal(error: AssetRefused) -> GraphQLError:
 
 
 def _declared(info: Info, ref: str) -> models.AgentAsset:
-    """The asset of this reference that the caller's own agent declares."""
+    """The declaration the caller may upload ``ref`` for.
+
+    The caller's own agent's, as ever. An admin of the organization may also upload a
+    file that any of its agents names a source for: that agent holds no bytes to upload.
+    """
     caller = CallerContext.from_info(info)
-    return asset_store.declared_asset(
-        organization_id=info.context.request.organization.id,
-        client_id=caller.client.pk if caller.client is not None else None,
-        user_id=caller.user.pk,
-        ref=ref,
-    )
+    organization_id = info.context.request.organization.id
+    try:
+        return asset_store.declared_asset(
+            organization_id=organization_id,
+            client_id=caller.client.pk if caller.client is not None else None,
+            user_id=caller.user.pk,
+            ref=ref,
+        )
+    except AssetRefused as refusal:
+        if refusal.code != "not_declared" or not has_org_role(info, "admin"):
+            raise
+        return asset_store.sourced_asset(organization_id=organization_id, ref=ref)
 
 
 def request_asset_upload(info: Info, input: inputs.RequestAssetUploadInput) -> dtypes.MediaUploadGrant:
-    """A media grant for one asset, issued only if the caller's agent declares it and its size passes the policy."""
+    """A media grant for one asset, issued only if the caller may upload it and its size passes the policy."""
     try:
         declared = _declared(info, input.ref)
-        asset_store.check_upload(declared)
+        size = asset_store.upload_size(declared, input.size)
     except AssetRefused as error:
         raise _refusal(error) from error
     grant = get_current_datalayer().generate_media_upload_grant(
-        base_models.RequestMediaUploadInput(original_file_name=f"{declared.name}-{declared.ref.removeprefix('sha256:')[:16]}", file_size=declared.size, content_type=CONTENT_TYPES.get(declared.kind)),
+        base_models.RequestMediaUploadInput(original_file_name=f"{declared.name}-{declared.ref.removeprefix('sha256:')[:16]}", file_size=size, content_type=CONTENT_TYPES.get(declared.kind)),
         organization_id=info.context.request.organization.id,
         creator_id=info.context.request.user.id,
     )

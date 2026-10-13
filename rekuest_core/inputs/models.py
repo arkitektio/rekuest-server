@@ -991,13 +991,17 @@ class LockImplementationInputModel(BaseModel):
     definition: LockDefinitionInputModel = Field(description="The lock definition this implementation fulfills.")
 
 
+ASSET_SOURCE_MAX_LENGTH = 2000
+
+
 class AssetInputModel(BaseModel):
     """A file an agent brings with it: the name its bloks call it by, and what the bytes are."""
 
     name: str = Field(description="The name bloks refer to the asset by, as in `@self.assets.<name>`. Unique within the agent.")
     kind: enums.AssetKind = Field(description="What the file is.")
     ref: str = Field(description="'sha256:' and the hex SHA-256 of the file's exact bytes.")
-    size: int = Field(description="The size of the file in bytes.")
+    size: int | None = Field(default=None, description="The size of the file in bytes. Required unless the asset names a `source`: an agent knows the size of a file it holds.")
+    source: str | None = Field(default=None, description="The https URL the file can be fetched from. Given instead of holding the file: the agent uploads nothing, an admin's client fetches it.")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1007,7 +1011,11 @@ class AssetInputModel(BaseModel):
             raise ValueError(f"Asset: the name {self.name!r} is not an identifier")
         if not re.fullmatch(r"sha256:[0-9a-f]{64}", self.ref):
             raise ValueError(f"Asset {self.name!r}: the reference must be 'sha256:' and 64 lowercase hex characters, not {self.ref!r}")
-        if self.size <= 0:
+        if self.source is not None and not (self.source.startswith("https://") and len("https://") < len(self.source) <= ASSET_SOURCE_MAX_LENGTH):
+            raise ValueError(f"Asset {self.name!r}: a source is an https URL of at most {ASSET_SOURCE_MAX_LENGTH} characters")
+        if self.size is None and self.source is None:
+            raise ValueError(f"Asset {self.name!r}: an asset has a size")
+        if self.size is not None and self.size <= 0:
             raise ValueError(f"Asset {self.name!r}: an asset has a size")
         return self
 

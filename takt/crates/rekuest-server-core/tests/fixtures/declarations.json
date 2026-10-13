@@ -14953,5 +14953,196 @@
   },
   "error": "Widget PROXY in port s names undeclared agent dependency 'd'",
   "error_type": "value_error"
+ },
+ "asset held by the agent": {
+  "input": {
+   "assets": [
+    {
+     "name": "scope",
+     "kind": "MODEL_3D",
+     "ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "size": 1024
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": null,
+   "locks": null,
+   "bloks": null,
+   "assets": [
+    {
+     "name": "scope",
+     "kind": "MODEL_3D",
+     "ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "size": 1024,
+     "source": null
+    }
+   ],
+   "hash": null
+  },
+  "hashes": []
+ },
+ "asset named by a source": {
+  "input": {
+   "assets": [
+    {
+     "name": "scope",
+     "kind": "MODEL_3D",
+     "ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source": "https://vendor.example/scope.glb?v=2"
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": null,
+   "locks": null,
+   "bloks": null,
+   "assets": [
+    {
+     "name": "scope",
+     "kind": "MODEL_3D",
+     "ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "size": null,
+     "source": "https://vendor.example/scope.glb?v=2"
+    }
+   ],
+   "hash": null
+  },
+  "hashes": []
+ },
+ "asset with a source and a size": {
+  "input": {
+   "assets": [
+    {
+     "name": "scope",
+     "kind": "MODEL_3D",
+     "ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source": "https://vendor.example/scope.glb",
+     "size": 1024
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": null,
+   "locks": null,
+   "bloks": null,
+   "assets": [
+    {
+     "name": "scope",
+     "kind": "MODEL_3D",
+     "ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "size": 1024,
+     "source": "https://vendor.example/scope.glb"
+    }
+   ],
+   "hash": null
+  },
+  "hashes": []
+ },
+ "asset without size or source": {
+  "input": {
+   "assets": [
+    {
+     "name": "scope",
+     "kind": "MODEL_3D",
+     "ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+   ]
+  },
+  "error": "Asset 'scope': an asset has a size",
+  "error_type": "value_error"
+ },
+ "asset of no size": {
+  "input": {
+   "assets": [
+    {
+     "name": "scope",
+     "kind": "MODEL_3D",
+     "ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "size": 0
+    }
+   ]
+  },
+  "error": "Asset 'scope': an asset has a size",
+  "error_type": "value_error"
+ },
+ "asset source not https": {
+  "input": {
+   "assets": [
+    {
+     "name": "scope",
+     "kind": "MODEL_3D",
+     "ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source": "http://vendor.example/scope.glb"
+    }
+   ]
+  },
+  "error": "Asset 'scope': a source is an https URL of at most 2000 characters",
+  "error_type": "value_error"
+ },
+ "asset source without a host": {
+  "input": {
+   "assets": [
+    {
+     "name": "scope",
+     "kind": "MODEL_3D",
+     "ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source": "https://"
+    }
+   ]
+  },
+  "error": "Asset 'scope': a source is an https URL of at most 2000 characters",
+  "error_type": "value_error"
+ },
+ "asset source too long": {
+  "input": {
+   "assets": [
+    {
+     "name": "scope",
+     "kind": "MODEL_3D",
+     "ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "source": "https://vendor.example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+   ]
+  },
+  "error": "Asset 'scope': a source is an https URL of at most 2000 characters",
+  "error_type": "value_error"
+ },
+ "asset name not an identifier": {
+  "input": {
+   "assets": [
+    {
+     "name": "my scope",
+     "kind": "MODEL_3D",
+     "ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "size": 1
+    }
+   ]
+  },
+  "error": "Asset: the name 'my scope' is not an identifier",
+  "error_type": "value_error"
+ },
+ "asset bad reference": {
+  "input": {
+   "assets": [
+    {
+     "name": "scope",
+     "kind": "MODEL_3D",
+     "ref": "md5:abc",
+     "size": 1
+    }
+   ]
+  },
+  "error": "Asset 'scope': the reference must be 'sha256:' and 64 lowercase hex characters, not 'md5:abc'",
+  "error_type": "value_error"
  }
 }

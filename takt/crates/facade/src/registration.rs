@@ -477,19 +477,22 @@ pub async fn implement_agent(
     }
 
     // The names the agent gives its files. The files themselves are the organization's
-    // `facade_asset` rows of the same ref, which the agent uploads after it registered.
+    // `facade_asset` rows of the same ref, which the agent uploads after it registered,
+    // or, for a file it only names a source for, an admin does.
     let mut declared_assets = vec![];
     for asset in payload.assets.iter().flatten() {
         sqlx::query(
-            "INSERT INTO facade_agentasset (agent_id, name, kind, ref, size) VALUES ($1, $2, $3, $4, $5)
+            "INSERT INTO facade_agentasset (agent_id, name, kind, ref, size, source) VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT (agent_id, name) DO UPDATE SET kind = excluded.kind, ref = excluded.ref,
-                                                        size = excluded.size, updated_at = now()",
+                                                        size = excluded.size, source = excluded.source,
+                                                        updated_at = now()",
         )
         .bind(agent)
         .bind(&asset.name)
         .bind(asset.kind.value())
         .bind(&asset.reference)
         .bind(asset.size)
+        .bind(&asset.source)
         .execute(&mut *conn)
         .await?;
         declared_assets.push(asset.name.clone());
