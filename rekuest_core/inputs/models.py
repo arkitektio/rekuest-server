@@ -319,6 +319,8 @@ class SearchAssignWidgetInputModel(_AssignWidgetBase):
             raise ValueError(f"SEARCH widget filters have duplicate keys {duplicates}")
         if "value" in keys:
             raise ValueError("SEARCH widget filters may not use the reserved key 'value'")
+        if "requires" in keys:
+            raise ValueError("SEARCH widget filters may not use the reserved key 'requires': a frontend passes the port's own constraints under it")
         undeclared = sorted(set(keys) - declared)
         if undeclared:
             raise ValueError(f"SEARCH widget query must declare a variable for each filter port: missing {['$' + key for key in undeclared]}")

@@ -18,7 +18,8 @@ def implementation_at(
         return cast("types.Implementation", models.Implementation.objects.get(agent_id=agent, action__hash=action_hash))
 
     if demand:
-        action_ids = managers.get_action_ids_by_action_demands([demand.to_pydantic()])[0]
+        # Scoped: without the organization the demand is matched against every organization's actions.
+        action_ids = managers.get_action_ids_by_action_demands([demand.to_pydantic()], organization_id=info.context.request.organization.id)[0]
         return cast("types.Implementation", models.Implementation.objects.get(agent_id=agent, action_id__in=action_ids))
 
     return cast("types.Implementation", models.Implementation.objects.get(agent_id=agent, interface=interface))

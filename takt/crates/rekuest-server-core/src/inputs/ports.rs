@@ -410,6 +410,11 @@ impl AssignWidgetInputModel {
                         "SEARCH widget filters may not use the reserved key 'value'".into(),
                     ));
                 }
+                if keys.contains(&"requires") {
+                    return Err(ValidationError(
+                        "SEARCH widget filters may not use the reserved key 'requires': a frontend passes the port's own constraints under it".into(),
+                    ));
+                }
                 let mut undeclared: Vec<String> = keys
                     .iter()
                     .filter(|k| !declared.contains(**k))

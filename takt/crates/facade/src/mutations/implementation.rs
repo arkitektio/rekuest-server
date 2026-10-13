@@ -329,12 +329,27 @@ async fn check_descriptor_keys(
     for (.., descriptors) in &constrained {
         compile_descriptors_to_jsonpath(Some(descriptors)).map_err(Refusal::Invalid)?;
     }
+    // Only what this definition can be held to: the structures its ports are typed on, and
+    // the keys it constrains (a non-structure port is held to "some structure declares it").
+    // The catalog holds every service's vocabulary and this runs once per registered action.
+    let identifiers: Vec<&str> = constrained
+        .iter()
+        .filter(|(_, kind, ..)| *kind == "STRUCTURE")
+        .filter_map(|(_, _, identifier, _)| *identifier)
+        .collect();
+    let keys: Vec<&str> = constrained
+        .iter()
+        .flat_map(|(.., descriptors)| descriptors.iter().map(|d| d.key.as_str()))
+        .collect();
     let rows: Vec<(String, String)> = sqlx::query_as(
         "SELECT s.identifier, d.key
            FROM facade_descriptor d
            JOIN facade_structuredeclaration s ON s.id = d.structure_id
+          WHERE s.identifier = ANY($1) OR d.key = ANY($2)
           ORDER BY s.identifier, d.position",
     )
+    .bind(&identifiers)
+    .bind(&keys)
     .fetch_all(&mut *conn)
     .await?;
     let mut declared: HashMap<&str, Vec<&str>> = HashMap::new();

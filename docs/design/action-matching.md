@@ -140,9 +140,18 @@ flowchart TD
 
 From `facade/models/action.py`, the port tables carry the indexes the engine relies on:
 
-- `Index(fields=["action", "key_path"])` — resolve a port by its materialized path in O(1) at
-  execution time, and correlate root ports to their action.
-- `Index(fields=["identifier"])` — reverse-match by macro-type for graph searches.
+- `(action, key_path)` — resolve a port by its materialized path at execution time.
+- Root ports only (`WHERE parent_id IS NULL`): `(action, kind)` and `(action, nullable)` for the
+  correlated `EXISTS` clauses and the `force_*` counts.
+- `identifier` — "which actions take this structure". The port rows of one identifier are the
+  selective side, and the planner starts from them and reaches the actions by primary key
+  (pinned by `tests/models/test_action_matching_plan.py` on a catalog of thousands of actions).
+- `Upper(identifier)` — the structure catalog's case-insensitive reverse lookup.
+
+The descriptor predicate itself (`jsonb_path_match(object, compiled_jsonpath)`) cannot be
+indexed: the predicate is the row and the object is the parameter. That is why a root match
+with descriptors must also narrow structurally — the indexes above find the candidate ports,
+and only those are evaluated.
 
 Together with the `parent_id` correlation, these are what turn "find actions whose nested port at
 `options.advanced.mask` is an `@mikro/image` carrying `axes == "c"`" from a full-catalogue scan into

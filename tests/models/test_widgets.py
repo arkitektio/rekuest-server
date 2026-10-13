@@ -259,3 +259,11 @@ def test_window_function_is_an_enum() -> None:
     window = imodels.WindowInputModel(window_function="MEAN", label="avg")
     track = omodels.TrackModel(state_key="s", value_key="v", windows=[window.model_dump()])
     assert track.windows[0].window_function == "MEAN"
+
+
+def test_a_search_widget_may_ask_for_the_ports_requires_but_no_filter_may_take_its_name() -> None:
+    """`$requires` is filled by the frontend from the port the widget sits on, so a query may declare it freely and a filter port may not be keyed by it."""
+    query = "query S($search: String, $values: [ID!], $requires: [DescriptorConstraintInput!]) { options: lenses(filters: {search: $search, ids: $values, requires: $requires}) { value: id label } }"
+    assert _widget("SEARCH", query=query, ward="mikro").filters is None
+    with pytest.raises(ValidationError, match="reserved key 'requires'"):
+        _widget("SEARCH", query=query, ward="mikro", filters=[{"key": "requires", "kind": "STRING", "nullable": False}])

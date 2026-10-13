@@ -40,7 +40,10 @@ def action(
             organization_id=info.context.request.organization.id,
         )[0]
 
-        return cast("types.Action", models.Action.objects.get(id=ids[0]))
+        if not ids:
+            raise ValueError("No action matches the given demand")
+        # The statement states no order, so "the first" is whichever row came back first: the oldest is named instead.
+        return cast("types.Action", models.Action.objects.get(id=min(ids)))
 
     if agent:
         if interface:

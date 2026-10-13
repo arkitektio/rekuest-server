@@ -255,6 +255,10 @@ class TestBrokenRules:
         context, _ = await _contexts()
         impl = await _schedulable("gone-sched", context)
         schedule = (await _run(CREATE_SCHEDULE, context, input={"name": "hourly", "action": str(impl.action_id), "intervalSeconds": 3600, "agent": str(impl.agent_id), "interface": impl.interface}))["createSchedule"]["id"]
+        # takt plans the first run once the schedule commits, as a task that names the
+        # implementation. Deleting before it has would race that insert: the delete nulls the
+        # tasks it finds, and a task written in between still points at the row at commit.
+        await _waiting(schedule)
         await models.Implementation.objects.filter(pk=impl.pk).adelete()
         update = "mutation($input: UpdateScheduleInput!) { updateSchedule(input: $input) { name enabled } }"
 
