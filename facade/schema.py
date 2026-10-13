@@ -338,6 +338,10 @@ class Subscription:
     watch_agent = subscription(resolver=subscriptions.watch_agent, description="Watch an agent: yields snapshots for all states then streams patches.")
     child_tasks = subscription(resolver=subscriptions.child_tasks, description="Subscribe to all descendant task changes of a task.")
     agent_tasks = subscription(resolver=subscriptions.agent_tasks, description="Subscribe to task create/update for a specific agent.")
+    latest_task = subscription(
+        resolver=subscriptions.latest_task,
+        description="The task an agent's action last ran as, whoever started it, kept current. Yields a `LatestTaskSnapshot` first, then that task's events (`TaskEventChange`: progress, results, its end) and, as a `TaskChange`, every task of the action that starts or ends: a started one with a higher id is the latest from then on. A snapshot without an implementation means the agent offers no action under that interface, and nothing follows.",
+    )
     probe_events = subscription(resolver=subscriptions.probe_events, description="Stream the events of one probe (caller-scoped, payload-carrying). Emits a state snapshot first when events already happened.")
 
 

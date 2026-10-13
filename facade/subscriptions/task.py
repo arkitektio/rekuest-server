@@ -2,10 +2,12 @@ import datetime
 from typing import AsyncGenerator
 
 import strawberry
+from asgiref.sync import sync_to_async
 from kante.types import Info
 
 from facade import channel_events, enums, models
-from facade.channels import agent_task_channel, child_task_channel, task_event_channel
+from facade.channels import agent_task_channel, child_task_channel, implementation_task_events, task_event_channel
+from facade.types.base import scoped_get
 from rekuest_core import scalars as rscalars
 
 
@@ -186,3 +188,82 @@ async def child_tasks(
             yield ChildTaskEvent(create=TaskChange.from_payload(message.create), update=None)
         elif message.update:
             yield ChildTaskEvent(update=TaskChange.from_payload(message.update), create=None)
+
+
+TERMINAL_KINDS = ("COMPLETED", "CANCELLED", "INTERRUPTED", "FAILED", "CRITICAL", "LOST")
+"""The kinds that end a task (takt's ``TERMINAL_KINDS``)."""
+
+REPORTED_KINDS = ("PROGRESS", "YIELD", *TERMINAL_KINDS)
+"""What a task's record is made of: how far it is, what it returned, how it ended."""
+
+
+@strawberry.type(
+    description="The task an implementation last ran as, with what its record is made of. The first message of `latestTask`, and again whenever a newer task takes its place."
+)
+class LatestTaskSnapshot:
+    implementation: strawberry.ID | None = strawberry.field(description="The implementation the agent offers under the interface; null if it offers none, and nothing follows then.")
+    latest: TaskChange | None = strawberry.field(description="The task it last ran as, whoever started it and whether or not it has ended; null if it never ran. (Not `task`: beside `TaskEventChange.task`, an id, one selection could not ask for both.)")
+    events: list[TaskEventChange] = strawberry.field(description="The task's last PROGRESS, last YIELD and its terminal event, oldest first: enough to say how far it is, what it returned and how it ended.")
+
+
+def read_latest_task(implementation: int) -> tuple[LatestTaskSnapshot, int]:
+    """The snapshot of an implementation's latest task, and the newest event id it accounts for.
+
+    Two queries: the task (one probe of ``task_impl_created_idx``), and the newest event of
+    each kind its record is made of.
+    """
+    reference = strawberry.ID(str(implementation))
+    task = models.Task.objects.filter(implementation_id=implementation).order_by("-created_at", "-id").first()
+    if task is None:
+        return LatestTaskSnapshot(implementation=reference, latest=None, events=[]), 0
+    events = sorted(
+        models.TaskEvent.objects.filter(task=task, kind__in=REPORTED_KINDS).order_by("kind", "-id").distinct("kind"),
+        key=lambda event: event.pk,
+    )
+    return (
+        LatestTaskSnapshot(implementation=reference, latest=TaskChange.from_model(task), events=[TaskEventChange.from_model(event) for event in events]),
+        max((event.pk for event in events), default=0),
+    )
+
+
+def relay_latest_task(message: channel_events.TaskEventCreatedEvent, *, task: int, seen: int) -> TaskChange | TaskEventChange | None:
+    """What a message of the implementation's feed is to someone holding a snapshot, or None.
+
+    ``task`` is the snapshot's task and ``seen`` its newest event (0 for none): a message
+    published before the snapshot was read says nothing the snapshot did not.
+    """
+    if message.create is not None:
+        return None if int(message.create.id) < task else TaskChange.from_payload(message.create)
+    if message.event is None or int(message.event.task) < task or int(message.event.id) <= seen:
+        return None
+    return TaskEventChange.from_payload(message.event)
+
+
+async def latest_task(
+    self: object,
+    info: Info,
+    agent: strawberry.ID,
+    interface: str,
+) -> AsyncGenerator[LatestTaskSnapshot | TaskChange | TaskEventChange, None]:
+    """The task an agent's action last ran as, kept current: a snapshot, then what changes it."""
+    found = await sync_to_async(scoped_get)(models.Agent, info, agent)
+    implementation = await models.Implementation.objects.filter(agent=found, interface=interface).afirst()
+    if implementation is None:
+        yield LatestTaskSnapshot(implementation=None, latest=None, events=[])
+        return
+
+    # Joined before the snapshot is read, unlike ``task_event_channel.listen`` would: what is
+    # published while the snapshot is read waits in the queue instead of being missed.
+    async with info.context.consumer.listen_to_channel(  # type: ignore[union-attr]
+        task_event_channel.message_type, groups=[implementation_task_events(implementation.pk)]
+    ) as messages:
+        snapshot, seen = await sync_to_async(read_latest_task)(implementation.pk)
+        yield snapshot
+        task = int(snapshot.latest.id) if snapshot.latest is not None else 0
+
+        async for raw in messages:
+            # Payload-carrying and already scoped by its group: no lookup per message.
+            relayed = relay_latest_task(task_event_channel.model.model_validate(raw.get("message")), task=task, seen=seen)
+            if relayed is not None:
+                yield relayed
+

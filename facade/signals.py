@@ -53,6 +53,15 @@ def task_post_save(sender: type[models.Task], instance: models.Task, created: bo
             ],
         )
 
+    # Implementation feed (``latestTask``): the task an implementation runs as changes when one
+    # is created, and its end is said here as well as by its terminal event.
+    if instance.implementation_id and (created or instance.is_done):
+        _broadcast_on_commit(
+            channels.task_event_channel,
+            channel_events.TaskEventCreatedEvent(create=channel_events.TaskChangePayload.from_task(instance)),
+            [channels.implementation_task_events(instance.implementation_id)],
+        )
+
     # Agent feed: any task (root or child) run by an agent is fanned out to that agent's
     # detail-page feed, so the agent's "latest tasks" list updates live on create and on
     # every status/is_done transition (which re-saves the Task row → arrives here as update).

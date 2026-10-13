@@ -123,9 +123,22 @@ async fn caller_organization(ctx: &Context, caller: i64) -> Result<i64, sqlx::Er
         .await
 }
 
+/// The group of one implementation's task feed: its tasks as they start and end, and what
+/// they report. Per implementation, not per agent: a subscriber's process shares one bounded
+/// receive queue, and a chatty sibling action must not push out the watched one's last event.
+pub fn implementation_task_events(implementation: i64) -> String {
+    format!("implementation_task_events_{implementation}")
+}
+
+/// The event kinds a task's record is made of (progress, results, the end): what the
+/// implementation's feed carries. Logs and lifecycle chatter change nothing a viewer shows.
+fn is_reported(kind: &str) -> bool {
+    kind == "PROGRESS" || kind == "YIELD" || crate::persist::transitions::is_terminal(kind)
+}
+
 /// A task was saved (`task_post_save`): a new root task reaches its caller's and its
 /// organization's feeds; every task reaches its agent's feed; a child reaches its parent's and
-/// its root's.
+/// its root's; a task that started or ended reaches its implementation's feed.
 pub async fn task_saved(ctx: &Context, task_id: i64, created: bool) {
     if let Err(e) = task_saved_inner(ctx, task_id, created).await {
         tracing::error!(task_id, "task fan-out failed: {e}");
@@ -161,6 +174,21 @@ async fn task_saved_inner(ctx: &Context, task_id: i64, created: bool) -> Result<
             )
             .await;
         }
+    }
+
+    // The latest task of an implementation changes when one starts, and its end is said here
+    // as well as by its terminal event: two messages, so one lost leaves no task running forever.
+    if let Some(implementation) = task.implementation_id.filter(|_| created || task.is_done) {
+        publish(
+            ctx,
+            channels::TASK_EVENT,
+            &TaskEventCreatedEvent {
+                event: None,
+                create: Some(payload.clone()),
+            },
+            vec![implementation_task_events(implementation)],
+        )
+        .await;
     }
 
     let event = if created {
@@ -205,16 +233,24 @@ struct EventRow {
     created_at: DateTime<Utc>,
     caller_id: Option<i64>,
     root_id: Option<i64>,
+    implementation_id: Option<i64>,
+}
+
+/// Where a persisted task event goes: the task's caller and root, and its implementation.
+pub struct EventRouting {
+    pub caller: Option<i64>,
+    pub root: Option<i64>,
+    pub implementation: Option<i64>,
 }
 
 /// The payload of a persisted task event (`TaskEventPayload.from_event`).
 pub async fn task_event_payload(
     ctx: &Context,
     event_id: i64,
-) -> Result<(TaskEventPayload, Option<i64>, Option<i64>), sqlx::Error> {
+) -> Result<(TaskEventPayload, EventRouting), sqlx::Error> {
     let event: EventRow = sqlx::query_as(
         "SELECT e.id, e.task_id, e.kind, e.message, e.progress, e.returns, e.level, e.value, e.created_at,
-                t.caller_id, t.root_id
+                t.caller_id, t.root_id, t.implementation_id
            FROM facade_taskevent e JOIN facade_task t ON t.id = e.task_id
           WHERE e.id = $1",
     )
@@ -233,14 +269,18 @@ pub async fn task_event_payload(
             value: event.value,
             created_at: event.created_at,
         },
-        event.caller_id,
-        event.root_id,
+        EventRouting {
+            caller: event.caller_id,
+            root: event.root_id,
+            implementation: event.implementation_id,
+        },
     ))
 }
 
 /// A task event was recorded (`task_event_post_save` → `publish_task_event`): it reaches its
 /// task's caller (`task_caller_{caller}`: the agent sockets and the GraphQL feeds), and, for a
-/// root task, the caller's and the organization's root-task feeds.
+/// root task, the caller's and the organization's root-task feeds. What a task's record is made
+/// of also reaches its implementation's feed, whoever called it and even if nobody did.
 pub async fn task_event_created(ctx: &Context, event_id: i64) {
     if let Err(e) = task_event_created_inner(ctx, event_id).await {
         tracing::error!(event_id, "task event fan-out failed: {e}");
@@ -248,8 +288,24 @@ pub async fn task_event_created(ctx: &Context, event_id: i64) {
 }
 
 async fn task_event_created_inner(ctx: &Context, event_id: i64) -> Result<(), sqlx::Error> {
-    let (payload, caller, root) = task_event_payload(ctx, event_id).await?;
-    let Some(caller) = caller else {
+    let (payload, routing) = task_event_payload(ctx, event_id).await?;
+    if let Some(implementation) = routing
+        .implementation
+        .filter(|_| is_reported(&payload.kind))
+    {
+        publish(
+            ctx,
+            channels::TASK_EVENT,
+            &TaskEventCreatedEvent {
+                event: Some(payload.clone()),
+                create: None,
+            },
+            vec![implementation_task_events(implementation)],
+        )
+        .await;
+    }
+    let root = routing.root;
+    let Some(caller) = routing.caller else {
         return Ok(());
     };
     tracing::debug!(event_id, caller, "task event fan-out");

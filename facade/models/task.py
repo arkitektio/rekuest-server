@@ -32,6 +32,8 @@ class Task(models.Model):
         related_name="tasks",
         blank=True,
         null=True,
+        # ``task_impl_created_idx`` leads with this column and answers every lookup by it.
+        db_index=False,
     )
     resolution = models.ForeignKey(
         "Resolution",
@@ -272,6 +274,10 @@ class Task(models.Model):
             # half of that join; it doubles as the ``agent`` filter and supplies the default
             # ``-created_at`` ordering and the created_before/after range without a sort node.
             models.Index(fields=["agent", "-created_at"], name="task_agent_created_idx"),
+            # "The task this implementation last ran as" (the ``latestTask`` feed's snapshot) and
+            # the ``implementation`` filter with its default ordering: one probe, no sort node.
+            # It stands in for the foreign key's own index, so the table carries no extra one.
+            models.Index(fields=["implementation", "-created_at"], name="task_impl_created_idx"),
             # ``TaskFilter.state`` (latest_event_kind__in) org-wide, with the same ordering.
             # Leading with a ~16-value column is fine because the second column is the sort key.
             models.Index(fields=["latest_event_kind", "-created_at"], name="task_state_created_idx"),

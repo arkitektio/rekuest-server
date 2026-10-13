@@ -28,3 +28,15 @@ probe_event_channel = build_channel(ProbeEventBroadcast, "probe_event_broadcast"
 signal_channel = build_channel(SignalFeedEvent, "signal_feed")
 
 rule_channel = build_channel(RuleFeedEvent, "rule_feed")
+
+
+def implementation_task_events(implementation: int | str) -> str:
+    """The group of one implementation's task feed, on ``task_event_channel``.
+
+    Its tasks as they start and end, and what they report (progress, results, the end).
+    Per implementation, not per agent: a process shares one bounded receive queue, and a
+    chatty sibling action must not push out the watched one's last event. takt publishes
+    to the same name (``signals::implementation_task_events``).
+    """
+    return f"implementation_task_events_{implementation}"
+

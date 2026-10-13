@@ -27,10 +27,16 @@ child = _build_task_for_agent_caller(agent.pk, prefix + "-child", parent=root, r
 event = models.TaskEvent.objects.create(task=root, kind="YIELD", message="half way", progress=50, returns={"return0": [1, 2.5, "x", True, None]})
 state = _build_state_for_agent(agent.pk, prefix + "-state", prefix)
 patch = models.Patch.objects.create(state=state, agent=agent, interface=state.interface, op="replace", path="/barcode", value={"n": 1}, global_rev=3)
-root.refresh_from_db(); child.refresh_from_db(); event.refresh_from_db(); patch.refresh_from_db()
+log = models.TaskEvent.objects.create(task=root, kind="LOG", message="noise")
+orphan = models.Task.objects.create(action=root.action, agent=agent, implementation=root.implementation, latest_event_kind=root.latest_event_kind, latest_instruct_kind=root.latest_instruct_kind)
+progress = models.TaskEvent.objects.create(task=orphan, kind="PROGRESS", progress=30, message="nobody called this")
+root.refresh_from_db(); child.refresh_from_db(); event.refresh_from_db(); patch.refresh_from_db(); progress.refresh_from_db()
 print("SEED " + json.dumps({
     "event": event.id, "root": root.id, "child": child.id, "patch": patch.id, "state": state.id,
     "caller": root.caller_id, "org": root.caller.organization_id, "agent": agent.pk,
+    "implementation": root.implementation_id, "log": log.id, "orphan_progress": progress.id,
+    "orphan_progress_payload": TaskEventCreatedEvent(event=TaskEventPayload.from_event(progress)).model_dump(mode="json"),
+    "root_created_payload": TaskEventCreatedEvent(create=TaskChangePayload.from_task(root)).model_dump(mode="json"),
     "event_payload": TaskEventCreatedEvent(event=TaskEventPayload.from_event(event)).model_dump(mode="json"),
     "child_payload": ChildTaskEvent(update=TaskChangePayload.from_task(child)).model_dump(mode="json"),
     "patch_payload": PatchEvent.from_patch(patch).model_dump(mode="json"),
@@ -151,6 +157,40 @@ async fn the_rust_fan_out_is_the_python_fan_out() {
             .await
             .is_err(),
         "parent and root are one group when they are one task"
+    );
+
+    // An implementation's feed (`latestTask`): what its tasks report, whoever called them and
+    // even if nobody did, and each task as it starts. Not logs, not another implementation's
+    // tasks, not a save that neither starts nor ends one.
+    let mut latest = listen(
+        &ctx,
+        &[facade::signals::implementation_task_events(id(
+            "implementation",
+        ))],
+    )
+    .await;
+    facade::signals::task_event_created(&ctx, id("log")).await;
+    facade::signals::task_saved(&ctx, id("child"), true).await;
+    facade::signals::task_saved(&ctx, id("root"), false).await;
+    facade::signals::task_event_created(&ctx, id("event")).await;
+    let got = next(&mut latest).await;
+    assert_eq!(got["type"], "channel.TaskEventCreatedEvent");
+    assert_eq!(got["message"], seed["event_payload"]);
+    facade::signals::task_event_created(&ctx, id("orphan_progress")).await;
+    assert_eq!(
+        next(&mut latest).await["message"],
+        seed["orphan_progress_payload"]
+    );
+    facade::signals::task_saved(&ctx, id("root"), true).await;
+    assert_eq!(
+        next(&mut latest).await["message"],
+        seed["root_created_payload"]
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_millis(300), latest.recv())
+            .await
+            .is_err(),
+        "nothing else belongs on an implementation's feed"
     );
 
     // A patch: its state's feed.
