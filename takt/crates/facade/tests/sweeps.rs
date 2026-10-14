@@ -1311,7 +1311,9 @@ async fn the_reaper_counts_what_the_lease_changed() {
     };
     let (agent, action) = agent(&ctx).await;
     implementation(&ctx, agent, action, "PLAIN").await;
-    reaper::run_sweep(&ctx, "live implementations").await.unwrap();
+    reaper::run_sweep(&ctx, "live implementations")
+        .await
+        .unwrap();
     assert_eq!(live_implementations(&ctx, action).await, (0, false));
 
     // The claim marks the agent's actions; the sweep (or a notice) recomputes them.
@@ -1319,10 +1321,14 @@ async fn the_reaper_counts_what_the_lease_changed() {
         .await
         .unwrap();
     assert_eq!(live_implementations(&ctx, action).await, (0, false));
-    reaper::run_sweep(&ctx, "live implementations").await.unwrap();
+    reaper::run_sweep(&ctx, "live implementations")
+        .await
+        .unwrap();
     assert_eq!(live_implementations(&ctx, action).await, (1, true));
 
     leases::release_lease(&ctx.db, agent, "c1").await.unwrap();
-    reaper::run_sweep(&ctx, "live implementations").await.unwrap();
+    reaper::run_sweep(&ctx, "live implementations")
+        .await
+        .unwrap();
     assert_eq!(live_implementations(&ctx, action).await, (0, false));
 }
