@@ -7,6 +7,7 @@
 //! |-----------------------------------|----------------------|-----------------------|
 //! | `reconcile_stale_agents`          | `Agent.last_seen`    | `agent_stale_after`   |
 //! | `reconcile_disconnected_agents`   | `Agent.last_seen`    | `grace`               |
+//! | `live_implementations::drain`     | `facade_actionlivenessdirty` (marks a notice missed) | — |
 //! | `refill_schedules`                | a schedule without an open run | (the schedule's own) |
 //! | `fire_triggers`                   | an unprocessed signal | `trigger_max_depth`  |
 //! | `dispatch_due_tasks`              | `Task.not_before`    | (the task's own)      |
@@ -30,7 +31,7 @@ use crate::clock;
 use crate::context::Context;
 use crate::persist::reconcile;
 use crate::redis_keys;
-use crate::{retention, schedules, triggers};
+use crate::{live_implementations, retention, schedules, triggers};
 
 /// How many rows one task sweep takes per tick; the next tick drains the rest.
 const SWEEP_LIMIT: i64 = 200;
@@ -39,9 +40,11 @@ const PLAN_LIMIT: i64 = 100;
 
 /// The ordered sweeps (`_sweeps`). Agents before tasks: healing a stuck-connected agent is what
 /// makes its work visible to the task sweeps of the same tick.
-pub const SWEEPS: [&str; 8] = [
+pub const SWEEPS: [&str; 9] = [
     "stale agents",
     "disconnected agents",
+    // After the agent sweeps, whose revokes it counts; normally a notice drained it already.
+    "live implementations",
     // Before the due tasks: a run a schedule is given or a signal fires this tick is dispatched
     // by the same tick when it is already due.
     "schedules",
@@ -61,6 +64,7 @@ pub async fn run_sweep(ctx: &Context, name: &str) -> Result<usize, sqlx::Error> 
     match name {
         "stale agents" => reconcile::reconcile_stale_agents(ctx).await,
         "disconnected agents" => reconcile::reconcile_disconnected_agents(ctx).await,
+        "live implementations" => live_implementations::drain(ctx).await,
         "schedules" => schedules::refill_schedules(ctx, PLAN_LIMIT).await,
         "triggers" => triggers::fire_triggers(ctx, PLAN_LIMIT).await,
         "due tasks" => reconcile::dispatch_due_tasks(ctx, SWEEP_LIMIT).await,

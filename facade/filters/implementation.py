@@ -4,19 +4,18 @@
 
 from __future__ import annotations
 
-import datetime
 from typing import TYPE_CHECKING, Optional
 
 import strawberry
 import strawberry_django
-from django.db.models import Q, QuerySet
-from django.utils import timezone
+from django.db.models import BooleanField, ExpressionWrapper, Q, QuerySet
+from django.db.models.expressions import OrderBy
 from strawberry import auto
 from strawberry.types import Info
 from strawberry_django.fields.filter_order import filter_field
 from strawberry_django.filters import FilterLookup
 
-from facade import inputs, managers, models
+from facade import inputs, liveness, managers, models
 from rekuest_core import enums as renums
 from rekuest_core import scalars as rscalars
 from rekuest_core.inputs import types as ritypes
@@ -63,11 +62,12 @@ class ImplementationActionFilter:
 class ImplementationOrder:
     created_at: auto
 
-    @strawberry_django.order_field
-    def active(self, value: strawberry_django.Ordering, prefix: str) -> list[str]:
+    @strawberry_django.order_field(description="Implementations an agent can run now first (DESC), or last (ASC): takt's rule, `liveness.agent_available_q`.")
+    def active(self, info: Info, queryset: QuerySet[models.Implementation], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Implementation], list[OrderBy]]:
         if not value:
-            return []
-        return [f"{prefix}agent__connected"]
+            return queryset, []
+        available = ExpressionWrapper(liveness.agent_available_q(f"{prefix}agent__"), output_field=BooleanField())
+        return queryset, [available.desc() if "DESC" in value.name else available.asc()]
 
 
 @strawberry_django.filter_type(models.Implementation)
@@ -76,13 +76,10 @@ class ImplementationFilter:
     action: ImplementationActionFilter | None
     agent: ImplementationAgentFilter | None
 
-    @filter_field
+    @filter_field(description="Whether an agent can run it now: a webhook agent, or a connected one with a fresh heartbeat (takt's rule).")
     def active(self, info: Info, queryset: QuerySet[models.Implementation], value: bool, prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
-        now = timezone.now()
-        if value:
-            return queryset.filter(**{f"{prefix}agent__last_seen__gt": now - datetime.timedelta(minutes=5)}), Q()
-        else:
-            return queryset.filter(**{f"{prefix}agent__last_seen__lte": now - datetime.timedelta(minutes=5)}), Q()
+        available = liveness.agent_available_q(f"{prefix}agent__")
+        return queryset, available if value else ~available
 
     @filter_field
     def ids(self, info: Info, queryset: QuerySet[models.Implementation], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[models.Implementation], Q]:

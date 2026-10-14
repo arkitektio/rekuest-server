@@ -78,6 +78,16 @@ type Action {
   """Timestamp when the action was defined."""
   definedAt: DateTime!
 
+  """
+  How many of its implementations sit on an agent that can take work now (connected, or a webhook agent) — one per agent. Kept by the database as agents connect and leave, a moment behind (takt recomputes it on commit); a crashed agent counts until takt's stale sweep notices (seconds).
+  """
+  liveImplementations: Int!
+
+  """
+  Whether an agent that can take this action is connected (or is a webhook agent) right now: `liveImplementations > 0`.
+  """
+  assignable: Boolean!
+
   """Test cases for this action."""
   testCases(filters: TestCaseFilter, pagination: OffsetPaginationInput): [TestCase!]
 
@@ -330,6 +340,11 @@ input ActionFilter {
   inCollection: String
   usedBefore: DateTime
   usedAfter: DateTime
+
+  """
+  Whether an agent that can take the action is connected now (`Action.assignable`).
+  """
+  assignable: Boolean
   stateful: Boolean
 
   """Filter using app identifier"""
@@ -350,6 +365,11 @@ enum ActionKind {
 input ActionOrder @oneOf {
   definedAt: Ordering
   usedAt: Ordering
+
+  """
+  Runnable first (DESC) or last (ASC) by `Action.assignable`. The order the filters set (a `search`'s ranking) is kept as the tie-break, so `search` with this ordering lists runnable matches first, each group still ranked by relevance.
+  """
+  assignable: Ordering
 }
 
 enum ActionScope {
@@ -631,6 +651,11 @@ input AgentFilter {
 
   """Filter by client ID of the app the agent is registered to"""
   clientId: String
+
+  """
+  Agents that can receive work now: a webhook agent, or a connected one with a fresh heartbeat (takt's rule).
+  """
+  available: Boolean
 
   """Filter by IDs of the agents"""
   ids: [ID!]
@@ -2830,6 +2855,10 @@ input ImplementationFilter {
   OR: ImplementationFilter
   NOT: ImplementationFilter
   DISTINCT: Boolean
+
+  """
+  Whether an agent can run it now: a webhook agent, or a connected one with a fresh heartbeat (takt's rule).
+  """
   active: Boolean
   ids: [ID!]
   actionHash: ActionHash
@@ -2925,6 +2954,10 @@ type ImplementationMapping {
 
 input ImplementationOrder @oneOf {
   createdAt: Ordering
+
+  """
+  Implementations an agent can run now first (DESC), or last (ASC): takt's rule, `liveness.agent_available_q`.
+  """
   active: Ordering
 }
 
@@ -5060,11 +5093,21 @@ input ShortcutFilter {
   search: String
   ids: [ID!]
   demands: [PortDemandInput!]
+
+  """
+  Whether an agent that can take the shortcut's action is connected now (`Action.assignable`).
+  """
+  assignable: Boolean
   toolbox: ID
 }
 
 input ShortcutOrder @oneOf {
   name: Ordering
+
+  """
+  Runnable first (DESC) or last (ASC) by the shortcut's `Action.assignable`; the order the filters set is the tie-break.
+  """
+  assignable: Ordering
 }
 
 """

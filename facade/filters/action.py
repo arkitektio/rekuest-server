@@ -21,6 +21,14 @@ from facade import inputs, managers, models
 from rekuest_core import enums as renums
 
 
+def assignable_first(queryset: QuerySet[models.Action] | QuerySet[models.Shortcut], value: strawberry_django.Ordering, field: str) -> list[OrderBy | str]:
+    """``field`` first, then the order the queryset already has — a search's ranking, which
+    strawberry_django would otherwise replace — then ``pk``, so an offset window is stable."""
+    existing = list(queryset.query.order_by) or list(queryset.model._meta.ordering)
+    tie_break = [*existing, *([] if "pk" in existing else ["pk"])]
+    return [value.resolve(field), *tie_break]
+
+
 def _filter_by_port_demands(info: Info, queryset: QuerySet[models.Action], value: list[inputs.PortDemandInput], prefix: str) -> tuple[QuerySet[models.Action], Q]:
     """Shared body of ``demands`` and ``object_demands`` — one port-demand resolution path.
 
@@ -47,6 +55,12 @@ class ActionOrder:
             return queryset, []
         queryset = queryset.annotate(latest_task_time=Max(f"{prefix}task__created_at"))
         return queryset, [value.resolve("latest_task_time")]
+
+    @strawberry_django.order_field(description="Runnable first (DESC) or last (ASC) by `Action.assignable`. The order the filters set (a `search`'s ranking) is kept as the tie-break, so `search` with this ordering lists runnable matches first, each group still ranked by relevance.")
+    def assignable(self, info: Info, queryset: QuerySet[models.Action], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Action], list[OrderBy | str]]:
+        if not value:
+            return queryset, []
+        return queryset, assignable_first(queryset, value, f"{prefix}assignable")
 
 
 @strawberry_django.filter_type(models.Action)
@@ -96,6 +110,10 @@ class ActionFilter:
     @filter_field
     def used_after(self, info: Info, queryset: QuerySet[models.Action], value: datetime.datetime, prefix: str) -> tuple[QuerySet[models.Action], Q]:
         return queryset.filter(**{f"{prefix}tasks__created_at__gt": value}), Q()
+
+    @filter_field(description="Whether an agent that can take the action is connected now (`Action.assignable`).")
+    def assignable(self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+        return queryset.filter(**{f"{prefix}assignable": value}), Q()
 
     @filter_field
     def stateful(self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str) -> tuple[QuerySet[models.Action], Q]:

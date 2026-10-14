@@ -86,6 +86,8 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(facade::upkeep::run_forever(facade.clone()));
     // What the server says about its schedules (a NOTIFY in the transaction that changes one).
     tokio::spawn(facade::schedule_notices::run_forever(facade.clone()));
+    // Action.live_implementations: the server's triggers mark, every replica drains on the notice.
+    tokio::spawn(facade::live_implementations::run_forever(facade.clone()));
     let state = Arc::new(urls::AppState {
         configuration,
         facade,

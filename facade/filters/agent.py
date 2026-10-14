@@ -11,7 +11,7 @@ from strawberry import UNSET, auto
 from strawberry.types import Info
 from strawberry_django.fields.filter_order import filter_field
 
-from facade import managers, models
+from facade import liveness, managers, models
 from facade.json_types import json_object
 from rekuest_core.inputs import types as ritypes
 
@@ -21,6 +21,11 @@ class AgentFilter:
     @filter_field(description="Filter by client ID of the app the agent is registered to")
     def client_id(self, info: Info, queryset: QuerySet[models.Agent], value: str, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}client__client_id": value}), Q()
+
+    @filter_field(description="Agents that can receive work now: a webhook agent, or a connected one with a fresh heartbeat (takt's rule).")
+    def available(self, info: Info, queryset: QuerySet[models.Agent], value: bool, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+        available = liveness.agent_available_q(prefix)
+        return queryset, available if value else ~available
 
     @filter_field(description="Filter by IDs of the agents")
     def ids(self, info: Info, queryset: QuerySet[models.Agent], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[models.Agent], Q]:

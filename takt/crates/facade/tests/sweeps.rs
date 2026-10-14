@@ -1294,3 +1294,35 @@ async fn an_escalated_cancel_of_unpicked_work_is_settled_by_the_watchdog() {
         Some("Interrupted before any agent picked the task up.")
     );
 }
+
+async fn live_implementations(ctx: &Context, action: i64) -> (i32, bool) {
+    sqlx::query_as("SELECT live_implementations, assignable FROM facade_action WHERE id = $1")
+        .bind(action)
+        .fetch_one(&ctx.db)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn the_reaper_counts_what_the_lease_changed() {
+    let _serial = serial().await;
+    let Some(ctx) = context(settings()).await else {
+        return;
+    };
+    let (agent, action) = agent(&ctx).await;
+    implementation(&ctx, agent, action, "PLAIN").await;
+    reaper::run_sweep(&ctx, "live implementations").await.unwrap();
+    assert_eq!(live_implementations(&ctx, action).await, (0, false));
+
+    // The claim marks the agent's actions; the sweep (or a notice) recomputes them.
+    leases::on_agent_connected(&ctx.db, &ctx.settings, agent, "c1", Some("S1"), false)
+        .await
+        .unwrap();
+    assert_eq!(live_implementations(&ctx, action).await, (0, false));
+    reaper::run_sweep(&ctx, "live implementations").await.unwrap();
+    assert_eq!(live_implementations(&ctx, action).await, (1, true));
+
+    leases::release_lease(&ctx.db, agent, "c1").await.unwrap();
+    reaper::run_sweep(&ctx, "live implementations").await.unwrap();
+    assert_eq!(live_implementations(&ctx, action).await, (0, false));
+}

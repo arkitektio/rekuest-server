@@ -22,6 +22,7 @@ pub mod higher_order;
 pub mod hooks;
 pub mod http_intake;
 pub mod inference;
+pub mod live_implementations;
 pub mod liveness;
 pub mod message_router;
 pub mod messages;

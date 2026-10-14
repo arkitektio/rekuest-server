@@ -1,0 +1,243 @@
+"""`facade_action.live_implementations` (and `assignable`, its `> 0`) — kept by the database.
+
+The count is takt's ``AVAILABLE`` (``takt/crates/facade/src/backend.rs``) asked of the action's
+implementations: how many sit on an agent that is a webhook or connected. Not the heartbeat term
+(``last_seen`` fresh): that is a time, and no trigger fires on one. takt's stale sweep turns a
+crashed agent's ``connected`` off and that change counts like any other, so the column lags takt's
+own answer by at most the stale window plus one sweep — only for a crash.
+
+Writers only leave a mark. Implementations and agents are written by takt (Rust) and Django alike,
+in transactions of every length — a registration can run for seconds. A trigger that recomputed
+in the writer's transaction would hold the action rows it touched until that commits: every
+connect of another agent on those actions would wait behind it, and a lease claim (agent row, then
+action) could deadlock with a registration (action, then agent row). So:
+
+- The triggers append the affected action ids to ``facade_actionlivenessdirty`` — a log with no
+  unique constraint and no foreign key, so concurrent writers never wait on one another — and
+  ``NOTIFY rekuest_action_liveness`` (sent on commit only, one per transaction).
+  facade_agent fires per row only when ``connected`` or ``kind`` changes: a heartbeat costs
+  nothing. facade_implementation fires per statement over its transition tables (Postgres allows
+  one event per such trigger, hence three); an update counts only when it moved an implementation.
+- ``facade_refresh_live_implementations(batch)`` drains them, and never waits: it claims marks
+  ``SKIP LOCKED``, locks their actions ``SKIP LOCKED``, recomputes those in a statement of its own
+  (a fresh snapshot: every change whose mark it claimed has committed), and puts back the marks of
+  actions someone else holds. Any number of takt replicas may run it at once. It returns how many
+  actions it recomputed; takt calls it on the notice and on every reaper tick.
+- Nothing else writes the column: a guard keeps the stored value through any other update (a
+  full ``save()`` of a stale instance included) and starts every new action at 0.
+"""
+
+from django.db import migrations, models
+
+#: The count for the action ``x.id``.
+COUNT = """(
+    SELECT count(*)::integer
+      FROM facade_implementation i
+      JOIN facade_agent g ON g.id = i.agent_id
+     WHERE i.action_id = x.id
+       AND (g.kind = 'WEBHOOK' OR g.connected)
+)"""
+
+FUNCTIONS = f"""
+CREATE OR REPLACE FUNCTION facade_mark_live_implementations(action_ids bigint[]) RETURNS void
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF action_ids IS NULL OR cardinality(action_ids) = 0 THEN
+        RETURN;
+    END IF;
+    INSERT INTO facade_actionlivenessdirty (action_id) SELECT DISTINCT unnest(action_ids);
+    PERFORM pg_notify('rekuest_action_liveness', '');
+END
+$$;
+
+CREATE OR REPLACE FUNCTION facade_refresh_live_implementations(batch integer DEFAULT 500) RETURNS integer
+LANGUAGE plpgsql AS $$
+DECLARE
+    claimed bigint[];
+    locked bigint[];
+BEGIN
+    WITH taken AS (
+        DELETE FROM facade_actionlivenessdirty d
+         WHERE d.id IN (
+               SELECT id FROM facade_actionlivenessdirty ORDER BY id LIMIT batch FOR UPDATE SKIP LOCKED
+         )
+        RETURNING d.action_id
+    )
+    SELECT coalesce(array_agg(DISTINCT action_id), '{{}}') INTO claimed FROM taken;
+    IF cardinality(claimed) = 0 THEN
+        RETURN 0;
+    END IF;
+
+    SELECT coalesce(array_agg(id), '{{}}') INTO locked FROM (
+        SELECT id FROM facade_action WHERE id = ANY(claimed) ORDER BY id FOR NO KEY UPDATE SKIP LOCKED
+    ) free;
+
+    PERFORM set_config('facade.live_implementations_refresh', 'on', true);
+    UPDATE facade_action a
+       SET live_implementations = r.n
+      FROM (SELECT x.id, {COUNT} AS n FROM unnest(locked) AS x(id)) r
+     WHERE a.id = r.id
+       AND a.live_implementations IS DISTINCT FROM r.n;
+    PERFORM set_config('facade.live_implementations_refresh', 'off', true);
+
+    -- Held by someone else right now: theirs to finish, ours to look at again. An action deleted
+    -- since its mark is neither held nor here, and its mark ends.
+    INSERT INTO facade_actionlivenessdirty (action_id)
+    SELECT id FROM facade_action WHERE id = ANY(claimed) AND NOT (id = ANY(locked));
+    RETURN cardinality(locked);
+END
+$$;
+
+CREATE OR REPLACE FUNCTION facade_action_guard_live_implementations() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        -- No implementation can name an action that does not exist yet.
+        NEW.live_implementations := 0;
+    ELSIF coalesce(current_setting('facade.live_implementations_refresh', true), 'off') <> 'on' THEN
+        NEW.live_implementations := OLD.live_implementations;
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION facade_agent_mark_live_implementations() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM facade_mark_live_implementations(
+        ARRAY(SELECT action_id FROM facade_implementation WHERE agent_id = NEW.id)
+    );
+    RETURN NULL;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION facade_implementation_inserted_mark() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM facade_mark_live_implementations(ARRAY(SELECT action_id FROM new_rows));
+    RETURN NULL;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION facade_implementation_deleted_mark() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM facade_mark_live_implementations(ARRAY(SELECT action_id FROM old_rows));
+    RETURN NULL;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION facade_implementation_updated_mark() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM facade_mark_live_implementations(ARRAY(
+        SELECT unnest(ARRAY[o.action_id, n.action_id])
+          FROM old_rows o JOIN new_rows n ON n.id = o.id
+         WHERE o.action_id IS DISTINCT FROM n.action_id OR o.agent_id IS DISTINCT FROM n.agent_id
+    ));
+    RETURN NULL;
+END
+$$;
+
+SELECT set_config('facade.live_implementations_refresh', 'on', true);
+UPDATE facade_action a SET live_implementations = r.n
+  FROM (SELECT x.id, {COUNT} AS n FROM facade_action x) r
+ WHERE a.id = r.id;
+SELECT set_config('facade.live_implementations_refresh', 'off', true);
+
+CREATE TRIGGER facade_action_guard_live_implementations_insert
+    BEFORE INSERT ON facade_action
+    FOR EACH ROW
+    EXECUTE FUNCTION facade_action_guard_live_implementations();
+
+CREATE TRIGGER facade_action_guard_live_implementations_update
+    BEFORE UPDATE OF live_implementations ON facade_action
+    FOR EACH ROW
+    WHEN (OLD.live_implementations IS DISTINCT FROM NEW.live_implementations)
+    EXECUTE FUNCTION facade_action_guard_live_implementations();
+
+CREATE TRIGGER facade_agent_mark_live_implementations
+    AFTER UPDATE OF connected, kind ON facade_agent
+    FOR EACH ROW
+    WHEN (OLD.connected IS DISTINCT FROM NEW.connected OR OLD.kind IS DISTINCT FROM NEW.kind)
+    EXECUTE FUNCTION facade_agent_mark_live_implementations();
+
+CREATE TRIGGER facade_implementation_inserted_mark
+    AFTER INSERT ON facade_implementation
+    REFERENCING NEW TABLE AS new_rows
+    FOR EACH STATEMENT
+    EXECUTE FUNCTION facade_implementation_inserted_mark();
+
+CREATE TRIGGER facade_implementation_deleted_mark
+    AFTER DELETE ON facade_implementation
+    REFERENCING OLD TABLE AS old_rows
+    FOR EACH STATEMENT
+    EXECUTE FUNCTION facade_implementation_deleted_mark();
+
+CREATE TRIGGER facade_implementation_updated_mark
+    AFTER UPDATE ON facade_implementation
+    REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+    FOR EACH STATEMENT
+    EXECUTE FUNCTION facade_implementation_updated_mark();
+"""
+
+DROP_FUNCTIONS = """
+DROP TRIGGER IF EXISTS facade_implementation_updated_mark ON facade_implementation;
+DROP TRIGGER IF EXISTS facade_implementation_deleted_mark ON facade_implementation;
+DROP TRIGGER IF EXISTS facade_implementation_inserted_mark ON facade_implementation;
+DROP TRIGGER IF EXISTS facade_agent_mark_live_implementations ON facade_agent;
+DROP TRIGGER IF EXISTS facade_action_guard_live_implementations_update ON facade_action;
+DROP TRIGGER IF EXISTS facade_action_guard_live_implementations_insert ON facade_action;
+DROP FUNCTION IF EXISTS facade_implementation_updated_mark();
+DROP FUNCTION IF EXISTS facade_implementation_deleted_mark();
+DROP FUNCTION IF EXISTS facade_implementation_inserted_mark();
+DROP FUNCTION IF EXISTS facade_agent_mark_live_implementations();
+DROP FUNCTION IF EXISTS facade_action_guard_live_implementations();
+DROP FUNCTION IF EXISTS facade_refresh_live_implementations(integer);
+DROP FUNCTION IF EXISTS facade_mark_live_implementations(bigint[]);
+"""
+
+
+class Migration(migrations.Migration):
+    dependencies = [
+        ("authentikate", "0006_alter_app_identifier_alter_release_unique_together"),
+        ("facade", "0005_task_impl_created_idx"),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name="ActionLivenessDirty",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("action_id", models.BigIntegerField()),
+            ],
+            options={
+                "db_table": "facade_actionlivenessdirty",
+            },
+        ),
+        migrations.AddField(
+            model_name="action",
+            name="live_implementations",
+            field=models.IntegerField(
+                db_default=0,
+                default=0,
+                editable=False,
+                help_text="How many implementations sit on an agent that can take work now (a webhook agent, or a connected one)",
+            ),
+        ),
+        migrations.AddField(
+            model_name="action",
+            name="assignable",
+            field=models.GeneratedField(
+                db_persist=True,
+                expression=models.Q(("live_implementations__gt", 0)),
+                help_text="Whether an agent that can take this action is connected (or a webhook) right now",
+                output_field=models.BooleanField(),
+            ),
+        ),
+        migrations.AddIndex(
+            model_name="action",
+            index=models.Index(fields=["organization", "assignable"], name="action_org_assignable_idx"),
+        ),
+        migrations.RunSQL(FUNCTIONS, DROP_FUNCTIONS),
+    ]

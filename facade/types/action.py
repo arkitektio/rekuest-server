@@ -51,6 +51,10 @@ class Action:
     tests: list["Action"] = strawberry_django.field(description="List of tests associated with the action.")
     protocols: list["Protocol"] = strawberry_django.field(description="Protocols associated with the action.")
     defined_at: datetime.datetime = strawberry_django.field(description="Timestamp when the action was defined.")
+    live_implementations: int = strawberry_django.field(
+        description="How many of its implementations sit on an agent that can take work now (connected, or a webhook agent) — one per agent. Kept by the database as agents connect and leave, a moment behind (takt recomputes it on commit); a crashed agent counts until takt's stale sweep notices (seconds)."
+    )
+    assignable: bool = strawberry_django.field(description="Whether an agent that can take this action is connected (or is a webhook agent) right now: `liveImplementations > 0`.")
     test_cases: list["TestCase"] | None = strawberry_django.field(description="Test cases for this action.")
     organization: "Organization" = strawberry_django.field(description="The organization that owns this action.")
     tasks: list["Task"] = strawberry_django.field(description="Tasks created for this action.")

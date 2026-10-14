@@ -10,14 +10,15 @@ Liveness is ``connected AND a fresh heartbeat``:
 
 takt writes all of it (``takt/crates/facade/src/persist/leases.rs``): the lease, the
 heartbeat renewal and the sweep that revokes a stuck one. This module is the read side, for the
-GraphQL ``active`` field, with the same window takt uses (``AGENT_STALE_AFTER``: three
-heartbeat intervals).
+GraphQL ``active`` field and the ``available``/``active`` filters, with the same window takt uses
+(``AGENT_STALE_AFTER``: three heartbeat intervals).
 """
 
 import datetime
 from datetime import timedelta
 
 from django.conf import settings
+from django.db.models import Q
 from django.utils import timezone
 
 
@@ -36,3 +37,15 @@ def agent_is_live(connected: bool, last_seen: datetime.datetime | None) -> bool:
     if not connected or last_seen is None:
         return False
     return last_seen > timezone.now() - timedelta(seconds=stale_after_seconds())
+
+
+def agent_available_q(prefix: str = "") -> Q:
+    """Agents that can receive work now: takt's ``AVAILABLE`` (``backend.rs``), as a ``Q``.
+
+    A webhook agent always can (it never sets ``connected``/``last_seen``); a websocket agent can
+    while it is live (``agent_is_live``). ``prefix`` reaches the agent through a relation
+    (``"agent__"`` from an implementation). ``Action.assignable`` is the stored form of this rule
+    without the heartbeat term (migration ``0006_action_assignable``).
+    """
+    cutoff = timezone.now() - timedelta(seconds=stale_after_seconds())
+    return Q(**{f"{prefix}kind": "WEBHOOK"}) | Q(**{f"{prefix}connected": True, f"{prefix}last_seen__gt": cutoff})

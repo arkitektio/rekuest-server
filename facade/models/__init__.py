@@ -9,6 +9,7 @@ registry, so submodule import order does not matter.
 
 from .action import (
     Action,
+    ActionLivenessDirty,
     ArgPort,
     BasePort,
     ReturnPort,
@@ -84,6 +85,7 @@ __all__ = [
     "Shortcut",
     # action
     "Action",
+    "ActionLivenessDirty",
     "BasePort",
     "ArgPort",
     "ReturnPort",

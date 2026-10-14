@@ -1,5 +1,6 @@
 from authentikate.models import App, Organization
 from django.db import models
+from django.db.models import Q
 from django.db.models.functions import Now, Upper
 from django_choices_field import TextChoicesField
 
@@ -97,6 +98,25 @@ class Action(EmbeddedDescriptionMixin, models.Model):
     arg_count = models.IntegerField(default=0, help_text="Pre-calculated number of root input ports", db_default=0)
     return_count = models.IntegerField(default=0, help_text="Pre-calculated number of root output ports", db_default=0)
 
+    # Kept by the database, never written by code (migration 0006_action_assignable): whoever
+    # changes an agent's `connected`/`kind` or an implementation leaves a mark in
+    # ActionLivenessDirty, and takt drains the marks (`facade_refresh_live_implementations`),
+    # recomputing the count without ever waiting on a lock. The rule is takt's AVAILABLE without
+    # the heartbeat term (a time, which no trigger sees): takt's stale sweep clears a crashed
+    # agent's `connected`, and that change is marked like any other.
+    live_implementations = models.IntegerField(
+        default=0,
+        db_default=0,
+        editable=False,
+        help_text="How many implementations sit on an agent that can take work now (a webhook agent, or a connected one)",
+    )
+    assignable = models.GeneratedField(
+        expression=Q(live_implementations__gt=0),
+        output_field=models.BooleanField(),
+        db_persist=True,
+        help_text="Whether an agent that can take this action is connected (or a webhook) right now",
+    )
+
     def __str__(self) -> str:
         return f"{self.name}"
 
@@ -115,7 +135,22 @@ class Action(EmbeddedDescriptionMixin, models.Model):
             models.Index(fields=["hash"], name="action_hash_idx"),
             models.Index(fields=["organization", "key"], name="action_org_key_idx"),
             models.Index(fields=["name"], name="action_name_idx"),
+            # The menu's "runnable first" ordering and the `assignable` filter, inside one org.
+            models.Index(fields=["organization", "assignable"], name="action_org_assignable_idx"),
         ]
+
+
+class ActionLivenessDirty(models.Model):
+    """An action whose `live_implementations` may have changed, waiting for takt's drain.
+
+    A log, not a set: no unique constraint and no foreign key, so the triggers that write it
+    never wait on one another, and a mark for an action deleted since is simply dropped.
+    """
+
+    action_id = models.BigIntegerField()
+
+    class Meta:
+        db_table = "facade_actionlivenessdirty"
 
 
 class BasePort(models.Model):

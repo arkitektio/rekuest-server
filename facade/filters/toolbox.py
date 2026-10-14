@@ -9,12 +9,14 @@ from typing import Optional
 import strawberry
 import strawberry_django
 from django.db.models import Q, QuerySet
+from django.db.models.expressions import OrderBy
 from strawberry import auto
 from strawberry.types import Info
 from strawberry_django.fields.filter_order import filter_field
 from strawberry_django.filters import FilterLookup
 
 from facade import inputs, managers, models
+from facade.filters.action import assignable_first
 
 
 @strawberry_django.order_type(models.Protocol)
@@ -25,6 +27,12 @@ class ProtocolOrder:
 @strawberry_django.order_type(models.Shortcut)
 class ShortcutOrder:
     name: auto
+
+    @strawberry_django.order_field(description="Runnable first (DESC) or last (ASC) by the shortcut's `Action.assignable`; the order the filters set is the tie-break.")
+    def assignable(self, info: Info, queryset: QuerySet[models.Shortcut], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Shortcut], list[OrderBy | str]]:
+        if not value:
+            return queryset, []
+        return queryset, assignable_first(queryset, value, f"{prefix}action__assignable")
 
 
 @strawberry_django.order_type(models.Toolbox)
@@ -76,6 +84,10 @@ class ShortcutFilter:
         # Shortcuts have no relational port rows; the manager falls back to the JSONB scan.
         ids = managers.get_action_ids_by_port_demands([managers.PortDemand.of(demand) for demand in value], model="facade_shortcut")
         return queryset.filter(**{f"{prefix}id__in": ids}), Q()
+
+    @filter_field(description="Whether an agent that can take the shortcut's action is connected now (`Action.assignable`).")
+    def assignable(self, info: Info, queryset: QuerySet[models.Shortcut], value: bool, prefix: str) -> tuple[QuerySet[models.Shortcut], Q]:
+        return queryset.filter(**{f"{prefix}action__assignable": value}), Q()
 
     @filter_field
     def toolbox(self, info: Info, queryset: QuerySet[models.Shortcut], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Shortcut], Q]:
