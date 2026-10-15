@@ -291,7 +291,12 @@ async fn task_event_created_inner(ctx: &Context, event_id: i64) -> Result<(), sq
     let (payload, routing) = task_event_payload(ctx, event_id).await?;
     // A progress held back by the gate goes out before whatever followed it.
     if payload.kind != "PROGRESS" {
-        if let Some(held) = payload.task.parse().ok().and_then(crate::progress_gate::take_held) {
+        if let Some(held) = payload
+            .task
+            .parse()
+            .ok()
+            .and_then(crate::progress_gate::take_held)
+        {
             Box::pin(task_event_created_inner(ctx, held)).await?;
         }
     }

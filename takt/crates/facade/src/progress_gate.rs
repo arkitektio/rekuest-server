@@ -44,7 +44,10 @@ enum Admit {
 fn admit(slots: &mut HashMap<i64, Slot>, task: i64, event: i64, now: Instant) -> Admit {
     if slots.len() >= MAX_TRACKED {
         slots.retain(|_, slot| {
-            slot.armed || slot.last_sent.is_some_and(|last| now.duration_since(last) < Duration::from_secs(60))
+            slot.armed
+                || slot
+                    .last_sent
+                    .is_some_and(|last| now.duration_since(last) < Duration::from_secs(60))
         });
     }
     let slot = slots.entry(task).or_default();
@@ -115,13 +118,28 @@ mod tests {
         let mut slots = HashMap::new();
         let t0 = Instant::now();
         assert_eq!(admit(&mut slots, 1, 10, t0), Admit::Now);
-        assert!(matches!(admit(&mut slots, 1, 11, t0 + Duration::from_millis(20)), Admit::HeldArm(_)));
-        assert_eq!(admit(&mut slots, 1, 12, t0 + Duration::from_millis(40)), Admit::Held);
+        assert!(matches!(
+            admit(&mut slots, 1, 11, t0 + Duration::from_millis(20)),
+            Admit::HeldArm(_)
+        ));
+        assert_eq!(
+            admit(&mut slots, 1, 12, t0 + Duration::from_millis(40)),
+            Admit::Held
+        );
         // The interval ends: the newest held one goes, once.
-        assert_eq!(release(&mut slots, 1, t0 + Duration::from_millis(100)), Some(12));
-        assert_eq!(release(&mut slots, 1, t0 + Duration::from_millis(100)), None);
+        assert_eq!(
+            release(&mut slots, 1, t0 + Duration::from_millis(100)),
+            Some(12)
+        );
+        assert_eq!(
+            release(&mut slots, 1, t0 + Duration::from_millis(100)),
+            None
+        );
         // A whole interval after the release, the next one goes at once.
-        assert_eq!(admit(&mut slots, 1, 13, t0 + Duration::from_millis(250)), Admit::Now);
+        assert_eq!(
+            admit(&mut slots, 1, 13, t0 + Duration::from_millis(250)),
+            Admit::Now
+        );
     }
 
     #[test]

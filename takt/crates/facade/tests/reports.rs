@@ -301,13 +301,14 @@ async fn every_report_is_recorded_and_the_task_keeps_its_latest() {
         kinds(&ctx, task).await,
         vec!["STARTED", "PROGRESS", "PROGRESS", "PROGRESS", "YIELD", "LOG"]
     );
-    let (progress, message, returns): (Option<i32>, Option<String>, Option<Value>) = sqlx::query_as(
-        "SELECT latest_progress, latest_message, latest_returns FROM facade_task WHERE id = $1",
-    )
-    .bind(task)
-    .fetch_one(&ctx.db)
-    .await
-    .unwrap();
+    let (progress, message, returns): (Option<i32>, Option<String>, Option<Value>) =
+        sqlx::query_as(
+            "SELECT latest_progress, latest_message, latest_returns FROM facade_task WHERE id = $1",
+        )
+        .bind(task)
+        .fetch_one(&ctx.db)
+        .await
+        .unwrap();
     // A progress without a number leaves the last one; any event's message replaces it.
     assert_eq!(progress, Some(70));
     assert_eq!(message.as_deref(), Some("almost"));
