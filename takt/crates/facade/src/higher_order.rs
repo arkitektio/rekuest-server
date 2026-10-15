@@ -3,8 +3,9 @@
 //!
 //! A higher-order implementation `H` wraps a lower one `L` on the same agent. Its config says
 //! how: `bound` (fixed args of `L`), `arg_map` (`{lower_key: {"from": "caller", "key": …}}`),
-//! `args_key` (pack the remaining caller args under one dict port), `dependency_map`, and
-//! `return_map` (the way back, `persist::transitions::project_returns`). Errors are worded as
+//! `args_key` (pack the remaining caller args under one dict port), `dependency_map`,
+//! `returns_key` (unpack the lower's returns from one dict port) and `return_map` (the way
+//! back, `persist::transitions::project_returns`). Errors are worded as
 //! the Python `ValueError`s.
 
 use serde_json::{Map, Value};

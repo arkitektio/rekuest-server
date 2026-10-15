@@ -29,7 +29,7 @@ pub struct CreateHigherOrderInput {
     /// The wrapper's interface, unique on that agent (e.g. `flow:123`).
     pub interface: String,
     pub definition: DefinitionInputModel,
-    /// `bound`, `arg_map`, `args_key`, `dependency_map`, `return_map` (see [`crate::higher_order`]).
+    /// `bound`, `arg_map`, `args_key`, `dependency_map`, `returns_key`, `return_map` (see [`crate::higher_order`]).
     #[serde(default)]
     pub config: Option<Value>,
     /// The dependencies the wrapper declares, for a `dependency_map` sourcing `from: caller`.

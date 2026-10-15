@@ -235,13 +235,29 @@ pub async fn claim(ctx: &Context, task: i64, claim: Claim<'_>) -> Result<bool, s
     Ok(true)
 }
 
-/// The wrapper's returns for a child's (`higher_order.project_returns`): `return_map` is
-/// `{higher_key: lower_key}`; empty means identity.
+/// The wrapper's returns for a child's (`higher_order.project_returns`).
+///
+/// `returns_key` is the way back of `args_key`: the lower implementation returns the
+/// wrapper's values packed in one dict port, and that dict is what is mapped (a missing or
+/// non-dict port is no values). `return_map` is then `{higher_key: lower_key}`; empty means
+/// identity.
 pub fn project_returns(
     config: &Value,
     lower: Option<&Map<String, Value>>,
 ) -> Option<Map<String, Value>> {
     let lower = lower?;
+    let unpacked;
+    let lower = match config.get("returns_key").and_then(Value::as_str) {
+        Some(key) => {
+            unpacked = lower
+                .get(key)
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default();
+            &unpacked
+        }
+        None => lower,
+    };
     let map = config
         .get("return_map")
         .and_then(Value::as_object)
@@ -446,5 +462,31 @@ mod tests {
             serde_json::json!({"x": 2, "y": null})
         );
         assert_eq!(project_returns(&Value::Null, None), None);
+    }
+
+    #[test]
+    fn a_returns_key_unpacks_the_dict_the_lower_returns() {
+        let lower: Map<String, Value> = serde_json::from_value(
+            serde_json::json!({"returns": {"return0": "img-mask", "return1": 7}}),
+        )
+        .unwrap();
+        let unpacked =
+            project_returns(&serde_json::json!({"returns_key": "returns"}), Some(&lower)).unwrap();
+        assert_eq!(
+            Value::Object(unpacked),
+            serde_json::json!({"return0": "img-mask", "return1": 7})
+        );
+        let mapped = project_returns(
+            &serde_json::json!({"returns_key": "returns", "return_map": {"mask": "return0"}}),
+            Some(&lower),
+        )
+        .unwrap();
+        assert_eq!(
+            Value::Object(mapped),
+            serde_json::json!({"mask": "img-mask"})
+        );
+        let missing =
+            project_returns(&serde_json::json!({"returns_key": "other"}), Some(&lower)).unwrap();
+        assert!(missing.is_empty());
     }
 }
