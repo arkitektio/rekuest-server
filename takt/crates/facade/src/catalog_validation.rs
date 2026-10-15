@@ -30,6 +30,7 @@ pub fn context_root(context: ComponentContext) -> Option<&'static str> {
     match context {
         ComponentContext::SCENE => Some("Scene"),
         ComponentContext::LOGO => Some("SVG"),
+        ComponentContext::ACTION_LOGO => Some("ActionLogo"),
         ComponentContext::HTML => None,
     }
 }
@@ -393,8 +394,9 @@ fn check_asset_prop(
 }
 
 /// Every component, prop and operation a tree uses is provided (`validate_components_against_catalogs`).
-/// `context` is the blok's own: a scene blok has one root, the scene, and a logo blok one `SVG`,
-/// whatever is registered.
+/// `context` is the blok's own: a scene blok has one root, the scene, a logo blok one `SVG` and an
+/// action logo one `ActionLogo`, whatever is registered. Both logos are held to the size of an
+/// icon, and an action logo to the palette.
 pub fn validate_components_against_catalogs(
     catalogs: &[Catalog],
     components: Option<&[ComponentNodeInputModel]>,
@@ -423,8 +425,14 @@ pub fn validate_components_against_catalogs(
             ));
         }
     }
-    if context == ComponentContext::LOGO {
+    if matches!(
+        context,
+        ComponentContext::LOGO | ComponentContext::ACTION_LOGO
+    ) {
         check_logo_complexity(components.unwrap_or_default(), demo_state)?;
+    }
+    if context == ComponentContext::ACTION_LOGO {
+        check_logo_palette(components.unwrap_or_default(), demo_state)?;
     }
     let mut diagnostics = vec![];
     let mut ancestors = vec![];
@@ -482,6 +490,7 @@ fn context_name(context: ComponentContext) -> &'static str {
         ComponentContext::HTML => "html",
         ComponentContext::SCENE => "scene",
         ComponentContext::LOGO => "logo",
+        ComponentContext::ACTION_LOGO => "action_logo",
     }
 }
 
@@ -622,6 +631,135 @@ pub fn check_logo_complexity(
         ));
     }
     Ok(())
+}
+
+/// What an action logo paints with: the viewer's palette, or a `url(#id)` to a gradient or clip path.
+pub const LOGO_PAINT_TOKENS: [&str; 7] = [
+    "ink",
+    "muted",
+    "brand",
+    "brand-strong",
+    "brand-soft",
+    "surface",
+    "none",
+];
+const LOGO_PAINT_PROPS: [&str; 3] = ["fill", "stroke", "stopColor"];
+
+/// `check_logo_palette`: an action logo paints only with `LOGO_PAINT_TOKENS` or a `url(#id)`; a
+/// static paint as written, a bound one as the demo state resolves it, for every item when it reads
+/// a foreach's let. A path the demo state does not hold draws nothing and is not checked.
+pub fn check_logo_palette(
+    components: &[ComponentNodeInputModel],
+    demo_state: Option<&serde_json::Map<String, Value>>,
+) -> Result<(), String> {
+    fn visit(
+        node: &ComponentNodeInputModel,
+        demo_state: Option<&serde_json::Map<String, Value>>,
+        scope: &HashMap<String, Vec<Value>>,
+    ) -> Result<(), String> {
+        for prop in node.props.iter().flatten() {
+            if !LOGO_PAINT_PROPS.contains(&prop.key.as_str()) {
+                continue;
+            }
+            let values = if let Some(value) = prop.static_value.as_ref().filter(|v| !v.is_null()) {
+                vec![value.clone()]
+            } else if let Some(path) = prop
+                .dynamic_value
+                .as_ref()
+                .and_then(|d| d.path.as_deref())
+                .filter(|p| !p.is_empty())
+            {
+                resolve(path, demo_state, scope)
+            } else {
+                vec![]
+            };
+            for value in values {
+                if !is_logo_paint(&value) {
+                    let shown = match &value {
+                        Value::String(text) => repr_str(text),
+                        other => other.to_string(),
+                    };
+                    return Err(format!(
+                        "component {}: a logo paints with {}|url(#…), not {shown} in {}",
+                        repr_str(&node.id),
+                        LOGO_PAINT_TOKENS.join("|"),
+                        repr_str(&prop.key)
+                    ));
+                }
+            }
+        }
+        let mut inner = None;
+        if node.component == "foreach" {
+            let props = || node.props.iter().flatten();
+            let let_name = props()
+                .find(|p| p.key == "let")
+                .and_then(|p| p.declares_value.clone());
+            let items = props()
+                .find(|p| p.key == "items")
+                .and_then(|p| p.dynamic_value.as_ref())
+                .and_then(|d| d.path.clone())
+                .filter(|p| !p.is_empty());
+            if let (Some(let_name), Some(items)) = (let_name, items) {
+                let mut scoped = scope.clone();
+                let drawn = resolve(&items, demo_state, scope)
+                    .into_iter()
+                    .filter_map(|found| match found {
+                        Value::Array(items) => Some(items),
+                        _ => None,
+                    })
+                    .flatten()
+                    .collect();
+                scoped.insert(let_name, drawn);
+                inner = Some(scoped);
+            }
+        }
+        for child in node.children.iter().flatten() {
+            visit(child, demo_state, inner.as_ref().unwrap_or(scope))?;
+        }
+        Ok(())
+    }
+
+    for root in components {
+        visit(root, demo_state, &HashMap::new())?;
+    }
+    Ok(())
+}
+
+/// A palette token, or a `url(#id)` reference to a gradient or clip path.
+pub fn is_logo_paint(value: &Value) -> bool {
+    let Some(paint) = value.as_str().map(str::trim) else {
+        return false;
+    };
+    LOGO_PAINT_TOKENS.contains(&paint) || (paint.starts_with("url(#") && paint.ends_with(')'))
+}
+
+/// What `path` holds: one value from the demo state, or one per item of a foreach's let.
+fn resolve(
+    path: &str,
+    demo_state: Option<&serde_json::Map<String, Value>>,
+    scope: &HashMap<String, Vec<Value>>,
+) -> Vec<Value> {
+    let segments: Vec<&str> = path.split(['.', '/']).filter(|s| !s.is_empty()).collect();
+    let Some((first, rest)) = segments.split_first() else {
+        return vec![];
+    };
+    let (roots, rest): (Vec<Value>, &[&str]) = match scope.get(*first) {
+        Some(items) => (items.clone(), rest),
+        None => (
+            vec![Value::Object(demo_state.cloned().unwrap_or_default())],
+            &segments[..],
+        ),
+    };
+    roots
+        .into_iter()
+        .filter_map(|root| {
+            let mut value = root;
+            for segment in rest {
+                value = value.as_object()?.get(*segment)?.clone();
+            }
+            Some(value)
+        })
+        .collect()
 }
 
 /// How many items a foreach's `items` gives in the demo state; 0 when it names none.

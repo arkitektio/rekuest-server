@@ -126,9 +126,9 @@ class ImplementAgentInputModel(BaseModel):
 
     @model_validator(mode="after")
     def check_logos(self) -> Self:
-        """An implementation's logo is a logo blok the agent declares."""
-        logos = {blok.key for blok in self.bloks or [] if blok.context == enums.ComponentContext.LOGO}
+        """An implementation's logo is an action logo blok the agent declares."""
+        logos = {blok.key for blok in self.bloks or [] if blok.context == enums.ComponentContext.ACTION_LOGO}
         for implementation in self.implementations or []:
             if implementation.logo is not None and implementation.logo not in logos:
-                raise ValueError(f"implementation {implementation.interface!r} is drawn by the logo {implementation.logo!r}, which is not a logo blok this agent declares")
+                raise ValueError(f"implementation {implementation.interface!r} is drawn by the logo {implementation.logo!r}, which is not an action logo blok this agent declares")
         return self

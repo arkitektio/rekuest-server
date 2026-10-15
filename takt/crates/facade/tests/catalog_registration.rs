@@ -1067,21 +1067,27 @@ async fn a_descriptor_is_declared_for_its_structure() {
 }
 
 #[tokio::test]
-async fn an_implementation_is_drawn_by_the_logo_blok_it_names() {
+async fn an_implementation_is_drawn_by_the_action_logo_blok_it_names() {
     let Some(t) = tenant().await else { return };
     t.catalog(
         "electron",
         json!([]),
         json!([
-            {"name": "SVG", "children_context": "LOGO", "not_downstream_of": ["SVG"]},
-            {"name": "Path", "context": "LOGO", "downstream_of": ["SVG"], "accepts_children": false,
-             "props": [{"key": "d", "kind": "STRING"}]},
+            {"name": "SVG", "children_context": "LOGO", "not_downstream_of": ["SVG", "ActionLogo"]},
+            {"name": "ActionLogo", "children_context": "LOGO", "not_downstream_of": ["SVG", "ActionLogo"]},
+            {"name": "Path", "context": "LOGO", "downstream_of": ["SVG", "ActionLogo"], "accepts_children": false,
+             "props": [{"key": "d", "kind": "STRING"}, {"key": "fill", "kind": "STRING", "required": false}]},
             {"name": "foreach", "inherits_context": true, "props": [{"key": "items", "kind": "LIST"}]},
         ]),
     )
     .await;
     let logo = |key: &str, components: Value, demo_state: Value| json!({"key": key, "catalog": "electron", "context": "LOGO", "components": components, "demo_state": demo_state});
     let svg = |children: Value| json!([{"id": "logo", "component": "SVG", "children": children}]);
+    let action_logo = |key: &str, children: Value, demo_state: Value| {
+        json!({"key": key, "catalog": "electron", "context": "ACTION_LOGO",
+        "components": [{"id": "logo", "component": "ActionLogo", "children": children}], "demo_state": demo_state})
+    };
+    let painted = |id: &str, fill: Value| json!({"id": id, "component": "Path", "props": [{"key": "d", "static_value": "M0 0"}, fill]});
     let path = |i: usize| json!({"id": format!("p{i}"), "component": "Path", "props": [{"key": "d", "static_value": "M0 0"}]});
     let drawn_by = |mut payload: Value, name: Option<&str>| {
         payload["implementations"][0]["logo"] = json!(name);
@@ -1098,7 +1104,7 @@ async fn an_implementation_is_drawn_by_the_logo_blok_it_names() {
         .unwrap()
     };
 
-    let crop = logo("crop", svg(json!([path(0)])), json!({}));
+    let crop = action_logo("crop", json!([path(0)]), json!({"task": null}));
     t.register(drawn_by(
         payload(&[], "gt", ("a", "b"), json!([crop.clone()])),
         Some("crop"),
@@ -1116,20 +1122,85 @@ async fn an_implementation_is_drawn_by_the_logo_blok_it_names() {
     assert_eq!(logo_of_scan().await, None);
 
     let panel = json!({"key": "panel", "components": [{"id": "root", "component": "Box"}]});
-    for name in ["nowhere", "panel"] {
+    // An agent's logo keeps any SVG colour, but draws no action.
+    let app = logo(
+        "app",
+        svg(json!([painted(
+            "p",
+            json!({"key": "fill", "static_value": "#fbbf24"})
+        )])),
+        json!({}),
+    );
+    for name in ["nowhere", "panel", "app"] {
         let refused = t
             .register(drawn_by(
-                payload(&[], "gt", ("a", "b"), json!([crop.clone(), panel.clone()])),
+                payload(
+                    &[],
+                    "gt",
+                    ("a", "b"),
+                    json!([crop.clone(), panel.clone(), app.clone()]),
+                ),
                 Some(name),
             ))
             .await
             .unwrap_err();
         assert!(
             refused.contains(&format!(
-                "is drawn by the logo '{name}', which is not a logo blok this agent declares"
+                "is drawn by the logo '{name}', which is not an action logo blok this agent declares"
             )),
             "{refused}"
         );
+    }
+
+    // An action logo paints with the palette: as written, and as its demo state resolves a binding.
+    let quiet = action_logo(
+        "quiet",
+        json!([
+            painted("soft", json!({"key": "fill", "static_value": "brand-soft"})),
+            painted("glow", json!({"key": "fill", "static_value": "url(#glow)"})),
+            painted(
+                "tint",
+                json!({"key": "fill", "dynamic_value": {"path": "task.tint"}})
+            )
+        ]),
+        json!({"task": null}),
+    );
+    t.register(payload(&[], "gt", ("a", "b"), json!([quiet, app.clone()])))
+        .await
+        .unwrap();
+    for (blok, message) in [
+        (
+            action_logo(
+                "loud",
+                json!([painted(
+                    "p",
+                    json!({"key": "fill", "static_value": "#fbbf24"})
+                )]),
+                json!({"task": null}),
+            ),
+            "not '#fbbf24' in 'fill'",
+        ),
+        (
+            action_logo(
+                "tinted",
+                json!([painted(
+                    "p",
+                    json!({"key": "fill", "dynamic_value": {"path": "task.tint"}})
+                )]),
+                json!({"task": {"tint": "red"}}),
+            ),
+            "not 'red' in 'fill'",
+        ),
+        (
+            json!({"key": "rooted", "catalog": "electron", "context": "ACTION_LOGO", "components": svg(json!([])), "demo_state": {}}),
+            "the root of a action_logo blok must be a 'ActionLogo', not 'SVG'",
+        ),
+    ] {
+        let refused = t
+            .register(payload(&[], "gt", ("a", "b"), json!([blok])))
+            .await
+            .unwrap_err();
+        assert!(refused.contains(message), "{refused}");
     }
 
     let lamps = |n: usize| json!({"lamps": (0..n).collect::<Vec<_>>()});

@@ -1660,6 +1660,7 @@ enum ComponentContext {
   HTML
   SCENE
   LOGO
+  ACTION_LOGO
 }
 
 """
@@ -2838,7 +2839,7 @@ type Implementation {
   codeHash: String
 
   """
-  The agent's logo blok (context LOGO) that draws this implementation's action, if it declared one.
+  The agent's action logo blok (context ACTION_LOGO) that draws this implementation's action, if it declared one.
   """
   logo: Blok
 
@@ -2978,7 +2979,7 @@ input ImplementationInput {
   codeHash: String = null
 
   """
-  The key of the agent's logo blok (context LOGO) that draws this action.
+  The key of the agent's action logo blok (context ACTION_LOGO) that draws this action.
   """
   logo: String = null
 }

@@ -35,7 +35,14 @@ UNKNOWN_OPERATION = "unknown_operation"
 CONTEXT_ROOTS = {
     enums.ComponentContext.SCENE: "Scene",
     enums.ComponentContext.LOGO: "SVG",
+    enums.ComponentContext.ACTION_LOGO: "ActionLogo",
 }
+# The blok contexts held to the size of an icon. ACTION_LOGO is a blok's context only: its
+# shapes are logo components, placed under an ActionLogo as under an SVG.
+LOGO_CONTEXTS = (enums.ComponentContext.LOGO, enums.ComponentContext.ACTION_LOGO)
+# What an action logo paints with: the viewer's palette, or a url(#id) to a gradient or clip path.
+LOGO_PAINT_TOKENS = ("ink", "muted", "brand", "brand-strong", "brand-soft", "surface", "none")
+LOGO_PAINT_PROPS = ("fill", "stroke", "stopColor")
 # A logo is an icon: what a logo blok may hold at most.
 LOGO_MAX_NODES = 200
 LOGO_MAX_DEPTH = 12
@@ -195,9 +202,10 @@ def validate_components_against_catalogs(
 ) -> list[DiagnosticModel]:
     """Every component, prop and operation a component tree uses is provided by base plus ``catalogs``.
 
-    ``context`` is the blok's own: a scene blok has one root, the scene, and a logo blok one
-    ``SVG``, whatever is registered. A logo is also held to the size of an icon
-    (:func:`check_logo_complexity`), its loops counted in ``demo_state``.
+    ``context`` is the blok's own: a scene blok has one root, the scene, a logo blok one
+    ``SVG`` and an action logo one ``ActionLogo``, whatever is registered. Both logos are held
+    to the size of an icon (:func:`check_logo_complexity`), their loops counted in
+    ``demo_state``, and an action logo to the palette (:func:`check_logo_palette`).
     """
     operations = resolve_operations(catalogs)
     component_specs = resolve_components(catalogs)
@@ -219,8 +227,10 @@ def validate_components_against_catalogs(
             raise ValueError(f"a {kind} blok has exactly one root, a {root!r}, not {len(roots)} roots")
         if roots[0].component != root:
             raise ValueError(f"component {roots[0].id!r}: the root of a {kind} blok must be a {root!r}, not {roots[0].component!r}")
-    if context == enums.ComponentContext.LOGO:
+    if context in LOGO_CONTEXTS:
         check_logo_complexity(components or [], demo_state)
+    if context == enums.ComponentContext.ACTION_LOGO:
+        check_logo_palette(components or [], demo_state)
     visit(components, (), enums.ComponentContext.HTML)
     return diagnostics
 
@@ -253,6 +263,66 @@ def check_logo_complexity(components: list[rimodels.ComponentNodeInputModel], de
         raise ValueError(f"a logo has at most {LOGO_MAX_NODES} components, this one {nodes}")
     if path_data > LOGO_MAX_PATH_DATA:
         raise ValueError(f"a logo holds at most {LOGO_MAX_PATH_DATA} characters of path data, this one {path_data}")
+
+
+def check_logo_palette(components: list[rimodels.ComponentNodeInputModel], demo_state: Mapping[str, object] | None = None) -> None:
+    """An action logo paints only with LOGO_PAINT_TOKENS or a url(#id): a static paint as written, a
+    bound one as the demo state resolves it, for every item when it reads a foreach's let. A path the
+    demo state does not hold draws nothing and is not checked."""
+
+    def visit(node: rimodels.ComponentNodeInputModel, scope: Mapping[str, list[object]]) -> None:
+        for prop in node.props or []:
+            if prop.key not in LOGO_PAINT_PROPS:
+                continue
+            if prop.static_value is not None:
+                values: list[object] = [prop.static_value]
+            elif prop.dynamic_value is not None and prop.dynamic_value.path:
+                values = _resolve(prop.dynamic_value.path, demo_state, scope)
+            else:
+                values = []
+            for value in values:
+                if not is_logo_paint(value):
+                    raise ValueError(f"component {node.id!r}: a logo paints with {'|'.join(LOGO_PAINT_TOKENS)}|url(#…), not {value!r} in {prop.key!r}")
+        inner = scope
+        if node.component == "foreach":
+            let = next((prop.declares_value for prop in node.props or [] if prop.key == "let" and prop.declares_value), None)
+            items = next((prop.dynamic_value.path for prop in node.props or [] if prop.key == "items" and prop.dynamic_value is not None and prop.dynamic_value.path), None)
+            if let and items:
+                inner = {**scope, let: [item for found in _resolve(items, demo_state, scope) if isinstance(found, list) for item in found]}
+        for child in node.children or []:
+            visit(child, inner)
+
+    for root in components:
+        visit(root, {})
+
+
+def is_logo_paint(value: object) -> bool:
+    """A palette token, or a url(#id) reference to a gradient or clip path."""
+    if not isinstance(value, str):
+        return False
+    paint = value.strip()
+    return paint in LOGO_PAINT_TOKENS or (paint.startswith("url(#") and paint.endswith(")"))
+
+
+def _resolve(path: str, demo_state: Mapping[str, object] | None, scope: Mapping[str, list[object]]) -> list[object]:
+    """What ``path`` holds: one value from the demo state, or one per item of a foreach's let."""
+    segments = [segment for segment in path.replace("/", ".").split(".") if segment]
+    if not segments:
+        return []
+    roots: list[object]
+    if segments[0] in scope:
+        roots, segments = list(scope[segments[0]]), segments[1:]
+    else:
+        roots = [demo_state or {}]
+    found: list[object] = []
+    for value in roots:
+        for segment in segments:
+            if not isinstance(value, Mapping) or segment not in value:
+                break
+            value = value[segment]
+        else:
+            found.append(value)
+    return found
 
 
 def _demo_items(prop: rimodels.ComponentPropInputModel, demo_state: Mapping[str, object] | None) -> int:

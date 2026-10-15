@@ -274,6 +274,43 @@ class TestUiCatalog:
             refused = await _create_blok(authenticated_context, roots, context=context)
             assert refused.errors and message in refused.errors[0].message, refused.errors
 
+    async def test_an_action_logo_is_one_action_logo_in_the_palette(self, authenticated_context: HttpContext) -> None:
+        """An action logo's root is an ``ActionLogo``; it paints with the palette and reads ``task`` from its demo state."""
+        await _register(
+            authenticated_context,
+            {
+                **CATALOG,
+                "components": [
+                    {"name": "SVG", "childrenContext": "LOGO", "notDownstreamOf": ["SVG", "ActionLogo"]},
+                    {"name": "ActionLogo", "childrenContext": "LOGO", "notDownstreamOf": ["SVG", "ActionLogo"]},
+                    {"name": "Path", "context": "LOGO", "downstreamOf": ["SVG", "ActionLogo"], "acceptsChildren": False, "props": [{"key": "fill", "kind": "STRING", "required": False}]},
+                ],
+            },
+        )
+
+        def drawn(root: str, fill: dict) -> list[dict]:
+            return [{"id": "logo", "component": root, "children": [{"id": "p", "component": "Path", "props": [{"key": "fill", **fill}]}]}]
+
+        quiet = await _create_blok(authenticated_context, drawn("ActionLogo", {"dynamicValue": {"path": "task.tint"}}), context="ACTION_LOGO", demoState={"task": None})
+        assert not quiet.errors, quiet.errors
+        # A logo keeps any SVG colour.
+        loud_logo = await _create_blok(authenticated_context, drawn("SVG", {"staticValue": "#fbbf24"}), context="LOGO")
+        assert not loud_logo.errors, loud_logo.errors
+
+        for components, message in (
+            (drawn("ActionLogo", {"staticValue": "#fbbf24"}), "not '#fbbf24' in 'fill'"),
+            (drawn("SVG", {"staticValue": "brand"}), "the root of a action_logo blok must be a 'ActionLogo', not 'SVG'"),
+        ):
+            refused = await _create_blok(authenticated_context, components, context="ACTION_LOGO", demoState={"task": None})
+            assert refused.errors and message in refused.errors[0].message, refused.errors
+        # No component lives in the action logo context: its shapes are logo components.
+        placed = await schema.execute(
+            REGISTER_UI_CATALOG,
+            context_value=authenticated_context,
+            variable_values={"input": {**CATALOG, "components": [{"name": "Path", "context": "ACTION_LOGO"}]}},
+        )
+        assert placed.errors and "ACTION_LOGO is a blok context only" in placed.errors[0].message, placed.errors
+
     async def test_a_blok_may_be_sent_as_its_bsx_source(self, authenticated_context: HttpContext, takt: str) -> None:
         """takt parses the source into the tree a client would have sent: same tree, same hash."""
         from facade.models import Blok

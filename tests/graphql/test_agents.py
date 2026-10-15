@@ -266,7 +266,7 @@ class TestGraphQLAgents:
             implementation = registered.create_implementation(ImplementationInputModel(interface="crop", definition=definition), agent)
             plain = registered.create_implementation(ImplementationInputModel(interface="plain", definition=DefinitionInputModel(key="plain", name="Plain", kind="FUNCTION", args=[], returns=[])), agent)
             catalog, _ = UICatalog.objects.get_or_create(organization=agent.organization, name="orkestrator")
-            logo = Blok.objects.create(organization=agent.organization, creator=agent.user, catalog=catalog, name="crop", context="LOGO")
+            logo = Blok.objects.create(organization=agent.organization, creator=agent.user, catalog=catalog, name="crop", context="ACTION_LOGO")
             Implementation.objects.filter(id=implementation.id).update(logo=logo)
             return str(implementation.id), str(plain.id), str(implementation.action_id)
 
@@ -281,7 +281,7 @@ class TestGraphQLAgents:
         """
         result = await schema.execute(query, context_value=authenticated_context, variable_values={"drawn": implementation_id, "plain": plain_id, "action": action_id})
         assert not result.errors, result.errors
-        assert result.data["drawn"] == {"logo": {"name": "crop", "context": "LOGO"}}
+        assert result.data["drawn"] == {"logo": {"name": "crop", "context": "ACTION_LOGO"}}
         assert result.data["plain"] == {"logo": None, "action": {"logo": None}}
         assert result.data["action"]["logo"]["name"] == "crop"
         assert len(result.data["action"]["logo"]["hash"]) == 64

@@ -609,7 +609,7 @@ pub struct ImplementationInputModel {
     pub execution: Execution,
     #[serde(default)]
     pub code_hash: Option<String>,
-    /// The key of the agent's logo blok (context LOGO) that draws this action.
+    /// The key of the agent's action logo blok (context ACTION_LOGO) that draws this action.
     #[serde(default)]
     pub logo: Option<String>,
 }
@@ -1150,7 +1150,17 @@ impl CatalogComponentInputModel {
         check_unique_keys(
             self.props.iter().map(|p| p.key.as_str()),
             &format!("catalog component {}", self.name),
-        )
+        )?;
+        // ACTION_LOGO is a blok's context, never a component's (`check_no_action_logo_context`).
+        if self.context == ComponentContext::ACTION_LOGO
+            || self.children_context == Some(ComponentContext::ACTION_LOGO)
+        {
+            return Err(ValidationError(format!(
+                "catalog component {}: ACTION_LOGO is a blok context only; its shapes are LOGO components",
+                self.name
+            )));
+        }
+        Ok(())
     }
 }
 
@@ -1222,19 +1232,19 @@ impl ImplementAgentInputModel {
         for blok in self.bloks.iter_mut().flatten() {
             blok.validate()?;
         }
-        // An implementation's logo is a logo blok the agent declares (`check_logos`).
+        // An implementation's logo is an action logo blok the agent declares (`check_logos`).
         let logos: HashSet<&str> = self
             .bloks
             .iter()
             .flatten()
-            .filter(|blok| blok.context == ComponentContext::LOGO)
+            .filter(|blok| blok.context == ComponentContext::ACTION_LOGO)
             .map(|blok| blok.key.as_str())
             .collect();
         for implementation in self.implementations.iter().flatten() {
             if let Some(logo) = implementation.logo.as_deref() {
                 if !logos.contains(logo) {
                     return Err(ValidationError(format!(
-                        "implementation {} is drawn by the logo {}, which is not a logo blok this agent declares",
+                        "implementation {} is drawn by the logo {}, which is not an action logo blok this agent declares",
                         repr_str(&implementation.interface),
                         repr_str(logo)
                     )));

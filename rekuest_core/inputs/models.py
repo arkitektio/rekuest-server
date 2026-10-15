@@ -946,7 +946,7 @@ class ImplementationInputModel(BaseModel):
     effects: enums.Effects = Field(default=enums.Effects.UNKNOWN, description="What running this implementation again would do to the world. Informational: shown to whoever decides about a lost task.")
     execution: enums.Execution = Field(default=enums.Execution.PLAIN, description="How this implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies.")
     code_hash: str | None = Field(default=None, description="A hash of the implementation's code. A workflow is only resumed by an implementation with the same hash.")
-    logo: str | None = Field(default=None, description="The key of the agent's logo blok (context LOGO) that draws this action.")
+    logo: str | None = Field(default=None, description="The key of the agent's action logo blok (context ACTION_LOGO) that draws this action.")
 
     @model_validator(mode="after")
     def check_widget_targets(self) -> Self:
@@ -1334,6 +1334,13 @@ class CatalogComponentInputModel(BaseModel):
     def check_unique_props(self) -> Self:
         """Prop keys are unique per component."""
         _check_unique(self.props, "key", f"catalog component {self.name}")
+        return self
+
+    @model_validator(mode="after")
+    def check_no_action_logo_context(self) -> Self:
+        """ACTION_LOGO is a blok's context, never a component's: an action logo draws logo components."""
+        if enums.ComponentContext.ACTION_LOGO in (self.context, self.children_context):
+            raise ValueError(f"catalog component {self.name}: ACTION_LOGO is a blok context only; its shapes are LOGO components")
         return self
 
 

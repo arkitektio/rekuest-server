@@ -45,7 +45,7 @@ class Implementation:
     effects: renums.Effects = strawberry_django.field(description="What running this implementation again would do to the world. Informational: shown to whoever decides about a lost task.")
     execution: renums.Execution = strawberry_django.field(description="How this implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies.")
     code_hash: Optional[str] = strawberry_django.field(description="A hash of the implementation's code; a workflow is only resumed by an implementation with the same hash.")
-    logo: Optional["Blok"] = strawberry_django.field(description="The agent's logo blok (context LOGO) that draws this implementation's action, if it declared one.")
+    logo: Optional["Blok"] = strawberry_django.field(description="The agent's action logo blok (context ACTION_LOGO) that draws this implementation's action, if it declared one.")
 
     @strawberry_django.field(description="Constructed name for display, combining interface and agent name.")
     def name(self) -> str:
