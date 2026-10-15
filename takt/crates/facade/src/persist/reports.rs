@@ -288,7 +288,12 @@ async fn record_event(
         return Ok(false);
     }
     let id = transitions::insert_event(&ctx.db, row.id, kind, &event).await?;
-    signals::task_event_created(ctx, id).await;
+    if kind == "PROGRESS" {
+        // Recorded always; fanned out at most once per interval per task.
+        crate::progress_gate::progress_recorded(ctx, row.id, id).await;
+    } else {
+        signals::task_event_created(ctx, id).await;
+    }
     Ok(true)
 }
 

@@ -279,6 +279,42 @@ async fn reports_are_persisted_once_and_acked() {
 }
 
 #[tokio::test]
+async fn every_report_is_recorded_and_the_task_keeps_its_latest() {
+    let Some(ctx) = context().await else { return };
+    let (agent, action) = agent(&ctx).await;
+    let task = task(&ctx, agent, action).await;
+    let t = task.to_string();
+
+    for frame_json in [
+        json!({"type": "STARTED", "task": t, "seq": 1}),
+        // Faster than the progress gate lets through: all recorded all the same.
+        json!({"type": "PROGRESS", "task": t, "progress": 10, "message": "loading"}),
+        json!({"type": "PROGRESS", "task": t, "progress": 40}),
+        json!({"type": "PROGRESS", "task": t, "progress": 70}),
+        json!({"type": "YIELD", "task": t, "returns": {"return0": 2}}),
+        json!({"type": "LOG", "task": t, "message": "almost", "level": "INFO"}),
+    ] {
+        route(&ctx, agent, &frame(frame_json), None).await.unwrap();
+    }
+
+    assert_eq!(
+        kinds(&ctx, task).await,
+        vec!["STARTED", "PROGRESS", "PROGRESS", "PROGRESS", "YIELD", "LOG"]
+    );
+    let (progress, message, returns): (Option<i32>, Option<String>, Option<Value>) = sqlx::query_as(
+        "SELECT latest_progress, latest_message, latest_returns FROM facade_task WHERE id = $1",
+    )
+    .bind(task)
+    .fetch_one(&ctx.db)
+    .await
+    .unwrap();
+    // A progress without a number leaves the last one; any event's message replaces it.
+    assert_eq!(progress, Some(70));
+    assert_eq!(message.as_deref(), Some("almost"));
+    assert_eq!(returns, Some(json!({"return0": 2})));
+}
+
+#[tokio::test]
 async fn numbered_frames_are_projected_once_and_never_event_acked() {
     let Some(ctx) = context().await else { return };
     let (agent, action) = agent(&ctx).await;

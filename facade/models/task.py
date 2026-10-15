@@ -158,6 +158,26 @@ class Task(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     finished_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
+    # --- What a live task shows, kept by takt as each event is recorded ------------------
+    # Written in the same statement as the event (takt's ``insert_event``), never by Django,
+    # and without bumping ``revision``: they summarise the events, they are not a new state.
+    # A client following a task reads these instead of carrying its whole event history.
+    latest_progress = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="The progress (0-100) of the latest PROGRESS event that carried one.",
+    )
+    latest_message = models.CharField(
+        max_length=30000,
+        null=True,
+        blank=True,
+        help_text="The message of the latest event that carried one.",
+    )
+    latest_returns = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="The returns of the latest YIELD event.",
+    )
     revision = models.PositiveBigIntegerField(
         default=1,
         db_default=1,

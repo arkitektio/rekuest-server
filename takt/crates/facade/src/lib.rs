@@ -29,6 +29,7 @@ pub mod messages;
 pub mod mutations;
 pub mod persist;
 pub mod probes;
+pub mod progress_gate;
 pub mod protocol;
 pub mod provenance;
 pub mod reaper;

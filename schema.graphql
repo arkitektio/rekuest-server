@@ -5973,6 +5973,17 @@ type Task {
   """Timestamp when the task was finished."""
   finishedAt: DateTime
 
+  """
+  Progress (0-100) of the latest PROGRESS event that carried one. Kept as events are recorded: follow a task with this, not with its events.
+  """
+  latestProgress: Int
+
+  """Message of the latest event that carried one."""
+  latestMessage: String
+
+  """Returns of the latest YIELD event."""
+  latestReturns: AnyDefault
+
   """The schedule this task is a run of, if any."""
   schedule: Schedule
 

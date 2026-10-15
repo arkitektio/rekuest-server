@@ -96,6 +96,11 @@ impl NewEvent {
 }
 
 /// Insert a `TaskEvent` (`TaskEvent.objects.create`); its id.
+///
+/// The same statement keeps the task's latest report (`latest_progress`, `latest_message`,
+/// `latest_returns`), so a client following a task reads three columns instead of its whole
+/// event history. Every event is written here, so nothing else has to keep them. They summarise
+/// the events, so `revision` does not move.
 pub async fn insert_event(
     executor: impl sqlx::PgExecutor<'_>,
     task: i64,
@@ -103,11 +108,22 @@ pub async fn insert_event(
     event: &NewEvent,
 ) -> Result<i64, sqlx::Error> {
     sqlx::query_scalar(
-        "INSERT INTO facade_taskevent
-            (task_id, kind, message, returns, progress, level, agent_pos, agent_ts, step, effect,
-             key, value, delegated_to_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-         RETURNING id",
+        "WITH event AS (
+            INSERT INTO facade_taskevent
+                (task_id, kind, message, returns, progress, level, agent_pos, agent_ts, step, effect,
+                 key, value, delegated_to_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+             RETURNING id, task_id, kind, message, returns, progress
+         ), kept AS (
+            UPDATE facade_task t
+               SET latest_progress = CASE WHEN event.kind = 'PROGRESS' AND event.progress IS NOT NULL
+                                          THEN event.progress ELSE t.latest_progress END,
+                   latest_message = COALESCE(event.message, t.latest_message),
+                   latest_returns = CASE WHEN event.kind = 'YIELD' THEN event.returns ELSE t.latest_returns END
+              FROM event
+             WHERE t.id = event.task_id
+         )
+         SELECT id FROM event",
     )
     .bind(task)
     .bind(kind)
