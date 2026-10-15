@@ -623,7 +623,8 @@ class ComponentNodeInput:
 class BlokImplementationInput:
     key: str
     dependencies: list[AgentDependencyInput] = strawberry.field(default_factory=list)
-    components: list[ComponentNodeInput] = strawberry.field(default_factory=list)
+    components: list[ComponentNodeInput] | None = None
+    source: str | None = None
     catalog: Optional[str] = None
     demo_state: Optional[scalars.JSONSerializable] = None
     description: Optional[str] = None

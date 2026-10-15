@@ -959,7 +959,12 @@ pub struct BlokImplementationInputModel {
     pub key: String,
     #[serde(default)]
     pub dependencies: Vec<AgentDependencyInputModel>,
-    pub components: Vec<ComponentNodeInputModel>,
+    /// The tree, unless the blok is sent as its `source`; `validate` parses that into this.
+    #[serde(default)]
+    pub components: Option<Vec<ComponentNodeInputModel>>,
+    /// The blok as BSX, three times fewer bytes than its tree. Exactly one of the two is sent.
+    #[serde(default)]
+    pub source: Option<String>,
     #[serde(default)]
     pub catalog: Option<String>,
     #[serde(default)]
@@ -1020,7 +1025,24 @@ pub fn check_blok_target(
 
 impl BlokImplementationInputModel {
     pub fn validate(&mut self) -> Result<(), ValidationError> {
-        for component in &mut self.components {
+        match (self.components.is_some(), self.source.take()) {
+            (true, Some(_)) => {
+                return Err(ValidationError(
+                    "a blok is sent as its components or as its BSX source, not both".to_string(),
+                ))
+            }
+            (false, None) => {
+                return Err(ValidationError(
+                    "a blok is sent as its components or as its BSX source".to_string(),
+                ))
+            }
+            (false, Some(source)) => {
+                let tree = crate::bsx::parse_bsx(&source).map_err(ValidationError)?;
+                self.components = Some(vec![tree]);
+            }
+            (true, None) => {}
+        }
+        for component in self.components.iter_mut().flatten() {
             component.validate()?;
         }
         let dependency_keys: HashSet<String> =
@@ -1030,7 +1052,7 @@ impl BlokImplementationInputModel {
             .as_ref()
             .map(|s| s.keys().cloned().collect());
         check_blok_manifest(
-            Some(&self.components),
+            self.components.as_deref(),
             &dependency_keys,
             state_keys.as_ref(),
         )?;
@@ -1232,7 +1254,7 @@ impl ImplementAgentInputModel {
         // Every dependency key of a declared blok is mapped to the declaring agent, so an
         // asset a blok names is one of this declaration's, whatever key it is named under.
         for blok in self.bloks.iter().flatten() {
-            for node in iter_component_nodes(Some(&blok.components)) {
+            for node in iter_component_nodes(blok.components.as_deref()) {
                 for prop in node.props.iter().flatten() {
                     let Some(path) = prop.dynamic_value.as_ref().and_then(|d| d.path.as_deref())
                     else {

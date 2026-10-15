@@ -1158,6 +1158,14 @@ class ComponentNodeInputModel(BaseModel):
     children: list["ComponentNodeInputModel"] | None = Field(default=None, description="Flat adjacency pointer list mapping out IDs nested inside this specific component layer.")
 
 
+def check_blok_sent_once(components: object | None, source: str | None, *, required: bool) -> None:
+    """A blok is sent as its components or as its BSX source: not both, and (where it must be sent) not neither."""
+    if components is not None and source is not None:
+        raise ValueError("a blok is sent as its components or as its BSX source, not both")
+    if required and components is None and source is None:
+        raise ValueError("a blok is sent as its components or as its BSX source")
+
+
 def check_blok_manifest(components: Optional[List[ComponentNodeInputModel]], dependency_keys: set[str], state_keys: Optional[set[str]]) -> None:
     """Coherence of a blok component tree.
 
@@ -1241,7 +1249,8 @@ class BlokImplementationInputModel(BaseModel):
 
     key: str = Field(description="The key of this Blok implementation.")
     dependencies: list[AgentDependencyInputModel] = Field(default_factory=list, description="The dependencies required by this Blok.")
-    components: list[ComponentNodeInputModel] = Field(description="The UI component tree blueprint for this Blok.")
+    components: Optional[list[ComponentNodeInputModel]] = Field(default=None, description="The UI component tree blueprint for this Blok, unless it is sent as its `source`.")
+    source: Optional[str] = Field(default=None, description="The Blok as BSX, parsed by the server into its component tree: three times fewer bytes than the tree. Exactly one of `components` and `source` is sent.")
     catalog: Optional[str] = Field(default=None, description="The optional catalog name if this Blok should be registered inside a specific namespace in your Electron app's UI component registry.")
     description: Optional[str] = Field(default=None, description="A human-readable description about this Blok's purpose and functionality.")
     demo_state: Optional[dict] = Field(default=None, description="An optional JSON-serializable object providing demo state values for this Blok's internal reactive data model, useful for testing and development purposes.")
@@ -1252,8 +1261,12 @@ class BlokImplementationInputModel(BaseModel):
 
     @model_validator(mode="after")
     def check_manifest(self) -> Self:
-        """The component tree is coherent with the declared dependencies and demo state."""
-        check_blok_manifest(self.components, {dep.key for dep in self.dependencies}, None if self.demo_state is None else set(self.demo_state))
+        """Sent one way; the component tree coherent with the declared dependencies and demo state.
+
+        A blok sent as its source is checked once takt has parsed it, at registration."""
+        check_blok_sent_once(self.components, self.source, required=True)
+        if self.components is not None:
+            check_blok_manifest(self.components, {dep.key for dep in self.dependencies}, None if self.demo_state is None else set(self.demo_state))
         check_blok_target(self.context, self.for_model, self.for_node)
         return self
 

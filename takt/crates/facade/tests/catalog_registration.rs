@@ -1174,3 +1174,64 @@ async fn an_implementation_is_drawn_by_the_logo_blok_it_names() {
         assert!(refused.contains(message), "{refused}");
     }
 }
+
+#[tokio::test]
+async fn a_blok_may_be_registered_as_its_bsx_source() {
+    let Some(t) = tenant().await else { return };
+    t.catalog(
+        "electron",
+        json!([]),
+        json!([{"name": "Box"}, {"name": "Label", "accepts_children": false, "props": [{"key": "text", "kind": "STRING"}]}]),
+    )
+    .await;
+    let stored = || async {
+        sqlx::query_scalar::<_, Value>(
+            "SELECT components FROM facade_blok WHERE organization_id = $1 AND name = 'panel'",
+        )
+        .bind(t.organization)
+        .fetch_one(&t.db)
+        .await
+        .unwrap()
+    };
+    let tree = json!([{"id": "Box", "component": "Box", "children": [
+        {"id": "Box/Label[0]", "component": "Label", "props": [{"key": "text", "static_value": "hi"}]}]}]);
+
+    t.register(payload(
+        &[],
+        "gt",
+        ("a", "b"),
+        json!([{"key": "panel", "catalog": "electron", "components": tree}]),
+    ))
+    .await
+    .unwrap();
+    let from_tree = stored().await;
+    t.register(payload(&[], "gt", ("a", "b"), json!([{"key": "panel", "catalog": "electron", "source": "<Box><Label text=\"hi\" /></Box>"}])))
+        .await
+        .unwrap();
+    assert_eq!(stored().await, from_tree);
+
+    for (blok, message) in [
+        (
+            json!({"key": "panel", "components": tree, "source": "<Box />"}),
+            "not both",
+        ),
+        (
+            json!({"key": "panel"}),
+            "a blok is sent as its components or as its BSX source",
+        ),
+        (
+            json!({"key": "panel", "source": "<Box><Label></Box>"}),
+            "Failed to parse BSX/XML at line 1",
+        ),
+        (
+            json!({"key": "panel", "catalog": "electron", "source": "<Box><Knob /></Box>"}),
+            "component 'Knob' is not registered",
+        ),
+    ] {
+        let refused = t
+            .register(payload(&[], "gt", ("a", "b"), json!([blok])))
+            .await
+            .unwrap_err();
+        assert!(refused.contains(message), "{refused}");
+    }
+}

@@ -1314,8 +1314,15 @@ input BlokImplementationInput {
   """The dependencies required by this Blok."""
   dependencies: [AgentDependencyInput!]! = []
 
-  """The UI component tree blueprint for this Blok."""
-  components: [ComponentNodeInput!]!
+  """
+  The UI component tree blueprint for this Blok, unless it is sent as its `source`.
+  """
+  components: [ComponentNodeInput!] = null
+
+  """
+  The Blok as BSX, parsed by the server into its component tree: three times fewer bytes than the tree. Exactly one of `components` and `source` is sent.
+  """
+  source: String = null
 
   """
   The optional catalog name if this Blok should be registered inside a specific namespace in your Electron app's UI component registry.
@@ -1762,6 +1769,11 @@ input CreateBlokInput {
   The schema of the blok. This can be used to validate the blok input and output.
   """
   components: [ComponentNodeInput!] = null
+
+  """
+  The blok as BSX, which the server parses into `components`: send one of the two.
+  """
+  source: String = null
 
   """
   The initial state of the blok. This is used to set the initial state of the blok when it is materialized.
@@ -6720,6 +6732,11 @@ input UpdateBlokInput {
   The full component tree of the blok. Replaces the existing tree when provided.
   """
   components: [ComponentNodeInput!] = null
+
+  """
+  The blok as BSX, which the server parses into the tree it replaces the existing one with: send it or `components`, not both.
+  """
+  source: String = null
 
   """
   The demo state used to preview this blok. Replaces the existing demo state when provided.

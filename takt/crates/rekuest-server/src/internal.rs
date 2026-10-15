@@ -40,6 +40,7 @@
 //! | `implementation/delete` | `{"principal", "implementation"}` | `{"implementation"}` |
 //! | `action/cleanup` | `{"principal", "actions"?: [id, …]}` (the organization's actions nothing implements) | `{"deleted"}` |
 //! | `schedule/validate` | `{"interval_seconds"?, "cron"?, "timezone"}` | `{}`, or `400` saying what is wrong with the timing |
+//! | `blok/parse` | `{"source"}` (a blok as BSX) | `{"components": [tree]}`, or `400` saying why it does not parse |
 //! | `schedule/trigger` | `{"schedule"}` (run now) | `{"task"}` |
 //! | `schedule/upcoming` | `{"timings": [{"interval_seconds"?, "cron"?, "timezone", "created_at", "count"}, …]}` (each timing's next slots after now) | `{"upcoming": [{"slots": [RFC 3339, …]} or {"error"}, …]}`, in the order asked |
 //! | `trigger/fire` | `{"principal", "trigger", "signal"}` (a replay: fires the trigger on a stored signal, whatever its conditions) | `{"firing"}` |
@@ -100,6 +101,7 @@ pub fn routes() -> Router<Shared> {
         .route("/internal/agent/implement", post(implement_agent))
         .route("/internal/agent/delete", post(delete_agent))
         .route("/internal/schedule/validate", post(validate_schedule))
+        .route("/internal/blok/parse", post(parse_blok))
         .route("/internal/schedule/trigger", post(trigger_schedule))
         .route("/internal/schedule/upcoming", post(upcoming_slots))
         .route("/internal/trigger/fire", post(fire_trigger))
@@ -451,6 +453,17 @@ internal!(validate_schedule, TimingRequest, |_state, request| {
     .validate()
     .map_err(|message| Refusal(StatusCode::BAD_REQUEST, message))?;
     Ok(Json(json!({})))
+});
+
+#[derive(Debug, Deserialize)]
+struct ParseBlokRequest {
+    source: String,
+}
+
+internal!(parse_blok, ParseBlokRequest, |_state, request| {
+    let tree = rekuest_core::bsx::parse_bsx(&request.source)
+        .map_err(|message| Refusal(StatusCode::BAD_REQUEST, message))?;
+    Ok(Json(json!({"components": [tree]})))
 });
 
 #[derive(Debug, Deserialize)]

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict
 
@@ -238,6 +238,19 @@ class ProbeState(Answer):
     created: str = ""
 
 
+# --- bloks -----------------------------------------------------------------------------------
+
+
+class ParseBlokRequest(Request):
+    source: str
+
+
+class ParseBlokAnswer(Answer):
+    """The tree a blok's BSX source describes, as its one root."""
+
+    components: list[dict[str, Any]]
+
+
 # --- schedules and triggers ------------------------------------------------------------------
 
 
@@ -327,6 +340,7 @@ DELETE_IMPLEMENTATION = Route("implementation/delete", ImplementationAnswer, Del
 CREATE_HIGHER_ORDER = Route("higher-order/create", ImplementationAnswer, CreateHigherOrderRequest)
 CLEANUP_ACTIONS = Route("action/cleanup", CleanupActionsAnswer, CleanupActionsRequest)
 VALIDATE_TIMING = Route("schedule/validate", Nothing, Timing)
+PARSE_BLOK = Route("blok/parse", ParseBlokAnswer, ParseBlokRequest)
 TRIGGER_SCHEDULE = Route("schedule/trigger", TaskAnswer, ScheduleRequest)
 UPCOMING = Route("schedule/upcoming", UpcomingAnswer, UpcomingRequest)
 FIRE_TRIGGER = Route("trigger/fire", FiringAnswer, FireTriggerRequest)

@@ -10,7 +10,7 @@ from typing import Iterable, cast
 from django.db import transaction
 from kante.types import Info
 
-from facade import inputs, models, types
+from facade import inputs, models, takt, takt_api, types
 from facade.catalog_validation import dump_diagnostics, validate_manifest_against_catalog
 from facade.types.base import scoped_get
 from rekuest_core import enums as renums
@@ -65,10 +65,20 @@ def _catalog_for(info: Info, name: str | None) -> models.UICatalog:
     return models.UICatalog.objects.get_or_create(name=name or STANDARD_CATALOG_NAME, organization=info.context.request.organization)[0]
 
 
+def _parsed(source: str) -> list[rimodels.ComponentNodeInputModel]:
+    """The tree a blok's BSX source describes, parsed by takt (the one server-side BSX parser)."""
+    answer = takt.call(takt_api.PARSE_BLOK, takt_api.ParseBlokRequest(source=source))
+    return [rimodels.ComponentNodeInputModel(**component) for component in answer.components]
+
+
 @transaction.atomic
 def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
     """Create or replace (by name) a blok in the caller's organization."""
     model = input.to_pydantic()
+    if model.source is not None:
+        components = _parsed(model.source)
+        rimodels.check_blok_manifest(components, {dep.key for dep in model.dependencies or []}, None if model.demo_state is None else set(model.demo_state))
+        model = model.model_copy(update={"components": components, "source": None})
     organization = info.context.request.organization
     catalog = _catalog_for(info, model.catalog)
     diagnostics = validate_manifest_against_catalog(catalog, model.components, model.context, model.demo_state)
@@ -114,6 +124,8 @@ def update_blok(info: Info, input: inputs.UpdateBlokInput) -> types.Blok:
         blok.name = model.name
     if model.description is not None:
         blok.description = model.description
+    if model.source is not None:
+        blok.components = [c.model_dump() for c in _parsed(model.source)]
     if model.components is not None:
         blok.components = [c.model_dump() for c in model.components]
     if model.demo_state is not None:

@@ -274,6 +274,34 @@ class TestUiCatalog:
             refused = await _create_blok(authenticated_context, roots, context=context)
             assert refused.errors and message in refused.errors[0].message, refused.errors
 
+    async def test_a_blok_may_be_sent_as_its_bsx_source(self, authenticated_context: HttpContext, takt: str) -> None:
+        """takt parses the source into the tree a client would have sent: same tree, same hash."""
+        from facade.models import Blok
+
+        await _register(authenticated_context, {**CATALOG, "components": [{"name": "Box"}, {"name": "Label", "props": [{"key": "text", "kind": "STRING"}], "acceptsChildren": False}]})
+        tree = [{"id": "Box", "component": "Box", "children": [{"id": "Box/Label[0]", "component": "Label", "props": [{"key": "text", "staticValue": "hi"}]}]}]
+
+        async def stored() -> tuple[list, str]:
+            blok = await sync_to_async(lambda: Blok.objects.get(name="catalogued"))()
+            result = await schema.execute("query($id: ID!) { blok(id: $id) { hash } }", context_value=authenticated_context, variable_values={"id": str(blok.id)})
+            return blok.components, result.data["blok"]["hash"]
+
+        as_tree = await _create_blok(authenticated_context, tree)
+        assert not as_tree.errors, as_tree.errors
+        from_tree = await stored()
+
+        as_source = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "catalogued", "catalog": "electron", "source": '<Box><Label text="hi" /></Box>', "demoState": {"exposure": 1}}})
+        assert not as_source.errors, as_source.errors
+        assert await stored() == from_tree
+
+        both = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "catalogued", "catalog": "electron", "components": tree, "source": "<Box />"}})
+        assert both.errors and "not both" in both.errors[0].message
+        broken = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "catalogued", "catalog": "electron", "source": "<Box>\n<Label>\n</Box>"}})
+        assert broken.errors and "line 3" in broken.errors[0].message, broken.errors
+        # What a parsed source draws is held to the catalog like any tree.
+        unknown = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "catalogued", "catalog": "electron", "source": "<Box><Knob /></Box>"}})
+        assert unknown.errors and "component 'Knob' is not registered" in unknown.errors[0].message
+
     async def test_a_blok_hash_follows_what_it_renders(self, authenticated_context: HttpContext) -> None:
         """The hash moves with the tree, the demo state and the context, and with nothing else."""
         from facade.models import Blok

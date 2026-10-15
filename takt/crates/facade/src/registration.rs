@@ -242,7 +242,7 @@ async fn register_blok(
     let catalog = Catalog::get_or_create(conn, catalog_name, agent.organization).await?;
     let diagnostics = validate_manifest_against_catalog(
         &catalog,
-        Some(&blok.components),
+        blok.components.as_deref(),
         blok.context,
         blok.demo_state.as_ref(),
     )?;
@@ -259,7 +259,7 @@ async fn register_blok(
     )
     .bind(&blok.key)
     .bind(&blok.description)
-    .bind(serde_json::to_value(&blok.components).expect("components serialize"))
+    .bind(serde_json::to_value(blok.components.as_deref().unwrap_or_default()).expect("components serialize"))
     .bind(serde_json::Value::Object(blok.demo_state.clone().unwrap_or_default()))
     .bind(dump_diagnostics(&diagnostics))
     .bind(agent.user)

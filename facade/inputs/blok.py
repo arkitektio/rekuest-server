@@ -56,6 +56,7 @@ class CreateBlokInputModel(BaseModel):
         default=None,
         description="The schema of the blok. This can be used to validate the blok input and output.",
     )
+    source: str | None = Field(default=None, description="The blok as BSX, which the server parses into `components`: send one of the two.")
     demo_state: dict[str, JSON] | None = Field(
         default=None,
         description="The initial state of the blok. This is used to set the initial state of the blok when it is materialized.",
@@ -72,7 +73,10 @@ class CreateBlokInputModel(BaseModel):
 
     @model_validator(mode="after")
     def check_manifest(self) -> Self:
-        """The component tree is coherent with the declared dependencies and demo state."""
+        """Sent one way; the component tree coherent with the declared dependencies and demo state.
+
+        A source is checked once ``createBlok`` has had takt parse it into components."""
+        rimodels.check_blok_sent_once(self.components, self.source, required=False)
         rimodels.check_blok_manifest(self.components, {dep.key for dep in self.dependencies or []}, None if self.demo_state is None else set(self.demo_state))
         rimodels.check_blok_target(self.context, self.for_model, self.for_node)
         return self
@@ -85,6 +89,7 @@ class CreateBlokInput:
     description: str | None = None
     catalog: str | None = None
     components: list[ritypes.ComponentNodeInput] | None = None
+    source: str | None = None
     demo_state: scalars.Args | None = None
     # Nullable, not defaulted: a client generated from the schema must not have to pass it.
     context: renums.ComponentContext | None = None
@@ -102,6 +107,13 @@ class UpdateBlokInputModel(BaseModel):
         default=None,
         description="The full component tree of the blok. Replaces the existing tree when provided.",
     )
+    source: str | None = Field(default=None, description="The blok as BSX, which the server parses into the tree it replaces the existing one with: send it or `components`, not both.")
+
+    @model_validator(mode="after")
+    def check_sent_once(self) -> Self:
+        """A new tree comes as components or as source, not both."""
+        rimodels.check_blok_sent_once(self.components, self.source, required=False)
+        return self
     demo_state: dict[str, JSON] | None = Field(
         default=None,
         description="The demo state used to preview this blok. Replaces the existing demo state when provided.",
@@ -122,6 +134,7 @@ class UpdateBlokInput:
     name: str | None = None
     description: str | None = None
     components: list[ritypes.ComponentNodeInput] | None = None
+    source: str | None = None
     demo_state: scalars.Args | None = None
     catalog: str | None = None
     dependencies: list[ritypes.AgentDependencyInput] | None = None
