@@ -213,7 +213,7 @@ class Implementation(models.Model):
         null=True,
         blank=True,
         related_name="drawn_implementations",
-        help_text="The agent's logo blok (context LOGO) that draws this implementation's action, if it declared one.",
+        help_text="The agent's action logo blok (context ACTION_LOGO) that draws this implementation's action, if it declared one.",
     )
 
     class Meta:

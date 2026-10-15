@@ -79,6 +79,11 @@ type Action {
   definedAt: DateTime!
 
   """
+  The action logo that draws this action: that of the implementation most recently registered with one (`Action.latest_logo`, kept by takt). Each implementation has its own (`Implementation.logo`); an action without one is drawn by its agent's default logo.
+  """
+  logo: Blok
+
+  """
   How many of its implementations sit on an agent that can take work now (connected, or a webhook agent) — one per agent. Kept by the database as agents connect and leave, a moment behind (takt recomputes it on commit); a crashed agent counts until takt's stale sweep notices (seconds).
   """
   liveImplementations: Int!
@@ -102,11 +107,6 @@ type Action {
 
   """The triggers that run this action."""
   triggers(filters: TriggerFilter, ordering: [TriggerOrder!]! = [], pagination: OffsetPaginationInput): [Trigger!]!
-
-  """
-  A logo that draws this action: that of the implementation most recently registered with one. Each implementation has its own (`Implementation.logo`); an action without one is drawn by its agent's default logo.
-  """
-  logo: Blok
 
   """
   This action's stored vector, as `<model id>:<floats>`. Null until it has been indexed.

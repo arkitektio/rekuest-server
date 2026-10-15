@@ -496,6 +496,18 @@ pub async fn implement_agent(
         .execute(&mut *conn)
         .await?;
     }
+    // Each action keeps the logo of its implementation most recently registered with one
+    // (`Action.latest_logo`): what clients draw it by.
+    sqlx::query(
+        "UPDATE facade_action a
+            SET latest_logo_id = (SELECT i.logo_id FROM facade_implementation i
+                                   WHERE i.action_id = a.id AND i.logo_id IS NOT NULL
+                                   ORDER BY i.updated_at DESC, i.id DESC LIMIT 1)
+          WHERE a.id IN (SELECT action_id FROM facade_implementation WHERE id = ANY($1))",
+    )
+    .bind(&created_implementations)
+    .execute(&mut *conn)
+    .await?;
 
     // The names the agent gives its files. The files themselves are the organization's
     // `facade_asset` rows of the same ref, which the agent uploads after it registered,

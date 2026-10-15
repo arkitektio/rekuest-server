@@ -1104,6 +1104,18 @@ async fn an_implementation_is_drawn_by_the_action_logo_blok_it_names() {
         .unwrap()
     };
 
+    let action_logo_of_scan = || async {
+        sqlx::query_scalar::<_, Option<String>>(
+            "SELECT b.name FROM facade_implementation i JOIN facade_action a ON a.id = i.action_id
+               LEFT JOIN facade_blok b ON b.id = a.latest_logo_id
+              WHERE i.agent_id = $1 AND i.interface = 'scan'",
+        )
+        .bind(t.agent)
+        .fetch_one(&t.db)
+        .await
+        .unwrap()
+    };
+
     let crop = action_logo("crop", json!([path(0)]), json!({"task": null}));
     t.register(drawn_by(
         payload(&[], "gt", ("a", "b"), json!([crop.clone()])),
@@ -1112,6 +1124,8 @@ async fn an_implementation_is_drawn_by_the_action_logo_blok_it_names() {
     .await
     .unwrap();
     assert_eq!(logo_of_scan().await.as_deref(), Some("crop"));
+    // The action keeps the logo of its implementation last registered with one.
+    assert_eq!(action_logo_of_scan().await.as_deref(), Some("crop"));
     // Registered again without one, the implementation is drawn by none.
     t.register(drawn_by(
         payload(&[], "gt", ("a", "b"), json!([crop.clone()])),
@@ -1120,6 +1134,7 @@ async fn an_implementation_is_drawn_by_the_action_logo_blok_it_names() {
     .await
     .unwrap();
     assert_eq!(logo_of_scan().await, None);
+    assert_eq!(action_logo_of_scan().await, None);
 
     let panel = json!({"key": "panel", "components": [{"id": "root", "component": "Box"}]});
     // An agent's logo keeps any SVG colour, but draws no action.

@@ -253,7 +253,7 @@ class TestGraphQLAgents:
 
     async def test_an_implementation_and_its_action_are_drawn_by_a_logo(self, authenticated_context: HttpContext):
         """`Implementation.logo` is the blok it named; `Action.logo` the logo of one of its implementations."""
-        from facade.models import Blok, Implementation, UICatalog
+        from facade.models import Action, Blok, Implementation, UICatalog
         from rekuest_core.inputs.models import DefinitionInputModel, ImplementationInputModel
         from tests import registered
 
@@ -268,6 +268,8 @@ class TestGraphQLAgents:
             catalog, _ = UICatalog.objects.get_or_create(organization=agent.organization, name="orkestrator")
             logo = Blok.objects.create(organization=agent.organization, creator=agent.user, catalog=catalog, name="crop", context="ACTION_LOGO")
             Implementation.objects.filter(id=implementation.id).update(logo=logo)
+            # What takt writes as it links the logo.
+            Action.objects.filter(id=implementation.action_id).update(latest_logo=logo)
             return str(implementation.id), str(plain.id), str(implementation.action_id)
 
         implementation_id, plain_id, action_id = await sync_to_async(implement)()

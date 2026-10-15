@@ -91,6 +91,14 @@ class Action(EmbeddedDescriptionMixin, models.Model):
         help_text="The organization this Action belongs to",
     )
     defined_at = models.DateTimeField(auto_created=True, auto_now_add=True, db_default=Now())
+    latest_logo = models.ForeignKey(
+        "Blok",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drawn_actions",
+        help_text="The action logo blok of the implementation most recently registered with one. takt keeps it as agents register.",
+    )
 
     args = models.JSONField(default=list, help_text="Inputs for this Action", db_default=[])
     returns = models.JSONField(default=list, help_text="Outputs for this Action", db_default=[])
