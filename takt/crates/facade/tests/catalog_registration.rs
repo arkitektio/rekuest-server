@@ -376,6 +376,90 @@ async fn components_are_held_to_their_declared_placement() {
 }
 
 #[tokio::test]
+async fn a_logo_blok_is_one_svg_and_control_flow_takes_its_context() {
+    let Some(t) = tenant().await else { return };
+    t.catalog(
+        "electron",
+        json!([]),
+        json!([
+            {"name": "Box"},
+            {"name": "foreach", "inherits_context": true},
+            {"name": "SVG", "children_context": "LOGO", "not_downstream_of": ["SVG"]},
+            {"name": "Path", "context": "LOGO", "downstream_of": ["SVG"], "accepts_children": false},
+            {"name": "Scene", "children_context": "SCENE", "not_downstream_of": ["Scene"]},
+            {"name": "Model", "context": "SCENE", "downstream_of": ["Scene"]},
+        ]),
+    )
+    .await;
+    let blok = |context: &str, components: Value| json!([{"key": "view", "catalog": "electron", "context": context, "components": components}]);
+    let looped = |child: Value| json!({"id": "loop", "component": "foreach", "children": [child]});
+    let path = json!({"id": "p", "component": "Path"});
+
+    for bloks in [
+        blok(
+            "LOGO",
+            json!([{"id": "logo", "component": "SVG", "children": [looped(path.clone())]}]),
+        ),
+        blok(
+            "SCENE",
+            json!([{"id": "scene", "component": "Scene", "children": [
+            looped(json!({"id": "m", "component": "Model"}))]}]),
+        ),
+        blok(
+            "HTML",
+            json!([{"id": "root", "component": "Box", "children": [
+            {"id": "logo", "component": "SVG", "children": [path.clone()]}]}]),
+        ),
+    ] {
+        t.register(payload(&[], "gt", ("a", "b"), bloks))
+            .await
+            .unwrap();
+    }
+
+    for (bloks, message) in [
+        (
+            blok("LOGO", json!([path.clone()])),
+            "the root of a logo blok must be a 'SVG', not 'Path'",
+        ),
+        (
+            blok(
+                "LOGO",
+                json!([{"id": "logo", "component": "SVG"}, {"id": "other", "component": "SVG"}]),
+            ),
+            "a logo blok has exactly one root, a 'SVG', not 2 roots",
+        ),
+        (
+            blok(
+                "LOGO",
+                json!([looped(json!({"id": "logo", "component": "SVG"}))]),
+            ),
+            "the root of a logo blok must be a 'SVG', not 'foreach'",
+        ),
+        (
+            blok(
+                "HTML",
+                json!([{"id": "root", "component": "Box", "children": [path.clone()]}]),
+            ),
+            "component 'Path' is a logo component and cannot be placed in the html context",
+        ),
+        (
+            blok(
+                "LOGO",
+                json!([{"id": "logo", "component": "SVG", "children": [
+                looped(json!({"id": "b", "component": "Box"}))]}]),
+            ),
+            "component 'Box' is a html component and cannot be placed in the logo context",
+        ),
+    ] {
+        let refused = t
+            .register(payload(&[], "gt", ("a", "b"), bloks))
+            .await
+            .unwrap_err();
+        assert!(refused.contains(message), "{refused}");
+    }
+}
+
+#[tokio::test]
 async fn a_scene_blok_opens_a_scene_names_its_models_and_may_be_the_default() {
     let Some(t) = tenant().await else { return };
     t.catalog(

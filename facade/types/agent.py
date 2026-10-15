@@ -12,12 +12,13 @@ from kante.types import Info
 
 from facade import enums, filters, liveness, models
 from facade.types.base import build_prescoped_queryset, row_of
+from rekuest_core.enums import ComponentContext
 
 if TYPE_CHECKING:
     # Named in annotations only: strawberry resolves them when it builds the schema.
     from facade.types.asset import AgentAsset
     from facade.types.auth import App, Client, Device, Organization, Release, User
-    from facade.types.blok import BlokAgentMapping
+    from facade.types.blok import BlokAgentMapping, MaterializedBlok
     from facade.types.implementation import Implementation
     from facade.types.schedule import Schedule
     from facade.types.session import Session
@@ -87,6 +88,12 @@ class Agent:
     def implementation(self, interface: str) -> Implementation | None:
         row = row_of(self, models.Agent)
         return cast("Implementation | None", row.implementations.filter(interface=interface).first())
+
+    @strawberry_django.field(description="The blok this agent declared as its default for a context, if any: its panel, its scene or its logo.")
+    def default_blok(self, context: ComponentContext) -> MaterializedBlok | None:
+        row = row_of(self, models.Agent)
+        found = row.declared_materialized_bloks.filter(is_default=True, blok__context=context.value).first()
+        return cast("MaterializedBlok | None", found)
 
     @strawberry_django.field(description="Determine if the agent is currently active based on last seen timestamp.")
     def active(self) -> bool:

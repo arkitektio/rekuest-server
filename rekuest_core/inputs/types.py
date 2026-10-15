@@ -648,6 +648,7 @@ class CatalogComponentInput:
     accepts_children: bool = True
     context: enums.ComponentContext = enums.ComponentContext.HTML
     children_context: Optional[enums.ComponentContext] = None
+    inherits_context: bool = False
     downstream_of: List[str] = strawberry.field(default_factory=list)
     not_downstream_of: List[str] = strawberry.field(default_factory=list)
 

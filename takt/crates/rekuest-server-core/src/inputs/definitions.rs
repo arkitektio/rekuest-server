@@ -1101,6 +1101,9 @@ pub struct CatalogComponentInputModel {
     /// The context of its children when it differs from its own: the component bridges two renderers.
     #[serde(default)]
     pub children_context: Option<ComponentContext>,
+    /// Placed in any context, taking its parent's for itself and its children (control flow).
+    #[serde(default)]
+    pub inherits_context: bool,
     /// At least one of these must be an ancestor, at any depth. Empty means no requirement.
     #[serde(default)]
     pub downstream_of: Vec<String>,

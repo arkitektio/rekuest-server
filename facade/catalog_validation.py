@@ -31,8 +31,11 @@ from rekuest_core.inputs.models import iter_util_calls
 from rekuest_core.objects.models import DiagnosticModel
 
 UNKNOWN_OPERATION = "unknown_operation"
-# The one component a scene blok may have as its root.
-SCENE_ROOT_COMPONENT = "Scene"
+# The one component a blok of each of these contexts may have as its root.
+CONTEXT_ROOTS = {
+    enums.ComponentContext.SCENE: "Scene",
+    enums.ComponentContext.LOGO: "SVG",
+}
 Widget = rimodels._AssignWidgetBase | rimodels._ReturnWidgetBase
 
 
@@ -185,7 +188,8 @@ def validate_components_against_catalogs(
 ) -> list[DiagnosticModel]:
     """Every component, prop and operation a component tree uses is provided by base plus ``catalogs``.
 
-    ``context`` is the blok's own: a scene blok has one root, the scene, whatever is registered.
+    ``context`` is the blok's own: a scene blok has one root, the scene, and a logo blok one
+    ``SVG``, whatever is registered.
     """
     operations = resolve_operations(catalogs)
     component_specs = resolve_components(catalogs)
@@ -199,12 +203,14 @@ def validate_components_against_catalogs(
             inner = _check_placement(node.component, ancestors, context, component_specs, owner)
             visit(node.children, (*ancestors, node.component), inner)
 
-    if context == enums.ComponentContext.SCENE:
+    root = CONTEXT_ROOTS.get(context)
+    if root is not None:
         roots = components or []
+        kind = context.value.lower()
         if len(roots) != 1:
-            raise ValueError(f"a scene blok has exactly one root, a {SCENE_ROOT_COMPONENT!r}, not {len(roots)} roots")
-        if roots[0].component != SCENE_ROOT_COMPONENT:
-            raise ValueError(f"component {roots[0].id!r}: the root of a scene blok must be a {SCENE_ROOT_COMPONENT!r}, not {roots[0].component!r}")
+            raise ValueError(f"a {kind} blok has exactly one root, a {root!r}, not {len(roots)} roots")
+        if roots[0].component != root:
+            raise ValueError(f"component {roots[0].id!r}: the root of a {kind} blok must be a {root!r}, not {roots[0].component!r}")
     visit(components, (), enums.ComponentContext.HTML)
     return diagnostics
 
@@ -219,18 +225,21 @@ def _check_placement(
     """Where a component sits in the tree, against what it declares; returns the context of its children.
 
     A tree starts in the html context. A component whose ``children_context`` differs from its
-    own bridges two renderers, and everything below it is checked in the new one.
+    own bridges two renderers, and everything below it is checked in the new one. One that
+    ``inherits_context`` sits in whichever context is in force and passes it on.
     """
     spec = component_specs.get(component) if component_specs is not None else None
     if spec is None:
         return context
-    if spec.context != context:
+    if not spec.inherits_context and spec.context != context:
         raise ValueError(f"{owner}: component {component!r} is a {spec.context.value.lower()} component and cannot be placed in the {context.value.lower()} context")
     if spec.downstream_of and not set(spec.downstream_of) & set(ancestors):
         raise ValueError(f"{owner}: component {component!r} must be inside one of {sorted(spec.downstream_of)}")
     forbidden = sorted(set(spec.not_downstream_of) & set(ancestors))
     if forbidden:
         raise ValueError(f"{owner}: component {component!r} must not be inside {forbidden}")
+    if spec.inherits_context:
+        return context
     return spec.children_context or spec.context
 
 

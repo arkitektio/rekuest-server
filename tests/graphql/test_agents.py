@@ -221,3 +221,32 @@ class TestGraphQLAgents:
 
         # Should fail due to invalid input field
         assert result.errors is not None
+
+    async def test_an_agent_names_its_default_blok_per_context(self, authenticated_context: HttpContext):
+        """A client finds an agent's logo without listing every blok it declared."""
+        from facade.models import Blok, MaterializedBlok, UICatalog
+
+        ensured = await schema.execute(ENSURE_AGENT, context_value=authenticated_context, variable_values={"input": {"name": "Logo Agent"}})
+        agent_id = ensured.data["ensureAgent"]["id"]
+
+        def declare() -> None:
+            agent = Agent.objects.get(id=agent_id)
+            catalog, _ = UICatalog.objects.get_or_create(organization=agent.organization, name="orkestrator")
+            for name, context, default in (("panel", "HTML", True), ("logo", "LOGO", True), ("old-logo", "LOGO", False)):
+                blok = Blok.objects.create(organization=agent.organization, creator=agent.user, catalog=catalog, name=name, context=context)
+                MaterializedBlok.objects.create(blok=blok, declared_by=agent, name=name, description=name, is_default=default)
+
+        await sync_to_async(declare)()
+
+        query = """
+            query($id: ID!) {
+                agent(id: $id) {
+                    logo: defaultBlok(context: LOGO) { name blok { context } }
+                    panel: defaultBlok(context: HTML) { name }
+                    scene: defaultBlok(context: SCENE) { name }
+                }
+            }
+        """
+        result = await schema.execute(query, context_value=authenticated_context, variable_values={"id": agent_id})
+        assert not result.errors, result.errors
+        assert result.data["agent"] == {"logo": {"name": "logo", "blok": {"context": "LOGO"}}, "panel": {"name": "panel"}, "scene": None}

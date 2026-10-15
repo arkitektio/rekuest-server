@@ -144,6 +144,7 @@ class AssetKind(str, Enum):
 class ComponentContext(str, Enum):
     HTML = "HTML"
     SCENE = "SCENE"
+    LOGO = "LOGO"
 
 
 @strawberry.enum(description="Severity of a registration finding. Errors are never stored (they abort registration), so only WARNING exists.")

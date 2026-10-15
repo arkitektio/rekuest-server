@@ -1312,6 +1312,7 @@ class CatalogComponentInputModel(BaseModel):
     accepts_children: bool = Field(default=True, description="Whether ComponentNode.children may be nested under this component.")
     context: enums.ComponentContext = Field(default=enums.ComponentContext.HTML, description="The context this component may be placed in.")
     children_context: enums.ComponentContext | None = Field(default=None, description="The context in force for this component's children, when it differs from its own: such a component bridges two renderers.")
+    inherits_context: bool = Field(default=False, description="Whether the component may be placed in any context, taking its parent's for itself and its children (control flow such as foreach or if). Its context is then ignored.")
     downstream_of: list[str] = Field(default_factory=list, description="Component names of which at least one must be an ancestor, at any depth. Empty means no requirement.")
     not_downstream_of: list[str] = Field(default_factory=list, description="Component names of which none may be an ancestor.")
 

@@ -397,6 +397,7 @@ class CatalogComponent:
     accepts_children: bool = strawberry.field(description="Whether children may be nested under this component.")
     context: enums.ComponentContext = strawberry.field(description="The context this component may be placed in.")
     children_context: Optional[enums.ComponentContext] = strawberry.field(default=None, description="The context in force for this component's children, when it differs from its own.")
+    inherits_context: bool = strawberry.field(default=False, description="Whether the component may be placed in any context, taking its parent's for itself and its children.")
     downstream_of: List[str] = strawberry.field(description="Component names of which at least one must be an ancestor, at any depth.")
     not_downstream_of: List[str] = strawberry.field(description="Component names of which none may be an ancestor.")
 

@@ -25,8 +25,14 @@ use sqlx::PgConnection;
 
 pub const UNKNOWN_OPERATION: &str = "unknown_operation";
 pub const UNKNOWN_CATALOG: &str = "unknown_catalog";
-/// The one component a scene blok may have as its root.
-pub const SCENE_ROOT_COMPONENT: &str = "Scene";
+/// The one component a blok of a context may have as its root, for the contexts that have one.
+pub fn context_root(context: ComponentContext) -> Option<&'static str> {
+    match context {
+        ComponentContext::SCENE => Some("Scene"),
+        ComponentContext::LOGO => Some("SVG"),
+        ComponentContext::HTML => None,
+    }
+}
 
 /// A non-fatal registration finding (`DiagnosticModel`), dumped as stored on the row.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -387,7 +393,8 @@ fn check_asset_prop(
 }
 
 /// Every component, prop and operation a tree uses is provided (`validate_components_against_catalogs`).
-/// `context` is the blok's own: a scene blok has one root, the scene, whatever is registered.
+/// `context` is the blok's own: a scene blok has one root, the scene, and a logo blok one `SVG`,
+/// whatever is registered.
 pub fn validate_components_against_catalogs(
     catalogs: &[Catalog],
     components: Option<&[ComponentNodeInputModel]>,
@@ -396,20 +403,21 @@ pub fn validate_components_against_catalogs(
     let operations = resolve_operations(catalogs)?;
     let specs = resolve_components(catalogs)?;
     let label = catalog_label(catalogs);
-    if context == ComponentContext::SCENE {
+    if let Some(required) = context_root(context) {
+        let kind = context_name(context);
         let roots = components.unwrap_or_default();
         let [root] = roots else {
             return Err(format!(
-                "a scene blok has exactly one root, a {}, not {} roots",
-                repr_str(SCENE_ROOT_COMPONENT),
+                "a {kind} blok has exactly one root, a {}, not {} roots",
+                repr_str(required),
                 roots.len()
             ));
         };
-        if root.component != SCENE_ROOT_COMPONENT {
+        if root.component != required {
             return Err(format!(
-                "component {}: the root of a scene blok must be a {}, not {}",
+                "component {}: the root of a {kind} blok must be a {}, not {}",
                 repr_str(&root.id),
-                repr_str(SCENE_ROOT_COMPONENT),
+                repr_str(required),
                 repr_str(&root.component)
             ));
         }
@@ -469,12 +477,14 @@ fn context_name(context: ComponentContext) -> &'static str {
     match context {
         ComponentContext::HTML => "html",
         ComponentContext::SCENE => "scene",
+        ComponentContext::LOGO => "logo",
     }
 }
 
 /// Where a component sits in the tree, against what it declares; the context of its children
 /// (`_check_placement`). A tree starts in the html context, and a component whose
-/// `children_context` differs from its own bridges two renderers.
+/// `children_context` differs from its own bridges two renderers. One that `inherits_context`
+/// sits in whichever context is in force and passes it on.
 fn check_placement(
     component: &str,
     ancestors: &[&str],
@@ -485,7 +495,7 @@ fn check_placement(
     let Some(spec) = specs.and_then(|specs| specs.get(component)) else {
         return Ok(context);
     };
-    if spec.context != context {
+    if !spec.inherits_context && spec.context != context {
         return Err(format!(
             "{owner}: component {} is a {} component and cannot be placed in the {} context",
             repr_str(component),
@@ -522,6 +532,9 @@ fn check_placement(
             repr_str(component),
             py_list(&forbidden)
         ));
+    }
+    if spec.inherits_context {
+        return Ok(context);
     }
     Ok(spec.children_context.unwrap_or(spec.context))
 }

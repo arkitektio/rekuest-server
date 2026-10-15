@@ -240,6 +240,80 @@ class TestUiCatalog:
         assert [(blok["name"], blok["forNode"], blok["context"]) for blok in found.data["bloksForModel"]] == [("catalogued", "turret", "HTML")]
         assert found.data["bloksForModel"][0]["componentTree"][0]["component"] == "Box"
 
+    async def test_a_logo_blok_is_one_svg(self, authenticated_context: HttpContext) -> None:
+        """The root of a logo blok is an ``SVG``; the shapes it draws stay inside one."""
+        await _register(
+            authenticated_context,
+            {
+                **CATALOG,
+                "components": [
+                    {"name": "Box"},
+                    {"name": "SVG", "childrenContext": "LOGO", "notDownstreamOf": ["SVG"]},
+                    {"name": "G", "context": "LOGO", "downstreamOf": ["SVG"]},
+                    {"name": "Path", "context": "LOGO", "downstreamOf": ["SVG"], "acceptsChildren": False},
+                ],
+            },
+        )
+        logo = [{"id": "logo", "component": "SVG", "children": [{"id": "g", "component": "G", "children": [{"id": "p", "component": "Path"}]}]}]
+
+        accepted = await _create_blok(authenticated_context, logo, context="LOGO")
+        assert not accepted.errors, accepted.errors
+        from facade.models import Blok
+
+        assert await sync_to_async(lambda: Blok.objects.get(name="catalogued").context)() == "LOGO"
+        # An html blok may draw an SVG too, anywhere it likes.
+        embedded = await _create_blok(authenticated_context, [{"id": "root", "component": "Box", "children": logo}])
+        assert not embedded.errors, embedded.errors
+
+        for roots, context, message in (
+            ([{"id": "p", "component": "Path"}], "LOGO", "the root of a logo blok must be a 'SVG', not 'Path'"),
+            ([{"id": "root", "component": "Box", "children": logo}], "LOGO", "the root of a logo blok must be a 'SVG', not 'Box'"),
+            (logo + [{"id": "other", "component": "SVG"}], "LOGO", "a logo blok has exactly one root, a 'SVG', not 2 roots"),
+            ([{"id": "root", "component": "Box", "children": [{"id": "p", "component": "Path"}]}], "HTML", "component 'Path' is a logo component and cannot be placed in the html context"),
+        ):
+            refused = await _create_blok(authenticated_context, roots, context=context)
+            assert refused.errors and message in refused.errors[0].message, refused.errors
+
+    async def test_control_flow_takes_the_context_it_is_placed_in(self, authenticated_context: HttpContext) -> None:
+        """A component that inherits its context sits in a scene or a logo, and its children stay there."""
+        await _register(
+            authenticated_context,
+            {
+                **CATALOG,
+                "components": [
+                    {"name": "Box"},
+                    {"name": "foreach", "inheritsContext": True},
+                    {"name": "Scene", "childrenContext": "SCENE", "notDownstreamOf": ["Scene"]},
+                    {"name": "Model", "context": "SCENE", "downstreamOf": ["Scene"]},
+                    {"name": "SVG", "childrenContext": "LOGO", "notDownstreamOf": ["SVG"]},
+                    {"name": "Path", "context": "LOGO", "downstreamOf": ["SVG"], "acceptsChildren": False},
+                ],
+            },
+        )
+
+        def loop(*children: dict, id: str = "loop") -> dict:
+            return {"id": id, "component": "foreach", "children": list(children)}
+
+        for roots, context in (
+            ([{"id": "root", "component": "SVG", "children": [loop({"id": "p", "component": "Path"})]}], "LOGO"),
+            ([{"id": "root", "component": "Scene", "children": [loop({"id": "m", "component": "Model"})]}], "SCENE"),
+            ([loop({"id": "b", "component": "Box"})], "HTML"),
+        ):
+            accepted = await _create_blok(authenticated_context, roots, context=context)
+            assert not accepted.errors, accepted.errors
+
+        # What the loop holds is still checked in the context it passes on.
+        boxed = await _create_blok(authenticated_context, [{"id": "root", "component": "SVG", "children": [loop({"id": "b", "component": "Box"})]}], context="LOGO")
+        assert boxed.errors and "component 'Box' is a html component and cannot be placed in the logo context" in boxed.errors[0].message
+        # The context is the blok's, not something a loop at the root can stand in for.
+        rooted = await _create_blok(authenticated_context, [loop({"id": "root", "component": "SVG"})], context="LOGO")
+        assert rooted.errors and "the root of a logo blok must be a 'SVG', not 'foreach'" in rooted.errors[0].message
+
+        listed = await schema.execute("query { uiCatalogs { name components { name inheritsContext } } }", context_value=authenticated_context)
+        assert not listed.errors, listed.errors
+        (electron,) = [catalog for catalog in listed.data["uiCatalogs"] if catalog["name"] == "electron"]
+        assert {component["name"] for component in electron["components"] if component["inheritsContext"]} == {"foreach"}
+
     async def test_unregistered_catalog_still_validates_base(self, authenticated_context: HttpContext) -> None:
         """A catalog that only exists because a blok named it checks no components, but base operations still apply."""
         result = await _create_blok(authenticated_context, [{"id": "root", "component": "Whatever", "props": [{"key": "x", "utilCall": {"operation": "anything"}}]}], catalog="fresh")
