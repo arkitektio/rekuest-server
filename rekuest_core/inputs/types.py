@@ -514,6 +514,7 @@ class ImplementationInput:
     effects: enums.Effects = enums.Effects.UNKNOWN
     execution: enums.Execution = enums.Execution.PLAIN
     code_hash: str | None = None
+    logo: str | None = None
     dependencies: list[AgentDependencyInput] = strawberry.field(default_factory=list)
 
 

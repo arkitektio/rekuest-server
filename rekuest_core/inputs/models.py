@@ -946,6 +946,7 @@ class ImplementationInputModel(BaseModel):
     effects: enums.Effects = Field(default=enums.Effects.UNKNOWN, description="What running this implementation again would do to the world. Informational: shown to whoever decides about a lost task.")
     execution: enums.Execution = Field(default=enums.Execution.PLAIN, description="How this implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies.")
     code_hash: str | None = Field(default=None, description="A hash of the implementation's code. A workflow is only resumed by an implementation with the same hash.")
+    logo: str | None = Field(default=None, description="The key of the agent's logo blok (context LOGO) that draws this action.")
 
     @model_validator(mode="after")
     def check_widget_targets(self) -> Self:

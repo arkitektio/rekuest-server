@@ -1065,3 +1065,112 @@ async fn a_descriptor_is_declared_for_its_structure() {
     .await
     .unwrap();
 }
+
+#[tokio::test]
+async fn an_implementation_is_drawn_by_the_logo_blok_it_names() {
+    let Some(t) = tenant().await else { return };
+    t.catalog(
+        "electron",
+        json!([]),
+        json!([
+            {"name": "SVG", "children_context": "LOGO", "not_downstream_of": ["SVG"]},
+            {"name": "Path", "context": "LOGO", "downstream_of": ["SVG"], "accepts_children": false,
+             "props": [{"key": "d", "kind": "STRING"}]},
+            {"name": "foreach", "inherits_context": true, "props": [{"key": "items", "kind": "LIST"}]},
+        ]),
+    )
+    .await;
+    let logo = |key: &str, components: Value, demo_state: Value| json!({"key": key, "catalog": "electron", "context": "LOGO", "components": components, "demo_state": demo_state});
+    let svg = |children: Value| json!([{"id": "logo", "component": "SVG", "children": children}]);
+    let path = |i: usize| json!({"id": format!("p{i}"), "component": "Path", "props": [{"key": "d", "static_value": "M0 0"}]});
+    let drawn_by = |mut payload: Value, name: Option<&str>| {
+        payload["implementations"][0]["logo"] = json!(name);
+        payload
+    };
+    let logo_of_scan = || async {
+        sqlx::query_scalar::<_, Option<String>>(
+            "SELECT b.name FROM facade_implementation i LEFT JOIN facade_blok b ON b.id = i.logo_id
+              WHERE i.agent_id = $1 AND i.interface = 'scan'",
+        )
+        .bind(t.agent)
+        .fetch_one(&t.db)
+        .await
+        .unwrap()
+    };
+
+    let crop = logo("crop", svg(json!([path(0)])), json!({}));
+    t.register(drawn_by(
+        payload(&[], "gt", ("a", "b"), json!([crop.clone()])),
+        Some("crop"),
+    ))
+    .await
+    .unwrap();
+    assert_eq!(logo_of_scan().await.as_deref(), Some("crop"));
+    // Registered again without one, the implementation is drawn by none.
+    t.register(drawn_by(
+        payload(&[], "gt", ("a", "b"), json!([crop.clone()])),
+        None,
+    ))
+    .await
+    .unwrap();
+    assert_eq!(logo_of_scan().await, None);
+
+    let panel = json!({"key": "panel", "components": [{"id": "root", "component": "Box"}]});
+    for name in ["nowhere", "panel"] {
+        let refused = t
+            .register(drawn_by(
+                payload(&[], "gt", ("a", "b"), json!([crop.clone(), panel.clone()])),
+                Some(name),
+            ))
+            .await
+            .unwrap_err();
+        assert!(
+            refused.contains(&format!(
+                "is drawn by the logo '{name}', which is not a logo blok this agent declares"
+            )),
+            "{refused}"
+        );
+    }
+
+    let lamps = |n: usize| json!({"lamps": (0..n).collect::<Vec<_>>()});
+    let looped = json!([{"id": "loop", "component": "foreach", "props": [{"key": "items", "dynamic_value": {"path": "lamps"}}],
+                         "children": [path(0)]}]);
+    t.register(payload(
+        &[],
+        "gt",
+        ("a", "b"),
+        json!([logo("lamps", svg(looped.clone()), lamps(64))]),
+    ))
+    .await
+    .unwrap();
+    for (blok, message) in [
+        (
+            logo(
+                "big",
+                svg(json!((0..200).map(path).collect::<Vec<_>>())),
+                json!({}),
+            ),
+            "a logo has at most 200 components, this one 201",
+        ),
+        (
+            logo("lamps", svg(looped.clone()), lamps(65)),
+            "a foreach in a logo draws at most 64 items, its demo state has 65",
+        ),
+        (
+            logo(
+                "long",
+                svg(
+                    json!([{"id": "p", "component": "Path", "props": [{"key": "d", "static_value": "M".repeat(16385)}]}]),
+                ),
+                json!({}),
+            ),
+            "a logo holds at most 16384 characters of path data, this one 16385",
+        ),
+    ] {
+        let refused = t
+            .register(payload(&[], "gt", ("a", "b"), json!([blok])))
+            .await
+            .unwrap_err();
+        assert!(refused.contains(message), "{refused}");
+    }
+}

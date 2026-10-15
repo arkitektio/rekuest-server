@@ -71,7 +71,7 @@ def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
     model = input.to_pydantic()
     organization = info.context.request.organization
     catalog = _catalog_for(info, model.catalog)
-    diagnostics = validate_manifest_against_catalog(catalog, model.components, model.context)
+    diagnostics = validate_manifest_against_catalog(catalog, model.components, model.context, model.demo_state)
 
     # ``organization`` is part of the lookup, not the defaults: keyed on name alone this was a
     # global upsert, so any user could overwrite another organization's blok by name.
@@ -126,7 +126,7 @@ def update_blok(info: Info, input: inputs.UpdateBlokInput) -> types.Blok:
     dependency_keys = {dep.key for dep in model.dependencies} if model.dependencies is not None else set(blok.dependencies.values_list("key", flat=True))
     components = [rimodels.ComponentNodeInputModel(**c) for c in blok.components]
     rimodels.check_blok_manifest(components, dependency_keys, set(blok.demo_state or {}))
-    blok.diagnostics = dump_diagnostics(validate_manifest_against_catalog(blok.catalog, components, renums.ComponentContext(blok.context)))
+    blok.diagnostics = dump_diagnostics(validate_manifest_against_catalog(blok.catalog, components, renums.ComponentContext(blok.context), blok.demo_state))
 
     blok.save()
 

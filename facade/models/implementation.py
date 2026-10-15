@@ -207,6 +207,14 @@ class Implementation(models.Model):
         blank=True,
         help_text="A hash of the implementation's code. A workflow is only resumed by an implementation with the same hash.",
     )
+    logo = models.ForeignKey(
+        "Blok",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drawn_implementations",
+        help_text="The agent's logo blok (context LOGO) that draws this implementation's action, if it declared one.",
+    )
 
     class Meta:
         permissions = [("providable", "Can provide this implementation")]

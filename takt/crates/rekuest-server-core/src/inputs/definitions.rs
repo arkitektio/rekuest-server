@@ -609,6 +609,9 @@ pub struct ImplementationInputModel {
     pub execution: Execution,
     #[serde(default)]
     pub code_hash: Option<String>,
+    /// The key of the agent's logo blok (context LOGO) that draws this action.
+    #[serde(default)]
+    pub logo: Option<String>,
 }
 
 impl ImplementationInputModel {
@@ -1196,6 +1199,25 @@ impl ImplementAgentInputModel {
         }
         for blok in self.bloks.iter_mut().flatten() {
             blok.validate()?;
+        }
+        // An implementation's logo is a logo blok the agent declares (`check_logos`).
+        let logos: HashSet<&str> = self
+            .bloks
+            .iter()
+            .flatten()
+            .filter(|blok| blok.context == ComponentContext::LOGO)
+            .map(|blok| blok.key.as_str())
+            .collect();
+        for implementation in self.implementations.iter().flatten() {
+            if let Some(logo) = implementation.logo.as_deref() {
+                if !logos.contains(logo) {
+                    return Err(ValidationError(format!(
+                        "implementation {} is drawn by the logo {}, which is not a logo blok this agent declares",
+                        repr_str(&implementation.interface),
+                        repr_str(logo)
+                    )));
+                }
+            }
         }
         let mut names = HashSet::new();
         for asset in self.assets.iter().flatten() {

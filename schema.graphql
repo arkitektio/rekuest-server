@@ -104,6 +104,11 @@ type Action {
   triggers(filters: TriggerFilter, ordering: [TriggerOrder!]! = [], pagination: OffsetPaginationInput): [Trigger!]!
 
   """
+  A logo that draws this action: that of the implementation most recently registered with one. Each implementation has its own (`Implementation.logo`); an action without one is drawn by its agent's default logo.
+  """
+  logo: Blok
+
+  """
   This action's stored vector, as `<model id>:<floats>`. Null until it has been indexed.
   """
   embedding: Embedding
@@ -2820,6 +2825,11 @@ type Implementation {
   """
   codeHash: String
 
+  """
+  The agent's logo blok (context LOGO) that draws this implementation's action, if it declared one.
+  """
+  logo: Blok
+
   """Constructed name for display, combining interface and agent name."""
   name: String!
 
@@ -2954,6 +2964,11 @@ input ImplementationInput {
   A hash of the implementation's code. A workflow is only resumed by an implementation with the same hash.
   """
   codeHash: String = null
+
+  """
+  The key of the agent's logo blok (context LOGO) that draws this action.
+  """
+  logo: String = null
 }
 
 type ImplementationMapping {

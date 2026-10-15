@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     # Named in annotations only: strawberry resolves them when it builds the schema.
     from facade.types.action import Action
     from facade.types.agent import Agent, Lock
+    from facade.types.blok import Blok
     from facade.types.dependency import Dependency, Resolution
     from facade.types.state import State
     from facade.types.task import Task
@@ -44,6 +45,7 @@ class Implementation:
     effects: renums.Effects = strawberry_django.field(description="What running this implementation again would do to the world. Informational: shown to whoever decides about a lost task.")
     execution: renums.Execution = strawberry_django.field(description="How this implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies.")
     code_hash: Optional[str] = strawberry_django.field(description="A hash of the implementation's code; a workflow is only resumed by an implementation with the same hash.")
+    logo: Optional["Blok"] = strawberry_django.field(description="The agent's logo blok (context LOGO) that draws this implementation's action, if it declared one.")
 
     @strawberry_django.field(description="Constructed name for display, combining interface and agent name.")
     def name(self) -> str:

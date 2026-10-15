@@ -1,8 +1,12 @@
 """Inputs for agent lifecycle controls (pin, bounce, kick, block, update)."""
 
+from typing import Self
+
 import strawberry
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from strawberry.experimental import pydantic
+
+from rekuest_core import enums
 
 from rekuest_core.inputs.models import AssetInputModel, BlokImplementationInputModel, ImplementationInputModel, LockImplementationInputModel, StateImplementationInputModel
 
@@ -119,3 +123,12 @@ class ImplementAgentInputModel(BaseModel):
         default=None,
         description="A unique hash of the agent definition. An agent can use this hash to check if its definition has changed and if it needs to update its implementations and states. This is used to optimize the update process by only updating the implementations and states that have changed.",
     )
+
+    @model_validator(mode="after")
+    def check_logos(self) -> Self:
+        """An implementation's logo is a logo blok the agent declares."""
+        logos = {blok.key for blok in self.bloks or [] if blok.context == enums.ComponentContext.LOGO}
+        for implementation in self.implementations or []:
+            if implementation.logo is not None and implementation.logo not in logos:
+                raise ValueError(f"implementation {implementation.interface!r} is drawn by the logo {implementation.logo!r}, which is not a logo blok this agent declares")
+        return self

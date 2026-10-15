@@ -399,6 +399,7 @@ pub fn validate_components_against_catalogs(
     catalogs: &[Catalog],
     components: Option<&[ComponentNodeInputModel]>,
     context: ComponentContext,
+    demo_state: Option<&serde_json::Map<String, Value>>,
 ) -> Result<Vec<Diagnostic>, String> {
     let operations = resolve_operations(catalogs)?;
     let specs = resolve_components(catalogs)?;
@@ -421,6 +422,9 @@ pub fn validate_components_against_catalogs(
                 repr_str(&root.component)
             ));
         }
+    }
+    if context == ComponentContext::LOGO {
+        check_logo_complexity(components.unwrap_or_default(), demo_state)?;
     }
     let mut diagnostics = vec![];
     let mut ancestors = vec![];
@@ -544,8 +548,109 @@ pub fn validate_manifest_against_catalog(
     catalog: &Catalog,
     components: Option<&[ComponentNodeInputModel]>,
     context: ComponentContext,
+    demo_state: Option<&serde_json::Map<String, Value>>,
 ) -> Result<Vec<Diagnostic>, String> {
-    validate_components_against_catalogs(std::slice::from_ref(catalog), components, context)
+    validate_components_against_catalogs(
+        std::slice::from_ref(catalog),
+        components,
+        context,
+        demo_state,
+    )
+}
+
+/// What a logo blok may hold at most: a logo is an icon.
+pub const LOGO_MAX_NODES: usize = 200;
+pub const LOGO_MAX_DEPTH: usize = 12;
+pub const LOGO_MAX_PATH_DATA: usize = 16 * 1024;
+pub const LOGO_MAX_FOREACH_ITEMS: usize = 64;
+const LOGO_PATH_DATA_PROPS: [&str; 2] = ["d", "points"];
+
+/// `check_logo_complexity`: how many components, how deep, how much path data, and how many
+/// items a foreach draws of the blok's demo state (a list it does not find there draws nothing).
+pub fn check_logo_complexity(
+    components: &[ComponentNodeInputModel],
+    demo_state: Option<&serde_json::Map<String, Value>>,
+) -> Result<(), String> {
+    fn visit(
+        node: &ComponentNodeInputModel,
+        depth: usize,
+        demo_state: Option<&serde_json::Map<String, Value>>,
+        nodes: &mut usize,
+        path_data: &mut usize,
+    ) -> Result<(), String> {
+        *nodes += 1;
+        if depth > LOGO_MAX_DEPTH {
+            return Err(format!(
+                "component {}: a logo nests at most {LOGO_MAX_DEPTH} deep",
+                repr_str(&node.id)
+            ));
+        }
+        for prop in node.props.iter().flatten() {
+            if LOGO_PATH_DATA_PROPS.contains(&prop.key.as_str()) {
+                if let Some(Value::String(data)) = &prop.static_value {
+                    *path_data += data.chars().count();
+                }
+            }
+            if node.component == "foreach" && prop.key == "items" {
+                let items = demo_items(prop, demo_state);
+                if items > LOGO_MAX_FOREACH_ITEMS {
+                    return Err(format!(
+                        "component {}: a foreach in a logo draws at most {LOGO_MAX_FOREACH_ITEMS} items, its demo state has {items}",
+                        repr_str(&node.id)
+                    ));
+                }
+            }
+        }
+        for child in node.children.iter().flatten() {
+            visit(child, depth + 1, demo_state, nodes, path_data)?;
+        }
+        Ok(())
+    }
+
+    let (mut nodes, mut path_data) = (0, 0);
+    for root in components {
+        visit(root, 1, demo_state, &mut nodes, &mut path_data)?;
+    }
+    if nodes > LOGO_MAX_NODES {
+        return Err(format!(
+            "a logo has at most {LOGO_MAX_NODES} components, this one {nodes}"
+        ));
+    }
+    if path_data > LOGO_MAX_PATH_DATA {
+        return Err(format!(
+            "a logo holds at most {LOGO_MAX_PATH_DATA} characters of path data, this one {path_data}"
+        ));
+    }
+    Ok(())
+}
+
+/// How many items a foreach's `items` gives in the demo state; 0 when it names none.
+fn demo_items(
+    prop: &ComponentPropInputModel,
+    demo_state: Option<&serde_json::Map<String, Value>>,
+) -> usize {
+    if let Some(Value::Array(items)) = &prop.static_value {
+        return items.len();
+    }
+    let Some(path) = prop.dynamic_value.as_ref().and_then(|d| d.path.as_deref()) else {
+        return 0;
+    };
+    let Some(state) = demo_state else { return 0 };
+    let mut value = &Value::Null;
+    let mut first = true;
+    for segment in path.split(['.', '/']).filter(|s| !s.is_empty()) {
+        let next = if first {
+            state.get(segment)
+        } else {
+            value.as_object().and_then(|object| object.get(segment))
+        };
+        first = false;
+        match next {
+            Some(found) => value = found,
+            None => return 0,
+        }
+    }
+    value.as_array().map_or(0, Vec::len)
 }
 
 /// A widget of a definition, assign or return side.

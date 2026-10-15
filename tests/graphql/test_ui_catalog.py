@@ -296,6 +296,52 @@ class TestUiCatalog:
         assert await hash_of([{"id": "other", "component": "Box"}]) != first
         assert await hash_of(box, demoState={"exposure": 2}) != first
 
+    async def test_a_logo_is_held_to_the_size_of_an_icon(self, authenticated_context: HttpContext) -> None:
+        """At most 200 components, 12 deep, 16 KB of path data, and 64 items per foreach of its demo state."""
+        await _register(
+            authenticated_context,
+            {
+                **CATALOG,
+                "components": [
+                    {"name": "SVG", "childrenContext": "LOGO", "notDownstreamOf": ["SVG"]},
+                    {"name": "G", "context": "LOGO", "downstreamOf": ["SVG"]},
+                    {"name": "Path", "context": "LOGO", "downstreamOf": ["SVG"], "acceptsChildren": False, "props": [{"key": "d", "kind": "STRING"}]},
+                    {"name": "foreach", "inheritsContext": True, "props": [{"key": "items", "kind": "LIST"}]},
+                ],
+            },
+        )
+
+        def svg(*children: dict) -> list[dict]:
+            return [{"id": "logo", "component": "SVG", "children": list(children)}]
+
+        def path(i: int, d: str = "M0 0") -> dict:
+            return {"id": f"p{i}", "component": "Path", "props": [{"key": "d", "staticValue": d}]}
+
+        def nested(depth: int) -> dict:
+            node = {"id": "g0", "component": "G"}
+            for i in range(1, depth):
+                node = {"id": f"g{i}", "component": "G", "children": [node]}
+            return node
+
+        loop = {"id": "loop", "component": "foreach", "props": [{"key": "items", "dynamicValue": {"path": "lamps"}}], "children": [path(0)]}
+
+        fits = await _create_blok(authenticated_context, svg(*(path(i) for i in range(199))), context="LOGO")
+        assert not fits.errors, fits.errors
+        drawn = await _create_blok(authenticated_context, svg(loop), context="LOGO", demoState={"lamps": list(range(64))})
+        assert not drawn.errors, drawn.errors
+
+        for components, demo_state, message in (
+            (svg(*(path(i) for i in range(200))), {}, "a logo has at most 200 components, this one 201"),
+            (svg(nested(12)), {}, "a logo nests at most 12 deep"),
+            (svg(path(0, "M" + "1" * 8192), path(1, "M" + "1" * 8192)), {}, "a logo holds at most 16384 characters of path data"),
+            (svg(loop), {"lamps": list(range(65))}, "a foreach in a logo draws at most 64 items, its demo state has 65"),
+        ):
+            refused = await _create_blok(authenticated_context, components, context="LOGO", demoState=demo_state)
+            assert refused.errors and message in refused.errors[0].message, refused.errors
+        # A panel draws as much as it likes.
+        panel = await _create_blok(authenticated_context, [{"id": "root", "component": "foreach", "children": svg(*(path(i) for i in range(300)))}])
+        assert not panel.errors, panel.errors
+
     async def test_control_flow_takes_the_context_it_is_placed_in(self, authenticated_context: HttpContext) -> None:
         """A component that inherits its context sits in a scene or a logo, and its children stay there."""
         await _register(

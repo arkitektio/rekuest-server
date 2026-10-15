@@ -21,6 +21,7 @@ from rekuest_core.objects import types as rtypes
 if TYPE_CHECKING:
     # Named in annotations only: strawberry resolves them when it builds the schema.
     from facade.types.auth import App, Organization
+    from facade.types.blok import Blok
     from facade.types.implementation import Implementation
     from facade.types.schedule import Schedule
     from facade.types.task import Task
@@ -51,6 +52,12 @@ class Action:
     tests: list["Action"] = strawberry_django.field(description="List of tests associated with the action.")
     protocols: list["Protocol"] = strawberry_django.field(description="Protocols associated with the action.")
     defined_at: datetime.datetime = strawberry_django.field(description="Timestamp when the action was defined.")
+
+    @strawberry_django.field(description="A logo that draws this action: that of the implementation most recently registered with one. Each implementation has its own (`Implementation.logo`); an action without one is drawn by its agent's default logo.")
+    def logo(self) -> Optional["Blok"]:
+        row = row_of(self, models.Action)
+        drawn = row.implementations.filter(logo__isnull=False).select_related("logo").order_by("-updated_at").first()
+        return cast("Blok | None", drawn.logo if drawn is not None else None)
     live_implementations: int = strawberry_django.field(
         description="How many of its implementations sit on an agent that can take work now (connected, or a webhook agent) — one per agent. Kept by the database as agents connect and leave, a moment behind (takt recomputes it on commit); a crashed agent counts until takt's stale sweep notices (seconds)."
     )

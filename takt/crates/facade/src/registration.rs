@@ -240,8 +240,12 @@ async fn register_blok(
         .filter(|c| !c.is_empty())
         .unwrap_or(STANDARD_CATALOG_NAME);
     let catalog = Catalog::get_or_create(conn, catalog_name, agent.organization).await?;
-    let diagnostics =
-        validate_manifest_against_catalog(&catalog, Some(&blok.components), blok.context)?;
+    let diagnostics = validate_manifest_against_catalog(
+        &catalog,
+        Some(&blok.components),
+        blok.context,
+        blok.demo_state.as_ref(),
+    )?;
 
     let (id, name, description): (i64, String, Option<String>) = sqlx::query_as(
         "INSERT INTO facade_blok (name, description, components, demo_state, diagnostics, creator_id, organization_id, catalog_id,
@@ -405,6 +409,8 @@ pub async fn implement_agent(
     declared.sort_by(|a, b| {
         (&a.definition.key, &a.definition.version).cmp(&(&b.definition.key, &b.definition.version))
     });
+    // Each implementation's logo, by blok key, in the order the implementations are written.
+    let logos: Vec<Option<String>> = declared.iter().map(|i| i.logo.clone()).collect();
     let mut diagnostics = vec![];
     let mut created_implementations = vec![];
     if !declared.is_empty() {
@@ -474,6 +480,21 @@ pub async fn implement_agent(
 
     for blok in payload.bloks.iter().flatten() {
         diagnostics.extend(register_blok(conn, &identity, blok).await?);
+    }
+
+    // A logo is a blok this registration has just written: link each implementation to its
+    // own (or to none, when it no longer names one).
+    for (implementation, logo) in created_implementations.iter().zip(&logos) {
+        sqlx::query(
+            "UPDATE facade_implementation
+                SET logo_id = (SELECT id FROM facade_blok WHERE organization_id = $2 AND name = $3)
+              WHERE id = $1",
+        )
+        .bind(implementation)
+        .bind(organization)
+        .bind(logo.as_deref())
+        .execute(&mut *conn)
+        .await?;
     }
 
     // The names the agent gives its files. The files themselves are the organization's

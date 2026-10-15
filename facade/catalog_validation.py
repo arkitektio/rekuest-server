@@ -21,7 +21,7 @@ every call a widget carries (custom props, ``state_call``, state accessors, opti
 goes through the same operation check as validators and effects.
 """
 
-from typing import Iterable, Iterator, Sequence
+from typing import Iterable, Iterator, Mapping, Sequence
 
 from facade import models
 from rekuest_core import enums
@@ -36,6 +36,12 @@ CONTEXT_ROOTS = {
     enums.ComponentContext.SCENE: "Scene",
     enums.ComponentContext.LOGO: "SVG",
 }
+# A logo is an icon: what a logo blok may hold at most.
+LOGO_MAX_NODES = 200
+LOGO_MAX_DEPTH = 12
+LOGO_MAX_PATH_DATA = 16 * 1024
+LOGO_MAX_FOREACH_ITEMS = 64
+LOGO_PATH_DATA_PROPS = ("d", "points")
 Widget = rimodels._AssignWidgetBase | rimodels._ReturnWidgetBase
 
 
@@ -185,11 +191,13 @@ def validate_components_against_catalogs(
     catalogs: Sequence[models.UICatalog],
     components: list[rimodels.ComponentNodeInputModel] | None,
     context: enums.ComponentContext = enums.ComponentContext.HTML,
+    demo_state: Mapping[str, object] | None = None,
 ) -> list[DiagnosticModel]:
     """Every component, prop and operation a component tree uses is provided by base plus ``catalogs``.
 
     ``context`` is the blok's own: a scene blok has one root, the scene, and a logo blok one
-    ``SVG``, whatever is registered.
+    ``SVG``, whatever is registered. A logo is also held to the size of an icon
+    (:func:`check_logo_complexity`), its loops counted in ``demo_state``.
     """
     operations = resolve_operations(catalogs)
     component_specs = resolve_components(catalogs)
@@ -211,8 +219,55 @@ def validate_components_against_catalogs(
             raise ValueError(f"a {kind} blok has exactly one root, a {root!r}, not {len(roots)} roots")
         if roots[0].component != root:
             raise ValueError(f"component {roots[0].id!r}: the root of a {kind} blok must be a {root!r}, not {roots[0].component!r}")
+    if context == enums.ComponentContext.LOGO:
+        check_logo_complexity(components or [], demo_state)
     visit(components, (), enums.ComponentContext.HTML)
     return diagnostics
+
+
+def check_logo_complexity(components: list[rimodels.ComponentNodeInputModel], demo_state: Mapping[str, object] | None = None) -> None:
+    """A logo has at most LOGO_MAX_NODES components, nests at most LOGO_MAX_DEPTH deep, holds at most
+    LOGO_MAX_PATH_DATA characters of path data, and a foreach in it draws at most LOGO_MAX_FOREACH_ITEMS
+    items of the blok's demo state (a list it does not find there draws nothing)."""
+    nodes = 0
+    path_data = 0
+
+    def visit(node: rimodels.ComponentNodeInputModel, depth: int) -> None:
+        nonlocal nodes, path_data
+        nodes += 1
+        if depth > LOGO_MAX_DEPTH:
+            raise ValueError(f"component {node.id!r}: a logo nests at most {LOGO_MAX_DEPTH} deep")
+        for prop in node.props or []:
+            if prop.key in LOGO_PATH_DATA_PROPS and isinstance(prop.static_value, str):
+                path_data += len(prop.static_value)
+            if node.component == "foreach" and prop.key == "items":
+                items = _demo_items(prop, demo_state)
+                if items > LOGO_MAX_FOREACH_ITEMS:
+                    raise ValueError(f"component {node.id!r}: a foreach in a logo draws at most {LOGO_MAX_FOREACH_ITEMS} items, its demo state has {items}")
+        for child in node.children or []:
+            visit(child, depth + 1)
+
+    for root in components:
+        visit(root, 1)
+    if nodes > LOGO_MAX_NODES:
+        raise ValueError(f"a logo has at most {LOGO_MAX_NODES} components, this one {nodes}")
+    if path_data > LOGO_MAX_PATH_DATA:
+        raise ValueError(f"a logo holds at most {LOGO_MAX_PATH_DATA} characters of path data, this one {path_data}")
+
+
+def _demo_items(prop: rimodels.ComponentPropInputModel, demo_state: Mapping[str, object] | None) -> int:
+    """How many items a foreach's ``items`` gives in the demo state; 0 when it names none."""
+    if isinstance(prop.static_value, list):
+        return len(prop.static_value)
+    path = prop.dynamic_value.path if prop.dynamic_value is not None else None
+    value: object = demo_state or {}
+    for segment in (path or "").replace("/", ".").split("."):
+        if not segment:
+            continue
+        if not isinstance(value, Mapping) or segment not in value:
+            return 0
+        value = value[segment]
+    return len(value) if isinstance(value, list) else 0
 
 
 def _check_placement(
@@ -247,9 +302,10 @@ def validate_manifest_against_catalog(
     catalog: models.UICatalog,
     components: list[rimodels.ComponentNodeInputModel] | None,
     context: enums.ComponentContext = enums.ComponentContext.HTML,
+    demo_state: Mapping[str, object] | None = None,
 ) -> list[DiagnosticModel]:
     """Single-catalog form of :func:`validate_components_against_catalogs` for blok manifests."""
-    return validate_components_against_catalogs([catalog], components, context)
+    return validate_components_against_catalogs([catalog], components, context, demo_state)
 
 
 def _prop_calls(prop: rimodels.ComponentPropInputModel) -> Iterator[rimodels.UtilCallInputModel]:
