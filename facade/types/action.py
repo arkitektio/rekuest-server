@@ -56,7 +56,9 @@ class Action:
     @strawberry_django.field(description="A logo that draws this action: that of the implementation most recently registered with one. Each implementation has its own (`Implementation.logo`); an action without one is drawn by its agent's default logo.")
     def logo(self) -> Optional["Blok"]:
         row = row_of(self, models.Action)
-        drawn = row.implementations.filter(logo__isnull=False).select_related("logo").order_by("-updated_at").first()
+        # Not through `row.implementations`: beside an `implementations` selection the optimizer
+        # prefetches them with `logo` deferred, and a deferred field cannot be select_related.
+        drawn = models.Implementation.objects.filter(action_id=row.pk, logo__isnull=False).select_related("logo").order_by("-updated_at").first()
         return cast("Blok | None", drawn.logo if drawn is not None else None)
     live_implementations: int = strawberry_django.field(
         description="How many of its implementations sit on an agent that can take work now (connected, or a webhook agent) — one per agent. Kept by the database as agents connect and leave, a moment behind (takt recomputes it on commit); a crashed agent counts until takt's stale sweep notices (seconds)."

@@ -285,3 +285,18 @@ class TestGraphQLAgents:
         assert result.data["plain"] == {"logo": None, "action": {"logo": None}}
         assert result.data["action"]["logo"]["name"] == "crop"
         assert len(result.data["action"]["logo"]["hash"]) == 64
+
+        # Asked beside its implementations (as a hover card asks), whose prefetch defers `logo`.
+        beside = await schema.execute(
+            """
+            query($action: ID!) {
+                action(id: $action) { implementations { id agent { connected } } logo { name } }
+                actions { id implementations { id } logo { name } }
+            }
+            """,
+            context_value=authenticated_context,
+            variable_values={"action": action_id},
+        )
+        assert not beside.errors, beside.errors
+        assert beside.data["action"]["logo"] == {"name": "crop"}
+        assert {"name": "crop"} in [listed["logo"] for listed in beside.data["actions"]]
