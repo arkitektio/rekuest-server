@@ -274,6 +274,28 @@ class TestUiCatalog:
             refused = await _create_blok(authenticated_context, roots, context=context)
             assert refused.errors and message in refused.errors[0].message, refused.errors
 
+    async def test_a_blok_hash_follows_what_it_renders(self, authenticated_context: HttpContext) -> None:
+        """The hash moves with the tree, the demo state and the context, and with nothing else."""
+        from facade.models import Blok
+
+        await _register(authenticated_context, {**CATALOG, "components": [{"name": "Box"}]})
+        query = "query($id: ID!) { blok(id: $id) { hash } }"
+
+        async def hash_of(components: list[dict], **extra: object) -> str:
+            created = await _create_blok(authenticated_context, components, **extra)
+            assert not created.errors, created.errors
+            blok_id = await sync_to_async(lambda: Blok.objects.get(name="catalogued").id)()
+            result = await schema.execute(query, context_value=authenticated_context, variable_values={"id": str(blok_id)})
+            assert not result.errors, result.errors
+            return result.data["blok"]["hash"]
+
+        box = [{"id": "root", "component": "Box"}]
+        first = await hash_of(box, description="one")
+        assert len(first) == 64
+        assert await hash_of(box, description="described differently") == first
+        assert await hash_of([{"id": "other", "component": "Box"}]) != first
+        assert await hash_of(box, demoState={"exposure": 2}) != first
+
     async def test_control_flow_takes_the_context_it_is_placed_in(self, authenticated_context: HttpContext) -> None:
         """A component that inherits its context sits in a scene or a logo, and its children stay there."""
         await _register(

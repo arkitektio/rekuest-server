@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import datetime
+import hashlib
+import json
 from typing import TYPE_CHECKING, cast
 
 import strawberry
@@ -25,6 +27,12 @@ if TYPE_CHECKING:
     from facade.types.dashboard import DashboardPlacement, UICatalog
     from facade.types.demand import ActionDependency, StateDependency
     from facade.types.threed import Placement
+
+
+def blok_hash(components: object, demo_state: object, context: str) -> str:
+    """The hash of a blok's rendering: canonical JSON (sorted keys, no whitespace) of its parts."""
+    canonical = json.dumps({"components": components, "demo_state": demo_state, "context": context}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode()).hexdigest()
 
 
 @strawberry_django.type(models.Blok)
@@ -59,6 +67,14 @@ class Blok:
     @strawberry_django.field(description="Demo state used to render a preview of this blok without agents.")
     def demo_state(self) -> scalars.Props:
         return self.demo_state
+
+    @strawberry_django.field(
+        description="A SHA-256 of what the blok renders: its component tree, demo state and context. Two bloks with the same hash draw the same thing, so a client may cache what it rendered under it.",
+        only=["components", "demo_state", "context"],
+    )
+    def hash(self) -> str:
+        row = row_of(self, models.Blok)
+        return blok_hash(row.components, row.demo_state, row.context)
 
     @strawberry_django.field(description="Non-fatal registration findings, e.g. manifest util calls naming operations that neither the base catalog nor this blok's catalog provides.")
     def diagnostics(self) -> list[rtypes.Diagnostic]:

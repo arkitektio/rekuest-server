@@ -1216,6 +1216,11 @@ type Blok {
   demoState: Props!
 
   """
+  A SHA-256 of what the blok renders: its component tree, demo state and context. Two bloks with the same hash draw the same thing, so a client may cache what it rendered under it.
+  """
+  hash: String!
+
+  """
   Non-fatal registration findings, e.g. manifest util calls naming operations that neither the base catalog nor this blok's catalog provides.
   """
   diagnostics: [Diagnostic!]!
