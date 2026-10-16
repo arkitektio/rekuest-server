@@ -458,6 +458,11 @@ type Agent {
   """
   description: String
 
+  """
+  The app this agent says controls its lifecycle (e.g. 'plugin_engine'), as stated on its last registration. Self-declared: a hint for pickers (descriptor @rekuest/supervisor), never authority.
+  """
+  supervisor: String
+
   """Current and historical states associated with the agent."""
   states: [State!]!
 
@@ -666,6 +671,16 @@ input AgentFilter {
   Agents that can receive work now: a webhook agent, or a connected one with a fresh heartbeat (takt's rule).
   """
   available: Boolean
+
+  """
+  Agents whose self-declared supervisor is this app (e.g. 'plugin_engine').
+  """
+  supervisor: String
+
+  """
+  Agents meeting a port's descriptor constraints (a picker hands them in as $requires). The only descriptor of @rekuest/agent is @rekuest/supervisor; any other key is refused.
+  """
+  requires: [RequiresInput!]
 
   """Filter by IDs of the agents"""
   ids: [ID!]
@@ -3235,6 +3250,11 @@ input MaterializedBlokFilter {
 
   """Search by name"""
   search: String
+
+  """
+  Only bloks that render in one of these contexts: HTML and SCENE are interfaces to open, LOGO and ACTION_LOGO draw an agent or an action.
+  """
+  contexts: [ComponentContext!]
 }
 
 input MaterializedBlokOrder @oneOf {

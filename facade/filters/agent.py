@@ -13,7 +13,37 @@ from strawberry_django.fields.filter_order import filter_field
 
 from facade import liveness, managers, models
 from facade.json_types import json_object
+from rekuest_core import enums as rcenums
 from rekuest_core.inputs import types as ritypes
+
+SUPERVISOR_DESCRIPTOR = "@rekuest/supervisor"
+"""The one descriptor ``@rekuest/agent`` carries: the agent's self-declared supervisor."""
+
+
+def _supervisor_q(prefix: str, operator: rcenums.DescriptorOperator, value: object) -> Q:
+    """One ``requires`` constraint on ``@rekuest/supervisor``, as a filter.
+
+    The operators mean what the runtime's descriptor checks mean (``MATCHES`` is ``==``).
+    An agent that declares no supervisor has no value: it satisfies only ``NOT_EQUALS``
+    and ``NOT_IN``.
+    """
+    field = f"{prefix}supervisor"
+    match operator:
+        case rcenums.DescriptorOperator.EQUALS | rcenums.DescriptorOperator.MATCHES:
+            return Q(**{field: value})
+        case rcenums.DescriptorOperator.NOT_EQUALS:
+            return ~Q(**{field: value}) | Q(**{f"{field}__isnull": True})
+        case rcenums.DescriptorOperator.IN:
+            return Q(**{f"{field}__in": list(value) if isinstance(value, list) else [value]})
+        case rcenums.DescriptorOperator.NOT_IN:
+            values = list(value) if isinstance(value, list) else [value]
+            return ~Q(**{f"{field}__in": values}) | Q(**{f"{field}__isnull": True})
+        case rcenums.DescriptorOperator.EXISTS:
+            return Q(**{f"{field}__isnull": False})
+        case rcenums.DescriptorOperator.CONTAINS:
+            return Q(**{f"{field}__contains": value})
+        case _:
+            raise ValueError(f"{SUPERVISOR_DESCRIPTOR} is a string: {operator.value} does not apply to it")
 
 
 @strawberry_django.filter_type(models.Agent, description="A way to filter agents")
@@ -26,6 +56,18 @@ class AgentFilter:
     def available(self, info: Info, queryset: QuerySet[models.Agent], value: bool, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
         available = liveness.agent_available_q(prefix)
         return queryset, available if value else ~available
+
+    @filter_field(description="Agents whose self-declared supervisor is this app (e.g. 'plugin_engine').")
+    def supervisor(self, info: Info, queryset: QuerySet[models.Agent], value: str, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+        return queryset.filter(**{f"{prefix}supervisor": value}), Q()
+
+    @filter_field(description="Agents meeting a port's descriptor constraints (a picker hands them in as $requires). The only descriptor of @rekuest/agent is @rekuest/supervisor; any other key is refused.")
+    def requires(self, info: Info, queryset: QuerySet[models.Agent], value: list[ritypes.RequiresInput], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+        for constraint in value:
+            if constraint.key != SUPERVISOR_DESCRIPTOR:
+                raise ValueError(f"@rekuest/agent declares no descriptor {constraint.key!r} (only {SUPERVISOR_DESCRIPTOR})")
+            queryset = queryset.filter(_supervisor_q(prefix, constraint.operator, constraint.value))
+        return queryset, Q()
 
     @filter_field(description="Filter by IDs of the agents")
     def ids(self, info: Info, queryset: QuerySet[models.Agent], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[models.Agent], Q]:

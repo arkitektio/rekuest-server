@@ -26,7 +26,7 @@ from typing import Any
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from facade import provisioning
+from facade import provisioning, service_catalog
 
 #: How long to wait for a pass another process is running (takt's periodic one takes seconds).
 WAIT_SECONDS = 60.0
@@ -38,8 +38,7 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         entries = list(settings.SERVICES)
         if not entries:
-            self.stdout.write("No services configured (rekuest.services): nothing to catalogue.")
-            return
+            self.stdout.write("No services configured (rekuest.services): only rekuest's own structures are catalogued.")
 
         deadline = time.monotonic() + WAIT_SECONDS
         failed = provisioning.catalogue_services()
@@ -50,6 +49,11 @@ class Command(BaseCommand):
             failed = provisioning.catalogue_services()
 
         refused: list[str] = []
+        if service_catalog.SELF in failed:
+            refused.append(service_catalog.SELF)
+            self.stderr.write(self.style.ERROR("Could not catalogue rekuest's own structures (see the log)."))
+        else:
+            self.stdout.write(self.style.SUCCESS("Catalogued rekuest's own structures."))
         for entry in entries:
             source = "from the config" if entry.hosts is not None else "from its manifest"
             if entry.name not in failed:

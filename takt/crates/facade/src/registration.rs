@@ -44,6 +44,23 @@ pub async fn ensure_agent(
     Ok(agent)
 }
 
+/// Record the supervisor the agent stated on this registration (none clears it). A hint for
+/// pickers, never authority; written only when it changed.
+pub async fn set_supervisor(
+    db: &PgPool,
+    agent: i64,
+    supervisor: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE facade_agent SET supervisor = $2 WHERE id = $1 AND supervisor IS DISTINCT FROM $2",
+    )
+    .bind(agent)
+    .bind(supervisor)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 /// Forget every drawer on the agent's shelve: a process that just started holds nothing.
 pub async fn clear_drawers(
     executor: impl sqlx::PgExecutor<'_>,

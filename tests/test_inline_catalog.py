@@ -64,7 +64,7 @@ class TestInlineDeclaration:
 
         hub.SERVICES = [ServiceEntry(name=fetched.name, url=fetched.url, hosts={})]
         assert service_catalog.catalogue_all() == []
-        assert not models.StructureDeclaration.objects.exists() and not models.SignalDeclaration.objects.exists()
+        assert not models.StructureDeclaration.objects.exclude(service__name=service_catalog.SELF).exists() and not models.SignalDeclaration.objects.exists()
 
     def test_the_catalogue_job_writes_what_the_config_says_and_does_not_fail_on_a_service_that_is_not_up(self, hub, capsys):
         from django.core.management import call_command
@@ -81,3 +81,27 @@ class TestInlineDeclaration:
         assert "Catalogued housekeeping (from the config)." in out and "Could not reach offline" in out
         assert models.StructureDeclaration.objects.filter(identifier="@housekeeping/room", service__name="housekeeping").exists()
         assert not models.Service.objects.filter(name="offline").exists()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestRekuestsOwnStructures:
+    """rekuest hosts ``@rekuest/agent`` itself: catalogued with every pass, peers or not."""
+
+    def test_the_agent_and_its_supervisor_descriptor_are_catalogued_without_any_peer(self, settings):
+        settings.SERVICES = []
+
+        assert service_catalog.catalogue_all() == []
+
+        agent = models.StructureDeclaration.objects.get(identifier="@rekuest/agent")
+        assert agent.service.name == service_catalog.SELF
+        assert list(agent.descriptors.values_list("key", "type")) == [("@rekuest/supervisor", "STRING")]
+
+    def test_the_catalogue_job_writes_them_with_no_services_configured(self, settings, capsys):
+        from django.core.management import call_command
+
+        settings.SERVICES = []
+
+        call_command("catalogue")
+
+        assert "Catalogued rekuest's own structures." in capsys.readouterr().out
+        assert models.StructureDeclaration.objects.filter(identifier="@rekuest/agent", service__name=service_catalog.SELF).exists()

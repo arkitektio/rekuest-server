@@ -272,6 +272,12 @@ async fn register(
         return Err(Refused::close(codes::AGENT_IS_BLOCKED_CODE));
     }
 
+    // The supervisor rides every REGISTER, outside the declaration: a hash-equal reconnect
+    // skips the reconciliation below, and must still say who supervises it now.
+    registration::set_supervisor(&ctx.db, agent, declaration.supervisor.as_deref())
+        .await
+        .map_err(|e| refuse(&e))?;
+
     // Registering is implementing: a declaration whose hash the agent does not hold yet is
     // reconciled in one transaction before the lease is claimed, so a refused one strands no
     // lease. Its non-fatal findings ride back on INIT.

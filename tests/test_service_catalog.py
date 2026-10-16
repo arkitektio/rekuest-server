@@ -46,7 +46,7 @@ class TestServiceCatalog:
 
         service_catalog.catalogue_all()
         assert list(models.SignalDeclaration.objects.values_list("kind", flat=True)) == ["CREATED"]
-        assert models.StructureDeclaration.objects.count() == 0
+        assert models.StructureDeclaration.objects.exclude(service__name=service_catalog.SELF).count() == 0
 
     def test_a_service_that_cannot_say_what_it_hosts_keeps_what_it_hosted(self, hub, monkeypatch):
         service_catalog.catalogue_all()

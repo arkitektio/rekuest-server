@@ -28,6 +28,10 @@ pub struct RegisterDeclaration {
     pub bloks: Option<Vec<Value>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assets: Option<Vec<Value>>,
+    /// The app the agent says controls its lifecycle (e.g. `plugin_engine`). A self-declared
+    /// hint written on every `REGISTER`; not part of the declaration (or its hash).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supervisor: Option<String>,
 }
 
 impl RegisterDeclaration {

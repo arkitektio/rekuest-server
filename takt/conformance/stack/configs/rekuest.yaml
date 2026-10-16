@@ -541,6 +541,14 @@ authentikate:
       client_app: conf_65
       client_release: v0.0.1
       client_id: conf_65
+    conf_66:
+      sub: 166
+      iss: lok
+      active_org: conformance
+      client_device: conf_66_device
+      client_app: conf_66
+      client_release: v0.0.1
+      client_id: conf_66
     test:
       sub: 1
       iss: lok

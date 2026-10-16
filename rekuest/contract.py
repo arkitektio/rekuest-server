@@ -7,7 +7,7 @@ the same commit, and no installer has to learn of it.
 
 from __future__ import annotations
 
-from arkitekt_service.contract import JSON, Contract, Description, Facts, Job, Needs, Offers, Peer, Refused, Scope, Sidecar, Start, blocks
+from arkitekt_service.contract import JSON, Contract, Description, Descriptor, Facts, Hosts, Job, Needs, Offers, Peer, Refused, Scope, Sidecar, Start, Structure, blocks
 
 from rekuest.configuration import Settings
 
@@ -21,6 +21,25 @@ SCOPES = [
     Scope(key="read", description="Read access to rekuest resources"),
     Scope(key="write", description="Write access to rekuest resources"),
 ]
+
+#: What rekuest itself hosts: its agents, as something an action can take. It catalogues this
+#: beside its peers' declarations (``facade.service_catalog.catalogue_self``).
+HOSTS = Hosts(
+    structures=[
+        Structure(
+            identifier="@rekuest/agent",
+            label="Agent",
+            description="An app instance connected to rekuest.",
+            descriptors=[
+                Descriptor(
+                    key="@rekuest/supervisor",
+                    type="STRING",
+                    description="The app the agent says controls its lifecycle (e.g. plugin_engine). Self-declared at registration: a hint, never authority.",
+                )
+            ],
+        )
+    ]
+)
 
 #: The roles a member of an organization can hold here.
 ROLES = [
@@ -75,6 +94,7 @@ contract = Contract(
         summary="Assigns work to agents and keeps the record of it.",
         needs=Needs(scopes=SCOPES, roles=ROLES, storage=["media"], instance_key=True, peers=[TAKT]),
         offers=Offers(health="ht"),
+        hosts=HOSTS,
         # Its other half: every agent connects to takt, not to this server, and the two are
         # released together under the same tag (takt even names the migrations it expects).
         sidecars=[Sidecar(name="takt", image="{repository}-takt:{tag}", summary="The agent protocol: registration, assignment, liveness.")],

@@ -16,7 +16,7 @@ import pytest
 from authentikate.models import Organization
 from django.test import Client as HttpClient
 
-from facade import enums, hook_agents, models, provisioning
+from facade import enums, hook_agents, models, provisioning, service_catalog
 from facade.inputs import ImplementAgentInputModel
 from rekuest.configuration import HookAgentEntry
 from arkitekt_service import trust
@@ -99,7 +99,8 @@ class TestWithoutAnyService:
         hub.SERVICES = []
         assert provisioning.provision_all() == provisioning.Failed(services=[], hook_agents=[])
         assert models.Agent.objects.filter(name="janitor", organization=lab).exists()
-        assert not models.Service.objects.exists()
+        # Only rekuest's own structures are catalogued.
+        assert list(models.Service.objects.values_list("name", flat=True)) == [service_catalog.SELF]
 
 
 @pytest.mark.django_db

@@ -12,6 +12,7 @@ from strawberry.types import Info
 from strawberry_django.fields.filter_order import filter_field
 
 from facade import models
+from rekuest_core import enums as renums
 
 
 @strawberry_django.order_type(models.MaterializedBlok)
@@ -32,3 +33,8 @@ class MaterializedBlokFilter:
     @filter_field(description="Search by name")
     def search(self, info: Info, queryset: QuerySet[models.MaterializedBlok], value: str | None, prefix: str) -> tuple[QuerySet[models.MaterializedBlok], Q]:
         return queryset.filter(**{f"{prefix}name__icontains": value}), Q()
+
+    @filter_field(description="Only bloks that render in one of these contexts: HTML and SCENE are interfaces to open, LOGO and ACTION_LOGO draw an agent or an action.")
+    def contexts(self, info: Info, queryset: QuerySet[models.MaterializedBlok], value: list[renums.ComponentContext], prefix: str) -> tuple[QuerySet[models.MaterializedBlok], Q]:
+        """Keep the materialized bloks whose blok renders in one of ``value``."""
+        return queryset.filter(**{f"{prefix}blok__context__in": [context.value for context in value]}), Q()

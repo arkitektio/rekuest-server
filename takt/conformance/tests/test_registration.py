@@ -57,3 +57,25 @@ async def test_an_unknown_token_is_refused(agents) -> None:  # noqa: ANN001
     await agent.send({"type": "REGISTER", "token": "not-a-token", "session_id": session_id()})
 
     assert await agent.expect_close() == SCHEMA
+
+
+async def test_every_register_states_the_supervisor(agents, graphql) -> None:  # noqa: ANN001
+    """The supervisor rides every REGISTER, outside the declaration: a reconnect that declares
+    nothing new still replaces it, and one that names none clears it."""
+    api = graphql("conf_66")
+    query = "query ($id: ID!) { agent(id: $id) { supervisor } }"
+
+    first = await agents()
+    agent_id = (await first.register("conf_66", session_id=session_id(), supervisor="plugin_engine"))["agent"]
+    await first.close()
+    assert (await api(query, id=agent_id))["agent"]["supervisor"] == "plugin_engine"
+
+    again = await agents()
+    await again.register("conf_66", session_id=session_id(), supervisor="local_launcher")
+    await again.close()
+    assert (await api(query, id=agent_id))["agent"]["supervisor"] == "local_launcher"
+
+    unsupervised = await agents()
+    await unsupervised.register("conf_66", session_id=session_id())
+    await unsupervised.close()
+    assert (await api(query, id=agent_id))["agent"]["supervisor"] is None

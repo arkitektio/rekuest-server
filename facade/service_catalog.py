@@ -142,9 +142,33 @@ def _sync_descriptors(structure: models.StructureDeclaration, descriptors: list[
     models.Descriptor.objects.filter(structure=structure).exclude(key__in=declared).delete()
 
 
+#: The name rekuest's own catalog row goes under, beside its peers' names.
+SELF = "rekuest"
+
+
+def catalogue_self() -> models.Service:
+    """Catalogue what rekuest itself hosts (its contract's ``hosts``), like a peer declared inline.
+
+    Its own structures need rows like anyone's: takt refuses a port that constrains a
+    descriptor no service declares. Read from this release's contract, so it is always there.
+    """
+    from rekuest.contract import contract
+
+    description = contract.description
+    service, _ = models.Service.objects.update_or_create(name=SELF, defaults={"identifier": description.identifier, "description": description.summary})
+    _sync_structures(service, [StructureManifest.model_validate(structure.model_dump()) for structure in description.hosts.structures])
+    _sync_signals(service, [SignalManifest.model_validate(signal.model_dump()) for signal in description.hosts.signals])
+    return service
+
+
 def catalogue_all() -> list[str]:
-    """Catalogue every configured service once; the names of those that could not be."""
+    """Catalogue rekuest itself, then every configured service once; the names of those that could not be."""
     failed: list[str] = []
+    try:
+        catalogue_self()
+    except Exception as error:
+        logger.warning("Could not catalogue rekuest's own structures: %s", error)
+        failed.append(SELF)
     services: list[ServiceEntry] = settings.SERVICES
     for entry in services:
         try:

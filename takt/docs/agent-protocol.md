@@ -56,7 +56,7 @@ sequenceDiagram
 
     AG->>S: WebSocket connect
     S->>P: first_frame (connection_id)
-    AG->>P: Register{token, force, session_id, name, hash, implementations, states, locks, bloks}
+    AG->>P: Register{token, force, session_id, supervisor, name, hash, implementations, states, locks, bloks}
     P->>AU: authenticate_token, expand_token_context
     P->>PB: ensure_agent (+ memory shelve)
     alt agent.blocked
@@ -110,6 +110,13 @@ work; a different id ⇒ a fresh process, fail-and-cascade) and the agent's **de
 `ImplementAgentInput`. Registering *is* implementing (see the lifecycle below); a `Register`
 without a declaration only ensures the agent exists.
 
+An optional `supervisor` names the app the agent says controls its lifecycle (e.g.
+`plugin_engine`, set by the engine that started its container as `ARKITEKT_SUPERVISOR`). It is
+not part of the declaration or its hash: every `Register` writes it to `Agent.supervisor` (none
+clears it), including the hash-equal fast path. It is self-declared, so it is a hint (the
+descriptor `@rekuest/supervisor` of `@rekuest/agent`, for pickers), never authority: a
+supervisor maps the agent to its own records before acting on it.
+
 ### Authentication — ensure semantics
 
 `register` verifies the token (`authentikate::authenticate_token`), expands it into
@@ -142,7 +149,7 @@ may still hold (returned by `on_agent_connected`). `run_session` then spawns the
 ### Registration lifecycle — registering is implementing
 
 ```
-Register{token, force, session_id, name, hash, implementations, states, locks, bloks}
+Register{token, force, session_id, supervisor, name, hash, implementations, states, locks, bloks}
   → (declaration carried, hash differs) one atomic registration
       ↳ refused: ProtocolError{error} + close(AGENT_REGISTRATION_REJECTED)
   → Init{agent, hash, diagnostics, inquiries}

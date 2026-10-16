@@ -61,6 +61,12 @@ class Agent(models.Model):
     name = models.CharField(max_length=2000, help_text="The name the agent declares for itself, written at every registration.", default="Nana", db_default="Nana")
     display_name = models.CharField(max_length=2000, null=True, blank=True, help_text="The name a user gave this agent. It wins over the declared name, and registration never touches it.")
     description = models.TextField(null=True, blank=True, help_text="A description for the Agent")
+    supervisor = models.CharField(
+        max_length=1000,
+        null=True,
+        blank=True,
+        help_text="The app this agent says controls its lifecycle (e.g. 'plugin_engine'), as it stated on its last registration. A self-declared hint for narrowing pickers, never authority: a supervisor maps the agent to its own records before acting.",
+    )
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
