@@ -87,7 +87,9 @@ def test_what_a_peer_hosts_goes_into_its_services_entry(tmp_path: Path, capsys: 
     assert code == 0, err
 
     (service,) = yaml.safe_load(out)["rekuest"]["services"]
-    assert service == {"name": "mikro", "url": "http://mikro:80/mikro/_rekuest/service", "identifier": "live.arkitekt.mikro", "hosts": hosts}
+    # As the hub said it, with what a structure says when it says nothing more (no reaches beyond `self`).
+    said = {**hosts, "structures": [{**structure, "reaches": []} for structure in hosts["structures"]]}
+    assert service == {"name": "mikro", "url": "http://mikro:80/mikro/_rekuest/service", "identifier": "live.arkitekt.mikro", "hosts": said}
 
 
 def test_cataloguing_is_a_job_and_part_of_the_setup(capsys: pytest.CaptureFixture[str]) -> None:

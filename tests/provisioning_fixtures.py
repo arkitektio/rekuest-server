@@ -7,11 +7,19 @@ from django.test import override_settings
 
 from rekuest.configuration import HookAgentEntry, ServiceEntry
 from arkitekt_service.service import Descriptor
+from arkitekt_service.service.described import Described
 from tests.hook_urls import housekeeping, janitor
 
 
-class Room:
-    """What the stand-in service hosts. Never saved: the catalog only needs its declaration."""
+class Room(Described):
+    """What the stand-in service hosts. Never saved: the catalog only needs its declaration.
+
+    A structure that declares descriptors keeps them on its rows, so its model is a Described;
+    abstract, as nothing is stored.
+    """
+
+    class Meta:
+        abstract = True
 
 
 @pytest.fixture
