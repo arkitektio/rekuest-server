@@ -18,6 +18,9 @@ pub enum AuthentikateError {
     MissingActiveOrganization,
     #[error("membership is blocked")]
     BlockedMembership,
+    /// A guest's token (granted collaborations only): this service serves no guests.
+    #[error("this service does not accept tokens that are limited to collaborations")]
+    ScopedTokenUnsupported,
     /// Key retrieval failed (issuer unreachable, malformed JWKS): not a permission
     /// decision, but still not authenticated.
     #[error("could not retrieve keys: {0}")]

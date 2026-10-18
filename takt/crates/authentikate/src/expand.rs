@@ -90,21 +90,33 @@ pub async fn expand_user(
     let (id, stored_hash) = match existing {
         Some(row) => row,
         None => {
+            let profile = &token.profile;
             let created: Result<i64, sqlx::Error> = sqlx::query_scalar(
                 "INSERT INTO authentikate_user
                    (password, is_superuser, username, first_name, last_name, email, is_staff,
-                    is_active, date_joined, sub, iss, changed_hash, active_organization_id)
-                 VALUES ($1, false, $2, $3, '', '', false, true, $4, $5, $6, $7, $8)
+                    is_active, date_joined, sub, iss, changed_hash, active_organization_id,
+                    preferred_username, name, nickname, email_verified, picture, locale, zoneinfo)
+                 VALUES ($1, false, $2, $3, $4, $5, false, true, $6, $7, $8, $9, $10,
+                         $11, $12, $13, $14, $15, $16, $17)
                  RETURNING id",
             )
             .bind(unusable_password())
             .bind(token_to_username(token))
-            .bind(&token.preferred_username)
+            .bind(profile.given_name.as_deref().unwrap_or(""))
+            .bind(profile.family_name.as_deref().unwrap_or(""))
+            .bind(profile.email.as_deref().unwrap_or(""))
             .bind(Utc::now())
             .bind(&token.sub)
             .bind(&token.iss)
             .bind(&changed_hash)
             .bind(organization)
+            .bind(&token.preferred_username)
+            .bind(&profile.name)
+            .bind(&profile.nickname)
+            .bind(profile.email_verified)
+            .bind(&profile.picture)
+            .bind(&profile.locale)
+            .bind(&profile.zoneinfo)
             .fetch_one(db)
             .await;
             match created {
@@ -123,15 +135,29 @@ pub async fn expand_user(
     };
 
     if stored_hash.as_deref() != Some(changed_hash.as_str()) {
+        // `apply_profile`: every claim is written, present or not, so one the issuer stopped
+        // sending clears its column.
+        let profile = &token.profile;
         sqlx::query(
             "UPDATE authentikate_user
-                SET first_name = $2, changed_hash = $3, active_organization_id = $4
+                SET changed_hash = $2, active_organization_id = $3, preferred_username = $4,
+                    name = $5, nickname = $6, first_name = $7, last_name = $8, email = $9,
+                    email_verified = $10, picture = $11, locale = $12, zoneinfo = $13
               WHERE id = $1",
         )
         .bind(id)
-        .bind(&token.preferred_username)
         .bind(&changed_hash)
         .bind(organization)
+        .bind(&token.preferred_username)
+        .bind(&profile.name)
+        .bind(&profile.nickname)
+        .bind(profile.given_name.as_deref().unwrap_or(""))
+        .bind(profile.family_name.as_deref().unwrap_or(""))
+        .bind(profile.email.as_deref().unwrap_or(""))
+        .bind(profile.email_verified)
+        .bind(&profile.picture)
+        .bind(&profile.locale)
+        .bind(&profile.zoneinfo)
         .execute(db)
         .await?;
     }

@@ -20,7 +20,8 @@ fn check_organization_allowed(
 }
 
 /// The verified token behind `token`: a static token (whose expiry still holds) or a signed
-/// JWT. Either way, its organization must be allowed.
+/// JWT. Either way, its organization must be allowed, and it must not be a guest's: this
+/// service holds no reads to collaborations (`SCOPED_TOKENS: auto` with nothing enforcing).
 pub async fn authenticate_token(
     verifier: &Verifier,
     token: &str,
@@ -37,6 +38,9 @@ pub async fn authenticate_token(
         None => verifier.decode(token).await?,
     };
     check_organization_allowed(&decoded, settings)?;
+    if decoded.collabs.is_some() {
+        return Err(AuthentikateError::ScopedTokenUnsupported);
+    }
     Ok(decoded)
 }
 
@@ -79,7 +83,7 @@ mod tests {
         let settings = AuthentikateSettings::prepare(
             &serde_json::json!({
                 "audience": "rekuest",
-                "static_tokens": {"t": {"sub": "1", "org": "lab"}, "other": {"sub": "2", "org": "elsewhere"}},
+                "static_tokens": {"t": {"sub": "1", "org": "lab"}, "other": {"sub": "2", "org": "elsewhere"}, "guest": {"sub": "3", "org": "lab", "roles": [], "collabs": {"12": {"5": []}}}},
                 "allowed_organizations": ["lab"],
             }),
             true,
@@ -94,6 +98,10 @@ mod tests {
         assert!(matches!(
             authenticate_token(&verifier, "other").await,
             Err(AuthentikateError::OrganizationNotAllowed(_))
+        ));
+        assert!(matches!(
+            authenticate_token(&verifier, "guest").await,
+            Err(AuthentikateError::ScopedTokenUnsupported)
         ));
         assert!(authenticate_token_or_none(&verifier, "not-a-token")
             .await

@@ -42,8 +42,8 @@ async fn a_token_becomes_its_rows_and_twice_is_the_same_rows() {
     let again = expand_token_context(&db, &token).await.unwrap();
     assert_eq!(first, again);
 
-    let (username, first_name, is_active, password, org): (String, String, bool, String, Option<i64>) = sqlx::query_as(
-        "SELECT username, first_name, is_active, password, active_organization_id FROM authentikate_user WHERE id = $1",
+    let (username, preferred_username, is_active, password, org): (String, String, bool, String, Option<i64>) = sqlx::query_as(
+        "SELECT username, preferred_username, is_active, password, active_organization_id FROM authentikate_user WHERE id = $1",
     )
     .bind(first.user)
     .fetch_one(&db)
@@ -51,8 +51,8 @@ async fn a_token_becomes_its_rows_and_twice_is_the_same_rows() {
     .unwrap();
     assert_eq!(username, token_to_username(&token));
     assert_eq!(
-        first_name, "ada",
-        "4.1.1 keeps preferred_username in first_name"
+        preferred_username, "ada",
+        "authentikate 5 keeps it in its own column"
     );
     assert!(
         is_active && password.starts_with('!'),
@@ -85,19 +85,21 @@ async fn changed_user_metadata_is_synced_and_roles_follow_the_token() {
 
     let mut renamed = original.clone();
     renamed.preferred_username = "lovelace".into();
+    renamed.profile.given_name = Some("Ada".into());
     renamed.roles = vec!["admin".into()];
     let after = expand_token_context(&db, &renamed).await.unwrap();
     assert_eq!(before.user, after.user);
 
-    let (first_name, hash): (String, String) =
-        sqlx::query_as("SELECT first_name, changed_hash FROM authentikate_user WHERE id = $1")
-            .bind(after.user)
-            .fetch_one(&db)
-            .await
-            .unwrap();
+    let (preferred_username, first_name, hash): (String, String, String) = sqlx::query_as(
+        "SELECT preferred_username, first_name, changed_hash FROM authentikate_user WHERE id = $1",
+    )
+    .bind(after.user)
+    .fetch_one(&db)
+    .await
+    .unwrap();
     assert_eq!(
-        (first_name.as_str(), hash),
-        ("lovelace", renamed.changed_hash())
+        (preferred_username.as_str(), first_name.as_str(), hash),
+        ("lovelace", "Ada", renamed.changed_hash())
     );
     let roles: serde_json::Value =
         sqlx::query_scalar("SELECT roles FROM authentikate_membership WHERE id = $1")

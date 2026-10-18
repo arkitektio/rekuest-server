@@ -1,4 +1,4 @@
-//! The token and the settings (`authentikate/base_models.py`, 4.1.1).
+//! The token and the settings (`authentikate/base_models.py`, 5).
 
 use std::collections::BTreeMap;
 
@@ -19,6 +19,47 @@ pub const ASYMMETRIC_ALGORITHMS: &[&str] = &[
     "RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "ES256", "ES384", "ES512", "Ed25519",
     "Ed448", "EdDSA",
 ];
+
+/// The optional OIDC profile claims (`PROFILE_CLAIMS`), mirrored onto the user. Their order
+/// is the Python tuple's: the changed hash serializes them in it.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct Profile {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub given_name: Option<String>,
+    #[serde(default)]
+    pub family_name: Option<String>,
+    #[serde(default)]
+    pub nickname: Option<String>,
+    #[serde(default)]
+    pub email: Option<String>,
+    #[serde(default)]
+    pub email_verified: Option<bool>,
+    #[serde(default)]
+    pub picture: Option<String>,
+    #[serde(default)]
+    pub locale: Option<String>,
+    #[serde(default)]
+    pub zoneinfo: Option<String>,
+}
+
+impl Profile {
+    /// `token.profile`: the claims by name, in `PROFILE_CLAIMS` order.
+    fn as_json(&self) -> Value {
+        serde_json::json!({
+            "name": self.name,
+            "given_name": self.given_name,
+            "family_name": self.family_name,
+            "nickname": self.nickname,
+            "email": self.email,
+            "email_verified": self.email_verified,
+            "picture": self.picture,
+            "locale": self.locale,
+            "zoneinfo": self.zoneinfo,
+        })
+    }
+}
 
 /// A verified token: who, acting in which organization, through which client.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -48,12 +89,18 @@ pub struct JwtToken {
     pub client_release: Option<String>,
     #[serde(default)]
     pub client_device: Option<String>,
+    #[serde(flatten)]
+    pub profile: Profile,
+    /// A guest's collaborations (granted only those, not the organization); None for a full
+    /// member. This service serves no guests: a token carrying it is refused.
+    #[serde(default)]
+    pub collabs: Option<Value>,
 }
 
 impl JwtToken {
     /// A hash that changes when the user changes: JSON of `[sub, preferred_username,
-    /// sorted(roles), org]` with compact separators, sha256, as 4.1.1 computes it. It is
-    /// persisted on the user, so it must match the Python side byte for byte.
+    /// sorted(roles), org, profile]` with compact separators, sha256, as authentikate 5
+    /// computes it. It is persisted on the user, so it must match the Python side byte for byte.
     pub fn changed_hash(&self) -> String {
         let mut roles = self.roles.clone();
         roles.sort();
@@ -61,7 +108,8 @@ impl JwtToken {
             self.sub,
             self.preferred_username,
             roles,
-            self.org
+            self.org,
+            self.profile.as_json()
         ]))
         .expect("strings serialize");
         hex::encode(Sha256::digest(python_json_ascii(&fingerprint).as_bytes()))
@@ -127,6 +175,10 @@ pub struct StaticToken {
     pub roles: Vec<String>,
     #[serde(default)]
     pub jti: Option<String>,
+    #[serde(flatten)]
+    pub profile: Profile,
+    #[serde(default)]
+    pub collabs: Option<Value>,
 }
 
 fn static_iss() -> String {
@@ -180,6 +232,8 @@ impl StaticToken {
             client_app: Some(self.client_app.clone()),
             client_release: Some(self.client_release.clone()),
             client_device: Some(self.client_device.clone()),
+            profile: self.profile.clone(),
+            collabs: self.collabs.clone(),
         }
     }
 }
@@ -393,7 +447,7 @@ mod tests {
 
     #[test]
     fn the_changed_hash_is_the_one_python_persists() {
-        // authentikate 4.1.1: sha256(json.dumps(["1", "admin", ["a", "b"], "org"], separators=(",", ":")))
+        // authentikate 5: sha256(json.dumps(["1", "admin", ["a", "b"], "org", token.profile], separators=(",", ":")))
         let token = JwtToken {
             sub: "1".into(),
             iss: "lok".into(),
@@ -410,16 +464,25 @@ mod tests {
             client_app: None,
             client_release: None,
             client_device: None,
+            profile: Profile::default(),
+            collabs: None,
         };
+        let nothing = r#"{"name":null,"given_name":null,"family_name":null,"nickname":null,"email":null,"email_verified":null,"picture":null,"locale":null,"zoneinfo":null}"#;
         assert_eq!(
             token.changed_hash(),
-            hex::encode(Sha256::digest(br#"["1","admin",["a","b"],"org"]"#))
+            hex::encode(Sha256::digest(format!(
+                r#"["1","admin",["a","b"],"org",{nothing}]"#
+            )))
         );
         let mut umlaut = token.clone();
         umlaut.preferred_username = "jörg".into();
+        umlaut.profile.email_verified = Some(true);
+        let verified = nothing.replace(r#""email_verified":null"#, r#""email_verified":true"#);
         assert_eq!(
             umlaut.changed_hash(),
-            hex::encode(Sha256::digest(br#"["1","j\u00f6rg",["a","b"],"org"]"#))
+            hex::encode(Sha256::digest(format!(
+                r#"["1","j\u00f6rg",["a","b"],"org",{verified}]"#
+            )))
         );
     }
 
