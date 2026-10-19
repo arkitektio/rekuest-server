@@ -222,7 +222,7 @@ fn d3() -> i16 {
     3
 }
 fn rekuest_identifier() -> String {
-    "live.arkitekt.rekuest".into()
+    "rekuest".into()
 }
 fn compat() -> String {
     "compat".into()
@@ -425,7 +425,7 @@ rekuest:
         assert_eq!(config.rekuest.pickup_deadline, 0);
         assert_eq!(config.rekuest.grace_default, 30);
         assert_eq!(config.provenance.issuer, "rekuest");
-        assert_eq!(config.rekuest.identifier, "live.arkitekt.rekuest");
+        assert_eq!(config.rekuest.identifier, "rekuest");
         assert_eq!(config.rekuest.probe_max_inflight, 32);
     }
 }

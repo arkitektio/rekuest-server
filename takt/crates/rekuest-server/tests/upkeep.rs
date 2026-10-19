@@ -18,7 +18,7 @@ use serde_json::{json, Value};
 const PEM: &str = "-----BEGIN PRIVATE KEY-----\n\
     MC4CAQAwBQYDK2VwBCIEILK+rl9gVEjfKGiye+mLLjfEUGIdoP0WPC8lMZS3NYK2\n\
     -----END PRIVATE KEY-----\n";
-const ME: &str = "live.arkitekt.rekuest";
+const ME: &str = "rekuest";
 
 /// What the stand-in server answers next, and what it was asked.
 #[derive(Default)]

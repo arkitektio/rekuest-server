@@ -83,7 +83,7 @@ class ServiceEntry(BaseModel):
 
     name: str = Field(description="The service's name (e.g. 'mikro'): what it is catalogued under, and its signal endpoint.")
     url: str = Field(description="The service's `rekuest_service` endpoint, e.g. http://mikro:80/mikro/_rekuest/service; its manifest is read at <url>/manifest.")
-    identifier: Optional[str] = Field(default=None, description="The fakts identifier of the service's instance — what its key is listed under in the trust bundle. Default: live.arkitekt.<name>.")
+    identifier: Optional[str] = Field(default=None, description="The fakts identifier of the service's instance — what its key is listed under in the trust bundle. Default: its name.")
     hosts: Optional[ServiceHosts] = Field(default=None, description="What the service hosts and emits, as its image says. Set: catalogued from here, and the service is not asked. Unset: its manifest is fetched.")
 
 
@@ -96,7 +96,7 @@ class HookAgentEntry(BaseModel):
 
     name: str = Field(description="The agent's name: what every organization sees it as.")
     hook_url: str = Field(description="Where rekuest POSTs the agent's Assigns — its `rekuest_hook` endpoint, e.g. http://mikro:80/mikro/_rekuest/hook; its manifest is read at <hook_url>/manifest.")
-    identifier: Optional[str] = Field(default=None, description="The fakts identifier of the instance the agent runs in — what its key is listed under in the trust bundle. Default: live.arkitekt.<name>.")
+    identifier: Optional[str] = Field(default=None, description="The fakts identifier of the instance the agent runs in — what its key is listed under in the trust bundle. Default: its name.")
 
 
 class InstanceBlock(InstanceSettings):
@@ -131,7 +131,7 @@ class RekuestBlock(BaseModel):
     )
     server_url: Optional[str] = Field(default=None, description="Read by takt, not by this server: where takt reaches this server for the upkeep jobs, with its script name. Defaults to http://rekuest:80/<django.force_script_name>; empty turns upkeep off.")
     takt_socket: Optional[str] = Field(default=None, description="takt's internal listener as a unix socket this server and takt both mount (takt: `TAKT_INTERNAL_BIND=unix:<path>`). When set, the internal API is reached through it and only the path of `takt_url` is used.")
-    identifier: str = Field(default="live.arkitekt.rekuest", description="This rekuest's fakts identifier — what its key is listed under in the hub trust bundle, and what services require rekuest's requests to come from.")
+    identifier: str = Field(default="rekuest", description="This rekuest's name in its hub — what its key is listed under in the hub trust bundle, and what services require rekuest's requests to come from.")
     services: list[ServiceEntry] = Field(default_factory=list, description="This hub's services: each one's structures and signals are catalogued from its manifest. Says nothing about agents.")
     hook_agents: list[HookAgentEntry] = Field(default_factory=list, description="This hub's hook agents: each is given to every organization, with the actions its manifest lists. Nothing is scheduled or triggered by itself.")
     trigger_max_depth: int = Field(default=3, description="How many trigger firings may chain (a triggered run's object signalling another trigger …) before a signal stops firing — the loop guard.")

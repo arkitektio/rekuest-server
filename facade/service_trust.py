@@ -8,7 +8,9 @@ of every instance, each listed under its identifier. An instance can therefore o
 itself, and only rekuest can speak as rekuest.
 
 Services and hook agents are separate lists, looked up separately; an entry of either says which
-instance it is (``identifier``, default ``live.arkitekt.<name>``).
+instance it is (``identifier``, default its name in the hub: ``mikro``). Names are unique only
+within a hub, so every token also carries the hub's uuid (``hub``), checked by
+:mod:`arkitekt_service.trust` against ``AUTHENTIKATE["hub"]``.
 
 Third-party HookAgents (registered through ``ensureAgent`` with a ``hook_url_secret``) keep the
 HMAC scheme (takt's ``hooks``); only the hub's configured ones use keys.
@@ -38,7 +40,7 @@ def rekuest_identifier() -> str:
 
 def identifier_of(entry: ServiceEntry | HookAgentEntry) -> str:
     """The identifier an entry's instance signs as (and is listed under in the trust bundle)."""
-    return entry.identifier or f"live.arkitekt.{entry.name}"
+    return entry.identifier or entry.name
 
 
 def sign_to(entry: ServiceEntry | HookAgentEntry, method: str, url: str, body: bytes) -> str:

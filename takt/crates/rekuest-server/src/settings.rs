@@ -45,6 +45,12 @@ pub fn from_configuration(configuration: &Configuration) -> anyhow::Result<Setti
         },
         instance_key,
         rekuest_identifier: rekuest.identifier.clone(),
+        hub: configuration
+            .authentikate
+            .get("hub")
+            .and_then(serde_json::Value::as_str)
+            .filter(|hub| !hub.is_empty())
+            .map(str::to_owned),
         server_url: match rekuest.server_url.as_deref() {
             None => Some(
                 format!(

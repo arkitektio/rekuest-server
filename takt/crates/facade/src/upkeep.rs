@@ -81,7 +81,8 @@ pub async fn call(settings: &Settings, job: &str) -> Result<Value, String> {
         .to_owned();
     let body = b"{}";
     let me = &settings.rekuest_identifier;
-    let authorization = service_trust::sign(key, "POST", &path, body, me, me);
+    let authorization =
+        service_trust::sign(key, "POST", &path, body, me, me, settings.hub.as_deref());
     let response = client()
         .post(&url)
         .header("Content-Type", "application/json")

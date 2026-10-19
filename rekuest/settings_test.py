@@ -63,7 +63,7 @@ INSTANCE = {
     "TRUST_JWKS": {
         "keys": [
             {**_public_jwk(_TestOKPKey.import_key(INSTANCE["PRIVATE_KEY"])), "service": REKUEST_IDENTIFIER},
-            *({**_public_jwk(key), "service": f"live.arkitekt.{name}"} for name, key in TEST_SERVICE_KEYS.items()),
+            *({**_public_jwk(key), "service": name} for name, key in TEST_SERVICE_KEYS.items()),
         ]
     },
 }

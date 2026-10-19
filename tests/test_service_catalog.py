@@ -19,7 +19,7 @@ class TestServiceCatalog:
         assert service_catalog.catalogue_all() == []
 
         service = models.Service.objects.get(name="housekeeping")
-        assert (service.identifier, service.description) == ("live.arkitekt.housekeeping", "A test service.")
+        assert (service.identifier, service.description) == ("housekeeping", "A test service.")
         (hosted,) = service.structures.all()
         assert (hosted.identifier, hosted.label, hosted.description) == ("@housekeeping/room", "Room", "A room to tidy.")
         assert list(hosted.descriptors.values_list("key", "type", "description")) == [("@housekeeping/area", "FLOAT", "Square metres")]

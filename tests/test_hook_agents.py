@@ -118,12 +118,12 @@ class TestHookEndpoint:
 
         assert post(None) == 401
         # mikro's genuine key, speaking as rekuest: the bundle says whose key it is.
-        impostor = trust.sign("POST", url, body, issuer="live.arkitekt.rekuest", audience="live.arkitekt.janitor", key=hub.TEST_SERVICE_KEYS["mikro"])
+        impostor = trust.sign("POST", url, body, issuer="rekuest", audience="janitor", key=hub.TEST_SERVICE_KEYS["mikro"])
         assert post(impostor) == 401
         # rekuest's genuine token, but for another instance — the service next door included.
-        for elsewhere in ("live.arkitekt.mikro", "live.arkitekt.housekeeping"):
-            assert post(trust.sign("POST", url, body, issuer="live.arkitekt.rekuest", audience=elsewhere)) == 401
-        genuine = trust.sign("POST", url, body, issuer="live.arkitekt.rekuest", audience="live.arkitekt.janitor")
+        for elsewhere in ("mikro", "housekeeping"):
+            assert post(trust.sign("POST", url, body, issuer="rekuest", audience=elsewhere)) == 401
+        genuine = trust.sign("POST", url, body, issuer="rekuest", audience="janitor")
         assert post(genuine) != 401
 
 

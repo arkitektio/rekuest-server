@@ -5,8 +5,12 @@
 //! ```text
 //! Authorization: RekuestService <jwt>
 //! header  {alg: Ed25519, kid: <RFC 7638 thumbprint>, typ: rekuest-service+jwt}
-//! claims  {iss, aud, iat, exp (60 s), jti, htm: <METHOD>, htu: <path>, bh: <b64url sha256(body)>}
+//! claims  {iss, aud, hub, iat, exp (60 s), jti, htm: <METHOD>, htu: <path>, bh: <b64url sha256(body)>}
 //! ```
+//!
+//! An instance is named by its name in its hub (`mikro`, `rekuest`), so `hub` -- the uuid the
+//! hub generated for itself (`authentikate.hub` in the config) -- tells two hubs' services apart:
+//! a token checked against the bundle must be for this hub.
 //!
 //! takt verifies only one sender: the rekuest server it runs beside, which shares its
 //! `config.yaml` and so its instance key. So the trust bundle is that one key: `kid` must be its
@@ -66,9 +70,10 @@ pub fn sign(
     body: &[u8],
     issuer: &str,
     audience: &str,
+    hub: Option<&str>,
 ) -> String {
     let now = chrono::Utc::now().timestamp();
-    let claims = json!({
+    let mut claims = json!({
         "iss": issuer,
         "aud": audience,
         "iat": now,
@@ -78,6 +83,9 @@ pub fn sign(
         "htu": path,
         "bh": body_hash(body),
     });
+    if let Some(hub) = hub {
+        claims["hub"] = json!(hub);
+    }
     let header = json!({"alg": ALGORITHM, "kid": key.kid(), "typ": TYP});
     format!("{SCHEME} {}", key.sign_jwt(&header, &claims))
 }
@@ -298,6 +306,7 @@ pub async fn verify_with_bundle(
     body: &[u8],
     authorization: Option<&str>,
     audience: &str,
+    hub: Option<&str>,
 ) -> Result<Verified, TrustError> {
     let Some(token) = authorization.and_then(|a| a.strip_prefix(&format!("{SCHEME} "))) else {
         return refuse("No service token");
@@ -338,6 +347,12 @@ pub async fn verify_with_bundle(
     if aud != Some(audience) {
         return refuse(format!("Token is for {}, not '{audience}'", py_str(aud)));
     }
+    if let Some(hub) = hub {
+        let theirs = claims.get("hub").and_then(Value::as_str);
+        if theirs != Some(hub) {
+            return refuse(format!("Token is for hub {}, not this hub", py_str(theirs)));
+        }
+    }
     let (jti, exp) = check_request_claims(&claims, method, path, body)?;
     Ok(Verified {
         issuer: issuer.to_owned(),
@@ -359,7 +374,7 @@ pub fn identifier_of(entry: &TrustedInstance) -> String {
     entry
         .identifier
         .clone()
-        .unwrap_or_else(|| format!("live.arkitekt.{}", entry.name))
+        .unwrap_or_else(|| entry.name.clone())
 }
 
 /// The `HOOK_AGENTS` entry of the agent whose client is `client_id`; `None` for any other
@@ -397,6 +412,7 @@ pub fn sign_to(
         body,
         &settings.rekuest_identifier,
         &identifier_of(entry),
+        settings.hub.as_deref(),
     ))
 }
 
@@ -416,6 +432,7 @@ pub async fn verify_from(
         body,
         authorization,
         &settings.rekuest_identifier,
+        settings.hub.as_deref(),
     )
     .await?;
     let expected = identifier_of(entry);
@@ -449,12 +466,21 @@ mod tests {
     const PEM: &str = "-----BEGIN PRIVATE KEY-----\n\
         MC4CAQAwBQYDK2VwBCIEILK+rl9gVEjfKGiye+mLLjfEUGIdoP0WPC8lMZS3NYK2\n\
         -----END PRIVATE KEY-----\n";
-    const ME: &str = "live.arkitekt.rekuest";
+    const ME: &str = "rekuest";
+    const HUB: &str = "0192f3c4-7a2b-7c1d-9e8f-1a2b3c4d5e6f";
 
     #[test]
     fn a_signed_request_verifies_only_as_signed() {
         let key = InstanceKey::from_pem(PEM).unwrap();
-        let header = sign(&key, "post", "/rekuest/internal/assign", b"{}", ME, ME);
+        let header = sign(
+            &key,
+            "post",
+            "/rekuest/internal/assign",
+            b"{}",
+            ME,
+            ME,
+            None,
+        );
         let verified = verify(
             &key,
             "POST",
@@ -479,7 +505,7 @@ mod tests {
             refused("POST", "/rekuest/internal/assign", b"{\"a\":1}", &header),
             "Service token was signed for another body"
         );
-        let other = sign(&key, "POST", "/p", b"", "live.arkitekt.mikro", ME);
+        let other = sign(&key, "POST", "/p", b"", "mikro", ME, None);
         assert!(refused("POST", "/p", b"", &other).starts_with("Key "));
         assert_eq!(
             verify(&key, "POST", "/p", b"", Some("Bearer x"), ME)
@@ -493,15 +519,16 @@ mod tests {
     async fn a_service_is_trusted_only_under_its_own_name() {
         let key = InstanceKey::from_pem(PEM).unwrap();
         let mut jwk = key.public_jwk();
-        jwk["service"] = json!("live.arkitekt.mikro");
+        jwk["service"] = json!("mikro");
         let bundle = TrustBundle::new(None, Some(&json!({"keys": [jwk]})));
         let mikro = sign(
             &key,
             "POST",
             "/rekuest/agi/http/7",
             b"{}",
-            "live.arkitekt.mikro",
+            "mikro",
             ME,
+            None,
         );
         let verified = verify_with_bundle(
             &bundle,
@@ -510,18 +537,20 @@ mod tests {
             b"{}",
             Some(&mikro),
             ME,
+            None,
         )
         .await
         .unwrap();
-        assert_eq!(verified.issuer, "live.arkitekt.mikro");
+        assert_eq!(verified.issuer, "mikro");
 
         let posing = sign(
             &key,
             "POST",
             "/rekuest/agi/http/7",
             b"{}",
-            "live.arkitekt.kabinet",
+            "kabinet",
             ME,
+            None,
         );
         let refused = verify_with_bundle(
             &bundle,
@@ -530,15 +559,13 @@ mod tests {
             b"{}",
             Some(&posing),
             ME,
+            None,
         )
         .await
         .unwrap_err();
         assert_eq!(
             refused.0,
-            format!(
-                "Key {} belongs to 'live.arkitekt.mikro', not to 'live.arkitekt.kabinet'",
-                key.kid()
-            )
+            format!("Key {} belongs to 'mikro', not to 'kabinet'", key.kid())
         );
 
         let empty = TrustBundle::default();
@@ -549,12 +576,56 @@ mod tests {
             b"{}",
             Some(&mikro),
             ME,
+            None,
         )
         .await
         .unwrap_err();
         assert_eq!(
             unknown.0,
             format!("No key {} in the hub's trust bundle", key.kid())
+        );
+    }
+
+    #[tokio::test]
+    async fn a_service_of_another_hub_with_the_same_name_is_refused() {
+        let key = InstanceKey::from_pem(PEM).unwrap();
+        let mut jwk = key.public_jwk();
+        jwk["service"] = json!("mikro");
+        let bundle = TrustBundle::new(None, Some(&json!({"keys": [jwk]})));
+        let path = "/rekuest/agi/http/7";
+        let here = sign(&key, "POST", path, b"{}", "mikro", ME, Some(HUB));
+        let verified = verify_with_bundle(&bundle, "POST", path, b"{}", Some(&here), ME, Some(HUB))
+            .await
+            .unwrap();
+        assert_eq!(verified.issuer, "mikro");
+
+        let elsewhere = sign(
+            &key,
+            "POST",
+            path,
+            b"{}",
+            "mikro",
+            ME,
+            Some("0192f3c4-0000-7000-8000-000000000000"),
+        );
+        let refused = verify_with_bundle(
+            &bundle,
+            "POST",
+            path,
+            b"{}",
+            Some(&elsewhere),
+            ME,
+            Some(HUB),
+        )
+        .await
+        .unwrap_err();
+        assert!(refused.0.ends_with("not this hub"), "{}", refused.0);
+
+        let nowhere = sign(&key, "POST", path, b"{}", "mikro", ME, None);
+        assert!(
+            verify_with_bundle(&bundle, "POST", path, b"{}", Some(&nowhere), ME, Some(HUB))
+                .await
+                .is_err()
         );
     }
 }

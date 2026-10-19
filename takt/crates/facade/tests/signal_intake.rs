@@ -24,7 +24,7 @@ async fn context() -> Option<(Context, Arc<InstanceKey>)> {
     let key = Arc::new(InstanceKey::from_pem(PEM).unwrap());
     // The test signs as the bank with the same key; the bundle lists it under the bank.
     let mut jwk = key.public_jwk();
-    jwk["service"] = json!("live.arkitekt.bank");
+    jwk["service"] = json!("bank");
     let settings = Settings {
         instance_key: Some(key.clone()),
         services: vec![TrustedInstance {
@@ -127,7 +127,8 @@ async fn post(
         &format!("/agi/signal/{service}"),
         &raw,
         issuer,
-        "live.arkitekt.rekuest",
+        "rekuest",
+        None,
     );
     headers.insert("Authorization", authorization.parse().unwrap());
     signal_intake(
@@ -153,7 +154,7 @@ async fn a_signal_is_stored_once_and_caused_only_within_its_organization() {
     };
     let org = format!("sig-{}", uuid::Uuid::new_v4().simple());
     let task = task_in(&ctx, &org).await;
-    let bank = "live.arkitekt.bank";
+    let bank = "bank";
 
     let (status, first) = post(
         &ctx,
@@ -220,35 +221,23 @@ async fn what_is_not_the_services_is_refused() {
     let org = format!("sig-{}", uuid::Uuid::new_v4().simple());
 
     assert_eq!(
-        post(
-            &ctx,
-            &key,
-            "bank",
-            "live.arkitekt.mikro",
-            &signal(&org, "x", None)
-        )
-        .await
-        .0,
+        post(&ctx, &key, "bank", "mikro", &signal(&org, "x", None))
+            .await
+            .0,
         401,
         "signed as another service"
     );
     assert_eq!(
-        post(
-            &ctx,
-            &key,
-            "nope",
-            "live.arkitekt.bank",
-            &signal(&org, "x", None)
-        )
-        .await
-        .0,
+        post(&ctx, &key, "nope", "bank", &signal(&org, "x", None))
+            .await
+            .0,
         404
     );
     let (status, dropped) = post(
         &ctx,
         &key,
         "bank",
-        "live.arkitekt.bank",
+        "bank",
         &signal(&format!("{org}-unknown"), "x", None),
     )
     .await;
@@ -258,26 +247,16 @@ async fn what_is_not_the_services_is_refused() {
     );
     let mut bad = signal(&org, "y", None);
     bad["kind"] = json!("EXPLODED");
-    assert_eq!(
-        post(&ctx, &key, "bank", "live.arkitekt.bank", &bad).await.0,
-        400
-    );
+    assert_eq!(post(&ctx, &key, "bank", "bank", &bad).await.0, 400);
 
     // A replayed request (the same token) is acknowledged as a duplicate, not stored again.
     let raw = serde_json::to_vec(&signal(&org, "z", None)).unwrap();
     let mut headers = HeaderMap::new();
     headers.insert(
         "Authorization",
-        service_trust::sign(
-            &key,
-            "POST",
-            PATH,
-            &raw,
-            "live.arkitekt.bank",
-            "live.arkitekt.rekuest",
-        )
-        .parse()
-        .unwrap(),
+        service_trust::sign(&key, "POST", PATH, &raw, "bank", "rekuest", None)
+            .parse()
+            .unwrap(),
     );
     assert_eq!(
         signal_intake(&ctx, "bank", PATH, &headers, &raw).await.0,

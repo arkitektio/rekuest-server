@@ -39,6 +39,9 @@ pub struct Settings {
     pub instance_key: Option<Arc<InstanceKey>>,
     /// `REKUEST_IDENTIFIER`: what this rekuest signs as, and what service tokens are for.
     pub rekuest_identifier: String,
+    /// `AUTHENTIKATE["hub"]`: the uuid the hub generated for itself. Service tokens carry it, and
+    /// one checked against the hub's bundle must be for it. None: not checked (a hub of none).
+    pub hub: Option<String>,
     /// Where the Python server answers, script name included (`rekuest.server_url`): takt asks
     /// it for the upkeep job. `None` turns upkeep off (tests).
     pub server_url: Option<String>,
@@ -76,7 +79,7 @@ pub struct Settings {
 }
 
 /// One entry of `SERVICES` or `HOOK_AGENTS`, as far as trust needs it: its name there, and the
-/// identifier its instance signs as (default `live.arkitekt.<name>`).
+/// identifier its instance signs as (default: its name in the hub).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TrustedInstance {
     pub name: String,
@@ -123,7 +126,8 @@ impl Default for Settings {
             control_deadline: Duration::from_secs(60),
             provenance: ProvenanceSettings::default(),
             instance_key: None,
-            rekuest_identifier: "live.arkitekt.rekuest".into(),
+            rekuest_identifier: "rekuest".into(),
+            hub: None,
             server_url: None,
             probe_ttl: Duration::from_secs(3600),
             probe_linger: Duration::from_secs(300),

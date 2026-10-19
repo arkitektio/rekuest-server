@@ -15,7 +15,7 @@ from arkitekt_service.contract import cli
 PEM = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEILK+rl9gVEjfKGiye+mLLjfEUGIdoP0WPC8lMZS3NYK2\n-----END PRIVATE KEY-----\n"
 
 FACTS: dict[str, object] = {
-    "me": {"name": "rekuest", "path": "rekuest", "url": "http://rekuest:80/rekuest", "identifier": "live.arkitekt.rekuest", "secret_key": "s3cret", "admin": {"username": "admin", "password": "pw"}},
+    "me": {"name": "rekuest", "path": "rekuest", "url": "http://rekuest:80/rekuest", "identifier": "rekuest", "secret_key": "s3cret", "admin": {"username": "admin", "password": "pw"}},
     "hub": {"origins": ["https://lab.example"], "auth": {"audience": "*", "issuers": [{"kind": "jwks_uri", "iss": "lok", "jwks_uri": "http://lok/.well-known/jwks.json"}], "static_tokens": {}}},
     "databases": {"main": {"host": "db", "name": "rekuest", "username": "hub", "password": "pw"}},
     "redis": {"host": "redis"},
@@ -23,8 +23,8 @@ FACTS: dict[str, object] = {
     "instance": {"private_key": PEM, "trust": {"jwks_uri": "http://lok/.well-known/hub-keys/1"}},
     "peers": {
         "takt": {"url": "http://rekuest-takt:8080/rekuest", "settings": {"socket": "/run/takt/internal.sock"}},
-        "mikro": {"identifier": "live.arkitekt.mikro", "url": "http://mikro:80/mikro", "offers": {"rekuest_service": "http://mikro:80/mikro/_rekuest/service", "rekuest_hook": "http://mikro:80/mikro/_rekuest/hook"}},
-        "kraph": {"identifier": "live.arkitekt.kraph", "url": "http://kraph:80/kraph"},
+        "mikro": {"identifier": "mikro", "url": "http://mikro:80/mikro", "offers": {"rekuest_service": "http://mikro:80/mikro/_rekuest/service", "rekuest_hook": "http://mikro:80/mikro/_rekuest/hook"}},
+        "kraph": {"identifier": "kraph", "url": "http://kraph:80/kraph"},
         "notes": {"url": "http://notes:80/notes", "offers": {"rekuest_hook": "http://notes:80/notes/_rekuest/hook"}},
     },
 }
@@ -64,9 +64,9 @@ def test_its_config_is_written_from_what_the_hub_says(tmp_path: Path, capsys: py
     block = config["rekuest"]
     # Wired to whoever offers each endpoint — a service, a hook agent, or both — by what the
     # peer offers and not by a list of names anybody keeps.
-    assert block["services"] == [{"name": "mikro", "url": "http://mikro:80/mikro/_rekuest/service", "identifier": "live.arkitekt.mikro"}]
+    assert block["services"] == [{"name": "mikro", "url": "http://mikro:80/mikro/_rekuest/service", "identifier": "mikro"}]
     assert block["hook_agents"] == [
-        {"name": "mikro", "hook_url": "http://mikro:80/mikro/_rekuest/hook", "identifier": "live.arkitekt.mikro"},
+        {"name": "mikro", "hook_url": "http://mikro:80/mikro/_rekuest/hook", "identifier": "mikro"},
         {"name": "notes", "hook_url": "http://notes:80/notes/_rekuest/hook"},
     ]
     assert block["takt_url"] == "http://rekuest-takt:8080/rekuest" and block["takt_socket"] == "/run/takt/internal.sock"
@@ -88,7 +88,7 @@ def test_what_a_peer_hosts_goes_into_its_services_entry(tmp_path: Path, capsys: 
 
     (service,) = yaml.safe_load(out)["rekuest"]["services"]
     # As the hub said it.
-    assert service == {"name": "mikro", "url": "http://mikro:80/mikro/_rekuest/service", "identifier": "live.arkitekt.mikro", "hosts": hosts}
+    assert service == {"name": "mikro", "url": "http://mikro:80/mikro/_rekuest/service", "identifier": "mikro", "hosts": hosts}
 
 
 def test_cataloguing_is_a_job_and_part_of_the_setup(capsys: pytest.CaptureFixture[str]) -> None:
