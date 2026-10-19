@@ -16,7 +16,7 @@ import pytest
 from authentikate.models import Organization
 from django.test import Client as HttpClient
 
-from facade import enums, hook_agents, models, provisioning, service_catalog
+from facade import enums, hook_agents, models, provisioning, schedules, service_catalog, triggers
 from facade.inputs import ImplementAgentInputModel
 from rekuest.configuration import HookAgentEntry
 from arkitekt_service import trust
@@ -125,3 +125,46 @@ class TestHookEndpoint:
             assert post(trust.sign("POST", url, body, issuer="live.arkitekt.rekuest", audience=elsewhere)) == 401
         genuine = trust.sign("POST", url, body, issuer="live.arkitekt.rekuest", audience="live.arkitekt.janitor")
         assert post(genuine) != 401
+
+
+#: An agent offering an action that takes a structure: what arkitekt-service's manifest version 2
+#: says for ``@agent.action(args=[StructurePort("metric", "@mikro/metric", nullable=True)])``.
+INGEST = hook_agents.HookManifest.model_validate(
+    {
+        "description": "Ingests metrics.",
+        "actions": [
+            {
+                "interface": "ingest_metrics",
+                "name": "Ingest metrics",
+                "args": [{"key": "metric", "kind": "STRUCTURE", "identifier": "@mikro/metric", "nullable": True, "description": "The metric written."}],
+            }
+        ],
+    }
+)
+
+
+@pytest.mark.django_db(transaction=True)
+class TestHookActionPorts:
+    def test_a_manifest_without_ports_is_an_action_without_arguments(self):
+        (action,) = hook_agents.HookManifest.model_validate({"actions": [{"interface": "tidy_up"}]}).actions
+        assert action.args == []
+
+    def test_a_structure_port_becomes_the_actions_argument(self, lab):
+        agent = hook_agents.provision_agent(HookAgentEntry(name="kraph", hook_url="http://127.0.0.1:9/_rekuest/hook"), INGEST, lab)
+        implementation = models.Implementation.objects.get(agent=agent, interface="ingest_metrics")
+        (port,) = models.ArgPort.objects.filter(action=implementation.action, parent__isnull=True)
+        assert (port.key, port.kind, port.identifier, port.nullable) == ("metric", "STRUCTURE", "@mikro/metric", True)
+
+    def test_a_trigger_on_the_structure_can_feed_it(self, lab):
+        agent = hook_agents.provision_agent(HookAgentEntry(name="kraph", hook_url="http://127.0.0.1:9/_rekuest/hook"), INGEST, lab)
+        action = models.Implementation.objects.get(agent=agent, interface="ingest_metrics").action
+        assert triggers.target_port(action, "metric", "@mikro/metric").key == "metric"
+        triggers.check_args(action, "metric", "@mikro/metric", {})
+        with pytest.raises(ValueError):
+            triggers.target_port(action, "metric", "@mikro/annotation")
+
+    def test_a_schedule_runs_it_without_an_object(self, lab):
+        """The same action on a schedule: the nullable port is simply left out."""
+        agent = hook_agents.provision_agent(HookAgentEntry(name="kraph", hook_url="http://127.0.0.1:9/_rekuest/hook"), INGEST, lab)
+        action = models.Implementation.objects.get(agent=agent, interface="ingest_metrics").action
+        schedules.validate(action=action, agent=None, interface=None, args={}, interval_seconds=60, cron=None, tz="UTC")

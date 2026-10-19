@@ -31,14 +31,14 @@ import threading
 import httpx
 from authentikate.models import App, Client, Membership, Organization, Release, User
 from django.conf import settings
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from facade import enums, inputs, models, takt, takt_api
 from facade.caller_context import CallerContext
 from facade.takt_api import Principal
 from rekuest.configuration import HookAgentEntry
 from rekuest_core.enums import ActionKind
-from rekuest_core.inputs.models import DefinitionInputModel, ImplementationInputModel
+from rekuest_core.inputs.models import ArgPortInputModel, DefinitionInputModel, ImplementationInputModel
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +68,9 @@ class HookAction(BaseModel):
     interface: str
     name: str | None = None
     description: str | None = None
+    #: Its ports (manifest version 2): the STRUCTURE ports a trigger can feed. An older agent
+    #: lists none, and its actions take no arguments.
+    args: list[ArgPortInputModel] = Field(default_factory=list)
 
 
 class HookManifest(BaseModel):
@@ -98,6 +101,7 @@ def _implementations(actions: list[HookAction]) -> list[ImplementationInputModel
                 name=action.name or action.interface,
                 description=action.description,
                 kind=ActionKind.FUNCTION,
+                args=action.args,
                 # A hook action must be safe to run twice (rekuest-hook's contract), which also
                 # lets rekuest redeliver it after an ambiguous loss.
                 idempotent=True,
