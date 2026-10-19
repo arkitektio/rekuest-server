@@ -499,12 +499,11 @@ pub async fn implement_agent(
 
     // The templates the agent's slots hold before: the ones it re-points or drops may be left
     // without a holder.
-    let held: Vec<i64> = sqlx::query_scalar(
-        "SELECT blok_id FROM facade_materializedblok WHERE declared_by_id = $1",
-    )
-    .bind(agent)
-    .fetch_all(&mut *conn)
-    .await?;
+    let held: Vec<i64> =
+        sqlx::query_scalar("SELECT blok_id FROM facade_materializedblok WHERE declared_by_id = $1")
+            .bind(agent)
+            .fetch_all(&mut *conn)
+            .await?;
     let mut declared_bloks = vec![];
     for blok in payload.bloks.iter().flatten() {
         diagnostics.extend(register_blok(conn, &identity, blok).await?);

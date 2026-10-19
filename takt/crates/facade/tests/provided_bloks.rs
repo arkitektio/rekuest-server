@@ -142,7 +142,11 @@ async fn agents_of_one_app_share_a_template_and_each_slot_follows_its_agent() {
 
     f.register(first, declaring(json!([panel("hi")]))).await;
     f.register(second, declaring(json!([panel("hi")]))).await;
-    assert_eq!(f.templates("panel").await.len(), 1, "same content, one template");
+    assert_eq!(
+        f.templates("panel").await.len(),
+        1,
+        "same content, one template"
+    );
     let (first_slot, shared) = f.slot(first, "panel").await.unwrap();
     assert_eq!(f.slot(second, "panel").await.unwrap().1, shared);
 
@@ -163,7 +167,8 @@ async fn agents_of_one_app_share_a_template_and_each_slot_follows_its_agent() {
 
     // Changed content: a new template, the same slot, the placement kept; the second agent's
     // template is not overwritten.
-    f.register(first, declaring(json!([panel("changed")]))).await;
+    f.register(first, declaring(json!([panel("changed")])))
+        .await;
     let (slot, changed) = f.slot(first, "panel").await.unwrap();
     assert_eq!(slot, first_slot);
     assert_ne!(changed, shared);
@@ -248,13 +253,12 @@ async fn an_action_keeps_its_logo_while_any_agent_still_provides_it() {
     });
     f.register(first, declaration.clone()).await;
     f.register(second, declaration).await;
-    let action: i64 = sqlx::query_scalar(
-        "SELECT action_id FROM facade_implementation WHERE agent_id = $1",
-    )
-    .bind(first)
-    .fetch_one(&f.db)
-    .await
-    .unwrap();
+    let action: i64 =
+        sqlx::query_scalar("SELECT action_id FROM facade_implementation WHERE agent_id = $1")
+            .bind(first)
+            .fetch_one(&f.db)
+            .await
+            .unwrap();
     let logo = "SELECT count(*) FROM facade_action WHERE id = $1 AND latest_logo_id IS NOT NULL";
     assert_eq!(f.count(logo, action).await, 1);
 
