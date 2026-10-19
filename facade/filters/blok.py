@@ -1,6 +1,6 @@
 # pyright: reportExplicitAny=false
 # strawberry-django's `auto` (a field whose type comes from the model) is itself spelled `Any`.
-"""Filters and orders for materialized bloks."""
+"""Filters and orders for bloks and materialized bloks."""
 
 from __future__ import annotations
 
@@ -20,6 +20,17 @@ class MaterializedBlokOrder:
     created_at: auto
 
 
+@strawberry_django.filter_type(models.Blok, description="A way to filter bloks")
+class BlokFilter:
+    @filter_field(description="Only bloks an app provides (true) or only custom bloks users made (false).")
+    def provided(self, info: Info, queryset: QuerySet[models.Blok], value: bool, prefix: str) -> tuple[QuerySet[models.Blok], Q]:
+        return queryset.filter(**{f"{prefix}app__isnull": not value}), Q()
+
+    @filter_field(description="Search by name")
+    def search(self, info: Info, queryset: QuerySet[models.Blok], value: str | None, prefix: str) -> tuple[QuerySet[models.Blok], Q]:
+        return queryset.filter(**{f"{prefix}name__icontains": value}), Q()
+
+
 @strawberry_django.filter_type(models.MaterializedBlok, description="A way to filter placements (space memberships)")
 class MaterializedBlokFilter:
     @filter_field(description="Filter by IDs")
@@ -29,6 +40,10 @@ class MaterializedBlokFilter:
     @filter_field(description="Filter by agent")
     def agent(self, info: Info, queryset: QuerySet[models.MaterializedBlok], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.MaterializedBlok], Q]:
         return queryset.filter(**{f"{prefix}agent_mappings__agent_id": value}), Q()
+
+    @filter_field(description="Only agents' own materializations of the bloks they provide (true) or only ones users made (false).")
+    def provided(self, info: Info, queryset: QuerySet[models.MaterializedBlok], value: bool, prefix: str) -> tuple[QuerySet[models.MaterializedBlok], Q]:
+        return queryset.filter(**{f"{prefix}declared_by__isnull": not value}), Q()
 
     @filter_field(description="Search by name")
     def search(self, info: Info, queryset: QuerySet[models.MaterializedBlok], value: str | None, prefix: str) -> tuple[QuerySet[models.MaterializedBlok], Q]:

@@ -1,4 +1,7 @@
-"""Blok mutations: create, update, delete.
+"""Blok mutations: create, update, delete, fork.
+
+These write custom bloks only. A provided blok (``app`` set) is its agents' and changes only with
+their registrations; a user who wants to change it, or bind other agents to it, forks it.
 
 Every read here is scoped to the caller's organization. ``scoped_get`` raises ``PermissionError``
 for a wrong-tenant id so it is indistinguishable from a missing one; deletes use a scoped filter
@@ -65,6 +68,14 @@ def _catalog_for(info: Info, name: str | None) -> models.UICatalog:
     return models.UICatalog.objects.get_or_create(name=name or STANDARD_CATALOG_NAME, organization=info.context.request.organization)[0]
 
 
+def _custom(info: Info, id: str) -> models.Blok:
+    """The caller's blok ``id``, refused when an app provides it."""
+    blok = scoped_get(models.Blok, info, id, field="organization")
+    if blok.app_id is not None:
+        raise ValueError(f"Blok '{blok.name}' is provided by its agents and changes with them; fork it to edit it.")
+    return blok
+
+
 def _parsed(source: str) -> list[rimodels.ComponentNodeInputModel]:
     """The tree a blok's BSX source describes, parsed by takt (the one server-side BSX parser)."""
     answer = takt.call(takt_api.PARSE_BLOK, takt_api.ParseBlokRequest(source=source))
@@ -85,9 +96,11 @@ def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
 
     # ``organization`` is part of the lookup, not the defaults: keyed on name alone this was a
     # global upsert, so any user could overwrite another organization's blok by name.
+    # Only a custom blok is ever replaced: one an app provides under the same name is its own row.
     blok, _ = models.Blok.objects.update_or_create(
         name=model.name,
         organization=organization,
+        app=None,
         defaults=dict(
             components=[c.model_dump() for c in model.components or []],
             description=model.description,
@@ -109,16 +122,47 @@ def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
 
 
 def delete_blok(info: Info, input: inputs.DeleteBlokInput) -> bool:
-    """Delete a blok in the caller's organization; False when there is none."""
+    """Delete a custom blok in the caller's organization; False when there is none."""
+    if models.Blok.objects.filter(id=input.id, organization=info.context.request.organization, app__isnull=False).exists():
+        raise ValueError("A provided blok goes when no agent declares it any more; it cannot be deleted by hand.")
     deleted, _ = models.Blok.objects.filter(id=input.id, organization=info.context.request.organization).delete()
     return deleted > 0
 
 
 @transaction.atomic
+def fork_blok(info: Info, input: inputs.ForkBlokInput) -> types.Blok:
+    """Copy a provided blok into a custom one, which lives on whatever its agents do."""
+    provided = scoped_get(models.Blok, info, input.id, field="organization")
+    if provided.app_id is None:
+        raise ValueError(f"Blok '{provided.name}' is already custom.")
+    name = input.name or provided.name
+    if models.Blok.objects.filter(organization=provided.organization, name=name, app__isnull=True).exists():
+        raise ValueError(f"A custom blok named '{name}' exists already.")
+    blok = models.Blok.objects.create(
+        organization=provided.organization,
+        name=name,
+        description=provided.description,
+        creator=info.context.request.user,
+        catalog=provided.catalog,
+        components=provided.components,
+        demo_state=provided.demo_state,
+        context=provided.context,
+        for_model=provided.for_model,
+        for_node=provided.for_node,
+        diagnostics=provided.diagnostics,
+    )
+    for dependency in provided.dependencies.all():
+        dependency.pk = None
+        dependency.blok = blok
+        dependency.save()
+    return cast("types.Blok", blok)
+
+
+@transaction.atomic
 def update_blok(info: Info, input: inputs.UpdateBlokInput) -> types.Blok:
-    """Partially update a blok in the caller's organization."""
+    """Partially update a custom blok in the caller's organization."""
     model = input.to_pydantic()
-    blok = scoped_get(models.Blok, info, model.id, field="organization")
+    blok = _custom(info, model.id)
 
     if model.name is not None:
         blok.name = model.name

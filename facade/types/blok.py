@@ -23,7 +23,7 @@ from rekuest_core.objects import types as rtypes
 if TYPE_CHECKING:
     # Named in annotations only: strawberry resolves them when it builds the schema.
     from facade.types.agent import Agent
-    from facade.types.auth import User
+    from facade.types.auth import App, User
     from facade.types.dashboard import DashboardPlacement, UICatalog
     from facade.types.demand import ActionDependency, StateDependency
     from facade.types.threed import Placement
@@ -35,13 +35,23 @@ def blok_hash(components: object, demo_state: object, context: str) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
-@strawberry_django.type(models.Blok)
+@strawberry_django.type(models.Blok, filters=filters.BlokFilter, pagination=True)
 class Blok:
     id: strawberry.ID
     name: str
     description: str | None
     creator: User
     catalog: UICatalog
+    app: App | None = strawberry_django.field(description="The app whose agents provide this blok; null for a custom blok a user made. A provided blok changes and goes with its agents' registrations and cannot be edited or materialized by hand: fork it.")
+
+    @strawberry_django.field(description="Whether an app's agents provide this blok (see `app`).", only=["app_id"])
+    def provided(self) -> bool:
+        return row_of(self, models.Blok).app_id is not None
+
+    @strawberry_django.field(description="The agents that currently provide this blok, each through its own materialization.")
+    def providers(self, info: Info) -> list[Agent]:
+        return cast("list[Agent]", list(models.Agent.objects.filter(declared_materialized_bloks__blok=row_of(self, models.Blok)).distinct()))
+
     materialized_bloks: list["MaterializedBlok"] = strawberry_django.field(
         description="Materialized bloks that are instances of this blok.",
     )
@@ -137,6 +147,7 @@ class MaterializedBlok:
     name: str | None
     description: str | None
     is_default: bool = strawberry_django.field(description="Whether this is its declaring agent's default blok for the blok's context.")
+    declared_by: Agent | None = strawberry_django.field(description="The agent this materialization belongs to, for a blok its app provides; null when a user made it. An agent's materialization follows its registrations.")
     created_at: datetime.datetime
     updated_at: datetime.datetime
     agent_mappings: list["BlokAgentMapping"] = strawberry_django.field(

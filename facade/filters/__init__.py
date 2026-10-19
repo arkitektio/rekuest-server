@@ -47,7 +47,7 @@ from .auth import (
     UserFilter,
     UserOrder,
 )
-from .blok import MaterializedBlokFilter, MaterializedBlokOrder
+from .blok import BlokFilter, MaterializedBlokFilter, MaterializedBlokOrder
 from .common import ParamPair
 from .dashboard import DashboardPlacementFilter, DashboardPlacementOrder
 from .dependency import (
@@ -128,6 +128,7 @@ __all__ = [
     "PlacementOrder",
     "PlacementFilter",
     "MaterializedBlokOrder",
+    "BlokFilter",
     "MaterializedBlokFilter",
     "DashboardPlacementFilter",
     "DashboardPlacementOrder",

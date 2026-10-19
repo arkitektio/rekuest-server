@@ -9135,11 +9135,6 @@
           "name": "panel-<side>",
           "mappings": [
             {
-              "key": "camera",
-              "dependency": null,
-              "agent_is_declarer": true
-            },
-            {
               "key": "stage",
               "dependency": "stage",
               "agent_is_declarer": true
@@ -9648,11 +9643,6 @@
               "key": "camera",
               "dependency": "camera",
               "agent_is_declarer": true
-            },
-            {
-              "key": "stage",
-              "dependency": null,
-              "agent_is_declarer": true
             }
           ],
           "description": "A panel"
@@ -9981,90 +9971,7 @@
         "description": "an agent",
         "name_is_client": true
       },
-      "bloks": [
-        {
-          "blok": {
-            "name": "panel-<side>",
-            "catalog": "orkestrator",
-            "components": [
-              {
-                "id": "root",
-                "props": [
-                  {
-                    "key": "onClick",
-                    "util_call": {
-                      "arguments": [],
-                      "operation": "made_up_ui_operation"
-                    },
-                    "agent_call": null,
-                    "static_value": null,
-                    "dynamic_value": null,
-                    "declares_value": null
-                  }
-                ],
-                "children": [
-                  {
-                    "id": "leaf",
-                    "props": [
-                      {
-                        "key": "text",
-                        "util_call": null,
-                        "agent_call": null,
-                        "static_value": "hi",
-                        "dynamic_value": null,
-                        "declares_value": null
-                      }
-                    ],
-                    "children": null,
-                    "component": "Text"
-                  }
-                ],
-                "component": "Stack"
-              }
-            ],
-            "demo_state": {
-              "x": 1
-            },
-            "description": "A panel",
-            "diagnostics": [
-              {
-                "code": "unknown_operation",
-                "path": "prop 'onClick' of component 'root'",
-                "level": "WARNING",
-                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered"
-              }
-            ],
-            "dependencies": [
-              {
-                "key": "camera",
-                "optional": false,
-                "app_filter": null,
-                "description": "the camera",
-                "state_demands": [],
-                "action_demands": [],
-                "version_filter": null,
-                "auto_resolvable": false,
-                "max_viable_instances": null,
-                "min_viable_instances": null
-              }
-            ]
-          },
-          "name": "panel-<side>",
-          "mappings": [
-            {
-              "key": "camera",
-              "dependency": "camera",
-              "agent_is_declarer": true
-            },
-            {
-              "key": "stage",
-              "dependency": null,
-              "agent_is_declarer": true
-            }
-          ],
-          "description": "A panel"
-        }
-      ],
+      "bloks": [],
       "locks": [
         {
           "key": "stage-lock",
@@ -10185,90 +10092,7 @@
         "description": "an agent",
         "name_is_client": true
       },
-      "bloks": [
-        {
-          "blok": {
-            "name": "panel-<side>",
-            "catalog": "orkestrator",
-            "components": [
-              {
-                "id": "root",
-                "props": [
-                  {
-                    "key": "onClick",
-                    "util_call": {
-                      "arguments": [],
-                      "operation": "made_up_ui_operation"
-                    },
-                    "agent_call": null,
-                    "static_value": null,
-                    "dynamic_value": null,
-                    "declares_value": null
-                  }
-                ],
-                "children": [
-                  {
-                    "id": "leaf",
-                    "props": [
-                      {
-                        "key": "text",
-                        "util_call": null,
-                        "agent_call": null,
-                        "static_value": "hi",
-                        "dynamic_value": null,
-                        "declares_value": null
-                      }
-                    ],
-                    "children": null,
-                    "component": "Text"
-                  }
-                ],
-                "component": "Stack"
-              }
-            ],
-            "demo_state": {
-              "x": 1
-            },
-            "description": "A panel",
-            "diagnostics": [
-              {
-                "code": "unknown_operation",
-                "path": "prop 'onClick' of component 'root'",
-                "level": "WARNING",
-                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered"
-              }
-            ],
-            "dependencies": [
-              {
-                "key": "camera",
-                "optional": false,
-                "app_filter": null,
-                "description": "the camera",
-                "state_demands": [],
-                "action_demands": [],
-                "version_filter": null,
-                "auto_resolvable": false,
-                "max_viable_instances": null,
-                "min_viable_instances": null
-              }
-            ]
-          },
-          "name": "panel-<side>",
-          "mappings": [
-            {
-              "key": "camera",
-              "dependency": "camera",
-              "agent_is_declarer": true
-            },
-            {
-              "key": "stage",
-              "dependency": null,
-              "agent_is_declarer": true
-            }
-          ],
-          "description": "A panel"
-        }
-      ],
+      "bloks": [],
       "locks": [
         {
           "key": "stage-lock",
@@ -10389,90 +10213,7 @@
         "description": "an agent",
         "name_is_client": true
       },
-      "bloks": [
-        {
-          "blok": {
-            "name": "panel-<side>",
-            "catalog": "orkestrator",
-            "components": [
-              {
-                "id": "root",
-                "props": [
-                  {
-                    "key": "onClick",
-                    "util_call": {
-                      "arguments": [],
-                      "operation": "made_up_ui_operation"
-                    },
-                    "agent_call": null,
-                    "static_value": null,
-                    "dynamic_value": null,
-                    "declares_value": null
-                  }
-                ],
-                "children": [
-                  {
-                    "id": "leaf",
-                    "props": [
-                      {
-                        "key": "text",
-                        "util_call": null,
-                        "agent_call": null,
-                        "static_value": "hi",
-                        "dynamic_value": null,
-                        "declares_value": null
-                      }
-                    ],
-                    "children": null,
-                    "component": "Text"
-                  }
-                ],
-                "component": "Stack"
-              }
-            ],
-            "demo_state": {
-              "x": 1
-            },
-            "description": "A panel",
-            "diagnostics": [
-              {
-                "code": "unknown_operation",
-                "path": "prop 'onClick' of component 'root'",
-                "level": "WARNING",
-                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered"
-              }
-            ],
-            "dependencies": [
-              {
-                "key": "camera",
-                "optional": false,
-                "app_filter": null,
-                "description": "the camera",
-                "state_demands": [],
-                "action_demands": [],
-                "version_filter": null,
-                "auto_resolvable": false,
-                "max_viable_instances": null,
-                "min_viable_instances": null
-              }
-            ]
-          },
-          "name": "panel-<side>",
-          "mappings": [
-            {
-              "key": "camera",
-              "dependency": "camera",
-              "agent_is_declarer": true
-            },
-            {
-              "key": "stage",
-              "dependency": null,
-              "agent_is_declarer": true
-            }
-          ],
-          "description": "A panel"
-        }
-      ],
+      "bloks": [],
       "locks": [
         {
           "key": "stage-lock",
@@ -10593,90 +10334,7 @@
         "description": "an agent",
         "name_is_client": true
       },
-      "bloks": [
-        {
-          "blok": {
-            "name": "panel-<side>",
-            "catalog": "orkestrator",
-            "components": [
-              {
-                "id": "root",
-                "props": [
-                  {
-                    "key": "onClick",
-                    "util_call": {
-                      "arguments": [],
-                      "operation": "made_up_ui_operation"
-                    },
-                    "agent_call": null,
-                    "static_value": null,
-                    "dynamic_value": null,
-                    "declares_value": null
-                  }
-                ],
-                "children": [
-                  {
-                    "id": "leaf",
-                    "props": [
-                      {
-                        "key": "text",
-                        "util_call": null,
-                        "agent_call": null,
-                        "static_value": "hi",
-                        "dynamic_value": null,
-                        "declares_value": null
-                      }
-                    ],
-                    "children": null,
-                    "component": "Text"
-                  }
-                ],
-                "component": "Stack"
-              }
-            ],
-            "demo_state": {
-              "x": 1
-            },
-            "description": "A panel",
-            "diagnostics": [
-              {
-                "code": "unknown_operation",
-                "path": "prop 'onClick' of component 'root'",
-                "level": "WARNING",
-                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered"
-              }
-            ],
-            "dependencies": [
-              {
-                "key": "camera",
-                "optional": false,
-                "app_filter": null,
-                "description": "the camera",
-                "state_demands": [],
-                "action_demands": [],
-                "version_filter": null,
-                "auto_resolvable": false,
-                "max_viable_instances": null,
-                "min_viable_instances": null
-              }
-            ]
-          },
-          "name": "panel-<side>",
-          "mappings": [
-            {
-              "key": "camera",
-              "dependency": "camera",
-              "agent_is_declarer": true
-            },
-            {
-              "key": "stage",
-              "dependency": null,
-              "agent_is_declarer": true
-            }
-          ],
-          "description": "A panel"
-        }
-      ],
+      "bloks": [],
       "locks": [
         {
           "key": "stage-lock",
@@ -10797,90 +10455,7 @@
         "description": "an agent",
         "name_is_client": true
       },
-      "bloks": [
-        {
-          "blok": {
-            "name": "panel-<side>",
-            "catalog": "orkestrator",
-            "components": [
-              {
-                "id": "root",
-                "props": [
-                  {
-                    "key": "onClick",
-                    "util_call": {
-                      "arguments": [],
-                      "operation": "made_up_ui_operation"
-                    },
-                    "agent_call": null,
-                    "static_value": null,
-                    "dynamic_value": null,
-                    "declares_value": null
-                  }
-                ],
-                "children": [
-                  {
-                    "id": "leaf",
-                    "props": [
-                      {
-                        "key": "text",
-                        "util_call": null,
-                        "agent_call": null,
-                        "static_value": "hi",
-                        "dynamic_value": null,
-                        "declares_value": null
-                      }
-                    ],
-                    "children": null,
-                    "component": "Text"
-                  }
-                ],
-                "component": "Stack"
-              }
-            ],
-            "demo_state": {
-              "x": 1
-            },
-            "description": "A panel",
-            "diagnostics": [
-              {
-                "code": "unknown_operation",
-                "path": "prop 'onClick' of component 'root'",
-                "level": "WARNING",
-                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered"
-              }
-            ],
-            "dependencies": [
-              {
-                "key": "camera",
-                "optional": false,
-                "app_filter": null,
-                "description": "the camera",
-                "state_demands": [],
-                "action_demands": [],
-                "version_filter": null,
-                "auto_resolvable": false,
-                "max_viable_instances": null,
-                "min_viable_instances": null
-              }
-            ]
-          },
-          "name": "panel-<side>",
-          "mappings": [
-            {
-              "key": "camera",
-              "dependency": "camera",
-              "agent_is_declarer": true
-            },
-            {
-              "key": "stage",
-              "dependency": null,
-              "agent_is_declarer": true
-            }
-          ],
-          "description": "A panel"
-        }
-      ],
+      "bloks": [],
       "locks": [
         {
           "key": "stage-lock",

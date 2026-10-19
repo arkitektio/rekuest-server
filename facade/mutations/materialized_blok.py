@@ -60,6 +60,12 @@ def _resolve_agent_mappings(organization: Organization, blok: models.Blok, wante
     return resolved
 
 
+def _refuse_declared(mblok: models.MaterializedBlok | None) -> None:
+    """An agent's own materialization follows its registrations, not a user."""
+    if mblok is not None and mblok.declared_by_id is not None:
+        raise ValueError(f"Materialized blok '{mblok.name}' is its agent's and changes with its registrations.")
+
+
 def _write_mappings(mblok: models.MaterializedBlok, resolved: dict[models.BlokDependency, models.Agent]) -> None:
     for dep, agent in resolved.items():
         # ``key`` is what ``unique_dependency_per_materialized_blok`` is built on; omitting it
@@ -73,6 +79,8 @@ def materialize_blok(info: Info, input: inputs.MaterializeBlokInput) -> types.Ma
     """Create a materialization of a blok with validated agent bindings, optionally placed on a dashboard."""
     organization = _organization(info)
     blok = scoped_get(models.Blok, info, input.blok, field="organization")
+    if blok.app_id is not None:
+        raise ValueError(f"Blok '{blok.name}' is provided by its agents, each materializing it for itself; fork it to bind other agents.")
     dashboard = scoped_get(models.Dashboard, info, input.dashboard, field="organization") if input.dashboard else None
 
     resolved = _resolve_agent_mappings(organization, blok, {mapping.key: str(mapping.agent) for mapping in input.agent_mappings or []})
@@ -94,7 +102,9 @@ def materialize_blok(info: Info, input: inputs.MaterializeBlokInput) -> types.Ma
 
 def delete_materialized_blok(info: Info, input: inputs.DeleteMaterializedBlokInput) -> bool:
     """Delete a materialization in the caller's organization; False when there is none."""
-    deleted, _ = models.MaterializedBlok.objects.filter(id=input.id, blok__organization=info.context.request.organization).delete()
+    rows = models.MaterializedBlok.objects.filter(id=input.id, blok__organization=info.context.request.organization)
+    _refuse_declared(rows.first())
+    deleted, _ = rows.delete()
     return deleted > 0
 
 
@@ -102,6 +112,7 @@ def delete_materialized_blok(info: Info, input: inputs.DeleteMaterializedBlokInp
 def update_materialized_blok(info: Info, input: inputs.UpdateMaterializedBlokInput) -> types.MaterializedBlok:
     """Replace the agent bindings of a materialization in the caller's organization."""
     mblok = scoped_get(models.MaterializedBlok, info, input.id, field="blok__organization")
+    _refuse_declared(mblok)
 
     if input.agent_mappings is not None:
         # Full replacement, validated before the old mappings are dropped.

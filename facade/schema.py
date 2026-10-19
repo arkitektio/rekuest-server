@@ -298,6 +298,7 @@ class Mutation:
 
     # Blok
     delete_blok = mutation(resolver=mutations.delete_blok, description="Delete a blok by ID.")
+    fork_blok = mutation(resolver=mutations.fork_blok, description="Copy a blok an app provides into a custom blok, to edit it or bind other agents to it. The copy lives on whatever the providing agents do.")
     update_blok = mutation(resolver=mutations.update_blok, description="Update properties of a blok such as its name, description, components, demo state, catalog, or dependencies.")
     delete_materialized_blok = mutation(resolver=mutations.delete_materialized_blok, description="Delete a materialized blok by ID.")
     update_materialized_blok = mutation(resolver=mutations.update_materialized_blok, description="Update properties of a materialized blok such as its agent mappings.")

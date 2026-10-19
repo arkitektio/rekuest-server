@@ -145,6 +145,12 @@ class DeleteBlokInput:
     id: strawberry.ID = strawberry.field(description="The blok ID to delete. This is used to identify the blok in the system.")
 
 
+@strawberry.input(description="Copy a blok an app provides into a custom blok of the caller's organization, to edit it or bind other agents to it.")
+class ForkBlokInput:
+    id: strawberry.ID = strawberry.field(description="The provided blok to fork.")
+    name: str | None = strawberry.field(default=None, description="The custom blok's name. Defaults to the provided blok's.")
+
+
 @strawberry.input(description="The input for updating a blok.")
 class BlokAgentMappingInput:
     agent: strawberry.ID

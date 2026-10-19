@@ -2,6 +2,8 @@ from django.contrib.auth import get_user_model
 from django.db import models
 from django.db.models.functions import Now
 
+from authentikate.models import App
+
 from rekuest_core.inputs.models import ActionDependencyInputModel, StateDependencyInputModel
 
 
@@ -19,8 +21,16 @@ class Dashboard(models.Model):
 
 
 class Blok(models.Model):
+    """A UI template. Either custom (``app`` NULL: a user wrote it, it is unique by name in its
+    organization and lives until deleted) or provided (``app`` set: an agent of that app declared
+    it at registration). A provided blok is content-addressed by ``declaration_hash`` and shared
+    by every agent of the app declaring the same content; each of them holds it through its own
+    ``MaterializedBlok`` slot, and takt deletes the blok when the last slot lets go. Users cannot
+    edit or materialize a provided blok, they fork it into a custom one."""
+
     # Declared for the type checker: Django adds these (a foreign key's id column, a
     # reverse relation's manager) without saying so in a way it can read.
+    app_id: int | None
     dependencies: "models.Manager[BlokDependency]"
     organization = models.ForeignKey(
         "authentikate.Organization",
@@ -48,10 +58,23 @@ class Blok(models.Model):
     for_model = models.CharField(max_length=71, null=True, blank=True, db_index=True, help_text="The model reference ('sha256:...') this Blok decorates, if any. Viewers showing that model offer the Blok at `for_node`.")
     for_node = models.CharField(max_length=1000, null=True, blank=True, help_text="The node of `for_model` this Blok attaches to; the model's root when NULL.")
     diagnostics = models.JSONField(default=list, help_text="Non-fatal registration findings (rekuest_core Diagnostic), e.g. manifest util calls naming operations that neither the base catalog nor this blok's catalog provides. Replaced on every write.", db_default=[])
+    app = models.ForeignKey(
+        App,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="provided_bloks",
+        help_text="The app whose agents provide this Blok. NULL for a custom Blok a user made.",
+    )
+    declaration_hash = models.CharField(max_length=64, null=True, blank=True, help_text="sha256 of the declared content of a provided Blok (not the rendering `hash` the API computes); NULL for a custom one.")
 
     class Meta:
-        # Every write path upserts on (organization, name); the constraint makes that upsert safe.
-        constraints = [models.UniqueConstraint(fields=["organization", "name"], name="unique_blok_name_per_organization")]
+        # createBlok upserts a custom blok on (organization, name); registration upserts a provided
+        # one on its content, so v1 and v2 of an app never overwrite each other.
+        constraints = [
+            models.UniqueConstraint(fields=["organization", "name"], condition=models.Q(app__isnull=True), name="unique_blok_name_per_organization"),
+            models.UniqueConstraint(fields=["organization", "app", "name", "declaration_hash"], condition=models.Q(app__isnull=False), name="blok_unique_provided"),
+        ]
 
 
 class BlokDependency(models.Model):
@@ -130,6 +153,7 @@ class MaterializedBlok(models.Model):
 
     # Declared for the type checker: Django adds these (a foreign key's id column, a
     # reverse relation's manager) without saying so in a way it can read.
+    declared_by_id: int | None
     agent_mappings: "models.Manager[BlokAgentMapping]"
 
     blok = models.ForeignKey(Blok, on_delete=models.CASCADE, related_name="materialized_bloks")
@@ -157,6 +181,13 @@ class MaterializedBlok(models.Model):
                 fields=["blok", "declared_by"],
                 condition=models.Q(declared_by__isnull=False),
                 name="mblok_unique_declaration_per_agent",
+            ),
+            # An agent's slot for one declared blok key: re-registering changed content re-points
+            # the slot to the new template and keeps its id, so placements survive.
+            models.UniqueConstraint(
+                fields=["declared_by", "name"],
+                condition=models.Q(declared_by__isnull=False),
+                name="mblok_unique_slot_per_agent",
             ),
         ]
 

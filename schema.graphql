@@ -1207,6 +1207,11 @@ type Blok {
   creator: User!
   catalog: UICatalog!
 
+  """
+  The app whose agents provide this blok; null for a custom blok a user made. A provided blok changes and goes with its agents' registrations and cannot be edited or materialized by hand: fork it.
+  """
+  app: App
+
   """Materialized bloks that are instances of this blok."""
   materializedBloks(filters: MaterializedBlokFilter, ordering: [MaterializedBlokOrder!]! = [], pagination: OffsetPaginationInput): [MaterializedBlok!]!
 
@@ -1220,6 +1225,14 @@ type Blok {
   The node of `forModel` this blok attaches to; the model's root when null.
   """
   forNode: String
+
+  """Whether an app's agents provide this blok (see `app`)."""
+  provided: Boolean!
+
+  """
+  The agents that currently provide this blok, each through its own materialization.
+  """
+  providers: [Agent!]!
 
   """The renderer for this blok's root."""
   context: ComponentContext!
@@ -1319,6 +1332,22 @@ input BlokDependencyFilter {
   NOT: BlokDependencyFilter
   DISTINCT: Boolean
   ids: [ID!]
+}
+
+"""A way to filter bloks"""
+input BlokFilter {
+  AND: BlokFilter
+  OR: BlokFilter
+  NOT: BlokFilter
+  DISTINCT: Boolean
+
+  """
+  Only bloks an app provides (true) or only custom bloks users made (false).
+  """
+  provided: Boolean
+
+  """Search by name"""
+  search: String
 }
 
 """Which locks does the agent provide in general"""
@@ -2615,6 +2644,17 @@ enum FiringOutcome {
   FAILED
 }
 
+"""
+Copy a blok an app provides into a custom blok of the caller's organization, to edit it or bind other agents to it.
+"""
+input ForkBlokInput {
+  """The provided blok to fork."""
+  id: ID!
+
+  """The custom blok's name. Defaults to the provided blok's."""
+  name: String = null
+}
+
 enum Granularity {
   HOUR
   DAY
@@ -3222,6 +3262,11 @@ type MaterializedBlok {
   Whether this is its declaring agent's default blok for the blok's context.
   """
   isDefault: Boolean!
+
+  """
+  The agent this materialization belongs to, for a blok its app provides; null when a user made it. An agent's materialization follows its registrations.
+  """
+  declaredBy: Agent
   createdAt: DateTime!
   updatedAt: DateTime!
 
@@ -3247,6 +3292,11 @@ input MaterializedBlokFilter {
 
   """Filter by agent"""
   agent: ID
+
+  """
+  Only agents' own materializations of the bloks they provide (true) or only ones users made (false).
+  """
+  provided: Boolean
 
   """Search by name"""
   search: String
@@ -3591,6 +3641,11 @@ type Mutation {
 
   """Delete a blok by ID."""
   deleteBlok(input: DeleteBlokInput!): Boolean! @auth
+
+  """
+  Copy a blok an app provides into a custom blok, to edit it or bind other agents to it. The copy lives on whatever the providing agents do.
+  """
+  forkBlok(input: ForkBlokInput!): Blok! @auth
 
   """
   Update properties of a blok such as its name, description, components, demo state, catalog, or dependencies.
@@ -4204,7 +4259,7 @@ type Query {
   dashboards: [Dashboard!]! @auth
 
   """List of UI Blok."""
-  bloks: [Blok!]! @auth
+  bloks(filters: BlokFilter, pagination: OffsetPaginationInput): [Blok!]! @auth
 
   """All resolutions."""
   resolutions(filters: ResolutionFilter, pagination: OffsetPaginationInput): [Resolution!]! @auth
@@ -6704,7 +6759,7 @@ type UICatalog {
   description: String
 
   """Bloks rendered against this catalog."""
-  bloks: [Blok!]!
+  bloks(filters: BlokFilter, pagination: OffsetPaginationInput): [Blok!]!
 
   """Registered components. Empty until a UI app registers the catalog."""
   components: [CatalogComponent!]!

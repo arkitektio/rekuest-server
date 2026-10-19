@@ -91,6 +91,35 @@ DELETE_BLOK = """
     }
 """
 
+FORK_BLOK = """
+    mutation ForkBlok($input: ForkBlokInput!) {
+        forkBlok(input: $input) {
+            id
+            name
+            provided
+            componentTree
+            dependencies {
+                key
+            }
+        }
+    }
+"""
+
+BLOKS = """
+    query Bloks($filters: BlokFilter) {
+        bloks(filters: $filters) {
+            name
+            provided
+            app {
+                identifier
+            }
+            providers {
+                id
+            }
+        }
+    }
+"""
+
 MATERIALIZE_BLOK = """
     mutation MaterializeBlok($input: MaterializeBlokInput!) {
         materializeBlok(input: $input) {

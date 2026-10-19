@@ -382,10 +382,72 @@ pub async fn delete_blok_dependencies(
     .await
 }
 
+/// Materialized bloks with their dashboard and scene placements and agent mappings (CASCADE).
+pub async fn delete_materialized_bloks(
+    conn: &mut PgConnection,
+    materialized: &[i64],
+) -> Result<(), sqlx::Error> {
+    if materialized.is_empty() {
+        return Ok(());
+    }
+    for statement in [
+        "DELETE FROM facade_dashboardplacement WHERE blok_id = ANY($1)",
+        "DELETE FROM facade_placement WHERE blok_id = ANY($1)",
+        "DELETE FROM facade_blokagentmapping WHERE materialized_blok_id = ANY($1)",
+        "DELETE FROM facade_materializedblok WHERE id = ANY($1)",
+    ] {
+        exec(conn, statement, materialized).await?;
+    }
+    Ok(())
+}
+
+/// Of `candidates`, the provided bloks no agent's slot holds any more, with their dependencies
+/// (CASCADE); implementations drawn by one lose their logo (SET_NULL), and an action drawn by one
+/// takes the logo of its implementation most recently registered with another, as registration
+/// picks it. Custom bloks are a user's and are never collected.
+pub async fn gc_provided_bloks(
+    conn: &mut PgConnection,
+    candidates: &[i64],
+) -> Result<(), sqlx::Error> {
+    if candidates.is_empty() {
+        return Ok(());
+    }
+    let orphans = ids(
+        conn,
+        "SELECT b.id FROM facade_blok b
+          WHERE b.id = ANY($1) AND b.app_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM facade_materializedblok m WHERE m.blok_id = b.id)",
+        candidates,
+    )
+    .await?;
+    if orphans.is_empty() {
+        return Ok(());
+    }
+    let dependencies = ids(
+        conn,
+        "SELECT id FROM facade_blokdependency WHERE blok_id = ANY($1)",
+        &orphans,
+    )
+    .await?;
+    delete_blok_dependencies(conn, &dependencies).await?;
+    for statement in [
+        "UPDATE facade_implementation SET logo_id = NULL WHERE logo_id = ANY($1)",
+        "UPDATE facade_action a
+            SET latest_logo_id = (SELECT i.logo_id FROM facade_implementation i
+                                   WHERE i.action_id = a.id AND i.logo_id IS NOT NULL
+                                   ORDER BY i.updated_at DESC, i.id DESC LIMIT 1)
+          WHERE a.latest_logo_id = ANY($1)",
+        "DELETE FROM facade_blok WHERE id = ANY($1)",
+    ] {
+        exec(conn, statement, &orphans).await?;
+    }
+    Ok(())
+}
+
 /// An agent and everything below it. CASCADE: its tasks, implementations, states, sessions,
 /// patches and snapshots, locks, shelve and drawers, schedules and triggers, signal
-/// declarations, the bloks it declared with their mappings and placements, and its pins.
-/// SET_NULL: the tasks its schedules and triggers fired. Refused like an implementation delete
+/// declarations, the bloks it declared with their mappings and placements, and its pins; the
+/// provided templates no other agent holds go with them. SET_NULL: the tasks its schedules and triggers fired. Refused like an implementation delete
 /// while another agent's resolution still depends on one of its implementations (PROTECT).
 pub async fn delete_agent(
     conn: &mut PgConnection,
@@ -413,6 +475,12 @@ pub async fn delete_agent(
     )
     .await?;
     delete_states(conn, &states).await?;
+    let held = ids(
+        conn,
+        "SELECT blok_id FROM facade_materializedblok WHERE declared_by_id = ANY($1)",
+        &agent,
+    )
+    .await?;
     for statement in [
         "DELETE FROM facade_patch WHERE agent_id = ANY($1)
             OR session_id IN (SELECT id FROM facade_session WHERE agent_id = ANY($1))",
@@ -445,5 +513,6 @@ pub async fn delete_agent(
     ] {
         exec(conn, statement, &agent).await?;
     }
+    gc_provided_bloks(conn, &held).await?;
     Ok(deleted)
 }

@@ -186,13 +186,15 @@ use sqlx::PgConnection;
 use crate::catalog_validation::{
     dump_diagnostics, validate_manifest_against_catalog, Catalog, Diagnostic,
 };
-use crate::deletion::{delete_implementations, delete_states};
+use crate::deletion::{
+    delete_implementations, delete_materialized_bloks, delete_states, gc_provided_bloks,
+};
 use crate::mutations::blok::sync_blok_dependencies;
 use crate::mutations::implementation::{create_implementation, AgentIdentity, Prefetch};
 use crate::mutations::Refusal;
 use crate::registration_lock::lock_organization;
 use crate::signals::{OnCommit, Signal};
-use crate::unique::hash_state_definition;
+use crate::unique::{hash_blok_definition, hash_state_definition};
 
 /// What a registration did: the diagnostics to hand back on `INIT`, the signals to publish
 /// once it committed, and the hash the agent now holds.
@@ -244,8 +246,9 @@ async fn register_state(
 /// The client's offline check and Django's `createBlok` use the same name.
 const STANDARD_CATALOG_NAME: &str = "orkestrator";
 
-/// One declared blok: its catalog, manifest check, row, auto-materialization bound to the
-/// declaring agent, and a mapping per dependency. Its diagnostics.
+/// One declared blok: its catalog, manifest check, the app's template for this content (shared
+/// by every agent of the app declaring the same, `hash_blok_definition`), and the agent's slot
+/// for the blok's key re-pointed at it, with a mapping per dependency. Its diagnostics.
 async fn register_blok(
     conn: &mut PgConnection,
     agent: &AgentIdentity,
@@ -264,14 +267,14 @@ async fn register_blok(
         blok.demo_state.as_ref(),
     )?;
 
+    // Same content, same row: only the findings (which depend on the catalog as it is now) are
+    // rewritten. A user's blok of the same name is custom and never matches.
     let (id, name, description): (i64, String, Option<String>) = sqlx::query_as(
         "INSERT INTO facade_blok (name, description, components, demo_state, diagnostics, creator_id, organization_id, catalog_id,
-                                  context, for_model, for_node)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-         ON CONFLICT (organization_id, name) DO UPDATE SET
-             description = excluded.description, components = excluded.components, demo_state = excluded.demo_state,
-             diagnostics = excluded.diagnostics, creator_id = excluded.creator_id, catalog_id = excluded.catalog_id,
-             context = excluded.context, for_model = excluded.for_model, for_node = excluded.for_node
+                                  context, for_model, for_node, app_id, declaration_hash)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         ON CONFLICT (organization_id, app_id, name, declaration_hash) WHERE app_id IS NOT NULL DO UPDATE SET
+             diagnostics = excluded.diagnostics
          RETURNING id, name, description",
     )
     .bind(&blok.key)
@@ -285,26 +288,34 @@ async fn register_blok(
     .bind(blok.context.value())
     .bind(&blok.for_model)
     .bind(&blok.for_node)
+    .bind(agent.app)
+    .bind(hash_blok_definition(blok))
     .fetch_one(&mut *conn)
     .await?;
+    let dependencies = sync_blok_dependencies(conn, id, &blok.dependencies, true).await?;
 
     if blok.default {
         // At most one default per agent and context: a newly declared default replaces the previous one.
         sqlx::query(
             "UPDATE facade_materializedblok m SET is_default = false
                FROM facade_blok b
-              WHERE b.id = m.blok_id AND m.declared_by_id = $1 AND m.is_default AND b.context = $2 AND b.id <> $3",
+              WHERE b.id = m.blok_id AND m.declared_by_id = $1 AND m.is_default AND b.context = $2 AND m.name <> $3",
         )
         .bind(agent.id)
         .bind(blok.context.value())
-        .bind(id)
+        .bind(&name)
         .execute(&mut *conn)
         .await?;
     }
 
-    let materialized: Option<i64> = sqlx::query_scalar(
-        "UPDATE facade_materializedblok SET name = $3, description = $4, is_default = $5, updated_at = now()
-          WHERE id = (SELECT id FROM facade_materializedblok WHERE blok_id = $1 AND declared_by_id = $2 ORDER BY id LIMIT 1)
+    // The agent's slot for this key keeps its id across content changes, so what was placed
+    // on it stays; the template it held is collected by the caller once nothing holds it.
+    let materialized: i64 = sqlx::query_scalar(
+        "INSERT INTO facade_materializedblok (name, description, blok_id, declared_by_id, is_default)
+         VALUES ($3, $4, $1, $2, $5)
+         ON CONFLICT (declared_by_id, name) WHERE declared_by_id IS NOT NULL DO UPDATE SET
+             blok_id = excluded.blok_id, description = excluded.description, is_default = excluded.is_default,
+             updated_at = now()
          RETURNING id",
     )
     .bind(id)
@@ -312,25 +323,16 @@ async fn register_blok(
     .bind(&name)
     .bind(description.as_deref().unwrap_or(""))
     .bind(blok.default)
-    .fetch_optional(&mut *conn)
+    .fetch_one(&mut *conn)
     .await?;
-    let materialized =
-        match materialized {
-            Some(materialized) => materialized,
-            None => sqlx::query_scalar(
-                "INSERT INTO facade_materializedblok (name, description, blok_id, declared_by_id, is_default)
-                 VALUES ($3, $4, $1, $2, $5) RETURNING id",
-            )
-            .bind(id)
-            .bind(agent.id)
-            .bind(&name)
-            .bind(description.as_deref().unwrap_or(""))
-            .bind(blok.default)
-            .fetch_one(&mut *conn)
-            .await?,
-        };
 
-    for (dependency, key) in sync_blok_dependencies(conn, id, &blok.dependencies, true).await? {
+    let keys: Vec<&str> = dependencies.iter().map(|(_, key)| key.as_str()).collect();
+    sqlx::query("DELETE FROM facade_blokagentmapping WHERE materialized_blok_id = $1 AND NOT (key = ANY($2))")
+        .bind(materialized)
+        .bind(&keys)
+        .execute(&mut *conn)
+        .await?;
+    for (dependency, key) in dependencies {
         sqlx::query(
             "INSERT INTO facade_blokagentmapping (key, agent_id, dependency_id, materialized_blok_id)
              VALUES ($1, $2, $3, $4)
@@ -495,20 +497,39 @@ pub async fn implement_agent(
         });
     }
 
+    // The templates the agent's slots hold before: the ones it re-points or drops may be left
+    // without a holder.
+    let held: Vec<i64> = sqlx::query_scalar(
+        "SELECT blok_id FROM facade_materializedblok WHERE declared_by_id = $1",
+    )
+    .bind(agent)
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut declared_bloks = vec![];
     for blok in payload.bloks.iter().flatten() {
         diagnostics.extend(register_blok(conn, &identity, blok).await?);
+        declared_bloks.push(blok.key.clone());
     }
+    let dropped: Vec<i64> = sqlx::query_scalar(
+        "SELECT id FROM facade_materializedblok WHERE declared_by_id = $1 AND NOT (name = ANY($2))",
+    )
+    .bind(agent)
+    .bind(&declared_bloks)
+    .fetch_all(&mut *conn)
+    .await?;
+    delete_materialized_bloks(conn, &dropped).await?;
+    gc_provided_bloks(conn, &held).await?;
 
-    // A logo is a blok this registration has just written: link each implementation to its
-    // own (or to none, when it no longer names one).
+    // A logo is a blok this registration has just written: link each implementation to the
+    // template its agent's slot holds (or to none, when it no longer names one).
     for (implementation, logo) in created_implementations.iter().zip(&logos) {
         sqlx::query(
             "UPDATE facade_implementation
-                SET logo_id = (SELECT id FROM facade_blok WHERE organization_id = $2 AND name = $3)
+                SET logo_id = (SELECT blok_id FROM facade_materializedblok WHERE declared_by_id = $2 AND name = $3)
               WHERE id = $1",
         )
         .bind(implementation)
-        .bind(organization)
+        .bind(agent)
         .bind(logo.as_deref())
         .execute(&mut *conn)
         .await?;

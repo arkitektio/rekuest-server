@@ -2,7 +2,8 @@
 
 use rekuest_core::enums::{ActionScope, PortKind};
 use rekuest_core::inputs::{
-    ArgPortInputModel, DefinitionInputModel, ReturnPortInputModel, StateDefinitionInputModel,
+    ArgPortInputModel, BlokImplementationInputModel, DefinitionInputModel, ReturnPortInputModel,
+    StateDefinitionInputModel,
 };
 use rekuest_core::pyjson::dumps;
 use serde_json::Value;
@@ -15,6 +16,18 @@ pub fn hash_state_definition(definition: &StateDefinitionInputModel) -> String {
     let ports = dump.get("ports").cloned().unwrap_or(Value::Array(vec![]));
     let subset = serde_json::json!({ "ports": ports });
     hex::encode(Sha256::digest(dumps(&subset, true).as_bytes()))
+}
+
+/// sha256 over a declared blok's content: what makes two agents' bloks the same template. The
+/// agent's own choices (`default`) and the BSX `source` (already parsed into `components`) are
+/// left out, so a blok sent as BSX and the same one sent as a tree share a template.
+pub fn hash_blok_definition(blok: &BlokImplementationInputModel) -> String {
+    let mut dump = serde_json::to_value(blok).expect("a blok declaration serializes");
+    if let Value::Object(fields) = &mut dump {
+        fields.remove("default");
+        fields.remove("source");
+    }
+    hex::encode(Sha256::digest(dumps(&dump, true).as_bytes()))
 }
 
 fn arg_is_local(port: &ArgPortInputModel) -> bool {
