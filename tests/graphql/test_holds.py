@@ -120,8 +120,9 @@ def test_tasks_and_rules_from_before_policies_keep_running_unattended() -> None:
     trigger = models.Trigger.objects.create(name="old", caller=caller, kind="CREATED", identifier="@mikro/image", action=action, port="image")
     executor = MigrationExecutor(connection)
     executor.migrate([("facade", "0011_provided_bloks")])
+    # Forward to the latest, not to 0013: every test after this one runs on what is left.
     executor = MigrationExecutor(connection)
-    executor.migrate([("facade", "0013_rule_policy")])
+    executor.migrate(executor.loader.graph.leaf_nodes("facade"))
 
     assert models.Task.objects.get(pk=before.pk).policy == "AUTO"
     assert models.Schedule.objects.get(pk=schedule.pk).policy == "AUTO"

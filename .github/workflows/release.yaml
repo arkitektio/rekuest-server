@@ -52,6 +52,15 @@ jobs:
         if: steps.kind.outputs.breaking != 'true'
         uses: docker/setup-buildx-action@v3
 
+      # The label the released image carries: the installer reads what rekuest is from it, and
+      # refuses an image without one.
+      - name: Describe the service as an image label
+        if: steps.kind.outputs.breaking != 'true'
+        id: describe
+        uses: arkitektio/arkitekt-service/.github/actions/describe-label@v7.1.2
+        with:
+          service: rekuest.contract
+
       - name: Build the server as a hub would pull it
         if: steps.kind.outputs.breaking != 'true'
         uses: docker/build-push-action@v5
@@ -59,7 +68,9 @@ jobs:
           context: .
           load: true
           tags: rekuest-candidate:ci
-          labels: org.opencontainers.image.version=0.0.0-candidate
+          labels: |
+            org.opencontainers.image.version=0.0.0-candidate
+            ${{ steps.describe.outputs.label }}
           # Where the image's code came from: `arkitekt-service describe` says it (`source`),
           # so that an installer can run the service from a checkout of this commit.
           build-args: |
