@@ -150,6 +150,13 @@ class Task(models.Model):
         choices_enum=enums.TaskInstructChoices,  # pyright: ignore[reportCallIssue]  django-choices-field's stub predates db_default
         help_text="The latest Instruct of this Provision (transitioned by events)",
     )
+    policy = models.CharField(
+        max_length=20,
+        choices=enums.TaskPolicyChoices.choices,
+        default="ASK",
+        db_default="ASK",
+        help_text="ASK: a child an agent assigns waits until a person approves it (HELD), and the task's own holds wait for a decision. AUTO: both are approved without asking. A root's is set on its assign; a child always takes its parent's.",
+    )
     is_done = models.BooleanField(
         default=False,
         help_text="Is this Task done (e.g. has it been completed and resulted in an error?)",

@@ -46,6 +46,7 @@ class Task:
     implementation: Optional["Implementation"] = strawberry.field(description="Implementation assigned to execute. Null until the task is mapped to one.")
     latest_event_kind: enums.TaskEventKind = strawberry.field(description="Type of the latest event.")
     latest_instruct_kind: enums.TaskInstructKind = strawberry.field(description="Last instruction type.")
+    policy: enums.TaskPolicy = strawberry.field(description="Whether the work agents ask for under this task waits for a person (ASK) or runs without asking (AUTO, auto-mode). A root's is set on its assign; a child takes its parent's.")
     caller: Optional["Caller"] = strawberry.field(description="Caller that created this task.")
     created_at: datetime.datetime = strawberry_django.field(description="Creation timestamp.")
     updated_at: datetime.datetime = strawberry_django.field(description="Last update timestamp.")
@@ -103,7 +104,7 @@ class TaskEvent:
     step: int | None = strawberry_django.field(description="The report's step within its task; a task's history in step order. Null for server-written events.")
     effect: str | None = strawberry_django.field(description="EFFECT events: NOW, RANDOM, SLEEP or RECORD.")
     key: str | None = strawberry_django.field(description="EFFECT events: what the task calls this value; a replay matches values by key.")
-    value: rscalars.AnyDefault | None = strawberry_django.field(description="EFFECT events: the value the task took (NOW: epoch seconds, RANDOM: hex, SLEEP: deadline).")
+    value: rscalars.AnyDefault | None = strawberry_django.field(description="EFFECT events: the value the task took (NOW: epoch seconds, RANDOM: hex, SLEEP: deadline). HELD: what waits for a decision ({kind: \"assign\", prompt, action, agent, args, caller_task, caller_agent} for a child an agent asked for, with held: the child's id on its parent and root; {kind: \"self\", prompt, details} for a task's own hold). DECIDED: the decision ({approved, answer, auto, user}). DENIED: {answer, user}. LOST: what is known about the lost run.")
 
     @strawberry_django.field(description="Log level of the event (LOG events; INFO when unset).")
     def level(self) -> enums.LogLevel:

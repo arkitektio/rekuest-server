@@ -98,6 +98,15 @@ class TaskAnswer(Answer):
     task: str
 
 
+class DecideRequest(Request):
+    """A person's answer to a held task. Always with a principal: only a person decides."""
+
+    principal: Principal
+    task: str
+    approved: bool
+    answer: str | None = None
+
+
 class CollectRequest(Request):
     principal: Principal
     drawers: list[str]
@@ -324,6 +333,7 @@ CANCEL = Route("cancel", TaskAnswer, ControlRequest)
 INTERRUPT = Route("interrupt", TaskAnswer, ControlRequest)
 PAUSE = Route("pause", TaskAnswer, ControlRequest)
 RESUME = Route("resume", TaskAnswer, ControlRequest)
+DECIDE = Route("decide", TaskAnswer, DecideRequest)
 BOUNCE = Route("bounce", AgentAnswer, AgentRequest)
 KICK = Route("kick", AgentAnswer, AgentRequest)
 BLOCK = Route("block", AgentAnswer, AgentRequest)

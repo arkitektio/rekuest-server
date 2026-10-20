@@ -134,6 +134,7 @@ Every `TaskEvent` for a task you assigned is streamed back as an `…Event` mess
 | dispatch / progress | `BoundEvent`, `QueuedEvent`, `StartedEvent`, `ProgressEvent`, `DelegateEvent`, `LogEvent`, `YieldEvent` |
 | cancel / interrupt | `CancellingEvent` → `CancelledEvent`, `InterruptingEvent` → `InterruptedEvent` |
 | pause / resume | `PausingEvent` → `PausedEvent`, `ResumingEvent` → `ResumedEvent` |
+| held | `HeldEvent` (`prompt`): the child waits for a person; approved, it goes on with `QueuedEvent`; denied, it ends with `DeniedEvent` (`answer`), never having run |
 | terminal | `CompletedEvent`, `FailedEvent`, `CriticalEvent`, `LostEvent` (`started`, `last_progress`, `effects`, `reason`: see [workflows.md](workflows.md)) |
 
 Every mirror carries (`ExecutionEvent` base):

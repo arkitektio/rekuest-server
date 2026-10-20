@@ -1537,3 +1537,96 @@ fn the_upcoming_slots_of_a_timing_follow_each_other() {
         .windows(2)
         .all(|pair| (pair[1] - pair[0]).num_seconds() == 90));
 }
+
+// -- policies ----------------------------------------------------------------------------------
+
+/// The policy and latest kind of a task.
+async fn policy_of(ctx: &Context, task: i64) -> (String, String) {
+    sqlx::query_as("SELECT policy, latest_event_kind FROM facade_task WHERE id = $1")
+        .bind(task)
+        .fetch_one(&ctx.db)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_schedules_runs_take_its_policy() {
+    let _serial = SERIAL.lock().await;
+    let Some(ctx) = context(Settings::default()).await else {
+        return;
+    };
+    // A schedule that says nothing asks, as any root does.
+    let (asking, _) = schedule(&ctx, 60, true).await;
+    assert!(schedules::refill_one(&ctx, asking).await.unwrap());
+    let run = the_open_run(&ctx, asking).await;
+    assert_eq!(policy_of(&ctx, run.id).await.0, "ASK");
+
+    // AUTO is every run's: the planned ones and a run now.
+    let (unattended, _) = schedule(&ctx, 60, true).await;
+    set(&ctx, "facade_schedule", unattended, "policy = 'AUTO'").await;
+    assert!(schedules::refill_one(&ctx, unattended).await.unwrap());
+    let planned = the_open_run(&ctx, unattended).await;
+    assert_eq!(policy_of(&ctx, planned.id).await.0, "AUTO");
+    finish(&ctx, planned.id, "COMPLETED", "").await;
+    let now = schedules::trigger(&ctx, unattended).await.unwrap();
+    assert_eq!(policy_of(&ctx, now).await.0, "AUTO");
+}
+
+#[tokio::test]
+async fn a_triggers_runs_take_its_policy_and_are_never_held() {
+    let _serial = SERIAL.lock().await;
+    let Some(ctx) = context(Settings::default()).await else {
+        return;
+    };
+    // A root: the trigger's policy, ASK unless it says AUTO.
+    for (policy, expected) in [(None, "ASK"), (Some("AUTO"), "AUTO")] {
+        let org = unique("fire-policy");
+        let target = target(&ctx, &org).await;
+        let trigger = trigger(&ctx, &org, &target, json!([])).await;
+        if let Some(policy) = policy {
+            set(
+                &ctx,
+                "facade_trigger",
+                trigger,
+                &format!("policy = '{policy}'"),
+            )
+            .await;
+        }
+        let signal = signal(&ctx, target.organization, 3, None).await;
+        assert_eq!(triggers::fire_one(&ctx, signal).await.unwrap(), 1);
+        let run: i64 = sqlx::query_scalar("SELECT id FROM facade_task WHERE trigger_id = $1")
+            .bind(trigger)
+            .fetch_one(&ctx.db)
+            .await
+            .unwrap();
+        assert_eq!(
+            policy_of(&ctx, run).await,
+            (expected.to_owned(), "QUEUED".to_owned())
+        );
+    }
+
+    // A child of the task whose signal fired it: the trigger asked for it, not an agent, so it
+    // is not held under its ASK parent, and it runs under the trigger's policy.
+    let org = unique("fire-policy-child");
+    let target = target(&ctx, &org).await;
+    let trigger = trigger(&ctx, &org, &target, json!([])).await;
+    set(&ctx, "facade_trigger", trigger, "policy = 'AUTO'").await;
+    let cause = causing_task(&ctx, &org, &target, 1).await;
+    assert_eq!(policy_of(&ctx, cause).await.0, "ASK");
+    let signal = signal(&ctx, target.organization, 3, Some(cause)).await;
+    assert_eq!(triggers::fire_one(&ctx, signal).await.unwrap(), 1);
+    let runs = fired(&ctx, trigger).await;
+    let [run] = runs.as_slice() else {
+        panic!("one run: {runs:?}")
+    };
+    assert_eq!(run.parent_id, Some(cause));
+    let child: i64 = sqlx::query_scalar("SELECT id FROM facade_task WHERE trigger_id = $1")
+        .bind(trigger)
+        .fetch_one(&ctx.db)
+        .await
+        .unwrap();
+    assert_eq!(
+        policy_of(&ctx, child).await,
+        ("AUTO".to_owned(), "QUEUED".to_owned())
+    );
+}

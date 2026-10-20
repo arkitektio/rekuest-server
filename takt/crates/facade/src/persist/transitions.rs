@@ -21,6 +21,7 @@ pub const TERMINAL_KINDS: &[&str] = &[
     "FAILED",
     "CRITICAL",
     "LOST",
+    "DENIED",
 ];
 
 pub fn is_terminal(kind: &str) -> bool {
@@ -247,6 +248,9 @@ pub async fn claim(ctx: &Context, task: i64, claim: Claim<'_>) -> Result<bool, s
     signals::task_saved(ctx, task, false).await;
     if let Some(event) = event {
         signals::task_event_created(ctx, event).await;
+    }
+    if claim.mark_done {
+        crate::holds::settle_held_children(ctx, task).await?;
     }
     Ok(true)
 }

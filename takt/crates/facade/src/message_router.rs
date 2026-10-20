@@ -395,6 +395,7 @@ fn acked(frame: &AgentFrame) -> Option<ToAgent> {
         frame.message,
         FromAgent::Started { .. }
             | FromAgent::Paused { .. }
+            | FromAgent::Held { .. }
             | FromAgent::Resumed { .. }
             | FromAgent::Completed { .. }
             | FromAgent::Failed { .. }

@@ -1006,10 +1006,14 @@ async fn an_assign_request_answers_and_a_resend_is_not_created_again() {
     let (_, parent_implementation) = action(&ctx, caller, false).await;
     // Addressed by agent + interface, the executor's implementation of `echo`.
     action(&ctx, executor, false).await;
+    // An unattended run (AUTO): its children are handed on without anyone approving them.
     let parent = backend::assign_with_status(
         &ctx,
         &principal(&ctx, caller).await,
-        &echo(parent_implementation, 1, None),
+        &AssignInput {
+            policy: Some("AUTO".into()),
+            ..echo(parent_implementation, 1, None)
+        },
         AssignOrigin::default(),
     )
     .await
@@ -1083,10 +1087,14 @@ async fn only_the_caller_controls_and_the_deadlines_are_columns() {
     let executor = agent(&ctx, Some(&organization)).await;
     let (_, parent_implementation) = action(&ctx, caller, false).await;
     let (_, implementation) = action(&ctx, executor, false).await;
+    // An unattended run (AUTO): its children are handed on without anyone approving them.
     let parent = backend::assign_with_status(
         &ctx,
         &principal(&ctx, caller).await,
-        &echo(parent_implementation, 1, None),
+        &AssignInput {
+            policy: Some("AUTO".into()),
+            ..echo(parent_implementation, 1, None)
+        },
         AssignOrigin::default(),
     )
     .await

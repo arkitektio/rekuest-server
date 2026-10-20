@@ -112,6 +112,23 @@ class TestTriggerGraphQL:
         assert [t["id"] for t in seen_by_a.data["triggers"]] == [created.data["createTrigger"]["id"]]
         assert seen_by_b.data["triggers"] == []
 
+        # A trigger asks unless it says AUTO, and a change says so too.
+        assert (await models.Trigger.objects.aget(pk=created.data["createTrigger"]["id"])).policy == "ASK"
+        unattended = await schema.execute(
+            "mutation($input: CreateTriggerInput!) { createTrigger(input: $input) { id policy } }",
+            variable_values={"input": {"name": "t-auto", "kind": "CREATED", "identifier": IDENTIFIER, "action": str(impl.action_id), "port": "image", "policy": "AUTO"}},
+            context_value=context_a,
+        )
+        assert unattended.errors is None, unattended.errors
+        assert unattended.data["createTrigger"]["policy"] == "AUTO"
+        asking = await schema.execute(
+            "mutation($input: UpdateTriggerInput!) { updateTrigger(input: $input) { id policy } }",
+            variable_values={"input": {"id": unattended.data["createTrigger"]["id"], "policy": "ASK"}},
+            context_value=context_a,
+        )
+        assert asking.errors is None, asking.errors
+        assert asking.data["updateTrigger"]["policy"] == "ASK"
+
         # Declarations are hub-wide: every tenant sees what the services emit.
         listed = await schema.execute("query { signalDeclarations { identifier kind descriptorKeys service { name } } }", context_value=context_b)
         assert listed.errors is None, listed.errors

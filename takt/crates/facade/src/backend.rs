@@ -25,7 +25,8 @@ use rekuest_core::values::validate_assignment_args;
 use crate::caller_context::CallerContext;
 use crate::context::Context;
 use crate::higher_order::{build_lower_args, build_lower_dependencies};
-use crate::messages::{Assign, ToAgent};
+use crate::holds::{self, HeldChild};
+use crate::messages::{Assign, AssignPrompt, ToAgent};
 use crate::persist::transitions::{insert_event, NewEvent};
 use crate::provenance::canonical::args_hash;
 use crate::provenance::{mint_token_for_task, MintError, MintTask};
@@ -142,6 +143,17 @@ pub struct AssignInput {
     pub step: Option<bool>,
     #[serde(default)]
     pub not_before: Option<DateTime<Utc>>,
+    /// `ASK` or `AUTO`: whether the children agents ask for under this run wait for a person.
+    /// Read on a root only; a child takes its parent's.
+    #[serde(default)]
+    pub policy: Option<String>,
+    /// Why the agent asking for this child wants it run: shown to whoever decides a held child.
+    #[serde(default)]
+    pub prompt: Option<AssignPrompt>,
+    /// A child the server makes itself (an init hook, a trigger's run): never held. With
+    /// `policy`, it runs under that instead of its parent's. Not on the wire.
+    #[serde(skip)]
+    pub unheld: bool,
 }
 
 impl AssignInput {
@@ -1046,6 +1058,9 @@ struct NewTask {
     signal: Option<i64>,
     trigger: Option<i64>,
     trigger_depth: i16,
+    policy: &'static str,
+    /// Created `HELD`: an agent's child waiting for a person, never dispatched until approved.
+    held: bool,
 }
 
 impl NewTask {
@@ -1079,6 +1094,8 @@ impl NewTask {
             signal: None,
             trigger: None,
             trigger_depth: 0,
+            policy: holds::ASK,
+            held: false,
         }
     }
 
@@ -1089,9 +1106,11 @@ impl NewTask {
                  agent_id, acted_on, capture, step, implementation_id, code_hash, dependency,
                  dependency_method, resolution_id, is_higher_order_child, latest_event_kind,
                  latest_instruct_kind, dependencies, caller_id, dispatched_at, dispatch_attempts,
-                 not_before, schedule_id, ephemeral, signal_id, trigger_id, trigger_depth, revision)
+                 not_before, schedule_id, ephemeral, signal_id, trigger_id, trigger_depth, revision,
+                 policy)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-                     $18, 'QUEUED', 'ASSIGN', $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, 1)
+                     $18, CASE WHEN $30 THEN 'HELD' ELSE 'QUEUED' END, 'ASSIGN', $19, $20, $21,
+                     $22, $23, $24, $25, $26, $27, $28, 1, $29)
              RETURNING id",
         )
         .bind(self.action)
@@ -1122,6 +1141,8 @@ impl NewTask {
         .bind(self.signal)
         .bind(self.trigger)
         .bind(self.trigger_depth)
+        .bind(self.policy)
+        .bind(self.held)
         .fetch_one(conn)
         .await
     }
@@ -1133,7 +1154,7 @@ fn is_unique_violation(e: &sqlx::Error) -> bool {
 
 /// Hand a committed task's `ASSIGN` to its agent (`_dispatch`). Never fails: a transport failure
 /// is recorded as `dispatched_at = NULL` ("never left"), which the pickup watchdog retries.
-async fn dispatch(ctx: &Context, task: i64, agent: i64, assign: Assign) -> bool {
+pub(crate) async fn dispatch(ctx: &Context, task: i64, agent: i64, assign: Assign) -> bool {
     let delivered = match transport::deliver_to_agent(
         ctx,
         agent,
@@ -1235,8 +1256,10 @@ pub async fn assign_with_status(
     }
 
     let parent = input.parent.as_deref().map(parse_id).transpose()?;
-    let root = match parent {
-        Some(parent) => {
+    // A root's policy is its assign's; a child's is its parent's, whatever it asks for. Only a
+    // child the server makes itself (a trigger's run) may bring its own.
+    let (root, policy) = match parent {
+        Some(parent) if input.unheld && input.policy.is_some() => {
             let (parent_root, parent_id): (Option<i64>, i64) = get(
                 sqlx::query_as("SELECT root_id, id FROM facade_task WHERE id = $1")
                     .bind(parent)
@@ -1244,10 +1267,29 @@ pub async fn assign_with_status(
                     .await?,
                 "Task",
             )?;
-            Some(parent_root.unwrap_or(parent_id))
+            (
+                Some(parent_root.unwrap_or(parent_id)),
+                holds::root_policy(input.policy.as_deref())?,
+            )
         }
-        None => None,
+        Some(parent) => {
+            let (parent_root, parent_id, policy): (Option<i64>, i64, String) = get(
+                sqlx::query_as("SELECT root_id, id, policy FROM facade_task WHERE id = $1")
+                    .bind(parent)
+                    .fetch_optional(&ctx.db)
+                    .await?,
+                "Task",
+            )?;
+            let policy = if policy == holds::AUTO {
+                holds::AUTO
+            } else {
+                holds::ASK
+            };
+            (Some(parent_root.unwrap_or(parent_id)), policy)
+        }
+        None => (None, holds::root_policy(input.policy.as_deref())?),
     };
+    let held = parent.is_some() && policy == holds::ASK && !input.unheld;
 
     let not_before = input.not_before;
     let delayed = not_before.is_some_and(|at| at > Utc::now());
@@ -1257,6 +1299,11 @@ pub async fn assign_with_status(
             "A delayed task (not_before in the future) cannot carry hooks".into(),
         ));
     }
+    if held && !hooks.is_empty() {
+        return Err(BackendError::Refused(
+            "A held child (its run's policy is ASK) cannot carry hooks: they would run before anyone approved it".into(),
+        ));
+    }
 
     if implementation.higher_order_for_id.is_some() {
         if delayed {
@@ -1264,8 +1311,17 @@ pub async fn assign_with_status(
                 "Higher-order implementations cannot be assigned with a future not_before".into(),
             ));
         }
-        return assign_higher_order(ctx, principal, input, &implementation, caller, root, parent)
-            .await;
+        return assign_higher_order(
+            ctx,
+            principal,
+            input,
+            &implementation,
+            caller,
+            root,
+            parent,
+            (policy, held),
+        )
+        .await;
     }
 
     let acted_on = acted_on_from_args(&input.args, &action.args);
@@ -1307,14 +1363,16 @@ pub async fn assign_with_status(
         dependency_method: input.method.clone(),
         resolution,
         dependencies: dependency_dict.unwrap_or(Value::Null),
-        dispatched_at: (!delayed).then(Utc::now),
-        dispatch_attempts: if delayed { 0 } else { 1 },
+        dispatched_at: (!delayed && !held).then(Utc::now),
+        dispatch_attempts: if delayed || held { 0 } else { 1 },
         not_before: if delayed { not_before } else { None },
         schedule: origin.schedule,
         ephemeral,
         signal: origin.signal,
         trigger: origin.trigger,
         trigger_depth: origin.trigger_depth,
+        policy,
+        held,
         ..NewTask::new(
             action.id,
             implementation.id,
@@ -1347,10 +1405,31 @@ pub async fn assign_with_status(
         principal,
     )
     .await?;
+    let held_events = match (held, parent, root) {
+        (true, Some(parent), Some(root)) => {
+            holds::record_held_child(
+                &mut tx,
+                &HeldChild {
+                    task,
+                    parent,
+                    root,
+                    action: &action,
+                    agent: implementation.agent_id,
+                    args: &input.args,
+                    prompt: input.prompt.as_ref(),
+                },
+            )
+            .await?
+        }
+        _ => vec![],
+    };
     tx.commit().await?;
     signals::task_saved(ctx, task, true).await;
+    for event in held_events {
+        signals::task_event_created(ctx, event).await;
+    }
 
-    if delayed {
+    if delayed || held {
         return Ok(Assigned {
             task,
             reference,
@@ -1395,6 +1474,8 @@ pub async fn assign_with_status(
                 .clone(),
             // Scoped to the parent: a constant reference would dedupe across tasks' hooks.
             reference: Some(format!("init_hook_0_{task}")),
+            // The server's own child: nobody asked for it, so nobody approves it.
+            unheld: true,
             ..AssignInput::default()
         };
         Box::pin(assign_with_status(
@@ -1438,6 +1519,7 @@ async fn lost_reference_race(
 /// A higher-order task (`_assign_higher_order`): a virtual wrapper that is never sent to an
 /// agent, and a child on the lower implementation's agent that runs it. Its events are unfolded
 /// back onto the wrapper (`persist::transitions::unfold_to_higher_order`).
+#[allow(clippy::too_many_arguments)]
 async fn assign_higher_order(
     ctx: &Context,
     principal: &CallerContext,
@@ -1446,6 +1528,7 @@ async fn assign_higher_order(
     caller: i64,
     root: Option<i64>,
     parent: Option<i64>,
+    (policy, held): (&'static str, bool),
 ) -> BackendResult<Assigned> {
     let config = &higher.higher_order_config;
     let lower = implementation_row(
@@ -1487,6 +1570,8 @@ async fn assign_higher_order(
         acted_on: acted_on_from_args(&input.args, &higher_action.args),
         capture: input.capture.unwrap_or(false),
         dependencies: Value::Object(higher_dependencies),
+        policy,
+        held,
         ..NewTask::new(
             higher.action_id,
             higher.id,
@@ -1518,8 +1603,11 @@ async fn assign_higher_order(
         code_hash: lower.code_hash.clone(),
         step: input.step.unwrap_or(false),
         dependencies: Value::Object(lower_dependencies),
-        dispatched_at: Some(Utc::now()),
-        dispatch_attempts: 1,
+        // A held wrapper's child waits with it: it is sent when the wrapper is approved.
+        dispatched_at: (!held).then(Utc::now),
+        dispatch_attempts: if held { 0 } else { 1 },
+        policy,
+        held,
         ..NewTask::new(
             lower.action_id,
             lower.id,
@@ -1542,9 +1630,37 @@ async fn assign_higher_order(
         principal,
     )
     .await?;
+    let held_events = match (held, parent, root) {
+        (true, Some(parent), Some(root)) => {
+            holds::record_held_child(
+                &mut tx,
+                &HeldChild {
+                    task: higher_task,
+                    parent,
+                    root,
+                    action: &higher_action,
+                    agent: higher.agent_id,
+                    args: &input.args,
+                    prompt: input.prompt.as_ref(),
+                },
+            )
+            .await?
+        }
+        _ => vec![],
+    };
     tx.commit().await?;
     signals::task_saved(ctx, higher_task, true).await;
     signals::task_saved(ctx, lower_task, true).await;
+    for event in held_events {
+        signals::task_event_created(ctx, event).await;
+    }
+    if held {
+        return Ok(Assigned {
+            task: higher_task,
+            reference,
+            created: true,
+        });
+    }
 
     dispatch(
         ctx,
@@ -1653,6 +1769,7 @@ struct LockedTask {
     not_before: Option<DateTime<Utc>>,
     dispatch_attempts: i16,
     picked_up_at: Option<DateTime<Utc>>,
+    latest_event_kind: String,
 }
 
 /// The request phase of a two-phase lifecycle op (`_request_control`): per target, under its row
@@ -1666,9 +1783,9 @@ pub async fn request_control(
     caller: Option<i64>,
 ) -> BackendResult<i64> {
     let task_id = parse_id(task)?;
-    let (is_done, organization): (bool, i64) = get(
+    let (is_done, organization, kind): (bool, i64, String) = get(
         sqlx::query_as(
-            "SELECT t.is_done, a.organization_id FROM facade_task t
+            "SELECT t.is_done, a.organization_id, t.latest_event_kind FROM facade_task t
                JOIN facade_agent a ON a.id = t.agent_id WHERE t.id = $1",
         )
         .bind(task_id)
@@ -1691,6 +1808,11 @@ pub async fn request_control(
     if is_done {
         return Err(BackendError::Refused("Task is already terminal".into()));
     }
+    if kind == "HELD" && matches!(control, Control::Pause | Control::Resume { .. }) {
+        return Err(BackendError::Refused(format!(
+            "Task {task} is held for a decision: decide it, or cancel it."
+        )));
+    }
 
     let mut targets: Vec<(i64, i64)> = vec![
         sqlx::query_as("SELECT id, agent_id FROM facade_task WHERE id = $1")
@@ -1708,14 +1830,31 @@ pub async fn request_control(
             .await?,
         );
     }
+    if control.waiting_outcome().is_some() {
+        // A child still held for a decision has no agent to wind it down: it ends with its
+        // parent's cancel or interrupt, now, rather than waiting for the parent to confirm.
+        let held: Vec<(i64, i64)> = sqlx::query_as(
+            "SELECT id, agent_id FROM facade_task
+              WHERE parent_id = $1 AND latest_event_kind = 'HELD' AND is_done = false
+                AND dispatch_attempts = 0 AND picked_up_at IS NULL ORDER BY id",
+        )
+        .bind(task_id)
+        .fetch_all(&ctx.db)
+        .await?;
+        for held in held {
+            if !targets.contains(&held) {
+                targets.push(held);
+            }
+        }
+    }
 
     let interrupt_at = control_deadline(ctx, control);
     for (target, agent) in targets {
         // Re-read under the row lock: another backend may have finished the task since.
         let mut tx = ctx.db.begin().await?;
         let locked: Option<LockedTask> = sqlx::query_as(
-            "SELECT is_done, not_before, dispatch_attempts, picked_up_at FROM facade_task
-              WHERE id = $1 FOR UPDATE",
+            "SELECT is_done, not_before, dispatch_attempts, picked_up_at, latest_event_kind
+               FROM facade_task WHERE id = $1 FOR UPDATE",
         )
         .bind(target)
         .fetch_optional(&mut *tx)
@@ -1723,10 +1862,11 @@ pub async fn request_control(
         let Some(locked) = locked.filter(|l| !l.is_done) else {
             continue;
         };
-        let still_delayed = locked.not_before.is_some()
-            && locked.dispatch_attempts == 0
-            && locked.picked_up_at.is_none();
-        if let Some(outcome) = control.waiting_outcome().filter(|_| still_delayed) {
+        // Never handed over: a delayed task not due yet, or a child still held for a decision.
+        let still_waiting = locked.dispatch_attempts == 0
+            && locked.picked_up_at.is_none()
+            && (locked.not_before.is_some() || locked.latest_event_kind == "HELD");
+        if let Some(outcome) = control.waiting_outcome().filter(|_| still_waiting) {
             // Never handed over: no agent has it, nobody to confirm. Settle it, send nothing.
             sqlx::query(
                 "UPDATE facade_task SET latest_instruct_kind = $2, latest_event_kind = $3,
@@ -1738,17 +1878,29 @@ pub async fn request_control(
             .bind(outcome)
             .execute(&mut *tx)
             .await?;
+            let settled = if locked.latest_event_kind == "HELD" {
+                "Settled while it was held — never dispatched."
+            } else {
+                "Settled before it was due — never dispatched."
+            };
             let event = insert_event(
                 &mut *tx,
                 target,
                 outcome,
-                &NewEvent::default()
-                    .with_message(Some("Settled before it was due — never dispatched.".into())),
+                &NewEvent::default().with_message(Some(settled.into())),
             )
             .await?;
+            let lower = if locked.latest_event_kind == "HELD" {
+                holds::settle_held_lower(&mut tx, target, outcome).await?
+            } else {
+                None
+            };
             insert_instruct(&mut tx, target, control, caller).await?;
             tx.commit().await?;
             signals::task_saved(ctx, target, false).await;
+            if let Some(lower) = lower {
+                signals::task_saved(ctx, lower, false).await;
+            }
             signals::task_event_created(ctx, event).await;
             continue;
         }

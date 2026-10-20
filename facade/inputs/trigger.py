@@ -24,6 +24,7 @@ class CreateTriggerInput:
     ends_at: datetime.datetime | None = strawberry.field(default=None, description="Nothing fires after this moment.")
     max_runs: int | None = strawberry.field(default=None, description="Nothing fires once it created this many runs.")
     debounce_seconds: int | None = strawberry.field(default=None, description="Fire at most once per object within this many seconds: the first signal fires, later ones are rejected.")
+    policy: enums.TaskPolicy = strawberry.field(default=enums.TaskPolicy.ASK, description="The policy of every run it fires: ASK (the default) holds a child an agent asks for until a person approves it; AUTO runs it unattended.")
 
 
 @strawberry.input(description="Change a trigger. Omitted fields stay as they are; the result is checked as a whole, like a new trigger. Give `agent: null` (with `interface: null`) to unpin it; give a policy as null to lift it.")
@@ -43,6 +44,7 @@ class UpdateTriggerInput:
     ends_at: datetime.datetime | None = strawberry.UNSET
     max_runs: int | None = strawberry.UNSET
     debounce_seconds: int | None = strawberry.UNSET
+    policy: enums.TaskPolicy | None = strawberry.field(default=None, description="The policy of every run it fires: ASK (the default) holds a child an agent asks for until a person approves it; AUTO runs it unattended.")
 
 
 @strawberry.input(description="Fire a trigger on a stored signal by hand (a replay): the run is created whether or not the signal satisfies the trigger.")

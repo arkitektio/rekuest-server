@@ -37,6 +37,7 @@ class _WireRuleModel(BaseModel):
     enabled: bool = Field(default=True, description="Whether the rule starts out enabled. An organization's own later switch is kept on re-import.")
     ends_at: datetime.datetime | None = Field(default=None, description="The rule stops after this moment.")
     max_runs: int | None = Field(default=None, ge=1, description="The rule stops once it created this many runs.")
+    policy: enums.TaskPolicy = Field(default=enums.TaskPolicy.ASK, description="The policy of every run the rule creates: ASK holds a child an agent asks for until a person approves it, AUTO runs it unattended.")
 
     @model_validator(mode="after")
     def args_are_a_dict(self) -> Self:
@@ -110,6 +111,7 @@ class WireScheduleInput:
     ephemeral_runs: bool = False
     overlap: enums.ScheduleOverlap = enums.ScheduleOverlap.SKIP
     catch_up: bool = False
+    policy: enums.TaskPolicy = enums.TaskPolicy.ASK
 
 
 @pydantic.input(WireTriggerModel, description="A trigger of a wiregram: run an agent's interface when a service signals a matching object.")
@@ -128,6 +130,7 @@ class WireTriggerInput:
     max_runs: int | None = None
     conditions: list[ritypes.RequiresInput] | None = None
     debounce_seconds: int | None = None
+    policy: enums.TaskPolicy = enums.TaskPolicy.ASK
 
 
 @pydantic.input(WiregramModel, description="A wiregram: one document of automation. Importing it creates its schedules and triggers; importing the same key again brings them in line with the new document.")

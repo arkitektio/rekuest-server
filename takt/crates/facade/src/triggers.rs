@@ -57,6 +57,8 @@ struct Trigger {
     max_runs: Option<i32>,
     run_count: i32,
     debounce_seconds: Option<i32>,
+    /// Every run's policy (`ASK` / `AUTO`): runs nobody watches need `AUTO` to delegate.
+    policy: String,
     user_id: i64,
     client_id: i64,
     organization_id: i64,
@@ -67,7 +69,7 @@ struct Trigger {
 }
 
 const COLUMNS: &str = "t.id, t.action_id, t.agent_id, t.interface, t.port, t.args, t.ends_at, t.max_runs, t.run_count,
-       t.debounce_seconds, c.user_id, c.client_id, c.organization_id";
+       t.debounce_seconds, t.policy, c.user_id, c.client_id, c.organization_id";
 
 /// Every enabled trigger of the signal's organization that listens for its kind and structure,
 /// with whether the signal satisfies it. Locked: see the module docs.
@@ -99,6 +101,10 @@ impl Trigger {
             args,
             reference: Some(reference),
             parent: signal.causing_task_id.map(|task| task.to_string()),
+            policy: Some(self.policy.clone()),
+            // The trigger asked for this run, not an agent: it is never held, also when a
+            // task's signal makes it that task's child. It runs under the trigger's policy.
+            unheld: true,
             ..AssignInput::default()
         };
         match self.agent_id {

@@ -10,7 +10,7 @@ repository = "https://github.com/jhnnsrs/rekuest-server-next"
 
 [workspace.dependencies]
 # The wire types, shared with the agents (arkirust).
-rekuest-protocol = "0.2.0"
+rekuest-protocol = "0.4"
 facade = { path = "crates/facade", package = "rekuest-server-facade" }
 authentikate = { path = "crates/authentikate" }
 rekuest-core = { path = "crates/rekuest-server-core", package = "rekuest-server-core" }

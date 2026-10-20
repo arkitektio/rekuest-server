@@ -330,6 +330,23 @@ pub async fn on_report(ctx: &Context, agent: i64, frame: &AgentFrame) -> Persist
         FromAgent::Resumed { task } => {
             nonterminal_confirm(ctx, agent, task, "RESUMED", NewEvent::stamped(stamp)).await?
         }
+        FromAgent::Held {
+            task,
+            message,
+            prompt,
+            details,
+        } => {
+            crate::holds::on_self_hold(
+                ctx,
+                agent,
+                task,
+                message.as_deref(),
+                prompt.as_ref(),
+                details.as_ref(),
+                stamp,
+            )
+            .await?
+        }
         FromAgent::Completed { task } => {
             finalize_from_agent(ctx, agent, frame, task, "COMPLETED", None).await?
         }

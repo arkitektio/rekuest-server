@@ -1962,9 +1962,9 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "rekuest-protocol"
-version = "0.2.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "025be4c568f0f90b39b6e640615f5c815c969b17ee6e233080409da43629572c"
+checksum = "a485181ce203231bbebcc831b103eb8e57de8b798408c984992eac8412ddae69"
 dependencies = [
  "hex",
  "serde",

@@ -107,10 +107,11 @@ async fn claim_lease(
     })
 }
 
-/// Open work the agent may hold: not done, not an undelivered `QUEUED` task, not a virtual
-/// higher-order wrapper (`_in_flight_q`).
+/// Open work the agent may hold: not done, not an undelivered `QUEUED` task or a child still
+/// `HELD` for a decision (no agent has either), not a virtual higher-order wrapper
+/// (`_in_flight_q`).
 pub const IN_FLIGHT: &str = "t.is_done = false
-    AND NOT (t.latest_event_kind = 'QUEUED' AND t.picked_up_at IS NULL)
+    AND NOT (t.latest_event_kind IN ('QUEUED', 'HELD') AND t.picked_up_at IS NULL)
     AND NOT EXISTS (SELECT 1 FROM facade_implementation i
                      WHERE i.id = t.implementation_id AND i.higher_order_for_id IS NOT NULL)";
 

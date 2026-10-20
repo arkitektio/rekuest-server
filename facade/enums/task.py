@@ -25,6 +25,9 @@ class TaskEventChoices(TextChoices):
     PAUSED = "PAUSED", "Paused (the agent suspended the task)"
     RESUMING = "RESUMING", "Resuming (a resume was requested; awaiting the agent's confirmation)"
     RESUMED = "RESUMED", "Resumed (the agent resumed the task)"
+    HELD = "HELD", "Held (waits for a person to approve it: a child an agent asked for, or the task's own hold)"
+    DECIDED = "DECIDED", "Decided (a person, or auto-mode, answered a hold)"
+    DENIED = "DENIED", "Denied (a person refused to let a held child run; it never started)"
     DELEGATE = "DELEGATE", "Delegate (Task was delegated to another Task)"
     FAILED = "FAILED"
     CRITICAL = "CRITICAL"
@@ -94,9 +97,29 @@ class TaskEventKind(str, Enum):
     PAUSED = "PAUSED"
     RESUMING = "RESUMING"
     RESUMED = "RESUMED"
+    # Waits for a person's decision: a child an agent asked for (never dispatched until
+    # approved), or the task's own hold.
+    HELD = "HELD"
+    # A hold was answered: by a person, or by auto-mode.
+    DECIDED = "DECIDED"
+    # A person refused a held child: it ended without ever running.
+    DENIED = "DENIED"
     FAILED = "FAILED"
     CRITICAL = "CRITICAL"
     # Its agent died while it ran: not failed, fate unknown. Whoever called decides.
     LOST = "LOST"
     # What the agent reported after the task was lost: kept, but it does not replace LOST.
     LATE_REPORT = "LATE_REPORT"
+
+
+class TaskPolicyChoices(TextChoices):
+    """Whether the children an agent asks for wait for a person (persisted on ``Task.policy``)."""
+
+    ASK = "ASK", "Ask (an agent's child waits until a person approves it)"
+    AUTO = "AUTO", "Auto (an agent's children run, and its own holds are approved, without asking)"
+
+
+@strawberry.enum(description="Whether the work an agent asks for waits for a person. ASK: a child an agent assigns is held until a person approves it, and the task's own holds wait for a decision. AUTO: they are approved without asking (auto-mode). Set on a root assign; every child inherits its parent's.")
+class TaskPolicy(str, Enum):
+    ASK = "ASK"
+    AUTO = "AUTO"

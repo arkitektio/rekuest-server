@@ -81,6 +81,7 @@ class Trigger:
     last_fired_at: datetime.datetime | None = strawberry_django.field(description="When it last created a run.")
     last_error_at: datetime.datetime | None = strawberry_django.field(description="When `lastError` was written.")
     debounce_seconds: int | None = strawberry_django.field(description="Fires at most once per object within this many seconds.")
+    policy: enums.TaskPolicy = strawberry_django.field(description="The policy of every run it fires: ASK holds a child an agent asks for until a person approves it, AUTO runs it unattended.")
     wiregram: Optional["Wiregram"] = strawberry_django.field(description="The wiregram that owns this trigger, if it was imported with one.")
     wire_key: str | None = strawberry_django.field(description="What the wiregram's document calls this trigger.")
 

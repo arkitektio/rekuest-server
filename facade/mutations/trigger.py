@@ -30,6 +30,7 @@ def create_trigger(info: Info, input: inputs.CreateTriggerInput) -> types.Trigge
             ends_at=input.ends_at,
             max_runs=input.max_runs,
             debounce_seconds=input.debounce_seconds,
+            policy=input.policy.value,
             name=input.name,
             caller=CallerContext.from_info(info).caller(),
             enabled=input.enabled,
@@ -92,6 +93,9 @@ def update_trigger(info: Info, input: inputs.UpdateTriggerInput) -> types.Trigge
     if input.debounce_seconds is not strawberry.UNSET and trigger.debounce_seconds != input.debounce_seconds:
         trigger.debounce_seconds = input.debounce_seconds
         changed.append("debounce_seconds")
+    if input.policy is not None and trigger.policy != input.policy.value:
+        trigger.policy = input.policy.value
+        changed.append("policy")
     rules.check_policies(max_runs=trigger.max_runs, debounce_seconds=trigger.debounce_seconds)
 
     # What it runs and what it listens for is checked only when that changed, and then as a

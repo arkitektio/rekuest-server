@@ -213,13 +213,40 @@ stateDiagram-v2
 - `QUEUED` → `STARTED` is the path to a running task; `LOG` and `PROGRESS` are non-terminal
   annotations along the way and do not move `latest_event_kind` (see the note above).
 - `YIELD` carries returns — a `FUNCTION` yields once, a `GENERATOR` many times.
-- Terminal kinds: `COMPLETED`, `CANCELLED`, `INTERRUPTED`, `FAILED`, `CRITICAL`, `LOST`.
+- Terminal kinds: `COMPLETED`, `CANCELLED`, `INTERRUPTED`, `FAILED`, `CRITICAL`, `LOST`, `DENIED`
+  (a held child a person refused; it never ran — see [Held work](#held-work)).
 - `BOUND`, `DELEGATE` and `UNASSIGN` exist in `TaskEventKind` but no server code writes them; they
   are retained for historical rows and protocol symmetry, and `DELEGATE`/`BOUND` are still *read* by
   the caller-event mirrors. Do not expect them in a new task's history.
 - `LOST` (its agent died while it ran; how it ended is unknown) is terminal, and final: a later
   report from the agent is kept as `LATE_REPORT`. A workflow is resumed instead (see
   [workflows.md](workflows.md)).
+
+## Held work
+
+A root's `policy` (`AssignInput.policy`, GraphQL only) is `ASK` (the default) or `AUTO`; every child
+takes its parent's, and an agent cannot set it (`holds.rs`). A schedule's and a trigger's own
+`policy` is every run's they create. A trigger's run is never held itself, also when a task's
+signal makes it that task's child, and it runs under the trigger's policy rather than the parent's.
+
+- **A child an agent asks for under `ASK`** is created with `latest_event_kind = HELD`, never
+  dispatched (`dispatched_at` NULL, `dispatch_attempts` 0), and gets a `HELD` event whose `value` is
+  what the person deciding sees: the agent's `prompt`, and what the server knows for certain (the
+  action, the target agent, the args, the calling task and agent). Its parent and root get a `HELD`
+  too, with `held: <child id>`. Its caller gets a `HeldEvent`. No sweep touches it: they all key on
+  `QUEUED` or on a pickup, and `IN_FLIGHT` leaves it out.
+- **`decide`** (internal route `decide`; GraphQL `decide`) answers it. Only the root's user may
+  decide, and never from the client of the agent that asked. Approved: `DECIDED`, then the Assign
+  is built (`build_redispatch_assign`) with the answer as its `message` and dispatched, and the
+  task reads `QUEUED`. Denied: `DECIDED`, then the terminal `DENIED`; the caller gets a
+  `DeniedEvent`. A held higher-order wrapper and its lower child move together.
+- **A task's own hold** (`HELD` from its agent) waits on its agent; `decide` writes `DECIDED` and
+  sends `DECIDE`. Under `AUTO` takt does both the moment the hold arrives (`auto: true`).
+- Pause and resume are refused on a held task; cancel and interrupt settle a held child without
+  sending anything, and so does its parent's cancel or interrupt, at the request. A held child
+  never outlives its parent: whenever a task ends (`transitions::claim`), its held children end
+  `CANCELLED` and their caller gets the `CancelledEvent`. Init hooks are the server's own children and never held; a held child cannot
+  carry hooks.
 
 ## Instructing a running task
 

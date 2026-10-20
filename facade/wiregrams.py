@@ -78,6 +78,7 @@ class _ScheduleFields:
     ephemeral_runs: bool
     overlap: str
     catch_up: bool
+    policy: str
     ends_at: datetime.datetime | None
     max_runs: int | None
 
@@ -98,14 +99,15 @@ class _ScheduleFields:
             ephemeral_runs=rule.ephemeral_runs,
             overlap=rule.overlap.value,
             catch_up=rule.catch_up,
+            policy=rule.policy.value,
             ends_at=rule.ends_at,
             max_runs=rule.max_runs,
         )
 
     def retimes(self, schedule: models.Schedule) -> bool:
         """Whether this changes what the schedule's waiting run was planned for."""
-        planned = (schedule.action, schedule.agent, schedule.interface, schedule.args, schedule.interval_seconds, schedule.cron, schedule.timezone, schedule.ephemeral_runs, schedule.ends_at, schedule.max_runs)
-        wanted = (self.target.action, self.target.agent, self.target.interface, self.args, self.interval_seconds, self.cron, self.timezone, self.ephemeral_runs, self.ends_at, self.max_runs)
+        planned = (schedule.action, schedule.agent, schedule.interface, schedule.args, schedule.interval_seconds, schedule.cron, schedule.timezone, schedule.ephemeral_runs, schedule.policy, schedule.ends_at, schedule.max_runs)
+        wanted = (self.target.action, self.target.agent, self.target.interface, self.args, self.interval_seconds, self.cron, self.timezone, self.ephemeral_runs, self.policy, self.ends_at, self.max_runs)
         return planned != wanted
 
     def _set(self, schedule: models.Schedule) -> None:
@@ -121,6 +123,7 @@ class _ScheduleFields:
         schedule.ephemeral_runs = self.ephemeral_runs
         schedule.overlap = self.overlap
         schedule.catch_up = self.catch_up
+        schedule.policy = self.policy
         schedule.ends_at = self.ends_at
         schedule.max_runs = self.max_runs
 
@@ -132,7 +135,7 @@ class _ScheduleFields:
 
     def update(self, rule: models.Schedule) -> None:
         self._set(rule)
-        rule.save(update_fields=["name", "description", "action", "agent", "interface", "args", "interval_seconds", "cron", "timezone", "ephemeral_runs", "overlap", "catch_up", "ends_at", "max_runs", "updated_at"])
+        rule.save(update_fields=["name", "description", "action", "agent", "interface", "args", "interval_seconds", "cron", "timezone", "ephemeral_runs", "overlap", "catch_up", "policy", "ends_at", "max_runs", "updated_at"])
 
 
 @dataclass(frozen=True)
@@ -147,6 +150,7 @@ class _TriggerFields:
     conditions: list[JSONObject]
     compiled_jsonpath: str | None
     debounce_seconds: int | None
+    policy: str
     ends_at: datetime.datetime | None
     max_runs: int | None
 
@@ -167,6 +171,7 @@ class _TriggerFields:
             conditions=conditions,
             compiled_jsonpath=compiled,
             debounce_seconds=rule.debounce_seconds,
+            policy=rule.policy.value,
             ends_at=rule.ends_at,
             max_runs=rule.max_runs,
         )
@@ -184,6 +189,7 @@ class _TriggerFields:
         trigger.conditions = self.conditions
         trigger.compiled_jsonpath = self.compiled_jsonpath
         trigger.debounce_seconds = self.debounce_seconds
+        trigger.policy = self.policy
         trigger.ends_at = self.ends_at
         trigger.max_runs = self.max_runs
 
@@ -195,7 +201,7 @@ class _TriggerFields:
 
     def update(self, rule: models.Trigger) -> None:
         self._set(rule)
-        rule.save(update_fields=["name", "description", "action", "agent", "interface", "args", "kind", "identifier", "port", "conditions", "compiled_jsonpath", "debounce_seconds", "ends_at", "max_runs", "updated_at"])
+        rule.save(update_fields=["name", "description", "action", "agent", "interface", "args", "kind", "identifier", "port", "conditions", "compiled_jsonpath", "debounce_seconds", "policy", "ends_at", "max_runs", "updated_at"])
 
 
 def _checked(document: WiregramModel, organization: Organization) -> tuple[dict[str, _ScheduleFields], dict[str, _TriggerFields]]:
@@ -305,6 +311,7 @@ def export_wiregram(key: str, name: str, description: str | None, listed_schedul
                 ephemeral_runs=s.ephemeral_runs,
                 overlap=s.overlap,
                 catch_up=s.catch_up,
+                policy=s.policy,
             )
             for s in listed_schedules
         ],
@@ -324,6 +331,7 @@ def export_wiregram(key: str, name: str, description: str | None, listed_schedul
                 port=t.port,
                 conditions=t.conditions or [],
                 debounce_seconds=t.debounce_seconds,
+                policy=t.policy,
             )
             for t in listed_triggers
         ],

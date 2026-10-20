@@ -41,6 +41,7 @@ def create_schedule(info: Info, input: inputs.CreateScheduleInput) -> types.Sche
             max_runs=input.max_runs,
             overlap=input.overlap.value,
             catch_up=input.catch_up,
+            policy=input.policy.value,
             name=input.name,
             caller=_caller(info),
             action=action,
@@ -113,8 +114,11 @@ def update_schedule(info: Info, input: inputs.UpdateScheduleInput) -> types.Sche
     if input.catch_up is not None and schedule.catch_up != input.catch_up:
         schedule.catch_up = input.catch_up
         changed.append("catch_up")
-    # A new target, timing or switch is a fresh start, and a new end or limit may end the
-    # schedule now: the waiting run was planned on the old terms. What it is called, and how
+    if input.policy is not None and schedule.policy != input.policy.value:
+        schedule.policy = input.policy.value
+        changed.append("policy")
+    # A new target, timing, switch or policy is a fresh start, and a new end or limit may end
+    # the schedule now: the waiting run was planned on the old terms (its policy included). What it is called, and how
     # its runs overlap or catch up, says nothing about that run.
     replan = bool(set(changed) - {"name", "description", "overlap", "catch_up"})
     rules.check_policies(max_runs=schedule.max_runs)

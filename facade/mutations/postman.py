@@ -26,6 +26,10 @@ def resume(info: Info, input: inputs.ResumeInput) -> types.Task:
     return cast("types.Task", takt.resume(input.to_pydantic(), caller=_caller(info)))
 
 
+def decide(info: Info, input: inputs.DecideInput) -> types.Task:
+    return cast("types.Task", takt.decide(CallerContext.from_info(info), input.to_pydantic()))
+
+
 def cancel(info: Info, input: inputs.CancelInput) -> types.Task:
     return cast("types.Task", takt.cancel(input.to_pydantic(), caller=_caller(info)))
 

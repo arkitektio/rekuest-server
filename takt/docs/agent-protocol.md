@@ -384,6 +384,7 @@ socket and the HookAgent HTTP intake:
 | `Interrupted` | `persist::reports::on_report` | terminal — confirms an `Interrupt` (→ `INTERRUPTED`) |
 | `Paused` | `persist::reports::on_report` | non-terminal — confirms a `Pause` (→ `PAUSED`) |
 | `Resumed` | `persist::reports::on_report` | non-terminal — confirms a `Resume` (→ `RESUMED`) |
+| `Held` | `holds::on_self_hold` | non-terminal — the task waits for a decision (→ `HELD`); under `AUTO` the server answers `Decide` at once (→ `DECIDED`) |
 | `Failed` / `Critical` | `persist::reports::on_report` | terminal with message |
 | `StatePatch` / `StateSnapshot` / `SessionInit` / `Lock` / `Unlock` | `persist::state::on_state` | append a `Patch`, write `Snapshot`s, initialize a `Session`, record the lock report |
 | `Shelve` | `registration::shelve` | upsert a `MemoryDrawer` on the agent's shelve; replies `Shelved{ref, drawer}` / `{ref, error}` (journaled: agent-minted, no reply) |
@@ -438,7 +439,11 @@ See [workflows.md](workflows.md). On the wire:
 - `EFFECT` carries `key`; kinds `RECORD` and `HOLD` join `NOW`, `RANDOM`, `SLEEP`.
 - `ASSIGN_REQUEST` carries `call_key`; a refused one answers `Nondeterministic workflow: …` when the
   key names another call than before.
-- `PAUSED` from the agent (a hold) may carry `message` and `details`.
+- `PAUSED` from the agent may carry `message` and `details` (a hold of an agent from before `HELD`).
+- `HELD {task, message?, prompt?, details?}`: the task waits for a person; the server answers with
+  `DECIDE {task, approved, answer?, auto}`. A denial does not end the task. See [Held work](task-lifecycle.md#held-work).
+- `ASSIGN_REQUEST` may carry `prompt {title, description?}`: why the caller wants the child run, shown
+  to whoever decides it when the run's policy holds it.
 - `STATE_REVISION_REQUEST {parent, dependency, state, since?, paths}` → `STATE_REVISION_RESPONSE
   {request, revision, changed?, detail?, error?}`: a workflow's guard.
 

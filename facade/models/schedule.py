@@ -77,6 +77,13 @@ class Schedule(models.Model):
     overlap = models.CharField(max_length=20, choices=enums.ScheduleOverlapChoices.choices, default="SKIP", db_default="SKIP", help_text="SKIP: the next run waits for the previous to finish. ALLOW: runs may overlap.")
     catch_up = models.BooleanField(default=False, db_default=False, help_text="Run the slots missed while takt was down or a run was open, late and in order, instead of skipping them")
     last_slot_at = models.DateTimeField(null=True, blank=True, help_text="The slot of the run planned last: where catch-up continues from")
+    policy = models.CharField(
+        max_length=20,
+        choices=enums.TaskPolicyChoices.choices,
+        default="ASK",
+        db_default="ASK",
+        help_text="The policy of every run it creates: ASK holds a child an agent asks for until a person approves it, AUTO runs it unattended. A schedule runs while nobody watches, so AUTO is what a run that delegates needs.",
+    )
 
     class Meta:
         constraints = [

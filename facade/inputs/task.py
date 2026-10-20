@@ -103,6 +103,10 @@ class AssignInputModel(BaseModel):
         default=None,
         description="Hold the task back until then: it is persisted now but only dispatched once due. A time in the past (or none) dispatches immediately.",
     )
+    policy: enums.TaskPolicy | None = Field(
+        default=None,
+        description="Whether the work the agents ask for under this task waits for a person: ASK (the default) holds every child an agent assigns until someone approves it, AUTO runs it without asking (auto-mode). Honoured on a root only: a child always takes its parent's.",
+    )
 
 
 @pydantic.input(
@@ -123,6 +127,7 @@ class AssignInput:
     step: bool | None = False
     dependencies: list[ResolvedDependencyInput] | None = None
     not_before: datetime.datetime | None = None
+    policy: enums.TaskPolicy | None = None
 
 
 class CancelInputModel(BaseModel):
@@ -189,6 +194,27 @@ class ResumeInputModel(BaseModel):
 class ResumeInput:
     task: strawberry.ID
     step: bool = False
+
+
+class DecideInputModel(BaseModel):
+    """Base model for answering a held task.
+
+    Attributes:
+        task: ID of the held task
+        approved: whether it may go on
+        answer: what the person says along with it
+    """
+
+    task: str = Field(description="The held task: a child an agent asked for, or a task that holds itself")
+    approved: bool = Field(description="Approve (the child runs; a task's own hold carries on approved) or deny (the child ends DENIED without running; a task's own hold carries on denied)")
+    answer: str | None = Field(default=None, description="What the person says with the decision. A child gets it as its Assign's message; a task's own hold gets it back.")
+
+
+@pydantic.input(DecideInputModel, description="The input for deciding a held task.")
+class DecideInput:
+    task: strawberry.ID
+    approved: bool
+    answer: str | None = None
 
 
 class InterruptInputModel(BaseModel):

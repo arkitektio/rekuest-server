@@ -190,7 +190,7 @@ async def child_tasks(
             yield ChildTaskEvent(update=TaskChange.from_payload(message.update), create=None)
 
 
-TERMINAL_KINDS = ("COMPLETED", "CANCELLED", "INTERRUPTED", "FAILED", "CRITICAL", "LOST")
+TERMINAL_KINDS = ("COMPLETED", "CANCELLED", "INTERRUPTED", "FAILED", "CRITICAL", "LOST", "DENIED")
 """The kinds that end a task (takt's ``TERMINAL_KINDS``)."""
 
 REPORTED_KINDS = ("PROGRESS", "YIELD", *TERMINAL_KINDS)

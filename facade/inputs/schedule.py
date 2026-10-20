@@ -24,6 +24,7 @@ class CreateScheduleInput:
     max_runs: int | None = strawberry.field(default=None, description="No run is planned once it created this many.")
     overlap: enums.ScheduleOverlap = strawberry.field(default=enums.ScheduleOverlap.SKIP, description="Whether a run may start while the previous one is open.")
     catch_up: bool = strawberry.field(default=False, description="Run slots missed while takt was down or a run was open, late and in order, instead of skipping them.")
+    policy: enums.TaskPolicy = strawberry.field(default=enums.TaskPolicy.ASK, description="The policy of every run it creates: ASK (the default) holds a child an agent asks for until a person approves it; AUTO runs it unattended.")
 
 
 @strawberry.input(description="Change a schedule. Giving intervalSeconds clears cron and vice versa. Give `agent: null` (with `interface: null`) to unpin it; give `endsAt` or `maxRuns` as null to lift it. A waiting run is re-planned; an executing one finishes first.")
@@ -44,6 +45,7 @@ class UpdateScheduleInput:
     max_runs: int | None = strawberry.UNSET
     overlap: enums.ScheduleOverlap | None = None
     catch_up: bool | None = None
+    policy: enums.TaskPolicy | None = strawberry.field(default=None, description="The policy of every run it creates: ASK (the default) holds a child an agent asks for until a person approves it; AUTO runs it unattended. A waiting run is re-planned with it.")
 
 
 @strawberry.input(description="Identify a schedule.")

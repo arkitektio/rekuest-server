@@ -145,6 +145,29 @@ class TestScheduleChanges:
         assert bad.errors is not None and "cron line" in str(bad.errors[0])
         assert (await models.Schedule.objects.aget(pk=schedule_id)).cron == "0 2 * * *"
 
+    async def test_a_schedules_policy_is_its_runs_policy(self, authenticated_context, schedule_notices):
+        """ASK unless it says AUTO; a changed policy replans the waiting run with it."""
+        context = (await sync_to_async(tenant_context)(TEST_TOKEN))[0]
+        schedule_id, _ = await self._created("sch-policy", context)
+        first_run = await waiting_run(schedule_id)
+        assert (await models.Schedule.objects.aget(pk=schedule_id)).policy == "ASK"
+        assert (await models.Task.objects.aget(pk=first_run)).policy == "ASK"
+        schedule_notices.sent()
+
+        changed = await schema.execute(
+            "mutation($input: UpdateScheduleInput!) { updateSchedule(input: $input) { id policy } }",
+            variable_values={"input": {"id": schedule_id, "policy": "AUTO"}},
+            context_value=context,
+        )
+        assert changed.errors is None, changed.errors
+        assert changed.data["updateSchedule"]["policy"] == "AUTO"
+        assert [notice["replan"] for notice in schedule_notices.sent()] == [True]
+        unattended = await waiting_run(schedule_id, other_than=first_run)
+        assert (await models.Task.objects.aget(pk=unattended)).policy == "AUTO"
+
+        auto_id, _ = await self._created("sch-policy-auto", context, policy="AUTO")
+        assert (await models.Task.objects.aget(pk=await waiting_run(auto_id))).policy == "AUTO"
+
     async def test_run_now_and_delete_go_through_takt(self, authenticated_context, schedule_notices):
         context = (await sync_to_async(tenant_context)(TEST_TOKEN))[0]
         other = (await sync_to_async(tenant_context)(OTHER_TOKEN))[0]

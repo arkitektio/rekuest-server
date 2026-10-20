@@ -1054,6 +1054,11 @@ input AssignInput {
   Hold the task back until then: it is persisted now but only dispatched once due. A time in the past (or none) dispatches immediately.
   """
   notBefore: DateTime = null
+
+  """
+  Whether the work the agents ask for under this task waits for a person: ASK (the default) holds every child an agent assigns until someone approves it, AUTO runs it without asking (auto-mode). Honoured on a root only: a child always takes its parent's.
+  """
+  policy: TaskPolicy = null
 }
 
 interface AssignWidget {
@@ -1932,6 +1937,11 @@ input CreateScheduleInput {
   Run slots missed while takt was down or a run was open, late and in order, instead of skipping them.
   """
   catchUp: Boolean! = false
+
+  """
+  The policy of every run it creates: ASK (the default) holds a child an agent asks for until a person approves it; AUTO runs it unattended.
+  """
+  policy: TaskPolicy! = ASK
 }
 
 """The input for creating a shortcut."""
@@ -2061,6 +2071,11 @@ input CreateTriggerInput {
   Fire at most once per object within this many seconds: the first signal fires, later ones are rejected.
   """
   debounceSeconds: Int = null
+
+  """
+  The policy of every run it fires: ASK (the default) holds a child an agent asks for until a person approves it; AUTO runs it unattended.
+  """
+  policy: TaskPolicy! = ASK
 }
 
 """A catalog component rendered as the port's widget."""
@@ -2175,6 +2190,22 @@ input DashboardPlacementOrder @oneOf {
 
 """Date with time (isoformat)"""
 scalar DateTime
+
+"""The input for deciding a held task."""
+input DecideInput {
+  """The held task: a child an agent asked for, or a task that holds itself"""
+  task: ID!
+
+  """
+  Approve (the child runs; a task's own hold carries on approved) or deny (the child ends DENIED without running; a task's own hold carries on denied)
+  """
+  approved: Boolean!
+
+  """
+  What the person says with the decision. A child gets it as its Assign's message; a task's own hold gets it back.
+  """
+  answer: String = null
+}
 
 "A definition\n\n    Definitions are the building implementation for Actions and provide the\n    information needed to create a action. They are primarly composed of a name,\n    a description, and a list of ports.\n\n    Definitions provide a protocol of input and output, and do not contain\n    any information about the actual implementation of the action ( this is handled\n    by a implementation that implements a action).\n\n    "
 input DefinitionInput {
@@ -3516,6 +3547,11 @@ type Mutation {
 
   """Resume a paused task."""
   resume(input: ResumeInput!): Task! @auth
+
+  """
+  Answer a held task. A child an agent asked for runs once approved, or ends DENIED without running; a task that holds itself carries on with the decision. Only the user the task runs for may decide, and never from the client of the agent that asked.
+  """
+  decide(input: DecideInput!): Task! @auth
 
   """Collect results from a task."""
   collect(input: CollectInput!): [String!]! @auth
@@ -4957,6 +4993,11 @@ type Schedule {
   """
   catchUp: Boolean!
 
+  """
+  The policy of every run it creates: ASK holds a child an agent asks for until a person approves it, AUTO runs it unattended.
+  """
+  policy: TaskPolicy!
+
   """The wiregram that owns this schedule, if it was imported with one."""
   wiregram: Wiregram
 
@@ -6031,6 +6072,11 @@ type Task {
   """Last instruction type."""
   latestInstructKind: TaskInstructKind!
 
+  """
+  Whether the work agents ask for under this task waits for a person (ASK) or runs without asking (AUTO, auto-mode). A root's is set on its assign; a child takes its parent's.
+  """
+  policy: TaskPolicy!
+
   """Caller that created this task."""
   caller: Caller
 
@@ -6186,7 +6232,7 @@ type TaskEvent {
   key: String
 
   """
-  EFFECT events: the value the task took (NOW: epoch seconds, RANDOM: hex, SLEEP: deadline).
+  EFFECT events: the value the task took (NOW: epoch seconds, RANDOM: hex, SLEEP: deadline). HELD: what waits for a decision ({kind: "assign", prompt, action, agent, args, caller_task, caller_agent} for a child an agent asked for, with held: the child's id on its parent and root; {kind: "self", prompt, details} for a task's own hold). DECIDED: the decision ({approved, answer, auto, user}). DENIED: {answer, user}. LOST: what is known about the lost run.
   """
   value: AnyDefault
 
@@ -6247,6 +6293,9 @@ enum TaskEventKind {
   PAUSED
   RESUMING
   RESUMED
+  HELD
+  DECIDED
+  DENIED
   FAILED
   CRITICAL
   LOST
@@ -6359,6 +6408,14 @@ enum TaskInstructKind {
 input TaskOrder @oneOf {
   createdAt: Ordering
   finishedAt: Ordering
+}
+
+"""
+Whether the work an agent asks for waits for a person. ASK: a child an agent assigns is held until a person approves it, and the task's own holds wait for a decision. AUTO: they are approved without asking (auto-mode). Set on a root assign; every child inherits its parent's.
+"""
+enum TaskPolicy {
+  ASK
+  AUTO
 }
 
 type TaskStats {
@@ -6673,6 +6730,11 @@ type Trigger {
   """Fires at most once per object within this many seconds."""
   debounceSeconds: Int
 
+  """
+  The policy of every run it fires: ASK holds a child an agent asks for until a person approves it, AUTO runs it unattended.
+  """
+  policy: TaskPolicy!
+
   """The wiregram that owns this trigger, if it was imported with one."""
   wiregram: Wiregram
 
@@ -6911,6 +6973,11 @@ input UpdateScheduleInput {
   maxRuns: Int
   overlap: ScheduleOverlap = null
   catchUp: Boolean = null
+
+  """
+  The policy of every run it creates: ASK (the default) holds a child an agent asks for until a person approves it; AUTO runs it unattended. A waiting run is re-planned with it.
+  """
+  policy: TaskPolicy = null
 }
 
 """The input for updating a space."""
@@ -6965,6 +7032,11 @@ input UpdateTriggerInput {
   endsAt: DateTime
   maxRuns: Int
   debounceSeconds: Int
+
+  """
+  The policy of every run it fires: ASK (the default) holds a child an agent asks for until a person approves it; AUTO runs it unattended.
+  """
+  policy: TaskPolicy = null
 }
 
 """Represents an authenticated user."""
@@ -7122,6 +7194,11 @@ input WireScheduleInput {
   """The rule stops once it created this many runs."""
   maxRuns: Int = null
 
+  """
+  The policy of every run the rule creates: ASK holds a child an agent asks for until a person approves it, AUTO runs it unattended.
+  """
+  policy: TaskPolicy! = ASK
+
   """Run every N seconds (exclusive with cron)."""
   intervalSeconds: Int = null
 
@@ -7183,6 +7260,11 @@ input WireTriggerInput {
 
   """The rule stops once it created this many runs."""
   maxRuns: Int = null
+
+  """
+  The policy of every run the rule creates: ASK holds a child an agent asks for until a person approves it, AUTO runs it unattended.
+  """
+  policy: TaskPolicy! = ASK
 
   """The signal kind it reacts to."""
   kind: SignalKind!

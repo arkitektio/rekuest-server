@@ -110,6 +110,12 @@ def resume(input: inputs.ResumeInputModel, caller: models.Caller | None = None) 
     return _control(takt_api.RESUME, input.task, caller, step=input.step)
 
 
+def decide(context: CallerContext, input: inputs.DecideInputModel) -> models.Task:
+    """Answer a held task: a child an agent asked for runs or ends DENIED; a task's own hold carries on."""
+    answer = call(takt_api.DECIDE, takt_api.DecideRequest(principal=Principal.of(context), task=input.task, approved=input.approved, answer=input.answer))
+    return models.Task.objects.get(pk=answer.task)
+
+
 def _agent_op(route: Route[takt_api.AgentRequest, takt_api.AgentAnswer], context: CallerContext, agent: str, reason: str | None = None) -> models.Agent:
     answer = call(route, takt_api.AgentRequest(principal=Principal.of(context), agent=agent, reason=reason))
     return models.Agent.objects.get(pk=answer.agent)

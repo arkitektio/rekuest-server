@@ -64,6 +64,8 @@ struct Schedule {
     overlap: String,
     catch_up: bool,
     last_slot_at: Option<DateTime<Utc>>,
+    /// Every run's policy (`ASK` / `AUTO`): runs nobody watches need `AUTO` to delegate.
+    policy: String,
     user_id: i64,
     client_id: i64,
     organization_id: i64,
@@ -71,7 +73,7 @@ struct Schedule {
 
 const COLUMNS: &str = "s.id, s.action_id, s.agent_id, s.interface, s.args, s.interval_seconds, s.cron, s.timezone,
                        s.created_at, s.refill_after, s.consecutive_failures, s.ends_at, s.max_runs, s.run_count,
-                       s.overlap, s.catch_up, s.last_slot_at, c.user_id, c.client_id, c.organization_id";
+                       s.overlap, s.catch_up, s.last_slot_at, s.policy, c.user_id, c.client_id, c.organization_id";
 
 /// A run that keeps a schedule from getting its next one: any open run, or with `ALLOW`
 /// overlap only one that is still waiting. `s` is the schedule, `t` the task.
@@ -142,6 +144,7 @@ impl Schedule {
             args,
             reference: Some(reference),
             not_before,
+            policy: Some(self.policy.clone()),
             ..AssignInput::default()
         };
         match self.agent_id {

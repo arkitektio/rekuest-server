@@ -244,6 +244,7 @@ class Mutation:
     cancel = mutation(resolver=mutations.cancel, description="Cancel an active task.")
     pause = mutation(resolver=mutations.pause, description="Pause an ongoing task.")
     resume = mutation(resolver=mutations.resume, description="Resume a paused task.")
+    decide = mutation(resolver=mutations.decide, description="Answer a held task. A child an agent asked for runs once approved, or ends DENIED without running; a task that holds itself carries on with the decision. Only the user the task runs for may decide, and never from the client of the agent that asked.")
     collect = mutation(resolver=mutations.collect, description="Collect results from a task.")
     interrupt = mutation(resolver=mutations.interrupt, description="Interrupt the execution of a task.")
     create_trigger = mutation(resolver=mutations.create_trigger, description="Create a trigger: run an action when a service signals a matching object.")

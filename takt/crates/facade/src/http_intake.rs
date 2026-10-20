@@ -154,6 +154,7 @@ pub fn reply_for_duplicate(frame: &AgentFrame) -> Option<Answer> {
         | FromAgent::Cancelled { .. }
         | FromAgent::Interrupted { .. }
         | FromAgent::Paused { .. }
+        | FromAgent::Held { .. }
         | FromAgent::Resumed { .. }
         | FromAgent::Effect { .. } => Some((200, body_of(message_router::ack(frame)))),
         _ => Some((200, json!({"duplicate": true}))),

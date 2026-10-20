@@ -49,6 +49,7 @@ class Schedule:
     last_error_at: datetime.datetime | None = strawberry_django.field(description="When `lastError` was written.")
     overlap: enums.ScheduleOverlap = strawberry_django.field(description="Whether a run may start while the previous one is open.")
     catch_up: bool = strawberry_django.field(description="Whether slots missed during downtime are run late, in order, instead of skipped.")
+    policy: enums.TaskPolicy = strawberry_django.field(description="The policy of every run it creates: ASK holds a child an agent asks for until a person approves it, AUTO runs it unattended.")
     wiregram: Optional["Wiregram"] = strawberry_django.field(description="The wiregram that owns this schedule, if it was imported with one.")
     wire_key: str | None = strawberry_django.field(description="What the wiregram's document calls this schedule.")
 

@@ -307,8 +307,8 @@ pub async fn fail_and_cascade_inflight(ctx: &Context, tasks: &[i64]) -> Result<(
         let Some((kind, picked_up_at, workflow)) = row else {
             continue;
         };
-        if kind == "QUEUED" && picked_up_at.is_none() {
-            continue; // undelivered, not orphaned
+        if (kind == "QUEUED" || kind == "HELD") && picked_up_at.is_none() {
+            continue; // undelivered (or held, never sent), not orphaned
         }
         if workflow && resume_workflow(ctx, task).await? {
             continue;

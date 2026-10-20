@@ -14,6 +14,8 @@ from .task import (
     TaskEventKind,
     TaskInstructChoices,
     TaskInstructKind,
+    TaskPolicy,
+    TaskPolicyChoices,
 )
 from .log import LogLevel, LogLevelChoices
 from .signal import FiringOutcome, FiringOutcomeChoices, ScheduleOverlap, ScheduleOverlapChoices, SignalKind, SignalKindChoices
@@ -42,6 +44,8 @@ __all__ = [
     "TaskEventKind",
     "TaskInstructChoices",
     "TaskInstructKind",
+    "TaskPolicy",
+    "TaskPolicyChoices",
     # log
     "LogLevel",
     "LogLevelChoices",

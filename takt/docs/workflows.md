@@ -85,10 +85,13 @@ again with `resume`:
 
 ## Holds
 
-`task.hold(message, lost=...)` pauses the task from the inside: `PAUSED` carries `message` and
-`details` (for a lost step: its effects, last progress), stored on the event. A person resumes it
-(`resume` mutation) or cancels it. Once resumed, the hold is recorded (`HOLD:n`), so a resumed run
-does not hold again; a workflow that died while held holds again after its resume.
+`task.hold(message, lost=...)` makes the task wait for a person from the inside: `HELD` carries
+`message`, a `prompt` and `details` (for a lost step: its effects, last progress), stored on the
+event. A person answers with the `decide` mutation, and the agent gets `DECIDE {approved, answer}`
+back: a denial is an answer, not an end (cancel still ends it). Under an `AUTO` run the server
+approves it the moment it arrives. The decision is recorded (`HOLD:n`), so a resumed run gets
+the same answer without holding again; a workflow that died while held holds again after its
+resume. An agent from before `HELD` pauses with `PAUSED` instead, which `resume` releases.
 
 ## Guards
 

@@ -29,6 +29,7 @@
 //! | `resolve` | `{"principal", "input": {"implementation", "dependencies"?}}` (a dry run of an assign's dependency tree) | `{"dependencies", "meta", "satisfied"}` |
 //! | `cancel`, `interrupt`, `pause` | `{"principal"?, "task"}` | `{"task"}` |
 //! | `resume` | `{"principal"?, "task", "step"?}` | `{"task"}` |
+//! | `decide` | `{"principal", "task", "approved", "answer"?}` (a person answers a held task; see `facade::holds`) | `{"task"}` |
 //! | `bounce`, `unblock` | `{"principal", "agent"}` | `{"agent"}` |
 //! | `kick`, `block` | `{"principal", "agent", "reason"?}` (the reason goes to the agent in its Kick frame) | `{"agent"}` |
 //! | `collect` | `{"principal", "drawers": [id, …]}` | `{"drawers"}` |
@@ -87,6 +88,7 @@ pub fn routes() -> Router<Shared> {
         .route("/internal/interrupt", post(interrupt))
         .route("/internal/pause", post(pause))
         .route("/internal/resume", post(resume))
+        .route("/internal/decide", post(decide))
         .route("/internal/bounce", post(bounce))
         .route("/internal/kick", post(kick))
         .route("/internal/block", post(block))
@@ -345,6 +347,28 @@ internal!(pause, ControlRequest, |state, request| control(
 internal!(resume, ControlRequest, |state, request| {
     let step = request.step;
     control(&state, &request, backend::Control::Resume { step }).await
+});
+
+#[derive(Debug, Deserialize)]
+struct DecideRequest {
+    principal: Principal,
+    task: Id,
+    approved: bool,
+    #[serde(default)]
+    answer: Option<String>,
+}
+
+internal!(decide, DecideRequest, |state, request| {
+    let principal = request.principal.context(&state).await?;
+    let task = facade::holds::decide(
+        &state.facade,
+        &principal,
+        &request.task.text(),
+        request.approved,
+        request.answer.clone(),
+    )
+    .await?;
+    Ok(Json(json!({"task": task.to_string()})))
 });
 
 #[derive(Debug, Deserialize)]

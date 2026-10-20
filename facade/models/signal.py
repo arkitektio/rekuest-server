@@ -101,6 +101,13 @@ class Trigger(models.Model):
     wiregram = models.ForeignKey("Wiregram", on_delete=models.CASCADE, null=True, blank=True, related_name="triggers", help_text="The wiregram that owns this rule, if it was imported with one")
     wire_key = models.CharField(max_length=200, null=True, blank=True, help_text="What the wiregram's document calls this rule")
     debounce_seconds = models.PositiveIntegerField(null=True, blank=True, help_text="Fire at most once per object within this many seconds (the first signal fires, later ones are rejected); null = every signal")
+    policy = models.CharField(
+        max_length=20,
+        choices=enums.TaskPolicyChoices.choices,
+        default="ASK",
+        db_default="ASK",
+        help_text="The policy of every run it fires: ASK holds a child an agent asks for until a person approves it, AUTO runs it unattended. The run itself is never held: the trigger, not an agent, asked for it.",
+    )
 
     class Meta:
         constraints = [

@@ -19,6 +19,7 @@ pub mod descriptors;
 pub mod embeddings;
 pub mod guards;
 pub mod higher_order;
+pub mod holds;
 pub mod hooks;
 pub mod http_intake;
 pub mod inference;

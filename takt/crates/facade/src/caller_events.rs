@@ -162,6 +162,19 @@ pub fn build_execution_event(event: &EventLike) -> Option<ToAgent> {
         "PAUSED" => ToAgent::PausedEvent(base),
         "RESUMING" => ToAgent::ResumingEvent(base),
         "RESUMED" => ToAgent::ResumedEvent(base),
+        // A HELD about a descendant (`held` names it) tells whoever follows this task that the
+        // run waits; it is not this task waiting, so its caller is not told it is.
+        "HELD" if field(event, "held").is_some() => return None,
+        "HELD" => ToAgent::HeldEvent {
+            event: base,
+            prompt: field(event, "prompt").and_then(|p| serde_json::from_value(p.clone()).ok()),
+        },
+        "DENIED" => ToAgent::DeniedEvent {
+            event: base,
+            answer: field(event, "answer")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+        },
         _ => return None,
     })
 }
@@ -178,6 +191,15 @@ pub fn mirror_of_channel_message(message: &Value) -> Option<ToAgent> {
         None
     }?;
     build_execution_event(&event)
+}
+
+/// A non-null member of the event's `value`.
+fn field<'a>(event: &'a EventLike, key: &str) -> Option<&'a Value> {
+    event
+        .value
+        .as_ref()
+        .and_then(|value| value.get(key))
+        .filter(|v| !v.is_null())
 }
 
 /// Python truthiness of a JSON value.
