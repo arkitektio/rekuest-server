@@ -29,12 +29,12 @@ HOSTS = Hosts(
         Structure(
             identifier="@rekuest/agent",
             label="Agent",
-            description="An app instance connected to rekuest.",
+            description="An app instance connected to rekuest (one per app client, user and organization): a worker that offers actions and runs the tasks assigned to it.",
             descriptors=[
                 Descriptor(
                     key="@rekuest/supervisor",
                     type="STRING",
-                    description="The app the agent says controls its lifecycle (e.g. plugin_engine). Self-declared at registration: a hint, never authority.",
+                    description="The app the agent says controls its lifecycle, starting and stopping it (e.g. plugin_engine for a plugin). Self-declared at registration: a hint, never authority.",
                 )
             ],
         )
