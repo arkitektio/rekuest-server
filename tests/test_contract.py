@@ -15,7 +15,7 @@ from arkitekt_service.contract import cli
 PEM = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEILK+rl9gVEjfKGiye+mLLjfEUGIdoP0WPC8lMZS3NYK2\n-----END PRIVATE KEY-----\n"
 
 FACTS: dict[str, object] = {
-    "me": {"name": "rekuest", "path": "rekuest", "url": "http://rekuest:80/rekuest", "identifier": "rekuest", "secret_key": "s3cret", "admin": {"username": "admin", "password": "pw"}},
+    "me": {"name": "rekuest", "path": "rekuest", "url": "http://rekuest:80/rekuest", "identifier": "live.arkitekt.rekuest", "secret_key": "s3cret", "admin": {"username": "admin", "password": "pw"}},
     "hub": {"origins": ["https://lab.example"], "auth": {"audience": "*", "issuers": [{"kind": "jwks_uri", "iss": "lok", "jwks_uri": "http://lok/.well-known/jwks.json"}], "static_tokens": {}}},
     "databases": {"main": {"host": "db", "name": "rekuest", "username": "hub", "password": "pw"}},
     "redis": {"host": "redis"},
@@ -71,6 +71,9 @@ def test_its_config_is_written_from_what_the_hub_says(tmp_path: Path, capsys: py
     ]
     assert block["takt_url"] == "http://rekuest-takt:8080/rekuest" and block["takt_socket"] == "/run/takt/internal.sock"
     assert block["server_url"] == "http://rekuest:80/rekuest"
+    # It signs as its name in the hub — what the hub's trust bundle lists its key under —
+    # and not as the kind of service it is, which the hub's facts also say.
+    assert block["identifier"] == "rekuest"
     assert config["datalayer"]["media"] == {"bucket": "rekuestmedia"}
     assert config["django"]["force_script_name"] == "rekuest" and config["django"]["csrf_trusted_origins"] == ["https://lab.example"]
     assert config["instance"]["trust"] == {"jwks_uri": "http://lok/.well-known/hub-keys/1"}

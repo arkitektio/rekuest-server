@@ -76,7 +76,9 @@ def render(facts: Facts) -> dict[str, JSON]:
             # the catalog is then written from here, and the service is not asked.
             "services": [_service(name, peer) for name, peer in facts.offering("rekuest_service").items()],
             "hook_agents": [{"name": name, "hook_url": peer.offers["rekuest_hook"], **({"identifier": peer.identifier} if peer.identifier else {})} for name, peer in facts.offering("rekuest_hook").items()],
-            "identifier": facts.me.identifier,
+            # What Rekuest signs as and is listed under in the hub's trust bundle: its name in
+            # the hub (`rekuest`), not the kind of service it is (`me.identifier`).
+            "identifier": facts.me.name,
             "server_url": facts.me.url,
             "takt_url": takt.url,
             **({"takt_socket": takt.settings["socket"]} if "socket" in takt.settings else {}),
