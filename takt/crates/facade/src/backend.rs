@@ -26,7 +26,7 @@ use crate::caller_context::CallerContext;
 use crate::context::Context;
 use crate::higher_order::{build_lower_args, build_lower_dependencies};
 use crate::holds::{self, HeldChild};
-use crate::messages::{Assign, AssignPrompt, ToAgent};
+use crate::messages::{Assign, AssignPrompt, StateRequirement, ToAgent};
 use crate::persist::transitions::{insert_event, NewEvent};
 use crate::provenance::canonical::args_hash;
 use crate::provenance::{mint_token_for_task, MintError, MintTask};
@@ -150,6 +150,11 @@ pub struct AssignInput {
     /// Why the agent asking for this child wants it run: shown to whoever decides a held child.
     #[serde(default)]
     pub prompt: Option<AssignPrompt>,
+    /// What the agent's state must hold for the task to run. Validated against the chosen
+    /// agent's states, refused for an agent that does not say it tests them, stored on the task
+    /// and sent with every dispatch of it.
+    #[serde(default)]
+    pub state_requires: Option<Vec<StateRequirement>>,
     /// A child the server makes itself (an init hook, a trigger's run): never held. With
     /// `policy`, it runs under that instead of its parent's. Not on the wire.
     #[serde(skip)]
@@ -1061,6 +1066,8 @@ struct NewTask {
     policy: &'static str,
     /// Created `HELD`: an agent's child waiting for a person, never dispatched until approved.
     held: bool,
+    /// What the agent's state must hold for it to run; stored NULL when there is none.
+    state_requires: Vec<StateRequirement>,
 }
 
 impl NewTask {
@@ -1096,6 +1103,7 @@ impl NewTask {
             trigger_depth: 0,
             policy: holds::ASK,
             held: false,
+            state_requires: vec![],
         }
     }
 
@@ -1107,10 +1115,10 @@ impl NewTask {
                  dependency_method, resolution_id, is_higher_order_child, latest_event_kind,
                  latest_instruct_kind, dependencies, caller_id, dispatched_at, dispatch_attempts,
                  not_before, schedule_id, ephemeral, signal_id, trigger_id, trigger_depth, revision,
-                 policy)
+                 policy, state_requires)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
                      $18, CASE WHEN $30 THEN 'HELD' ELSE 'QUEUED' END, 'ASSIGN', $19, $20, $21,
-                     $22, $23, $24, $25, $26, $27, $28, 1, $29)
+                     $22, $23, $24, $25, $26, $27, $28, 1, $29, $31)
              RETURNING id",
         )
         .bind(self.action)
@@ -1143,6 +1151,7 @@ impl NewTask {
         .bind(self.trigger_depth)
         .bind(self.policy)
         .bind(self.held)
+        .bind((!self.state_requires.is_empty()).then_some(sqlx::types::Json(&self.state_requires)))
         .fetch_one(conn)
         .await
     }
@@ -1254,6 +1263,13 @@ pub async fn assign_with_status(
             .map_err(|e| BackendError::Refused(format!("The action's ports do not parse: {e}")))?;
         validate_assignment_args(&ports, &input.args).map_err(BackendError::Refused)?;
     }
+    let state_requires = input.state_requires.clone().unwrap_or_default();
+    if !state_requires.is_empty() && implementation.higher_order_for_id.is_some() {
+        return Err(BackendError::Refused(
+            "A higher-order implementation cannot be assigned with state requirements: its wrapper runs on no agent that could test them".into(),
+        ));
+    }
+    crate::state_requires::check(&ctx.db, implementation.agent_id, &state_requires).await?;
 
     let parent = input.parent.as_deref().map(parse_id).transpose()?;
     // A root's policy is its assign's; a child's is its parent's, whatever it asks for. Only a
@@ -1373,6 +1389,7 @@ pub async fn assign_with_status(
         trigger_depth: origin.trigger_depth,
         policy,
         held,
+        state_requires: state_requires.clone(),
         ..NewTask::new(
             action.id,
             implementation.id,
@@ -1460,6 +1477,7 @@ pub async fn assign_with_status(
             implementation: implementation.id.to_string(),
             token,
             resume: None,
+            state_requires,
         },
     )
     .await;
@@ -1685,6 +1703,8 @@ async fn assign_higher_order(
             implementation: lower.id.to_string(),
             token,
             resume: None,
+            // Refused on a higher-order assign (see `assign_with_status`).
+            state_requires: vec![],
         },
     )
     .await;

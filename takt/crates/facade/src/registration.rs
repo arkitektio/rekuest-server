@@ -61,6 +61,21 @@ pub async fn set_supervisor(
     Ok(())
 }
 
+/// Record what the agent said on this registration it implements beyond the base protocol (none
+/// clears it): whether a task with `state_requires` may be sent to it. Written only when it
+/// changed.
+pub async fn set_features(db: &PgPool, agent: i64, features: &[String]) -> Result<(), sqlx::Error> {
+    let features = (!features.is_empty()).then_some(sqlx::types::Json(features));
+    sqlx::query(
+        "UPDATE facade_agent SET features = $2 WHERE id = $1 AND features IS DISTINCT FROM $2",
+    )
+    .bind(agent)
+    .bind(features)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 /// Forget every drawer on the agent's shelve: a process that just started holds nothing.
 pub async fn clear_drawers(
     executor: impl sqlx::PgExecutor<'_>,

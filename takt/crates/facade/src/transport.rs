@@ -184,6 +184,7 @@ mod tests {
             implementation: "2".into(),
             token: None,
             resume: None,
+            state_requires: vec![],
         })));
         assert_eq!(text.matches("\"id\"").count(), 1);
         let value: Value = serde_json::from_str(&text).unwrap();

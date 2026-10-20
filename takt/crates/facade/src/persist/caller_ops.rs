@@ -57,6 +57,7 @@ pub fn assign_input(message: &FromAgent<impl Sized>) -> Option<BackendResult<Ass
         capture,
         step,
         prompt,
+        state_requires,
     } = message
     else {
         return None;
@@ -93,6 +94,7 @@ pub fn assign_input(message: &FromAgent<impl Sized>) -> Option<BackendResult<Ass
         // An agent never sets its children's policy: they take their parent's.
         policy: None,
         prompt: prompt.clone(),
+        state_requires: (!state_requires.is_empty()).then(|| state_requires.clone()),
         unheld: false,
     }))
 }

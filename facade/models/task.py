@@ -157,6 +157,11 @@ class Task(models.Model):
         db_default="ASK",
         help_text="ASK: a child an agent assigns waits until a person approves it (HELD), and the task's own holds wait for a decision. AUTO: both are approved without asking. A root's is set on its assign; a child always takes its parent's.",
     )
+    state_requires = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="What the agent's state must hold for the task to run ([{state, path, operator, value}]), sent with every dispatch of it. The agent tests it with the task's locks held; on a mismatch the task ends FAILED with code STATE_PRECONDITION.",
+    )
     is_done = models.BooleanField(
         default=False,
         help_text="Is this Task done (e.g. has it been completed and resulted in an error?)",

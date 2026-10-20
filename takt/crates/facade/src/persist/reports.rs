@@ -187,7 +187,14 @@ async fn finalize_from_agent(
     let Some(row) = agent_task(ctx, agent, task).await? else {
         return Ok(());
     };
-    let event = NewEvent::stamped(position_stamp(frame)).with_message(message.clone());
+    let mut event = NewEvent::stamped(position_stamp(frame)).with_message(message.clone());
+    // A FAILED report's code (`STATE_PRECONDITION`) is the event's value: `{"code": ...}`.
+    if let FromAgent::Failed {
+        code: Some(code), ..
+    } = &frame.message
+    {
+        event.value = Some(serde_json::json!({ "code": code }));
+    }
     if row.is_done {
         if row.latest_event_kind == "LOST" {
             return record_late_report(ctx, row.id, kind, &event).await;
@@ -356,7 +363,7 @@ pub async fn on_report(ctx: &Context, agent: i64, frame: &AgentFrame) -> Persist
         FromAgent::Interrupted { task } => {
             finalize_from_agent(ctx, agent, frame, task, "INTERRUPTED", None).await?
         }
-        FromAgent::Failed { task, error } => {
+        FromAgent::Failed { task, error, .. } => {
             finalize_from_agent(ctx, agent, frame, task, "FAILED", Some(error.clone())).await?
         }
         FromAgent::Critical { task, error } => {

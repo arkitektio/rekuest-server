@@ -46,6 +46,7 @@ pub mod service_trust;
 pub mod settings;
 pub mod signal_intake;
 pub mod signals;
+pub mod state_requires;
 pub mod timing;
 pub mod transport;
 pub mod triggers;

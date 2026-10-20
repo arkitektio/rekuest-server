@@ -129,6 +129,12 @@ pub fn build_execution_event(event: &EventLike) -> Option<ToAgent> {
         "FAILED" => ToAgent::FailedEvent {
             event: base,
             error: event.message.clone(),
+            code: event
+                .value
+                .as_ref()
+                .and_then(|v| v.get("code"))
+                .and_then(Value::as_str)
+                .map(str::to_owned),
         },
         "CRITICAL" => ToAgent::CriticalEvent {
             event: base,

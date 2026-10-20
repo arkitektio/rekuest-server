@@ -322,7 +322,7 @@ async fn route_probe(
         FromAgent::Cancelled { task } => terminal(ctx, task, "CANCELLED", None).await?,
         FromAgent::Interrupted { task } => terminal(ctx, task, "INTERRUPTED", None).await?,
         FromAgent::Completed { task } => terminal(ctx, task, "COMPLETED", None).await?,
-        FromAgent::Failed { task, error } => terminal(ctx, task, "FAILED", Some(error)).await?,
+        FromAgent::Failed { task, error, .. } => terminal(ctx, task, "FAILED", Some(error)).await?,
         FromAgent::Critical { task, error } => terminal(ctx, task, "CRITICAL", Some(error)).await?,
         FromAgent::Yield { task, returns } => {
             let event = ProbeEvent {

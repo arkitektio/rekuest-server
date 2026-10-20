@@ -1,14 +1,16 @@
 """Inputs for tasks and the postman lifecycle controls."""
 
 import datetime
+from typing import Self
 
 import strawberry
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from strawberry.experimental import pydantic
 
 from facade import enums, scalars
 from facade.inputs.dependency import ResolvedDependencyInput, ResolvedDependencyInputModel
 from facade.json_types import JSON
+from rekuest_core import enums as rcenums
 from rekuest_core import scalars as rscalars
 
 
@@ -31,6 +33,46 @@ class HookInputModel(BaseModel):
 class HookInput:
     kind: enums.HookKind
     hash: rscalars.ActionHash
+
+
+class StateRequirementInputModel(BaseModel):
+    """What the agent's state must hold for a task to run.
+
+    The agent tests it after taking the task's locks and the locks the state requires;
+    on a mismatch the task ends FAILED (code STATE_PRECONDITION) and nothing of it runs.
+    The server checks only that the state and the path's first member are declared,
+    and sends requirements only to an agent that says it tests them.
+    """
+
+    state: str = Field(min_length=1, description="The state's interface on the agent.")
+    path: str = Field(pattern=r"^/", description="An RFC 6901 pointer into the state's value, e.g. '/busy' or '/stage/position/0'.")
+    operator: rcenums.DescriptorOperator = Field(description="How the value at `path` is compared with `value`.")
+    value: JSON = Field(default=None, description="What the value is compared with: IN/NOT_IN take a list, LTE/GTE a number, EXISTS true or false.")
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def check_operator_value(self) -> Self:
+        """Operator and value agree, as for a port's requires."""
+        operator, value, where = self.operator, self.value, f"{self.state}{self.path}"
+        if operator in (rcenums.DescriptorOperator.IN, rcenums.DescriptorOperator.NOT_IN) and not isinstance(value, list):
+            raise ValueError(f"state requirement {where!r}: {operator.value} needs a list value")
+        if operator in (rcenums.DescriptorOperator.LTE, rcenums.DescriptorOperator.GTE) and (isinstance(value, bool) or not isinstance(value, (int, float))):
+            raise ValueError(f"state requirement {where!r}: {operator.value} needs a numeric value")
+        if operator == rcenums.DescriptorOperator.EXISTS and value is not None and not isinstance(value, bool):
+            raise ValueError(f"state requirement {where!r}: EXISTS takes no value or a boolean")
+        return self
+
+
+@pydantic.input(
+    StateRequirementInputModel,
+    description="What the agent's state must hold for the task to run: the value at `path` (an RFC 6901 pointer into the state `state`) compared with `value` by `operator`. The agent tests it with the task's locks held; on a mismatch the task ends FAILED with code STATE_PRECONDITION and nothing of it runs.",
+)
+class StateRequirementInput:
+    state: str
+    path: str
+    operator: rcenums.DescriptorOperator
+    value: rscalars.Arg | None = None
 
 
 class AssignInputModel(BaseModel):
@@ -107,6 +149,10 @@ class AssignInputModel(BaseModel):
         default=None,
         description="Whether the work the agents ask for under this task waits for a person: ASK (the default) holds every child an agent assigns until someone approves it, AUTO runs it without asking (auto-mode). Honoured on a root only: a child always takes its parent's.",
     )
+    state_requires: list[StateRequirementInputModel] | None = Field(
+        default=None,
+        description="What the agent's state must hold for the task to run. Refused unless the agent says it tests them, and for a state or path its declaration does not have.",
+    )
 
 
 @pydantic.input(
@@ -128,6 +174,7 @@ class AssignInput:
     dependencies: list[ResolvedDependencyInput] | None = None
     not_before: datetime.datetime | None = None
     policy: enums.TaskPolicy | None = None
+    state_requires: list[StateRequirementInput] | None = None
 
 
 class CancelInputModel(BaseModel):

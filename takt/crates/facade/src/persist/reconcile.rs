@@ -18,7 +18,7 @@ use sqlx::types::Json;
 use crate::caller_context::CallerContext;
 use crate::context::Context;
 use crate::liveness::agent_is_live;
-use crate::messages::{Assign, Journal, RecordedEffect, ToAgent};
+use crate::messages::{Assign, Journal, RecordedEffect, StateRequirement, ToAgent};
 use crate::persist::leases::{self, IN_FLIGHT};
 use crate::persist::transitions::{
     self, insert_event, update_task_kind, Claim, Guard, NewEvent, TaskRow, TASK_ROW,
@@ -138,6 +138,7 @@ struct AssignSource {
     action_hash: String,
     user_sub: Option<String>,
     org_slug: Option<String>,
+    state_requires: Option<Json<Vec<StateRequirement>>>,
 }
 
 /// Rebuild the Assign of a task sent again, or `None` (`_build_redispatch_assign_sync`): when it
@@ -150,7 +151,7 @@ pub async fn build_redispatch_assign(
     let source: Option<AssignSource> = sqlx::query_as(
         "SELECT t.args, t.reference, t.capture, t.step, t.resolution_id, t.parent_id, t.root_id,
                 t.implementation_id, i.interface, i.execution, a.hash AS action_hash,
-                u.sub AS user_sub, o.slug AS org_slug
+                u.sub AS user_sub, o.slug AS org_slug, t.state_requires
            FROM facade_task t
            JOIN facade_action a ON a.id = t.action_id
            LEFT JOIN facade_implementation i ON i.id = t.implementation_id
@@ -204,6 +205,9 @@ pub async fn build_redispatch_assign(
         implementation: implementation.to_string(),
         token,
         resume,
+        // Sent again with every dispatch: a held, delayed or redelivered task is tested as
+        // its first send would have been.
+        state_requires: source.state_requires.map(|r| r.0).unwrap_or_default(),
     }))
 }
 

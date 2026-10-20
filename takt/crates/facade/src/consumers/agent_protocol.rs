@@ -201,6 +201,7 @@ async fn first_frame(
         token,
         force,
         session_id,
+        features,
         declaration,
     } = frame.message
     else {
@@ -215,6 +216,7 @@ async fn first_frame(
         &token,
         force,
         session_id,
+        &features,
         &declaration,
     )
     .await
@@ -234,6 +236,7 @@ fn parse(text: &str) -> Result<AgentFrame, Refused> {
 
 /// Authenticate, gate and claim, in the Python order (`on_register`): token → blocked →
 /// declaration → caller → lease → displacement → `INIT`.
+#[allow(clippy::too_many_arguments)]
 async fn register(
     ctx: &Context,
     sender: &Sender,
@@ -241,6 +244,7 @@ async fn register(
     token: &str,
     force: bool,
     session_id: Option<String>,
+    features: &[String],
     declaration: &crate::messages::RegisterDeclaration,
 ) -> Result<Registered, Refused> {
     let refuse = |e: &dyn std::fmt::Display| {
@@ -275,6 +279,10 @@ async fn register(
     // The supervisor rides every REGISTER, outside the declaration: a hash-equal reconnect
     // skips the reconciliation below, and must still say who supervises it now.
     registration::set_supervisor(&ctx.db, agent, declaration.supervisor.as_deref())
+        .await
+        .map_err(|e| refuse(&e))?;
+    // So do its features: what it says it implements now, whatever it said before.
+    registration::set_features(&ctx.db, agent, features)
         .await
         .map_err(|e| refuse(&e))?;
 

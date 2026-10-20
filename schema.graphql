@@ -1064,6 +1064,11 @@ input AssignInput {
   Whether the work the agents ask for under this task waits for a person: ASK (the default) holds every child an agent assigns until someone approves it, AUTO runs it without asking (auto-mode). Honoured on a root only: a child always takes its parent's.
   """
   policy: TaskPolicy = null
+
+  """
+  What the agent's state must hold for the task to run. Refused unless the agent says it tests them, and for a state or path its declaration does not have.
+  """
+  stateRequires: [StateRequirementInput!] = null
 }
 
 interface AssignWidget {
@@ -5764,6 +5769,27 @@ type StatePatchEvent {
   timestamp: DateTime
 }
 
+"""
+What the agent's state must hold for the task to run: the value at `path` (an RFC 6901 pointer into the state `state`) compared with `value` by `operator`. The agent tests it with the task's locks held; on a mismatch the task ends FAILED with code STATE_PRECONDITION and nothing of it runs.
+"""
+input StateRequirementInput {
+  """The state's interface on the agent."""
+  state: String!
+
+  """
+  An RFC 6901 pointer into the state's value, e.g. '/busy' or '/stage/position/0'.
+  """
+  path: String!
+
+  """How the value at `path` is compared with `value`."""
+  operator: DescriptorOperator!
+
+  """
+  What the value is compared with: IN/NOT_IN take a list, LTE/GTE a number, EXISTS true or false.
+  """
+  value: Arg = null
+}
+
 """A plain snapshot of a state's current value."""
 type StateSnapshotEvent {
   stateId: ID!
@@ -6251,7 +6277,7 @@ type TaskEvent {
   key: String
 
   """
-  EFFECT events: the value the task took (NOW: epoch seconds, RANDOM: hex, SLEEP: deadline). HELD: what waits for a decision ({kind: "assign", prompt, action, agent, args, caller_task, caller_agent} for a child an agent asked for, with held: the child's id on its parent and root; {kind: "self", prompt, details} for a task's own hold). DECIDED: the decision ({approved, answer, auto, user}). DENIED: {answer, user}. LOST: what is known about the lost run.
+  EFFECT events: the value the task took (NOW: epoch seconds, RANDOM: hex, SLEEP: deadline). HELD: what waits for a decision ({kind: "assign", prompt, action, agent, args, caller_task, caller_agent} for a child an agent asked for, with held: the child's id on its parent and root; {kind: "self", prompt, details} for a task's own hold). DECIDED: the decision ({approved, answer, auto, user}). DENIED: {answer, user}. FAILED: {code} when the failure has one the protocol names (STATE_PRECONDITION: the agent's state did not match the task's stateRequires, and nothing of it ran). LOST: what is known about the lost run.
   """
   value: AnyDefault
 

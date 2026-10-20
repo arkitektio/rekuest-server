@@ -67,6 +67,11 @@ class Agent(models.Model):
         blank=True,
         help_text="The app this agent says controls its lifecycle (e.g. 'plugin_engine'), as it stated on its last registration. A self-declared hint for narrowing pickers, never authority: a supervisor maps the agent to its own records before acting.",
     )
+    features = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="What the agent said on its last registration it implements beyond the base protocol (e.g. 'state_requires'). A task with state requirements is only assigned to an agent that says it tests them.",
+    )
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,

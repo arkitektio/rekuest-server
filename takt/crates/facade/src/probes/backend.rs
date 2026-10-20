@@ -149,6 +149,7 @@ pub async fn probe(
                 implementation: implementation.id.to_string(),
                 token,
                 resume: None,
+                state_requires: vec![],
             })),
             true,
         )
