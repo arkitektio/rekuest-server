@@ -11,6 +11,7 @@ from strawberry import auto
 from strawberry.types import Info
 from strawberry_django.fields.filter_order import filter_field
 
+from embeddings.search import hybrid_search
 from facade import models
 
 
@@ -26,9 +27,9 @@ class StructureDescriptorFilter:
     def ids(self, info: Info, queryset: QuerySet[models.Descriptor], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[models.Descriptor], Q]:
         return queryset.filter(**{f"{prefix}id__in": value}), Q()
 
-    @filter_field(description="Keep descriptors whose key or description contains this text")
+    @filter_field(description="Keep descriptors whose key or description contains this text, or whose description means something close to it. Substring matches rank first, then by similarity; an explicit `ordering` replaces that ranking.")
     def search(self, info: Info, queryset: QuerySet[models.Descriptor], value: str, prefix: str) -> tuple[QuerySet[models.Descriptor], Q]:
-        return queryset, Q(**{f"{prefix}key__icontains": value}) | Q(**{f"{prefix}description__icontains": value})
+        return hybrid_search(queryset, prefix, value, Q(**{f"{prefix}key__icontains": value}) | Q(**{f"{prefix}description__icontains": value}))
 
     @filter_field(description="Filter by the exact descriptor key, e.g. '@mikro/n_channels'")
     def key(self, info: Info, queryset: QuerySet[models.Descriptor], value: str, prefix: str) -> tuple[QuerySet[models.Descriptor], Q]:
@@ -63,9 +64,9 @@ class HostedStructureFilter:
     def ids(self, info: Info, queryset: QuerySet[models.StructureDeclaration], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[models.StructureDeclaration], Q]:
         return queryset.filter(**{f"{prefix}id__in": value}), Q()
 
-    @filter_field(description="Keep structures whose identifier, label or description contains this text")
+    @filter_field(description="Keep structures whose identifier, label or description contains this text, or whose label and description mean something close to it. Substring matches rank first, then by similarity; an explicit `ordering` replaces that ranking.")
     def search(self, info: Info, queryset: QuerySet[models.StructureDeclaration], value: str, prefix: str) -> tuple[QuerySet[models.StructureDeclaration], Q]:
-        return queryset, Q(**{f"{prefix}identifier__icontains": value}) | Q(**{f"{prefix}label__icontains": value}) | Q(**{f"{prefix}description__icontains": value})
+        return hybrid_search(queryset, prefix, value, Q(**{f"{prefix}identifier__icontains": value}) | Q(**{f"{prefix}label__icontains": value}) | Q(**{f"{prefix}description__icontains": value}))
 
     @filter_field(description="Keep the structures of this package, e.g. 'mikro'")
     def package(self, info: Info, queryset: QuerySet[models.StructureDeclaration], value: str, prefix: str) -> tuple[QuerySet[models.StructureDeclaration], Q]:

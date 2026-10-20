@@ -1,9 +1,10 @@
-from typing import cast
+from typing import Annotated, cast
 
 import kante
 import strawberry
 import strawberry_django
 from authentikate.strawberry import AuthentikateExtension, AuthExtension, AuthSubscribeExtension
+from django.db.models import Q
 from kante.types import Info
 from kante.unions import unionElementOf
 from strawberry.schema.config import StrawberryConfig
@@ -11,6 +12,7 @@ from strawberry_django.optimizer import DjangoOptimizerExtension
 
 from datalayer import mutations as datalayer_mutations
 from datalayer.scalars import scalar_map as dscalar_map
+from embeddings.search import hybrid_search
 from embeddings.strawberry import scalar_map as escalar_map
 from facade import enums, models, mutations, queries, subscriptions, types
 from facade.json_types import json_value
@@ -188,10 +190,18 @@ class Query:
         return cast(types.HostedStructure, models.StructureDeclaration.objects.select_related("service").get(pk=id))
 
     @field(description="The signals this hub's services declare they emit — what triggers can wait for. Hub-wide.")
-    def signal_declarations(self, info: Info, identifier: str | None = None) -> list[types.SignalDeclaration]:
+    def signal_declarations(
+        self,
+        info: Info,
+        identifier: str | None = None,
+        search: Annotated[str | None, strawberry.argument(description="Keep signals whose identifier or description contains this text, or whose description means something close to it; substring matches first, then by similarity")] = None,
+    ) -> list[types.SignalDeclaration]:
         declarations = models.SignalDeclaration.objects.select_related("service").order_by("identifier", "kind")
         if identifier is not None:
             declarations = declarations.filter(identifier=identifier)
+        if search is not None:
+            declarations, matches = hybrid_search(declarations, "", search, Q(identifier__icontains=search) | Q(description__icontains=search))
+            declarations = declarations.filter(matches)
         return cast(list[types.SignalDeclaration], list(declarations))
 
     # Not a method called `service`: federation's own `_service` field lives under that Python name.

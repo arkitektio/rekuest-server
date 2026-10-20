@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 from django.db import models
 from django.db.models.functions import Now
 
+from embeddings.models import EmbeddedDescriptionMixin
 from facade import enums
 
 if TYPE_CHECKING:
@@ -157,13 +158,18 @@ class Firing(models.Model):
         return f"{self.outcome}: trigger {self.trigger_id} on signal {self.signal_id}"
 
 
-class SignalDeclaration(models.Model):
+class SignalDeclaration(EmbeddedDescriptionMixin, models.Model):
     """A signal a service says it emits, read from its manifest by provisioning.
+
+    Carries an embedding of its description, so ``signalDeclarations(search:)`` finds a signal
+    by what it announces.
 
     Hub-wide, not organization-scoped: a service emits them about every organization's objects.
     Triggers are checked against these — the kind and
     identifier exist, the condition keys are ones the service sends — and a UI lists them.
     """
+
+    embedding_source_fields = ("description",)
 
     service = models.ForeignKey("Service", on_delete=models.CASCADE, related_name="signals", help_text="The service that emits it")
     identifier = models.CharField(max_length=1000, help_text="The structure identifier of the objects signalled")
@@ -171,7 +177,7 @@ class SignalDeclaration(models.Model):
     descriptor_keys = models.JSONField(default=list, blank=True, help_text="The descriptor keys each signal carries", db_default=[])
     description = models.TextField(null=True, blank=True, help_text="What the service says about the signal")
 
-    class Meta:
+    class Meta(EmbeddedDescriptionMixin.Meta):
         constraints = [models.UniqueConstraint(fields=["service", "identifier", "kind"], name="signal_declaration_unique")]
 
     def __str__(self) -> str:

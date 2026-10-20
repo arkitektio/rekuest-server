@@ -69,7 +69,11 @@ def _port_usages(info: Info, identifier: str, kind: str, port_model: type[models
 
 
 def _distinct_identifiers(info: Info, kind: str, search: str | None = None, package_key: str | None = None) -> list[str]:
-    """Distinct (lowercased) '@package/key' identifiers of ``kind`` referenced by the org's ports."""
+    """Distinct (lowercased) '@package/key' identifiers of ``kind`` referenced by the org's ports.
+
+    ``search`` is a substring of the identifier only: a port names an identifier, not what it
+    means. Search by meaning is ``hostedStructures(filters: {search})``, over what services declare.
+    """
     identifiers: set[str] = set()
     for port_model in (models.ArgPort, models.ReturnPort):
         queryset = port_model.objects.filter(kind=kind, identifier__isnull=False, action__organization=info.context.request.organization)

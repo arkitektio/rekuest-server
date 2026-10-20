@@ -20,7 +20,11 @@ def _structures(*declared: dict) -> list[service_catalog.StructureManifest]:
 
 
 def _catalogue() -> None:
-    mikro = models.Service.objects.create(name="mikro", description="Microscopy data")
+    _declare(models.Service.objects.create(name="mikro", description="Microscopy data"), models.Service.objects.create(name="bank"))
+
+
+def _declare(mikro: models.Service, bank: models.Service) -> None:
+    """What mikro and bank declare, as one provisioning pass reads it."""
     service_catalog._sync_structures(
         mikro,
         _structures(
@@ -29,7 +33,6 @@ def _catalogue() -> None:
             {"identifier": "@mikro/folder", "label": "Folder", "descriptors": []},
         ),
     )
-    bank = models.Service.objects.create(name="bank")
     service_catalog._sync_structures(bank, _structures({"identifier": "@bank/category", "label": "Category", "descriptors": [{"key": "@bank/kind", "type": "STRING", "description": "Expense, income or transfer"}]}))
 
 
@@ -111,3 +114,82 @@ async def test_a_descriptor_keeps_its_row_across_provisioning_passes(authenticat
     rows = [row async for row in models.Descriptor.objects.filter(structure=lens).order_by("position")]
     assert [(row.key, row.description) for row in rows] == [("@mikro/n_channels", "Channels"), ("@mikro/n_timepoints", None)]
     assert rows[0].pk == before.pk  # what a client holds on to stays valid
+
+
+SIGNALS = [
+    {"identifier": "@mikro/arraydataset", "kinds": ["CREATED", "DELETED"], "descriptors": ["@mikro/n_channels"], "description": "An array dataset was created or deleted"},
+    {"identifier": "@bank/category", "kinds": ["CREATED"], "description": "A spending or income category was set up"},
+]
+
+
+def _catalogue_signals() -> None:
+    for name in ("mikro", "bank"):
+        service = models.Service.objects.get(name=name)
+        service_catalog._sync_signals(service, [service_catalog.SignalManifest.model_validate(signal) for signal in SIGNALS if signal["identifier"].startswith(f"@{name}/")])
+
+
+async def test_the_catalogue_is_embedded_when_it_is_read(authenticated_context):
+    await sync_to_async(_catalogue)()
+    await sync_to_async(_catalogue_signals)()
+
+    def embedded(queryset) -> dict[str, bool]:
+        return {str(row): row.embedding is not None for row in queryset}
+
+    structures = await sync_to_async(embedded)(models.StructureDeclaration.objects.select_related("service"))
+    assert all(structures.values()), structures  # every one has a label
+    descriptors = await sync_to_async(embedded)(models.Descriptor.objects.select_related("structure"))
+    assert all(descriptors.values()), descriptors
+    signals = await sync_to_async(embedded)(models.SignalDeclaration.objects.select_related("service"))
+    assert all(signals.values()), signals
+
+    # A declaration with nothing to embed has no vector, never a zero one.
+    folder = await models.StructureDeclaration.objects.aget(identifier="@mikro/folder")
+    await sync_to_async(service_catalog._sync_descriptors)(folder, [service_catalog.DescriptorManifest.model_validate({"key": "@mikro/tag"})])
+    assert (await models.Descriptor.objects.aget(key="@mikro/tag")).embedding is None
+
+
+async def test_a_row_without_a_vector_is_embedded_on_the_next_pass(authenticated_context):
+    # Rows catalogued before the column existed, or while the model could not load, have none.
+    await sync_to_async(_catalogue)()
+    await sync_to_async(_catalogue_signals)()
+    await models.StructureDeclaration.objects.all().aupdate(embedding=None)
+    await models.Descriptor.objects.all().aupdate(embedding=None)
+    await models.SignalDeclaration.objects.all().aupdate(embedding=None)
+
+    await sync_to_async(_declare)(await models.Service.objects.aget(name="mikro"), await models.Service.objects.aget(name="bank"))
+    await sync_to_async(_catalogue_signals)()
+
+    assert not await models.StructureDeclaration.objects.filter(embedding__isnull=True).aexists()
+    assert not await models.Descriptor.objects.filter(embedding__isnull=True).aexists()
+    assert not await models.SignalDeclaration.objects.filter(embedding__isnull=True).aexists()
+
+
+async def test_the_catalogue_is_searched_by_meaning(authenticated_context):
+    """No word of these queries is in what the service declares; what it says means them."""
+    context = (await sync_to_async(tenant_context)(TEST_TOKEN))[0]
+    await sync_to_async(_catalogue)()
+    await sync_to_async(_catalogue_signals)()
+
+    structures = (await _run("query($search: String!) { hostedStructures(filters: {search: $search}) { identifier } }", context, search="directory"))["hostedStructures"]
+    assert structures[0] == {"identifier": "@mikro/folder"}
+
+    descriptors = (await _run("query($search: String!) { descriptors(filters: {search: $search}) { key } }", context, search="money moved between accounts"))["descriptors"]
+    assert descriptors[0] == {"key": "@bank/kind"}
+
+    signals = (await _run("query($search: String!) { signalDeclarations(search: $search) { identifier kind } }", context, search="expense classification"))["signalDeclarations"]
+    assert signals[0] == {"identifier": "@bank/category", "kind": "CREATED"}
+
+
+async def test_signal_declarations_are_searched(authenticated_context):
+    context = (await sync_to_async(tenant_context)(TEST_TOKEN))[0]
+    await sync_to_async(_catalogue)()
+    await sync_to_async(_catalogue_signals)()
+    query = "query($search: String) { signalDeclarations(search: $search) { identifier kind } }"
+
+    everything = (await _run(query, context))["signalDeclarations"]
+    assert [(row["identifier"], row["kind"]) for row in everything] == [("@bank/category", "CREATED"), ("@mikro/arraydataset", "CREATED"), ("@mikro/arraydataset", "DELETED")]
+
+    # A substring of the identifier or the description, ranked before anything found by meaning.
+    found = (await _run(query, context, search="deleted"))["signalDeclarations"]
+    assert {(row["identifier"], row["kind"]) for row in found[:2]} == {("@mikro/arraydataset", "CREATED"), ("@mikro/arraydataset", "DELETED")}
+    assert [(row["identifier"], row["kind"]) for row in (await _run(query, context, search="@bank/"))["signalDeclarations"]][0] == ("@bank/category", "CREATED")
