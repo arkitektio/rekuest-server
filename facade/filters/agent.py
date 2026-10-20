@@ -11,7 +11,7 @@ from strawberry import UNSET, auto
 from strawberry.types import Info
 from strawberry_django.fields.filter_order import filter_field
 
-from facade import liveness, managers, models
+from facade import callers, liveness, managers, models
 from facade.json_types import json_object
 from rekuest_core import enums as rcenums
 from rekuest_core.inputs import types as ritypes
@@ -68,6 +68,11 @@ class AgentFilter:
                 raise ValueError(f"@rekuest/agent declares no descriptor {constraint.key!r} (only {SUPERVISOR_DESCRIPTOR})")
             queryset = queryset.filter(_supervisor_q(prefix, constraint.operator, constraint.value))
         return queryset, Q()
+
+    @filter_field(description="The agents that called this task, nearest first: its ancestors' agents, then the agent of the app its run was started from. Never the task's own agent. How an app finds what its caller offers (with actionDemands) and calls it.")
+    def caller_of(self, info: Info, queryset: QuerySet[models.Agent], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+        ids = callers.caller_agent_ids(value, info.context.request.organization.id)
+        return callers.nearest_first(queryset, ids, f"{prefix}id"), Q()
 
     @filter_field(description="Filter by IDs of the agents")
     def ids(self, info: Info, queryset: QuerySet[models.Agent], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
@@ -177,6 +182,11 @@ class AgentOrder:
 
 @strawberry_django.filter_type(models.Agent)
 class ImplementationAgentFilter:
+    @filter_field(description="Implementations of the agents that called this task, nearest first: its ancestors' agents, then the agent of the app its run was started from. Never the task's own agent. How an app finds what its caller offers (with actionDemand) and calls it.")
+    def caller_of(self, info: Info, queryset: QuerySet[models.Agent], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+        ids = callers.caller_agent_ids(value, info.context.request.organization.id)
+        return callers.nearest_first(queryset, ids, f"{prefix}id"), Q()
+
     @filter_field
     def client_id(self, info: Info, queryset: QuerySet[models.Agent], value: str, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}client__client_id": value}), Q()

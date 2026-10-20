@@ -682,6 +682,11 @@ input AgentFilter {
   """
   requires: [RequiresInput!]
 
+  """
+  The agents that called this task, nearest first: its ancestors' agents, then the agent of the app its run was started from. Never the task's own agent. How an app finds what its caller offers (with actionDemands) and calls it.
+  """
+  callerOf: ID
+
   """Filter by IDs of the agents"""
   ids: [ID!]
 
@@ -2967,6 +2972,11 @@ input ImplementationAgentFilter {
   OR: ImplementationAgentFilter
   NOT: ImplementationAgentFilter
   DISTINCT: Boolean
+
+  """
+  Implementations of the agents that called this task, nearest first: its ancestors' agents, then the agent of the app its run was started from. Never the task's own agent. How an app finds what its caller offers (with actionDemand) and calls it.
+  """
+  callerOf: ID
   clientId: String
   ids: [ID!]
   hasImplementations: [String!]
