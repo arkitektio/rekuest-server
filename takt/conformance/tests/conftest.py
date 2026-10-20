@@ -189,7 +189,7 @@ class GraphQL:
     async def assign(self, agent: str, interface: str, args: dict[str, Any]) -> str:
         data = await self(
             "mutation ($input: AssignInput!) { assign(input: $input) { id } }",
-            input={"agent": agent, "interface": interface, "args": args, "capture": False, "reference": str(uuid.uuid4())},
+            input={"agent": agent, "interface": interface, "args": args, "capture": False, "policy": "AUTO", "reference": str(uuid.uuid4())},
         )
         return data["assign"]["id"]
 

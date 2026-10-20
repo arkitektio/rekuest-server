@@ -130,7 +130,7 @@ async def test_liveness_under_graphql_load(agents, target) -> None:  # noqa: ANN
                     data = await gql(
                         AGENT_TOKEN,
                         "mutation ($input: AssignInput!) { assign(input: $input) { id } }",
-                        input={"agent": init["agent"], "interface": "bench_count", "args": {"x": 1}, "capture": False, "reference": str(uuid.uuid4())},
+                        input={"agent": init["agent"], "interface": "bench_count", "args": {"x": 1}, "capture": False, "policy": "AUTO", "reference": str(uuid.uuid4())},
                     )
                     task, arrived = await asyncio.wait_for(measured.assigns.get(), 30)
                     assert task == data["assign"]["id"]

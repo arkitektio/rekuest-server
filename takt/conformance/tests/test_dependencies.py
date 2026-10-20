@@ -108,7 +108,7 @@ async def test_a_dry_run_shows_what_is_unmet_and_a_pin_one_level_down_meets_it(a
     assign = "mutation ($input: AssignInput!) { assign(input: $input) { id } }"
     refused = await api.client.post(
         api.url,
-        json={"query": assign, "variables": {"input": {"agent": workflow_id, "interface": "echo", "args": {"x": 1}, "capture": False, "dependencies": [pin(relay_id)]}}},
+        json={"query": assign, "variables": {"input": {"agent": workflow_id, "interface": "echo", "args": {"x": 1}, "capture": False, "policy": "AUTO", "dependencies": [pin(relay_id)]}}},
         headers={"Authorization": f"Bearer {api.token}"},
     )
     assert below["unmet"] in str(refused.json().get("errors")), refused.json()
@@ -117,7 +117,7 @@ async def test_a_dry_run_shows_what_is_unmet_and_a_pin_one_level_down_meets_it(a
     nested = [pin(relay_id, [pin(leaf_id)])]
     met = await tree(nested)
     assert met["satisfied"] is True, met
-    data = await api(assign, input={"agent": workflow_id, "interface": "echo", "args": {"x": 1}, "capture": False, "reference": str(uuid.uuid4()), "dependencies": nested})
+    data = await api(assign, input={"agent": workflow_id, "interface": "echo", "args": {"x": 1}, "capture": False, "policy": "AUTO", "reference": str(uuid.uuid4()), "dependencies": nested})
     assert (await workflow.receive_type("ASSIGN"))["task"] == data["assign"]["id"]
 
 
@@ -263,7 +263,7 @@ async def test_two_instances_are_both_bound_and_a_pin_below_picks_one(agents, gr
     assert pinned["satisfied"] is True and below(pinned) == [second_id], pinned
 
     # Assigned with that pin, the relay's call can only land on the chosen instance.
-    data = await api(ASSIGN, input={"agent": workflow_id, "interface": "echo", "args": {"x": 1}, "capture": False, "reference": str(uuid.uuid4()), "dependencies": pins})
+    data = await api(ASSIGN, input={"agent": workflow_id, "interface": "echo", "args": {"x": 1}, "capture": False, "policy": "AUTO", "reference": str(uuid.uuid4()), "dependencies": pins})
     root = data["assign"]["id"]
     assert (await workflow.receive_type("ASSIGN"))["task"] == root
     await workflow.send(dependency_call(root))
@@ -303,7 +303,7 @@ async def test_a_rerun_pins_the_tree_the_task_ran_with(agents, graphql) -> None:
             for dependency in level
         ]
 
-    data = await api(ASSIGN, input={"agent": workflow_id, "interface": "echo", "args": {"x": 1}, "capture": False, "reference": str(uuid.uuid4()), "dependencies": pins(ran_with)})
+    data = await api(ASSIGN, input={"agent": workflow_id, "interface": "echo", "args": {"x": 1}, "capture": False, "policy": "AUTO", "reference": str(uuid.uuid4()), "dependencies": pins(ran_with)})
     again = data["assign"]["id"]
     assert again != first and (await workflow.receive_type("ASSIGN"))["task"] == again
     assert (await api(frozen, id=again))["task"]["resolvedDependencies"] == ran_with
@@ -327,7 +327,7 @@ async def test_a_cycle_is_refused_and_the_dry_run_says_where(agents, graphql) ->
 
     refused = await api.client.post(
         api.url,
-        json={"query": ASSIGN, "variables": {"input": {"agent": workflow_id, "interface": "echo", "args": {"x": 1}, "capture": False}}},
+        json={"query": ASSIGN, "variables": {"input": {"agent": workflow_id, "interface": "echo", "args": {"x": 1}, "capture": False, "policy": "AUTO"}}},
         headers={"Authorization": f"Bearer {api.token}"},
     )
     assert "Dependency cycle" in str(refused.json().get("errors")), refused.json()
