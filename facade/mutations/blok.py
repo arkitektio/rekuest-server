@@ -8,52 +8,21 @@ for a wrong-tenant id so it is indistinguishable from a missing one; deletes use
 for the same reason.
 """
 
-from typing import Iterable, cast
+from typing import cast
 
+from authentikate.models import User
 from django.db import transaction
 from kante.types import Info
 
 from facade import inputs, models, takt, takt_api, types
-from facade.catalog_validation import dump_diagnostics, validate_manifest_against_catalog
+from facade.blok_revisions import BlokContent, StaleRevisionError, commit_revision, content_of_blok, content_of_revision, lock_blok
+from facade.caller_context import CallerContext
+from facade.catalog_validation import validate_manifest_against_catalog
+from facade.mutations.materialized_blok import check_agent_mappings, organization_of, write_mappings
 from facade.types.base import scoped_get
-from rekuest_core import enums as renums
+from facade.json_types import JSONObject, json_object
 from rekuest_core.inputs import models as rimodels
-
-
-def _sync_blok_dependencies(blok: models.Blok, dependencies: Iterable[rimodels.AgentDependencyInputModel] | None, *, replace: bool) -> list[models.BlokDependency]:
-    """Upsert ``BlokDependency`` rows by ``(blok, key)`` from a manifest.
-
-    Writes every declared field (``optional`` included: before this helper only demands and the
-    app/version filters were persisted, so ``optional`` could never be honoured downstream).
-    With ``replace`` every existing key that is not declared any more is deleted; a
-    ``BlokAgentMapping`` pointing at it keeps its row with ``dependency=NULL`` (``SET_NULL``).
-    """
-    existing = {dep.key: dep for dep in blok.dependencies.all()}
-    synced: list[models.BlokDependency] = []
-    for declared in dependencies or []:
-        dep, _ = models.BlokDependency.objects.update_or_create(
-            blok=blok,
-            key=declared.key,
-            defaults=dict(
-                action_demands=[d.model_dump() for d in declared.action_dependencies or []],
-                state_demands=[d.model_dump() for d in declared.state_dependencies or []],
-                app_filter=declared.app,
-                version_filter=declared.version,
-                optional=declared.optional,
-                description=declared.description,
-                auto_resolvable=declared.auto_resolvable,
-                min_viable_instances=declared.min_viable_instances,
-                max_viable_instances=declared.max_viable_instances,
-            ),
-        )
-        synced.append(dep)
-        existing.pop(declared.key, None)
-
-    if replace:
-        for stale in existing.values():
-            stale.delete()
-
-    return synced
+from rekuest_core.objects import types as rtypes
 
 
 STANDARD_CATALOG_NAME = "orkestrator"
@@ -92,7 +61,6 @@ def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
         model = model.model_copy(update={"components": components, "source": None})
     organization = info.context.request.organization
     catalog = _catalog_for(info, model.catalog)
-    diagnostics = validate_manifest_against_catalog(catalog, model.components, model.context, model.demo_state)
 
     # ``organization`` is part of the lookup, not the defaults: keyed on name alone this was a
     # global upsert, so any user could overwrite another organization's blok by name.
@@ -113,21 +81,24 @@ def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
         app=None,
         defaults=dict(
             **installed,
-            components=[c.model_dump() for c in model.components or []],
             description=model.description,
             creator=info.context.request.user,
             catalog=catalog,
-            demo_state=model.demo_state or {},
-            diagnostics=dump_diagnostics(diagnostics),
-            context=model.context.value,
             for_model=model.for_model,
             for_node=model.for_node,
         ),
     )
 
-    # create is an upsert on (name, organization); dependencies a previous registration declared
-    # but this one does not are stale and go too.
-    _sync_blok_dependencies(blok, model.dependencies, replace=True)
+    # create is an upsert on (name, organization): it commits what it is given as the blok's next
+    # revision, dependencies a previous one declared but this one does not included.
+    content = BlokContent(
+        components=[json_object(component.model_dump()) for component in model.components or []],
+        demo_state=model.demo_state or {},
+        context=model.context,
+        catalog=catalog,
+        dependencies=list(model.dependencies or []),
+    )
+    commit_revision(blok, content, base=None, guarded=False, author=CallerContext.from_info(info).user, message="Created" if blok.head_id is None else "Created again")
 
     return cast("types.Blok", blok)
 
@@ -140,33 +111,21 @@ def delete_blok(info: Info, input: inputs.DeleteBlokInput) -> bool:
     return deleted > 0
 
 
-@transaction.atomic
-def fork_blok(info: Info, input: inputs.ForkBlokInput) -> types.Blok:
-    """Copy a provided blok into a custom one, which lives on whatever its agents do."""
-    provided = scoped_get(models.Blok, info, input.id, field="organization")
-    if provided.app_id is None:
-        raise ValueError(f"Blok '{provided.name}' is already custom.")
-    name = input.name or provided.name
+def _fork(provided: models.Blok, name: str, user: User) -> models.Blok:
+    """A custom copy of a provided blok, its first revision the provided content."""
     if models.Blok.objects.filter(organization=provided.organization, name=name, app__isnull=True).exists():
         raise ValueError(f"A custom blok named '{name}' exists already.")
     blok = models.Blok.objects.create(
         organization=provided.organization,
         name=name,
         description=provided.description,
-        creator=info.context.request.user,
+        creator=user,
         catalog=provided.catalog,
-        components=provided.components,
-        demo_state=provided.demo_state,
         context=provided.context,
         for_model=provided.for_model,
         for_node=provided.for_node,
         args=provided.args,
-        diagnostics=provided.diagnostics,
     )
-    for dependency in provided.dependencies.all():
-        dependency.pk = None
-        dependency.blok = blok
-        dependency.save()
     # Rows are written parents first, so in id order every parent is copied before its children.
     copies: dict[int, models.BlokArgPort] = {}
     for port in provided.arg_ports.order_by("id"):
@@ -176,12 +135,33 @@ def fork_blok(info: Info, input: inputs.ForkBlokInput) -> types.Blok:
         port.parent = None if parent_id is None else copies[parent_id]
         port.save()
         copies[source_id] = port
-    return cast("types.Blok", blok)
+    commit_revision(blok, content_of_blok(provided), base=None, author=user, message=f"Forked from the blok '{provided.name}' its agents provide")
+    return blok
+
+
+def _free_name(organization_id: int, name: str) -> str:
+    """``name``, or the first ``name (n)`` no custom blok of the organization has."""
+    taken = set(models.Blok.objects.filter(organization_id=organization_id, app__isnull=True, name__startswith=name).values_list("name", flat=True))
+    if name not in taken:
+        return name
+    number = 2
+    while f"{name} ({number})" in taken:
+        number += 1
+    return f"{name} ({number})"
+
+
+@transaction.atomic
+def fork_blok(info: Info, input: inputs.ForkBlokInput) -> types.Blok:
+    """Copy a provided blok into a custom one, which lives on whatever its agents do."""
+    provided = scoped_get(models.Blok, info, input.id, field="organization")
+    if provided.app_id is None:
+        raise ValueError(f"Blok '{provided.name}' is already custom.")
+    return cast("types.Blok", _fork(provided, input.name or provided.name, CallerContext.from_info(info).user))
 
 
 @transaction.atomic
 def update_blok(info: Info, input: inputs.UpdateBlokInput) -> types.Blok:
-    """Partially update a custom blok in the caller's organization."""
+    """Partially update a custom blok in the caller's organization: a new revision on top of its head."""
     model = input.to_pydantic()
     blok = _custom(info, model.id)
 
@@ -189,25 +169,117 @@ def update_blok(info: Info, input: inputs.UpdateBlokInput) -> types.Blok:
         blok.name = model.name
     if model.description is not None:
         blok.description = model.description
-    if model.source is not None:
-        blok.components = [c.model_dump() for c in _parsed(model.source)]
-    if model.components is not None:
-        blok.components = [c.model_dump() for c in model.components]
-    if model.demo_state is not None:
-        blok.demo_state = model.demo_state
-    if model.catalog is not None:
-        blok.catalog = _catalog_for(info, model.catalog)
+    blok.save(update_fields=["name", "description"])
 
-    # A partial update is validated as the manifest it results in: new components against the
-    # dependencies and demo state that will be in force after the update.
-    dependency_keys = {dep.key for dep in model.dependencies} if model.dependencies is not None else set(blok.dependencies.values_list("key", flat=True))
-    components = [rimodels.ComponentNodeInputModel(**c) for c in blok.components]
-    rimodels.check_blok_manifest(components, dependency_keys, set(blok.demo_state or {}))
-    blok.diagnostics = dump_diagnostics(validate_manifest_against_catalog(blok.catalog, components, renums.ComponentContext(blok.context), blok.demo_state))
-
-    blok.save()
-
-    if model.dependencies is not None:
-        _sync_blok_dependencies(blok, model.dependencies, replace=True)
-
+    # A partial update is validated as the content it results in: new components against the
+    # dependencies and local state that will be in force after the update.
+    content = _edited(info, lock_blok(blok.pk), model.source, model.components, model.demo_state, model.catalog, model.dependencies)
+    content.check()
+    commit_revision(blok, content, base=None, guarded=False, author=CallerContext.from_info(info).user)
     return cast("types.Blok", blok)
+
+
+def _edited(
+    info: Info,
+    blok: models.Blok,
+    source: str | None,
+    components: list[rimodels.ComponentNodeInputModel] | None,
+    demo_state: JSONObject | None,
+    catalog: str | None,
+    dependencies: list[rimodels.AgentDependencyInputModel] | None,
+) -> BlokContent:
+    """The blok's head content with every part that is given replaced."""
+    current = content_of_revision(blok.head) if blok.head is not None else content_of_blok(blok)
+    tree = _parsed(source) if source is not None else components
+    return current.but(
+        components=None if tree is None else [json_object(component.model_dump()) for component in tree],
+        demo_state=demo_state,
+        catalog=None if catalog is None else _catalog_for(info, catalog),
+        dependencies=dependencies,
+    )
+
+
+def _task_of(caller: CallerContext, task_id: str | None) -> models.Task | None:
+    """The task a write is made by, which must be one the calling client's agent runs."""
+    if task_id is None:
+        return None
+    try:
+        return models.Task.objects.get(id=task_id, agent__client=caller.client, agent__organization=caller.organization)
+    except models.Task.DoesNotExist:
+        raise PermissionError(f"Task {task_id} is not one of this client's agents runs.")
+
+
+@transaction.atomic
+def edit_blok(info: Info, input: inputs.EditBlokInput) -> types.BlokEdit:
+    """Edit the blok a materialization shows, and its bindings there, in one write.
+
+    The edit starts from ``base``, which must still be the blok's head. A provided blok is
+    forked first (its agents' slot is left as it is) and a new materialization of the fork is
+    made, holding the slot's bindings. The new content is checked in full; with ``dry_run``
+    nothing is kept.
+    """
+    model = input.to_pydantic()
+    caller = CallerContext.from_info(info)
+    organization = organization_of(info)
+    mblok = scoped_get(models.MaterializedBlok, info, model.materialized_blok, field="blok__organization")
+    task = _task_of(caller, model.task)
+
+    provided = mblok.blok.app_id is not None
+    if provided:
+        blok = mblok.blok
+        base = None
+    else:
+        # Locked from here, so the head cannot move between this check and the write.
+        blok = lock_blok(mblok.blok_id)
+        try:
+            base = None if model.base is None else blok.revisions.get(id=model.base)
+        except models.BlokRevision.DoesNotExist:
+            raise ValueError(f"Blok '{blok.name}' has no revision {model.base}.")
+        # No base names a blok without history; one that has some must be edited from its head.
+        if (None if base is None else base.pk) != blok.head_id:
+            raise StaleRevisionError(blok, base, blok.head)
+
+    content = _edited(info, blok, model.source, model.components, model.demo_state, model.catalog, model.dependencies)
+    content.check()
+
+    # The bindings the edit leaves: the ones kept for keys still declared, the given ones over them.
+    declared = {dependency.key for dependency in content.dependencies}
+    wanted = {mapping.key: str(mapping.agent_id) for mapping in mblok.agent_mappings.all() if mapping.key in declared}
+    wanted.update({mapping.key: mapping.agent for mapping in model.agent_mappings or []})
+    bound = check_agent_mappings(organization, blok.name, content.dependencies, wanted)
+    diagnostics = validate_manifest_against_catalog(content.catalog, content.parsed_components(), content.context, content.demo_state)
+
+    if model.dry_run:
+        # A catalog named for the first time was created on the way: nothing of it is kept.
+        transaction.set_rollback(True)
+        return types.BlokEdit(applied=False, forked=provided, revision=None, materialized_blok=cast("types.MaterializedBlok", mblok), diagnostics=cast("list[rtypes.Diagnostic]", diagnostics))
+
+    if provided:
+        blok = _fork(blok, _free_name(blok.organization_id, blok.name), caller.user)
+        base = blok.head
+        target = models.MaterializedBlok.objects.create(blok=blok, name=mblok.name, description=mblok.description)
+    else:
+        target = mblok
+
+    revision = commit_revision(blok, content, base=base, author=caller.user, task=task, message=model.message)
+    # Edited where it is shown, so shown as edited: an edit unpins the materialization it came through.
+    if target.pinned_revision_id is not None:
+        target.pinned_revision = None
+        target.save(update_fields=["pinned_revision", "updated_at"])
+    write_mappings(target, bound)
+    return types.BlokEdit(applied=True, forked=provided, revision=cast("types.BlokRevision", revision), materialized_blok=cast("types.MaterializedBlok", target), diagnostics=cast("list[rtypes.Diagnostic]", diagnostics))
+
+
+@transaction.atomic
+def revert_blok(info: Info, input: inputs.RevertBlokInput) -> types.BlokRevision:
+    """Make an earlier revision's content the blok's head again, as a new revision on top of ``base``."""
+    caller = CallerContext.from_info(info)
+    blok = _custom(info, input.blok)
+    try:
+        earlier = blok.revisions.get(id=input.to)
+        base = blok.revisions.get(id=input.base)
+    except models.BlokRevision.DoesNotExist:
+        raise ValueError(f"Blok '{blok.name}' has no revision {input.to} or {input.base}.")
+    message = input.message or f"Back to revision {earlier.number}"
+    revision = commit_revision(blok, content_of_revision(earlier), base=base, author=caller.user, task=_task_of(caller, input.task), message=message)
+    return cast("types.BlokRevision", revision)

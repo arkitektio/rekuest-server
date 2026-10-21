@@ -33,8 +33,11 @@ class Blok(models.Model):
     # Declared for the type checker: Django adds these (a foreign key's id column, a
     # reverse relation's manager) without saying so in a way it can read.
     app_id: int | None
+    organization_id: int
+    head_id: int | None
     dependencies: "models.Manager[BlokDependency]"
     arg_ports: "models.Manager[BlokArgPort]"
+    revisions: "models.Manager[BlokRevision]"
     organization = models.ForeignKey(
         "authentikate.Organization",
         on_delete=models.CASCADE,
@@ -73,6 +76,14 @@ class Blok(models.Model):
     declaration_hash = models.CharField(max_length=64, null=True, blank=True, help_text="sha256 of the declared content of a provided Blok (not the rendering `hash` the API computes); NULL for a custom one.")
     origin = models.CharField(max_length=2000, null=True, blank=True, help_text="Where a custom Blok was installed from, e.g. kabinet's `github:<owner>/<repo>:<branch>#<key>`; NULL for one made here. Installing from the same origin again updates this row.")
     origin_hash = models.CharField(max_length=100, null=True, blank=True, help_text="The hash its origin gave what it draws when it was installed: an origin whose hash differs has an update.")
+    head = models.ForeignKey(
+        "BlokRevision",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The revision this custom Blok's columns and dependency rows are a copy of. NULL for a provided Blok, which its declaration hash versions instead.",
+    )
 
     class Meta:
         # createBlok upserts a custom blok on (organization, name); registration upserts a provided
@@ -82,6 +93,40 @@ class Blok(models.Model):
             models.UniqueConstraint(fields=["organization", "app", "name", "declaration_hash"], condition=models.Q(app__isnull=False), name="blok_unique_provided"),
             models.UniqueConstraint(fields=["organization", "origin"], condition=models.Q(app__isnull=True, origin__isnull=False), name="unique_blok_origin_per_organization"),
         ]
+
+
+class BlokRevision(models.Model):
+    """One state of a custom Blok, never changed once written.
+
+    Every write to a custom blok commits a revision and copies it onto the ``Blok`` (its ``head``),
+    so everything that reads a blok keeps reading the row while history only grows: an undo is a
+    new revision with an old one's content. A write names the revision it was made from, and one
+    made from anything but the head is refused, so a change made meanwhile is never lost.
+    """
+
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    blok_id: int
+    parent_id: int | None
+    catalog_id: int
+    task_id: int | None
+
+    blok = models.ForeignKey(Blok, on_delete=models.CASCADE, related_name="revisions")
+    number = models.PositiveIntegerField(help_text="The place of this revision in its blok's history, from 1.")
+    parent = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="children", help_text="The revision this one was made from; NULL for the first.")
+    components = models.JSONField(default=list, db_default=[], help_text="The component tree of this revision.")
+    demo_state = models.JSONField(default=dict, db_default={}, help_text="The local state of this revision.")
+    context = models.CharField(max_length=16, default="HTML", db_default="HTML", help_text="The renderer for this revision's root (rekuest_core ComponentContext).")
+    catalog = models.ForeignKey("UICatalog", on_delete=models.CASCADE, related_name="blok_revisions", help_text="The catalog this revision renders against.")
+    dependencies = models.JSONField(default=list, db_default=[], help_text="The agent dependencies of this revision (rekuest_core AgentDependencyInput), as the blok's dependency rows held them.")
+    content_hash = models.CharField(max_length=64, help_text="sha256 of everything above: two revisions with the same hash are the same blok.")
+    author = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name="blok_revisions", help_text="The user this revision was written as.")
+    task = models.ForeignKey("Task", on_delete=models.SET_NULL, null=True, blank=True, related_name="blok_revisions", help_text="The task that wrote this revision, e.g. the assistant turn that designed it.")
+    message = models.TextField(null=True, blank=True, help_text="What changed and why, in a sentence.")
+    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["blok", "number"], name="unique_revision_number_per_blok")]
 
 
 class BlokArgPort(BasePort):
@@ -178,7 +223,9 @@ class MaterializedBlok(models.Model):
 
     # Declared for the type checker: Django adds these (a foreign key's id column, a
     # reverse relation's manager) without saying so in a way it can read.
+    blok_id: int
     declared_by_id: int | None
+    pinned_revision_id: int | None
     agent_mappings: "models.Manager[BlokAgentMapping]"
 
     blok = models.ForeignKey(Blok, on_delete=models.CASCADE, related_name="materialized_bloks")
@@ -192,6 +239,14 @@ class MaterializedBlok(models.Model):
     )
     name = models.CharField(max_length=1000, help_text="The name of this Blok Implementation")
     description = models.TextField(help_text="A description for this Blok Implementation")
+    pinned_revision = models.ForeignKey(
+        BlokRevision,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pinned_by",
+        help_text="The revision this materialization stays at. NULL follows the blok's head, which is what a materialization does unless pinned.",
+    )
     is_default = models.BooleanField(default=False, db_default=False, help_text="Whether this is its declaring agent's default Blok for the Blok's context. At most one per agent and context: declaring a new default clears the previous one.")
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
@@ -226,6 +281,9 @@ class DashboardPlacement(models.Model):
 
 class BlokAgentMapping(models.Model):
     """An Agent Mapping is a mapping between an Agent and a Blok Implementation"""
+
+    # Declared for the type checker: Django adds the foreign key's id column without saying so.
+    agent_id: int
 
     key = models.CharField(max_length=1000, help_text="The reference of the dependency this mapping is for (e.g. imagej)", default="general", db_default="general")
     agent = models.ForeignKey("Agent", on_delete=models.CASCADE, related_name="agent_mappings")

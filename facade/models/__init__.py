@@ -33,6 +33,7 @@ from .blok import (
     Blok,
     BlokAgentMapping,
     BlokArgPort,
+    BlokRevision,
     BlokDependency,
     Dashboard,
     DashboardPlacement,
@@ -121,6 +122,7 @@ __all__ = [
     "DashboardPlacement",
     "BlokAgentMapping",
     "BlokArgPort",
+    "BlokRevision",
     # threed
     "ThreeDModel",
     "Asset",

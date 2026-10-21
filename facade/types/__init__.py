@@ -48,7 +48,7 @@ from .task import (
 from .probe import Probe, ProbeEvent, ProbeStats
 from .auth import App, Caller, Client, Device, Organization, Release, User
 from .base import build_prescoped_queryset
-from .blok import Blok, BlokAgentMapping, BlokDependency, MaterializedBlok
+from .blok import Blok, BlokAgentMapping, BlokDependency, BlokEdit, BlokRevision, MaterializedBlok, RevisionDependency
 from .dashboard import BaseCatalog, Dashboard, DashboardPlacement, UICatalog
 from .demand import (
     ActionDemand,
@@ -151,6 +151,9 @@ __all__ = [
     "BlokDependency",
     "MaterializedBlok",
     "BlokAgentMapping",
+    "BlokEdit",
+    "BlokRevision",
+    "RevisionDependency",
     "StateDefinition",
     "State",
     "JSONPatch",

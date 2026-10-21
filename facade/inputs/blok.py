@@ -6,7 +6,7 @@ from strawberry.experimental import pydantic
 from typing_extensions import Self
 
 from facade import scalars
-from facade.inputs.dependency import MappedAgentInput
+from facade.inputs.dependency import MappedAgentInput, MappedAgentInputModel
 from facade.json_types import JSON
 from rekuest_core import enums as renums
 from rekuest_core.inputs import models as rimodels
@@ -174,3 +174,54 @@ class MaterializeBlokInput:
     )
     name: str | None = strawberry.field(default=None, description="Display name of this materialization. Defaults to the blok's name.")
     description: str | None = strawberry.field(default=None, description="Description of this materialization. Defaults to the blok's description.")
+
+
+class EditBlokInputModel(BaseModel):
+    """An edit of the blok a materialization shows: the parts given replace the head's."""
+
+    materialized_blok: str = Field(description="The materialization the edit is made through. Its bindings are the ones `agent_mappings` changes.")
+    base: str | None = Field(default=None, description="The revision the edit starts from. It must still be the blok's head, or the edit is refused. Required for a custom blok; a provided blok has no revisions and is forked.")
+    components: list[rimodels.ComponentNodeInputModel] | None = Field(default=None, description="The full component tree. Kept when omitted.")
+    source: str | None = Field(default=None, description="The full component tree as BSX, which the server parses: send it or `components`, not both.")
+    demo_state: dict[str, JSON] | None = Field(default=None, description="The full local state. Kept when omitted.")
+    catalog: str | None = Field(default=None, description="Name of the UI catalog (in the caller's organization) the blok renders against. Kept when omitted.")
+    dependencies: list[rimodels.AgentDependencyInputModel] | None = Field(default=None, description="The full list of agent dependencies. Kept when omitted; keys not listed are removed.")
+    agent_mappings: list[MappedAgentInputModel] | None = Field(default=None, description="Bindings on this materialization, by dependency key, over the ones it has. Bindings of keys the edit removes go.")
+    message: str | None = Field(default=None, description="What changed and why, in a sentence; kept with the revision.")
+    task: str | None = Field(default=None, description="The task making the edit (one the caller's agent runs), kept with the revision.")
+    dry_run: bool | None = Field(default=None, description="Check everything and return the findings, keeping nothing. Off when omitted.")
+
+    @model_validator(mode="after")
+    def check_sent_once(self) -> Self:
+        rimodels.check_blok_sent_once(self.components, self.source, required=False)
+        return self
+
+
+@pydantic.input(EditBlokInputModel, description="Edit the blok a materialization shows, and its bindings there, as one new revision.")
+class EditBlokInput:
+    materialized_blok: strawberry.ID
+    base: strawberry.ID | None = None
+    components: list[ritypes.ComponentNodeInput] | None = None
+    source: str | None = None
+    demo_state: scalars.Args | None = None
+    catalog: str | None = None
+    dependencies: list[ritypes.AgentDependencyInput] | None = None
+    agent_mappings: list[MappedAgentInput] | None = None
+    message: str | None = None
+    task: strawberry.ID | None = None
+    dry_run: bool | None = None
+
+
+@strawberry.input(description="Make an earlier revision's content a blok's head again.")
+class RevertBlokInput:
+    blok: strawberry.ID = strawberry.field(description="The custom blok.")
+    to: strawberry.ID = strawberry.field(description="The revision whose content comes back.")
+    base: strawberry.ID = strawberry.field(description="The revision the caller saw as the head; refused when the head moved since.")
+    message: str | None = strawberry.field(default=None, description="Why, in a sentence. Defaults to 'Back to revision <n>'.")
+    task: strawberry.ID | None = strawberry.field(default=None, description="The task making the change (one the caller's agent runs).")
+
+
+@strawberry.input(description="Keep a materialization at one revision of its blok, or let it follow the head.")
+class PinMaterializedBlokInput:
+    id: strawberry.ID = strawberry.field(description="The materialization.")
+    revision: strawberry.ID | None = strawberry.field(default=None, description="The revision to stay at; null follows the head again.")

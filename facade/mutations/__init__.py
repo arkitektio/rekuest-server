@@ -9,9 +9,9 @@ from .shortcut import create_shortcut, delete_shortcut
 from .schedule import create_schedule, update_schedule, delete_schedule, trigger_schedule
 from .wiregram import delete_wiregram, export_wiregram, import_wiregram
 from .trigger import create_trigger, update_trigger, delete_trigger, fire_trigger
-from .blok import create_blok, delete_blok, fork_blok, update_blok
+from .blok import create_blok, delete_blok, edit_blok, fork_blok, revert_blok, update_blok
 from .catalog import register_ui_catalog
-from .materialized_blok import materialize_blok, delete_materialized_blok, update_materialized_blok
+from .materialized_blok import materialize_blok, delete_materialized_blok, pin_materialized_blok, update_materialized_blok
 from .action import cleanup_actions
 from .resolution import auto_resolve
 from .space import create_space, create_placement, update_space, delete_space, update_placement, delete_placement
@@ -41,12 +41,15 @@ __all__ = [
     "create_threed_model",
     "delete_materialized_blok",
     "update_materialized_blok",
+    "pin_materialized_blok",
     "update_agent",
     "bounce",
     "delete_dashboard",
     "update_dashboard",
     "delete_blok",
     "fork_blok",
+    "edit_blok",
+    "revert_blok",
     "update_blok",
     "kick",
     "implement_agent",

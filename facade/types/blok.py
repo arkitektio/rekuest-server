@@ -13,10 +13,12 @@ from django.db.models import QuerySet
 from kante.types import Info
 
 from facade import filters, models, scalars
+from facade.blok_revisions import content_of_blok, content_of_revision
 from facade.types.base import build_prescoped_queryset, row_of
 from facade.types.demand import ActionDependencyModel, StateDependencyModel
 from rekuest_core import enums as renums
 from rekuest_core import scalars as rscalars
+from rekuest_core.inputs import models as rimodels
 from rekuest_core.objects import models as rmodels
 from rekuest_core.objects import types as rtypes
 
@@ -25,6 +27,7 @@ if TYPE_CHECKING:
     from facade.types.agent import Agent
     from facade.types.auth import App, User
     from facade.types.dashboard import DashboardPlacement, UICatalog
+    from facade.types.task import Task
     from facade.types.demand import ActionDependency, StateDependency
     from facade.types.threed import Placement
 
@@ -96,9 +99,72 @@ class Blok:
     def diagnostics(self) -> list[rtypes.Diagnostic]:
         return cast("list[rtypes.Diagnostic]", [rmodels.DiagnosticModel(**i) for i in self.diagnostics])
 
+    head: BlokRevision | None = strawberry_django.field(description="The revision this custom blok is at: what an edit names as its `base`. Null for a provided blok, which changes with its agents' registrations instead.")
+
+    @strawberry_django.field(description="The revisions of this custom blok, newest first. An undo is a revision too, so history only grows.")
+    def revisions(self, limit: int = 20, offset: int = 0) -> list[BlokRevision]:
+        rows = row_of(self, models.Blok).revisions.order_by("-number")[offset : offset + limit]
+        return cast("list[BlokRevision]", list(rows))
+
     @classmethod
     def get_queryset(cls, queryset: QuerySet[models.Blok], info: Info, **kwargs: object) -> QuerySet[models.Blok]:
         return build_prescoped_queryset(info, queryset, field="organization")
+
+
+@strawberry.type(description="A dependency as a blok revision declares it.")
+class RevisionDependency:
+    key: str
+    optional: bool
+    description: str | None
+    app: str | None = strawberry.field(description="Only agents of this app may be bound to it.")
+    version: str | None = strawberry.field(description="Only agents of this version may be bound to it.")
+
+
+@strawberry_django.type(models.BlokRevision, description="One state of a custom blok, never changed once written. Every write to a custom blok commits one; the blok is a copy of its head.")
+class BlokRevision:
+    id: strawberry.ID
+    number: int = strawberry_django.field(description="The place of this revision in its blok's history, from 1.")
+    blok: Blok
+    parent: BlokRevision | None = strawberry_django.field(description="The revision this one was made from; null for the first.")
+    catalog: UICatalog
+    content_hash: str = strawberry_django.field(description="sha256 of everything this revision holds, its dependencies included (unlike `hash`).")
+    author: User | None = strawberry_django.field(description="The user it was written as.")
+    task: Task | None = strawberry_django.field(description="The task that wrote it, e.g. the assistant turn that designed it.")
+    message: str | None = strawberry_django.field(description="What changed and why, in a sentence.")
+    created_at: datetime.datetime
+
+    @strawberry_django.field(description="The renderer for this revision's root.")
+    def context(self) -> renums.ComponentContext:
+        return renums.ComponentContext(self.context)
+
+    @strawberry_django.field(description="The whole component tree as one JSON value, in the wire spelling (snake_case keys).")
+    def component_tree(self) -> rscalars.AnyDefault:
+        return cast("rscalars.AnyDefault", self.components)
+
+    @strawberry_django.field(description="The typed component tree of this revision.")
+    def components(self) -> list[rtypes.ComponentNode]:
+        return cast("list[rtypes.ComponentNode]", [rmodels.ComponentNodeModel(**i) for i in self.components])
+
+    @strawberry_django.field(description="The local state of this revision.")
+    def demo_state(self) -> scalars.Props:
+        return self.demo_state
+
+    @strawberry_django.field(description="A SHA-256 of what this revision renders, as `Blok.hash` is of the head.", only=["components", "demo_state", "context"])
+    def hash(self) -> str:
+        row = row_of(self, models.BlokRevision)
+        return blok_hash(row.components, row.demo_state, row.context)
+
+    @strawberry_django.field(description="The agent dependencies of this revision.")
+    def dependencies(self) -> list[RevisionDependency]:
+        return [_revision_dependency(dependency) for dependency in content_of_revision(row_of(self, models.BlokRevision)).dependencies]
+
+    @classmethod
+    def get_queryset(cls, queryset: QuerySet[models.BlokRevision], info: Info, **kwargs: object) -> QuerySet[models.BlokRevision]:
+        return build_prescoped_queryset(info, queryset, field="blok__organization")
+
+
+def _revision_dependency(dependency: rimodels.AgentDependencyInputModel) -> RevisionDependency:
+    return RevisionDependency(key=dependency.key, optional=dependency.optional, description=dependency.description, app=dependency.app, version=dependency.version)
 
 
 @strawberry_django.type(models.BlokDependency, filters=filters.BlokDependencyFilter, pagination=True, description="An agent dependency declared by a blok.")
@@ -165,6 +231,20 @@ class MaterializedBlok:
     placements: list["Placement"] = strawberry_django.field(
         description="Placements of this materialized blok.",
     )
+    pinned_revision: BlokRevision | None = strawberry_django.field(description="The revision this materialization stays at; null when it follows its blok's head.")
+
+    @strawberry_django.field(description="The revision this materialization shows: the pinned one, else its blok's head. Null for a provided blok, which has none.")
+    def revision(self) -> BlokRevision | None:
+        row = row_of(self, models.MaterializedBlok)
+        return cast("BlokRevision | None", row.pinned_revision or row.blok.head)
+
+    @strawberry_django.field(description="The required dependencies of the revision shown that no agent is bound to here. An edit made elsewhere can add one: bind it with updateMaterializedBlok.")
+    def unbound_dependencies(self) -> list[str]:
+        row = row_of(self, models.MaterializedBlok)
+        revision = row.pinned_revision or row.blok.head
+        content = content_of_blok(row.blok) if revision is None else content_of_revision(revision)
+        bound = set(row.agent_mappings.values_list("key", flat=True))
+        return sorted(dependency.key for dependency in content.dependencies if not dependency.optional and dependency.key not in bound)
 
     @classmethod
     def get_queryset(cls, queryset: QuerySet[models.MaterializedBlok], info: Info, **kwargs: object) -> QuerySet[models.MaterializedBlok]:
@@ -180,3 +260,12 @@ class BlokAgentMapping:
     materialized_blok: MaterializedBlok
     created_at: datetime.datetime
     updated_at: datetime.datetime
+
+
+@strawberry.type(description="What an edit of a blok did, or with `dryRun` would do.")
+class BlokEdit:
+    applied: bool = strawberry.field(description="Whether anything was written; false for a dry run.")
+    forked: bool = strawberry.field(description="Whether the blok was provided and the edit made a custom copy of it (with a new materialization) to land on.")
+    revision: BlokRevision | None = strawberry.field(description="The revision the blok is at after the edit; null for a dry run.")
+    materialized_blok: MaterializedBlok = strawberry.field(description="The materialization that shows the edit: the one it was made through, or the fork's new one.")
+    diagnostics: list[rtypes.Diagnostic] = strawberry.field(description="Non-fatal findings about the new content, e.g. util calls no catalog provides.")

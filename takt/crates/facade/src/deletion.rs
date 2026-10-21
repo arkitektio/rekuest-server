@@ -39,7 +39,7 @@ async fn exec(conn: &mut PgConnection, sql: &str, bind: &[i64]) -> Result<(), sq
 }
 
 /// Tasks and everything below them: children and root-descendants (CASCADE), events,
-/// instructs and patches (CASCADE); locks held and signals caused are released (SET_NULL).
+/// instructs and patches (CASCADE); locks held, signals caused and blok revisions written are released (SET_NULL).
 pub async fn delete_tasks(conn: &mut PgConnection, tasks: &[i64]) -> Result<(), sqlx::Error> {
     if tasks.is_empty() {
         return Ok(());
@@ -70,6 +70,13 @@ pub async fn delete_tasks(conn: &mut PgConnection, tasks: &[i64]) -> Result<(), 
     exec(
         conn,
         "UPDATE facade_firing SET task_id = NULL WHERE task_id = ANY($1)",
+        &all,
+    )
+    .await?;
+    // A blok revision outlives the task that wrote it: it keeps its content and its author.
+    exec(
+        conn,
+        "UPDATE facade_blokrevision SET task_id = NULL WHERE task_id = ANY($1)",
         &all,
     )
     .await?;
