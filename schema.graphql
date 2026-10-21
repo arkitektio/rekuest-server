@@ -693,6 +693,11 @@ input AgentFilter {
   """Filter by implementations of the agents"""
   hasImplementations: [String!]
 
+  """
+  The agents with at least one implementation listed under any of these protocols, declared as a hint (`on_scene_annotation`) or inferred. Each agent once, however many of its actions match.
+  """
+  implementsProtocols: [String!]
+
   """Filter by states of the agents"""
   hasStates: [String!]
 
@@ -1241,6 +1246,16 @@ type Blok {
   """
   forNode: String
 
+  """
+  Where this custom blok was installed from (e.g. kabinet's `RepoBlok.origin`); null for one made here.
+  """
+  origin: String
+
+  """
+  The hash its origin gave what it draws when it was installed. When the origin's hash differs now, it has an update.
+  """
+  originHash: String
+
   """Whether an app's agents provide this blok (see `app`)."""
   provided: Boolean!
 
@@ -1368,6 +1383,14 @@ input BlokFilter {
 
   """Search by name"""
   search: String
+
+  """
+  Only bloks installed from an origin (true) or only ones made here (false).
+  """
+  hasOrigin: Boolean
+
+  """Only bloks installed from one of these origins."""
+  origins: [String!]
 
   """
   Only bloks whose args accept these demands: the bloks an item opens in. Same matching as `ActionFilter.demands`, so a match's `descriptors` are checked against each arg's `requires`. Only `ARGS` demands; a blok without args matches none.
@@ -1865,6 +1888,16 @@ input CreateBlokInput {
   The node of `for_model` this blok attaches to; the model's root when absent.
   """
   forNode: String = null
+
+  """
+  Where the blok is installed from (kabinet's `RepoBlok.origin`). A blok of the same origin is updated in place instead of matched by name.
+  """
+  origin: String = null
+
+  """
+  The hash its origin gives what it draws, kept to tell when the origin has an update.
+  """
+  originHash: String = null
 }
 
 """
@@ -2283,6 +2316,11 @@ input DefinitionInput {
   Names of the UI catalogs that extend the base catalog (`base@1`, always applied) for this definition's effect and validator calls. Unknown names yield an unknown_catalog warning; conflicting operation definitions across catalogs are a registration error.
   """
   catalogs: [String!] = []
+
+  """
+  Where the action means to hook in (`on_scene_annotation`): hints a caller filters on, stored beside the protocols the server infers. Not a contract, and not part of the action's hash.
+  """
+  protocols: [String!]! = []
 
   """
   The port groups of the definition. This is used to group ports together in the UI
@@ -3000,6 +3038,7 @@ input ImplementationAgentFilter {
   clientId: String
   ids: [ID!]
   hasImplementations: [String!]
+  implementsProtocols: [String!]
   hasStates: [String!]
 }
 

@@ -84,7 +84,7 @@ def _parsed(source: str) -> list[rimodels.ComponentNodeInputModel]:
 
 @transaction.atomic
 def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
-    """Create or replace (by name) a blok in the caller's organization."""
+    """Create or replace a custom blok in the caller's organization: by its name, or by its ``origin`` when it is installed from one."""
     model = input.to_pydantic()
     if model.source is not None:
         components = _parsed(model.source)
@@ -97,11 +97,22 @@ def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
     # ``organization`` is part of the lookup, not the defaults: keyed on name alone this was a
     # global upsert, so any user could overwrite another organization's blok by name.
     # Only a custom blok is ever replaced: one an app provides under the same name is its own row.
+    # A blok installed from an origin is found again by it, whatever it is named, and never
+    # replaces a blok made by hand or installed from elsewhere under its name.
+    if model.origin is not None:
+        if models.Blok.objects.filter(organization=organization, name=model.name, app__isnull=True).exclude(origin=model.origin).exists():
+            raise ValueError(f"A custom blok named '{model.name}' exists already; rename or delete it to install this one.")
+        lookup = dict(origin=model.origin)
+        installed = dict(name=model.name, origin_hash=model.origin_hash)
+    else:
+        lookup = dict(name=model.name)
+        installed = {}
     blok, _ = models.Blok.objects.update_or_create(
-        name=model.name,
+        **lookup,
         organization=organization,
         app=None,
         defaults=dict(
+            **installed,
             components=[c.model_dump() for c in model.components or []],
             description=model.description,
             creator=info.context.request.user,

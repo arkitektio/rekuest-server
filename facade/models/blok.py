@@ -71,6 +71,8 @@ class Blok(models.Model):
         help_text="The app whose agents provide this Blok. NULL for a custom Blok a user made.",
     )
     declaration_hash = models.CharField(max_length=64, null=True, blank=True, help_text="sha256 of the declared content of a provided Blok (not the rendering `hash` the API computes); NULL for a custom one.")
+    origin = models.CharField(max_length=2000, null=True, blank=True, help_text="Where a custom Blok was installed from, e.g. kabinet's `github:<owner>/<repo>:<branch>#<key>`; NULL for one made here. Installing from the same origin again updates this row.")
+    origin_hash = models.CharField(max_length=100, null=True, blank=True, help_text="The hash its origin gave what it draws when it was installed: an origin whose hash differs has an update.")
 
     class Meta:
         # createBlok upserts a custom blok on (organization, name); registration upserts a provided
@@ -78,6 +80,7 @@ class Blok(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["organization", "name"], condition=models.Q(app__isnull=True), name="unique_blok_name_per_organization"),
             models.UniqueConstraint(fields=["organization", "app", "name", "declaration_hash"], condition=models.Q(app__isnull=False), name="blok_unique_provided"),
+            models.UniqueConstraint(fields=["organization", "origin"], condition=models.Q(app__isnull=True, origin__isnull=False), name="unique_blok_origin_per_organization"),
         ]
 
 

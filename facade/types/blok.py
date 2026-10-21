@@ -69,6 +69,8 @@ class Blok:
 
     for_model: str | None = strawberry_django.field(description="The model reference this blok decorates, if any.")
     for_node: str | None = strawberry_django.field(description="The node of `forModel` this blok attaches to; the model's root when null.")
+    origin: str | None = strawberry_django.field(description="Where this custom blok was installed from (e.g. kabinet's `RepoBlok.origin`); null for one made here.")
+    origin_hash: str | None = strawberry_django.field(description="The hash its origin gave what it draws when it was installed. When the origin's hash differs now, it has an update.")
 
     @strawberry_django.field(description="The whole component tree as one JSON value, in the wire spelling (snake_case keys). Unlike `components` it has no depth limit, which a selection set always has.")
     def component_tree(self) -> rscalars.AnyDefault:

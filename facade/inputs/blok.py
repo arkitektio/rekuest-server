@@ -64,6 +64,8 @@ class CreateBlokInputModel(BaseModel):
     context: renums.ComponentContext = Field(default=renums.ComponentContext.HTML, description="The renderer for the blok's root: HTML, or SCENE for a full 3D view.")
     for_model: str | None = Field(default=None, description="The model ('sha256:...') this blok decorates. HTML bloks only.")
     for_node: str | None = Field(default=None, description="The node of `for_model` this blok attaches to; the model's root when absent.")
+    origin: str | None = Field(default=None, max_length=2000, description="Where the blok is installed from (kabinet's `RepoBlok.origin`). A blok of the same origin is updated in place instead of matched by name.")
+    origin_hash: str | None = Field(default=None, max_length=100, description="The hash its origin gives what it draws, kept to tell when the origin has an update.")
 
     @field_validator("context", mode="before")
     @classmethod
@@ -95,6 +97,8 @@ class CreateBlokInput:
     context: renums.ComponentContext | None = None
     for_model: str | None = None
     for_node: str | None = None
+    origin: str | None = None
+    origin_hash: str | None = None
 
 
 class UpdateBlokInputModel(BaseModel):

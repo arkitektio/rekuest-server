@@ -36,6 +36,14 @@ class BlokFilter:
     def search(self, info: Info, queryset: QuerySet[models.Blok], value: str | None, prefix: str) -> tuple[QuerySet[models.Blok], Q]:
         return queryset.filter(**{f"{prefix}name__icontains": value}), Q()
 
+    @filter_field(description="Only bloks installed from an origin (true) or only ones made here (false).")
+    def has_origin(self, info: Info, queryset: QuerySet[models.Blok], value: bool, prefix: str) -> tuple[QuerySet[models.Blok], Q]:
+        return queryset.filter(**{f"{prefix}origin__isnull": not value}), Q()
+
+    @filter_field(description="Only bloks installed from one of these origins.")
+    def origins(self, info: Info, queryset: QuerySet[models.Blok], value: list[str], prefix: str) -> tuple[QuerySet[models.Blok], Q]:
+        return queryset.filter(**{f"{prefix}origin__in": value}), Q()
+
     @filter_field(description="Only bloks whose args accept these demands: the bloks an item opens in. Same matching as `ActionFilter.demands`, so a match's `descriptors` are checked against each arg's `requires`. Only `ARGS` demands; a blok without args matches none.")
     def demands(self, info: Info, queryset: QuerySet[models.Blok], value: list[inputs.PortDemandInput], prefix: str) -> tuple[QuerySet[models.Blok], Q]:
         if len(value) == 0:
