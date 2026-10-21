@@ -303,3 +303,76 @@ async fn an_action_falls_back_to_another_releases_logo() {
     f.delete(new).await;
     assert_eq!(latest().await, Some(old_logo));
 }
+
+fn inspector(args: Value) -> Value {
+    json!({"key": "inspector", "catalog": "electron", "args": args, "demo_state": {"args": {"image": null}},
+        "components": [{"id": "root", "component": "Box", "props": [
+            {"key": "label", "dynamic_value": {"path": "args.image"}}]}]})
+}
+
+#[tokio::test]
+async fn a_blok_with_args_writes_them_as_port_rows_once_per_template() {
+    let Some(f) = fleet().await else { return };
+    f.catalog().await;
+    let first = f.agent("first", "app", "1").await;
+    let second = f.agent("second", "app", "1").await;
+    // Constrained on a key its structure declares: blok args are held to declared descriptors.
+    let image = format!("@b{}/image", f.unique);
+    let size = format!("@b{}/z_size", f.unique);
+    sqlx::query(
+        "WITH service AS (
+             INSERT INTO facade_service (name) VALUES ('provided-bloks')
+             ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id),
+         structure AS (
+             INSERT INTO facade_structuredeclaration (service_id, identifier)
+             SELECT id, $1 FROM service RETURNING id)
+         INSERT INTO facade_descriptor (structure_id, key, position) SELECT id, $2, 1 FROM structure",
+    )
+    .bind(&image)
+    .bind(&size)
+    .execute(&f.db)
+    .await
+    .unwrap();
+    let args = json!([{"key": "image", "kind": "STRUCTURE", "identifier": image,
+        "nullable": false, "requires": [{"key": size, "operator": "GTE", "value": 2}]},
+        {"key": "masks", "kind": "LIST", "nullable": true, "children": [
+            {"key": "mask", "kind": "STRUCTURE", "identifier": "@mikro/image", "nullable": false}]}]);
+
+    f.register(first, declaring(json!([inspector(args.clone())])))
+        .await;
+    f.register(second, declaring(json!([inspector(args)])))
+        .await;
+    let (_, blok) = f.slot(first, "inspector").await.unwrap();
+    // key_path, identifier, compiled_jsonpath, nullable, is a root
+    type Row = (String, Option<String>, Option<String>, bool, bool);
+    let rows: Vec<Row> = sqlx::query_as(
+        "SELECT key_path, identifier, compiled_jsonpath, nullable, parent_id IS NULL
+           FROM facade_blokargport WHERE blok_id = $1 ORDER BY id",
+    )
+    .bind(blok)
+    .fetch_all(&f.db)
+    .await
+    .unwrap();
+    // The second agent declared the same content: its template, and no second set of rows.
+    assert_eq!(
+        rows.iter().map(|r| r.0.as_str()).collect::<Vec<_>>(),
+        ["image", "masks", "masks.mask"]
+    );
+    assert!(rows[0].2.is_some(), "requires compiled: {rows:?}");
+    assert!(
+        rows[1].4 && !rows[2].4,
+        "the mask is under the list: {rows:?}"
+    );
+    let stored: Value = sqlx::query_scalar("SELECT args FROM facade_blok WHERE id = $1")
+        .bind(blok)
+        .fetch_one(&f.db)
+        .await
+        .unwrap();
+    assert_eq!(stored[0]["identifier"], image);
+
+    // The template goes with its rows.
+    f.delete(first).await;
+    f.delete(second).await;
+    let left = "SELECT count(*) FROM facade_blokargport WHERE blok_id = $1";
+    assert_eq!(f.count(left, blok).await, 0);
+}

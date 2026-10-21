@@ -141,6 +141,23 @@ ASSETS = {
     "asset bad reference": asset(ref="md5:abc", size=1),
 }
 
+def blok(**fields) -> dict:
+    tree = [{"id": "root", "component": "Box", "props": [{"key": "label", "dynamic_value": {"path": "args.image"}}]}]
+    return {"key": "inspector", "components": tree, "demo_state": {"args": {"image": None}}, **fields}
+
+
+IMAGE = port("image", "STRUCTURE", identifier="@mikro/image", nullable=False)
+
+BLOKS = {
+    "blok without args": blok(demo_state={"label": "x"}, components=[{"id": "root", "component": "Box"}]),
+    "blok with args": blok(args=[{**IMAGE, "requires": [{"key": "@mikro/z_size", "operator": "GTE", "value": 2}]}]),
+    "blok with a list arg": blok(args=[port("images", "LIST", nullable=False, children=[IMAGE])]),
+    "blok args keyed twice": blok(args=[IMAGE, IMAGE]),
+    "blok args on a scene": blok(context="SCENE", args=[IMAGE]),
+    "blok args beside a dependency named args": blok(args=[IMAGE], dependencies=[{"key": "args"}]),
+    "blok arg of a bad shape": blok(args=[port("image", "STRUCTURE", nullable=False)]),
+}
+
 cases = {}
 for name, declaration in json.loads((HERE / "app_declarations.json").read_text()).items():
     cases[f"app {name}"] = record(declaration)
@@ -149,6 +166,9 @@ for name, implementation in {**VALID_EXTRA, **BROKEN}.items():
 
 for name, declared in ASSETS.items():
     cases[name] = record({"assets": [declared]})
+
+for name, declared in BLOKS.items():
+    cases[name] = record({"bloks": [declared]})
 
 (HERE / "declarations.json").write_text(json.dumps(cases, indent=1, ensure_ascii=False) + "\n")
 valid = sum(1 for c in cases.values() if "dump" in c)

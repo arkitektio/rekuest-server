@@ -1321,3 +1321,33 @@ async fn a_blok_may_be_registered_as_its_bsx_source() {
         assert!(refused.contains(message), "{refused}");
     }
 }
+
+/// A blok's args are held to the declared descriptors like an action's: a blok constrained
+/// on a key nobody declares would be offered on nothing.
+#[tokio::test]
+async fn a_blok_arg_constrains_only_declared_descriptors() {
+    let Some(t) = tenant().await else { return };
+    t.catalog("orkestrator", json!([]), json!([{"name": "Box"}]))
+        .await;
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let image = format!("@d{unique}/image");
+    let size = format!("@d{unique}/z_size");
+    declare_structure(&t.db, &image, &[&size]).await;
+    let inspector = |key: &str| {
+        let bloks = json!([{"key": "inspector", "demo_state": {"args": {"image": null}},
+            "components": [{"id": "root", "component": "Box"}],
+            "args": [{"key": "image", "kind": "STRUCTURE", "identifier": image, "nullable": false,
+                      "requires": [{"key": key, "operator": "GTE", "value": 2}]}]}]);
+        payload(&[], "gt", ("a", "b"), bloks)
+    };
+
+    let refused = t
+        .register(inspector(&format!("@d{unique}/z_sise")))
+        .await
+        .unwrap_err();
+    assert!(
+        refused.contains(&format!("Port 'image' of 'inspector' constrains the descriptor '@d{unique}/z_sise', which no service declares for {image}. Declared: {size}")),
+        "{refused}"
+    );
+    t.register(inspector(&size)).await.unwrap();
+}

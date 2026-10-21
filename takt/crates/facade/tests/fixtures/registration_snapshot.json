@@ -8508,6 +8508,943 @@
     }
   },
   {
+    "step": "app dataset_inspector",
+    "outcome": {
+      "accepted": []
+    },
+    "rows": {
+      "agent": {
+        "hash": "app-dataset_inspector",
+        "name": "dataset-inspector",
+        "description": null,
+        "name_is_client": false
+      },
+      "bloks": [
+        {
+          "blok": {
+            "name": "dataset_inspector",
+            "catalog": "orkestrator",
+            "components": [
+              {
+                "id": "Resizable",
+                "props": [
+                  {
+                    "key": "direction",
+                    "util_call": null,
+                    "agent_call": null,
+                    "static_value": "row",
+                    "dynamic_value": null,
+                    "declares_value": null
+                  },
+                  {
+                    "key": "className",
+                    "util_call": null,
+                    "agent_call": null,
+                    "static_value": "rounded-xl border",
+                    "dynamic_value": null,
+                    "declares_value": null
+                  }
+                ],
+                "children": [
+                  {
+                    "id": "Resizable/ResizablePanel[0]",
+                    "props": [
+                      {
+                        "key": "defaultSize",
+                        "util_call": null,
+                        "agent_call": null,
+                        "static_value": "55",
+                        "dynamic_value": null,
+                        "declares_value": null
+                      },
+                      {
+                        "key": "minSize",
+                        "util_call": null,
+                        "agent_call": null,
+                        "static_value": "30",
+                        "dynamic_value": null,
+                        "declares_value": null
+                      }
+                    ],
+                    "children": [
+                      {
+                        "id": "Resizable/ResizablePanel[0]/Card[0]",
+                        "props": [
+                          {
+                            "key": "className",
+                            "util_call": null,
+                            "agent_call": null,
+                            "static_value": "h-full rounded-none border-0",
+                            "dynamic_value": null,
+                            "declares_value": null
+                          }
+                        ],
+                        "children": [
+                          {
+                            "id": "Resizable/ResizablePanel[0]/Card[0]/CardHeader[0]",
+                            "props": null,
+                            "children": [
+                              {
+                                "id": "Resizable/ResizablePanel[0]/Card[0]/CardHeader[0]/CardTitle[0]",
+                                "props": [
+                                  {
+                                    "key": "text",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": "Dataset",
+                                    "dynamic_value": null,
+                                    "declares_value": null
+                                  }
+                                ],
+                                "children": null,
+                                "component": "CardTitle"
+                              },
+                              {
+                                "id": "Resizable/ResizablePanel[0]/Card[0]/CardHeader[0]/StructureDisplay[0]",
+                                "props": [
+                                  {
+                                    "key": "value",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": null,
+                                    "dynamic_value": {
+                                      "path": "args.dataset",
+                                      "literal": null
+                                    },
+                                    "declares_value": null
+                                  },
+                                  {
+                                    "key": "variant",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": "inline",
+                                    "dynamic_value": null,
+                                    "declares_value": null
+                                  }
+                                ],
+                                "children": null,
+                                "component": "StructureDisplay"
+                              }
+                            ],
+                            "component": "CardHeader"
+                          },
+                          {
+                            "id": "Resizable/ResizablePanel[0]/Card[0]/CardContent[0]",
+                            "props": null,
+                            "children": [
+                              {
+                                "id": "Resizable/ResizablePanel[0]/Card[0]/CardContent[0]/StructureViewer[0]",
+                                "props": [
+                                  {
+                                    "key": "value",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": null,
+                                    "dynamic_value": {
+                                      "path": "args.dataset",
+                                      "literal": null
+                                    },
+                                    "declares_value": null
+                                  },
+                                  {
+                                    "key": "height",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": "32rem",
+                                    "dynamic_value": null,
+                                    "declares_value": null
+                                  },
+                                  {
+                                    "key": "emptyText",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": "Open this from a dataset.",
+                                    "dynamic_value": null,
+                                    "declares_value": null
+                                  }
+                                ],
+                                "children": null,
+                                "component": "StructureViewer"
+                              }
+                            ],
+                            "component": "CardContent"
+                          }
+                        ],
+                        "component": "Card"
+                      }
+                    ],
+                    "component": "ResizablePanel"
+                  },
+                  {
+                    "id": "Resizable/ResizableHandle[0]",
+                    "props": [
+                      {
+                        "key": "withHandle",
+                        "util_call": null,
+                        "agent_call": null,
+                        "static_value": "true",
+                        "dynamic_value": null,
+                        "declares_value": null
+                      }
+                    ],
+                    "children": null,
+                    "component": "ResizableHandle"
+                  },
+                  {
+                    "id": "Resizable/ResizablePanel[1]",
+                    "props": [
+                      {
+                        "key": "defaultSize",
+                        "util_call": null,
+                        "agent_call": null,
+                        "static_value": "45",
+                        "dynamic_value": null,
+                        "declares_value": null
+                      },
+                      {
+                        "key": "minSize",
+                        "util_call": null,
+                        "agent_call": null,
+                        "static_value": "25",
+                        "dynamic_value": null,
+                        "declares_value": null
+                      }
+                    ],
+                    "children": [
+                      {
+                        "id": "Resizable/ResizablePanel[1]/Card[0]",
+                        "props": [
+                          {
+                            "key": "className",
+                            "util_call": null,
+                            "agent_call": null,
+                            "static_value": "h-full rounded-none border-0",
+                            "dynamic_value": null,
+                            "declares_value": null
+                          }
+                        ],
+                        "children": [
+                          {
+                            "id": "Resizable/ResizablePanel[1]/Card[0]/CardHeader[0]",
+                            "props": null,
+                            "children": [
+                              {
+                                "id": "Resizable/ResizablePanel[1]/Card[0]/CardHeader[0]/CardTitle[0]",
+                                "props": [
+                                  {
+                                    "key": "text",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": "Intensities",
+                                    "dynamic_value": null,
+                                    "declares_value": null
+                                  }
+                                ],
+                                "children": null,
+                                "component": "CardTitle"
+                              },
+                              {
+                                "id": "Resizable/ResizablePanel[1]/Card[0]/CardHeader[0]/CardDescription[0]",
+                                "props": [
+                                  {
+                                    "key": "text",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": "How the dataset's values are spread.",
+                                    "dynamic_value": null,
+                                    "declares_value": null
+                                  }
+                                ],
+                                "children": null,
+                                "component": "CardDescription"
+                              }
+                            ],
+                            "component": "CardHeader"
+                          },
+                          {
+                            "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]",
+                            "props": [
+                              {
+                                "key": "className",
+                                "util_call": null,
+                                "agent_call": null,
+                                "static_value": "grid gap-4",
+                                "dynamic_value": null,
+                                "declares_value": null
+                              }
+                            ],
+                            "children": [
+                              {
+                                "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Field[0]",
+                                "props": [
+                                  {
+                                    "key": "label",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": "Bins",
+                                    "dynamic_value": null,
+                                    "declares_value": null
+                                  }
+                                ],
+                                "children": [
+                                  {
+                                    "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Field[0]/Slider[0]",
+                                    "props": [
+                                      {
+                                        "key": "bind",
+                                        "util_call": null,
+                                        "agent_call": null,
+                                        "static_value": "form.bins",
+                                        "dynamic_value": null,
+                                        "declares_value": null
+                                      },
+                                      {
+                                        "key": "min",
+                                        "util_call": null,
+                                        "agent_call": null,
+                                        "static_value": "4",
+                                        "dynamic_value": null,
+                                        "declares_value": null
+                                      },
+                                      {
+                                        "key": "max",
+                                        "util_call": null,
+                                        "agent_call": null,
+                                        "static_value": "256",
+                                        "dynamic_value": null,
+                                        "declares_value": null
+                                      },
+                                      {
+                                        "key": "step",
+                                        "util_call": null,
+                                        "agent_call": null,
+                                        "static_value": "4",
+                                        "dynamic_value": null,
+                                        "declares_value": null
+                                      }
+                                    ],
+                                    "children": null,
+                                    "component": "Slider"
+                                  },
+                                  {
+                                    "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Field[0]/Text[0]",
+                                    "props": [
+                                      {
+                                        "key": "text",
+                                        "util_call": null,
+                                        "agent_call": null,
+                                        "static_value": null,
+                                        "dynamic_value": {
+                                          "path": "form.bins",
+                                          "literal": null
+                                        },
+                                        "declares_value": null
+                                      },
+                                      {
+                                        "key": "tone",
+                                        "util_call": null,
+                                        "agent_call": null,
+                                        "static_value": "muted",
+                                        "dynamic_value": null,
+                                        "declares_value": null
+                                      },
+                                      {
+                                        "key": "size",
+                                        "util_call": null,
+                                        "agent_call": null,
+                                        "static_value": "sm",
+                                        "dynamic_value": null,
+                                        "declares_value": null
+                                      }
+                                    ],
+                                    "children": null,
+                                    "component": "Text"
+                                  }
+                                ],
+                                "component": "Field"
+                              },
+                              {
+                                "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Button[0]",
+                                "props": [
+                                  {
+                                    "key": "label",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": "Measure",
+                                    "dynamic_value": null,
+                                    "declares_value": null
+                                  },
+                                  {
+                                    "key": "fullWidth",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": "true",
+                                    "dynamic_value": null,
+                                    "declares_value": null
+                                  },
+                                  {
+                                    "key": "disabled",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": null,
+                                    "dynamic_value": {
+                                      "path": "run.running",
+                                      "literal": null
+                                    },
+                                    "declares_value": null
+                                  },
+                                  {
+                                    "key": "onClick",
+                                    "util_call": null,
+                                    "agent_call": {
+                                      "arguments": [
+                                        {
+                                          "key": "dataset",
+                                          "util_call": null,
+                                          "agent_call": null,
+                                          "value_dict": null,
+                                          "value_list": null,
+                                          "value_path": "args.dataset",
+                                          "value_literal": null
+                                        },
+                                        {
+                                          "key": "bins",
+                                          "util_call": null,
+                                          "agent_call": null,
+                                          "value_dict": null,
+                                          "value_list": null,
+                                          "value_path": "form.bins",
+                                          "value_literal": null
+                                        }
+                                      ],
+                                      "operation": "intensity_histogram",
+                                      "dependency": "self"
+                                    },
+                                    "static_value": null,
+                                    "dynamic_value": null,
+                                    "declares_value": "run"
+                                  }
+                                ],
+                                "children": null,
+                                "component": "Button"
+                              },
+                              {
+                                "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Progress[0]",
+                                "props": [
+                                  {
+                                    "key": "value",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": null,
+                                    "dynamic_value": {
+                                      "path": "run.progress",
+                                      "literal": null
+                                    },
+                                    "declares_value": null
+                                  }
+                                ],
+                                "children": null,
+                                "component": "Progress"
+                              },
+                              {
+                                "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Text[0]",
+                                "props": [
+                                  {
+                                    "key": "text",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": null,
+                                    "dynamic_value": {
+                                      "path": "run.message",
+                                      "literal": null
+                                    },
+                                    "declares_value": null
+                                  },
+                                  {
+                                    "key": "tone",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": "muted",
+                                    "dynamic_value": null,
+                                    "declares_value": null
+                                  },
+                                  {
+                                    "key": "size",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": "sm",
+                                    "dynamic_value": null,
+                                    "declares_value": null
+                                  }
+                                ],
+                                "children": null,
+                                "component": "Text"
+                              },
+                              {
+                                "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Text[1]",
+                                "props": [
+                                  {
+                                    "key": "text",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": null,
+                                    "dynamic_value": {
+                                      "path": "run.error",
+                                      "literal": null
+                                    },
+                                    "declares_value": null
+                                  },
+                                  {
+                                    "key": "tone",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": "destructive",
+                                    "dynamic_value": null,
+                                    "declares_value": null
+                                  },
+                                  {
+                                    "key": "size",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": "sm",
+                                    "dynamic_value": null,
+                                    "declares_value": null
+                                  }
+                                ],
+                                "children": null,
+                                "component": "Text"
+                              },
+                              {
+                                "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Chart[0]",
+                                "props": [
+                                  {
+                                    "key": "type",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": "bar",
+                                    "dynamic_value": null,
+                                    "declares_value": null
+                                  },
+                                  {
+                                    "key": "data",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": null,
+                                    "dynamic_value": {
+                                      "path": "run.result",
+                                      "literal": null
+                                    },
+                                    "declares_value": null
+                                  },
+                                  {
+                                    "key": "categoryKey",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": "name",
+                                    "dynamic_value": null,
+                                    "declares_value": null
+                                  },
+                                  {
+                                    "key": "series",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": "[{\"key\": \"count\", \"label\": \"Values\"}]",
+                                    "dynamic_value": null,
+                                    "declares_value": null
+                                  },
+                                  {
+                                    "key": "height",
+                                    "util_call": null,
+                                    "agent_call": null,
+                                    "static_value": "280",
+                                    "dynamic_value": null,
+                                    "declares_value": null
+                                  }
+                                ],
+                                "children": null,
+                                "component": "Chart"
+                              }
+                            ],
+                            "component": "CardContent"
+                          }
+                        ],
+                        "component": "Card"
+                      }
+                    ],
+                    "component": "ResizablePanel"
+                  }
+                ],
+                "component": "Resizable"
+              }
+            ],
+            "demo_state": {
+              "run": {
+                "done": false,
+                "error": "",
+                "failed": false,
+                "result": null,
+                "status": "idle",
+                "message": "",
+                "returns": {},
+                "running": false,
+                "progress": 0
+              },
+              "args": {
+                "dataset": null
+              },
+              "form": {
+                "bins": 32
+              }
+            },
+            "description": "A dataset next to the histogram of its intensities.",
+            "diagnostics": [],
+            "dependencies": [
+              {
+                "key": "self",
+                "optional": false,
+                "app_filter": null,
+                "description": null,
+                "state_demands": [],
+                "action_demands": [
+                  {
+                    "key": "intensity_histogram",
+                    "demand": {
+                      "app": null,
+                      "key": "intensity_histogram",
+                      "hash": null,
+                      "name": null,
+                      "pure": null,
+                      "version": null,
+                      "stateful": null,
+                      "protocols": null,
+                      "idempotent": null,
+                      "arg_matches": [
+                        {
+                          "at": 0,
+                          "key": "dataset",
+                          "kind": "STRUCTURE",
+                          "children": null,
+                          "nullable": false,
+                          "dimension": null,
+                          "identifier": "@mikro/arraydataset",
+                          "descriptors": null
+                        },
+                        {
+                          "at": 1,
+                          "key": "bins",
+                          "kind": "INT",
+                          "children": null,
+                          "nullable": true,
+                          "dimension": null,
+                          "identifier": null,
+                          "descriptors": null
+                        }
+                      ],
+                      "return_matches": [
+                        {
+                          "at": 0,
+                          "key": "return0",
+                          "kind": "LIST",
+                          "children": [
+                            {
+                              "at": 0,
+                              "key": "...",
+                              "kind": "MODEL",
+                              "children": [
+                                {
+                                  "at": 0,
+                                  "key": "name",
+                                  "kind": "STRING",
+                                  "children": null,
+                                  "nullable": false,
+                                  "dimension": null,
+                                  "identifier": null,
+                                  "descriptors": null
+                                },
+                                {
+                                  "at": 1,
+                                  "key": "count",
+                                  "kind": "INT",
+                                  "children": null,
+                                  "nullable": false,
+                                  "dimension": null,
+                                  "identifier": null,
+                                  "descriptors": null
+                                }
+                              ],
+                              "nullable": false,
+                              "dimension": null,
+                              "identifier": "@dataset-inspector/histogram_bin",
+                              "descriptors": null
+                            }
+                          ],
+                          "nullable": false,
+                          "dimension": null,
+                          "identifier": null,
+                          "descriptors": null
+                        }
+                      ],
+                      "force_arg_length": null,
+                      "force_return_length": null
+                    },
+                    "optional": false,
+                    "description": "Intensity Histogram\n\nThe histogram of every value in the dataset, between its smallest and its\nlargest finite value.",
+                    "allow_inactive": true
+                  }
+                ],
+                "version_filter": null,
+                "auto_resolvable": false,
+                "max_viable_instances": null,
+                "min_viable_instances": null
+              }
+            ]
+          },
+          "name": "dataset_inspector",
+          "mappings": [
+            {
+              "key": "self",
+              "dependency": "self",
+              "agent_is_declarer": true
+            }
+          ],
+          "description": "A dataset next to the histogram of its intensities."
+        }
+      ],
+      "locks": [],
+      "states": [],
+      "implementations": [
+        {
+          "action": {
+            "key": "intensity_histogram",
+            "args": [
+              {
+                "key": "dataset",
+                "kind": "STRUCTURE",
+                "label": null,
+                "widget": {
+                  "kind": "SEARCH",
+                  "ward": "mikro",
+                  "query": "query SearchArrayDatasets($search: String, $values: [ID!], $limit: Int, $offset: Int = 0) {\n  options: arrayDatasets(\n    filters: {search: $search, ids: $values}\n    pagination: {limit: $limit, offset: $offset}\n  ) {\n    value: id\n    label: name\n    __typename\n  }\n}",
+                  "filters": null,
+                  "placeholder": null,
+                  "dependencies": [],
+                  "follow_value": null
+                },
+                "choices": null,
+                "default": null,
+                "effects": [],
+                "children": null,
+                "nullable": false,
+                "requires": null,
+                "dimension": null,
+                "identifier": "@mikro/arraydataset",
+                "validators": [],
+                "description": "The dataset to measure",
+                "proposed_units": null,
+                "reference_unit": null
+              },
+              {
+                "key": "bins",
+                "kind": "INT",
+                "label": null,
+                "widget": null,
+                "choices": null,
+                "default": 32,
+                "effects": [],
+                "children": null,
+                "nullable": true,
+                "requires": null,
+                "dimension": null,
+                "identifier": null,
+                "validators": [],
+                "description": "How many bins",
+                "proposed_units": null,
+                "reference_unit": null
+              }
+            ],
+            "hash": "e83303ff879fb7d8f3e9bb3aa744cc4f1cf303024bbcd750a9ab76d6865e6fb7",
+            "kind": "FUNCTION",
+            "name": "Intensity Histogram",
+            "pure": false,
+            "ports": [
+              {
+                "key": "bins",
+                "kind": "INT",
+                "side": "arg",
+                "index": 1,
+                "parent": null,
+                "key_path": "bins",
+                "nullable": true,
+                "dimension": null,
+                "identifier": null,
+                "compiled_jsonpath": null
+              },
+              {
+                "key": "dataset",
+                "kind": "STRUCTURE",
+                "side": "arg",
+                "index": 0,
+                "parent": null,
+                "key_path": "dataset",
+                "nullable": false,
+                "dimension": null,
+                "identifier": "@mikro/arraydataset",
+                "compiled_jsonpath": null
+              },
+              {
+                "key": "return0",
+                "kind": "LIST",
+                "side": "return",
+                "index": 0,
+                "parent": null,
+                "key_path": "return0",
+                "nullable": false,
+                "dimension": null,
+                "identifier": null,
+                "compiled_jsonpath": null
+              },
+              {
+                "key": "...",
+                "kind": "MODEL",
+                "side": "return",
+                "index": 0,
+                "parent": "return0",
+                "key_path": "return0....",
+                "nullable": false,
+                "dimension": null,
+                "identifier": "@dataset-inspector/histogram_bin",
+                "compiled_jsonpath": null
+              },
+              {
+                "key": "count",
+                "kind": "INT",
+                "side": "return",
+                "index": 1,
+                "parent": "return0....",
+                "key_path": "return0.....count",
+                "nullable": false,
+                "dimension": null,
+                "identifier": null,
+                "compiled_jsonpath": null
+              },
+              {
+                "key": "name",
+                "kind": "STRING",
+                "side": "return",
+                "index": 0,
+                "parent": "return0....",
+                "key_path": "return0.....name",
+                "nullable": false,
+                "dimension": null,
+                "identifier": null,
+                "compiled_jsonpath": null
+              }
+            ],
+            "scope": "GLOBAL",
+            "is_dev": false,
+            "returns": [
+              {
+                "key": "return0",
+                "kind": "LIST",
+                "label": null,
+                "widget": null,
+                "choices": null,
+                "effects": [],
+                "children": [
+                  {
+                    "key": "...",
+                    "kind": "MODEL",
+                    "label": null,
+                    "widget": null,
+                    "choices": null,
+                    "effects": [],
+                    "children": [
+                      {
+                        "key": "name",
+                        "kind": "STRING",
+                        "label": null,
+                        "widget": null,
+                        "choices": null,
+                        "effects": [],
+                        "children": null,
+                        "nullable": false,
+                        "provides": null,
+                        "dimension": null,
+                        "identifier": null,
+                        "description": null,
+                        "proposed_units": null,
+                        "reference_unit": null
+                      },
+                      {
+                        "key": "count",
+                        "kind": "INT",
+                        "label": null,
+                        "widget": null,
+                        "choices": null,
+                        "effects": [],
+                        "children": null,
+                        "nullable": false,
+                        "provides": null,
+                        "dimension": null,
+                        "identifier": null,
+                        "description": null,
+                        "proposed_units": null,
+                        "reference_unit": null
+                      }
+                    ],
+                    "nullable": false,
+                    "provides": null,
+                    "dimension": null,
+                    "identifier": "@dataset-inspector/histogram_bin",
+                    "description": "One bin of an intensity histogram, as a chart draws it.",
+                    "proposed_units": null,
+                    "reference_unit": null
+                  }
+                ],
+                "nullable": false,
+                "provides": null,
+                "dimension": null,
+                "identifier": null,
+                "description": null,
+                "proposed_units": null,
+                "reference_unit": null
+              }
+            ],
+            "version": "1",
+            "same_app": true,
+            "same_org": true,
+            "stateful": false,
+            "arg_count": 2,
+            "protocols": [],
+            "idempotent": false,
+            "allow_probe": false,
+            "collections": [],
+            "description": "Intensity Histogram\n\nThe histogram of every value in the dataset, between its smallest and its\nlargest finite value.",
+            "is_test_for": [],
+            "port_groups": [],
+            "return_count": 1
+          },
+          "params": {},
+          "tracks": [],
+          "effects": "UNKNOWN",
+          "code_hash": "3ca3822a214a6a453802ff99b3a9f21ac1508f9b7b1e77cbe04079e823d9d154",
+          "execution": "PLAIN",
+          "interface": "intensity_histogram",
+          "diagnostics": [],
+          "manipulates": [],
+          "needs_token": true,
+          "dependencies": [],
+          "higher_order": false,
+          "higher_order_config": {},
+          "provenance_audience": [
+            "mikro",
+            "dataset-inspector"
+          ]
+        }
+      ]
+    }
+  },
+  {
     "step": "full",
     "outcome": {
       "accepted": [

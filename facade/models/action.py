@@ -185,19 +185,23 @@ class BasePort(models.Model):
 
     class Meta:
         abstract = True
-        indexes = [
-            # Composite index for instant payload resolution at execution time
-            models.Index(fields=["action", "key_path"]),
-            # Partial root-port indexes for the matcher: the correlated EXISTS clauses and the
-            # force_* count subqueries all filter exactly on
-            # (action_id, parent_id IS NULL, kind|nullable). Nested children are reached via the
-            # FK index on parent with tiny fan-out, so only root rows are worth indexing.
-            models.Index(fields=["action", "kind"], condition=models.Q(parent__isnull=True), name="%(class)s_root_kind_idx"),
-            models.Index(fields=["action", "nullable"], condition=models.Q(parent__isnull=True), name="%(class)s_root_null_idx"),
-            # Case-insensitive reverse lookup ("which actions use @mikro/image?") — the catalog
-            # entities are lower-cased at registration while port identifiers keep original case.
-            models.Index(Upper("identifier"), name="%(class)s_ident_upper_idx"),
-        ]
+
+
+def port_indexes(owner: str) -> list[models.Index]:
+    """The matcher's indexes over a port table whose rows belong to ``owner`` (an Action, a Blok)."""
+    return [
+        # Composite index for instant payload resolution at execution time
+        models.Index(fields=[owner, "key_path"]),
+        # Partial root-port indexes for the matcher: the correlated EXISTS clauses and the
+        # force_* count subqueries all filter exactly on
+        # (<owner>_id, parent_id IS NULL, kind|nullable). Nested children are reached via the
+        # FK index on parent with tiny fan-out, so only root rows are worth indexing.
+        models.Index(fields=[owner, "kind"], condition=models.Q(parent__isnull=True), name="%(class)s_root_kind_idx"),
+        models.Index(fields=[owner, "nullable"], condition=models.Q(parent__isnull=True), name="%(class)s_root_null_idx"),
+        # Case-insensitive reverse lookup ("which actions use @mikro/image?") — the catalog
+        # entities are lower-cased at registration while port identifiers keep original case.
+        models.Index(Upper("identifier"), name="%(class)s_ident_upper_idx"),
+    ]
 
 
 class ArgPort(BasePort):
@@ -209,6 +213,9 @@ class ArgPort(BasePort):
 
     action = models.ForeignKey(Action, on_delete=models.CASCADE, related_name="arg_ports")
     parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children", help_text="If this port is nested inside a LIST or DICT")
+
+    class Meta:
+        indexes = port_indexes("action")
 
     def __str__(self) -> str:
         return f"Arg: {self.key_path} ({self.identifier})"
@@ -223,6 +230,9 @@ class ReturnPort(BasePort):
 
     action = models.ForeignKey(Action, on_delete=models.CASCADE, related_name="return_ports")
     parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children", help_text="If this port is nested inside a LIST or DICT")
+
+    class Meta:
+        indexes = port_indexes("action")
 
     def __str__(self) -> str:
         return f"Return: {self.key_path} ({self.identifier})"

@@ -99,3 +99,30 @@ def test_a_handler_argument_may_read_the_event() -> None:
     call = {"dependency": "stage", "operation": "move", "arguments": [{"key": "x", "value_path": "$event.value"}]}
     components = [{"id": "root", "component": "Slider", "props": [{"key": "onChange", "agent_call": call}]}]
     _manifest(components, dependencies=["stage"], demo_state={"exposure": 1})
+
+
+ARGS_TREE = [{"id": "root", "component": "Text", "props": [{"key": "value", "dynamic_value": {"path": "args.image"}}]}]
+IMAGE_ARG = {"key": "image", "kind": "STRUCTURE", "identifier": "@mikro/image", "nullable": False}
+
+
+def test_a_blok_reads_its_args_under_the_args_root() -> None:
+    """The client seeds ``args`` into the demo state, so ``@args.image`` resolves like any root."""
+    blok = imodels.BlokImplementationInputModel(key="inspector", components=ARGS_TREE, args=[IMAGE_ARG], demo_state={"args": {"image": None}})
+    assert blok.args[0].identifier == "@mikro/image"
+    with pytest.raises(ValidationError, match="references 'args'"):
+        imodels.BlokImplementationInputModel(key="inspector", components=ARGS_TREE, args=[IMAGE_ARG], demo_state={})
+
+
+def test_only_an_html_blok_takes_args() -> None:
+    """A scene, a logo or an action logo is never opened for an item."""
+    with pytest.raises(ValidationError, match="only an html blok takes args, not a SCENE blok"):
+        imodels.BlokImplementationInputModel(key="inspector", components=ARGS_TREE, args=[IMAGE_ARG], demo_state={"args": {}}, context="SCENE")
+
+
+def test_blok_args_are_keyed_once_and_own_their_root() -> None:
+    """Two args of one key, or a dependency called ``args`` beside them, are refused."""
+    with pytest.raises(ValidationError, match="Blok manifest args: duplicate key 'image'"):
+        imodels.BlokImplementationInputModel(key="inspector", components=[], args=[IMAGE_ARG, IMAGE_ARG])
+    with pytest.raises(ValidationError, match="no dependency can be called that"):
+        imodels.BlokImplementationInputModel(key="inspector", components=[], args=[IMAGE_ARG], dependencies=[{"key": "args"}])
+    imodels.BlokImplementationInputModel(key="panel", components=[], dependencies=[{"key": "args"}])

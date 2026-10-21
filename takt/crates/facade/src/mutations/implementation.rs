@@ -242,7 +242,7 @@ async fn upsert_action(
 }
 
 /// What the relational port rows need of a declared port.
-trait RelationalPort {
+pub(crate) trait RelationalPort {
     fn key(&self) -> &str;
     fn kind(&self) -> &'static str;
     fn identifier(&self) -> Option<&str>;
@@ -322,6 +322,28 @@ async fn check_descriptor_keys(
     let mut constrained = Vec::new();
     constrained_ports(&definition.args, "", &mut constrained);
     constrained_ports(&definition.returns, "", &mut constrained);
+    check_constrained_descriptors(conn, &definition.key, constrained).await
+}
+
+/// A blok's args are held to the same: a key nobody declares would leave the blok offered on
+/// nothing, and nobody told why.
+pub(crate) async fn check_blok_arg_descriptor_keys(
+    conn: &mut PgConnection,
+    blok: &str,
+    args: &[ArgPortInputModel],
+) -> Result<(), Refusal> {
+    let mut constrained = Vec::new();
+    constrained_ports(args, "", &mut constrained);
+    check_constrained_descriptors(conn, blok, constrained).await
+}
+
+/// The constrained ports of `owner` (an action's key, a blok's), each key looked up in the
+/// services' declared vocabulary (`check_descriptor_keys`).
+async fn check_constrained_descriptors(
+    conn: &mut PgConnection,
+    owner: &str,
+    constrained: Vec<(String, &'static str, Option<&str>, &[DescriptorConstraint])>,
+) -> Result<(), Refusal> {
     if constrained.is_empty() {
         return Ok(());
     }
@@ -368,16 +390,14 @@ async fn check_descriptor_keys(
             }
             return Err(Refusal::Invalid(match structure {
                 Some(identifier) => format!(
-                    "Port '{path}' of '{}' constrains the descriptor '{key}', which no service declares for {identifier}. Declared: {}",
-                    definition.key,
+                    "Port '{path}' of '{owner}' constrains the descriptor '{key}', which no service declares for {identifier}. Declared: {}",
                     declared.get(identifier).map_or_else(
                         || "none (no service hosts this structure, or it is not catalogued yet)".to_owned(),
                         |keys| keys.join(", "),
                     ),
                 ),
                 None => format!(
-                    "Port '{path}' of '{}' constrains the descriptor '{key}', which no service declares for any structure",
-                    definition.key,
+                    "Port '{path}' of '{owner}' constrains the descriptor '{key}', which no service declares for any structure",
                 ),
             }));
         }
@@ -385,11 +405,13 @@ async fn check_descriptor_keys(
     Ok(())
 }
 
-/// Flatten a port tree into rows, one insert per depth level (`_bulk_create_ports_level_by_level`).
-async fn create_ports_level_by_level<P: RelationalPort>(
+/// Flatten a port tree into rows of the row `owner` (an action's `action_id`, a blok's
+/// `blok_id`), one insert per depth level (`_bulk_create_ports_level_by_level`).
+pub(crate) async fn create_ports_level_by_level<P: RelationalPort>(
     conn: &mut PgConnection,
     ports: &[P],
-    action: i64,
+    owner_column: &str,
+    owner: i64,
     table: &str,
 ) -> Result<(), Refusal> {
     // (port, its parent row, its index among siblings, its key path)
@@ -406,7 +428,7 @@ async fn create_ports_level_by_level<P: RelationalPort>(
             );
         }
         let ids: Vec<i64> = sqlx::query_scalar(&format!(
-            "INSERT INTO {table} (action_id, parent_id, index, key, key_path, kind, identifier, compiled_jsonpath, nullable, dimension)
+            "INSERT INTO {table} ({owner_column}, parent_id, index, key, key_path, kind, identifier, compiled_jsonpath, nullable, dimension)
              SELECT $1, parent_id, index, key, key_path, kind, identifier, compiled_jsonpath,
                      nullable, dimension
                FROM unnest($2::bigint[], $3::int[], $4::varchar[], $5::varchar[], $6::varchar[], $7::varchar[],
@@ -415,7 +437,7 @@ async fn create_ports_level_by_level<P: RelationalPort>(
              ORDER BY n
              RETURNING id"
         ))
-        .bind(action)
+        .bind(owner)
         .bind(level.iter().map(|(_, parent, ..)| *parent).collect::<Vec<_>>())
         .bind(level.iter().map(|(_, _, index, _)| *index).collect::<Vec<_>>())
         .bind(level.iter().map(|(port, ..)| port.key()).collect::<Vec<_>>())
@@ -462,8 +484,22 @@ async fn rebuild_relational_ports(
         .bind(action.id)
         .execute(&mut *conn)
         .await?;
-    create_ports_level_by_level(conn, &definition.args, action.id, "facade_argport").await?;
-    create_ports_level_by_level(conn, &definition.returns, action.id, "facade_returnport").await?;
+    create_ports_level_by_level(
+        conn,
+        &definition.args,
+        "action_id",
+        action.id,
+        "facade_argport",
+    )
+    .await?;
+    create_ports_level_by_level(
+        conn,
+        &definition.returns,
+        "action_id",
+        action.id,
+        "facade_returnport",
+    )
+    .await?;
     action.arg_count = definition.args.len() as i32;
     action.return_count = definition.returns.len() as i32;
     sqlx::query("UPDATE facade_action SET arg_count = $2, return_count = $3 WHERE id = $1")

@@ -402,7 +402,7 @@ pub async fn delete_materialized_bloks(
 }
 
 /// Of `candidates`, the provided bloks no agent's slot holds any more, with their dependencies
-/// (CASCADE); implementations drawn by one lose their logo (SET_NULL), and an action drawn by one
+/// and arg port rows (CASCADE); implementations drawn by one lose their logo (SET_NULL), and an action drawn by one
 /// takes the logo of its implementation most recently registered with another, as registration
 /// picks it. Custom bloks are a user's and are never collected.
 pub async fn gc_provided_bloks(
@@ -437,6 +437,7 @@ pub async fn gc_provided_bloks(
                                    WHERE i.action_id = a.id AND i.logo_id IS NOT NULL
                                    ORDER BY i.updated_at DESC, i.id DESC LIMIT 1)
           WHERE a.latest_logo_id = ANY($1)",
+        "DELETE FROM facade_blokargport WHERE blok_id = ANY($1)",
         "DELETE FROM facade_blok WHERE id = ANY($1)",
     ] {
         exec(conn, statement, &orphans).await?;

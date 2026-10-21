@@ -1244,6 +1244,22 @@ def check_blok_target(context: enums.ComponentContext, for_model: Optional[str],
         raise ValueError("Blok manifest: only an html blok can decorate a model")
 
 
+BLOK_ARGS_ROOT = "args"
+
+
+def check_blok_args(context: enums.ComponentContext, args: list["ArgPortInputModel"], dependency_keys: set[str]) -> None:
+    """A blok's args are the items it is opened for: an html blok's, keyed once, read under ``@args``.
+
+    The root ``args`` is the blok's own then, so no dependency may take the name."""
+    if not args:
+        return
+    if context != enums.ComponentContext.HTML:
+        raise ValueError(f"Blok manifest: only an html blok takes args, not a {context.value} blok")
+    _check_unique(args, "key", "Blok manifest args")
+    if BLOK_ARGS_ROOT in dependency_keys:
+        raise ValueError(f"Blok manifest: a blok with args reads them under {BLOK_ARGS_ROOT!r}, so no dependency can be called that")
+
+
 class BlokImplementationInputModel(BaseModel):
     "Base model for a Blok implementation manifest, which compiles all necessary information to materialize a Blok instance in the Arkitekt ecosystem."
 
@@ -1258,6 +1274,7 @@ class BlokImplementationInputModel(BaseModel):
     default: bool = Field(default=False, description="Whether this Blok is its agent's default for its context. A newly declared default replaces the previous one.")
     for_model: Optional[str] = Field(default=None, description="The model ('sha256:...') this Blok decorates: viewers showing that model offer this Blok at `for_node`. HTML bloks only.")
     for_node: Optional[str] = Field(default=None, description="The node of `for_model` this Blok attaches to; the model's root when absent.")
+    args: list[ArgPortInputModel] = Field(default_factory=list, description="The items this Blok is opened for, declared like an action's args and read under `@args.<key>`. A UI offers the Blok on any item its args accept (`MaterializedBlokFilter.demands`). HTML bloks only.")
 
     @model_validator(mode="after")
     def check_manifest(self) -> Self:
@@ -1268,6 +1285,7 @@ class BlokImplementationInputModel(BaseModel):
         if self.components is not None:
             check_blok_manifest(self.components, {dep.key for dep in self.dependencies}, None if self.demo_state is None else set(self.demo_state))
         check_blok_target(self.context, self.for_model, self.for_node)
+        check_blok_args(self.context, self.args, {dep.key for dep in self.dependencies})
         return self
 
 

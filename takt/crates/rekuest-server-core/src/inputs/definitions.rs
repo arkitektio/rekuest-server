@@ -983,6 +983,37 @@ pub struct BlokImplementationInputModel {
     /// The node of `for_model` this blok attaches to; the model's root when absent.
     #[serde(default)]
     pub for_node: Option<String>,
+    /// The items this blok is opened for, read under `@args.<key>`. HTML bloks only.
+    #[serde(default)]
+    pub args: Vec<ArgPortInputModel>,
+}
+
+/// The root a blok reads its args under (`BLOK_ARGS_ROOT`).
+pub const BLOK_ARGS_ROOT: &str = "args";
+
+/// A blok's args are an html blok's, keyed once, and no dependency takes their root (`check_blok_args`).
+pub fn check_blok_args(
+    context: ComponentContext,
+    args: &[ArgPortInputModel],
+    dependency_keys: &HashSet<String>,
+) -> Result<(), ValidationError> {
+    if args.is_empty() {
+        return Ok(());
+    }
+    if context != ComponentContext::HTML {
+        return Err(ValidationError(format!(
+            "Blok manifest: only an html blok takes args, not a {} blok",
+            context.value()
+        )));
+    }
+    check_unique_keys(args.iter().map(|p| p.key.as_str()), "Blok manifest args")?;
+    if dependency_keys.contains(BLOK_ARGS_ROOT) {
+        return Err(ValidationError(format!(
+            "Blok manifest: a blok with args reads them under {}, so no dependency can be called that",
+            repr_str(BLOK_ARGS_ROOT)
+        )));
+    }
+    Ok(())
 }
 
 /// Whether `value` is `sha256:` and 64 lowercase hex characters (`MODEL_REF_PATTERN`).
@@ -1045,6 +1076,9 @@ impl BlokImplementationInputModel {
         for component in self.components.iter_mut().flatten() {
             component.validate()?;
         }
+        for port in &mut self.args {
+            port.validate()?;
+        }
         let dependency_keys: HashSet<String> =
             self.dependencies.iter().map(|d| d.key.clone()).collect();
         let state_keys: Option<HashSet<String>> = self
@@ -1060,7 +1094,8 @@ impl BlokImplementationInputModel {
             self.context,
             self.for_model.as_deref(),
             self.for_node.as_deref(),
-        )
+        )?;
+        check_blok_args(self.context, &self.args, &dependency_keys)
     }
 }
 

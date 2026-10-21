@@ -32,6 +32,7 @@ from .task import (
 from .blok import (
     Blok,
     BlokAgentMapping,
+    BlokArgPort,
     BlokDependency,
     Dashboard,
     DashboardPlacement,
@@ -119,6 +120,7 @@ __all__ = [
     "MaterializedBlok",
     "DashboardPlacement",
     "BlokAgentMapping",
+    "BlokArgPort",
     # threed
     "ThreeDModel",
     "Asset",

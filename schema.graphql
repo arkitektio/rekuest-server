@@ -1253,6 +1253,11 @@ type Blok {
   context: ComponentContext!
 
   """
+  The items this blok is opened for, declared like an action's args and read under `@args.<key>`; empty for a blok that is opened on its own.
+  """
+  args: [ArgPort!]!
+
+  """
   The whole component tree as one JSON value, in the wire spelling (snake_case keys). Unlike `components` it has no depth limit, which a selection set always has.
   """
   componentTree: AnyDefault!
@@ -1363,6 +1368,11 @@ input BlokFilter {
 
   """Search by name"""
   search: String
+
+  """
+  Only bloks whose args accept these demands: the bloks an item opens in. Same matching as `ActionFilter.demands`, so a match's `descriptors` are checked against each arg's `requires`. Only `ARGS` demands; a blok without args matches none.
+  """
+  demands: [PortDemandInput!]
 }
 
 """Which locks does the agent provide in general"""
@@ -1417,6 +1427,11 @@ input BlokImplementationInput {
   The node of `for_model` this Blok attaches to; the model's root when absent.
   """
   forNode: String = null
+
+  """
+  The items this Blok is opened for, declared like an action's args and read under `@args.<key>`. A UI offers the Blok on any item its args accept (`MaterializedBlokFilter.demands`). HTML bloks only.
+  """
+  args: [ArgPortInput!]! = []
 }
 
 """The input for bouncing an agent."""
@@ -3351,6 +3366,11 @@ input MaterializedBlokFilter {
   Only bloks that render in one of these contexts: HTML and SCENE are interfaces to open, LOGO and ACTION_LOGO draw an agent or an action.
   """
   contexts: [ComponentContext!]
+
+  """
+  Only materialized bloks whose blok's args accept these demands: what an item opens in. See `BlokFilter.demands`.
+  """
+  demands: [PortDemandInput!]
 }
 
 input MaterializedBlokOrder @oneOf {

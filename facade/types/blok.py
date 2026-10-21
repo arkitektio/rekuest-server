@@ -63,6 +63,10 @@ class Blok:
     def context(self) -> renums.ComponentContext:
         return renums.ComponentContext(self.context)
 
+    @strawberry_django.field(description="The items this blok is opened for, declared like an action's args and read under `@args.<key>`; empty for a blok that is opened on its own.")
+    def args(self) -> list[rtypes.ArgPort]:
+        return cast("list[rtypes.ArgPort]", [rmodels.ArgPortModel(**i) for i in self.args])
+
     for_model: str | None = strawberry_django.field(description="The model reference this blok decorates, if any.")
     for_node: str | None = strawberry_django.field(description="The node of `forModel` this blok attaches to; the model's root when null.")
 

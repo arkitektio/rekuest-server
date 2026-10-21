@@ -96,3 +96,38 @@ class TestProvidedBloks:
             listed = await schema.execute(BLOKS, context_value=authenticated_context, variable_values={"filters": {"provided": provided}})
             assert not listed.errors, listed.errors
             assert listed.data["bloks"] == expected
+
+
+BLOKS_FOR = """
+    query BloksFor($filters: BlokFilter) {
+        bloks(filters: $filters) {
+            name
+            args { key identifier }
+        }
+    }
+"""
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+class TestBlokArgs:
+    async def test_a_fork_keeps_the_items_the_blok_opens_for(self, authenticated_context: HttpContext) -> None:
+        """The fork copies the args and their rows (children under their copied parent), so an item finds both."""
+        from tests.registered import create_blok
+
+        image = {"key": "image", "kind": "STRUCTURE", "identifier": "@mikro/image", "nullable": False}
+        org, user = authenticated_context.request.organization, authenticated_context.request.user
+        app = await sync_to_async(App.objects.create)(identifier="gallery-app")
+        provided = await sync_to_async(create_blok)(org, user, "gallery", [{"key": "images", "kind": "LIST", "nullable": False, "children": [image]}], app=app, declaration_hash="b" * 64)
+
+        forked = await schema.execute(FORK_BLOK, context_value=authenticated_context, variable_values={"input": {"id": str(provided.id), "name": "my-gallery"}})
+        assert not forked.errors, forked.errors
+
+        demand = {"kind": "ARGS", "matches": [{"at": 0, "kind": "LIST", "children": [{"identifier": "@mikro/image"}]}]}
+        found = await schema.execute(BLOKS_FOR, context_value=authenticated_context, variable_values={"filters": {"demands": [demand]}})
+        assert not found.errors, found.errors
+        assert sorted(blok["name"] for blok in found.data["bloks"]) == ["gallery", "my-gallery"]
+        assert all(blok["args"] == [{"key": "images", "identifier": None}] for blok in found.data["bloks"])
+
+        none = await schema.execute(BLOKS_FOR, context_value=authenticated_context, variable_values={"filters": {"demands": [{"kind": "ARGS", "matches": [{"at": 0, "identifier": "@mikro/table"}]}]}})
+        assert none.data["bloks"] == []

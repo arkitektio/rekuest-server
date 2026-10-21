@@ -20,12 +20,16 @@ pub fn hash_state_definition(definition: &StateDefinitionInputModel) -> String {
 
 /// sha256 over a declared blok's content: what makes two agents' bloks the same template. The
 /// agent's own choices (`default`) and the BSX `source` (already parsed into `components`) are
-/// left out, so a blok sent as BSX and the same one sent as a tree share a template.
+/// left out, so a blok sent as BSX and the same one sent as a tree share a template. So are
+/// empty `args`: a blok without them keeps the template it had before bloks took args.
 pub fn hash_blok_definition(blok: &BlokImplementationInputModel) -> String {
     let mut dump = serde_json::to_value(blok).expect("a blok declaration serializes");
     if let Value::Object(fields) = &mut dump {
         fields.remove("default");
         fields.remove("source");
+        if blok.args.is_empty() {
+            fields.remove("args");
+        }
     }
     hex::encode(Sha256::digest(dumps(&dump, true).as_bytes()))
 }
@@ -48,5 +52,32 @@ pub fn infer_action_scope(definition: &DefinitionInputModel) -> ActionScope {
         (false, false) => ActionScope::GLOBAL,
         (false, true) => ActionScope::BRIDGE_GLOBAL_TO_LOCAL,
         (true, false) => ActionScope::BRIDGE_LOCAL_TO_GLOBAL,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_blok_without_args_hashes_as_before_args_existed() {
+        let blok: BlokImplementationInputModel = serde_json::from_value(serde_json::json!({
+            "key": "panel", "components": [{"id": "root", "component": "Box"}]}))
+        .unwrap();
+        let mut dump = serde_json::to_value(&blok).unwrap();
+        let fields = dump.as_object_mut().unwrap();
+        assert_eq!(fields.remove("args"), Some(serde_json::json!([])));
+        fields.remove("default");
+        fields.remove("source");
+        let before = hex::encode(Sha256::digest(dumps(&dump, true).as_bytes()));
+        assert_eq!(hash_blok_definition(&blok), before);
+        let mut with_args = blok.clone();
+        with_args.args = serde_json::from_value(serde_json::json!([
+            {"key": "image", "kind": "STRUCTURE", "identifier": "@mikro/image", "nullable": false}]))
+        .unwrap();
+        assert_ne!(
+            hash_blok_definition(&blok),
+            hash_blok_definition(&with_args)
+        );
     }
 }

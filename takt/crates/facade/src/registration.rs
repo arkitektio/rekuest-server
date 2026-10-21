@@ -205,7 +205,10 @@ use crate::deletion::{
     delete_implementations, delete_materialized_bloks, delete_states, gc_provided_bloks,
 };
 use crate::mutations::blok::sync_blok_dependencies;
-use crate::mutations::implementation::{create_implementation, AgentIdentity, Prefetch};
+use crate::mutations::implementation::{
+    check_blok_arg_descriptor_keys, create_implementation, create_ports_level_by_level,
+    AgentIdentity, Prefetch,
+};
 use crate::mutations::Refusal;
 use crate::registration_lock::lock_organization;
 use crate::signals::{OnCommit, Signal};
@@ -281,16 +284,18 @@ async fn register_blok(
         blok.context,
         blok.demo_state.as_ref(),
     )?;
+    check_blok_arg_descriptor_keys(conn, &blok.key, &blok.args).await?;
 
     // Same content, same row: only the findings (which depend on the catalog as it is now) are
     // rewritten. A user's blok of the same name is custom and never matches.
-    let (id, name, description): (i64, String, Option<String>) = sqlx::query_as(
+    // `xmax = 0` only on a row this statement inserted: an existing template already has its port rows.
+    let (id, name, description, inserted): (i64, String, Option<String>, bool) = sqlx::query_as(
         "INSERT INTO facade_blok (name, description, components, demo_state, diagnostics, creator_id, organization_id, catalog_id,
-                                  context, for_model, for_node, app_id, declaration_hash)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                                  context, for_model, for_node, app_id, declaration_hash, args)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          ON CONFLICT (organization_id, app_id, name, declaration_hash) WHERE app_id IS NOT NULL DO UPDATE SET
              diagnostics = excluded.diagnostics
-         RETURNING id, name, description",
+         RETURNING id, name, description, (xmax = 0)",
     )
     .bind(&blok.key)
     .bind(&blok.description)
@@ -305,8 +310,13 @@ async fn register_blok(
     .bind(&blok.for_node)
     .bind(agent.app)
     .bind(hash_blok_definition(blok))
+    .bind(serde_json::to_value(&blok.args).expect("blok args serialize"))
     .fetch_one(&mut *conn)
     .await?;
+    if inserted {
+        // The template's content is its hash, args included: its rows never change after this.
+        create_ports_level_by_level(conn, &blok.args, "blok_id", id, "facade_blokargport").await?;
+    }
     let dependencies = sync_blok_dependencies(conn, id, &blok.dependencies, true).await?;
 
     if blok.default {

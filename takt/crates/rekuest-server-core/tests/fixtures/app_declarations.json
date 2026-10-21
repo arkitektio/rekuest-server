@@ -6602,5 +6602,617 @@
   "locks": [],
   "bloks": [],
   "hash": null
+ },
+ "dataset_inspector": {
+  "name": "dataset-inspector",
+  "hash": "h",
+  "implementations": [
+   {
+    "definition": {
+     "description": "Intensity Histogram\n\nThe histogram of every value in the dataset, between its smallest and its\nlargest finite value.",
+     "collections": [],
+     "key": "intensity_histogram",
+     "version": "1",
+     "name": "Intensity Histogram",
+     "stateful": false,
+     "port_groups": [],
+     "args": [
+      {
+       "key": "dataset",
+       "label": null,
+       "kind": "STRUCTURE",
+       "description": "The dataset to measure",
+       "identifier": "@mikro/arraydataset",
+       "nullable": false,
+       "effects": [],
+       "validators": [],
+       "default": null,
+       "widget": {
+        "kind": "SEARCH",
+        "query": "query SearchArrayDatasets($search: String, $values: [ID!], $limit: Int, $offset: Int = 0) {\n  options: arrayDatasets(\n    filters: {search: $search, ids: $values}\n    pagination: {limit: $limit, offset: $offset}\n  ) {\n    value: id\n    label: name\n    __typename\n  }\n}",
+        "ward": "mikro",
+        "filters": null,
+        "dependencies": []
+       },
+       "requires": null
+      },
+      {
+       "key": "bins",
+       "label": null,
+       "kind": "INT",
+       "description": "How many bins",
+       "nullable": true,
+       "effects": [],
+       "validators": [],
+       "default": 32,
+       "widget": null,
+       "requires": null
+      }
+     ],
+     "returns": [
+      {
+       "key": "return0",
+       "label": null,
+       "kind": "LIST",
+       "description": null,
+       "nullable": false,
+       "effects": [],
+       "children": [
+        {
+         "key": "...",
+         "label": null,
+         "kind": "MODEL",
+         "description": "One bin of an intensity histogram, as a chart draws it.",
+         "identifier": "@dataset-inspector/histogram_bin",
+         "nullable": false,
+         "effects": [],
+         "children": [
+          {
+           "key": "name",
+           "label": null,
+           "kind": "STRING",
+           "description": null,
+           "nullable": false,
+           "effects": [],
+           "widget": null,
+           "provides": null
+          },
+          {
+           "key": "count",
+           "label": null,
+           "kind": "INT",
+           "description": null,
+           "nullable": false,
+           "effects": [],
+           "widget": null,
+           "provides": null
+          }
+         ],
+         "widget": null,
+         "provides": null
+        }
+       ],
+       "widget": null,
+       "provides": null
+      }
+     ],
+     "kind": "FUNCTION",
+     "is_test_for": [],
+     "is_dev": false
+    },
+    "dependencies": [],
+    "tracks": [],
+    "interface": "intensity_histogram",
+    "locks": [],
+    "optimistics": [],
+    "manipulates": [],
+    "needs_token": true,
+    "effects": "UNKNOWN",
+    "execution": "PLAIN",
+    "code_hash": "3ca3822a214a6a453802ff99b3a9f21ac1508f9b7b1e77cbe04079e823d9d154"
+   }
+  ],
+  "states": [],
+  "locks": [],
+  "bloks": [
+   {
+    "key": "dataset_inspector",
+    "dependencies": [
+     {
+      "key": "self",
+      "app": null,
+      "optional": false,
+      "action_dependencies": [
+       {
+        "key": "intensity_histogram",
+        "description": "Intensity Histogram\n\nThe histogram of every value in the dataset, between its smallest and its\nlargest finite value.",
+        "demand": {
+         "hash": null,
+         "key": "intensity_histogram",
+         "app": null,
+         "version": null,
+         "name": null,
+         "arg_matches": [
+          {
+           "at": 0,
+           "key": "dataset",
+           "kind": "STRUCTURE",
+           "identifier": "@mikro/arraydataset",
+           "nullable": false,
+           "children": null
+          },
+          {
+           "at": 1,
+           "key": "bins",
+           "kind": "INT",
+           "identifier": null,
+           "nullable": true,
+           "children": null
+          }
+         ],
+         "return_matches": [
+          {
+           "at": 0,
+           "key": "return0",
+           "kind": "LIST",
+           "identifier": null,
+           "nullable": false,
+           "children": [
+            {
+             "at": 0,
+             "key": "...",
+             "kind": "MODEL",
+             "identifier": "@dataset-inspector/histogram_bin",
+             "nullable": false,
+             "children": [
+              {
+               "at": 0,
+               "key": "name",
+               "kind": "STRING",
+               "identifier": null,
+               "nullable": false,
+               "children": null
+              },
+              {
+               "at": 1,
+               "key": "count",
+               "kind": "INT",
+               "identifier": null,
+               "nullable": false,
+               "children": null
+              }
+             ]
+            }
+           ]
+          }
+         ],
+         "protocols": null,
+         "force_arg_length": null,
+         "force_return_length": null
+        },
+        "optional": false,
+        "allow_inactive": true
+       }
+      ],
+      "state_dependencies": null,
+      "auto_resolvable": false
+     }
+    ],
+    "components": [
+     {
+      "id": "Resizable",
+      "component": "Resizable",
+      "props": [
+       {
+        "key": "direction",
+        "static_value": "row"
+       },
+       {
+        "key": "className",
+        "static_value": "rounded-xl border"
+       }
+      ],
+      "children": [
+       {
+        "id": "Resizable/ResizablePanel[0]",
+        "component": "ResizablePanel",
+        "props": [
+         {
+          "key": "defaultSize",
+          "static_value": "55"
+         },
+         {
+          "key": "minSize",
+          "static_value": "30"
+         }
+        ],
+        "children": [
+         {
+          "id": "Resizable/ResizablePanel[0]/Card[0]",
+          "component": "Card",
+          "props": [
+           {
+            "key": "className",
+            "static_value": "h-full rounded-none border-0"
+           }
+          ],
+          "children": [
+           {
+            "id": "Resizable/ResizablePanel[0]/Card[0]/CardHeader[0]",
+            "component": "CardHeader",
+            "props": null,
+            "children": [
+             {
+              "id": "Resizable/ResizablePanel[0]/Card[0]/CardHeader[0]/CardTitle[0]",
+              "component": "CardTitle",
+              "props": [
+               {
+                "key": "text",
+                "static_value": "Dataset"
+               }
+              ],
+              "children": null
+             },
+             {
+              "id": "Resizable/ResizablePanel[0]/Card[0]/CardHeader[0]/StructureDisplay[0]",
+              "component": "StructureDisplay",
+              "props": [
+               {
+                "key": "value",
+                "dynamic_value": {
+                 "path": "args.dataset"
+                }
+               },
+               {
+                "key": "variant",
+                "static_value": "inline"
+               }
+              ],
+              "children": null
+             }
+            ]
+           },
+           {
+            "id": "Resizable/ResizablePanel[0]/Card[0]/CardContent[0]",
+            "component": "CardContent",
+            "props": null,
+            "children": [
+             {
+              "id": "Resizable/ResizablePanel[0]/Card[0]/CardContent[0]/StructureViewer[0]",
+              "component": "StructureViewer",
+              "props": [
+               {
+                "key": "value",
+                "dynamic_value": {
+                 "path": "args.dataset"
+                }
+               },
+               {
+                "key": "height",
+                "static_value": "32rem"
+               },
+               {
+                "key": "emptyText",
+                "static_value": "Open this from a dataset."
+               }
+              ],
+              "children": null
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "Resizable/ResizableHandle[0]",
+        "component": "ResizableHandle",
+        "props": [
+         {
+          "key": "withHandle",
+          "static_value": "true"
+         }
+        ],
+        "children": null
+       },
+       {
+        "id": "Resizable/ResizablePanel[1]",
+        "component": "ResizablePanel",
+        "props": [
+         {
+          "key": "defaultSize",
+          "static_value": "45"
+         },
+         {
+          "key": "minSize",
+          "static_value": "25"
+         }
+        ],
+        "children": [
+         {
+          "id": "Resizable/ResizablePanel[1]/Card[0]",
+          "component": "Card",
+          "props": [
+           {
+            "key": "className",
+            "static_value": "h-full rounded-none border-0"
+           }
+          ],
+          "children": [
+           {
+            "id": "Resizable/ResizablePanel[1]/Card[0]/CardHeader[0]",
+            "component": "CardHeader",
+            "props": null,
+            "children": [
+             {
+              "id": "Resizable/ResizablePanel[1]/Card[0]/CardHeader[0]/CardTitle[0]",
+              "component": "CardTitle",
+              "props": [
+               {
+                "key": "text",
+                "static_value": "Intensities"
+               }
+              ],
+              "children": null
+             },
+             {
+              "id": "Resizable/ResizablePanel[1]/Card[0]/CardHeader[0]/CardDescription[0]",
+              "component": "CardDescription",
+              "props": [
+               {
+                "key": "text",
+                "static_value": "How the dataset's values are spread."
+               }
+              ],
+              "children": null
+             }
+            ]
+           },
+           {
+            "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]",
+            "component": "CardContent",
+            "props": [
+             {
+              "key": "className",
+              "static_value": "grid gap-4"
+             }
+            ],
+            "children": [
+             {
+              "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Field[0]",
+              "component": "Field",
+              "props": [
+               {
+                "key": "label",
+                "static_value": "Bins"
+               }
+              ],
+              "children": [
+               {
+                "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Field[0]/Slider[0]",
+                "component": "Slider",
+                "props": [
+                 {
+                  "key": "bind",
+                  "static_value": "form.bins"
+                 },
+                 {
+                  "key": "min",
+                  "static_value": "4"
+                 },
+                 {
+                  "key": "max",
+                  "static_value": "256"
+                 },
+                 {
+                  "key": "step",
+                  "static_value": "4"
+                 }
+                ],
+                "children": null
+               },
+               {
+                "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Field[0]/Text[0]",
+                "component": "Text",
+                "props": [
+                 {
+                  "key": "text",
+                  "dynamic_value": {
+                   "path": "form.bins"
+                  }
+                 },
+                 {
+                  "key": "tone",
+                  "static_value": "muted"
+                 },
+                 {
+                  "key": "size",
+                  "static_value": "sm"
+                 }
+                ],
+                "children": null
+               }
+              ]
+             },
+             {
+              "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Button[0]",
+              "component": "Button",
+              "props": [
+               {
+                "key": "label",
+                "static_value": "Measure"
+               },
+               {
+                "key": "fullWidth",
+                "static_value": "true"
+               },
+               {
+                "key": "disabled",
+                "dynamic_value": {
+                 "path": "run.running"
+                }
+               },
+               {
+                "key": "onClick",
+                "declares_value": "run",
+                "agent_call": {
+                 "dependency": "self",
+                 "operation": "intensity_histogram",
+                 "arguments": [
+                  {
+                   "key": "dataset",
+                   "value_path": "args.dataset"
+                  },
+                  {
+                   "key": "bins",
+                   "value_path": "form.bins"
+                  }
+                 ]
+                }
+               }
+              ],
+              "children": null
+             },
+             {
+              "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Progress[0]",
+              "component": "Progress",
+              "props": [
+               {
+                "key": "value",
+                "dynamic_value": {
+                 "path": "run.progress"
+                }
+               }
+              ],
+              "children": null
+             },
+             {
+              "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Text[0]",
+              "component": "Text",
+              "props": [
+               {
+                "key": "text",
+                "dynamic_value": {
+                 "path": "run.message"
+                }
+               },
+               {
+                "key": "tone",
+                "static_value": "muted"
+               },
+               {
+                "key": "size",
+                "static_value": "sm"
+               }
+              ],
+              "children": null
+             },
+             {
+              "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Text[1]",
+              "component": "Text",
+              "props": [
+               {
+                "key": "text",
+                "dynamic_value": {
+                 "path": "run.error"
+                }
+               },
+               {
+                "key": "tone",
+                "static_value": "destructive"
+               },
+               {
+                "key": "size",
+                "static_value": "sm"
+               }
+              ],
+              "children": null
+             },
+             {
+              "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Chart[0]",
+              "component": "Chart",
+              "props": [
+               {
+                "key": "type",
+                "static_value": "bar"
+               },
+               {
+                "key": "data",
+                "dynamic_value": {
+                 "path": "run.result"
+                }
+               },
+               {
+                "key": "categoryKey",
+                "static_value": "name"
+               },
+               {
+                "key": "series",
+                "static_value": "[{\"key\": \"count\", \"label\": \"Values\"}]"
+               },
+               {
+                "key": "height",
+                "static_value": "280"
+               }
+              ],
+              "children": null
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "catalog": null,
+    "description": "A dataset next to the histogram of its intensities.",
+    "demo_state": {
+     "args": {
+      "dataset": null
+     },
+     "form": {
+      "bins": 32
+     },
+     "run": {
+      "status": "idle",
+      "running": false,
+      "done": false,
+      "failed": false,
+      "progress": 0,
+      "message": "",
+      "error": "",
+      "result": null,
+      "returns": {}
+     }
+    },
+    "context": "HTML",
+    "default": false,
+    "for_model": null,
+    "for_node": null,
+    "args": [
+     {
+      "key": "dataset",
+      "label": null,
+      "kind": "STRUCTURE",
+      "description": null,
+      "identifier": "@mikro/arraydataset",
+      "nullable": false,
+      "effects": [],
+      "validators": [],
+      "default": null,
+      "widget": {
+       "kind": "SEARCH",
+       "query": "query SearchArrayDatasets($search: String, $values: [ID!], $limit: Int, $offset: Int = 0) {\n  options: arrayDatasets(\n    filters: {search: $search, ids: $values}\n    pagination: {limit: $limit, offset: $offset}\n  ) {\n    value: id\n    label: name\n    __typename\n  }\n}",
+       "ward": "mikro",
+       "filters": null,
+       "dependencies": []
+      },
+      "requires": null
+     }
+    ]
+   }
+  ]
  }
 }

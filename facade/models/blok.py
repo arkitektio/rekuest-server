@@ -6,6 +6,8 @@ from authentikate.models import App
 
 from rekuest_core.inputs.models import ActionDependencyInputModel, StateDependencyInputModel
 
+from .action import BasePort, port_indexes
+
 
 class Dashboard(models.Model):
     # Declared for the type checker: Django adds these (a foreign key's id column, a
@@ -32,6 +34,7 @@ class Blok(models.Model):
     # reverse relation's manager) without saying so in a way it can read.
     app_id: int | None
     dependencies: "models.Manager[BlokDependency]"
+    arg_ports: "models.Manager[BlokArgPort]"
     organization = models.ForeignKey(
         "authentikate.Organization",
         on_delete=models.CASCADE,
@@ -57,6 +60,7 @@ class Blok(models.Model):
     context = models.CharField(max_length=16, default="HTML", db_default="HTML", help_text="The renderer for this Blok's root (rekuest_core ComponentContext): HTML, or SCENE for a full 3D view.")
     for_model = models.CharField(max_length=71, null=True, blank=True, db_index=True, help_text="The model reference ('sha256:...') this Blok decorates, if any. Viewers showing that model offer the Blok at `for_node`.")
     for_node = models.CharField(max_length=1000, null=True, blank=True, help_text="The node of `for_model` this Blok attaches to; the model's root when NULL.")
+    args = models.JSONField(default=list, db_default=[], help_text="The items this Blok is opened for: its declared arg ports (rekuest_core ArgPortInput), read under `@args.<key>`. Matched through its BlokArgPort rows.")
     diagnostics = models.JSONField(default=list, help_text="Non-fatal registration findings (rekuest_core Diagnostic), e.g. manifest util calls naming operations that neither the base catalog nor this blok's catalog provides. Replaced on every write.", db_default=[])
     app = models.ForeignKey(
         App,
@@ -75,6 +79,24 @@ class Blok(models.Model):
             models.UniqueConstraint(fields=["organization", "name"], condition=models.Q(app__isnull=True), name="unique_blok_name_per_organization"),
             models.UniqueConstraint(fields=["organization", "app", "name", "declaration_hash"], condition=models.Q(app__isnull=False), name="blok_unique_provided"),
         ]
+
+
+class BlokArgPort(BasePort):
+    """A Blok's arg port as a row, so ``demands`` find the bloks an item opens in the way they find actions."""
+
+    # Declared for the type checker: Django adds these (a foreign key's id column, a
+    # reverse relation's manager) without saying so in a way it can read.
+    blok_id: int
+    parent_id: int | None
+
+    blok = models.ForeignKey(Blok, on_delete=models.CASCADE, related_name="arg_ports")
+    parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children", help_text="If this port is nested inside a LIST or DICT")
+
+    class Meta:
+        indexes = port_indexes("blok")
+
+    def __str__(self) -> str:
+        return f"Blok arg: {self.key_path} ({self.identifier})"
 
 
 class BlokDependency(models.Model):

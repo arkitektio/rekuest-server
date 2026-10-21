@@ -16,16 +16,17 @@ import typing as t
 
 from facade import models
 from facade.descriptors import compile_descriptors_to_jsonpath
-from rekuest_core.inputs.models import DefinitionInputModel, ImplementationInputModel
+from rekuest_core.inputs.models import BlokImplementationInputModel, DefinitionInputModel, ImplementationInputModel
 
 
-def _ports(port_datas: t.Sequence[t.Any], action: models.Action, port_model: type, descriptor_field: str) -> None:
-    """The port tree as rows, parents before children (``key_path`` dotted from the root)."""
+def _ports(port_datas: t.Sequence[t.Any], owner: dict[str, t.Any], port_model: type, descriptor_field: str) -> None:
+    """The port tree as rows of ``owner`` (``{"action": ...}``, ``{"blok": ...}``), parents before
+    children (``key_path`` dotted from the root)."""
 
     def build(port_data: t.Any, parent: t.Any, index: int, parent_path: str) -> tuple:
         path = f"{parent_path}.{port_data.key}" if parent_path else port_data.key
         row = port_model(
-            action=action,
+            **owner,
             parent=parent,
             index=index,
             key=port_data.key,
@@ -48,11 +49,27 @@ def rebuild_relational_ports(action: models.Action, definition: DefinitionInputM
     """Replace the action's ArgPort/ReturnPort rows and root counts from its definition."""
     action.arg_ports.all().delete()
     action.return_ports.all().delete()
-    _ports(definition.args, action, models.ArgPort, "requires")
-    _ports(definition.returns, action, models.ReturnPort, "provides")
+    _ports(definition.args, {"action": action}, models.ArgPort, "requires")
+    _ports(definition.returns, {"action": action}, models.ReturnPort, "provides")
     action.arg_count = len(definition.args or [])
     action.return_count = len(definition.returns or [])
     action.save(update_fields=["arg_count", "return_count"])
+
+
+def create_blok(organization: t.Any, creator: t.Any, name: str, args: t.Sequence[dict] = (), **fields: t.Any) -> models.Blok:
+    """A blok with its declared args stored and as BlokArgPort rows, as takt registers them."""
+    declared = BlokImplementationInputModel(key=name, components=[], args=list(args))
+    catalog = models.UICatalog.objects.get_or_create(name="orkestrator", organization=organization)[0]
+    blok = models.Blok.objects.create(
+        name=name,
+        organization=organization,
+        creator=creator,
+        catalog=catalog,
+        args=declared.model_dump(mode="json")["args"],
+        **fields,
+    )
+    _ports(declared.args, {"blok": blok}, models.BlokArgPort, "requires")
+    return blok
 
 
 def create_implementation(input: ImplementationInputModel, agent: models.Agent) -> models.Implementation:

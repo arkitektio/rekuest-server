@@ -149,12 +149,22 @@ def fork_blok(info: Info, input: inputs.ForkBlokInput) -> types.Blok:
         context=provided.context,
         for_model=provided.for_model,
         for_node=provided.for_node,
+        args=provided.args,
         diagnostics=provided.diagnostics,
     )
     for dependency in provided.dependencies.all():
         dependency.pk = None
         dependency.blok = blok
         dependency.save()
+    # Rows are written parents first, so in id order every parent is copied before its children.
+    copies: dict[int, models.BlokArgPort] = {}
+    for port in provided.arg_ports.order_by("id"):
+        source_id, parent_id = port.pk, port.parent_id
+        port.pk = None
+        port.blok = blok
+        port.parent = None if parent_id is None else copies[parent_id]
+        port.save()
+        copies[source_id] = port
     return cast("types.Blok", blok)
 
 

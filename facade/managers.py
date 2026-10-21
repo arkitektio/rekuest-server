@@ -47,7 +47,7 @@ class PortDemand:
 
 
 # =========================================================================
-# Relational port-matching engine (Actions only)
+# Relational port-matching engine (Actions, and Blok args)
 #
 # Actions flatten their ports into the indexed ``facade_argport`` /
 # ``facade_returnport`` tables (see facade.mutations.implementation). Matching
@@ -63,6 +63,22 @@ class PortDemand:
 PORT_TABLE = {"args": "facade_argport", "returns": "facade_returnport"}
 
 
+@dataclass(frozen=True)
+class PortOwner:
+    """A row that owns relational port rows: the table it lives in, the column its port rows
+    point back with, its port tables by demand type, and the root counts it keeps itself."""
+
+    table: str
+    column: str
+    port_tables: dict[str, str]
+    count_columns: dict[str, str] | None = None
+
+
+ACTION_PORTS = PortOwner("facade_action", "action_id", PORT_TABLE, {"args": "arg_count", "returns": "return_count"})
+#: A blok's args (``facade_blokargport``): the items it is opened for. A blok has no returns.
+BLOK_PORTS = PortOwner("facade_blok", "blok_id", {"args": "facade_blokargport"})
+
+
 def _build_match_exists(
     match: PortMatchInputModel,
     table: str,
@@ -70,6 +86,7 @@ def _build_match_exists(
     parent_alias: str | None,
     id_path: str,
     params: Params,
+    owner_column: str = "action_id",
 ) -> str:
     """Build one correlated ``EXISTS`` clause for a single match.
 
@@ -84,7 +101,7 @@ def _build_match_exists(
     conditions: list[str] = []
 
     if parent_alias is None:
-        conditions.append(f"{alias}.action_id = {action_alias}.id")
+        conditions.append(f"{alias}.{owner_column} = {action_alias}.id")
         conditions.append(f"{alias}.parent_id IS NULL")
     else:
         conditions.append(f"{alias}.parent_id = {parent_alias}.id")
@@ -141,16 +158,16 @@ def _build_match_exists(
         conditions.append(f"({alias}.compiled_jsonpath IS NULL OR jsonb_path_match(%({key})s::jsonb, {alias}.compiled_jsonpath::jsonpath, '{{}}'::jsonb, true))")
 
     for child_index, child in enumerate(match.children or []):
-        conditions.append(_build_match_exists(child, table, action_alias, alias, f"{id_path}_{child_index}", params))
+        conditions.append(_build_match_exists(child, table, action_alias, alias, f"{id_path}_{child_index}", params, owner_column))
 
     inner = " AND ".join(conditions)
     return f"EXISTS (SELECT 1 FROM {table} {alias} WHERE {inner})"
 
 
-def _root_count_subquery(table: str, action_alias: str, extra_condition: str, param_key: str, value: int, params: Params) -> str:
-    """Build a ``(SELECT COUNT(*) ...) = N`` clause over an action's root ports."""
+def _root_count_subquery(table: str, action_alias: str, extra_condition: str, param_key: str, value: int, params: Params, owner_column: str = "action_id") -> str:
+    """Build a ``(SELECT COUNT(*) ...) = N`` clause over an action's (or another owner's) root ports."""
     params[param_key] = value
-    return f"(SELECT COUNT(*) FROM {table} pc WHERE pc.action_id = {action_alias}.id AND pc.parent_id IS NULL AND {extra_condition}) = %({param_key})s"
+    return f"(SELECT COUNT(*) FROM {table} pc WHERE pc.{owner_column} = {action_alias}.id AND pc.parent_id IS NULL AND {extra_condition}) = %({param_key})s"
 
 
 def _execute_ids(sql: str, params: Params) -> list[int]:
@@ -177,8 +194,9 @@ def _demand_kind(kind: str) -> t.Literal["args", "returns"]:
 def _port_demand_sql(
     demands: t.Sequence[PortDemand],
     organization_id: int | str | None = None,
+    owner: PortOwner = ACTION_PORTS,
 ) -> tuple[str, Params]:
-    """Build the (sql, named params) selecting facade_action ids satisfying EVERY demand."""
+    """Build the (sql, named params) selecting the owner's ids (facade_action by default) satisfying EVERY demand."""
     action_alias = "a"
     clauses: list[str] = []
     params: Params = {}
@@ -188,27 +206,31 @@ def _port_demand_sql(
         clauses.append(f"{action_alias}.organization_id = %(org)s")
 
     for demand_index, demand in enumerate(demands):
-        table = PORT_TABLE[demand.kind]
+        table = owner.port_tables.get(demand.kind)
+        if table is None:
+            raise ValueError(f"{owner.table} rows have no {demand.kind} ports to demand: only {', '.join(sorted(owner.port_tables))}")
 
         for match_index, match in enumerate(demand.matches or []):
-            clauses.append(_build_match_exists(match, table, action_alias, None, f"{demand_index}_{match_index}", params))
+            clauses.append(_build_match_exists(match, table, action_alias, None, f"{demand_index}_{match_index}", params, owner.column))
 
         if demand.force_length is not None:
-            column = "arg_count" if table == PORT_TABLE["args"] else "return_count"
             key = f"force_length_{demand_index}"
-            params[key] = demand.force_length
-            clauses.append(f"{action_alias}.{column} = %({key})s")
+            if owner.count_columns is not None:
+                params[key] = demand.force_length
+                clauses.append(f"{action_alias}.{owner.count_columns[demand.kind]} = %({key})s")
+            else:
+                clauses.append(_root_count_subquery(table, action_alias, "TRUE", key, demand.force_length, params, owner.column))
 
         if demand.force_non_nullable_length is not None:
-            clauses.append(_root_count_subquery(table, action_alias, "pc.nullable = false", f"force_non_nullable_{demand_index}", demand.force_non_nullable_length, params))
+            clauses.append(_root_count_subquery(table, action_alias, "pc.nullable = false", f"force_non_nullable_{demand_index}", demand.force_non_nullable_length, params, owner.column))
 
         if demand.force_structure_length is not None:
-            clauses.append(_root_count_subquery(table, action_alias, "pc.kind = 'STRUCTURE'", f"force_structure_{demand_index}", demand.force_structure_length, params))
+            clauses.append(_root_count_subquery(table, action_alias, "pc.kind = 'STRUCTURE'", f"force_structure_{demand_index}", demand.force_structure_length, params, owner.column))
 
     if not clauses:
         raise ValueError("No search params provided")
 
-    sql = f"SELECT {action_alias}.id FROM facade_action {action_alias} WHERE " + " AND ".join(clauses)
+    sql = f"SELECT {action_alias}.id FROM {owner.table} {action_alias} WHERE " + " AND ".join(clauses)
     return sql, params
 
 
@@ -238,6 +260,17 @@ def get_action_port_demand_subquery(
     unselective demands).
     """
     sql, params = _port_demand_sql(demands, organization_id=organization_id)
+    positional_sql, positional_params = _to_positional(sql, params)
+    return RawSQL(positional_sql, positional_params)
+
+
+def get_blok_port_demand_subquery(
+    demands: t.Sequence[PortDemand],
+    organization_id: int | str | None = None,
+) -> RawSQL:
+    """The bloks whose args satisfy every demand -- the bloks an item opens in -- as a ``RawSQL``
+    id subquery over ``facade_blok``. Same engine as actions, so ``requires`` is honoured."""
+    sql, params = _port_demand_sql(demands, organization_id=organization_id, owner=BLOK_PORTS)
     positional_sql, positional_params = _to_positional(sql, params)
     return RawSQL(positional_sql, positional_params)
 

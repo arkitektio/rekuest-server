@@ -632,6 +632,7 @@ class BlokImplementationInput:
     default: bool = False
     for_model: Optional[str] = None
     for_node: Optional[str] = None
+    args: list[ArgPortInput] = strawberry.field(default_factory=list)
 
 
 @pydantic.input(models.CatalogPropInputModel, description="A prop a catalog component accepts.")
