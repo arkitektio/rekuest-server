@@ -2,10 +2,9 @@ name: takt
 
 # takt writes the schema this repository's migrations define, so every push tests the pair:
 # the Rust workspace against a database this checkout migrated, and the conformance suite
-# against both images built from this checkout.
+# against both images built from this checkout. A push to main or next runs it through the
+# release, which calls it, so it is not triggered by the push a second time.
 on:
-  push:
-    branches: [main, next]
   pull_request:
     branches: [main, next]
   # The release calls this: no image of either program is published unless the pair passed.

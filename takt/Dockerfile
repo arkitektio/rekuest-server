@@ -7,12 +7,20 @@ ARG EMBEDDINGS_MODEL=minishlab/potion-base-8M
 COPY scripts/bake-embeddings.sh /bake-embeddings.sh
 RUN /bake-embeddings.sh bake "$EMBEDDINGS_MODEL" /opt/models/embeddings
 
-# The build stage runs on the builder's own architecture and cross-compiles for the target.
+# The build stages run on the builder's own architecture and cross-compile for the target.
 # Compiling Rust under emulation kept the arm64 leg of a release busy for the better part of
 # an hour, and the image is only published once every platform is built.
-FROM --platform=$BUILDPLATFORM rust:1.93-slim AS build
-ARG TARGETARCH
+# cargo-chef's image is rust:1.93-slim with `cargo chef` in it.
+FROM --platform=$BUILDPLATFORM lukemathwalker/cargo-chef:0.1.73-rust-1.93-slim AS chef
 WORKDIR /src
+
+# What the workspace depends on, as a recipe: it changes only when a manifest or the lock does.
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS build
+ARG TARGETARCH
 RUN set -eu; \
     case "$TARGETARCH" in \
       amd64) triple=x86_64-unknown-linux-gnu; gnu=x86_64-linux-gnu; packages="gcc-x86-64-linux-gnu libc6-dev-amd64-cross" ;; \
@@ -27,6 +35,10 @@ RUN set -eu; \
       rm -rf /var/lib/apt/lists/*; \
       printf '[target.%s]\nlinker = "%s-gcc"\n' "$triple" "$gnu" >> "$CARGO_HOME/config.toml"; \
     fi
+# The dependencies, compiled in a layer of their own: a change to takt's own code reuses it
+# (the release caches it per platform), so only the workspace's crates are compiled again.
+COPY --from=planner /src/recipe.json recipe.json
+RUN cargo chef cook --release --target "$(cat /triple)" --recipe-path recipe.json
 COPY . .
 ARG EMBEDDINGS_MODEL=minishlab/potion-base-8M
 RUN scripts/bake-embeddings.sh check "$EMBEDDINGS_MODEL"

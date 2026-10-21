@@ -128,20 +128,11 @@ jobs:
         if: failure()
         run: docker ps -a
 
-  # 1. Run the suite, then let python-semantic-release decide the next version
-  #    from the conventional-commit history, tag HEAD (vX.Y.Z on main /
-  #    vX.Y.Z-rc.N on next) and cut a GitHub Release with generated notes.
-  release:
-    needs: [takt, hub]
+  # 1. The server's suite, beside the pair and the hub: it needs nothing they build.
+  tests:
     runs-on: ubuntu-latest
-    outputs:
-      released: ${{ steps.release.outputs.released }}
-      version: ${{ steps.release.outputs.version }}
-      tag: ${{ steps.release.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # semantic-release needs the full history + tags
 
       - name: Install uv and set the python version
         uses: astral-sh/setup-uv@v6
@@ -155,10 +146,10 @@ jobs:
       # The integration suite brings a docker-compose stack up per test through
       # dokker, so one run pulls its base images (postgres, redis, ...) dozens of
       # times. Anonymous Docker Hub pulls are rate limited per source IP, and a
-      # test step that trips the limit fails the release job -- which then cuts
-      # no version and skips the image build, a release that silently does
-      # nothing. Authenticate with the credentials the docker job already uses.
-      # Best effort: raising the pull limit is an optimisation, so a repo with no
+      # test step that trips the limit fails the release -- which then cuts no
+      # version and publishes no image, a release that silently does nothing.
+      # Authenticate with the credentials the image jobs already use. Best
+      # effort: raising the pull limit is an optimisation, so a repo with no
       # DOCKERHUB_* secrets configured must not have its release blocked by it.
       # Anonymous pulls still work, they are just rate limited.
       - name: Login to Docker Hub (avoids anonymous pull limits in the test stacks)
@@ -170,6 +161,147 @@ jobs:
 
       - name: Run tests
         run: uv run pytest
+
+  # 2. The images of the version this commit would release, built beside the gates and
+  #    pushed under a candidate tag only (`candidate-<sha>`): nothing pulls those. Once the
+  #    gates pass and the version is tagged, `docker` gives them their release tags, which
+  #    is a registry copy of seconds instead of a build. Two images, one version: the
+  #    server (GraphQL, migrations) and takt (the agent protocol, takt/), which writes the
+  #    schema this server migrates and is only ever run beside the server of the same
+  #    release. A commit that releases nothing builds nothing here.
+  images:
+    runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.version.outputs.released }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # semantic-release needs the full history + tags
+
+      # The version `release` will tag, decided without tagging anything.
+      - name: The version this commit releases
+        id: version
+        uses: python-semantic-release/python-semantic-release@v10
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          no_operation_mode: true
+          commit: false
+          tag: false
+          push: false
+          changelog: false
+          vcs_release: false
+
+      - name: Set up QEMU
+        if: steps.version.outputs.released == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.version.outputs.released == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        if: steps.version.outputs.released == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # The labels of the release (its version among them); the tag is the candidate's.
+      - name: Docker meta (the release's labels)
+        if: steps.version.outputs.released == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: jhnnsrs/rekuest
+          tags: type=raw,value=candidate-${{ github.sha }}
+          labels: org.opencontainers.image.version=${{ steps.version.outputs.version }}
+
+      # What the service is, stamped into the image as a label: an installer reads it from the
+      # registry instead of pulling the image to run it.
+      - name: Describe the service as an image label
+        if: steps.version.outputs.released == 'true'
+        id: describe
+        uses: arkitektio/arkitekt-service/.github/actions/describe-label@v7.1.2
+        with:
+          service: rekuest.contract
+
+      - name: Build and push the server candidate
+        if: steps.version.outputs.released == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            ${{ steps.describe.outputs.label }}
+          # Where the image's code came from: `arkitekt-service describe` says it (`source`),
+          # so that an installer can run the service from a checkout of this commit.
+          build-args: |
+            ARKITEKT_SOURCE_REPOSITORY=${{ github.server_url }}/${{ github.repository }}
+            ARKITEKT_SOURCE_REVISION=${{ github.sha }}
+
+      - name: Docker meta for takt (the release's labels)
+        if: steps.version.outputs.released == 'true'
+        id: takt-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: jhnnsrs/rekuest-takt
+          tags: type=raw,value=candidate-${{ github.sha }}
+          labels: org.opencontainers.image.version=${{ steps.version.outputs.version }}
+
+      # takt's Dockerfile cross-compiles: the Rust build runs on the runner's own
+      # architecture for both platforms, with its dependencies in a layer of their own
+      # (cargo-chef) that this cache keeps per platform. Emulation is only used for the
+      # final stage.
+      - name: Build and push the takt candidate
+        if: steps.version.outputs.released == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: takt
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.takt-meta.outputs.tags }}
+          labels: ${{ steps.takt-meta.outputs.labels }}
+          cache-from: type=gha,scope=takt
+          cache-to: type=gha,scope=takt,mode=max
+
+  # 3. Once every gate passed: let python-semantic-release decide the next version
+  #    from the conventional-commit history, tag HEAD (vX.Y.Z on main /
+  #    vX.Y.Z-rc.N on next) and cut a GitHub Release with generated notes.
+  release:
+    needs: [takt, hub, tests, images]
+    runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.release.outputs.released }}
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # semantic-release needs the full history + tags
+
+      # The candidates carry the version `images` decided as their label: a release tagged
+      # under another version (a tag pushed in between) would publish them mislabelled.
+      - name: The version the candidates were built for
+        id: decided
+        uses: python-semantic-release/python-semantic-release@v10
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          no_operation_mode: true
+          commit: false
+          tag: false
+          push: false
+          changelog: false
+          vcs_release: false
+
+      - name: Refuse a version the candidates were not built for
+        if: steps.decided.outputs.released != needs.images.outputs.released || steps.decided.outputs.version != needs.images.outputs.version
+        run: |
+          echo "The images were built for '${{ needs.images.outputs.version }}' (released: ${{ needs.images.outputs.released }}), but this commit now releases '${{ steps.decided.outputs.version }}' (released: ${{ steps.decided.outputs.released }}). Run the workflow again." >&2
+          exit 1
 
       - name: Python Semantic Release
         id: release
@@ -187,7 +319,7 @@ jobs:
 
       # Append the Docker image pull instructions and a contributors list to the
       # freshly-created Release. This only needs the version + git history, so it
-      # does not wait on the image build — the docker job (and its registry tags)
+      # does not wait on the image tags — the docker job (and its registry tags)
       # come from the same version.
       - name: Enrich the GitHub Release notes
         if: steps.release.outputs.released == 'true'
@@ -217,13 +349,9 @@ jobs:
             printf '## Contributors\n\n%s\n' "$contributors"
           } | gh release edit "$TAG" --notes-file -
 
-  # 2. Only if a release was actually cut: build the images at the new tag and
-  #    push them under the semver "multi-tag" regime. Two images, one version: the
-  #    server (GraphQL, migrations) and takt (the agent protocol, takt/), which
-  #    writes the schema this server migrates and is only ever run beside the server
-  #    of the same release. metadata-action expands the
-  #    tag into the full set, and automatically skips the moving major/minor/
-  #    latest tags for prereleases:
+  # 4. Only if a release was actually cut: give the candidates their release tags under
+  #    the semver "multi-tag" regime. metadata-action expands the tag into the full set,
+  #    and automatically skips the moving major/minor/latest tags for prereleases:
   #      v1.2.3       -> 1.2.3, 1.2, 1, latest
   #      v1.2.3-rc.1  -> 1.2.3-rc.1
   docker:
@@ -231,14 +359,6 @@ jobs:
     if: needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout the released tag
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.release.outputs.tag }}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -259,36 +379,6 @@ jobs:
           flavor: |
             latest=${{ github.ref_name == 'main' }}
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      # What the service is, stamped into the image as a label: an installer reads it from the
-      # registry instead of pulling the image to run it.
-      - name: Describe the service as an image label
-        id: describe
-        uses: arkitektio/arkitekt-service/.github/actions/describe-label@v7.1.2
-        with:
-          service: rekuest.contract
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: |
-            ${{ steps.meta.outputs.labels }}
-            ${{ steps.describe.outputs.label }}
-          # Where the image's code came from: `arkitekt-service describe` says it (`source`),
-          # so that an installer can run the service from a checkout of this commit.
-          build-args: |
-            ARKITEKT_SOURCE_REPOSITORY=${{ github.server_url }}/${{ github.repository }}
-            ARKITEKT_SOURCE_REVISION=${{ github.sha }}
-
       - name: Docker meta for takt (the same tags)
         id: takt-meta
         uses: docker/metadata-action@v5
@@ -302,15 +392,26 @@ jobs:
           flavor: |
             latest=${{ github.ref_name == 'main' }}
 
-      # takt's Dockerfile cross-compiles: the Rust build runs on the runner's own
-      # architecture for both platforms. Emulation is only used for the final stage.
-      - name: Build and push takt
-        uses: docker/build-push-action@v5
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
         with:
-          context: takt
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.takt-meta.outputs.tags }}
-          labels: ${{ steps.takt-meta.outputs.labels }}
-          cache-from: type=gha,scope=takt
-          cache-to: type=gha,scope=takt,mode=max
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Both platforms' manifests, as built and labelled, under every release tag.
+      - name: Tag the candidates as the release
+        env:
+          SERVER_TAGS: ${{ steps.meta.outputs.tags }}
+          TAKT_TAGS: ${{ steps.takt-meta.outputs.tags }}
+          CANDIDATE: candidate-${{ github.sha }}
+        run: |
+          retag() {
+            source="$1"; shift
+            args=()
+            while IFS= read -r tag; do
+              [ -n "$tag" ] && args+=(--tag "$tag")
+            done <<< "$1"
+            docker buildx imagetools create "${args[@]}" "$source"
+          }
+          retag "jhnnsrs/rekuest:$CANDIDATE" "$SERVER_TAGS"
+          retag "jhnnsrs/rekuest-takt:$CANDIDATE" "$TAKT_TAGS"
