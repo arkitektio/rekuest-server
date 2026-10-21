@@ -79,3 +79,38 @@ async def test_every_register_states_the_supervisor(agents, graphql) -> None:  #
     await unsupervised.register("conf_66", session_id=session_id())
     await unsupervised.close()
     assert (await api(query, id=agent_id))["agent"]["supervisor"] is None
+
+
+def _attach(protocols: list[str] | None) -> dict:
+    """One `attach(scene: str)` implementation, hinted as `protocols` when given."""
+    definition = {"key": "attach", "version": "1", "name": "Attach", "kind": "FUNCTION",
+                  "args": [{"key": "scene", "kind": "STRING", "nullable": False}], "returns": []}
+    if protocols is not None:
+        definition["protocols"] = protocols
+    return {"interface": "attach", "definition": definition}
+
+
+async def test_protocol_hints_register_and_find_the_agent(agents, graphql) -> None:  # noqa: ANN001
+    """A definition's protocol hints land with the registration: the agent is found by them
+    (`implementsProtocols`), its implementation filters by them, and a reconnect that changes
+    only the hints (and so the agent's hash, never the action's) rewrites them."""
+    api = graphql("conf_67")
+    find = "query ($p: [String!]!) { agents(filters: {implementsProtocols: $p}) { id } }"
+    hooks = """query ($id: ID!, $p: [String!]!) {
+        implementations(filters: {agent: {ids: [$id]}, action: {protocols: $p}}) { interface action { hash protocols { name } } }
+    }"""
+
+    first = await agents()
+    agent_id = (await first.register("conf_67", session_id=session_id(), hash="hints-1", implementations=[_attach(["on_scene_init"])]))["agent"]
+    await first.close()
+    assert agent_id in [a["id"] for a in (await api(find, p=["on_scene_init"]))["agents"]]
+    (listed,) = (await api(hooks, id=agent_id, p=["on_scene_init"]))["implementations"]
+    assert [p["name"] for p in listed["action"]["protocols"]] == ["on_scene_init"]
+
+    again = await agents()
+    await again.register("conf_67", session_id=session_id(), hash="hints-2", implementations=[_attach(["on_scene_leave"])])
+    await again.close()
+    assert (await api(hooks, id=agent_id, p=["on_scene_init"]))["implementations"] == []
+    (moved,) = (await api(hooks, id=agent_id, p=["on_scene_leave"]))["implementations"]
+    assert moved["action"]["hash"] == listed["action"]["hash"], "a hint is not the action's identity"
+

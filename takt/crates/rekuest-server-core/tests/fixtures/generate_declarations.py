@@ -101,10 +101,14 @@ BROKEN = {
     "EXISTS takes no value": impl(returns=[port("s", "STRUCTURE", identifier="@a/b", provides=[{"key": "k", "operator": "EXISTS", "value": 3}])]),
     "test target empty": impl(is_test_for=[{}]),
     "unknown definition field": impl(bogus=1),
+    "protocol hint with whitespace": impl(protocols=["on scene"]),
+    "protocol hint empty": impl(protocols=[""]),
+    "protocol hint twice": impl(protocols=["on_scene_init", "on_scene_init"]),
     "proxy undeclared dependency": impl(args=[port("s", "STRING", widget={"kind": "PROXY", "target_port": "p", "target_action": "a", "target_dependency": "d"})]),
 }
 
 VALID_EXTRA = {
+    "protocol hints": impl(protocols=["on_scene_annotation", "on_scene_init"]),
     "quantity canonicalized": impl(args=[port("q", "QUANTITY", reference_unit="mV", proposed_units=["V", "kV"])]),
     "rich widgets": impl(
         args=[

@@ -173,6 +173,17 @@ closes like any other malformed frame (3003).
 The registration runs inline in the handshake; it is sub-second, and no heartbeat is pending
 before `Init`.
 
+**Protocol hints.** A definition may carry `protocols: ["on_scene_annotation", …]`: names of
+where the action means to hook in. They are hints for whoever fires that hook (it finds agents
+with `AgentFilter.implementsProtocols` and still matches the ports itself), never a contract:
+nothing checks the ports against them. The action is listed under them beside the protocols
+inferred from its ports (`predicate`, `hook`, `agent`); a declared name an inference also
+writes keeps the inference's description. They are not part of `unique_hash`, so the action
+keeps its hash, and its protocol rows are rewritten on every registration that reconciles, not
+only when the definition changed. The agent's own hash covers them, so a change to the hints
+alone does reconcile. An agent that hints nothing sends no `protocols` field: a takt that
+predates hints refuses the field (`deny_unknown_fields`, 3003), so hints need this takt.
+
 Shelving is a request/reply pair: `Shelve{ref, identifier, resource_id, label, description}` →
 `Shelved{ref, drawer}` records a value the agent holds in memory; `Unshelve{ref, drawer}` →
 `Unshelved{ref}` drops it, correlated by the client-minted `ref` and answering with `error`

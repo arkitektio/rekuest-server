@@ -257,6 +257,11 @@ pub struct DefinitionInputModel {
     pub is_dev: bool,
     #[serde(default = "empty_catalogs")]
     pub catalogs: Option<Vec<String>>,
+    /// Where the action means to hook in (`on_scene_annotation`): hints a caller
+    /// filters on, stored beside the inferred protocols. Not a contract, and not
+    /// part of `unique_hash`.
+    #[serde(default)]
+    pub protocols: Vec<String>,
 }
 
 /// A port path (`a..b..c`) resolves through `children` from the root ports.
@@ -310,7 +315,34 @@ impl DefinitionInputModel {
         }
         self.check_keys()?;
         self.check_port_groups()?;
+        self.check_protocols()?;
         self.check_dependencies()
+    }
+
+    /// A protocol hint is a name to filter on: one word, said once.
+    fn check_protocols(&self) -> Result<(), ValidationError> {
+        let mut seen: HashSet<&str> = HashSet::new();
+        for protocol in &self.protocols {
+            // `facade_protocol.name` is a varchar(1000).
+            if protocol.is_empty()
+                || protocol.chars().any(char::is_whitespace)
+                || protocol.chars().count() > 1000
+            {
+                return Err(ValidationError(format!(
+                    "Definition {}: a protocol hint is a name without whitespace, got {}",
+                    self.key,
+                    repr_str(protocol)
+                )));
+            }
+            if !seen.insert(protocol.as_str()) {
+                return Err(ValidationError(format!(
+                    "Definition {}: the protocol hint {} is given twice",
+                    self.key,
+                    repr_str(protocol)
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Root arg keys and root return keys are unique, and the two sets do not overlap.

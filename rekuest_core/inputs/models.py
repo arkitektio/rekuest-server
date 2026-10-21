@@ -823,8 +823,24 @@ class DefinitionInputModel(BaseModel):
         default_factory=list,
         description="Names of the UI catalogs (in the registering agent's organization) that extend the base catalog for this definition's effect and validator calls. The base catalog (`base@1`) is always applied and may be named explicitly; naming another base version or a catalog that does not exist yields an unknown_catalog warning. Two catalogs defining the same operation differently is a registration error. An operation no catalog provides is stored as a warning on the implementation.",
     )
+    protocols: list[str] = Field(
+        default_factory=list,
+        description="Where the action means to hook in (`on_scene_annotation`): hints a caller filters on, stored beside the protocols the server infers. Not a contract -- nothing checks the ports against them -- and not part of the action's hash.",
+    )
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def check_protocols(self) -> Self:
+        """A protocol hint is a name to filter on: one word, said once."""
+        for protocol in self.protocols:
+            # `Protocol.name` is a CharField(max_length=1000).
+            if not protocol or len(protocol) > 1000 or any(character.isspace() for character in protocol):
+                raise ValueError(f"Definition {self.key}: a protocol hint is a name without whitespace, got {protocol!r}")
+        twice = sorted({protocol for protocol in self.protocols if self.protocols.count(protocol) > 1})
+        if twice:
+            raise ValueError(f"Definition {self.key}: the protocol hint {twice[0]!r} is given twice")
+        return self
 
     @model_validator(mode="after")
     def check_keys(self) -> Self:

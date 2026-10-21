@@ -260,7 +260,8 @@
       "kind": "GENERATOR",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -348,7 +349,8 @@
       "kind": "GENERATOR",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -883,7 +885,8 @@
       "kind": "GENERATOR",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [
       {
@@ -1094,7 +1097,8 @@
       "kind": "GENERATOR",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [
       {
@@ -1731,7 +1735,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -1819,7 +1824,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -1889,7 +1895,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -1977,7 +1984,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -2083,7 +2091,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -2741,7 +2750,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -2847,7 +2857,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -2935,7 +2946,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -3041,7 +3053,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -3147,7 +3160,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -3235,7 +3249,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -6412,7 +6427,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [
       {
@@ -7180,7 +7196,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [
       {
@@ -7896,7 +7913,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [
       {
@@ -8646,7 +8664,8 @@
       "kind": "GENERATOR",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [
       {
@@ -9500,7 +9519,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -9841,7 +9861,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -10042,7 +10063,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -10394,7 +10416,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -10464,7 +10487,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -10552,7 +10576,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -10622,7 +10647,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -11162,7 +11188,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -11394,7 +11421,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -11464,7 +11492,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -11738,7 +11767,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -11825,7 +11855,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -12271,7 +12302,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -12361,7 +12393,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -12433,7 +12466,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -12919,7 +12953,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [
       {
@@ -13954,7 +13989,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": [],
@@ -14695,6 +14731,78 @@
    "e83303ff879fb7d8f3e9bb3aa744cc4f1cf303024bbcd750a9ab76d6865e6fb7"
   ]
  },
+ "protocol hints": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "protocols": [
+       "on_scene_annotation",
+       "on_scene_init"
+      ]
+     }
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": [
+    {
+     "definition": {
+      "key": "act",
+      "version": "1",
+      "description": null,
+      "collections": [],
+      "name": "Act",
+      "stateful": false,
+      "pure": false,
+      "idempotent": false,
+      "allow_probe": false,
+      "port_groups": [],
+      "args": [],
+      "returns": [],
+      "kind": "FUNCTION",
+      "is_test_for": [],
+      "is_dev": false,
+      "catalogs": [],
+      "protocols": [
+       "on_scene_annotation",
+       "on_scene_init"
+      ]
+     },
+     "dependencies": [],
+     "tracks": null,
+     "interface": "act",
+     "params": null,
+     "instance_id": null,
+     "locks": null,
+     "optimistics": null,
+     "manipulates": null,
+     "needs_token": true,
+     "provenance_audience": null,
+     "effects": "UNKNOWN",
+     "execution": "PLAIN",
+     "code_hash": null,
+     "logo": null
+    }
+   ],
+   "locks": null,
+   "bloks": null,
+   "assets": null,
+   "hash": null
+  },
+  "hashes": [
+   "f2b2860085defd0cbf2dc539a340d7deef051b2d01a028c0e7c42ca4e2ff75dd"
+  ]
+ },
  "quantity canonicalized": {
   "input": {
    "implementations": [
@@ -14764,7 +14872,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": null,
@@ -15197,7 +15306,8 @@
       "kind": "FUNCTION",
       "is_test_for": [],
       "is_dev": false,
-      "catalogs": []
+      "catalogs": [],
+      "protocols": []
      },
      "dependencies": [],
      "tracks": null,
@@ -16449,6 +16559,70 @@
   },
   "error": "Extra inputs are not permitted",
   "error_type": "extra_forbidden"
+ },
+ "protocol hint with whitespace": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "protocols": [
+       "on scene"
+      ]
+     }
+    }
+   ]
+  },
+  "error": "Definition act: a protocol hint is a name without whitespace, got 'on scene'",
+  "error_type": "value_error"
+ },
+ "protocol hint empty": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "protocols": [
+       ""
+      ]
+     }
+    }
+   ]
+  },
+  "error": "Definition act: a protocol hint is a name without whitespace, got ''",
+  "error_type": "value_error"
+ },
+ "protocol hint twice": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "protocols": [
+       "on_scene_init",
+       "on_scene_init"
+      ]
+     }
+    }
+   ]
+  },
+  "error": "Definition act: the protocol hint 'on_scene_init' is given twice",
+  "error_type": "value_error"
  },
  "proxy undeclared dependency": {
   "input": {

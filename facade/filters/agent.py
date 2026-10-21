@@ -20,6 +20,14 @@ SUPERVISOR_DESCRIPTOR = "@rekuest/supervisor"
 """The one descriptor ``@rekuest/agent`` carries: the agent's self-declared supervisor."""
 
 
+def _implementing(protocols: list[str]) -> QuerySet[models.Implementation]:
+    """The ids of the agents with an implementation listed under any of ``protocols``.
+
+    A subquery, not a join: an agent offering several matching hooks is one agent.
+    """
+    return models.Implementation.objects.filter(action__protocols__name__in=protocols).values("agent_id")
+
+
 def _supervisor_q(prefix: str, operator: rcenums.DescriptorOperator, value: object) -> Q:
     """One ``requires`` constraint on ``@rekuest/supervisor``, as a filter.
 
@@ -81,6 +89,10 @@ class AgentFilter:
     @filter_field(description="Filter by implementations of the agents")
     def has_implementations(self, info: Info, queryset: QuerySet[models.Agent], value: list[str], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}implementations__action__hash__in": value}), Q()
+
+    @filter_field(description="The agents with at least one implementation listed under any of these protocols, declared as a hint (`on_scene_annotation`) or inferred. Each agent once, however many of its actions match.")
+    def implements_protocols(self, info: Info, queryset: QuerySet[models.Agent], value: list[str], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+        return queryset.filter(**{f"{prefix}id__in": _implementing(value)}), Q()
 
     @filter_field(description="Filter by states of the agents")
     def has_states(self, info: Info, queryset: QuerySet[models.Agent], value: list[str], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
@@ -198,6 +210,10 @@ class ImplementationAgentFilter:
     @filter_field
     def has_implementations(self, info: Info, queryset: QuerySet[models.Agent], value: list[str], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}implementations__action__hash__in": value}), Q()
+
+    @filter_field
+    def implements_protocols(self, info: Info, queryset: QuerySet[models.Agent], value: list[str], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+        return queryset.filter(**{f"{prefix}id__in": _implementing(value)}), Q()
 
     @filter_field
     def has_states(self, info: Info, queryset: QuerySet[models.Agent], value: list[str], prefix: str) -> tuple[QuerySet[models.Agent], Q]:

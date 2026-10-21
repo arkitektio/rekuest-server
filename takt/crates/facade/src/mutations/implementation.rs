@@ -15,7 +15,7 @@ use super::Refusal;
 use crate::catalog_validation::{collect_diagnostics, dump_diagnostics, Diagnostic};
 use crate::deletion::{delete_actions, delete_dependencies};
 use crate::descriptors::compile_descriptors_to_jsonpath;
-use crate::protocol::infer_protocols;
+use crate::protocol::action_protocols;
 use crate::provenance::audience;
 use crate::signals::{OnCommit, Signal};
 use crate::unique::infer_action_scope;
@@ -736,18 +736,22 @@ pub async fn create_implementation(
         action.port_groups = port_groups;
     }
 
+    // Every register, not only when the definition changed: hints are not part of
+    // the hash, so a change to them alone leaves `definition_changed` false, and it
+    // must still land.
+    let protocols = action_protocols(conn, definition, agent.organization).await?;
+    set_m2m(
+        conn,
+        "facade_action_protocols",
+        "action_id",
+        "protocol_id",
+        action.id,
+        &protocols,
+    )
+    .await?;
+
     if definition_changed || !relational_state_is_current(conn, &action, definition).await? {
         rebuild_relational_ports(conn, &mut action, definition).await?;
-        let protocols = infer_protocols(conn, definition, agent.organization).await?;
-        set_m2m(
-            conn,
-            "facade_action_protocols",
-            "action_id",
-            "protocol_id",
-            action.id,
-            &protocols,
-        )
-        .await?;
         let targets = resolve_test_targets(conn, definition, agent).await?;
         set_m2m(
             conn,
