@@ -311,7 +311,7 @@ class Mutation:
     delete_blok = mutation(resolver=mutations.delete_blok, description="Delete a blok by ID.")
     fork_blok = mutation(resolver=mutations.fork_blok, description="Copy a blok an app provides into a custom blok, to edit it or bind other agents to it. The copy lives on whatever the providing agents do.")
     update_blok = mutation(resolver=mutations.update_blok, description="Update properties of a blok such as its name, description, components, demo state, catalog, or dependencies.")
-    edit_blok = mutation(resolver=mutations.edit_blok, description="Edit the blok a materialization shows, and its bindings there, as one new revision on top of the head the editor read. A provided blok is forked first. With dryRun, every check runs and nothing is kept.")
+    edit_blok = mutation(resolver=mutations.edit_blok, description="Edit a blok as one new revision on top of the head the editor read: on the blok itself (an editor of the blok), or through a materialization, with its bindings there (an assistant at a dashboard). A provided blok is forked first. With dryRun, every check runs and nothing is kept.")
     revert_blok = mutation(resolver=mutations.revert_blok, description="Make an earlier revision's content a custom blok's head again, as a new revision.")
     delete_materialized_blok = mutation(resolver=mutations.delete_materialized_blok, description="Delete a materialized blok by ID.")
     update_materialized_blok = mutation(resolver=mutations.update_materialized_blok, description="Update properties of a materialized blok such as its agent mappings.")

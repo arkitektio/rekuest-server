@@ -58,6 +58,7 @@ EDIT_BLOK = f"""
         editBlok(input: $input) {{
             applied
             forked
+            blok {{ id name provided }}
             revision {{ {REVISION} }}
             materializedBlok {{ id blok {{ id provided }} agentMappings {{ key agent {{ id }} }} }}
             diagnostics {{ message }}
@@ -305,6 +306,55 @@ class TestBlokRevisions:
 
         reverted = (await _run(authenticated_context, REVERT_BLOK, {"input": {"blok": env["blok"], "to": env["head"], "base": edited["revision"]["id"], "task": task}}))["revertBlok"]
         assert reverted["task"] == {"id": task}
+
+    async def test_an_editor_of_the_blok_itself_saves_on_its_head(self, authenticated_context: HttpContext) -> None:
+        env = await _blok_with_two_materializations(authenticated_context)
+
+        saved = (await _run(authenticated_context, EDIT_BLOK, {"input": {"blok": env["blok"], "base": env["head"], "components": TEXT, "dependencies": [{"key": "stage"}], "message": "From the editor"}}))["editBlok"]
+        assert saved["applied"] and not saved["forked"]
+        assert saved["blok"]["id"] == env["blok"] and saved["materializedBlok"] is None
+        assert (saved["revision"]["number"], saved["revision"]["message"]) == (2, "From the editor")
+        # Binding is for each materialization: every one that follows the head now lacks it.
+        for materialized in (env["first"], env["second"]):
+            assert (await _run(authenticated_context, MATERIALIZED, {"id": materialized}))["materializedBlok"]["unboundDependencies"] == ["stage"]
+
+        # An assistant saved meanwhile: the editor, still on revision 1, is refused.
+        message = await _refused(authenticated_context, EDIT_BLOK, {"input": {"blok": env["blok"], "base": env["head"], "demoState": {"x": 1}}})
+        assert "changed since revision 1" in message
+        assert await _revision_count(env["blok"]) == 2
+
+    async def test_a_blok_binds_no_agents_and_an_edit_names_one_target(self, authenticated_context: HttpContext) -> None:
+        env = await _blok_with_two_materializations(authenticated_context)
+        bindings = await _refused(authenticated_context, EDIT_BLOK, {"input": {"blok": env["blok"], "base": env["head"], "agentMappings": []}})
+        assert "binds no agents" in bindings
+        both = await _refused(authenticated_context, EDIT_BLOK, {"input": {"blok": env["blok"], "materializedBlok": env["first"], "base": env["head"]}})
+        neither = await _refused(authenticated_context, EDIT_BLOK, {"input": {"base": env["head"]}})
+        assert "one of the two" in both and "one of the two" in neither
+
+    async def test_an_editor_of_a_provided_blok_saves_a_copy_and_no_materialization(self, authenticated_context: HttpContext) -> None:
+        org, user = authenticated_context.request.organization, authenticated_context.request.user
+
+        @sync_to_async
+        def provided() -> Blok:
+            agent = _agent_in(org, user, "editor-viewer")
+            catalog = UICatalog.objects.get_or_create(name="orkestrator", organization=org)[0]
+            blok = Blok.objects.create(name="viewer", creator=user, organization=org, catalog=catalog, app=agent.app, declaration_hash="b" * 64, components=BOX)
+            MaterializedBlok.objects.create(blok=blok, declared_by=agent, name="viewer", description="")
+            return blok
+
+        blok = await provided()
+        materializations = await sync_to_async(MaterializedBlok.objects.count)()
+
+        checked = (await _run(authenticated_context, EDIT_BLOK, {"input": {"blok": str(blok.id), "components": TEXT, "dryRun": True}}))["editBlok"]
+        assert (checked["applied"], checked["forked"], checked["blok"]["id"]) == (False, True, str(blok.id))
+        assert await sync_to_async(Blok.objects.count)() == 1
+
+        saved = (await _run(authenticated_context, EDIT_BLOK, {"input": {"blok": str(blok.id), "components": TEXT}}))["editBlok"]
+        assert saved["forked"] and saved["materializedBlok"] is None
+        assert saved["blok"]["id"] != str(blok.id) and saved["blok"]["provided"] is False and saved["blok"]["name"] == "viewer"
+        assert saved["revision"]["number"] == 2
+        assert await sync_to_async(MaterializedBlok.objects.count)() == materializations
+        assert _drawn((await sync_to_async(Blok.objects.get)(id=blok.id)).components) == BOX
 
     async def test_deleting_a_blok_takes_its_history(self, authenticated_context: HttpContext) -> None:
         env = await _blok_with_two_materializations(authenticated_context)

@@ -132,16 +132,19 @@ class UpdateBlokInputModel(BaseModel):
     )
 
 
+EDIT_CONTENT = "Use editBlok: it checks the write is made on the head you read, keeps a message with the revision, and has a dry run. updateBlok keeps name and description."
+
+
 @pydantic.input(UpdateBlokInputModel, description="The input for updating a blok. Omitted (null) fields are left unchanged; list fields replace wholesale.")
 class UpdateBlokInput:
     id: strawberry.ID
     name: str | None = None
     description: str | None = None
-    components: list[ritypes.ComponentNodeInput] | None = None
-    source: str | None = None
-    demo_state: scalars.Args | None = None
-    catalog: str | None = None
-    dependencies: list[ritypes.AgentDependencyInput] | None = None
+    components: list[ritypes.ComponentNodeInput] | None = strawberry.field(default=None, deprecation_reason=EDIT_CONTENT)
+    source: str | None = strawberry.field(default=None, deprecation_reason=EDIT_CONTENT)
+    demo_state: scalars.Args | None = strawberry.field(default=None, deprecation_reason=EDIT_CONTENT)
+    catalog: str | None = strawberry.field(default=None, deprecation_reason=EDIT_CONTENT)
+    dependencies: list[ritypes.AgentDependencyInput] | None = strawberry.field(default=None, deprecation_reason=EDIT_CONTENT)
 
 
 @strawberry.input(description="The input for updating a blok.")
@@ -177,16 +180,17 @@ class MaterializeBlokInput:
 
 
 class EditBlokInputModel(BaseModel):
-    """An edit of the blok a materialization shows: the parts given replace the head's."""
+    """An edit of a blok, made on it or through a materialization of it: the parts given replace the head's."""
 
-    materialized_blok: str = Field(description="The materialization the edit is made through. Its bindings are the ones `agent_mappings` changes.")
+    blok: str | None = Field(default=None, description="The blok to edit, as an editor of the blok itself does. Send it or `materialized_blok`, not both.")
+    materialized_blok: str | None = Field(default=None, description="The materialization the edit is made through, which also takes `agent_mappings`. Send it or `blok`, not both.")
     base: str | None = Field(default=None, description="The revision the edit starts from. It must still be the blok's head, or the edit is refused. Required for a custom blok; a provided blok has no revisions and is forked.")
     components: list[rimodels.ComponentNodeInputModel] | None = Field(default=None, description="The full component tree. Kept when omitted.")
     source: str | None = Field(default=None, description="The full component tree as BSX, which the server parses: send it or `components`, not both.")
     demo_state: dict[str, JSON] | None = Field(default=None, description="The full local state. Kept when omitted.")
     catalog: str | None = Field(default=None, description="Name of the UI catalog (in the caller's organization) the blok renders against. Kept when omitted.")
     dependencies: list[rimodels.AgentDependencyInputModel] | None = Field(default=None, description="The full list of agent dependencies. Kept when omitted; keys not listed are removed.")
-    agent_mappings: list[MappedAgentInputModel] | None = Field(default=None, description="Bindings on this materialization, by dependency key, over the ones it has. Bindings of keys the edit removes go.")
+    agent_mappings: list[MappedAgentInputModel] | None = Field(default=None, description="Bindings on `materialized_blok`, by dependency key, over the ones it has. Bindings of keys the edit removes go. Refused with `blok`: a blok binds no agents, its materializations do.")
     message: str | None = Field(default=None, description="What changed and why, in a sentence; kept with the revision.")
     task: str | None = Field(default=None, description="The task making the edit (one the caller's agent runs), kept with the revision.")
     dry_run: bool | None = Field(default=None, description="Check everything and return the findings, keeping nothing. Off when omitted.")
@@ -194,12 +198,17 @@ class EditBlokInputModel(BaseModel):
     @model_validator(mode="after")
     def check_sent_once(self) -> Self:
         rimodels.check_blok_sent_once(self.components, self.source, required=False)
+        if (self.blok is None) == (self.materialized_blok is None):
+            raise ValueError("Edit a blok, or a materialization of it: send `blok` or `materialized_blok`, one of the two.")
+        if self.blok is not None and self.agent_mappings is not None:
+            raise ValueError("A blok binds no agents, its materializations do: send `materialized_blok` with `agent_mappings`.")
         return self
 
 
-@pydantic.input(EditBlokInputModel, description="Edit the blok a materialization shows, and its bindings there, as one new revision.")
+@pydantic.input(EditBlokInputModel, description="Edit a blok, on it or through a materialization of it (and its bindings there), as one new revision.")
 class EditBlokInput:
-    materialized_blok: strawberry.ID
+    blok: strawberry.ID | None = None
+    materialized_blok: strawberry.ID | None = None
     base: strawberry.ID | None = None
     components: list[ritypes.ComponentNodeInput] | None = None
     source: str | None = None

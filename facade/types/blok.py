@@ -265,7 +265,8 @@ class BlokAgentMapping:
 @strawberry.type(description="What an edit of a blok did, or with `dryRun` would do.")
 class BlokEdit:
     applied: bool = strawberry.field(description="Whether anything was written; false for a dry run.")
-    forked: bool = strawberry.field(description="Whether the blok was provided and the edit made a custom copy of it (with a new materialization) to land on.")
+    forked: bool = strawberry.field(description="Whether the blok was provided and the edit made a custom copy of it to land on: `blok` is the copy, and an edit made through a materialization has a new one of it.")
+    blok: Blok = strawberry.field(description="The blok the edit landed on: the one edited, or the custom copy of a provided one. An editor of the blok follows it here.")
     revision: BlokRevision | None = strawberry.field(description="The revision the blok is at after the edit; null for a dry run.")
-    materialized_blok: MaterializedBlok = strawberry.field(description="The materialization that shows the edit: the one it was made through, or the fork's new one.")
+    materialized_blok: MaterializedBlok | None = strawberry.field(description="The materialization that shows the edit: the one it was made through, or the fork's new one. Null for an edit of the blok itself.")
     diagnostics: list[rtypes.Diagnostic] = strawberry.field(description="Non-fatal findings about the new content, e.g. util calls no catalog provides.")

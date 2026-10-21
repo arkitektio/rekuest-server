@@ -211,26 +211,31 @@ def _task_of(caller: CallerContext, task_id: str | None) -> models.Task | None:
 
 @transaction.atomic
 def edit_blok(info: Info, input: inputs.EditBlokInput) -> types.BlokEdit:
-    """Edit the blok a materialization shows, and its bindings there, in one write.
+    """Edit a blok in one write: on the blok itself, or through a materialization with its bindings there.
 
     The edit starts from ``base``, which must still be the blok's head. A provided blok is
-    forked first (its agents' slot is left as it is) and a new materialization of the fork is
-    made, holding the slot's bindings. The new content is checked in full; with ``dry_run``
-    nothing is kept.
+    forked first (its agents' slot is left as it is); an edit made through the slot gets a new
+    materialization of the fork, holding the slot's bindings. The new content is checked in
+    full; with ``dry_run`` nothing is kept.
     """
     model = input.to_pydantic()
     caller = CallerContext.from_info(info)
-    organization = organization_of(info)
-    mblok = scoped_get(models.MaterializedBlok, info, model.materialized_blok, field="blok__organization")
     task = _task_of(caller, model.task)
-
-    provided = mblok.blok.app_id is not None
-    if provided:
+    if model.materialized_blok is not None:
+        mblok = scoped_get(models.MaterializedBlok, info, model.materialized_blok, field="blok__organization")
         blok = mblok.blok
+    elif model.blok is not None:
+        mblok = None
+        blok = scoped_get(models.Blok, info, model.blok, field="organization")
+    else:
+        raise ValueError("Edit a blok, or a materialization of it: send `blok` or `materialized_blok`, one of the two.")
+
+    provided = blok.app_id is not None
+    if provided:
         base = None
     else:
         # Locked from here, so the head cannot move between this check and the write.
-        blok = lock_blok(mblok.blok_id)
+        blok = lock_blok(blok.pk)
         try:
             base = None if model.base is None else blok.revisions.get(id=model.base)
         except models.BlokRevision.DoesNotExist:
@@ -242,32 +247,37 @@ def edit_blok(info: Info, input: inputs.EditBlokInput) -> types.BlokEdit:
     content = _edited(info, blok, model.source, model.components, model.demo_state, model.catalog, model.dependencies)
     content.check()
 
-    # The bindings the edit leaves: the ones kept for keys still declared, the given ones over them.
-    declared = {dependency.key for dependency in content.dependencies}
-    wanted = {mapping.key: str(mapping.agent_id) for mapping in mblok.agent_mappings.all() if mapping.key in declared}
-    wanted.update({mapping.key: mapping.agent for mapping in model.agent_mappings or []})
-    bound = check_agent_mappings(organization, blok.name, content.dependencies, wanted)
-    diagnostics = validate_manifest_against_catalog(content.catalog, content.parsed_components(), content.context, content.demo_state)
+    # The bindings an edit through a materialization leaves: the ones kept for keys still
+    # declared, the given ones over them. An edit of the blok itself binds nothing; a required
+    # dependency it adds shows as unbound on every materialization.
+    bound: dict[str, models.Agent] | None = None
+    if mblok is not None:
+        declared = {dependency.key for dependency in content.dependencies}
+        wanted = {mapping.key: str(mapping.agent_id) for mapping in mblok.agent_mappings.all() if mapping.key in declared}
+        wanted.update({mapping.key: mapping.agent for mapping in model.agent_mappings or []})
+        bound = check_agent_mappings(organization_of(info), blok.name, content.dependencies, wanted)
+    diagnostics = cast("list[rtypes.Diagnostic]", validate_manifest_against_catalog(content.catalog, content.parsed_components(), content.context, content.demo_state))
 
     if model.dry_run:
         # A catalog named for the first time was created on the way: nothing of it is kept.
         transaction.set_rollback(True)
-        return types.BlokEdit(applied=False, forked=provided, revision=None, materialized_blok=cast("types.MaterializedBlok", mblok), diagnostics=cast("list[rtypes.Diagnostic]", diagnostics))
+        return types.BlokEdit(applied=False, forked=provided, blok=cast("types.Blok", blok), revision=None, materialized_blok=cast("types.MaterializedBlok | None", mblok), diagnostics=diagnostics)
 
+    target = mblok
     if provided:
         blok = _fork(blok, _free_name(blok.organization_id, blok.name), caller.user)
         base = blok.head
-        target = models.MaterializedBlok.objects.create(blok=blok, name=mblok.name, description=mblok.description)
-    else:
-        target = mblok
+        if mblok is not None:
+            target = models.MaterializedBlok.objects.create(blok=blok, name=mblok.name, description=mblok.description)
 
     revision = commit_revision(blok, content, base=base, author=caller.user, task=task, message=model.message)
-    # Edited where it is shown, so shown as edited: an edit unpins the materialization it came through.
-    if target.pinned_revision_id is not None:
-        target.pinned_revision = None
-        target.save(update_fields=["pinned_revision", "updated_at"])
-    write_mappings(target, bound)
-    return types.BlokEdit(applied=True, forked=provided, revision=cast("types.BlokRevision", revision), materialized_blok=cast("types.MaterializedBlok", target), diagnostics=cast("list[rtypes.Diagnostic]", diagnostics))
+    if target is not None and bound is not None:
+        # Edited where it is shown, so shown as edited: an edit unpins the materialization it came through.
+        if target.pinned_revision_id is not None:
+            target.pinned_revision = None
+            target.save(update_fields=["pinned_revision", "updated_at"])
+        write_mappings(target, bound)
+    return types.BlokEdit(applied=True, forked=provided, blok=cast("types.Blok", blok), revision=cast("types.BlokRevision", revision), materialized_blok=cast("types.MaterializedBlok | None", target), diagnostics=diagnostics)
 
 
 @transaction.atomic
