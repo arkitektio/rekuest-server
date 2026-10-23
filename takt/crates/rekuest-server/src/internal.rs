@@ -356,6 +356,9 @@ struct DecideRequest {
     approved: bool,
     #[serde(default)]
     answer: Option<String>,
+    /// The answer through the hold's blok, checked against its returns.
+    #[serde(default)]
+    values: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 internal!(decide, DecideRequest, |state, request| {
@@ -366,6 +369,7 @@ internal!(decide, DecideRequest, |state, request| {
         &request.task.text(),
         request.approved,
         request.answer.clone(),
+        request.values.clone(),
     )
     .await?;
     Ok(Json(json!({"task": task.to_string()})))

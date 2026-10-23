@@ -59,6 +59,8 @@ def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
         components = _parsed(model.source)
         rimodels.check_blok_manifest(components, {dep.key for dep in model.dependencies or []}, None if model.demo_state is None else set(model.demo_state))
         model = model.model_copy(update={"components": components, "source": None})
+    # Every query in the tree runs on a service the blok names.
+    rimodels.check_blok_services(model.components, list(model.services or []))
     organization = info.context.request.organization
     catalog = _catalog_for(info, model.catalog)
 
@@ -97,6 +99,9 @@ def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
         context=model.context,
         catalog=catalog,
         dependencies=list(model.dependencies or []),
+        # createBlok declares no args: a blok created again keeps the ones it has.
+        args=[rimodels.ArgPortInputModel(**arg) for arg in blok.args or []],
+        services=list(model.services or []),
     )
     commit_revision(blok, content, base=None, guarded=False, author=CallerContext.from_info(info).user, message="Created" if blok.head_id is None else "Created again")
 
@@ -125,6 +130,7 @@ def _fork(provided: models.Blok, name: str, user: User) -> models.Blok:
         for_model=provided.for_model,
         for_node=provided.for_node,
         args=provided.args,
+        services=provided.services,
     )
     # Rows are written parents first, so in id order every parent is copied before its children.
     copies: dict[int, models.BlokArgPort] = {}
@@ -173,7 +179,7 @@ def update_blok(info: Info, input: inputs.UpdateBlokInput) -> types.Blok:
 
     # A partial update is validated as the content it results in: new components against the
     # dependencies and local state that will be in force after the update.
-    content = _edited(info, lock_blok(blok.pk), model.source, model.components, model.demo_state, model.catalog, model.dependencies)
+    content = _edited(info, lock_blok(blok.pk), model.source, model.components, model.demo_state, model.catalog, model.dependencies, None)
     content.check()
     commit_revision(blok, content, base=None, guarded=False, author=CallerContext.from_info(info).user)
     return cast("types.Blok", blok)
@@ -187,6 +193,8 @@ def _edited(
     demo_state: JSONObject | None,
     catalog: str | None,
     dependencies: list[rimodels.AgentDependencyInputModel] | None,
+    args: list[rimodels.ArgPortInputModel] | None,
+    services: list[rimodels.BlokServiceInputModel] | None = None,
 ) -> BlokContent:
     """The blok's head content with every part that is given replaced."""
     current = content_of_revision(blok.head) if blok.head is not None else content_of_blok(blok)
@@ -196,6 +204,8 @@ def _edited(
         demo_state=demo_state,
         catalog=None if catalog is None else _catalog_for(info, catalog),
         dependencies=dependencies,
+        args=args,
+        services=services,
     )
 
 
@@ -244,7 +254,7 @@ def edit_blok(info: Info, input: inputs.EditBlokInput) -> types.BlokEdit:
         if (None if base is None else base.pk) != blok.head_id:
             raise StaleRevisionError(blok, base, blok.head)
 
-    content = _edited(info, blok, model.source, model.components, model.demo_state, model.catalog, model.dependencies)
+    content = _edited(info, blok, model.source, model.components, model.demo_state, model.catalog, model.dependencies, model.args, model.services)
     content.check()
 
     # The bindings an edit through a materialization leaves: the ones kept for keys still

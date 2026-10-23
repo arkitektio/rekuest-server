@@ -11,7 +11,7 @@ from facade.catalog_validation import check_extension_does_not_shadow_base, vali
 def register_ui_catalog(info: Info, input: inputs.RegisterUiCatalogInput) -> types.UICatalog:
     """Upsert a catalog by name in the caller's organization with the components, operations and default widgets a UI app announces."""
     model = input.to_pydantic()
-    check_extension_does_not_shadow_base(model.operations, model.name)
+    check_extension_does_not_shadow_base(model.operations, model.name, model.components)
 
     components = [component.model_dump() for component in model.components]
     operations = [operation.model_dump() for operation in model.operations]

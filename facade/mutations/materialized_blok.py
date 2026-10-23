@@ -13,7 +13,7 @@ from authentikate.models import Organization
 from django.db import transaction
 from kante.types import Info
 
-from facade import inputs, models, types
+from facade import enums, inputs, models, types
 from facade.blok_revisions import dependency_input_of
 from facade.caller_context import CallerContext
 from facade.types.base import scoped_get
@@ -90,8 +90,12 @@ def materialize_blok(info: Info, input: inputs.MaterializeBlokInput) -> types.Ma
     """Create a materialization of a blok with validated agent bindings, optionally placed on a dashboard."""
     organization = organization_of(info)
     blok = scoped_get(models.Blok, info, input.blok, field="organization")
-    if blok.app_id is not None:
+    for_message = input.scope == enums.MaterializationScope.MESSAGE
+    # A message shows a provided blok as it is now, bound for that one message: nothing to fork.
+    if blok.app_id is not None and not for_message:
         raise ValueError(f"Blok '{blok.name}' is provided by its agents, each materializing it for itself; fork it to bind other agents.")
+    if for_message and input.dashboard:
+        raise ValueError("A materialization made for a message is shown in it, not placed on a dashboard.")
     dashboard = scoped_get(models.Dashboard, info, input.dashboard, field="organization") if input.dashboard else None
 
     resolved = _resolve_agent_mappings(organization, blok, {mapping.key: str(mapping.agent) for mapping in input.agent_mappings or []})
@@ -102,6 +106,7 @@ def materialize_blok(info: Info, input: inputs.MaterializeBlokInput) -> types.Ma
         blok=blok,
         name=input.name or blok.name,
         description=input.description or blok.description or "",
+        scope=input.scope.value,
     )
     write_mappings(mblok, resolved)
 

@@ -1,10 +1,12 @@
-"""The base catalog: pure operations every UI implements for port calls.
+"""The base catalog: the pure operations and control-flow components every UI implements.
 
 ``base_v1.json`` is the source of truth. It ships with the server (the Dockerfile copies the
 whole tree) and is vendored byte-for-byte by the Python client, so both sides resolve
 positional call arguments against the same parameter names. The base catalog is virtual:
 it is never a ``UICatalog`` row, it is merged under every named catalog, and UI apps may
-not redefine its operation names.
+not redefine its operation or component names. Its components are control flow
+(``foreach``, ``if``, ``match``/``case``/``default``, ``when``, the record slots), named in
+lowercase; what a UI draws is its own catalog's.
 """
 
 import functools
@@ -15,7 +17,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 from typing_extensions import Self
 
-from rekuest_core.inputs.models import CatalogOperationInputModel, _check_unique
+from rekuest_core.inputs.models import CatalogComponentInputModel, CatalogOperationInputModel, _check_unique
 
 BASE_CATALOG_NAME = "base"
 BASE_CATALOG_VERSION = 1
@@ -41,11 +43,13 @@ class BaseCatalogModel(BaseModel):
     version: int
     description: str | None = None
     operations: list[CatalogOperationInputModel] = Field(default_factory=list)
+    components: list[CatalogComponentInputModel] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def check_unique_operations(self) -> Self:
-        """Operation names are unique."""
+        """Operation and component names are unique."""
         _check_unique(self.operations, "name", "base catalog")
+        _check_unique(self.components, "name", "base catalog")
         return self
 
 
@@ -62,8 +66,19 @@ def base_operations() -> dict[str, CatalogOperationInputModel]:
 
 
 def base_operation_names() -> frozenset[str]:
-    """The names UI catalogs may not redefine."""
+    """The operation names UI catalogs may not redefine."""
     return frozenset(base_operations())
+
+
+@functools.lru_cache(maxsize=1)
+def base_components() -> dict[str, CatalogComponentInputModel]:
+    """Base components by name."""
+    return {component.name: component for component in load_base_catalog().components}
+
+
+def base_component_names() -> frozenset[str]:
+    """The component names UI catalogs may not redefine."""
+    return frozenset(base_components())
 
 
 # A broken manifest must fail at import (server startup), not at the first registration.

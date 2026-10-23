@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List, Optional, cast
 
 import strawberry
 import strawberry_django
@@ -21,10 +21,65 @@ if TYPE_CHECKING:
     from facade.types.action import Action
     from facade.types.agent import Agent, Lock
     from facade.types.auth import Caller
+    from facade.types.blok import MaterializedBlok
     from facade.types.dependency import Resolution
     from facade.types.implementation import Implementation
     from facade.types.schedule import Schedule
     from facade.types.trigger import Signal, Trigger
+
+
+@strawberry.type(description="A blok a task showed a person: to ask (the task holds until they answer through it) or to inform.")
+class TaskBlok:
+    materialized_blok: "MaterializedBlok" = strawberry.field(description="What it shows: a materialization of scope TASK, opened on its args.")
+    role: enums.TaskBlokRole = strawberry.field(description="ASK or INFORM.")
+    status: enums.TaskBlokStatus = strawberry.field(description="Where it stands: an ask WAITING, ANSWERED, DISMISSED or GONE (the task ended first); an inform SHOWN.")
+    message: str | None = strawberry.field(description="What the task said with it.")
+    values: scalars.Args | None = strawberry.field(description="The answer to an ask, by the blok's returns.")
+    decided_by: str | None = strawberry.field(description="The user (sub) who answered or dismissed an ask.")
+    created_at: datetime.datetime = strawberry.field(description="When the task showed it.")
+
+
+def task_bloks(task: models.Task) -> list[TaskBlok]:
+    """The bloks ``task`` showed, oldest first, each with where it stands (read off its events).
+
+    An ask's ``HELD`` event names its materialization; the ``DECIDED`` that follows it is its
+    answer. An inform's ``INFORM`` event names it.
+    """
+    shown = list(task.shown_bloks.all().order_by("id"))
+    if not shown:
+        return []
+    events = list(task.events.filter(kind__in=["HELD", "DECIDED", "INFORM"]).order_by("id").values("kind", "value", "message", "created_at"))
+    bloks = []
+    for materialized in shown:
+        key = str(materialized.id)
+        named = next((i for i, e in enumerate(events) if e["kind"] in ("HELD", "INFORM") and (e["value"] or {}).get("blok") == key), None)
+        event = events[named] if named is not None else None
+        role = enums.TaskBlokRole(materialized.task_role or "INFORM")
+        values, decided_by = None, None
+        if role == enums.TaskBlokRole.INFORM:
+            status = enums.TaskBlokStatus.SHOWN
+        else:
+            decision = next((e for e in events[(named or 0) + 1 :] if e["kind"] == "DECIDED"), None) if named is not None else None
+            if decision is not None:
+                answer = decision["value"] or {}
+                status = enums.TaskBlokStatus.ANSWERED if answer.get("approved") else enums.TaskBlokStatus.DISMISSED
+                values, decided_by = answer.get("values"), answer.get("user")
+            elif task.is_done:
+                status = enums.TaskBlokStatus.GONE
+            else:
+                status = enums.TaskBlokStatus.WAITING
+        bloks.append(
+            TaskBlok(
+                materialized_blok=cast("MaterializedBlok", materialized),
+                role=role,
+                status=status,
+                message=event["message"] if event else None,
+                values=cast("scalars.Args | None", values),
+                decided_by=decided_by,
+                created_at=event["created_at"] if event else materialized.created_at,
+            )
+        )
+    return bloks
 
 
 @strawberry_django.type(models.Task, filters=filters.TaskFilter, ordering=filters.TaskOrder, pagination=True, description="Tracks the assignment of an implementation to a specific task.")
@@ -55,6 +110,10 @@ class Task:
     latest_progress: int | None = strawberry_django.field(description="Progress (0-100) of the latest PROGRESS event that carried one. Kept as events are recorded: follow a task with this, not with its events.")
     latest_message: str | None = strawberry_django.field(description="Message of the latest event that carried one.")
     latest_returns: rscalars.AnyDefault | None = strawberry_django.field(description="Returns of the latest YIELD event.")
+
+    @strawberry_django.field(description="The bloks this task showed a person, oldest first: asks it holds on (or held on) and informs.")
+    def bloks(self) -> list[TaskBlok]:
+        return task_bloks(row_of(self, models.Task))
     schedule: Optional["Schedule"] = strawberry.field(description="The schedule this task is a run of, if any.")
     signal: Optional["Signal"] = strawberry.field(description="The signal that caused this task, if a trigger fired it.")
     trigger: Optional["Trigger"] = strawberry.field(description="The trigger that fired this task, if any.")

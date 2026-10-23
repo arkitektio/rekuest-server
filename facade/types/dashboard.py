@@ -59,12 +59,13 @@ class UICatalog:
         return build_prescoped_queryset(info, queryset, field="organization")
 
 
-@strawberry.type(description="The built-in base catalog: the pure operations every UI implements, applied to every definition and blok before any registered UI catalog. Virtual: shipped with the server, not registered, identical in every organization.")
+@strawberry.type(description="The built-in base catalog: the pure operations and control-flow components every UI implements, applied to every definition and blok before any registered UI catalog. Virtual: shipped with the server, not registered, identical in every organization.")
 class BaseCatalog:
     name: str = strawberry.field(description="Always 'base'.")
     version: int = strawberry.field(description="Manifest version; evolves additively.")
     description: str | None = strawberry.field(default=None, description="What the base catalog is for.")
     operations: list[rtypes.CatalogOperation] = strawberry.field(description="The base operations, argument order being positional order.")
+    components: list[rtypes.CatalogComponent] = strawberry.field(description="The base components: control flow (foreach, if, match, …), named in lowercase. A UI catalog may not redefine them.")
 
 
 def base_catalog(info: Info) -> BaseCatalog:
@@ -75,6 +76,7 @@ def base_catalog(info: Info) -> BaseCatalog:
         version=manifest.version,
         description=manifest.description,
         operations=cast("list[rtypes.CatalogOperation]", [rmodels.CatalogOperationModel(**operation.model_dump()) for operation in manifest.operations]),
+        components=cast("list[rtypes.CatalogComponent]", [rmodels.CatalogComponentModel(**component.model_dump()) for component in manifest.components]),
     )
 
 

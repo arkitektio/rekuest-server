@@ -1,16 +1,18 @@
-//! The base catalog: the pure operations every UI implements for port calls
+//! The base catalog: the pure operations and control-flow components every UI implements
 //! (`rekuest_core/catalogs/__init__.py`).
 //!
 //! `base_v1.json` is the source of truth, embedded byte for byte as the Python server ships it.
 //! The base catalog is virtual: never a `UICatalog` row, merged under every named catalog, and
-//! UI catalogs may not redefine its operation names.
+//! UI catalogs may not redefine its operation or component names. Its components are control
+//! flow (`foreach`, `if`, `match`/`case`/`default`, `when`, the record slots, `query`), named in
+//! lowercase; what a UI draws is its own catalog's.
 
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 use serde::Deserialize;
 
-use crate::inputs::{CatalogOperationInputModel, ValidationError};
+use crate::inputs::{CatalogComponentInputModel, CatalogOperationInputModel, ValidationError};
 
 pub const BASE_CATALOG_NAME: &str = "base";
 pub const BASE_CATALOG_VERSION: i64 = 1;
@@ -41,6 +43,8 @@ pub struct BaseCatalogModel {
     pub description: Option<String>,
     #[serde(default)]
     pub operations: Vec<CatalogOperationInputModel>,
+    #[serde(default)]
+    pub components: Vec<CatalogComponentInputModel>,
 }
 
 fn load() -> Result<BaseCatalogModel, ValidationError> {
@@ -62,6 +66,15 @@ fn load() -> Result<BaseCatalogModel, ValidationError> {
             )));
         }
     }
+    let mut seen = std::collections::HashSet::new();
+    for component in &catalog.components {
+        if !seen.insert(component.name.as_str()) {
+            return Err(ValidationError(format!(
+                "base catalog: duplicate name {:?}",
+                component.name
+            )));
+        }
+    }
     Ok(catalog)
 }
 
@@ -80,9 +93,43 @@ pub fn base_operations() -> BTreeMap<String, CatalogOperationInputModel> {
         .collect()
 }
 
+/// Base components by name.
+pub fn base_components() -> BTreeMap<String, CatalogComponentInputModel> {
+    load_base_catalog()
+        .components
+        .iter()
+        .map(|component| (component.name.clone(), component.clone()))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_embedded_manifest_is_the_servers() {
+        // Vendored byte for byte from the Python server's; a base change there must land here too.
+        let server = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../rekuest_core/catalogs/base_v1.json");
+        if let Ok(theirs) = std::fs::read_to_string(&server) {
+            assert!(
+                theirs == MANIFEST,
+                "catalogs/base_v1.json differs from {}: copy it over",
+                server.display()
+            );
+        }
+    }
+
+    #[test]
+    fn base_components_are_control_flow() {
+        let components = base_components();
+        for name in ["foreach", "if", "match", "case", "default", "when", "query"] {
+            assert!(
+                components.contains_key(name),
+                "{name} is not a base component"
+            );
+        }
+    }
 
     #[test]
     fn the_embedded_manifest_loads() {

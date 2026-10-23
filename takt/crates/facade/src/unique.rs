@@ -30,6 +30,10 @@ pub fn hash_blok_definition(blok: &BlokImplementationInputModel) -> String {
         if blok.args.is_empty() {
             fields.remove("args");
         }
+        // Declarations made before bloks had returns keep their hash.
+        if blok.returns.is_empty() {
+            fields.remove("returns");
+        }
     }
     hex::encode(Sha256::digest(dumps(&dump, true).as_bytes()))
 }

@@ -6,10 +6,11 @@ from facade import models
 from facade.catalog_validation import (
     UNKNOWN_OPERATION,
     check_extension_does_not_shadow_base,
+    resolve_components,
     resolve_operations,
     validate_calls_against_catalog,
 )
-from rekuest_core.catalogs import BASE_CATALOG_VERSION, base_operation_names, base_operations, load_base_catalog
+from rekuest_core.catalogs import BASE_CATALOG_VERSION, base_components, base_operation_names, base_operations, load_base_catalog
 from rekuest_core.inputs import models as imodels
 
 V1_NAMES = {
@@ -44,6 +45,67 @@ V1_NAMES = {
     "neg",
 }
 
+# The standard library every UI evaluates beside the v1 core: namespaced by domain.
+STD_NAMES = {
+    "fmt.bytes",
+    "fmt.currency",
+    "fmt.date",
+    "fmt.datetime",
+    "fmt.json",
+    "fmt.number",
+    "fmt.percent",
+    "fmt.relativeTime",
+    "list.at",
+    "list.compact",
+    "list.first",
+    "list.join",
+    "list.last",
+    "list.pluck",
+    "list.range",
+    "list.reverse",
+    "list.slice",
+    "list.sort",
+    "list.sum",
+    "list.unique",
+    "math.abs",
+    "math.ceil",
+    "math.clamp",
+    "math.floor",
+    "math.round",
+    "obj.entries",
+    "obj.has",
+    "obj.keys",
+    "obj.values",
+    "str.capitalize",
+    "str.default",
+    "str.lower",
+    "str.replace",
+    "str.slice",
+    "str.split",
+    "str.trim",
+    "str.truncate",
+    "str.upper",
+    "type.of",
+    "type.toBoolean",
+    "type.toNumber",
+    "type.toString",
+}
+
+BASE_COMPONENTS = {
+    "query",
+    "case",
+    "default",
+    "empty",
+    "failed",
+    "foreach",
+    "fragment",
+    "if",
+    "match",
+    "pending",
+    "ready",
+    "when",
+}
+
 
 def test_manifest_loads_and_is_cached() -> None:
     """Manifest loads and is cached."""
@@ -54,8 +116,19 @@ def test_manifest_loads_and_is_cached() -> None:
 
 
 def test_manifest_names_match_the_v1_vocabulary() -> None:
-    """Manifest names match the v1 vocabulary exactly."""
-    assert base_operation_names() == frozenset(V1_NAMES)
+    """Manifest names match the v1 core plus the standard library exactly."""
+    assert base_operation_names() == frozenset(V1_NAMES | STD_NAMES)
+
+
+def test_manifest_components_are_lowercase_control_flow() -> None:
+    """The base components are control flow, named in lowercase, and pass their context on."""
+    components = base_components()
+    assert set(components) == BASE_COMPONENTS
+    for component in components.values():
+        assert component.name == component.name.lower(), component.name
+        assert component.inherits_context, component.name
+        assert component.description, f"{component.name} needs a description"
+    assert components["case"].downstream_of == ["match"]
 
 
 def test_manifest_argument_order_is_positional_order() -> None:
@@ -74,7 +147,7 @@ def test_manifest_argument_order_is_positional_order() -> None:
 def test_boolean_operations_return_bool() -> None:
     """Everything a validator or effect can use returns BOOL; the value-shaped ones do not."""
     ops = base_operations()
-    non_bool = {name for name, op in ops.items() if op.returns != "BOOL"}
+    non_bool = {name for name, op in ops.items() if name in V1_NAMES and op.returns != "BOOL"}
     assert non_bool == {"if", "len", "get", "coalesce", "add", "sub", "mul", "div", "mod", "neg"}
 
 
@@ -89,7 +162,7 @@ def test_parameter_names_are_python_keyword_argument_names() -> None:
 
 def test_resolve_operations_without_catalog_is_base() -> None:
     """Resolve operations without catalog is base."""
-    assert set(resolve_operations([])) == V1_NAMES
+    assert set(resolve_operations([])) == V1_NAMES | STD_NAMES
 
 
 @pytest.mark.django_db
@@ -98,7 +171,7 @@ def test_resolve_operations_unions_extension() -> None:
     org = __import__("authentikate.models", fromlist=["Organization"]).Organization.objects.create(slug="base-cat-org")
     catalog = models.UICatalog.objects.create(name="electron", organization=org, operations=[{"name": "clamp", "arguments": [{"key": "v", "kind": "FLOAT"}], "returns": "FLOAT"}])
     resolved = resolve_operations([catalog])
-    assert set(resolved) == V1_NAMES | {"clamp"}
+    assert set(resolved) == V1_NAMES | STD_NAMES | {"clamp"}
     assert resolved["gt"] is base_operations()["gt"]
 
 
@@ -124,16 +197,16 @@ def _call(operation: str, *arguments: dict) -> imodels.UtilCallInputModel:
     return imodels.UtilCallInputModel(operation=operation, arguments=list(arguments))
 
 
-def test_unknown_operation_is_a_warning_and_argument_mismatch_an_error() -> None:
-    """Unknown operation is a warning, argument mismatch on a known operation an error."""
+def test_unknown_operation_and_argument_mismatch_are_warnings() -> None:
+    """An unknown operation and a known one called with the wrong keys are findings, not refusals."""
     warnings = validate_calls_against_catalog(None, [_call("fizz", {"key": "a", "value_path": "/value"})], "Validator x")
     assert [w.code for w in warnings] == [UNKNOWN_OPERATION]
     assert "'fizz'" in warnings[0].message and warnings[0].path == "Validator x"
 
-    with pytest.raises(ValueError, match=r"'between' does not accept arguments \['a', 'b'\]"):
-        validate_calls_against_catalog(None, [_call("between", {"key": "a", "value_path": "/value"}, {"key": "b", "value_literal": 1})], "Validator x")
-    with pytest.raises(ValueError, match=r"'gt' requires arguments \['b'\]"):
-        validate_calls_against_catalog(None, [_call("gt", {"key": "a", "value_path": "/value"})], "Validator x")
+    (wrong,) = validate_calls_against_catalog(None, [_call("between", {"key": "a", "value_path": "/value"}, {"key": "b", "value_literal": 1})], "Validator x")
+    assert wrong.code == "operation_arguments" and "'between' does not accept arguments ['a', 'b']" in wrong.message
+    (missing,) = validate_calls_against_catalog(None, [_call("gt", {"key": "a", "value_path": "/value"})], "Validator x")
+    assert missing.code == "operation_arguments" and "'gt' requires arguments ['b']" in missing.message
 
 
 def test_nested_calls_are_checked_and_optional_arguments_may_be_omitted() -> None:
@@ -144,7 +217,7 @@ def test_nested_calls_are_checked_and_optional_arguments_may_be_omitted() -> Non
 
 
 def test_resolve_components_is_none_until_a_catalog_registers_components() -> None:
-    """Base has no components; only registered catalogs contribute, and identical duplicates are tolerated."""
+    """Base's control flow is always in force; checking starts once a catalog registers components, and identical duplicates are tolerated."""
     from facade.catalog_validation import resolve_components
 
     assert resolve_components([]) is None
@@ -153,7 +226,38 @@ def test_resolve_components_is_none_until_a_catalog_registers_components() -> No
     box = {"name": "Box", "props": [], "accepts_children": True}
     knob = {"name": "Knob", "props": [{"key": "value", "kind": "FLOAT", "required": False, "description": None}], "accepts_children": False, "description": None}
     resolved = resolve_components([models.UICatalog(name="a", components=[box]), models.UICatalog(name="b", components=[box, knob])])
-    assert set(resolved) == {"Box", "Knob"}
+    assert set(resolved) == {"Box", "Knob"} | BASE_COMPONENTS
 
     with pytest.raises(ValueError, match="component 'Knob' is defined differently by catalogs 'a' and 'b'"):
         resolve_components([models.UICatalog(name="a", components=[knob]), models.UICatalog(name="b", components=[{**knob, "accepts_children": True}])])
+
+
+def test_extension_cannot_shadow_a_base_component() -> None:
+    """A UI catalog may add components but not redefine a base one."""
+    button = imodels.CatalogComponentInputModel(name="Button")
+    foreach = imodels.CatalogComponentInputModel(name="foreach")
+    check_extension_does_not_shadow_base([], "electron", [button])
+    with pytest.raises(ValueError, match=r"catalog 'electron' cannot redefine base components \['foreach'\]"):
+        check_extension_does_not_shadow_base([], "electron", [button, foreach])
+
+
+@pytest.mark.django_db
+def test_base_components_win_over_an_older_registration() -> None:
+    """A catalog registered before a component joined base may still list it; base's definition is used."""
+    org = __import__("authentikate.models", fromlist=["Organization"]).Organization.objects.create(slug="base-comp-org")
+    catalog = models.UICatalog.objects.create(
+        name="electron",
+        organization=org,
+        components=[{"name": "foreach", "props": []}, {"name": "Button", "props": []}],
+        operations=[{"name": "list.first", "arguments": [], "returns": "ANY"}],
+    )
+    components = resolve_components([catalog])
+    assert components is not None
+    assert components["foreach"] is base_components()["foreach"]
+    assert "Button" in components
+    assert resolve_operations([catalog])["list.first"] is base_operations()["list.first"]
+
+
+def test_without_registered_components_nothing_is_checked() -> None:
+    """Base control flow alone does not make component names checkable."""
+    assert resolve_components([]) is None

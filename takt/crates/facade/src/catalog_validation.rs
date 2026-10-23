@@ -9,7 +9,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use rekuest_core::catalogs::{
-    base_operations, base_version_named, BASE_CATALOG_ID, BASE_CATALOG_VERSION,
+    base_components, base_operations, base_version_named, BASE_CATALOG_ID, BASE_CATALOG_VERSION,
 };
 use rekuest_core::enums::{CatalogValueKind, ComponentContext};
 use rekuest_core::inputs::{
@@ -25,6 +25,18 @@ use sqlx::PgConnection;
 
 pub const UNKNOWN_OPERATION: &str = "unknown_operation";
 pub const UNKNOWN_CATALOG: &str = "unknown_catalog";
+// What a blok does against the UI catalog it renders in is the UI's business: the renderer
+// draws what it does not know as an inline error. So these are findings stored on the row,
+// never a refusal; what the server builds on (parse, ids, dependencies, args, services, the
+// context root, logo limits, asset bindings) still refuses.
+pub const UNKNOWN_COMPONENT: &str = "unknown_component";
+pub const UNKNOWN_PROP: &str = "unknown_prop";
+pub const MISSING_PROP: &str = "missing_prop";
+pub const CHILDREN_NOT_ACCEPTED: &str = "children_not_accepted";
+pub const UNBOUND_CALLBACK: &str = "unbound_callback";
+pub const MISPLACED_COMPONENT: &str = "misplaced_component";
+pub const OPERATION_ARGUMENTS: &str = "operation_arguments";
+pub const CATALOG_CONFLICT: &str = "catalog_conflict";
 /// The one component a blok of a context may have as its root, for the contexts that have one.
 pub fn context_root(context: ComponentContext) -> Option<&'static str> {
     match context {
@@ -141,58 +153,83 @@ impl Catalog {
 type Operations = BTreeMap<String, CatalogOperationInputModel>;
 type Components = HashMap<String, CatalogComponentInputModel>;
 
-/// The operations in force: base plus every catalog's; two catalogs may only agree (`resolve_operations`).
-fn resolve_operations(catalogs: &[Catalog]) -> Result<Operations, String> {
+/// The operations in force: base plus every catalog's (`resolve_operations`). Two catalogs that
+/// define one differently are a `catalog_conflict`; the first keeps it.
+fn resolve_operations(catalogs: &[Catalog]) -> (Operations, Vec<Diagnostic>) {
     let mut operations = base_operations();
+    let base: std::collections::HashSet<String> = operations.keys().cloned().collect();
     let mut provider: HashMap<&str, &str> = HashMap::new();
+    let mut conflicts = vec![];
     for catalog in catalogs {
         for operation in &catalog.operations {
+            // Base wins: a catalog registered before an operation joined base still lists it.
+            if base.contains(&operation.name) {
+                continue;
+            }
             if let (Some(previous), Some(first)) = (
                 operations.get(&operation.name),
                 provider.get(operation.name.as_str()),
             ) {
                 if previous != operation {
-                    return Err(format!(
-                        "operation {} is defined differently by catalogs {} and {}",
-                        repr_str(&operation.name),
-                        repr_str(first),
-                        repr_str(&catalog.name)
+                    conflicts.push(Diagnostic::warning(
+                        CATALOG_CONFLICT,
+                        format!(
+                            "operation {} is defined differently by catalogs {} and {}",
+                            repr_str(&operation.name),
+                            repr_str(first),
+                            repr_str(&catalog.name)
+                        ),
+                        catalog.name.clone(),
                     ));
                 }
+                continue;
             }
             operations.insert(operation.name.clone(), operation.clone());
             provider.entry(&operation.name).or_insert(&catalog.name);
         }
     }
-    Ok(operations)
+    (operations, conflicts)
 }
 
-/// The components in force, `None` while no catalog registered any (`resolve_components`).
-fn resolve_components(catalogs: &[Catalog]) -> Result<Option<Components>, String> {
-    let mut components: Components = HashMap::new();
+/// The components in force, `None` while no catalog registered any (`resolve_components`). Two
+/// catalogs that define one differently are a `catalog_conflict`; the first keeps it.
+fn resolve_components(catalogs: &[Catalog]) -> (Option<Components>, Vec<Diagnostic>) {
+    // The base catalog's control flow, then the union of what the catalogs registered.
+    let mut components: Components = base_components().into_iter().collect();
     let mut provider: HashMap<&str, &str> = HashMap::new();
+    let base: std::collections::HashSet<String> = components.keys().cloned().collect();
     let mut registered = false;
+    let mut conflicts = vec![];
     for catalog in catalogs {
         if catalog.components.is_empty() {
             continue;
         }
         registered = true;
         for component in &catalog.components {
+            // Base wins, as for operations: an older registration may still list it.
+            if base.contains(&component.name) {
+                continue;
+            }
             if let Some(previous) = components.get(&component.name) {
                 if previous != component {
-                    return Err(format!(
-                        "component {} is defined differently by catalogs {} and {}",
-                        repr_str(&component.name),
-                        repr_str(provider[component.name.as_str()]),
-                        repr_str(&catalog.name)
+                    conflicts.push(Diagnostic::warning(
+                        CATALOG_CONFLICT,
+                        format!(
+                            "component {} is defined differently by catalogs {} and {}",
+                            repr_str(&component.name),
+                            repr_str(provider[component.name.as_str()]),
+                            repr_str(&catalog.name)
+                        ),
+                        catalog.name.clone(),
                     ));
                 }
+                continue;
             }
             components.insert(component.name.clone(), component.clone());
             provider.entry(&component.name).or_insert(&catalog.name);
         }
     }
-    Ok(registered.then_some(components))
+    (registered.then_some(components), conflicts)
 }
 
 fn catalog_label(catalogs: &[Catalog]) -> String {
@@ -211,23 +248,25 @@ fn py_list(items: &[&str]) -> String {
     ))
 }
 
-/// A known operation takes exactly its argument keys; an unknown one is a warning (`_check_call`).
+/// A known operation takes exactly its argument keys; an unknown one, or other keys, are
+/// warnings (`_check_call`).
 fn check_call(
     call: &UtilCallInputModel,
     operations: &Operations,
     label: &str,
     owner: &str,
-) -> Result<Option<Diagnostic>, String> {
+) -> Vec<Diagnostic> {
     let Some(spec) = operations.get(&call.operation) else {
-        return Ok(Some(Diagnostic::warning(
+        return vec![Diagnostic::warning(
             UNKNOWN_OPERATION,
             format!(
                 "{owner}: operation {} is not provided by the catalog ({label}); the UI cannot evaluate this call until it is registered",
                 repr_str(&call.operation)
             ),
             owner.to_owned(),
-        )));
+        )];
     };
+    let mut diagnostics = vec![];
     let accepted: HashSet<&str> = spec.arguments.iter().map(|a| a.key.as_str()).collect();
     let passed: HashSet<&str> = call
         .arguments
@@ -238,10 +277,14 @@ fn check_call(
     let mut unknown: Vec<&str> = passed.difference(&accepted).copied().collect();
     unknown.sort();
     if !unknown.is_empty() {
-        return Err(format!(
-            "{owner}: operation {} does not accept arguments {}",
-            repr_str(&call.operation),
-            py_list(&unknown)
+        diagnostics.push(Diagnostic::warning(
+            OPERATION_ARGUMENTS,
+            format!(
+                "{owner}: operation {} does not accept arguments {}",
+                repr_str(&call.operation),
+                py_list(&unknown)
+            ),
+            owner.to_owned(),
         ));
     }
     let mut missing: Vec<&str> = spec
@@ -252,13 +295,17 @@ fn check_call(
         .collect();
     missing.sort();
     if !missing.is_empty() {
-        return Err(format!(
-            "{owner}: operation {} requires arguments {}",
-            repr_str(&call.operation),
-            py_list(&missing)
+        diagnostics.push(Diagnostic::warning(
+            OPERATION_ARGUMENTS,
+            format!(
+                "{owner}: operation {} requires arguments {}",
+                repr_str(&call.operation),
+                py_list(&missing)
+            ),
+            owner.to_owned(),
         ));
     }
-    Ok(None)
+    diagnostics
 }
 
 fn check_calls<'a>(
@@ -266,14 +313,14 @@ fn check_calls<'a>(
     operations: &Operations,
     label: &str,
     owner: &str,
-) -> Result<Vec<Diagnostic>, String> {
+) -> Vec<Diagnostic> {
     let mut diagnostics = vec![];
     for call in calls {
         for candidate in std::iter::once(call).chain(iter_util_calls(call.arguments.as_deref())) {
-            diagnostics.extend(check_call(candidate, operations, label, owner)?);
+            diagnostics.extend(check_call(candidate, operations, label, owner));
         }
     }
-    Ok(diagnostics)
+    diagnostics
 }
 
 fn prop_calls(prop: &ComponentPropInputModel) -> Vec<&UtilCallInputModel> {
@@ -285,7 +332,8 @@ fn prop_calls(prop: &ComponentPropInputModel) -> Vec<&UtilCallInputModel> {
 }
 
 /// One component node: its structure against the registered specs, its calls against the
-/// operations (`_check_component`).
+/// operations (`_check_component`). What the catalog says of it is a warning; only an ASSET
+/// prop not naming an asset refuses.
 fn check_component(
     component: &str,
     props: Option<&[ComponentPropInputModel]>,
@@ -295,52 +343,68 @@ fn check_component(
     label: &str,
     owner: &str,
 ) -> Result<Vec<Diagnostic>, String> {
+    let mut diagnostics = vec![];
+    let finding =
+        |code: &'static str, message: String| Diagnostic::warning(code, message, owner.to_owned());
     let spec = specs.and_then(|specs| specs.get(component));
     if specs.is_some() {
-        let Some(spec) = spec else {
-            return Err(format!(
-                "{owner}: component {} is not registered in catalog ({label})",
-                repr_str(component)
-            ));
-        };
-        if has_children && !spec.accepts_children {
-            return Err(format!(
-                "{owner}: component {} does not accept children",
-                repr_str(component)
-            ));
-        }
-        let known: HashSet<&str> = spec.props.iter().map(|p| p.key.as_str()).collect();
-        let present: HashSet<&str> = props
-            .unwrap_or_default()
-            .iter()
-            .map(|p| p.key.as_str())
-            .collect();
-        let mut unknown: Vec<&str> = present.difference(&known).copied().collect();
-        unknown.sort();
-        if !unknown.is_empty() {
-            return Err(format!(
-                "{owner}: component {} has no props {}",
-                repr_str(component),
-                py_list(&unknown)
-            ));
-        }
-        let mut missing: Vec<&str> = spec
-            .props
-            .iter()
-            .filter(|p| p.required && !present.contains(p.key.as_str()))
-            .map(|p| p.key.as_str())
-            .collect();
-        missing.sort();
-        missing.dedup();
-        if !missing.is_empty() {
-            return Err(format!(
-                "{owner}: component {} requires props {}",
-                repr_str(component),
-                py_list(&missing)
-            ));
+        match spec {
+            None => diagnostics.push(finding(
+                UNKNOWN_COMPONENT,
+                format!(
+                    "{owner}: component {} is not registered in catalog ({label})",
+                    repr_str(component)
+                ),
+            )),
+            Some(spec) => {
+                if has_children && !spec.accepts_children {
+                    diagnostics.push(finding(
+                        CHILDREN_NOT_ACCEPTED,
+                        format!(
+                            "{owner}: component {} does not accept children",
+                            repr_str(component)
+                        ),
+                    ));
+                }
+                let known: HashSet<&str> = spec.props.iter().map(|p| p.key.as_str()).collect();
+                let present: HashSet<&str> = props
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|p| p.key.as_str())
+                    .collect();
+                let mut unknown: Vec<&str> = present.difference(&known).copied().collect();
+                unknown.sort();
+                if !unknown.is_empty() {
+                    diagnostics.push(finding(
+                        UNKNOWN_PROP,
+                        format!(
+                            "{owner}: component {} has no props {}",
+                            repr_str(component),
+                            py_list(&unknown)
+                        ),
+                    ));
+                }
+                let mut missing: Vec<&str> = spec
+                    .props
+                    .iter()
+                    .filter(|p| p.required && !present.contains(p.key.as_str()))
+                    .map(|p| p.key.as_str())
+                    .collect();
+                missing.sort();
+                missing.dedup();
+                if !missing.is_empty() {
+                    diagnostics.push(finding(
+                        MISSING_PROP,
+                        format!(
+                            "{owner}: component {} requires props {}",
+                            repr_str(component),
+                            py_list(&missing)
+                        ),
+                    ));
+                }
+            }
         }
     }
-    let mut diagnostics = vec![];
     for prop in props.unwrap_or_default() {
         let prop_owner = format!("prop {} of {owner}", repr_str(&prop.key));
         if let Some(spec) = spec {
@@ -353,8 +417,12 @@ fn check_component(
                 && prop.agent_call.is_none()
                 && prop.util_call.is_none()
             {
-                return Err(format!(
-                    "{prop_owner} is a CALLBACK prop and must be bound via agent_call or util_call"
+                diagnostics.push(Diagnostic::warning(
+                    UNBOUND_CALLBACK,
+                    format!(
+                        "{prop_owner} is a CALLBACK prop and must be bound via agent_call or util_call"
+                    ),
+                    prop_owner.clone(),
                 ));
             }
             check_asset_prop(kind, prop, &prop_owner)?;
@@ -364,7 +432,7 @@ fn check_component(
             operations,
             label,
             &prop_owner,
-        )?);
+        ));
     }
     Ok(diagnostics)
 }
@@ -403,8 +471,9 @@ pub fn validate_components_against_catalogs(
     context: ComponentContext,
     demo_state: Option<&serde_json::Map<String, Value>>,
 ) -> Result<Vec<Diagnostic>, String> {
-    let operations = resolve_operations(catalogs)?;
-    let specs = resolve_components(catalogs)?;
+    let (operations, mut diagnostics) = resolve_operations(catalogs);
+    let (specs, conflicts) = resolve_components(catalogs);
+    diagnostics.extend(conflicts);
     let label = catalog_label(catalogs);
     if let Some(required) = context_root(context) {
         let kind = context_name(context);
@@ -434,7 +503,6 @@ pub fn validate_components_against_catalogs(
     if context == ComponentContext::ACTION_LOGO {
         check_logo_palette(components.unwrap_or_default(), demo_state)?;
     }
-    let mut diagnostics = vec![];
     let mut ancestors = vec![];
     visit_components(
         components.unwrap_or_default(),
@@ -469,7 +537,14 @@ fn visit_components<'a>(
             label,
             &owner,
         )?);
-        let inner = check_placement(&node.component, ancestors, context, specs, &owner)?;
+        let inner = check_placement(
+            &node.component,
+            ancestors,
+            context,
+            specs,
+            &owner,
+            diagnostics,
+        );
         ancestors.push(&node.component);
         visit_components(
             node.children.as_deref().unwrap_or_default(),
@@ -504,12 +579,20 @@ fn check_placement(
     context: ComponentContext,
     specs: Option<&Components>,
     owner: &str,
-) -> Result<ComponentContext, String> {
+    diagnostics: &mut Vec<Diagnostic>,
+) -> ComponentContext {
     let Some(spec) = specs.and_then(|specs| specs.get(component)) else {
-        return Ok(context);
+        return context;
+    };
+    let mut misplaced = |message: String| {
+        diagnostics.push(Diagnostic::warning(
+            MISPLACED_COMPONENT,
+            message,
+            owner.to_owned(),
+        ))
     };
     if !spec.inherits_context && spec.context != context {
-        return Err(format!(
+        misplaced(format!(
             "{owner}: component {} is a {} component and cannot be placed in the {} context",
             repr_str(component),
             context_name(spec.context),
@@ -525,7 +608,7 @@ fn check_placement(
         let mut required: Vec<&str> = spec.downstream_of.iter().map(String::as_str).collect();
         required.sort();
         required.dedup();
-        return Err(format!(
+        misplaced(format!(
             "{owner}: component {} must be inside one of {}",
             repr_str(component),
             py_list(&required)
@@ -540,16 +623,16 @@ fn check_placement(
     forbidden.sort();
     forbidden.dedup();
     if !forbidden.is_empty() {
-        return Err(format!(
+        misplaced(format!(
             "{owner}: component {} must not be inside {}",
             repr_str(component),
             py_list(&forbidden)
         ));
     }
     if spec.inherits_context {
-        return Ok(context);
+        return context;
     }
-    Ok(spec.children_context.unwrap_or(spec.context))
+    spec.children_context.unwrap_or(spec.context)
 }
 
 /// `validate_manifest_against_catalog`: a blok manifest against its one catalog.
@@ -853,10 +936,10 @@ fn validate_widgets_against_catalogs(
     catalogs: &[Catalog],
     definition: &DefinitionInputModel,
 ) -> Result<Vec<Diagnostic>, String> {
-    let operations = resolve_operations(catalogs)?;
-    let specs = resolve_components(catalogs)?;
+    // Operation conflicts are reported with the definition's calls (`collect_diagnostics`).
+    let (operations, _) = resolve_operations(catalogs);
+    let (specs, mut diagnostics) = resolve_components(catalogs);
     let label = catalog_label(catalogs);
-    let mut diagnostics = vec![];
     for (owner, widget) in definition_widgets(definition) {
         let owner = format!("widget of {owner}");
         let custom = match widget {
@@ -887,7 +970,7 @@ fn validate_widgets_against_catalogs(
                     .flatten()
                     .filter_map(|a| a.call.as_ref()),
             );
-            diagnostics.extend(check_calls(calls, &operations, &label, &owner)?);
+            diagnostics.extend(check_calls(calls, &operations, &label, &owner));
         }
     }
     Ok(diagnostics)
@@ -983,14 +1066,14 @@ pub async fn collect_diagnostics(
     optimistics: Option<&[OptimisticInputModel]>,
 ) -> Result<Vec<Diagnostic>, String> {
     let (catalogs, unapplied) = catalogs_for_definition(conn, definition, organization).await?;
-    let operations = resolve_operations(&catalogs)?;
+    let (operations, mut diagnostics) = resolve_operations(&catalogs);
     let label = catalog_label(&catalogs);
-    let mut diagnostics = check_calls(
+    diagnostics.extend(check_calls(
         definition_calls(definition, optimistics),
         &operations,
         &label,
         &format!("Definition {}", definition.key),
-    )?;
+    ));
     diagnostics.extend(validate_widgets_against_catalogs(&catalogs, definition)?);
     diagnostics.extend(unapplied);
     for diagnostic in &diagnostics {

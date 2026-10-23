@@ -4,14 +4,26 @@ Every definition and blok is checked against the *base catalog* (``rekuest_core.
 pure operations every UI implements. A ``UICatalog`` a UI app has registered *extends* it with the
 components it can render and further operations; it may not redefine base names.
 
-Two kinds of finding:
+Every catalog finding is a warning (:class:`DiagnosticModel`): the blok is stored, the finding
+with it, and the UI shows it. The catalog is the UI's own; the server holds only the copy a UI
+registered, which may be older or newer than the UI that draws the blok, and a renderer draws a
+node it does not know as an inline error anyway. So nothing here refuses a blok for:
 
-- hard errors (``ValueError``, registration aborts): a known operation called with argument keys it
-  does not accept or without a required one; an unknown component, prop or child once a catalog
-  has registered components; two catalogs defining one operation or component differently.
-- warnings (returned as :class:`DiagnosticModel`, registration succeeds, the caller stores them):
-  an operation neither the base catalog nor the named catalogs provide. UI apps roll out new
-  operations independently of agents, so this must not block registration.
+- a component, prop or child the catalog does not know, or one placed where its spec says it may
+  not be (``unknown_component``, ``unknown_prop``, ``missing_prop``, ``children_not_accepted``,
+  ``unbound_callback``, ``misplaced_component``);
+- an operation the catalogs do not provide (``unknown_operation``), or a known one called with
+  argument keys it does not take (``operation_arguments``);
+- two catalogs defining one operation or component differently (``catalog_conflict``: the first
+  catalog's definition is used).
+
+What stays a refusal (``ValueError``) is what makes the stored row coherent whatever the catalog
+says: the context root, a logo's size and palette, and an ASSET prop that must name an asset the
+app registered (its relation is built from it). Authors get strict checking where they write:
+arkitekt-spec's ``mode="strict"`` and the BSX editor, both against the UI's own catalog.
+
+The same rules run in takt (``crates/facade/src/catalog_validation.rs``), which registers agents'
+bloks; ``rekuest_core/catalogs/validation_cases.json`` holds the cases both must agree on.
 
 Components are only checked once a named catalog has registered any (before that the catalog is
 just a name), so a CUSTOM widget or blok component in an unregistered catalog is accepted silently.
@@ -25,12 +37,24 @@ from typing import Iterable, Iterator, Mapping, Sequence
 
 from facade import models
 from rekuest_core import enums
-from rekuest_core.catalogs import BASE_CATALOG_ID, base_operation_names, base_operations
+from rekuest_core.catalogs import BASE_CATALOG_ID, base_component_names, base_components, base_operation_names, base_operations
 from rekuest_core.inputs import models as rimodels
 from rekuest_core.inputs.models import iter_util_calls
 from rekuest_core.objects.models import DiagnosticModel
 
 UNKNOWN_OPERATION = "unknown_operation"
+OPERATION_ARGUMENTS = "operation_arguments"
+CATALOG_CONFLICT = "catalog_conflict"
+UNKNOWN_COMPONENT = "unknown_component"
+UNKNOWN_PROP = "unknown_prop"
+MISSING_PROP = "missing_prop"
+CHILDREN_NOT_ACCEPTED = "children_not_accepted"
+UNBOUND_CALLBACK = "unbound_callback"
+MISPLACED_COMPONENT = "misplaced_component"
+
+
+def _warning(code: str, message: str, path: str | None) -> DiagnosticModel:
+    return DiagnosticModel(level=enums.DiagnosticLevel.WARNING, code=code, message=message, path=path)
 # The one component a blok of each of these contexts may have as its root.
 CONTEXT_ROOTS = {
     enums.ComponentContext.SCENE: "Scene",
@@ -52,52 +76,79 @@ LOGO_PATH_DATA_PROPS = ("d", "points")
 Widget = rimodels._AssignWidgetBase | rimodels._ReturnWidgetBase
 
 
-def resolve_operations(catalogs: Sequence[models.UICatalog]) -> dict[str, rimodels.CatalogOperationInputModel]:
+def resolve_operations(
+    catalogs: Sequence[models.UICatalog], findings: list[DiagnosticModel] | None = None
+) -> dict[str, rimodels.CatalogOperationInputModel]:
     """The operations in force: the base catalog plus everything the given catalogs registered.
 
-    Two catalogs may register the same operation only if they define it identically; a
-    conflicting definition is a hard error, because the UI could not know which one to run.
+    Two catalogs may register the same operation only if they define it identically. A
+    conflicting definition is reported in ``findings`` (``catalog_conflict``) and the first
+    catalog's is kept; without ``findings`` it is raised.
     """
     operations = dict(base_operations())
     provider: dict[str, str] = {}
     for catalog in catalogs:
         for operation in catalog.get_operations():
+            # Base wins: a catalog registered before an operation joined base still lists it.
+            if operation.name in base_operation_names():
+                continue
             previous = operations.get(operation.name)
             if previous is not None and operation.name in provider and previous.model_dump() != operation.model_dump():
-                raise ValueError(f"operation {operation.name!r} is defined differently by catalogs {provider[operation.name]!r} and {catalog.name!r}")
+                message = f"operation {operation.name!r} is defined differently by catalogs {provider[operation.name]!r} and {catalog.name!r}"
+                if findings is None:
+                    raise ValueError(message)
+                findings.append(_warning(CATALOG_CONFLICT, message, None))
+                continue
             operations[operation.name] = operation
             provider.setdefault(operation.name, catalog.name)
     return operations
 
 
-def resolve_components(catalogs: Sequence[models.UICatalog]) -> dict[str, rimodels.CatalogComponentInputModel] | None:
-    """The components in force: the union of what the given catalogs registered.
+def resolve_components(
+    catalogs: Sequence[models.UICatalog], findings: list[DiagnosticModel] | None = None
+) -> dict[str, rimodels.CatalogComponentInputModel] | None:
+    """The components in force: the base catalog's plus the union of what the given catalogs registered.
 
     ``None`` when no catalog has registered components yet, meaning component names cannot be
-    checked at all (the base catalog has no components). Two catalogs may register the same
-    component only if they define it identically.
+    checked at all (the base catalog's control flow alone says nothing about what a UI draws).
+    Two catalogs may register the same component only if they define it identically; a conflict
+    is reported or raised as in :func:`resolve_operations`.
     """
-    components: dict[str, rimodels.CatalogComponentInputModel] = {}
-    provider: dict[str, str] = {}
+    components: dict[str, rimodels.CatalogComponentInputModel] = dict(base_components())
+    provider: dict[str, str] = {name: BASE_CATALOG_ID for name in components}
     registered = False
     for catalog in catalogs:
         if not catalog.components:
             continue
         registered = True
         for component in catalog.get_components():
+            # Base wins, as for operations: an older registration may still list it.
+            if component.name in components and provider[component.name] == BASE_CATALOG_ID:
+                continue
             previous = components.get(component.name)
             if previous is not None and previous.model_dump() != component.model_dump():
-                raise ValueError(f"component {component.name!r} is defined differently by catalogs {provider[component.name]!r} and {catalog.name!r}")
+                message = f"component {component.name!r} is defined differently by catalogs {provider[component.name]!r} and {catalog.name!r}"
+                if findings is None:
+                    raise ValueError(message)
+                findings.append(_warning(CATALOG_CONFLICT, message, None))
+                continue
             components[component.name] = component
             provider.setdefault(component.name, catalog.name)
     return components if registered else None
 
 
-def check_extension_does_not_shadow_base(operations: Iterable[rimodels.CatalogOperationInputModel], catalog_name: str) -> None:
-    """A UI catalog may add operations but never redefine a base one."""
+def check_extension_does_not_shadow_base(
+    operations: Iterable[rimodels.CatalogOperationInputModel],
+    catalog_name: str,
+    components: Iterable[rimodels.CatalogComponentInputModel] = (),
+) -> None:
+    """A UI catalog may add operations and components but never redefine a base one."""
     shadowed = sorted({operation.name for operation in operations} & base_operation_names())
     if shadowed:
         raise ValueError(f"catalog {catalog_name!r} cannot redefine base operations {shadowed}")
+    shadowed = sorted({component.name for component in components} & base_component_names())
+    if shadowed:
+        raise ValueError(f"catalog {catalog_name!r} cannot redefine base components {shadowed}")
 
 
 def _catalog_label(catalogs: Sequence[models.UICatalog]) -> str:
@@ -118,10 +169,10 @@ def _check_call(call: rimodels.UtilCallInputModel, operations: dict[str, rimodel
     passed = {argument.key for argument in call.arguments or []}
     unknown = sorted(key for key in passed - set(accepted) if key is not None)
     if unknown:
-        raise ValueError(f"{owner}: operation {call.operation!r} does not accept arguments {unknown}")
+        return _warning(OPERATION_ARGUMENTS, f"{owner}: operation {call.operation!r} does not accept arguments {unknown}", owner)
     missing = sorted(key for key, argument in accepted.items() if argument.required and key not in passed)
     if missing:
-        raise ValueError(f"{owner}: operation {call.operation!r} requires arguments {missing}")
+        return _warning(OPERATION_ARGUMENTS, f"{owner}: operation {call.operation!r} requires arguments {missing}", owner)
     return None
 
 
@@ -138,10 +189,12 @@ def _check_calls(calls: Iterable[rimodels.UtilCallInputModel], operations: dict[
 def validate_calls_against_catalogs(catalogs: Sequence[models.UICatalog], calls: Iterable[rimodels.UtilCallInputModel], owner: str) -> list[DiagnosticModel]:
     """Check every call (and every call nested in its arguments) against base plus ``catalogs``.
 
-    Returns the warnings for unknown operations; raises for argument-key mismatches on known ones
-    and for operations the catalogs define differently.
+    Returns the findings: unknown operations, argument-key mismatches on known ones, and
+    operations the catalogs define differently.
     """
-    return _check_calls(calls, resolve_operations(catalogs), _catalog_label(catalogs), owner)
+    findings: list[DiagnosticModel] = []
+    operations = resolve_operations(catalogs, findings)
+    return [*findings, *_check_calls(calls, operations, _catalog_label(catalogs), owner)]
 
 
 def validate_calls_against_catalog(catalog: models.UICatalog | None, calls: Iterable[rimodels.UtilCallInputModel], owner: str) -> list[DiagnosticModel]:
@@ -156,30 +209,33 @@ def _check_component(
     catalog_label: str,
     owner: str,
 ) -> list[DiagnosticModel]:
-    """One component node: structure against the registered specs (if any), calls against the operations."""
+    """One component node: structure against the registered specs (if any), calls against the operations.
+
+    What the catalog says of the node is a finding; only an ASSET prop that names no asset is raised.
+    """
     spec = component_specs.get(node.component) if component_specs is not None else None
+    diagnostics: list[DiagnosticModel] = []
     if component_specs is not None:
         if spec is None:
-            raise ValueError(f"{owner}: component {node.component!r} is not registered in catalog ({catalog_label})")
-        if node.children and not spec.accepts_children:
-            raise ValueError(f"{owner}: component {node.component!r} does not accept children")
+            diagnostics.append(_warning(UNKNOWN_COMPONENT, f"{owner}: component {node.component!r} is not registered in catalog ({catalog_label})", owner))
+        else:
+            if node.children and not spec.accepts_children:
+                diagnostics.append(_warning(CHILDREN_NOT_ACCEPTED, f"{owner}: component {node.component!r} does not accept children", owner))
+            prop_specs = {prop.key: prop for prop in spec.props}
+            present = {prop.key for prop in node.props or []}
+            unknown = sorted(present - set(prop_specs))
+            if unknown:
+                diagnostics.append(_warning(UNKNOWN_PROP, f"{owner}: component {node.component!r} has no props {unknown}", owner))
+            missing = sorted(key for key, prop in prop_specs.items() if prop.required and key not in present)
+            if missing:
+                diagnostics.append(_warning(MISSING_PROP, f"{owner}: component {node.component!r} requires props {missing}", owner))
 
-        prop_specs = {prop.key: prop for prop in spec.props}
-        present = {prop.key for prop in node.props or []}
-        unknown = sorted(present - set(prop_specs))
-        if unknown:
-            raise ValueError(f"{owner}: component {node.component!r} has no props {unknown}")
-        missing = sorted(key for key, prop in prop_specs.items() if prop.required and key not in present)
-        if missing:
-            raise ValueError(f"{owner}: component {node.component!r} requires props {missing}")
-
-    diagnostics: list[DiagnosticModel] = []
     for prop in node.props or []:
         prop_owner = f"prop {prop.key!r} of {owner}"
         if spec is not None:
             kind = next((p.kind for p in spec.props if p.key == prop.key), None)
             if kind == enums.CatalogValueKind.CALLBACK and prop.agent_call is None and prop.util_call is None:
-                raise ValueError(f"{prop_owner} is a CALLBACK prop and must be bound via agent_call or util_call")
+                diagnostics.append(_warning(UNBOUND_CALLBACK, f"{prop_owner} is a CALLBACK prop and must be bound via agent_call or util_call", prop_owner))
             _check_asset_prop(kind, prop, prop_owner)
         diagnostics.extend(_check_calls(_prop_calls(prop), operations, catalog_label, prop_owner))
     return diagnostics
@@ -207,16 +263,16 @@ def validate_components_against_catalogs(
     to the size of an icon (:func:`check_logo_complexity`), their loops counted in
     ``demo_state``, and an action logo to the palette (:func:`check_logo_palette`).
     """
-    operations = resolve_operations(catalogs)
-    component_specs = resolve_components(catalogs)
-    catalog_label = _catalog_label(catalogs)
     diagnostics: list[DiagnosticModel] = []
+    operations = resolve_operations(catalogs, diagnostics)
+    component_specs = resolve_components(catalogs, diagnostics)
+    catalog_label = _catalog_label(catalogs)
 
     def visit(nodes: list[rimodels.ComponentNodeInputModel] | None, ancestors: tuple[str, ...], context: enums.ComponentContext) -> None:
         for node in nodes or []:
             owner = f"component {node.id!r}"
             diagnostics.extend(_check_component(node, component_specs, operations, catalog_label, owner))
-            inner = _check_placement(node.component, ancestors, context, component_specs, owner)
+            inner = _check_placement(node.component, ancestors, context, component_specs, owner, diagnostics)
             visit(node.children, (*ancestors, node.component), inner)
 
     root = CONTEXT_ROOTS.get(context)
@@ -346,8 +402,11 @@ def _check_placement(
     context: enums.ComponentContext,
     component_specs: dict[str, rimodels.CatalogComponentInputModel] | None,
     owner: str,
+    diagnostics: list[DiagnosticModel],
 ) -> enums.ComponentContext:
     """Where a component sits in the tree, against what it declares; returns the context of its children.
+
+    A component placed where its spec says it may not be is a finding (``misplaced_component``).
 
     A tree starts in the html context. A component whose ``children_context`` differs from its
     own bridges two renderers, and everything below it is checked in the new one. One that
@@ -357,12 +416,12 @@ def _check_placement(
     if spec is None:
         return context
     if not spec.inherits_context and spec.context != context:
-        raise ValueError(f"{owner}: component {component!r} is a {spec.context.value.lower()} component and cannot be placed in the {context.value.lower()} context")
+        diagnostics.append(_warning(MISPLACED_COMPONENT, f"{owner}: component {component!r} is a {spec.context.value.lower()} component and cannot be placed in the {context.value.lower()} context", owner))
     if spec.downstream_of and not set(spec.downstream_of) & set(ancestors):
-        raise ValueError(f"{owner}: component {component!r} must be inside one of {sorted(spec.downstream_of)}")
+        diagnostics.append(_warning(MISPLACED_COMPONENT, f"{owner}: component {component!r} must be inside one of {sorted(spec.downstream_of)}", owner))
     forbidden = sorted(set(spec.not_downstream_of) & set(ancestors))
     if forbidden:
-        raise ValueError(f"{owner}: component {component!r} must not be inside {forbidden}")
+        diagnostics.append(_warning(MISPLACED_COMPONENT, f"{owner}: component {component!r} must not be inside {forbidden}", owner))
     if spec.inherits_context:
         return context
     return spec.children_context or spec.context
@@ -400,10 +459,10 @@ def iter_widget_calls(widget: Widget) -> Iterator[rimodels.UtilCallInputModel]:
 
 def validate_widgets_against_catalogs(catalogs: Sequence[models.UICatalog], widgets: Iterable[tuple[str, Widget]]) -> list[DiagnosticModel]:
     """Widgets are validated like blok components: a CUSTOM widget is a one-node manifest, and every call it carries is checked."""
-    operations = resolve_operations(catalogs)
-    component_specs = resolve_components(catalogs)
-    catalog_label = _catalog_label(catalogs)
     diagnostics: list[DiagnosticModel] = []
+    operations = resolve_operations(catalogs, diagnostics)
+    component_specs = resolve_components(catalogs, diagnostics)
+    catalog_label = _catalog_label(catalogs)
     for owner, widget in widgets:
         if isinstance(widget, (rimodels.CustomAssignWidgetInputModel, rimodels.CustomReturnWidgetInputModel)):
             node = rimodels.ComponentNodeInputModel(id="widget", component=widget.component, props=widget.props)

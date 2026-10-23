@@ -1195,7 +1195,7 @@ input AutoResolveInput {
 }
 
 """
-The built-in base catalog: the pure operations every UI implements, applied to every definition and blok before any registered UI catalog. Virtual: shipped with the server, not registered, identical in every organization.
+The built-in base catalog: the pure operations and control-flow components every UI implements, applied to every definition and blok before any registered UI catalog. Virtual: shipped with the server, not registered, identical in every organization.
 """
 type BaseCatalog {
   """Always 'base'."""
@@ -1209,6 +1209,11 @@ type BaseCatalog {
 
   """The base operations, argument order being positional order."""
   operations: [CatalogOperation!]!
+
+  """
+  The base components: control flow (foreach, if, match, …), named in lowercase. A UI catalog may not redefine them.
+  """
+  components: [CatalogComponent!]!
 }
 
 """The input for bouncing an agent."""
@@ -1232,7 +1237,9 @@ type Blok {
   """
   app: App
 
-  """Materialized bloks that are instances of this blok."""
+  """
+  Materialized bloks that are instances of this blok, but the ones made for a message.
+  """
   materializedBloks(filters: MaterializedBlokFilter, ordering: [MaterializedBlokOrder!]! = [], pagination: OffsetPaginationInput): [MaterializedBlok!]!
 
   """Dependencies that need to be resolved for this blok."""
@@ -1276,6 +1283,16 @@ type Blok {
   The items this blok is opened for, declared like an action's args and read under `@args.<key>`; empty for a blok that is opened on its own.
   """
   args: [ArgPort!]!
+
+  """
+  What a person answers through this blok when a task asks with it, declared like an action's returns: the values `blok.answer` hands back. Empty for a blok that answers nothing.
+  """
+  returns: [ReturnPort!]!
+
+  """
+  The backend services this blok reads from (its `query` components name them), each frozen at the version it was written against. A client warns when the live service differs.
+  """
+  services: [BlokService!]!
 
   """
   The whole component tree as one JSON value, in the wire spelling (snake_case keys). Unlike `components` it has no depth limit, which a selection set always has.
@@ -1494,6 +1511,11 @@ input BlokImplementationInput {
   The items this Blok is opened for, declared like an action's args and read under `@args.<key>`. A UI offers the Blok on any item its args accept (`MaterializedBlokFilter.demands`). HTML bloks only.
   """
   args: [ArgPortInput!]! = []
+
+  """
+  The backend services this Blok reads from (its `query` components name them), each frozen at the version it was written against.
+  """
+  services: [BlokServiceInput!]! = []
 }
 
 """
@@ -1546,6 +1568,37 @@ type BlokRevision {
 
   """The agent dependencies of this revision."""
   dependencies: [RevisionDependency!]!
+}
+
+"""
+A backend service a blok reads from, frozen at the version it was written against.
+"""
+type BlokService {
+  key: String!
+  service: String
+  version: String
+  schemaHash: String
+}
+
+"""
+A backend service a blok reads from, frozen at the version it was written against.
+"""
+input BlokServiceInput {
+  """The service's key, as a `query`'s `schema` names it: 'mikro'."""
+  key: String!
+
+  """The service type, in reverse-domain form: 'live.arkitekt.mikro'."""
+  service: String = null
+
+  """
+  The server version the blok was written against, as the service declaration names it ('8').
+  """
+  version: String = null
+
+  """
+  'sha256:<hex>' of the canonical GraphQL schema the blok's queries were checked against.
+  """
+  schemaHash: String = null
 }
 
 """The input for bouncing an agent."""
@@ -1965,6 +2018,11 @@ input CreateBlokInput {
   source: String = null
 
   """
+  The backend services the blok's queries read from, each frozen at the version it was written against. Every `query`'s `schema` must name one.
+  """
+  services: [BlokServiceInput!] = null
+
+  """
   The initial state of the blok. This is used to set the initial state of the blok when it is materialized.
   """
   demoState: Args = null
@@ -2354,6 +2412,11 @@ input DecideInput {
   What the person says with the decision. A child gets it as its Assign's message; a task's own hold gets it back.
   """
   answer: String = null
+
+  """
+  The answer through the blok a task asks with (a hold on a blok), by the blok's returns, and checked against them. Only an approved ask takes them.
+  """
+  values: Args = null
 }
 
 "A definition\n\n    Definitions are the building implementation for Actions and provide the\n    information needed to create a action. They are primarly composed of a name,\n    a description, and a list of ports.\n\n    Definitions provide a protocol of input and output, and do not contain\n    any information about the actual implementation of the action ( this is handled\n    by a implementation that implements a action).\n\n    "
@@ -2710,6 +2773,16 @@ input EditBlokInput {
   The full list of agent dependencies. Kept when omitted; keys not listed are removed.
   """
   dependencies: [AgentDependencyInput!] = null
+
+  """
+  The full list of the items the blok is opened for, read under `@args.<key>` (html bloks only). Kept when omitted; an empty list removes them.
+  """
+  args: [ArgPortInput!] = null
+
+  """
+  The full list of the backend services the blok's queries read from, each frozen at its version. Kept when omitted; an empty list removes them.
+  """
+  services: [BlokServiceInput!] = null
 
   """
   Bindings on `materialized_blok`, by dependency key, over the ones it has. Bindings of keys the edit removes go. Refused with `blok`: a blok binds no agents, its materializations do.
@@ -3476,6 +3549,15 @@ input MappedAgentInput {
   dependencies: [ResolvedDependencyInput!] = null
 }
 
+"""
+Where a materialization lives: DASHBOARD ones are listed and placed on dashboards; a MESSAGE one belongs to the message it was made for, a TASK one to the task that showed it (to ask or to inform). Neither is listed; each is reached by its id.
+"""
+enum MaterializationScope {
+  DASHBOARD
+  MESSAGE
+  TASK
+}
+
 """The input for creating a blok."""
 input MaterializeBlokInput {
   blok: ID!
@@ -3497,6 +3579,11 @@ input MaterializeBlokInput {
   Description of this materialization. Defaults to the blok's description.
   """
   description: String = null
+
+  """
+  MESSAGE: made for one chat message, to show inline in it. It is never listed, takes no dashboard, and may materialize a blok an app provides (bound to any agents).
+  """
+  scope: MaterializationScope! = DASHBOARD
 }
 
 """
@@ -3533,6 +3620,21 @@ type MaterializedBlok {
   The revision this materialization stays at; null when it follows its blok's head.
   """
   pinnedRevision: BlokRevision
+
+  """
+  Where it lives: DASHBOARD, MESSAGE when it was made for one chat message to show inline, or TASK when a task showed it.
+  """
+  scope: MaterializationScope!
+
+  """
+  Why its task showed it (scope TASK): ASK holds the task until a person answers through it, INFORM shows it while the task carries on. Null for any other.
+  """
+  taskRole: TaskBlokRole
+
+  """
+  What it is opened on, by arg key (read under `@args.<key>`): set by the task that showed it. Empty when whoever shows it chooses.
+  """
+  args: Args!
 
   """
   The revision this materialization shows: the pinned one, else its blok's head. Null for a provided blok, which has none.
@@ -4559,13 +4661,17 @@ type Query {
   """All dashboards."""
   dashboards: [Dashboard!]! @auth
 
-  """List of UI Blok."""
+  """
+  List of UI Blok. Leaves out the bloks a task made from its BSX to show: each goes with its task.
+  """
   bloks(filters: BlokFilter, pagination: OffsetPaginationInput): [Blok!]! @auth
 
   """All resolutions."""
   resolutions(filters: ResolutionFilter, pagination: OffsetPaginationInput): [Resolution!]! @auth
 
-  """List of UI Blok."""
+  """
+  List of UI Blok. Leaves out the materializations made for a message: each is shown in its message and reached by its id.
+  """
   materializedBloks(filters: MaterializedBlokFilter, ordering: [MaterializedBlokOrder!]! = [], pagination: OffsetPaginationInput): [MaterializedBlok!]! @auth
 
   """
@@ -6465,6 +6571,11 @@ type Task {
   """The method of the dependency that caused this task, if applicable."""
   dependencyMethod: String
 
+  """
+  The bloks this task showed a person, oldest first: asks it holds on (or held on) and informs.
+  """
+  bloks: [TaskBlok!]!
+
   """List of recent instructions for this task."""
   instructs: [TaskInstruct!]!
 
@@ -6473,6 +6584,53 @@ type Task {
 
   """The resolved dependencies for this task."""
   resolvedDependencies: [ResolvedAgentDependency!]!
+}
+
+"""
+A blok a task showed a person: to ask (the task holds until they answer through it) or to inform.
+"""
+type TaskBlok {
+  """What it shows: a materialization of scope TASK, opened on its args."""
+  materializedBlok: MaterializedBlok!
+
+  """ASK or INFORM."""
+  role: TaskBlokRole!
+
+  """
+  Where it stands: an ask WAITING, ANSWERED, DISMISSED or GONE (the task ended first); an inform SHOWN.
+  """
+  status: TaskBlokStatus!
+
+  """What the task said with it."""
+  message: String
+
+  """The answer to an ask, by the blok's returns."""
+  values: Args
+
+  """The user (sub) who answered or dismissed an ask."""
+  decidedBy: String
+
+  """When the task showed it."""
+  createdAt: DateTime!
+}
+
+"""
+Why a task showed a blok: ASK holds the task until a person answers through it, INFORM shows it while the task carries on.
+"""
+enum TaskBlokRole {
+  ASK
+  INFORM
+}
+
+"""
+Where a blok a task showed stands. WAITING: an ask nobody answered yet. ANSWERED / DISMISSED: a person answered it, or turned it down. GONE: the task ended before anyone did. SHOWN: an inform.
+"""
+enum TaskBlokStatus {
+  WAITING
+  ANSWERED
+  DISMISSED
+  GONE
+  SHOWN
 }
 
 type TaskBoundary {
@@ -6623,6 +6781,7 @@ enum TaskEventKind {
   RESUMED
   HELD
   DECIDED
+  INFORM
   DENIED
   FAILED
   CRITICAL

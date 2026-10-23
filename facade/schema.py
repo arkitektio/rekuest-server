@@ -65,9 +65,17 @@ class Query:
     checkout = field(resolver=queries.checkout, description="Materialize the latest state for a specific agent")
     checkout_agent = field(resolver=queries.checkout_agent, description="Materialize the latest states for a specific agent")
     dashboards: list[types.Dashboard] = field(description="All dashboards.")
-    bloks: list[types.Blok] = field(description="List of UI Blok.")
+    bloks: list[types.Blok] = strawberry_django.field(
+        field_cls=types.blok.ListedBloksField,
+        extensions=[AuthExtension()],
+        description="List of UI Blok. Leaves out the bloks a task made from its BSX to show: each goes with its task.",
+    )
     resolutions: list[types.Resolution] = field(description="All resolutions.")
-    materialized_bloks: list[types.MaterializedBlok] = field(description="List of UI Blok.")
+    materialized_bloks: list[types.MaterializedBlok] = strawberry_django.field(
+        field_cls=types.blok.ListedMaterializationsField,
+        extensions=[AuthExtension()],
+        description="List of UI Blok. Leaves out the materializations made for a message: each is shown in its message and reached by its id.",
+    )
     ui_catalogs: list[types.UICatalog] = field(description="UI catalogs registered in the caller's organization: the components and operations UI apps can render and evaluate.")
     base_catalog = field(resolver=types.dashboard.base_catalog, description="The built-in base catalog every definition and blok is validated against before any registered UI catalog (virtual: shipped with the server, not registered).")
     memory_shelves: list[types.MemoryShelve] = field(description="All memory shelves.")

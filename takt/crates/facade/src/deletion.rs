@@ -98,7 +98,56 @@ pub async fn delete_tasks(conn: &mut PgConnection, tasks: &[i64]) -> Result<(), 
         &all,
     )
     .await?;
+    delete_task_bloks(conn, &all).await?;
     exec(conn, "DELETE FROM facade_task WHERE id = ANY($1)", &all).await
+}
+
+/// What tasks showed (CASCADE on `owner_task`): their materializations, and the bloks made from
+/// their BSX with everything below them (dependencies, arg ports, revisions, any other
+/// materialization of one).
+async fn delete_task_bloks(conn: &mut PgConnection, tasks: &[i64]) -> Result<(), sqlx::Error> {
+    let owned = ids(
+        conn,
+        "SELECT id FROM facade_blok WHERE owner_task_id = ANY($1)",
+        tasks,
+    )
+    .await?;
+    let mut shown = ids(
+        conn,
+        "SELECT id FROM facade_materializedblok WHERE owner_task_id = ANY($1)",
+        tasks,
+    )
+    .await?;
+    shown.extend(
+        ids(
+            conn,
+            "SELECT id FROM facade_materializedblok WHERE blok_id = ANY($1)",
+            &owned,
+        )
+        .await?,
+    );
+    shown.sort_unstable();
+    shown.dedup();
+    delete_materialized_bloks(conn, &shown).await?;
+    if owned.is_empty() {
+        return Ok(());
+    }
+    let dependencies = ids(
+        conn,
+        "SELECT id FROM facade_blokdependency WHERE blok_id = ANY($1)",
+        &owned,
+    )
+    .await?;
+    delete_blok_dependencies(conn, &dependencies).await?;
+    for statement in [
+        "UPDATE facade_blok SET head_id = NULL WHERE id = ANY($1)",
+        "DELETE FROM facade_blokrevision WHERE blok_id = ANY($1)",
+        "DELETE FROM facade_blokargport WHERE blok_id = ANY($1)",
+        "DELETE FROM facade_blok WHERE id = ANY($1)",
+    ] {
+        exec(conn, statement, &owned).await?;
+    }
+    Ok(())
 }
 
 /// Resolutions: their tasks and resolved dependencies (CASCADE).

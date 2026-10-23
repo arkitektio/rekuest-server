@@ -11,8 +11,9 @@ import strawberry
 import strawberry_django
 from django.db.models import QuerySet
 from kante.types import Info
+from strawberry_django.fields.field import StrawberryDjangoField
 
-from facade import filters, models, scalars
+from facade import enums, filters, models, scalars
 from facade.blok_revisions import content_of_blok, content_of_revision
 from facade.types.base import build_prescoped_queryset, row_of
 from facade.types.demand import ActionDependencyModel, StateDependencyModel
@@ -38,6 +39,21 @@ def blok_hash(components: object, demo_state: object, context: str) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
+class ListedMaterializationsField(StrawberryDjangoField):
+    """The materializations a list shows: not the ones made for a message or shown by a task, which only their message or task opens."""
+
+    def get_queryset(self, queryset, info, **kwargs):  # noqa: ANN001, ANN201  strawberry_django's own signature
+        hidden = [enums.MaterializationScopeChoices.MESSAGE, enums.MaterializationScopeChoices.TASK]
+        return super().get_queryset(queryset.exclude(scope__in=hidden), info, **kwargs)
+
+
+class ListedBloksField(StrawberryDjangoField):
+    """The bloks a list shows: not the ones a task made from its BSX to show, which go with their task."""
+
+    def get_queryset(self, queryset, info, **kwargs):  # noqa: ANN001, ANN201  strawberry_django's own signature
+        return super().get_queryset(queryset.filter(owner_task__isnull=True), info, **kwargs)
+
+
 @strawberry_django.type(models.Blok, filters=filters.BlokFilter, pagination=True)
 class Blok:
     id: strawberry.ID
@@ -56,7 +72,8 @@ class Blok:
         return cast("list[Agent]", list(models.Agent.objects.filter(declared_materialized_bloks__blok=row_of(self, models.Blok)).distinct()))
 
     materialized_bloks: list["MaterializedBlok"] = strawberry_django.field(
-        description="Materialized bloks that are instances of this blok.",
+        field_cls=ListedMaterializationsField,
+        description="Materialized bloks that are instances of this blok, but the ones made for a message.",
     )
     dependencies: list["BlokDependency"] = strawberry_django.field(
         description="Dependencies that need to be resolved for this blok.",
@@ -69,6 +86,14 @@ class Blok:
     @strawberry_django.field(description="The items this blok is opened for, declared like an action's args and read under `@args.<key>`; empty for a blok that is opened on its own.")
     def args(self) -> list[rtypes.ArgPort]:
         return cast("list[rtypes.ArgPort]", [rmodels.ArgPortModel(**i) for i in self.args])
+
+    @strawberry_django.field(description="What a person answers through this blok when a task asks with it, declared like an action's returns: the values `blok.answer` hands back. Empty for a blok that answers nothing.")
+    def returns(self) -> list[rtypes.ReturnPort]:
+        return cast("list[rtypes.ReturnPort]", [rmodels.ReturnPortModel(**i) for i in self.returns])
+
+    @strawberry_django.field(description="The backend services this blok reads from (its `query` components name them), each frozen at the version it was written against. A client warns when the live service differs.")
+    def services(self) -> list[rtypes.BlokService]:
+        return cast("list[rtypes.BlokService]", [rmodels.BlokServiceModel(**i) for i in self.services])
 
     for_model: str | None = strawberry_django.field(description="The model reference this blok decorates, if any.")
     for_node: str | None = strawberry_django.field(description="The node of `forModel` this blok attaches to; the model's root when null.")
@@ -232,6 +257,19 @@ class MaterializedBlok:
         description="Placements of this materialized blok.",
     )
     pinned_revision: BlokRevision | None = strawberry_django.field(description="The revision this materialization stays at; null when it follows its blok's head.")
+
+    @strawberry_django.field(description="Where it lives: DASHBOARD, MESSAGE when it was made for one chat message to show inline, or TASK when a task showed it.")
+    def scope(self) -> enums.MaterializationScope:
+        return enums.MaterializationScope(row_of(self, models.MaterializedBlok).scope)
+
+    @strawberry_django.field(description="Why its task showed it (scope TASK): ASK holds the task until a person answers through it, INFORM shows it while the task carries on. Null for any other.")
+    def task_role(self) -> enums.TaskBlokRole | None:
+        role = row_of(self, models.MaterializedBlok).task_role
+        return enums.TaskBlokRole(role) if role else None
+
+    @strawberry_django.field(description="What it is opened on, by arg key (read under `@args.<key>`): set by the task that showed it. Empty when whoever shows it chooses.")
+    def args(self) -> scalars.Args:
+        return cast("scalars.Args", row_of(self, models.MaterializedBlok).args or {})
 
     @strawberry_django.field(description="The revision this materialization shows: the pinned one, else its blok's head. Null for a provided blok, which has none.")
     def revision(self) -> BlokRevision | None:

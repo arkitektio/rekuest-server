@@ -402,6 +402,14 @@ class CatalogComponent:
     not_downstream_of: List[str] = strawberry.field(description="Component names of which none may be an ancestor.")
 
 
+@pydantic.type(models.BlokServiceModel, description="A backend service a blok reads from, frozen at the version it was written against.")
+class BlokService:
+    key: str = strawberry.field(description="The service's key, as a `query`'s `schema` names it: 'mikro'.")
+    service: Optional[str] = strawberry.field(default=None, description="The service type, in reverse-domain form: 'live.arkitekt.mikro'.")
+    version: Optional[str] = strawberry.field(default=None, description="The server version the blok was written against.")
+    schema_hash: Optional[str] = strawberry.field(default=None, description="'sha256:<hex>' of the canonical GraphQL schema the blok's queries were checked against.")
+
+
 @pydantic.type(models.CatalogArgumentModel, description="An argument a catalog operation accepts.")
 class CatalogArgument:
     key: str = strawberry.field(description="The argument key a UtilCall argument must use.")

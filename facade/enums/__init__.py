@@ -5,6 +5,7 @@ the established ``from facade import enums`` / ``enums.X`` access keeps working.
 """
 
 from .action import ActionKindChoices, ActionScope, DemandKind, EffectsChoices, ExecutionChoices, HookKind
+from .blok import MaterializationScope, MaterializationScopeChoices, TaskBlokRole, TaskBlokRoleChoices, TaskBlokStatus
 from .agent import (
     AgentEventChoices,
     AgentKind,
@@ -36,6 +37,12 @@ __all__ = [
     "EffectsChoices",
     "ExecutionChoices",
     "HookKind",
+    # blok
+    "MaterializationScope",
+    "MaterializationScopeChoices",
+    "TaskBlokRole",
+    "TaskBlokRoleChoices",
+    "TaskBlokStatus",
     # agent
     "AgentEventChoices",
     "AgentKind",

@@ -291,8 +291,8 @@ async fn register_blok(
     // `xmax = 0` only on a row this statement inserted: an existing template already has its port rows.
     let (id, name, description, inserted): (i64, String, Option<String>, bool) = sqlx::query_as(
         "INSERT INTO facade_blok (name, description, components, demo_state, diagnostics, creator_id, organization_id, catalog_id,
-                                  context, for_model, for_node, app_id, declaration_hash, args)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                                  context, for_model, for_node, app_id, declaration_hash, args, returns, services)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          ON CONFLICT (organization_id, app_id, name, declaration_hash) WHERE app_id IS NOT NULL DO UPDATE SET
              diagnostics = excluded.diagnostics
          RETURNING id, name, description, (xmax = 0)",
@@ -311,6 +311,8 @@ async fn register_blok(
     .bind(agent.app)
     .bind(hash_blok_definition(blok))
     .bind(serde_json::to_value(&blok.args).expect("blok args serialize"))
+    .bind(serde_json::to_value(&blok.returns).expect("blok returns serialize"))
+    .bind(serde_json::to_value(&blok.services).expect("blok services serialize"))
     .fetch_one(&mut *conn)
     .await?;
     if inserted {

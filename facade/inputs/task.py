@@ -255,6 +255,7 @@ class DecideInputModel(BaseModel):
     task: str = Field(description="The held task: a child an agent asked for, or a task that holds itself")
     approved: bool = Field(description="Approve (the child runs; a task's own hold carries on approved) or deny (the child ends DENIED without running; a task's own hold carries on denied)")
     answer: str | None = Field(default=None, description="What the person says with the decision. A child gets it as its Assign's message; a task's own hold gets it back.")
+    values: dict[str, JSON] | None = Field(default=None, description="The answer through the blok a task asks with (a hold on a blok), by the blok's returns, and checked against them. Only an approved ask takes them.")
 
 
 @pydantic.input(DecideInputModel, description="The input for deciding a held task.")
@@ -262,6 +263,7 @@ class DecideInput:
     task: strawberry.ID
     approved: bool
     answer: str | None = None
+    values: scalars.Args | None = None
 
 
 class InterruptInputModel(BaseModel):

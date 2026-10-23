@@ -74,6 +74,38 @@ impl Tenant {
         Ok(diagnostics.as_array().cloned().unwrap_or_default())
     }
 
+    /// Register; what came of it: a refusal as `("refused", reason)`, else every finding stored on
+    /// the implementation and on the bloks the agent declares, as `(code, message)`. What the UI
+    /// catalog says of a blok or a widget is a finding, never a refusal.
+    async fn findings(&self, payload: Value) -> Vec<(String, String)> {
+        let implementation = match self.register(payload).await {
+            Ok(diagnostics) => diagnostics,
+            Err(reason) => return vec![("refused".into(), reason)],
+        };
+        let bloks: Vec<Value> = sqlx::query_scalar(
+            "SELECT b.diagnostics FROM facade_blok b JOIN facade_materializedblok m ON m.blok_id = b.id
+              WHERE m.declared_by_id = $1",
+        )
+        .bind(self.agent)
+        .fetch_all(&self.db)
+        .await
+        .unwrap();
+        implementation
+            .iter()
+            .chain(
+                bloks
+                    .iter()
+                    .flat_map(|d| d.as_array().into_iter().flatten()),
+            )
+            .map(|d| {
+                (
+                    d["code"].as_str().unwrap().to_owned(),
+                    d["message"].as_str().unwrap().to_owned(),
+                )
+            })
+            .collect()
+    }
+
     async fn count(&self, table: &str) -> i64 {
         let column = if table == "facade_blok" {
             "organization_id"
@@ -135,6 +167,13 @@ fn widget(named: &[&str], widget: Value, return_widget: Option<Value>, port_kind
         "key": "scan", "version": "1", "name": "Scan", "kind": "FUNCTION", "catalogs": catalogs(named),
         "args": [{"key": "exposure", "kind": port_kind, "identifier": identifier, "nullable": false, "widget": widget}],
         "returns": returns}}]})
+}
+
+/// Whether `findings` hold one with `code` whose message says `message`.
+fn found(findings: &[(String, String)], code: &str, message: &str) -> bool {
+    findings
+        .iter()
+        .any(|(c, m)| c == code && m.contains(message))
 }
 
 fn codes(diagnostics: &[Value]) -> Vec<&str> {
@@ -204,22 +243,27 @@ async fn base_applies_without_a_catalog() {
 }
 
 #[tokio::test]
-async fn a_base_argument_mismatch_refuses_the_registration() {
+async fn a_base_argument_mismatch_is_a_finding() {
     let Some(t) = tenant().await else { return };
-    let between = t.register(call(&[], "between")).await.unwrap_err();
+    let between = t.findings(call(&[], "between")).await;
     assert!(
-        between.contains("operation 'between' does not accept arguments ['a', 'b']"),
-        "{between}"
+        found(
+            &between,
+            "operation_arguments",
+            "operation 'between' does not accept arguments ['a', 'b']"
+        ),
+        "{between:?}"
     );
-    let gt = t
-        .register(payload(&[], "gt", ("a", "c"), json!([])))
-        .await
-        .unwrap_err();
+    let gt = t.findings(payload(&[], "gt", ("a", "c"), json!([]))).await;
     assert!(
-        gt.contains("operation 'gt' does not accept arguments ['c']"),
-        "{gt}"
+        found(
+            &gt,
+            "operation_arguments",
+            "operation 'gt' does not accept arguments ['c']"
+        ),
+        "{gt:?}"
     );
-    assert_eq!(t.count("facade_implementation").await, 0);
+    assert_eq!(t.count("facade_implementation").await, 1);
 }
 
 #[tokio::test]
@@ -252,15 +296,15 @@ async fn agent_declared_bloks_are_validated_against_their_catalog() {
     )
     .await;
     let knob = json!([{"key": "panel", "catalog": "electron", "components": [{"id": "root", "component": "Knob"}]}]);
-    let refused = t
-        .register(payload(&[], "gt", ("a", "b"), knob))
-        .await
-        .unwrap_err();
+    let knob = t.findings(payload(&[], "gt", ("a", "b"), knob)).await;
     assert!(
-        refused.contains("component 'Knob' is not registered"),
-        "{refused}"
+        found(
+            &knob,
+            "unknown_component",
+            "component 'Knob' is not registered"
+        ),
+        "{knob:?}"
     );
-    assert_eq!(t.count("facade_blok").await, 0);
 
     let boxed = json!([{"key": "panel", "catalog": "electron", "components": [
         {"id": "root", "component": "Box", "props": [{"key": "v", "util_call": {"operation": "fizz"}}]}]}]);
@@ -288,13 +332,14 @@ async fn a_blok_naming_no_catalog_is_checked_against_the_standard_one() {
     t.catalog("orkestrator", json!([]), json!([{"name": "Box"}]))
         .await;
     let knob = json!([{"key": "panel", "components": [{"id": "root", "component": "Knob"}]}]);
-    let refused = t
-        .register(payload(&[], "gt", ("a", "b"), knob))
-        .await
-        .unwrap_err();
+    let knob = t.findings(payload(&[], "gt", ("a", "b"), knob)).await;
     assert!(
-        refused.contains("component 'Knob' is not registered"),
-        "{refused}"
+        found(
+            &knob,
+            "unknown_component",
+            "component 'Knob' is not registered"
+        ),
+        "{knob:?}"
     );
 
     let boxed = json!([{"key": "panel", "components": [{"id": "root", "component": "Box"}]}]);
@@ -367,11 +412,11 @@ async fn components_are_held_to_their_declared_placement() {
             "component 'Scene' must not be inside ['Scene']",
         ),
     ] {
-        let refused = t
-            .register(payload(&[], "gt", ("a", "b"), blok(tree)))
-            .await
-            .unwrap_err();
-        assert!(refused.contains(message), "{refused}");
+        let findings = t.findings(payload(&[], "gt", ("a", "b"), blok(tree))).await;
+        assert!(
+            found(&findings, "misplaced_component", message),
+            "{findings:?}"
+        );
     }
 }
 
@@ -416,9 +461,11 @@ async fn a_logo_blok_is_one_svg_and_control_flow_takes_its_context() {
             .unwrap();
     }
 
-    for (bloks, message) in [
+    // The root a context requires still refuses; where the catalog places a component is a finding.
+    for (bloks, code, message) in [
         (
             blok("LOGO", json!([path.clone()])),
+            "refused",
             "the root of a logo blok must be a 'SVG', not 'Path'",
         ),
         (
@@ -426,6 +473,7 @@ async fn a_logo_blok_is_one_svg_and_control_flow_takes_its_context() {
                 "LOGO",
                 json!([{"id": "logo", "component": "SVG"}, {"id": "other", "component": "SVG"}]),
             ),
+            "refused",
             "a logo blok has exactly one root, a 'SVG', not 2 roots",
         ),
         (
@@ -433,6 +481,7 @@ async fn a_logo_blok_is_one_svg_and_control_flow_takes_its_context() {
                 "LOGO",
                 json!([looped(json!({"id": "logo", "component": "SVG"}))]),
             ),
+            "refused",
             "the root of a logo blok must be a 'SVG', not 'foreach'",
         ),
         (
@@ -440,6 +489,7 @@ async fn a_logo_blok_is_one_svg_and_control_flow_takes_its_context() {
                 "HTML",
                 json!([{"id": "root", "component": "Box", "children": [path.clone()]}]),
             ),
+            "misplaced_component",
             "component 'Path' is a logo component and cannot be placed in the html context",
         ),
         (
@@ -448,14 +498,12 @@ async fn a_logo_blok_is_one_svg_and_control_flow_takes_its_context() {
                 json!([{"id": "logo", "component": "SVG", "children": [
                 looped(json!({"id": "b", "component": "Box"}))]}]),
             ),
+            "misplaced_component",
             "component 'Box' is a html component and cannot be placed in the logo context",
         ),
     ] {
-        let refused = t
-            .register(payload(&[], "gt", ("a", "b"), bloks))
-            .await
-            .unwrap_err();
-        assert!(refused.contains(message), "{refused}");
+        let findings = t.findings(payload(&[], "gt", ("a", "b"), bloks)).await;
+        assert!(found(&findings, code, message), "{findings:?}");
     }
 }
 
@@ -704,18 +752,21 @@ async fn multiple_catalogs_are_unioned_with_base() {
             "{operation}"
         );
     }
-    let refused = t
-        .register(payload(&["electron", "web"], "fmt", ("x", "y"), json!([])))
-        .await
-        .unwrap_err();
+    let findings = t
+        .findings(payload(&["electron", "web"], "fmt", ("x", "y"), json!([])))
+        .await;
     assert!(
-        refused.contains("'fmt' does not accept arguments"),
-        "{refused}"
+        found(
+            &findings,
+            "operation_arguments",
+            "'fmt' does not accept arguments"
+        ),
+        "{findings:?}"
     );
 }
 
 #[tokio::test]
-async fn conflicting_catalogs_are_refused_and_identical_ones_tolerated() {
+async fn conflicting_catalogs_are_a_finding_and_identical_ones_tolerated() {
     let Some(t) = tenant().await else { return };
     let clamp: Value = serde_json::from_str(CLAMP).unwrap();
     t.catalog("electron", json!([clamp.clone()]), json!([]))
@@ -729,15 +780,20 @@ async fn conflicting_catalogs_are_refused_and_identical_ones_tolerated() {
         .await
         .unwrap()
         .is_empty());
-    let refused = t
-        .register(call(&["electron", "rival"], "clamp"))
-        .await
-        .unwrap_err();
+    // The first catalog keeps it: `clamp` is still called as electron defines it.
+    let findings = t.findings(call(&["electron", "rival"], "clamp")).await;
+    assert_eq!(
+        findings.iter().map(|(c, _)| c.as_str()).collect::<Vec<_>>(),
+        ["catalog_conflict"],
+        "{findings:?}"
+    );
     assert!(
-        refused.contains(
+        found(
+            &findings,
+            "catalog_conflict",
             "operation 'clamp' is defined differently by catalogs 'electron' and 'rival'"
         ),
-        "{refused}"
+        "{findings:?}"
     );
 }
 
@@ -764,21 +820,18 @@ async fn a_custom_widget_component_is_checked_once_the_catalog_registers_compone
         .is_empty());
     t.catalog("electron", json!([]), json!([{"name": "Box"}]))
         .await;
-    let refused = t
-        .register(widget(&["electron"], custom_knob(), None, "FLOAT"))
-        .await
-        .unwrap_err();
+    let findings = t
+        .findings(widget(&["electron"], custom_knob(), None, "FLOAT"))
+        .await;
     assert!(
-        refused.contains(
+        found(
+            &findings,
+            "unknown_component",
             "widget of Definition scan port exposure: component 'Knob' is not registered"
         ),
-        "{refused}"
+        "{findings:?}"
     );
-    assert_eq!(
-        t.count("facade_implementation").await,
-        1,
-        "the earlier registration survived"
-    );
+    assert_eq!(t.count("facade_implementation").await, 1);
     t.catalog(
         "electron",
         json!([]),
@@ -815,13 +868,14 @@ async fn widget_calls_are_checked_like_validator_calls() {
 
     let wrong = json!({"kind": "CUSTOM", "component": "Knob", "props": [{"key": "label",
                        "util_call": {"operation": "gt", "arguments": [{"key": "left", "value_path": "/value"}]}}]});
-    let refused = t
-        .register(widget(&[], wrong, None, "FLOAT"))
-        .await
-        .unwrap_err();
+    let findings = t.findings(widget(&[], wrong, None, "FLOAT")).await;
     assert!(
-        refused.contains("operation 'gt' does not accept arguments ['left']"),
-        "{refused}"
+        found(
+            &findings,
+            "operation_arguments",
+            "operation 'gt' does not accept arguments ['left']"
+        ),
+        "{findings:?}"
     );
 }
 
@@ -833,42 +887,50 @@ async fn filter_ports_fallbacks_and_return_widgets_are_walked() {
     let query = "query S($search: String, $values: [ID!], $f: String) { x }";
     let in_filter = json!({"kind": "SEARCH", "query": query, "ward": "mikro",
                            "filters": [{"key": "f", "kind": "STRING", "nullable": false, "widget": custom_knob()}]});
-    let refused = t
-        .register(widget(&["electron"], in_filter, None, "STRUCTURE"))
-        .await
-        .unwrap_err();
+    let findings = t
+        .findings(widget(&["electron"], in_filter, None, "STRUCTURE"))
+        .await;
     assert!(
-        refused.contains("widget of Definition scan port exposure filter port f: component 'Knob'"),
-        "{refused}"
+        found(
+            &findings,
+            "unknown_component",
+            "widget of Definition scan port exposure filter port f: component 'Knob'"
+        ),
+        "{findings:?}"
     );
 
     let mut in_fallback = custom_knob();
     in_fallback["component"] = json!("Box");
     in_fallback["props"] = json!([]);
     in_fallback["fallback"] = custom_knob();
-    let refused = t
-        .register(widget(&["electron"], in_fallback, None, "FLOAT"))
-        .await
-        .unwrap_err();
+    let findings = t
+        .findings(widget(&["electron"], in_fallback, None, "FLOAT"))
+        .await;
     assert!(
-        refused.contains("widget of Definition scan port exposure fallback 1: component 'Knob'"),
-        "{refused}"
+        found(
+            &findings,
+            "unknown_component",
+            "widget of Definition scan port exposure fallback 1: component 'Knob'"
+        ),
+        "{findings:?}"
     );
 
-    let refused = t
-        .register(widget(
+    let findings = t
+        .findings(widget(
             &["electron"],
             json!({"kind": "SLIDER"}),
             Some(json!({"kind": "CUSTOM", "component": "Gauge"})),
             "FLOAT",
         ))
-        .await
-        .unwrap_err();
+        .await;
     assert!(
-        refused.contains("widget of Definition scan port out: component 'Gauge'"),
-        "{refused}"
+        found(
+            &findings,
+            "unknown_component",
+            "widget of Definition scan port out: component 'Gauge'"
+        ),
+        "{findings:?}"
     );
-    assert_eq!(t.count("facade_implementation").await, 0);
 }
 
 #[tokio::test]
@@ -1296,29 +1358,32 @@ async fn a_blok_may_be_registered_as_its_bsx_source() {
         .unwrap();
     assert_eq!(stored().await, from_tree);
 
-    for (blok, message) in [
+    for (blok, code, message) in [
         (
             json!({"key": "panel", "components": tree, "source": "<Box />"}),
+            "refused",
             "not both",
         ),
         (
             json!({"key": "panel"}),
+            "refused",
             "a blok is sent as its components or as its BSX source",
         ),
         (
             json!({"key": "panel", "source": "<Box><Label></Box>"}),
+            "refused",
             "Failed to parse BSX/XML at line 1",
         ),
         (
             json!({"key": "panel", "catalog": "electron", "source": "<Box><Knob /></Box>"}),
+            "unknown_component",
             "component 'Knob' is not registered",
         ),
     ] {
-        let refused = t
-            .register(payload(&[], "gt", ("a", "b"), json!([blok])))
-            .await
-            .unwrap_err();
-        assert!(refused.contains(message), "{refused}");
+        let findings = t
+            .findings(payload(&[], "gt", ("a", "b"), json!([blok])))
+            .await;
+        assert!(found(&findings, code, message), "{findings:?}");
     }
 }
 

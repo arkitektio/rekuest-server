@@ -1018,6 +1018,85 @@ pub struct BlokImplementationInputModel {
     /// The items this blok is opened for, read under `@args.<key>`. HTML bloks only.
     #[serde(default)]
     pub args: Vec<ArgPortInputModel>,
+    /// What a person answers through this blok when a task asks with it: the values its tree
+    /// hands back with `blok.answer`. Left out of its dump when empty, as before bloks had returns.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub returns: Vec<ReturnPortInputModel>,
+    /// The backend services its `query` components read from, each frozen at the version it
+    /// was written against. Left out of its dump when empty, as before bloks named them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub services: Vec<BlokServiceInputModel>,
+}
+
+/// A backend service a blok reads from, frozen at the version it was written against
+/// (`BlokServiceInputModel`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BlokServiceInputModel {
+    /// The service's key, as a `query`'s `schema` names it: `mikro`.
+    pub key: String,
+    /// The service type, in reverse-domain form: `live.arkitekt.mikro`.
+    #[serde(default)]
+    pub service: Option<String>,
+    /// The server version the blok was written against, as the service declaration names it.
+    #[serde(default)]
+    pub version: Option<String>,
+    /// `sha256:<hex>` of the canonical GraphQL schema the blok's queries were checked against.
+    #[serde(default)]
+    pub schema_hash: Option<String>,
+}
+
+/// The base component that reads a service (`QUERY_COMPONENT`).
+pub const QUERY_COMPONENT: &str = "query";
+
+/// A blok names each service once, and every `query` in it runs on one it names
+/// (`check_blok_services`).
+pub fn check_blok_services(
+    components: Option<&[ComponentNodeInputModel]>,
+    services: &[BlokServiceInputModel],
+) -> Result<(), ValidationError> {
+    for service in services {
+        min_length(&service.key, "key")?;
+    }
+    check_unique_keys(
+        services.iter().map(|s| s.key.as_str()),
+        "Blok manifest services",
+    )?;
+    let declared: HashSet<&str> = services.iter().map(|s| s.key.as_str()).collect();
+    for node in iter_component_nodes(components) {
+        if node.component != QUERY_COMPONENT {
+            continue;
+        }
+        let schema = node
+            .props
+            .iter()
+            .flatten()
+            .find(|prop| prop.key == "schema")
+            .and_then(|prop| prop.static_value.as_ref())
+            .and_then(Value::as_str);
+        if let Some(schema) = schema.filter(|s| !declared.contains(s)) {
+            let mut known: Vec<&str> = declared.iter().copied().collect();
+            known.sort_unstable();
+            let known = if known.is_empty() {
+                "none".to_owned()
+            } else {
+                format!(
+                    "[{}]",
+                    known
+                        .iter()
+                        .map(|k| repr_str(k))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            };
+            return Err(ValidationError(format!(
+                "Blok manifest: component {} queries the {} service, which the blok does not declare in its services (declared: {known})",
+                repr_str(&node.id),
+                repr_str(schema)
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// The root a blok reads its args under (`BLOK_ARGS_ROOT`).
@@ -1111,6 +1190,9 @@ impl BlokImplementationInputModel {
         for port in &mut self.args {
             port.validate()?;
         }
+        for port in &mut self.returns {
+            port.validate()?;
+        }
         let dependency_keys: HashSet<String> =
             self.dependencies.iter().map(|d| d.key.clone()).collect();
         let state_keys: Option<HashSet<String>> = self
@@ -1127,7 +1209,8 @@ impl BlokImplementationInputModel {
             self.for_model.as_deref(),
             self.for_node.as_deref(),
         )?;
-        check_blok_args(self.context, &self.args, &dependency_keys)
+        check_blok_args(self.context, &self.args, &dependency_keys)?;
+        check_blok_services(self.components.as_deref(), &self.services)
     }
 }
 

@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from strawberry.experimental import pydantic
 from typing_extensions import Self
 
-from facade import scalars
+from facade import enums, scalars
 from facade.inputs.dependency import MappedAgentInput, MappedAgentInputModel
 from facade.json_types import JSON
 from rekuest_core import enums as renums
@@ -57,6 +57,7 @@ class CreateBlokInputModel(BaseModel):
         description="The schema of the blok. This can be used to validate the blok input and output.",
     )
     source: str | None = Field(default=None, description="The blok as BSX, which the server parses into `components`: send one of the two.")
+    services: list[rimodels.BlokServiceInputModel] | None = Field(default=None, description="The backend services the blok's queries read from, each frozen at the version it was written against. Every `query`'s `schema` must name one.")
     demo_state: dict[str, JSON] | None = Field(
         default=None,
         description="The initial state of the blok. This is used to set the initial state of the blok when it is materialized.",
@@ -92,6 +93,7 @@ class CreateBlokInput:
     catalog: str | None = None
     components: list[ritypes.ComponentNodeInput] | None = None
     source: str | None = None
+    services: list[ritypes.BlokServiceInput] | None = None
     demo_state: scalars.Args | None = None
     # Nullable, not defaulted: a client generated from the schema must not have to pass it.
     context: renums.ComponentContext | None = None
@@ -177,6 +179,10 @@ class MaterializeBlokInput:
     )
     name: str | None = strawberry.field(default=None, description="Display name of this materialization. Defaults to the blok's name.")
     description: str | None = strawberry.field(default=None, description="Description of this materialization. Defaults to the blok's description.")
+    scope: enums.MaterializationScope = strawberry.field(
+        default=enums.MaterializationScope.DASHBOARD,
+        description="MESSAGE: made for one chat message, to show inline in it. It is never listed, takes no dashboard, and may materialize a blok an app provides (bound to any agents).",
+    )
 
 
 class EditBlokInputModel(BaseModel):
@@ -190,6 +196,8 @@ class EditBlokInputModel(BaseModel):
     demo_state: dict[str, JSON] | None = Field(default=None, description="The full local state. Kept when omitted.")
     catalog: str | None = Field(default=None, description="Name of the UI catalog (in the caller's organization) the blok renders against. Kept when omitted.")
     dependencies: list[rimodels.AgentDependencyInputModel] | None = Field(default=None, description="The full list of agent dependencies. Kept when omitted; keys not listed are removed.")
+    args: list[rimodels.ArgPortInputModel] | None = Field(default=None, description="The full list of the items the blok is opened for, read under `@args.<key>` (html bloks only). Kept when omitted; an empty list removes them.")
+    services: list[rimodels.BlokServiceInputModel] | None = Field(default=None, description="The full list of the backend services the blok's queries read from, each frozen at its version. Kept when omitted; an empty list removes them.")
     agent_mappings: list[MappedAgentInputModel] | None = Field(default=None, description="Bindings on `materialized_blok`, by dependency key, over the ones it has. Bindings of keys the edit removes go. Refused with `blok`: a blok binds no agents, its materializations do.")
     message: str | None = Field(default=None, description="What changed and why, in a sentence; kept with the revision.")
     task: str | None = Field(default=None, description="The task making the edit (one the caller's agent runs), kept with the revision.")
@@ -215,6 +223,8 @@ class EditBlokInput:
     demo_state: scalars.Args | None = None
     catalog: str | None = None
     dependencies: list[ritypes.AgentDependencyInput] | None = None
+    args: list[ritypes.ArgPortInput] | None = None
+    services: list[ritypes.BlokServiceInput] | None = None
     agent_mappings: list[MappedAgentInput] | None = None
     message: str | None = None
     task: strawberry.ID | None = None

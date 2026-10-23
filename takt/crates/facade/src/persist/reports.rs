@@ -342,6 +342,7 @@ pub async fn on_report(ctx: &Context, agent: i64, frame: &AgentFrame) -> Persist
             message,
             prompt,
             details,
+            blok,
         } => {
             crate::holds::on_self_hold(
                 ctx,
@@ -350,9 +351,35 @@ pub async fn on_report(ctx: &Context, agent: i64, frame: &AgentFrame) -> Persist
                 message.as_deref(),
                 prompt.as_ref(),
                 details.as_ref(),
+                blok.as_ref(),
                 stamp,
             )
             .await?
+        }
+        FromAgent::Inform {
+            task,
+            message,
+            blok,
+        } => {
+            // Shown while the task carries on: the blok, then the event naming it.
+            let Some(row) = agent_task(ctx, agent, task).await? else {
+                return Ok(true);
+            };
+            if row.is_done {
+                return Ok(true);
+            }
+            let Some(materialized) =
+                crate::task_bloks::shown(ctx, agent, row.id, crate::task_bloks::INFORM, blok)
+                    .await?
+            else {
+                return Ok(true);
+            };
+            let event = NewEvent {
+                message: message.clone().filter(|m| !m.is_empty()),
+                value: Some(serde_json::json!({"blok": materialized.to_string()})),
+                ..NewEvent::stamped(stamp)
+            };
+            record_event(ctx, agent, task, "INFORM", event).await?;
         }
         FromAgent::Completed { task } => {
             finalize_from_agent(ctx, agent, frame, task, "COMPLETED", None).await?

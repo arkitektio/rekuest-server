@@ -49,6 +49,16 @@ async def _blok_diagnostics(name: str = "catalogued") -> list[dict]:
     return await sync_to_async(lambda: Blok.objects.get(name=name).diagnostics)()
 
 
+async def _stored(result: object, name: str = "catalogued") -> list[dict]:
+    """The findings a blok was stored with: a catalog finding never refuses it."""
+    assert not result.errors, result.errors  # type: ignore[attr-defined]
+    return await _blok_diagnostics(name)
+
+
+def _found(findings: list[dict], code: str, text: str) -> None:
+    assert any(finding["code"] == code and text in finding["message"] for finding in findings), findings
+
+
 async def _register(context: HttpContext, catalog: dict = CATALOG) -> dict:
     result = await schema.execute(REGISTER_UI_CATALOG, context_value=context, variable_values={"input": catalog})
     assert not result.errors, result.errors
@@ -96,20 +106,20 @@ class TestUiCatalog:
         assert foreign.errors, "org A read org B's catalog"
 
     async def test_blok_against_registered_catalog_is_validated(self, authenticated_context: HttpContext) -> None:
-        """Unknown components, props and operations are rejected; a conforming manifest is accepted."""
+        """What the catalog does not know of a blok is recorded with it; a conforming manifest has no findings."""
         await _register(authenticated_context)
 
         unknown_component = await _create_blok(authenticated_context, [{"id": "root", "component": "Knob"}])
-        assert unknown_component.errors and "component 'Knob' is not registered" in unknown_component.errors[0].message
+        _found(await _stored(unknown_component), "unknown_component", "component 'Knob' is not registered")
 
         unknown_prop = await _create_blok(authenticated_context, [{"id": "root", "component": "Slider", "props": [{"key": "value", "staticValue": 1}, {"key": "colour", "staticValue": "red"}]}])
-        assert unknown_prop.errors and "has no props ['colour']" in unknown_prop.errors[0].message
+        _found(await _stored(unknown_prop), "unknown_prop", "has no props ['colour']")
 
         missing_required = await _create_blok(authenticated_context, [{"id": "root", "component": "Slider"}])
-        assert missing_required.errors and "requires props ['value']" in missing_required.errors[0].message
+        _found(await _stored(missing_required), "missing_prop", "requires props ['value']")
 
         children_refused = await _create_blok(authenticated_context, [{"id": "root", "component": "Slider", "props": [{"key": "value", "staticValue": 1}], "children": [{"id": "c", "component": "Box"}]}])
-        assert children_refused.errors and "does not accept children" in children_refused.errors[0].message
+        _found(await _stored(children_refused), "children_not_accepted", "does not accept children")
 
         unknown_operation = await _create_blok(
             authenticated_context,
@@ -122,7 +132,7 @@ class TestUiCatalog:
             authenticated_context,
             [{"id": "root", "component": "Slider", "props": [{"key": "value", "utilCall": {"operation": "gt", "arguments": [{"key": "a", "valuePath": "/exposure"}]}}]}],
         )
-        assert wrong_arguments.errors and "requires arguments ['b']" in wrong_arguments.errors[0].message
+        _found(await _stored(wrong_arguments), "operation_arguments", "requires arguments ['b']")
 
         accepted = await _create_blok(
             authenticated_context,
@@ -151,14 +161,14 @@ class TestUiCatalog:
         await _register(authenticated_context, {**CATALOG, "name": "orkestrator"})
         unnamed = {"name": "catalogued", "demoState": {"exposure": 1}}
 
-        refused = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**unnamed, "components": [{"id": "root", "component": "Knob"}]}})
-        assert refused.errors and "component 'Knob' is not registered" in refused.errors[0].message
+        unknown = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**unnamed, "components": [{"id": "root", "component": "Knob"}]}})
+        _found(await _stored(unknown), "unknown_component", "component 'Knob' is not registered")
 
         accepted = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**unnamed, "components": [{"id": "root", "component": "Box"}]}})
         assert not accepted.errors, accepted.errors
 
     async def test_components_are_held_to_their_declared_placement(self, authenticated_context: HttpContext) -> None:
-        """A component is refused outside its context, without a required ancestor, or under a forbidden one."""
+        """A component outside its context, without a required ancestor, or under a forbidden one is recorded as misplaced."""
         scene = [
             {"name": "Box"},
             {"name": "Label", "acceptsChildren": False},
@@ -183,8 +193,8 @@ class TestUiCatalog:
             (node("Scene", node("Move")), "component 'Move' must be inside one of ['Model', 'Robot']"),
             (node("Scene", node("Model", node("Popout", node("Scene")))), "component 'Scene' must not be inside ['Scene']"),
         ):
-            refused = await _create_blok(authenticated_context, [tree])
-            assert refused.errors and message in refused.errors[0].message, refused.errors
+            misplaced = await _create_blok(authenticated_context, [tree])
+            _found(await _stored(misplaced), "misplaced_component", message)
 
     async def test_a_scene_blok_opens_a_scene_and_names_its_models_properly(self, authenticated_context: HttpContext) -> None:
         """The root of a scene blok opens a scene; a model names an asset of a declared dependency."""
@@ -269,10 +279,12 @@ class TestUiCatalog:
             ([{"id": "p", "component": "Path"}], "LOGO", "the root of a logo blok must be a 'SVG', not 'Path'"),
             ([{"id": "root", "component": "Box", "children": logo}], "LOGO", "the root of a logo blok must be a 'SVG', not 'Box'"),
             (logo + [{"id": "other", "component": "SVG"}], "LOGO", "a logo blok has exactly one root, a 'SVG', not 2 roots"),
-            ([{"id": "root", "component": "Box", "children": [{"id": "p", "component": "Path"}]}], "HTML", "component 'Path' is a logo component and cannot be placed in the html context"),
         ):
             refused = await _create_blok(authenticated_context, roots, context=context)
             assert refused.errors and message in refused.errors[0].message, refused.errors
+        # Where the catalog places a shape is a finding: the root rule above is the blok's own.
+        loose = await _create_blok(authenticated_context, [{"id": "root", "component": "Box", "children": [{"id": "p", "component": "Path"}]}])
+        _found(await _stored(loose), "misplaced_component", "component 'Path' is a logo component and cannot be placed in the html context")
 
     async def test_an_action_logo_is_one_action_logo_in_the_palette(self, authenticated_context: HttpContext) -> None:
         """An action logo's root is an ``ActionLogo``; it paints with the palette and reads ``task`` from its demo state."""
@@ -337,7 +349,7 @@ class TestUiCatalog:
         assert broken.errors and "line 3" in broken.errors[0].message, broken.errors
         # What a parsed source draws is held to the catalog like any tree.
         unknown = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "catalogued", "catalog": "electron", "source": "<Box><Knob /></Box>"}})
-        assert unknown.errors and "component 'Knob' is not registered" in unknown.errors[0].message
+        _found(await _stored(unknown), "unknown_component", "component 'Knob' is not registered")
 
     async def test_a_blok_hash_follows_what_it_renders(self, authenticated_context: HttpContext) -> None:
         """The hash moves with the tree, the demo state and the context, and with nothing else."""
@@ -371,7 +383,7 @@ class TestUiCatalog:
                     {"name": "SVG", "childrenContext": "LOGO", "notDownstreamOf": ["SVG"]},
                     {"name": "G", "context": "LOGO", "downstreamOf": ["SVG"]},
                     {"name": "Path", "context": "LOGO", "downstreamOf": ["SVG"], "acceptsChildren": False, "props": [{"key": "d", "kind": "STRING"}]},
-                    {"name": "foreach", "inheritsContext": True, "props": [{"key": "items", "kind": "LIST"}]},
+                    # foreach is the base catalog's.
                 ],
             },
         )
@@ -408,14 +420,13 @@ class TestUiCatalog:
         assert not panel.errors, panel.errors
 
     async def test_control_flow_takes_the_context_it_is_placed_in(self, authenticated_context: HttpContext) -> None:
-        """A component that inherits its context sits in a scene or a logo, and its children stay there."""
+        """A component that inherits its context (base's foreach) sits in a scene or a logo, and its children stay there."""
         await _register(
             authenticated_context,
             {
                 **CATALOG,
                 "components": [
                     {"name": "Box"},
-                    {"name": "foreach", "inheritsContext": True},
                     {"name": "Scene", "childrenContext": "SCENE", "notDownstreamOf": ["Scene"]},
                     {"name": "Model", "context": "SCENE", "downstreamOf": ["Scene"]},
                     {"name": "SVG", "childrenContext": "LOGO", "notDownstreamOf": ["SVG"]},
@@ -437,15 +448,20 @@ class TestUiCatalog:
 
         # What the loop holds is still checked in the context it passes on.
         boxed = await _create_blok(authenticated_context, [{"id": "root", "component": "SVG", "children": [loop({"id": "b", "component": "Box"})]}], context="LOGO")
-        assert boxed.errors and "component 'Box' is a html component and cannot be placed in the logo context" in boxed.errors[0].message
+        _found(await _stored(boxed), "misplaced_component", "component 'Box' is a html component and cannot be placed in the logo context")
         # The context is the blok's, not something a loop at the root can stand in for.
         rooted = await _create_blok(authenticated_context, [loop({"id": "root", "component": "SVG"})], context="LOGO")
         assert rooted.errors and "the root of a logo blok must be a 'SVG', not 'foreach'" in rooted.errors[0].message
 
-        listed = await schema.execute("query { uiCatalogs { name components { name inheritsContext } } }", context_value=authenticated_context)
+        listed = await schema.execute("query { baseCatalog { components { name inheritsContext } } }", context_value=authenticated_context)
         assert not listed.errors, listed.errors
-        (electron,) = [catalog for catalog in listed.data["uiCatalogs"] if catalog["name"] == "electron"]
-        assert {component["name"] for component in electron["components"] if component["inheritsContext"]} == {"foreach"}
+        assert all(component["inheritsContext"] for component in listed.data["baseCatalog"]["components"])
+        assert "foreach" in {component["name"] for component in listed.data["baseCatalog"]["components"]}
+
+    async def test_registering_a_base_component_is_rejected(self, authenticated_context: HttpContext) -> None:
+        """A UI catalog cannot redefine a base component."""
+        result = await schema.execute(REGISTER_UI_CATALOG, context_value=authenticated_context, variable_values={"input": {**CATALOG, "components": [{"name": "match"}]}})
+        assert result.errors and "cannot redefine base components ['match']" in result.errors[0].message
 
     async def test_unregistered_catalog_still_validates_base(self, authenticated_context: HttpContext) -> None:
         """A catalog that only exists because a blok named it checks no components, but base operations still apply."""
@@ -454,7 +470,7 @@ class TestUiCatalog:
         assert [d["code"] for d in await _blok_diagnostics()] == ["unknown_operation"]
 
         wrong_keys = await _create_blok(authenticated_context, [{"id": "root", "component": "Whatever", "props": [{"key": "x", "utilCall": {"operation": "gt", "arguments": [{"key": "left", "valueLiteral": 1}]}}]}], catalog="fresh")
-        assert wrong_keys.errors and "does not accept arguments ['left']" in wrong_keys.errors[0].message
+        _found(await _stored(wrong_keys), "operation_arguments", "does not accept arguments ['left']")
 
     async def test_registering_a_base_name_is_rejected(self, authenticated_context: HttpContext) -> None:
         """A UI catalog cannot redefine a base operation."""

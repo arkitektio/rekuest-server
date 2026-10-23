@@ -620,6 +620,14 @@ class ComponentNodeInput:
     children: Optional[List[Annotated["ComponentNodeInput", strawberry.lazy(__name__)]]] = None
 
 
+@pydantic.input(models.BlokServiceInputModel, description="A backend service a blok reads from, frozen at the version it was written against.")
+class BlokServiceInput:
+    key: str
+    service: Optional[str] = None
+    version: Optional[str] = None
+    schema_hash: Optional[str] = None
+
+
 @pydantic.input(
     models.BlokImplementationInputModel,
     description="Which locks does the agent provide in general",
@@ -637,6 +645,7 @@ class BlokImplementationInput:
     for_model: Optional[str] = None
     for_node: Optional[str] = None
     args: list[ArgPortInput] = strawberry.field(default_factory=list)
+    services: list[BlokServiceInput] = strawberry.field(default_factory=list)
 
 
 @pydantic.input(models.CatalogPropInputModel, description="A prop a catalog component accepts.")

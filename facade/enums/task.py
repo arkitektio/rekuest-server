@@ -41,6 +41,7 @@ class TaskEventChoices(TextChoices):
     COMPLETED = "COMPLETED", "Completed (Agent finished the Task)"
     LOG = "LOG", "Log (Agent logged a message)"
     EFFECT = "EFFECT", "Effect (the task took a value from outside itself: the clock, randomness, a sleep deadline)"
+    INFORM = "INFORM", "Inform (the task showed a person a blok while it carried on)"
 
 
 class TaskInstructChoices(TextChoices):
@@ -102,6 +103,8 @@ class TaskEventKind(str, Enum):
     HELD = "HELD"
     # A hold was answered: by a person, or by auto-mode.
     DECIDED = "DECIDED"
+    # The task showed a person a blok and carried on.
+    INFORM = "INFORM"
     # A person refused a held child: it ended without ever running.
     DENIED = "DENIED"
     FAILED = "FAILED"

@@ -379,6 +379,13 @@ class CatalogOperationModel(BaseModel):
     returns: enums.CatalogValueKind
 
 
+class BlokServiceModel(BaseModel):
+    key: str
+    service: str | None = None
+    version: str | None = None
+    schema_hash: str | None = None
+
+
 class DiagnosticModel(BaseModel):
     """A non-fatal registration finding, stored on the registered row."""
 

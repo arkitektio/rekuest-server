@@ -1263,6 +1263,35 @@ def check_blok_target(context: enums.ComponentContext, for_model: Optional[str],
 BLOK_ARGS_ROOT = "args"
 
 
+QUERY_COMPONENT = "query"
+"""The base catalog's GraphQL read: it runs on the service its ``schema`` prop names."""
+
+
+class BlokServiceInputModel(BaseModel):
+    """A backend service a blok reads from, frozen at the version it was written against."""
+
+    key: str = Field(min_length=1, description="The service's key, as a `query`'s `schema` names it: 'mikro'.")
+    service: Optional[str] = Field(default=None, description="The service type, in reverse-domain form: 'live.arkitekt.mikro'.")
+    version: Optional[str] = Field(default=None, description="The server version the blok was written against, as the service declaration names it ('8').")
+    schema_hash: Optional[str] = Field(default=None, description="'sha256:<hex>' of the canonical GraphQL schema the blok's queries were checked against.")
+
+
+def check_blok_services(components: Optional[List["ComponentNodeInputModel"]], services: list[BlokServiceInputModel]) -> None:
+    """A blok names each service once, and every ``query`` in it runs on one it names."""
+    _check_unique(services, "key", "Blok manifest services")
+    declared = {service.key for service in services}
+
+    def visit(nodes: Optional[List["ComponentNodeInputModel"]]) -> None:
+        for node in nodes or []:
+            if node.component == QUERY_COMPONENT:
+                schema = next((prop.static_value for prop in node.props or [] if prop.key == "schema"), None)
+                if isinstance(schema, str) and schema not in declared:
+                    raise ValueError(f"Blok manifest: component {node.id!r} queries the {schema!r} service, which the blok does not declare in its services (declared: {sorted(declared) or 'none'})")
+            visit(node.children)
+
+    visit(components)
+
+
 def check_blok_args(context: enums.ComponentContext, args: list["ArgPortInputModel"], dependency_keys: set[str]) -> None:
     """A blok's args are the items it is opened for: an html blok's, keyed once, read under ``@args``.
 
@@ -1291,6 +1320,7 @@ class BlokImplementationInputModel(BaseModel):
     for_model: Optional[str] = Field(default=None, description="The model ('sha256:...') this Blok decorates: viewers showing that model offer this Blok at `for_node`. HTML bloks only.")
     for_node: Optional[str] = Field(default=None, description="The node of `for_model` this Blok attaches to; the model's root when absent.")
     args: list[ArgPortInputModel] = Field(default_factory=list, description="The items this Blok is opened for, declared like an action's args and read under `@args.<key>`. A UI offers the Blok on any item its args accept (`MaterializedBlokFilter.demands`). HTML bloks only.")
+    services: list[BlokServiceInputModel] = Field(default_factory=list, description="The backend services this Blok reads from (its `query` components name them), each frozen at the version it was written against.")
 
     @model_validator(mode="after")
     def check_manifest(self) -> Self:
@@ -1302,6 +1332,8 @@ class BlokImplementationInputModel(BaseModel):
             check_blok_manifest(self.components, {dep.key for dep in self.dependencies}, None if self.demo_state is None else set(self.demo_state))
         check_blok_target(self.context, self.for_model, self.for_node)
         check_blok_args(self.context, self.args, {dep.key for dep in self.dependencies})
+        if self.components is not None:
+            check_blok_services(self.components, self.services)
         return self
 
 

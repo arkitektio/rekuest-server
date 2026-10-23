@@ -1,10 +1,13 @@
 from django.contrib.auth import get_user_model
 from django.db import models
 from django.db.models.functions import Now
+from django_choices_field import TextChoicesField
 
 from authentikate.models import App
 
 from rekuest_core.inputs.models import ActionDependencyInputModel, StateDependencyInputModel
+
+from facade import enums
 
 from .action import BasePort, port_indexes
 
@@ -64,6 +67,16 @@ class Blok(models.Model):
     for_model = models.CharField(max_length=71, null=True, blank=True, db_index=True, help_text="The model reference ('sha256:...') this Blok decorates, if any. Viewers showing that model offer the Blok at `for_node`.")
     for_node = models.CharField(max_length=1000, null=True, blank=True, help_text="The node of `for_model` this Blok attaches to; the model's root when NULL.")
     args = models.JSONField(default=list, db_default=[], help_text="The items this Blok is opened for: its declared arg ports (rekuest_core ArgPortInput), read under `@args.<key>`. Matched through its BlokArgPort rows.")
+    returns = models.JSONField(default=list, db_default=[], help_text="What a person answers through this Blok when a task asks with it (rekuest_core ReturnPortInput): the values `blok.answer` hands back.")
+    services = models.JSONField(default=list, db_default=[], help_text="The backend services this Blok reads from (rekuest_core BlokServiceInput: key, service, version, schema_hash), each frozen at the version it was written against.")
+    owner_task = models.ForeignKey(
+        "Task",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="owned_bloks",
+        help_text="The task that made this Blok from its BSX to show it (ask or inform). It is never listed and goes with its task. NULL for every other Blok.",
+    )
     diagnostics = models.JSONField(default=list, help_text="Non-fatal registration findings (rekuest_core Diagnostic), e.g. manifest util calls naming operations that neither the base catalog nor this blok's catalog provides. Replaced on every write.", db_default=[])
     app = models.ForeignKey(
         App,
@@ -89,7 +102,7 @@ class Blok(models.Model):
         # createBlok upserts a custom blok on (organization, name); registration upserts a provided
         # one on its content, so v1 and v2 of an app never overwrite each other.
         constraints = [
-            models.UniqueConstraint(fields=["organization", "name"], condition=models.Q(app__isnull=True), name="unique_blok_name_per_organization"),
+            models.UniqueConstraint(fields=["organization", "name"], condition=models.Q(app__isnull=True, owner_task__isnull=True), name="unique_blok_name_per_organization"),
             models.UniqueConstraint(fields=["organization", "app", "name", "declaration_hash"], condition=models.Q(app__isnull=False), name="blok_unique_provided"),
             models.UniqueConstraint(fields=["organization", "origin"], condition=models.Q(app__isnull=True, origin__isnull=False), name="unique_blok_origin_per_organization"),
         ]
@@ -119,6 +132,9 @@ class BlokRevision(models.Model):
     context = models.CharField(max_length=16, default="HTML", db_default="HTML", help_text="The renderer for this revision's root (rekuest_core ComponentContext).")
     catalog = models.ForeignKey("UICatalog", on_delete=models.CASCADE, related_name="blok_revisions", help_text="The catalog this revision renders against.")
     dependencies = models.JSONField(default=list, db_default=[], help_text="The agent dependencies of this revision (rekuest_core AgentDependencyInput), as the blok's dependency rows held them.")
+    args = models.JSONField(default=list, db_default=[], help_text="The args of this revision (rekuest_core ArgPortInput): the items the blok is opened for.")
+    returns = models.JSONField(default=list, db_default=[], help_text="The returns of this revision (rekuest_core ReturnPortInput): what a person answers through the blok.")
+    services = models.JSONField(default=list, db_default=[], help_text="The services of this revision (rekuest_core BlokServiceInput): what its queries read from, at the version they were written against.")
     content_hash = models.CharField(max_length=64, help_text="sha256 of everything above: two revisions with the same hash are the same blok.")
     author = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name="blok_revisions", help_text="The user this revision was written as.")
     task = models.ForeignKey("Task", on_delete=models.SET_NULL, null=True, blank=True, related_name="blok_revisions", help_text="The task that wrote this revision, e.g. the assistant turn that designed it.")
@@ -248,6 +264,23 @@ class MaterializedBlok(models.Model):
         help_text="The revision this materialization stays at. NULL follows the blok's head, which is what a materialization does unless pinned.",
     )
     is_default = models.BooleanField(default=False, db_default=False, help_text="Whether this is its declaring agent's default Blok for the Blok's context. At most one per agent and context: declaring a new default clears the previous one.")
+    scope = TextChoicesField(  # pyright: ignore[reportCallIssue]  django-choices-field's stub predates db_default
+        max_length=1000,
+        choices_enum=enums.MaterializationScopeChoices,  # pyright: ignore[reportCallIssue]  django-choices-field's stub predates db_default
+        default=enums.MaterializationScopeChoices.DASHBOARD.value,
+        db_default="DASHBOARD",
+        help_text="Where it lives: DASHBOARD ones are listed; a MESSAGE one was made for one chat message, a TASK one for the task that showed it. Those are reached only by their id.",
+    )
+    owner_task = models.ForeignKey(
+        "Task",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="shown_bloks",
+        help_text="The task that showed this materialization (scope TASK): it goes with its task.",
+    )
+    task_role = models.CharField(max_length=16, null=True, blank=True, choices=enums.TaskBlokRoleChoices.choices, help_text="Why its task showed it: ASK (the task holds until a person answers through it) or INFORM.")
+    args = models.JSONField(default=dict, db_default={}, help_text="What it is opened on, by arg key (read under `@args.<key>`). Empty for a materialization opened by whoever shows it.")
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
 

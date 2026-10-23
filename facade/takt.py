@@ -112,7 +112,7 @@ def resume(input: inputs.ResumeInputModel, caller: models.Caller | None = None) 
 
 def decide(context: CallerContext, input: inputs.DecideInputModel) -> models.Task:
     """Answer a held task: a child an agent asked for runs or ends DENIED; a task's own hold carries on."""
-    answer = call(takt_api.DECIDE, takt_api.DecideRequest(principal=Principal.of(context), task=input.task, approved=input.approved, answer=input.answer))
+    answer = call(takt_api.DECIDE, takt_api.DecideRequest(principal=Principal.of(context), task=input.task, approved=input.approved, answer=input.answer, values=input.values))
     return models.Task.objects.get(pk=answer.task)
 
 

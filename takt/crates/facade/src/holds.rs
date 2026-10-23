@@ -29,6 +29,11 @@
 //! task to decide. A task's own hold is `{"kind": "self", "prompt", "details"}`. `DECIDED` is
 //! `{"approved", "answer", "auto", "user"}` on the held task and on whoever got its `HELD`;
 //! `DENIED` is `{"answer", "user"}`.
+//!
+//! A task may hold on a blok (`HELD` with `blok`, an ask): the blok is made for the task
+//! (`task_bloks`) and its materialization named in the hold (`"blok": "<id>"`). The person
+//! answers through it, so `DECIDED` and `DECIDE` carry `values`, checked against the blok's
+//! returns. Auto-mode cannot answer for a person: an ask waits under `AUTO` too.
 
 use chrono::Utc;
 use serde_json::{json, Map, Value};
@@ -37,11 +42,13 @@ use sqlx::{PgConnection, Postgres, Transaction};
 use crate::backend::{parse_id, ActionRow, BackendError, BackendResult};
 use crate::caller_context::CallerContext;
 use crate::context::Context;
-use crate::messages::{AssignPrompt, ToAgent};
+use crate::messages::{AssignPrompt, TaskBlok, ToAgent};
 use crate::persist::reconcile::build_redispatch_assign;
 use crate::persist::transitions::{self, insert_event, update_task_kind, Claim, NewEvent};
 use crate::persist::PersistResult;
+use crate::task_bloks;
 use crate::{signals, transport};
+use rekuest_core::values::validate_assignment_args;
 
 /// An agent's children wait for a person.
 pub const ASK: &str = "ASK";
@@ -131,6 +138,7 @@ fn watchers(parent: i64, root: i64) -> Vec<i64> {
 }
 
 /// A task's own hold (`HELD` from its agent). Under `AUTO` the server approves it at once.
+#[allow(clippy::too_many_arguments)]
 pub async fn on_self_hold(
     ctx: &Context,
     agent: i64,
@@ -138,6 +146,7 @@ pub async fn on_self_hold(
     message: Option<&str>,
     prompt: Option<&AssignPrompt>,
     details: Option<&Value>,
+    blok: Option<&TaskBlok>,
     stamp: crate::persist::positions::Stamp,
 ) -> PersistResult<()> {
     let Some(row) = crate::persist::reports::agent_task(ctx, agent, task).await? else {
@@ -146,6 +155,16 @@ pub async fn on_self_hold(
     if row.is_done {
         return Ok(());
     }
+    let asked = match blok {
+        Some(blok) => {
+            match crate::task_bloks::shown(ctx, agent, row.id, task_bloks::ASK, blok).await? {
+                Some(materialized) => Some(materialized),
+                // Refused, and the agent told why: the task is not held.
+                None => return Ok(()),
+            }
+        }
+        None => None,
+    };
     let message = message
         .filter(|m| !m.is_empty())
         .map(str::to_owned)
@@ -156,7 +175,12 @@ pub async fn on_self_hold(
         Claim {
             event: Some(NewEvent {
                 message,
-                value: Some(json!({"kind": "self", "prompt": prompt, "details": details})),
+                value: Some(json!({
+                    "kind": "self",
+                    "prompt": prompt,
+                    "details": details,
+                    "blok": asked.map(|id| id.to_string()),
+                })),
                 ..NewEvent::stamped(stamp)
             }),
             ..Claim::to("HELD")
@@ -164,6 +188,14 @@ pub async fn on_self_hold(
     )
     .await?;
     if !won {
+        if let Some(materialized) = asked {
+            let mut conn = ctx.db.acquire().await?;
+            task_bloks::discard(&mut conn, materialized).await?;
+        }
+        return Ok(());
+    }
+    if asked.is_some() {
+        // Only a person answers through a blok.
         return Ok(());
     }
     let policy: String = sqlx::query_scalar("SELECT policy FROM facade_task WHERE id = $1")
@@ -196,6 +228,7 @@ pub async fn on_self_hold(
                 approved: true,
                 answer: None,
                 auto: true,
+                values: None,
             },
             false,
         )
@@ -206,6 +239,14 @@ pub async fn on_self_hold(
 
 fn decision(approved: bool, answer: Option<&str>, auto: bool, user: Option<&str>) -> Value {
     json!({"approved": approved, "answer": answer, "auto": auto, "user": user})
+}
+
+/// What a person answered through a blok, recorded with the decision.
+fn decision_with(mut decided: Value, values: Option<&Map<String, Value>>) -> Value {
+    if let Some(values) = values {
+        decided["values"] = Value::Object(values.clone());
+    }
+    decided
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -224,6 +265,8 @@ struct HeldRow {
     root_user: Option<i64>,
     /// What waits: `assign` (a child never dispatched) or `self` (the task's own hold).
     held_kind: Option<String>,
+    /// The materialization a self-hold asks through, if it holds on a blok.
+    held_blok: Option<String>,
 }
 
 /// A person's answer to a held task (`decide`). Only the user the run is for may decide, and
@@ -234,6 +277,7 @@ pub async fn decide(
     task: &str,
     approved: bool,
     answer: Option<String>,
+    values: Option<Map<String, Value>>,
 ) -> BackendResult<i64> {
     let task_id = parse_id(task)?;
     let row: Option<HeldRow> = sqlx::query_as(
@@ -241,7 +285,9 @@ pub async fn decide(
                 a.organization_id, c.client_id AS caller_client, a.client_id AS agent_client,
                 rc.user_id AS root_user,
                 (SELECT e.value->>'kind' FROM facade_taskevent e
-                  WHERE e.task_id = t.id AND e.kind = 'HELD' ORDER BY e.id DESC LIMIT 1) AS held_kind
+                  WHERE e.task_id = t.id AND e.kind = 'HELD' ORDER BY e.id DESC LIMIT 1) AS held_kind,
+                (SELECT e.value->>'blok' FROM facade_taskevent e
+                  WHERE e.task_id = t.id AND e.kind = 'HELD' ORDER BY e.id DESC LIMIT 1) AS held_blok
            FROM facade_task t
            JOIN facade_agent a ON a.id = t.agent_id
            LEFT JOIN facade_caller c ON c.id = t.caller_id
@@ -286,14 +332,53 @@ pub async fn decide(
         ));
     }
 
-    let decided = decision(
-        approved,
-        answer.as_deref(),
-        false,
-        Some(&principal.user_sub),
+    let values = match (
+        row.held_blok.as_deref().and_then(|b| b.parse::<i64>().ok()),
+        values,
+    ) {
+        // An ask is answered through its blok: approving it checks what was answered, nothing
+        // included, against the blok's returns.
+        (Some(materialized), values) if approved => {
+            let values = values.unwrap_or_default();
+            let mut conn = ctx.db.acquire().await?;
+            let returns = task_bloks::returns_of(&mut conn, materialized).await?;
+            validate_assignment_args(&returns, &values).map_err(|e| {
+                BackendError::Refused(format!("The answer does not fit the blok's returns: {e}"))
+            })?;
+            Some(values)
+        }
+        (_, None) => None,
+        (Some(_), Some(_)) => {
+            return Err(BackendError::Refused(
+                "A dismissed ask carries no values.".into(),
+            ))
+        }
+        (None, Some(_)) => {
+            return Err(BackendError::Refused(format!(
+                "Task {task} does not ask through a blok: its decision carries no values."
+            )))
+        }
+    };
+    let decided = decision_with(
+        decision(
+            approved,
+            answer.as_deref(),
+            false,
+            Some(&principal.user_sub),
+        ),
+        values.as_ref(),
     );
     if row.held_kind.as_deref() == Some("self") {
-        decide_self(ctx, task_id, row.agent_id, approved, answer, decided).await?;
+        decide_self(
+            ctx,
+            task_id,
+            row.agent_id,
+            approved,
+            answer,
+            values,
+            decided,
+        )
+        .await?;
     } else {
         let watchers = row
             .parent_id
@@ -311,6 +396,7 @@ async fn decide_self(
     agent: i64,
     approved: bool,
     answer: Option<String>,
+    values: Option<Map<String, Value>>,
     decided: Value,
 ) -> BackendResult<()> {
     let won = transitions::claim(
@@ -340,6 +426,7 @@ async fn decide_self(
             approved,
             answer,
             auto: false,
+            values,
         },
         false,
     )

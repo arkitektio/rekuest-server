@@ -11262,11 +11262,24 @@
   {
     "step": "wrong call",
     "outcome": {
-      "refused": "Definition wrong: operation 'gt' does not accept arguments ['nope']"
+      "accepted": [
+        {
+          "level": "WARNING",
+          "code": "operation_arguments",
+          "message": "Definition wrong: operation 'gt' does not accept arguments ['nope']",
+          "path": "Definition wrong"
+        },
+        {
+          "level": "WARNING",
+          "code": "operation_arguments",
+          "message": "Definition wrong: operation 'gt' requires arguments ['a', 'b']",
+          "path": "Definition wrong"
+        }
+      ]
     },
     "rows": {
       "agent": {
-        "hash": "h35",
+        "hash": "h6",
         "name": "<client id>",
         "description": "an agent",
         "name_is_client": true
@@ -11283,11 +11296,11 @@
       "implementations": [
         {
           "action": {
-            "key": "bad",
+            "key": "wrong",
             "args": [
               {
-                "key": "image",
-                "kind": "STRUCTURE",
+                "key": "a",
+                "kind": "INT",
                 "label": null,
                 "widget": null,
                 "choices": null,
@@ -11295,37 +11308,52 @@
                 "effects": null,
                 "children": null,
                 "nullable": false,
-                "requires": [
+                "requires": null,
+                "dimension": null,
+                "identifier": null,
+                "validators": [
                   {
-                    "key": "x",
-                    "value": null,
-                    "operator": "EXISTS"
+                    "call": {
+                      "arguments": [
+                        {
+                          "key": "nope",
+                          "util_call": null,
+                          "agent_call": null,
+                          "value_dict": null,
+                          "value_list": null,
+                          "value_path": null,
+                          "value_literal": 1
+                        }
+                      ],
+                      "operation": "gt"
+                    },
+                    "label": null,
+                    "source": null,
+                    "dependencies": [],
+                    "error_message": null
                   }
                 ],
-                "dimension": null,
-                "identifier": "@mikro/image",
-                "validators": null,
                 "description": null,
                 "proposed_units": null,
                 "reference_unit": null
               }
             ],
-            "hash": "20fa130d30a293d0bc8f02e91c88e753430206a974b88b842c55306dc8c80e8f",
+            "hash": "97e06790f4140cd27d548129182318f26e02dc378c820ced9837a2c0acb950e1",
             "kind": "FUNCTION",
-            "name": "bad",
+            "name": "wrong",
             "pure": false,
             "ports": [
               {
-                "key": "image",
-                "kind": "STRUCTURE",
+                "key": "a",
+                "kind": "INT",
                 "side": "arg",
                 "index": 0,
                 "parent": null,
-                "key_path": "image",
+                "key_path": "a",
                 "nullable": false,
                 "dimension": null,
-                "identifier": "@mikro/image",
-                "compiled_jsonpath": "exists($.\"x\")"
+                "identifier": null,
+                "compiled_jsonpath": null
               }
             ],
             "scope": "GLOBAL",
@@ -11339,10 +11367,7 @@
             "protocols": [],
             "idempotent": false,
             "allow_probe": false,
-            "collections": [
-              "parity-collection",
-              "parity-other"
-            ],
+            "collections": [],
             "description": "No description",
             "is_test_for": [],
             "port_groups": [],
@@ -11353,19 +11378,19 @@
           "effects": "UNKNOWN",
           "code_hash": null,
           "execution": "PLAIN",
-          "interface": "bad",
+          "interface": "wrong",
           "diagnostics": [
             {
-              "code": "unknown_catalog",
-              "path": "Definition bad",
+              "code": "operation_arguments",
+              "path": "Definition wrong",
               "level": "WARNING",
-              "message": "Definition bad: catalog 'base@2' was not applied: this server provides base@1"
+              "message": "Definition wrong: operation 'gt' does not accept arguments ['nope']"
             },
             {
-              "code": "unknown_catalog",
-              "path": "Definition bad",
+              "code": "operation_arguments",
+              "path": "Definition wrong",
               "level": "WARNING",
-              "message": "Definition bad: catalog 'not-registered' was not applied: it is not registered in this organization"
+              "message": "Definition wrong: operation 'gt' requires arguments ['a', 'b']"
             }
           ],
           "manipulates": [],
@@ -11373,9 +11398,7 @@
           "dependencies": [],
           "higher_order": false,
           "higher_order_config": {},
-          "provenance_audience": [
-            "mikro"
-          ]
+          "provenance_audience": null
         }
       ]
     }

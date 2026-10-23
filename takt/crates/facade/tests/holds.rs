@@ -357,12 +357,12 @@ async fn an_asked_child_waits_until_its_person_approves_it() {
         .await
         .unwrap();
     assert!(matches!(
-        holds::decide(&ctx, &from_the_asker, &child.to_string(), true, None).await,
+        holds::decide(&ctx, &from_the_asker, &child.to_string(), true, None, None).await,
         Err(BackendError::Forbidden(_))
     ));
     let colleague = person.colleague().at_a_desk(&ctx).await;
     assert!(matches!(
-        holds::decide(&ctx, &colleague, &child.to_string(), true, None).await,
+        holds::decide(&ctx, &colleague, &child.to_string(), true, None, None).await,
         Err(BackendError::Forbidden(_))
     ));
 
@@ -372,6 +372,7 @@ async fn an_asked_child_waits_until_its_person_approves_it() {
         &child.to_string(),
         true,
         Some("go ahead".into()),
+        None,
     )
     .await
     .unwrap();
@@ -405,7 +406,7 @@ async fn an_asked_child_waits_until_its_person_approves_it() {
     assert_eq!(kinds(&events(&ctx, parent).await), ["HELD", "DECIDED"]);
 
     assert!(matches!(
-        holds::decide(&ctx, &desk, &child.to_string(), true, None).await,
+        holds::decide(&ctx, &desk, &child.to_string(), true, None, None).await,
         Err(BackendError::Refused(_))
     ));
 }
@@ -427,6 +428,7 @@ async fn a_denied_child_never_runs_and_its_caller_is_told() {
         &child.to_string(),
         false,
         Some("not now".into()),
+        None,
     )
     .await
     .unwrap();
@@ -570,7 +572,15 @@ async fn a_task_that_holds_itself_gets_the_answer_back() {
         .await
         .unwrap();
     assert!(matches!(
-        holds::decide(&ctx, &from_the_holder, &asking.to_string(), true, None).await,
+        holds::decide(
+            &ctx,
+            &from_the_holder,
+            &asking.to_string(),
+            true,
+            None,
+            None
+        )
+        .await,
         Err(BackendError::Forbidden(_))
     ));
     holds::decide(
@@ -579,6 +589,7 @@ async fn a_task_that_holds_itself_gets_the_answer_back() {
         &asking.to_string(),
         false,
         Some("keep it".into()),
+        None,
     )
     .await
     .unwrap();
@@ -708,7 +719,316 @@ async fn a_held_child_never_outlives_its_parent() {
     );
     assert!(cancelled(&mirrors, child), "{mirrors:?}");
     assert!(matches!(
-        holds::decide(&ctx, &desk, &child.to_string(), true, None).await,
+        holds::decide(&ctx, &desk, &child.to_string(), true, None, None).await,
         Err(BackendError::Refused(_))
     ));
+}
+
+/// The standard catalog of `agent`'s organization, drawing `Box`.
+async fn standard_catalog(ctx: &Context, agent: i64) {
+    sqlx::query(
+        "INSERT INTO facade_uicatalog (name, components, operations, widget_defaults, organization_id)
+         SELECT 'orkestrator', '[{\"name\": \"Box\"}]', '[]', '[]', organization_id FROM facade_agent WHERE id = $1
+         ON CONFLICT (organization_id, name) DO UPDATE SET components = excluded.components",
+    )
+    .bind(agent)
+    .execute(&ctx.db)
+    .await
+    .unwrap();
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct Shown {
+    scope: String,
+    task_role: Option<String>,
+    owner_task_id: Option<i64>,
+    args: sqlx::types::Json<Value>,
+    blok_owner: Option<i64>,
+    returns: sqlx::types::Json<Value>,
+}
+
+async fn shown(ctx: &Context, materialized: i64) -> Option<Shown> {
+    sqlx::query_as(
+        "SELECT m.scope, m.task_role, m.owner_task_id, m.args, b.owner_task_id AS blok_owner, b.returns
+           FROM facade_materializedblok m JOIN facade_blok b ON b.id = m.blok_id WHERE m.id = $1",
+    )
+    .bind(materialized)
+    .fetch_optional(&ctx.db)
+    .await
+    .unwrap()
+}
+
+async fn bound(ctx: &Context, materialized: i64) -> Vec<(String, i64)> {
+    sqlx::query_as(
+        "SELECT key, agent_id FROM facade_blokagentmapping WHERE materialized_blok_id = $1 ORDER BY key",
+    )
+    .bind(materialized)
+    .fetch_all(&ctx.db)
+    .await
+    .unwrap()
+}
+
+fn of_type(frames: Vec<Value>, kind: &str) -> Vec<Value> {
+    frames
+        .into_iter()
+        .filter(|f| f["type"] == kind)
+        .map(|mut f| {
+            f.as_object_mut().unwrap().remove("id");
+            f
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn a_task_asks_through_a_blok_it_writes_and_gets_the_values_back() {
+    let Some(ctx) = context().await else { return };
+    let person = Person::new();
+    let holder = person.agent(&ctx).await;
+    standard_catalog(&ctx, holder).await;
+    let (_, workflow) = action(&ctx, holder).await;
+    let desk = person.at_a_desk(&ctx).await;
+    let images = json!([
+        {"__identifier": "@mikro/image", "object": "7"},
+        {"__identifier": "@mikro/image", "object": "8"},
+    ]);
+    let ask = |task: i64| {
+        frame(json!({
+            "type": "HELD", "task": task.to_string(), "message": "Which one?",
+            "blok": {
+                "source": "<Box/>", "name": "Pick an image", "args": {"images": images},
+                "returns": [{"key": "image", "kind": "STRUCTURE", "identifier": "@mikro/image",
+                             "nullable": false, "effects": []}],
+            },
+        }))
+    };
+
+    let asking = root(&ctx, &desk, workflow, "ASK").await;
+    route(&ctx, holder, &ask(asking), None).await.unwrap();
+    let refused = of_type(queued(&ctx, holder).await, "BLOK_REFUSED");
+    assert!(refused.is_empty(), "{refused:?}");
+    assert_eq!(row(&ctx, asking).await.latest_event_kind, "HELD");
+    let held = events(&ctx, asking).await;
+    let materialized: i64 = held[0].2.as_ref().unwrap()["blok"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let blok = shown(&ctx, materialized).await.unwrap();
+    assert_eq!(
+        (
+            blok.scope.as_str(),
+            blok.task_role.as_deref(),
+            blok.owner_task_id,
+            blok.blok_owner
+        ),
+        ("TASK", Some("ASK"), Some(asking), Some(asking))
+    );
+    assert_eq!(blok.args.0, json!({"images": images}));
+    assert_eq!(blok.returns.0[0]["key"], "image");
+    assert_eq!(
+        bound(&ctx, materialized).await,
+        [("self".to_string(), holder)]
+    );
+
+    // The answer is checked against the blok's returns: nothing answered misses the required image.
+    assert!(matches!(
+        holds::decide(&ctx, &desk, &asking.to_string(), true, None, None).await,
+        Err(BackendError::Refused(_))
+    ));
+    // The answer is checked against the blok's returns.
+    let not_an_image = json!({"image": 3}).as_object().unwrap().clone();
+    assert!(matches!(
+        holds::decide(
+            &ctx,
+            &desk,
+            &asking.to_string(),
+            true,
+            None,
+            Some(not_an_image)
+        )
+        .await,
+        Err(BackendError::Refused(_))
+    ));
+    let picked = json!({"image": {"__identifier": "@mikro/image", "object": "8"}});
+    holds::decide(
+        &ctx,
+        &desk,
+        &asking.to_string(),
+        true,
+        None,
+        Some(picked.as_object().unwrap().clone()),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        of_type(queued(&ctx, holder).await, "DECIDE"),
+        [
+            json!({"type": "DECIDE", "task": asking.to_string(), "approved": true, "auto": false, "values": picked})
+        ]
+    );
+    let decided = events(&ctx, asking).await;
+    assert_eq!(kinds(&decided), ["HELD", "DECIDED"]);
+    assert_eq!(decided[1].2.as_ref().unwrap()["values"], picked);
+
+    // Auto-mode cannot answer for a person: an ask waits under AUTO too.
+    let auto = root(&ctx, &desk, workflow, "AUTO").await;
+    route(&ctx, holder, &ask(auto), None).await.unwrap();
+    assert_eq!(kinds(&events(&ctx, auto).await), ["HELD"]);
+
+    // A plain hold carries no values.
+    let plain = root(&ctx, &desk, workflow, "ASK").await;
+    route(
+        &ctx,
+        holder,
+        &frame(json!({"type": "HELD", "task": plain.to_string()})),
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        holds::decide(
+            &ctx,
+            &desk,
+            &plain.to_string(),
+            true,
+            None,
+            Some(picked.as_object().unwrap().clone())
+        )
+        .await,
+        Err(BackendError::Refused(_))
+    ));
+}
+
+#[tokio::test]
+async fn a_blok_that_cannot_be_made_refuses_the_hold_and_says_why() {
+    let Some(ctx) = context().await else { return };
+    let person = Person::new();
+    let holder = person.agent(&ctx).await;
+    standard_catalog(&ctx, holder).await;
+    let (_, workflow) = action(&ctx, holder).await;
+    let desk = person.at_a_desk(&ctx).await;
+
+    for (blok, why) in [
+        (json!({"source": "<Box"}), "does not hold"),
+        (json!({"key": "nothing"}), "declares no blok"),
+        (
+            json!({"source": "<Box/>", "agent_mappings": {"other": "1"}}),
+            "no dependency",
+        ),
+    ] {
+        let task = root(&ctx, &desk, workflow, "ASK").await;
+        route(
+            &ctx,
+            holder,
+            &frame(json!({"type": "HELD", "task": task.to_string(), "blok": blok})),
+            None,
+        )
+        .await
+        .unwrap();
+        assert_ne!(row(&ctx, task).await.latest_event_kind, "HELD", "{blok}");
+        let refusals = of_type(queued(&ctx, holder).await, "BLOK_REFUSED");
+        let refusal = refusals
+            .iter()
+            .find(|f| f["task"] == task.to_string())
+            .unwrap_or_else(|| panic!("no refusal for {blok}"));
+        let reason = refusal["reason"].as_str().unwrap();
+        assert!(reason.contains(why), "{blok}: {reason}");
+        let left: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM facade_materializedblok WHERE owner_task_id = $1",
+        )
+        .bind(task)
+        .fetch_one(&ctx.db)
+        .await
+        .unwrap();
+        assert_eq!(left, 0, "{blok}");
+    }
+}
+
+/// What the UI catalog lacks is the UI's to draw (as an inline error): the task still holds,
+/// and the blok carries it as a finding.
+#[tokio::test]
+async fn a_blok_the_catalog_does_not_know_still_holds_and_says_so() {
+    let Some(ctx) = context().await else { return };
+    let person = Person::new();
+    let holder = person.agent(&ctx).await;
+    standard_catalog(&ctx, holder).await;
+    let (_, workflow) = action(&ctx, holder).await;
+    let desk = person.at_a_desk(&ctx).await;
+
+    let task = root(&ctx, &desk, workflow, "ASK").await;
+    route(
+        &ctx,
+        holder,
+        &frame(json!({"type": "HELD", "task": task.to_string(), "blok": {"source": "<Box><Knob/></Box>"}})),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(row(&ctx, task).await.latest_event_kind, "HELD");
+    let findings: Value = sqlx::query_scalar(
+        "SELECT b.diagnostics FROM facade_materializedblok m JOIN facade_blok b ON b.id = m.blok_id
+          WHERE m.owner_task_id = $1",
+    )
+    .bind(task)
+    .fetch_one(&ctx.db)
+    .await
+    .unwrap();
+    assert_eq!(findings[0]["code"], "unknown_component", "{findings}");
+    assert!(findings[0]["message"].as_str().unwrap().contains("'Knob'"));
+}
+
+#[tokio::test]
+async fn an_inform_shows_a_blok_and_goes_with_its_task() {
+    let Some(ctx) = context().await else { return };
+    let person = Person::new();
+    let holder = person.agent(&ctx).await;
+    standard_catalog(&ctx, holder).await;
+    let (_, workflow) = action(&ctx, holder).await;
+    let desk = person.at_a_desk(&ctx).await;
+
+    let task = root(&ctx, &desk, workflow, "ASK").await;
+    route(
+        &ctx,
+        holder,
+        &frame(json!({
+            "type": "INFORM", "task": task.to_string(), "message": "Halfway there",
+            "blok": {"source": "<Box/>", "name": "Progress"},
+        })),
+        None,
+    )
+    .await
+    .unwrap();
+    let shown_events = events(&ctx, task).await;
+    let inform = shown_events
+        .iter()
+        .find(|(kind, ..)| kind == "INFORM")
+        .expect("an INFORM event");
+    assert_eq!(inform.1.as_deref(), Some("Halfway there"));
+    let materialized: i64 = inform.2.as_ref().unwrap()["blok"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(
+        shown(&ctx, materialized)
+            .await
+            .unwrap()
+            .task_role
+            .as_deref(),
+        Some("INFORM")
+    );
+    assert_ne!(row(&ctx, task).await.latest_event_kind, "HELD");
+
+    let mut conn = ctx.db.acquire().await.unwrap();
+    facade::deletion::delete_tasks(&mut conn, &[task])
+        .await
+        .unwrap();
+    assert!(shown(&ctx, materialized).await.is_none());
+    let owned: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM facade_blok WHERE owner_task_id = $1")
+            .bind(task)
+            .fetch_one(&ctx.db)
+            .await
+            .unwrap();
+    assert_eq!(owned, 0);
 }
