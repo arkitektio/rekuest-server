@@ -1023,8 +1023,8 @@ pub struct BlokImplementationInputModel {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub returns: Vec<ReturnPortInputModel>,
     /// The backend services its `query` components read from, each frozen at the version it
-    /// was written against. Left out of its dump when empty, as before bloks named them.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// was written against.
+    #[serde(default)]
     pub services: Vec<BlokServiceInputModel>,
 }
 

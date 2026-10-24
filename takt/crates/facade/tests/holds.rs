@@ -929,7 +929,7 @@ async fn a_blok_that_cannot_be_made_refuses_the_hold_and_says_why() {
         let refusals = of_type(queued(&ctx, holder).await, "BLOK_REFUSED");
         let refusal = refusals
             .iter()
-            .find(|f| f["task"] == task.to_string())
+            .find(|f| f["task"].as_str() == Some(task.to_string().as_str()))
             .unwrap_or_else(|| panic!("no refusal for {blok}"));
         let reason = refusal["reason"].as_str().unwrap();
         assert!(reason.contains(why), "{blok}: {reason}");

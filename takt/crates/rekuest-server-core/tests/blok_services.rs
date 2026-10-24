@@ -34,10 +34,3 @@ fn each_service_is_named_once() {
         .unwrap_err()
         .contains("duplicate key 'mikro'"));
 }
-
-#[test]
-fn services_stay_out_of_a_dump_without_them() {
-    let model: BlokImplementationInputModel =
-        serde_json::from_value(json!({"key": "plain", "components": []})).unwrap();
-    assert!(serde_json::to_value(&model).unwrap().get("services").is_none());
-}

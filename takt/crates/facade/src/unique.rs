@@ -21,7 +21,8 @@ pub fn hash_state_definition(definition: &StateDefinitionInputModel) -> String {
 /// sha256 over a declared blok's content: what makes two agents' bloks the same template. The
 /// agent's own choices (`default`) and the BSX `source` (already parsed into `components`) are
 /// left out, so a blok sent as BSX and the same one sent as a tree share a template. So are
-/// empty `args`: a blok without them keeps the template it had before bloks took args.
+/// empty `args` and `services`: a blok without them keeps the template it had before bloks
+/// took them.
 pub fn hash_blok_definition(blok: &BlokImplementationInputModel) -> String {
     let mut dump = serde_json::to_value(blok).expect("a blok declaration serializes");
     if let Value::Object(fields) = &mut dump {
@@ -29,6 +30,9 @@ pub fn hash_blok_definition(blok: &BlokImplementationInputModel) -> String {
         fields.remove("source");
         if blok.args.is_empty() {
             fields.remove("args");
+        }
+        if blok.services.is_empty() {
+            fields.remove("services");
         }
         // Declarations made before bloks had returns keep their hash.
         if blok.returns.is_empty() {
@@ -71,6 +75,7 @@ mod tests {
         let mut dump = serde_json::to_value(&blok).unwrap();
         let fields = dump.as_object_mut().unwrap();
         assert_eq!(fields.remove("args"), Some(serde_json::json!([])));
+        fields.remove("services");
         fields.remove("default");
         fields.remove("source");
         let before = hex::encode(Sha256::digest(dumps(&dump, true).as_bytes()));
@@ -82,6 +87,28 @@ mod tests {
         assert_ne!(
             hash_blok_definition(&blok),
             hash_blok_definition(&with_args)
+        );
+    }
+
+    #[test]
+    fn a_blok_without_services_hashes_as_before_services_existed() {
+        let blok: BlokImplementationInputModel = serde_json::from_value(serde_json::json!({
+            "key": "panel", "components": [{"id": "root", "component": "Box"}]}))
+        .unwrap();
+        let mut dump = serde_json::to_value(&blok).unwrap();
+        let fields = dump.as_object_mut().unwrap();
+        assert_eq!(fields.remove("services"), Some(serde_json::json!([])));
+        for field in ["args", "returns", "default", "source"] {
+            fields.remove(field);
+        }
+        let before = hex::encode(Sha256::digest(dumps(&dump, true).as_bytes()));
+        assert_eq!(hash_blok_definition(&blok), before);
+        let mut with_services = blok.clone();
+        with_services.services =
+            serde_json::from_value(serde_json::json!([{"key": "mikro", "version": "8"}])).unwrap();
+        assert_ne!(
+            hash_blok_definition(&blok),
+            hash_blok_definition(&with_services)
         );
     }
 }
