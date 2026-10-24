@@ -28,7 +28,7 @@ dependencies = [
     "pgvector>=0.5",
     "model2vec>=0.9",
     "arkitekt-service>=7.0.0",
-    "arkitekt-datalayer",
+    "arkitekt-datalayer>=1.0.0",
 ]
 
 [dependency-groups]
@@ -128,5 +128,3 @@ exclude_commit_patterns = [
     '^Merge ',
 ]
 
-[tool.uv.sources]
-arkitekt-datalayer = { path = "../../../../packages/arkitekt-datalayer", editable = true }
