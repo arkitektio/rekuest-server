@@ -12,11 +12,11 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, fields
 from typing import Any
 
+from arkitekt_datalayer.datalayer import Datalayer
+from arkitekt_datalayer.models import MediaStore
 from django.conf import settings
 from django.db import IntegrityError, transaction
 
-from datalayer.datalayer import Datalayer
-from datalayer.models import MediaStore
 from facade import models
 from facade.glb_validation import ModelPolicy, ModelRefused, check_ref_format, validate_model
 from facade.image_validation import ImagePolicy, ImageRefused, validate_image
@@ -98,15 +98,13 @@ def upload_size(declared: models.AgentAsset, measured: int | None) -> int:
 
 def _read_object(datalayer: Datalayer, store: MediaStore, limit: int) -> bytes:
     """The stored bytes, refused before they are read if the object is over ``limit``."""
-    conf = datalayer.get_bucket_config(store.bucket)
-    key = datalayer.build_object_key(store.bucket, store.key)
     try:
-        size = datalayer.get_object_size(store.bucket, key)
-    except Exception as error:
+        size = store.measure_bytes(datalayer)
+    except FileNotFoundError as error:
         raise AssetRefused("not_uploaded", f"nothing was uploaded to store {store.pk}") from error
     if size > limit:
         raise AssetRefused("too_large", f"the file is {size} bytes, over the limit of {limit}")
-    return datalayer._s3.get_object(Bucket=conf.bucket, Key=key)["Body"].read(limit + 1)
+    return store.read_bytes(datalayer, max_bytes=limit + 1)
 
 
 def _validate(data: bytes, ref: str, kind: str, policy: AssetPolicy) -> tuple[int, dict[str, Any]]:

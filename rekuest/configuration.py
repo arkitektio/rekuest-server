@@ -9,12 +9,12 @@ with a ``ValidationError`` if they are not supplied via config or environment.
 
 from typing import List, Optional
 
+from arkitekt_datalayer.configuration import DatalayerSettings
 from arkitekt_service.server import settings as shared
 from arkitekt_service.server.settings import DjangoSettings, InstanceSettings, PostgresSettings, ServiceSettings
 from authentikate.base_models import AuthentikateSettings
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
-from facade.json_types import JSON
 
 class RedisSettings(shared.RedisSettings):
     """Redis connection (channel layer / cache)."""
@@ -151,29 +151,10 @@ class ProvenanceBlock(BaseModel):
     strict: bool = Field(default=False, description="Require the human-root invariant when minting.")
 
 
-class DatalayerBucket(BaseModel):
-    """A single S3 bucket binding within the datalayer."""
+class RekuestDatalayerSettings(DatalayerSettings):
+    """The datalayer block: rekuest stores agent assets and 3D models as media."""
 
-    model_config = ConfigDict(extra="allow")
-
-    bucket: str = Field(description="S3 bucket name.")
-
-
-class DatalayerSettings(BaseModel):
-    """S3 storage connection and buckets (the datalayer module; replaces the old top-level ``s3`` block)."""
-
-    model_config = ConfigDict(extra="allow")
-
-    access_key: str = Field(description="S3 access key. Secret — must be set.")
-    secret_key: str = Field(description="S3 secret key. Secret — must be set.")
-    host: Optional[str] = Field(default=None, description="S3 endpoint host.")
-    port: Optional[int] = Field(default=None, description="S3 endpoint port.")
-    protocol: str = Field(default="http", description="S3 endpoint protocol (http or https).")
-    region: str = Field(default="us-east-1", description="S3 region name.")
-    media: Optional[DatalayerBucket] = Field(default=None, description="Bucket for media / general file storage.")
-    zarr: Optional[DatalayerBucket] = Field(default=None, description="Bucket for Zarr arrays.")
-    parquet: Optional[DatalayerBucket] = Field(default=None, description="Bucket for Parquet tables.")
-    bigfile: Optional[DatalayerBucket] = Field(default=None, description="Bucket for large binary files.")
+    session_name: str = Field(default="rekuest", description="Prefix of every STS session rekuest assumes, so an object store's audit log names it.")
 
 
 class EmbeddingsSettings(BaseModel):
@@ -197,5 +178,5 @@ class Settings(ServiceSettings):
     rekuest: RekuestBlock = Field(default_factory=RekuestBlock, description="Grace/capability tuning.")
     provenance: ProvenanceBlock = Field(description="Provenance signing config (requires a static Ed25519 key).")
     instance: InstanceBlock = Field(description="This instance's key and the hub trust bundle (no shared secrets between services).")
-    datalayer: Optional[DatalayerSettings] = Field(default=None, description="Optional S3 config forwarded to the datalayer app.")
+    datalayer: Optional[RekuestDatalayerSettings] = Field(default=None, description="Optional S3 config forwarded to the datalayer app.")
     embeddings: EmbeddingsSettings = Field(default_factory=EmbeddingsSettings, description="Semantic search: on or off, and its threshold.")

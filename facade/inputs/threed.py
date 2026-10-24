@@ -1,7 +1,7 @@
 """Inputs for 3D models, spaces and placements."""
 
 import strawberry
-from datalayer import scalars as dscalars
+from arkitekt_datalayer import scalars as dscalars
 from pydantic import BaseModel, Field
 from rekuest_core.inputs import models as rimodels
 from rekuest_core.inputs import types as ritypes

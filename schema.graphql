@@ -1607,6 +1607,11 @@ input BounceInput {
   agent: ID!
 }
 
+"""
+A number of bytes. 64-bit, unlike Int: serialized as a JSON number, and accepted as a number or a numeric string.
+"""
+scalar ByteCount
+
 """The (client, user, organization) identity that requests work."""
 type Caller {
   """Unique identifier for the caller."""
@@ -3697,9 +3702,7 @@ type MediaAccessGrant {
   store: String
 }
 
-"""
-A type representing a media store reference, which can be either a string ID or a more complex object.
-"""
+"""A reference to a media store: the id its finished upload returned."""
 scalar MediaLike
 
 type MediaStore @key(fields: "id", resolvable: true) {
@@ -3707,17 +3710,24 @@ type MediaStore @key(fields: "id", resolvable: true) {
   path: String!
   bucket: String!
   key: String!
+
+  """
+  The byte budget the upload grant advertised for this store. Advertised, not enforced: a session policy bounds what a credential may write, never how much, so a store may exceed this
+  """
+  maxBytes: ByteCount
+
+  """
+  How many bytes this store actually holds, measured when its upload was finished. Null while unfinished, or for stores written before this was recorded
+  """
+  sizeBytes: ByteCount
   originalFileName: String
   contentType: String
 
   """Get temporary S3 read credentials for the media object."""
-  accessGrant(host: String = null): MediaAccessGrant!
-
-  """Compatibility field returning the canonical S3 object path."""
-  presignedUrl(host: String = null): String!
+  accessGrant: MediaAccessGrant!
 }
 
-"""A presigned PUT grant for uploading a media object."""
+"""Temporary S3 credentials for uploading a media object."""
 type MediaUploadGrant {
   status: String!
   accessKey: String!
@@ -3729,11 +3739,10 @@ type MediaUploadGrant {
   path: String!
   expiresIn: Int!
   store: String!
-  maxBytes: Int!
+  maxBytes: ByteCount!
   originalFileName: String
   uploadFileName: String!
   uploadContentType: String
-  uploadFormField: String!
 }
 
 type MemoryDrawer {
@@ -5013,7 +5022,7 @@ input RequestMediaAccessInput {
 
 input RequestMediaUploadInput {
   originalFileName: String!
-  fileSize: Int = null
+  fileSize: ByteCount = null
   contentType: String = null
 }
 

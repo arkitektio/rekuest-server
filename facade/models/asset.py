@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.db import models
 from django.db.models.functions import Now
 
-from datalayer.models import MediaStore
+from arkitekt_datalayer.models import MediaStore
 
 
 class Asset(models.Model):

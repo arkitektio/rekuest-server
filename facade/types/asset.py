@@ -9,7 +9,7 @@ import strawberry_django
 from django.db.models import QuerySet
 from kante.types import Info
 
-from datalayer import types as dtypes
+from arkitekt_datalayer import types as dtypes
 from facade import models
 from facade.types.base import build_prescoped_queryset, row_of
 from rekuest_core import enums

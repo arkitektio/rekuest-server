@@ -7,8 +7,8 @@ from asgiref.sync import sync_to_async
 from authentikate.models import App, Release
 from kante.context import HttpContext
 
-from datalayer.datalayer import get_current_datalayer
-from datalayer.models import MediaStore
+from arkitekt_datalayer.datalayer import get_current_datalayer
+from arkitekt_datalayer.models import MediaStore
 from facade.glb_validation import model_ref
 from facade.models import Agent, AgentAsset, Asset
 from facade.schema import schema
@@ -55,7 +55,7 @@ def admin(db, backend_stack) -> tuple[HttpContext, Agent]:
 @pytest.fixture
 def media_bucket(s3, settings):
     """A datalayer with a media bucket, on moto."""
-    from datalayer import datalayer as module
+    from arkitekt_datalayer import datalayer as module
 
     settings.DATALAYER = {"allow_unscoped_fallback": True, "access_key": "testing", "secret_key": "testing", "media": {"path": "media"}}
     module.GLOBAL_DL = None

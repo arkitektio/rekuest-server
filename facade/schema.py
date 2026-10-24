@@ -3,6 +3,8 @@ from typing import Annotated, cast
 import kante
 import strawberry
 import strawberry_django
+from arkitekt_datalayer import mutations as datalayer_mutations
+from arkitekt_datalayer.scalars import SCALAR_MAP as dscalar_map
 from authentikate.strawberry import AuthentikateExtension, AuthExtension, AuthSubscribeExtension
 from django.db.models import Q
 from kante.types import Info
@@ -10,8 +12,6 @@ from kante.unions import unionElementOf
 from strawberry.schema.config import StrawberryConfig
 from strawberry_django.optimizer import DjangoOptimizerExtension
 
-from datalayer import mutations as datalayer_mutations
-from datalayer.scalars import scalar_map as dscalar_map
 from embeddings.search import hybrid_search
 from embeddings.strawberry import scalar_map as escalar_map
 from facade import enums, models, mutations, queries, subscriptions, types

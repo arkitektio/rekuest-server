@@ -9,8 +9,6 @@ decision goes to takt and its refusal comes back as GraphQL errors.
 import pytest
 from asgiref.sync import sync_to_async
 from authentikate.models import App, Client, Device, Release
-from django.db import connection
-from django.db.migrations.executor import MigrationExecutor
 from django.utils import timezone
 from kante.context import HttpContext
 
@@ -111,22 +109,10 @@ async def test_a_held_child_is_decided_by_its_person(authenticated_context: Http
 
 
 @pytest.mark.django_db(transaction=True)
-def test_tasks_and_rules_from_before_policies_keep_running_unattended() -> None:
-    """The migrations fill the rows that exist with AUTO; a row made after them asks."""
-    before = _build_task("policy-before")
+def test_a_new_task_or_rule_asks() -> None:
+    """A row made now asks, whoever writes it."""
     _, _, organization, caller = create_registry_bundle("policy-rules")
     action = create_action_for_organization(organization, "policy-rules")
-    schedule = models.Schedule.objects.create(name="old", caller=caller, action=action, interval_seconds=60)
-    trigger = models.Trigger.objects.create(name="old", caller=caller, kind="CREATED", identifier="@mikro/image", action=action, port="image")
-    executor = MigrationExecutor(connection)
-    executor.migrate([("facade", "0011_provided_bloks")])
-    # Forward to the latest, not to 0013: every test after this one runs on what is left.
-    executor = MigrationExecutor(connection)
-    executor.migrate(executor.loader.graph.leaf_nodes("facade"))
-
-    assert models.Task.objects.get(pk=before.pk).policy == "AUTO"
-    assert models.Schedule.objects.get(pk=schedule.pk).policy == "AUTO"
-    assert models.Trigger.objects.get(pk=trigger.pk).policy == "AUTO"
     assert models.Schedule.objects.create(name="new", caller=caller, action=action, interval_seconds=60).policy == "ASK"
     assert _build_task("policy-after").policy == "ASK"
     after = _build_task("policy-after-db")

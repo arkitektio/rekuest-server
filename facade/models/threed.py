@@ -2,7 +2,7 @@ from authentikate.models import Organization
 from django.db.models.functions import Now
 from django.contrib.auth import get_user_model
 from django.db import models
-from datalayer.models import MediaStore
+from arkitekt_datalayer.models import MediaStore
 
 
 class ThreeDModel(models.Model):

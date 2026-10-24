@@ -2,7 +2,7 @@
 
 import strawberry
 
-from datalayer import scalars as dscalars
+from arkitekt_datalayer import scalars as dscalars
 
 
 @strawberry.input(description="Ask for a grant to upload one asset: one the caller's agent declares, or, for an admin, one an agent of the organization names a source for.")

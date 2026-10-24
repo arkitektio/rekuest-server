@@ -25,9 +25,15 @@ action) could deadlock with a registration (action, then agent row). So:
   actions it recomputed; takt calls it on the notice and on every reaper tick.
 - Nothing else writes the column: a guard keeps the stored value through any other update (a
   full ``save()`` of a stale instance included) and starts every new action at 0.
+
+It also lets a blok revision go of its task in the database, not only in Django: takt deletes
+tasks with its own SQL, so ``ON DELETE SET NULL`` sits on the constraint itself.
+
+Hand-written, so re-add it whenever the history is regenerated: ``makemigrations`` emits none
+of this. In its own migration because Django adds 0001's foreign keys only as that one ends.
 """
 
-from django.db import migrations, models
+from django.db import migrations
 
 #: The count for the action ``x.id``.
 COUNT = """(
@@ -197,47 +203,27 @@ DROP FUNCTION IF EXISTS facade_refresh_live_implementations(integer);
 DROP FUNCTION IF EXISTS facade_mark_live_implementations(bigint[]);
 """
 
+SET_NULL = """
+DO $$
+DECLARE name text;
+BEGIN
+    SELECT c.conname INTO name
+      FROM pg_constraint c
+      JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+     WHERE c.conrelid = 'facade_blokrevision'::regclass AND c.contype = 'f' AND a.attname = 'task_id';
+    EXECUTE format('ALTER TABLE facade_blokrevision DROP CONSTRAINT %I', name);
+    ALTER TABLE facade_blokrevision ADD CONSTRAINT facade_blokrevision_task_id_fk_facade_task_id
+        FOREIGN KEY (task_id) REFERENCES facade_task (id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED;
+END $$;
+"""
+
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("authentikate", "0006_alter_app_identifier_alter_release_unique_together"),
-        ("facade", "0005_task_impl_created_idx"),
+        ("facade", "0001_initial"),
     ]
 
     operations = [
-        migrations.CreateModel(
-            name="ActionLivenessDirty",
-            fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
-                ("action_id", models.BigIntegerField()),
-            ],
-            options={
-                "db_table": "facade_actionlivenessdirty",
-            },
-        ),
-        migrations.AddField(
-            model_name="action",
-            name="live_implementations",
-            field=models.IntegerField(
-                db_default=0,
-                default=0,
-                editable=False,
-                help_text="How many implementations sit on an agent that can take work now (a webhook agent, or a connected one)",
-            ),
-        ),
-        migrations.AddField(
-            model_name="action",
-            name="assignable",
-            field=models.GeneratedField(
-                db_persist=True,
-                expression=models.Q(("live_implementations__gt", 0)),
-                help_text="Whether an agent that can take this action is connected (or a webhook) right now",
-                output_field=models.BooleanField(),
-            ),
-        ),
-        migrations.AddIndex(
-            model_name="action",
-            index=models.Index(fields=["organization", "assignable"], name="action_org_assignable_idx"),
-        ),
         migrations.RunSQL(FUNCTIONS, DROP_FUNCTIONS),
+        migrations.RunSQL(SET_NULL, migrations.RunSQL.noop),
     ]

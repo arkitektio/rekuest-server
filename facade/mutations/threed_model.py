@@ -6,7 +6,7 @@ import strawberry
 from kante.types import Info
 from pydantic import BaseModel
 
-from datalayer.models import MediaStore
+from arkitekt_datalayer.models import MediaStore
 from facade import inputs, models, types
 from facade.json_types import JSON
 from facade.types.base import scoped_get

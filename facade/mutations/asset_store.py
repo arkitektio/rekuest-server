@@ -3,14 +3,15 @@
 from dataclasses import asdict
 from typing import cast
 
+from arkitekt_datalayer import base_models
+from arkitekt_datalayer import types as dtypes
+from arkitekt_datalayer.context import caller
+from arkitekt_datalayer.datalayer import get_current_datalayer
+from arkitekt_datalayer.models import MediaStore
 from authentikate.strawberry.directives import has_org_role
 from graphql import GraphQLError
 from kante.types import Info
 
-from datalayer import base_models
-from datalayer import types as dtypes
-from datalayer.datalayer import get_current_datalayer
-from datalayer.models import MediaStore
 from facade import asset_store, inputs, models, types
 from facade.asset_store import AssetRefused
 from facade.caller_context import CallerContext
@@ -53,10 +54,11 @@ def request_asset_upload(info: Info, input: inputs.RequestAssetUploadInput) -> d
         size = asset_store.upload_size(declared, input.size)
     except AssetRefused as error:
         raise _refusal(error) from error
+    organization_id, user = caller(info)
     grant = get_current_datalayer().generate_media_upload_grant(
+        organization_id,
         base_models.RequestMediaUploadInput(original_file_name=f"{declared.name}-{declared.ref.removeprefix('sha256:')[:16]}", file_size=size, content_type=CONTENT_TYPES.get(declared.kind)),
-        organization_id=info.context.request.organization.id,
-        creator_id=info.context.request.user.id,
+        user=user,
     )
     return dtypes.MediaUploadGrant(**grant.model_dump())
 
