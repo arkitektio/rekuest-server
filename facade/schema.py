@@ -100,8 +100,8 @@ class Query:
     space: types.Space = field(description="Fetch a specific space by ID.")
     placements: list[types.Placement] = field(description="List all placements.")
     placement: types.Placement = field(description="Fetch a specific placement by ID.")
-    threed_models: list[types.ThreeDModel] = field(description="List all 3D models.")
-    threed_model: types.ThreeDModel = field(description="Fetch a specific 3D model by ID.")
+    space_placements: list[types.SpacePlacement] = field(description="List the 3D bloks placed in spaces.")
+    space_placement: types.SpacePlacement = field(description="Fetch one placed 3D blok by ID.")
     asset = field(resolver=mutations.asset, description="The stored asset of this reference ('sha256:...') in the caller's organization, or null if no agent has uploaded it.")
     asset_policy = field(resolver=mutations.asset_policy, description="The limits each kind of asset is held to when it is added.")
     bloks_for_model = field(resolver=mutations.bloks_for_model, description="The html bloks registered to decorate the model of this reference.")
@@ -331,9 +331,6 @@ class Mutation:
     # Assets
     request_asset_upload = mutation(resolver=mutations.request_asset_upload, description="A media upload grant for one asset. Issued for a file the caller's own agent declares (it registered with it), or, to an admin, for a file an agent of the organization names a source for; and only if its size passes the policy.")
     create_asset = mutation(resolver=mutations.create_asset, description="Verify an asset uploaded with a grant from `requestAssetUpload` (its hash and the rules of its kind) and record it. Returns the existing asset if the hash is stored already; a refusal carries its code in `extensions.code` and deletes the upload.")
-    create_threed_model = mutation(resolver=mutations.create_threed_model, description="Create a new 3D model.")
-    update_threed_model = mutation(resolver=mutations.update_threed_model, description="Update an existing 3D model.")
-    delete_threed_model = mutation(resolver=mutations.delete_threed_model, description="Delete a 3D model.")
 
     # Space
 
@@ -344,6 +341,10 @@ class Mutation:
     create_placement = mutation(resolver=mutations.create_placement, description="Create a new placement for an agent in a space.")
     update_placement = mutation(resolver=mutations.update_placement, description="Update an existing placement.")
     delete_placement = mutation(resolver=mutations.delete_placement, description="Delete a placement.")
+
+    create_space_placement = mutation(resolver=mutations.create_space_placement, description="Place a 3D blok (a Model or Robot over a kulisse asset) in a space at an affine transform.")
+    update_space_placement = mutation(resolver=mutations.update_space_placement, description="Move or rename a placed 3D blok.")
+    delete_space_placement = mutation(resolver=mutations.delete_space_placement, description="Remove a placed 3D blok from its space.")
 
 
 @strawberry.type(description="Root subscription type for real-time event streams from the system.")

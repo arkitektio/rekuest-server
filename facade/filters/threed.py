@@ -1,6 +1,6 @@
 # pyright: reportExplicitAny=false
 # strawberry-django's `auto` (a field whose type comes from the model) is itself spelled `Any`.
-"""Filters and orders for 3D models, spaces and placements."""
+"""Filters and orders for spaces, agent placements and blok placements."""
 
 from __future__ import annotations
 
@@ -12,24 +12,6 @@ from strawberry.types import Info
 from strawberry_django.fields.filter_order import filter_field
 
 from facade import models
-
-
-@strawberry_django.order_type(models.ThreeDModel)
-class ThreeDModelOrder:
-    created_at: auto
-    updated_at: auto
-    name: auto
-
-
-@strawberry_django.filter_type(models.ThreeDModel, description="A way to filter 3D models")
-class ThreeDModelFilter:
-    @filter_field(description="Filter by IDs")
-    def ids(self, info: Info, queryset: QuerySet[models.ThreeDModel], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[models.ThreeDModel], Q]:
-        return queryset.filter(**{f"{prefix}id__in": value}), Q()
-
-    @filter_field(description="Search by name")
-    def search(self, info: Info, queryset: QuerySet[models.ThreeDModel], value: str, prefix: str) -> tuple[QuerySet[models.ThreeDModel], Q]:
-        return queryset.filter(**{f"{prefix}name__icontains": value}), Q()
 
 
 @strawberry_django.order_type(models.Space)
@@ -73,3 +55,20 @@ class PlacementFilter:
     @filter_field(description="Search by name")
     def search(self, info: Info, queryset: QuerySet[models.Placement], value: str | None, prefix: str) -> tuple[QuerySet[models.Placement], Q]:
         return queryset.filter(**{f"{prefix}name__icontains": value}), Q()
+
+
+@strawberry_django.order_type(models.SpacePlacement)
+class SpacePlacementOrder:
+    created_at: auto
+    name: auto
+
+
+@strawberry_django.filter_type(models.SpacePlacement, description="A way to filter blok placements in spaces")
+class SpacePlacementFilter:
+    @filter_field(description="Filter by IDs")
+    def ids(self, info: Info, queryset: QuerySet[models.SpacePlacement], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[models.SpacePlacement], Q]:
+        return queryset.filter(**{f"{prefix}id__in": value}), Q()
+
+    @filter_field(description="Filter by space")
+    def space(self, info: Info, queryset: QuerySet[models.SpacePlacement], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.SpacePlacement], Q]:
+        return queryset.filter(**{f"{prefix}space_id": value}), Q()

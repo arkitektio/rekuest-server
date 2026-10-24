@@ -4,7 +4,6 @@ from django.contrib.auth import get_user_model
 from django.db import models
 from django.db.models.functions import Now
 
-from arkitekt_datalayer.models import MediaStore
 
 
 class Asset(models.Model):
@@ -13,9 +12,9 @@ class Asset(models.Model):
     organization = models.ForeignKey("authentikate.Organization", on_delete=models.CASCADE, related_name="assets", help_text="The organization this asset belongs to. Access is scoped to it.")
     ref = models.CharField(max_length=71, help_text="'sha256:' and the hex SHA-256 of the file's exact bytes.")
     kind = models.CharField(max_length=32, help_text="What the file is (rekuest_core AssetKind).")
-    file = models.ForeignKey(MediaStore, on_delete=models.CASCADE, related_name="assets", help_text="The stored file.")
+    file = models.ForeignKey("datalayer.DatalayerStore", on_delete=models.CASCADE, related_name="assets", help_text="The stored file: a kulisse store for a 3D model, a media store for an image.")
     size = models.BigIntegerField(help_text="The size of the file in bytes, measured by the server.")
-    meta = models.JSONField(default=dict, db_default={}, help_text="What validation found: a model's node names and counts, an image's format and size.")
+    meta = models.JSONField(default=dict, db_default={}, help_text="What validation found: a model's node names, counts and joint table, an image's format and size.")
     uploaded_by = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name="uploaded_assets", help_text="The user whose app uploaded the file.")
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
 

@@ -89,8 +89,8 @@ from .structure import (
     StructurePackage,
 )
 from .testcase import TestCase, TestResult
-from .asset import AgentAsset, Asset, AssetPolicy, ImagePolicy, ModelPolicy, ModelStats
-from .threed import Placement, Space, ThreeDModel
+from .asset import AgentAsset, Asset, AssetPolicy, AssetUploadGrant, ImagePolicy, ModelPolicy, ModelStats
+from .threed import Placement, Space, SpacePlacement
 from .toolbox import Collection, Protocol, Shortcut, Toolbox
 
 __all__ = [
@@ -169,10 +169,11 @@ __all__ = [
     "TaskBoundary",
     "SessionBoundary",
     "Session",
-    "ThreeDModel",
+    "SpacePlacement",
     "Asset",
     "AgentAsset",
     "AssetPolicy",
+    "AssetUploadGrant",
     "ImagePolicy",
     "ModelPolicy",
     "ModelStats",

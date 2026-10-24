@@ -1,24 +1,25 @@
 """The asset store: the files agents declare, verified and kept once per organization.
 
 An agent names its files at registration (``AgentAsset``). It may then upload the ones
-the organization does not hold: with an ordinary media grant, issued only for a file its
-own declaration names. A file it does not hold it names a ``source`` for instead, and an
-admin's client fetches and uploads that one. Nothing about either upload is trusted.
-``create_asset`` reads the stored object back and holds it to the rules of its kind.
+the organization does not hold, with a grant issued only for a file its own declaration
+names: a kulisse grant for a 3D model, a media grant for an image. A file it does not hold it
+names a ``source`` for instead, and an admin's client fetches and uploads that one. Nothing
+about either upload is trusted: ``create_asset`` finishes a model's kulisse store (whose own
+reader checks the GLB and hashes it) and reads an image back, and holds each to its kind.
 """
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, fields
+from dataclasses import dataclass, fields
 from typing import Any
 
-from arkitekt_datalayer.datalayer import Datalayer
-from arkitekt_datalayer.models import MediaStore
+from arkitekt_datalayer.datalayer import Datalayer, load_config
+from arkitekt_datalayer.kulisse import KulissePolicy, KulisseRefused, check_ref
+from arkitekt_datalayer.models import DatalayerStore, KulisseStore, MediaStore
 from django.conf import settings
 from django.db import IntegrityError, transaction
 
 from facade import models
-from facade.glb_validation import ModelPolicy, ModelRefused, check_ref_format, validate_model
 from facade.image_validation import ImagePolicy, ImageRefused, validate_image
 from rekuest_core.enums import AssetKind
 
@@ -32,11 +33,17 @@ class AssetRefused(ValueError):
         self.message = message
 
 
+#: Texture limits a client checks before it uploads (it decodes the images; the server never
+#: does). Advertised beside the server's own model policy so a client holds one set of numbers.
+MAX_TEXTURE_SIZE = 4096
+MAX_TEXTURE_MEMORY = 256 * 1024 * 1024
+
+
 @dataclass(frozen=True)
 class AssetPolicy:
-    """The limits each kind of asset is held to."""
+    """The limits each kind of asset is held to: a model's are the datalayer's kulisse policy."""
 
-    model: ModelPolicy
+    model: KulissePolicy
     image: ImagePolicy
 
     def max_size(self, kind: str) -> int:
@@ -44,7 +51,7 @@ class AssetPolicy:
         return self.model.max_size if kind == AssetKind.MODEL_3D.value else self.image.max_size
 
 
-def _overlaid[P](policy: type[P], setting: str) -> P:
+def _overlaid[P](policy: type[P], setting: str) -> P:  # noqa: D103
     """``policy``'s defaults overlaid with the deployment's ``setting``."""
     overrides = dict(getattr(settings, setting, None) or {})
     unknown = sorted(set(overrides) - {field.name for field in fields(policy)})  # type: ignore[arg-type]
@@ -56,14 +63,14 @@ def _overlaid[P](policy: type[P], setting: str) -> P:
 
 
 def asset_policy() -> AssetPolicy:
-    """The deployment's policy: the defaults overlaid with ``settings.MODEL_POLICY`` and ``settings.IMAGE_POLICY``."""
-    return AssetPolicy(model=_overlaid(ModelPolicy, "MODEL_POLICY"), image=_overlaid(ImagePolicy, "IMAGE_POLICY"))
+    """The deployment's policy: ``datalayer.kulisse_policy`` for models, ``settings.IMAGE_POLICY`` over the defaults for images."""
+    return AssetPolicy(model=load_config().kulisse_policy.policy(), image=_overlaid(ImagePolicy, "IMAGE_POLICY"))
 
 
 def _check_ref(ref: str) -> None:
     try:
-        check_ref_format(ref)
-    except ModelRefused as error:
+        check_ref(ref)
+    except KulisseRefused as error:
         raise AssetRefused("bad_reference", f"an asset reference is 'sha256:' and 64 lowercase hex characters, not {ref!r}") from error
 
 
@@ -107,19 +114,34 @@ def _read_object(datalayer: Datalayer, store: MediaStore, limit: int) -> bytes:
     return store.read_bytes(datalayer, max_bytes=limit + 1)
 
 
-def _validate(data: bytes, ref: str, kind: str, policy: AssetPolicy) -> tuple[int, dict[str, Any]]:
-    """Hold ``data`` to the rules of ``kind``: its size and what validation found."""
+def _finish_model(datalayer: Datalayer, store: DatalayerStore, ref: str) -> tuple[int, dict[str, Any]]:
+    """Finish a model's kulisse store -- its reader checks the GLB and hashes it -- and hold it to ``ref``."""
+    if not isinstance(store, KulisseStore):
+        raise AssetRefused("wrong_store", f"a 3D model is uploaded to a kulisse store (requestAssetUpload issues one), not to store {store.pk}")
     try:
-        if kind == AssetKind.MODEL_3D.value:
-            model = validate_model(data, ref, policy.model)
-            return model.size, {"nodes": model.nodes, "stats": asdict(model.stats)}
-        image = validate_image(data, ref, policy.image)
-        return image.size, {"format": image.format, "width": image.width, "height": image.height}
-    except (ModelRefused, ImageRefused) as error:
+        store.fill_info(datalayer)
+    except FileNotFoundError as error:
+        raise AssetRefused("not_uploaded", f"nothing was uploaded to store {store.pk}") from error
+    except KulisseRefused as error:
         raise AssetRefused(error.code, error.message) from error
+    if store.ref != ref:
+        raise AssetRefused("hash_mismatch", f"the stored bytes are {store.ref}, not {ref}")
+    return int(store.size_bytes or 0), {"nodes": store.nodes or [], "stats": store.stats, "joints": store.joints or []}
 
 
-def create_asset(datalayer: Datalayer, *, declared: models.AgentAsset, user_id: int, store: MediaStore) -> models.Asset:
+def _finish_image(datalayer: Datalayer, store: DatalayerStore, ref: str, policy: AssetPolicy) -> tuple[int, dict[str, Any]]:
+    """Read an image back and hold it to the image rules and ``ref``."""
+    if not isinstance(store, MediaStore):
+        raise AssetRefused("wrong_store", f"an image is uploaded to a media store (requestAssetUpload issues one), not to store {store.pk}")
+    try:
+        image = validate_image(_read_object(datalayer, store, policy.image.max_size), ref, policy.image)
+    except ImageRefused as error:
+        raise AssetRefused(error.code, error.message) from error
+    store.fill_info(datalayer)
+    return image.size, {"format": image.format, "width": image.width, "height": image.height}
+
+
+def create_asset(datalayer: Datalayer, *, declared: models.AgentAsset, user_id: int, store: DatalayerStore) -> models.Asset:
     """Verify what was uploaded to ``store`` and record it; the existing record if the hash is stored already.
 
     A refused upload leaves nothing behind: the object and its store row are deleted.
@@ -131,15 +153,16 @@ def create_asset(datalayer: Datalayer, *, declared: models.AgentAsset, user_id: 
             store.delete()
         return existing
 
-    policy = asset_policy()
     try:
-        size, meta = _validate(_read_object(datalayer, store, policy.max_size(declared.kind)), declared.ref, declared.kind, policy)
+        if declared.kind == AssetKind.MODEL_3D.value:
+            size, meta = _finish_model(datalayer, store, declared.ref)
+        else:
+            size, meta = _finish_image(datalayer, store, declared.ref, asset_policy())
     except AssetRefused:
         # Deleting the store row deletes its object.
         store.delete()
         raise
 
-    store.fill_info(datalayer)
     try:
         with transaction.atomic():
             return models.Asset.objects.create(organization_id=organization_id, ref=declared.ref, kind=declared.kind, file=store, size=size, meta=meta, uploaded_by_id=user_id)

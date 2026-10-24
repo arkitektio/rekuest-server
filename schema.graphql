@@ -708,7 +708,6 @@ input AgentFilter {
   search: String
   dependency: ID
   blokDependency: ID
-  threeDModel: ID
   distinct: Boolean
   actionDemands: [ActionDemandInput!]
   stateDemands: [StateDemandInput!]
@@ -943,11 +942,20 @@ type Asset {
 
   """What the file is."""
   kind: AssetKind!
-  file: MediaStore!
 
   """The size of the file in bytes, measured by the server."""
   size: Int!
   createdAt: DateTime!
+
+  """
+  The stored file: a kulisse store for a 3D model, a media store for an image.
+  """
+  file: AssetFile!
+
+  """
+  A 3D model's joint table (name, node, type, axis, limit, mimic). Empty for other kinds.
+  """
+  joints: JSON!
 
   """
   A 3D model's node names: what blok bindings can address. Empty for other kinds.
@@ -965,6 +973,11 @@ type Asset {
   """An image's height in pixels. Null for other kinds."""
   height: Int
 }
+
+"""
+Where an asset's bytes are: a kulisse store for a 3D model, a media store for an image.
+"""
+union AssetFile = KulisseStore | MediaStore
 
 """
 A file an agent brings with it: the name its bloks call it by, and what the bytes are.
@@ -1004,6 +1017,26 @@ enum AssetKind {
 type AssetPolicy {
   model: ModelPolicy!
   image: ImagePolicy!
+}
+
+"""
+Temporary S3 credentials for uploading one asset: to a kulisse store for a 3D model, to a media store for an image. Write the file to `key`, then call `createAsset` with `store`.
+"""
+type AssetUploadGrant {
+  status: String!
+  accessKey: String!
+  secretKey: String!
+  sessionToken: String!
+  region: String!
+  bucket: String!
+  key: String!
+  path: String!
+  expiresIn: Int!
+  store: String!
+  maxBytes: ByteCount!
+  originalFileName: String
+  uploadFileName: String!
+  uploadContentType: String
 }
 
 """
@@ -2102,11 +2135,6 @@ input CreatePlacementInput {
   affineMatrix: [[Float!]!] = null
 
   """
-  The 3D model ID for the placement. This is used to identify the 3D model in the system.
-  """
-  model: ID = null
-
-  """
   The agent ID for the placement. This is used to identify the agent in the system.
   """
   agent: ID = null
@@ -2210,6 +2238,23 @@ input CreateSpaceInput {
   placements: [PlacementInput!] = null
 }
 
+"""Place a 3D blok in a space at an affine transform."""
+input CreateSpacePlacementInput {
+  """The space to place the blok in."""
+  space: ID!
+
+  """The materialized 3D blok to place."""
+  blok: ID!
+
+  """What the placement is called in its space."""
+  name: String = null
+
+  """
+  Where the blok sits: a 4x4 affine matrix, row-major, from the blok's frame into the space's. Omitted is the identity.
+  """
+  affineMatrix: [[Float!]!] = null
+}
+
 """Declare that one action tests another."""
 input CreateTestCaseInput {
   """The action under test."""
@@ -2237,24 +2282,6 @@ input CreateTestResultInput {
 
   """What the test produced, as JSON."""
   result: AnyDefault = null
-}
-
-"""The input for creating a 3D model."""
-input CreateThreeDModelInput {
-  """The name of the 3D model."""
-  name: String!
-
-  """A description of the 3D model."""
-  description: String = null
-
-  """The media store file for the 3D model."""
-  media: MediaLike!
-
-  """How the agent's state maps onto the model's properties."""
-  transferFunction: String = null
-
-  """The agent this model shows: whose state the transfer function reads."""
-  dependency: AgentDependencyInput = null
 }
 
 """
@@ -2569,9 +2596,9 @@ input DeleteSpaceInput {
   id: ID!
 }
 
-"""The input for deleting a 3D model."""
-input DeleteThreeDModelInput {
-  """The ID of the 3D model to delete."""
+"""Remove a placed 3D blok from its space."""
+input DeleteSpacePlacementInput {
+  """The blok placement to remove."""
   id: ID!
 }
 
@@ -3462,6 +3489,85 @@ input KickInput {
   reason: String = null
 }
 
+"""Temporary S3 credentials for reading a kulisse model."""
+type KulisseAccessGrant {
+  status: String!
+  accessKey: String!
+  secretKey: String!
+  sessionToken: String!
+  region: String!
+  bucket: String!
+  key: String!
+  path: String!
+  expiresIn: Int!
+  store: String
+}
+
+"""What a kulisse model contains, counted from its JSON."""
+type KulisseStats {
+  nodes: Int!
+  triangles: Int!
+  textures: Int!
+  animations: Int!
+}
+
+"""
+A kulisse model: a device or scene model stored as one self-contained binary glTF. Everything here is read from the file when its upload is finished, never declared by a caller.
+"""
+type KulisseStore @key(fields: "id", resolvable: true) {
+  id: ID!
+  path: String!
+  bucket: String!
+  key: String!
+
+  """
+  The byte budget the upload grant advertised for this store. Advertised, not enforced: a session policy bounds what a credential may write, never how much, so a store may exceed this
+  """
+  maxBytes: ByteCount
+
+  """
+  How many bytes the model holds, measured when its upload was finished. Null while unfinished
+  """
+  sizeBytes: ByteCount
+  originalFileName: String
+
+  """
+  `sha256:` and the hex digest of the model's exact bytes: what a blok decorating it names as `forModel`
+  """
+  ref: String
+
+  """The glTF version the model declares"""
+  specVersion: String
+
+  """The tool that wrote the model, as it says"""
+  generator: String
+
+  """
+  The box the default scene occupies, `{min: [x, y, z], max: [x, y, z]}` in the model's own coordinates. Null when nothing declares a box
+  """
+  bounds: JSON
+
+  """The named nodes a blok can address"""
+  nodes: [String!]
+
+  """
+  The joint table (`extras.arkitekt.joints`): name, node, type, axis, limit, mimic. Empty for a rigid model
+  """
+  joints: JSON
+
+  """The glTF extensions the model uses"""
+  extensionsUsed: [String!]
+
+  """What the reader noticed but did not refuse"""
+  warnings: [String!]
+
+  """What the model contains, counted from its JSON."""
+  stats: KulisseStats
+
+  """Get temporary S3 read credentials for the model."""
+  accessGrant: KulisseAccessGrant!
+}
+
 """
 The task an implementation last ran as, with what its record is made of. The first message of `latestTask`, and again whenever a newer task takes its place.
 """
@@ -3620,6 +3726,9 @@ type MaterializedBlok {
 
   """Placements of this materialized blok."""
   placements(filters: PlacementFilter, ordering: [PlacementOrder!]! = [], pagination: OffsetPaginationInput): [Placement!]!
+
+  """Where this 3D blok is placed in spaces, each at its affine transform."""
+  spacePlacements(filters: SpacePlacementFilter, ordering: [SpacePlacementOrder!]! = [], pagination: OffsetPaginationInput): [SpacePlacement!]!
 
   """
   The revision this materialization stays at; null when it follows its blok's head.
@@ -4072,21 +4181,12 @@ type Mutation {
   """
   A media upload grant for one asset. Issued for a file the caller's own agent declares (it registered with it), or, to an admin, for a file an agent of the organization names a source for; and only if its size passes the policy.
   """
-  requestAssetUpload(input: RequestAssetUploadInput!): MediaUploadGrant! @auth
+  requestAssetUpload(input: RequestAssetUploadInput!): AssetUploadGrant! @auth
 
   """
   Verify an asset uploaded with a grant from `requestAssetUpload` (its hash and the rules of its kind) and record it. Returns the existing asset if the hash is stored already; a refusal carries its code in `extensions.code` and deletes the upload.
   """
   createAsset(input: CreateAssetInput!): Asset! @auth
-
-  """Create a new 3D model."""
-  createThreedModel(input: CreateThreeDModelInput!): ThreeDModel! @auth
-
-  """Update an existing 3D model."""
-  updateThreedModel(input: UpdateThreeDModelInput!): ThreeDModel! @auth
-
-  """Delete a 3D model."""
-  deleteThreedModel(input: DeleteThreeDModelInput!): ID! @auth
 
   """Create a new space."""
   createSpace(input: CreateSpaceInput!): Space! @auth
@@ -4105,6 +4205,17 @@ type Mutation {
 
   """Delete a placement."""
   deletePlacement(input: DeletePlacementInput!): ID! @auth
+
+  """
+  Place a 3D blok (a Model or Robot over a kulisse asset) in a space at an affine transform.
+  """
+  createSpacePlacement(input: CreateSpacePlacementInput!): SpacePlacement! @auth
+
+  """Move or rename a placed 3D blok."""
+  updateSpacePlacement(input: UpdateSpacePlacementInput!): SpacePlacement! @auth
+
+  """Remove a placed 3D blok from its space."""
+  deleteSpacePlacement(input: DeleteSpacePlacementInput!): ID! @auth
 }
 
 input OffsetPaginationInput {
@@ -4226,7 +4337,6 @@ type Placement {
   blok: MaterializedBlok
   role: String!
   affineMatrix: Args
-  model: ThreeDModel
 
   """Get the agent associated with this placement."""
   name: String!
@@ -4263,11 +4373,6 @@ input PlacementInput {
   The affine matrix for the placement. This is used to identify the placement in the system.
   """
   affineMatrix: [[Float!]!] = null
-
-  """
-  The 3D model ID for the placement. This is used to identify the 3D model in the system.
-  """
-  model: ID = null
 
   """
   The agent ID for the placement. This is used to identify the agent in the system.
@@ -4741,11 +4846,11 @@ type Query {
   """Fetch a specific placement by ID."""
   placement(id: ID!): Placement! @auth
 
-  """List all 3D models."""
-  threedModels(filters: ThreeDModelFilter, ordering: [ThreeDModelOrder!]! = [], pagination: OffsetPaginationInput): [ThreeDModel!]! @auth
+  """List the 3D bloks placed in spaces."""
+  spacePlacements(filters: SpacePlacementFilter, ordering: [SpacePlacementOrder!]! = [], pagination: OffsetPaginationInput): [SpacePlacement!]! @auth
 
-  """Fetch a specific 3D model by ID."""
-  threedModel(id: ID!): ThreeDModel! @auth
+  """Fetch one placed 3D blok by ID."""
+  spacePlacement(id: ID!): SpacePlacement! @auth
 
   """List all sessions."""
   sessions(filters: SessionFilter, ordering: [SessionOrder!]! = [], pagination: OffsetPaginationInput): [Session!]! @auth
@@ -5897,6 +6002,9 @@ type Space {
   createdAt: DateTime!
   updatedAt: DateTime!
   placements(filters: PlacementFilter, ordering: [PlacementOrder!]! = [], pagination: OffsetPaginationInput): [Placement!]!
+
+  """The 3D bloks placed in this space, each at its affine transform."""
+  blokPlacements(filters: SpacePlacementFilter, ordering: [SpacePlacementOrder!]! = [], pagination: OffsetPaginationInput): [SpacePlacement!]!
 }
 
 """A way to filter spaces"""
@@ -5916,6 +6024,42 @@ input SpaceFilter {
 input SpaceOrder @oneOf {
   createdAt: Ordering
   updatedAt: Ordering
+  name: Ordering
+}
+
+"""
+A 3D blok placed in a space at an affine transform: a Model or Robot blok over a kulisse asset, with no agent of its own.
+"""
+type SpacePlacement {
+  id: ID!
+  space: Space!
+  blok: MaterializedBlok!
+  name: String
+
+  """
+  Where the blok sits: a 4x4 affine matrix, row-major, from the blok's frame into the space's. Null is the identity.
+  """
+  affineMatrix: Args
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+"""A way to filter blok placements in spaces"""
+input SpacePlacementFilter {
+  AND: SpacePlacementFilter
+  OR: SpacePlacementFilter
+  NOT: SpacePlacementFilter
+  DISTINCT: Boolean
+
+  """Filter by IDs"""
+  ids: [ID!]
+
+  """Filter by space"""
+  space: ID
+}
+
+input SpacePlacementOrder @oneOf {
+  createdAt: Ordering
   name: Ordering
 }
 
@@ -7043,42 +7187,6 @@ input TestTargetInput {
   version: String = null
 }
 
-"""A 3D model file."""
-type ThreeDModel {
-  id: ID!
-  name: String!
-  description: String
-  transferFunction: String
-
-  """
-  The agent this model shows (an agent-dependency declaration), as stored.
-  """
-  dependency: AnyDefault
-  file: MediaStore!
-  createdAt: DateTime!
-  updatedAt: DateTime!
-}
-
-"""A way to filter 3D models"""
-input ThreeDModelFilter {
-  AND: ThreeDModelFilter
-  OR: ThreeDModelFilter
-  NOT: ThreeDModelFilter
-  DISTINCT: Boolean
-
-  """Filter by IDs"""
-  ids: [ID!]
-
-  """Search by name"""
-  search: String
-}
-
-input ThreeDModelOrder @oneOf {
-  createdAt: Ordering
-  updatedAt: Ordering
-  name: Ordering
-}
-
 type TimeBucket {
   ts: DateTime!
   count: Int!
@@ -7440,11 +7548,6 @@ input UpdatePlacementInput {
   """
   affineMatrix: [[Float!]!] = null
 
-  """
-  The 3D model ID for the placement. This is used to identify the 3D model in the system.
-  """
-  model: ID = null
-
   """The ID of the placement to update."""
   id: ID!
 }
@@ -7488,25 +7591,16 @@ input UpdateSpaceInput {
   description: String = null
 }
 
-"""The input for updating a 3D model."""
-input UpdateThreeDModelInput {
-  """The ID of the 3D model to update."""
+"""Move or rename a placed 3D blok."""
+input UpdateSpacePlacementInput {
+  """The blok placement to change."""
   id: ID!
 
-  """The new name of the 3D model."""
+  """A new name."""
   name: String = null
 
-  """The new description of the 3D model."""
-  description: String = null
-
-  """The new media store file ID for the 3D model."""
-  media: ID = null
-
-  """How the agent's state maps onto the model's properties."""
-  transferFunction: String = null
-
-  """The agent this model shows."""
-  dependency: AgentDependencyInput = null
+  """A new 4x4 affine matrix, row-major."""
+  affineMatrix: [[Float!]!] = null
 }
 
 """

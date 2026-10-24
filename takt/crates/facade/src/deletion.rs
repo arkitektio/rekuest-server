@@ -438,7 +438,7 @@ pub async fn delete_blok_dependencies(
     .await
 }
 
-/// Materialized bloks with their dashboard and scene placements and agent mappings (CASCADE).
+/// Materialized bloks with their dashboard, space (blok) and agent placements and agent mappings (CASCADE).
 pub async fn delete_materialized_bloks(
     conn: &mut PgConnection,
     materialized: &[i64],
@@ -448,6 +448,7 @@ pub async fn delete_materialized_bloks(
     }
     for statement in [
         "DELETE FROM facade_dashboardplacement WHERE blok_id = ANY($1)",
+        "DELETE FROM facade_spaceplacement WHERE blok_id = ANY($1)",
         "DELETE FROM facade_placement WHERE blok_id = ANY($1)",
         "DELETE FROM facade_blokagentmapping WHERE materialized_blok_id = ANY($1)",
         "DELETE FROM facade_materializedblok WHERE id = ANY($1)",
@@ -559,6 +560,8 @@ pub async fn delete_agent(
           WHERE trigger_id IN (SELECT id FROM facade_trigger WHERE agent_id = ANY($1))",
         "DELETE FROM facade_trigger WHERE agent_id = ANY($1)",
         "DELETE FROM facade_dashboardplacement
+          WHERE blok_id IN (SELECT id FROM facade_materializedblok WHERE declared_by_id = ANY($1))",
+        "DELETE FROM facade_spaceplacement
           WHERE blok_id IN (SELECT id FROM facade_materializedblok WHERE declared_by_id = ANY($1))",
         "DELETE FROM facade_placement WHERE agent_id = ANY($1)
             OR blok_id IN (SELECT id FROM facade_materializedblok WHERE declared_by_id = ANY($1))",

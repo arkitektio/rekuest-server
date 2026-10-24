@@ -14,8 +14,7 @@ from .catalog import register_ui_catalog
 from .materialized_blok import materialize_blok, delete_materialized_blok, pin_materialized_blok, update_materialized_blok
 from .action import cleanup_actions
 from .resolution import auto_resolve
-from .space import create_space, create_placement, update_space, delete_space, update_placement, delete_placement
-from .threed_model import create_threed_model, update_threed_model, delete_threed_model
+from .space import create_space, create_placement, update_space, delete_space, update_placement, delete_placement, create_space_placement, update_space_placement, delete_space_placement
 from .asset_store import asset, asset_policy, bloks_for_model, create_asset, request_asset_upload
 from .agent import implement_agent, update_agent
 
@@ -37,8 +36,6 @@ __all__ = [
     "delete_schedule",
     "trigger_schedule",
     "create_higher_order_implementation",
-    "delete_threed_model",
-    "create_threed_model",
     "delete_materialized_blok",
     "update_materialized_blok",
     "pin_materialized_blok",
@@ -63,12 +60,13 @@ __all__ = [
     "register_ui_catalog",
     "create_space",
     "create_placement",
+    "create_space_placement",
+    "update_space_placement",
+    "delete_space_placement",
     "update_space",
     "delete_space",
     "update_placement",
     "delete_placement",
-    "update_threed_model",
-    "delete_threed_model",
     "block",
     "create_shortcut",
     "delete_shortcut",

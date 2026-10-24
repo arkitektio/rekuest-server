@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from facade.types.dashboard import DashboardPlacement, UICatalog
     from facade.types.task import Task
     from facade.types.demand import ActionDependency, StateDependency
-    from facade.types.threed import Placement
+    from facade.types.threed import Placement, SpacePlacement
 
 
 def blok_hash(components: object, demo_state: object, context: str) -> str:
@@ -256,6 +256,7 @@ class MaterializedBlok:
     placements: list["Placement"] = strawberry_django.field(
         description="Placements of this materialized blok.",
     )
+    space_placements: list["SpacePlacement"] = strawberry_django.field(description="Where this 3D blok is placed in spaces, each at its affine transform.")
     pinned_revision: BlokRevision | None = strawberry_django.field(description="The revision this materialization stays at; null when it follows its blok's head.")
 
     @strawberry_django.field(description="Where it lives: DASHBOARD, MESSAGE when it was made for one chat message to show inline, or TASK when a task showed it.")

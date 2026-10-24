@@ -129,16 +129,6 @@ class AgentFilter:
             raise ValueError("Filtering by blok_dependency currently only allowed when the blok_dependency declared an app filter, sorry :( This is coming")
 
     @filter_field
-    def three_d_model(self, info: Info, queryset: QuerySet[models.Agent], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
-        # A model's dependency is stored as the document it was declared with.
-        declared = json_object(models.ThreeDModel.objects.get(id=value).dependency or {})
-        app_filter = declared.get("app_filter")
-        if isinstance(app_filter, str):
-            return queryset.filter(**{f"{prefix}app__identifier": app_filter}), Q()
-        else:
-            raise ValueError("Filtering by three_d_model currently only allowed when the model's dependency declared an app filter")
-
-    @filter_field
     def distinct(self, info: Info, queryset: QuerySet[models.Agent], value: bool, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.distinct(), Q()
 

@@ -1,73 +1,23 @@
-"""Inputs for 3D models, spaces and placements."""
+"""Inputs for spaces, agent placements and blok placements."""
 
 import strawberry
-from arkitekt_datalayer import scalars as dscalars
 from pydantic import BaseModel, Field
-from rekuest_core.inputs import models as rimodels
-from rekuest_core.inputs import types as ritypes
 from strawberry.experimental import pydantic
-
-
-class CreateThreeDModelInputModel(BaseModel):
-    name: str = Field(description="The name of the 3D model.")
-    description: str | None = Field(default=None, description="A description of the 3D model.")
-    media: str = Field(description="The media store file for the 3D model.")
-    transfer_function: str | None = Field(default=None, description="How the agent's state maps onto the model's properties.")
-    dependency: rimodels.AgentDependencyInputModel | None = Field(default=None, description="The agent this model shows: whose state the transfer function reads.")
-
-
-@pydantic.input(CreateThreeDModelInputModel, description="The input for creating a 3D model.")
-class CreateThreeDModelInput:
-    name: str
-    description: str | None = None
-    media: dscalars.MediaLike
-    transfer_function: str | None = None
-    dependency: ritypes.AgentDependencyInput | None = None
-
-
-class UpdateThreeDModelInputModel(BaseModel):
-    id: str = Field(description="The ID of the 3D model to update.")
-    name: str | None = Field(default=None, description="The new name of the 3D model.")
-    description: str | None = Field(default=None, description="The new description of the 3D model.")
-    media: str | None = Field(default=None, description="The new media store file ID for the 3D model.")
-    transfer_function: str | None = Field(default=None, description="How the agent's state maps onto the model's properties.")
-    dependency: rimodels.AgentDependencyInputModel | None = Field(default=None, description="The agent this model shows.")
-
-
-@pydantic.input(UpdateThreeDModelInputModel, description="The input for updating a 3D model.")
-class UpdateThreeDModelInput:
-    id: strawberry.ID
-    name: str | None = None
-    description: str | None = None
-    media: strawberry.ID | None = None
-    transfer_function: str | None = None
-    dependency: ritypes.AgentDependencyInput | None = None
 
 
 class PlacementInputModel(BaseModel):
     role: str | None = Field(default=None, description="The role of the placement. This is used to identify the placement in the system.")
     affine_matrix: list[list[float]] | None = Field(default=None, description="The affine matrix for the placement. This is used to identify the placement in the system.")
-    model: str | None = Field(default=None, description="The 3D model ID for the placement. This is used to identify the 3D model in the system.")
     agent: str | None = Field(default=None, description="The agent ID for the placement. This is used to identify the agent in the system.")
     blok: str | None = Field(default=None, description="A specific blok that should be used to visualize the state of the placement.")
-
-
-class DeleteThreeDModelInputModel(BaseModel):
-    id: str = Field(description="The ID of the 3D model to delete.")
 
 
 @pydantic.input(PlacementInputModel, description="The input for creating or updating a placement.")
 class PlacementInput:
     role: str | None = None
     affine_matrix: list[list[float]] | None = None
-    model: strawberry.ID | None = None
     agent: strawberry.ID | None = None
     blok: strawberry.ID | None = None
-
-
-@pydantic.input(DeleteThreeDModelInputModel, description="The input for deleting a 3D model.")
-class DeleteThreeDModelInput:
-    id: strawberry.ID
 
 
 class CreateSpaceInputModel(BaseModel):
@@ -130,7 +80,6 @@ class CreatePlacementInput:
     space: str
     role: str | None = None
     affine_matrix: list[list[float]] | None = None
-    model: strawberry.ID | None = None
     agent: strawberry.ID | None = None
     materialized_blok: strawberry.ID | None = None
 
@@ -140,7 +89,6 @@ class UpdatePlacementInput:
     id: strawberry.ID
     role: str | None = None
     affine_matrix: list[list[float]] | None = None
-    model: strawberry.ID | None = None
 
 
 class DeletePlacementInputModel(BaseModel):
@@ -149,4 +97,41 @@ class DeletePlacementInputModel(BaseModel):
 
 @pydantic.input(DeletePlacementInputModel, description="The input for deleting a placement.")
 class DeletePlacementInput:
+    id: strawberry.ID
+
+
+class CreateSpacePlacementInputModel(BaseModel):
+    space: str = Field(description="The space to place the blok in.")
+    blok: str = Field(description="The materialized 3D blok to place.")
+    name: str | None = Field(default=None, description="What the placement is called in its space.")
+    affine_matrix: list[list[float]] | None = Field(default=None, description="Where the blok sits: a 4x4 affine matrix, row-major, from the blok's frame into the space's. Omitted is the identity.")
+
+
+@pydantic.input(CreateSpacePlacementInputModel, description="Place a 3D blok in a space at an affine transform.")
+class CreateSpacePlacementInput:
+    space: strawberry.ID
+    blok: strawberry.ID
+    name: str | None = None
+    affine_matrix: list[list[float]] | None = None
+
+
+class UpdateSpacePlacementInputModel(BaseModel):
+    id: str = Field(description="The blok placement to change.")
+    name: str | None = Field(default=None, description="A new name.")
+    affine_matrix: list[list[float]] | None = Field(default=None, description="A new 4x4 affine matrix, row-major.")
+
+
+@pydantic.input(UpdateSpacePlacementInputModel, description="Move or rename a placed 3D blok.")
+class UpdateSpacePlacementInput:
+    id: strawberry.ID
+    name: str | None = None
+    affine_matrix: list[list[float]] | None = None
+
+
+class DeleteSpacePlacementInputModel(BaseModel):
+    id: str = Field(description="The blok placement to remove.")
+
+
+@pydantic.input(DeleteSpacePlacementInputModel, description="Remove a placed 3D blok from its space.")
+class DeleteSpacePlacementInput:
     id: strawberry.ID

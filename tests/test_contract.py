@@ -52,7 +52,7 @@ def test_it_says_what_it_needs_before_it_has_any_config(capsys: pytest.CaptureFi
 
     said = json.loads(capsys.readouterr().out)
     assert said["name"] == "rekuest"
-    assert said["needs"]["instance_key"] is True and said["needs"]["storage"] == ["media"] and said["needs"]["peers"] == ["takt"]
+    assert said["needs"]["instance_key"] is True and said["needs"]["storage"] == ["media", "kulisse"] and said["needs"]["peers"] == ["takt"]
 
 
 def test_its_config_is_written_from_what_the_hub_says(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

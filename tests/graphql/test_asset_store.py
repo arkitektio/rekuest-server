@@ -1,6 +1,9 @@
 """The asset store: an agent uploads the files it declares, each held to the rules of its kind."""
 
+import hashlib
+import json
 import struct
+from typing import Any
 
 import pytest
 from asgiref.sync import sync_to_async
@@ -8,12 +11,10 @@ from authentikate.models import App, Release
 from kante.context import HttpContext
 
 from arkitekt_datalayer.datalayer import get_current_datalayer
-from arkitekt_datalayer.models import MediaStore
-from facade.glb_validation import model_ref
+from arkitekt_datalayer.models import DatalayerStore
 from facade.models import Agent, AgentAsset, Asset
 from facade.schema import schema
 from tests.graphql.test_cross_tenant_isolation import OTHER_TOKEN, tenant_context
-from tests.models.test_glb_validation import glb, triangle
 
 REQUEST = "mutation($input: RequestAssetUploadInput!) { requestAssetUpload(input: $input) { store bucket key } }"
 CREATE = "mutation($input: CreateAssetInput!) { createAsset(input: $input) { id ref kind size nodes stats { nodes triangles } width height } }"
@@ -21,6 +22,37 @@ ASSET = "query($ref: String!) { asset(ref: $ref) { id ref } }"
 AGENT_ASSETS = "query($id: ID!) { agent(id: $id) { assets { name kind ref size source asset { id ref } } } }"
 SOURCE = "https://vendor.example/models/scope.glb"
 POLICY = "query { assetPolicy { model { maxSize maxNodes extensions } image { maxSize maxSide formats } } }"
+
+
+def glb(document: dict[str, Any], binary: bytes = b"") -> bytes:
+    """A GLB container around ``document`` and ``binary``, padded as the format requires."""
+    payload = json.dumps(document).encode()
+    payload += b" " * (-len(payload) % 4)
+    binary += b"\0" * (-len(binary) % 4)
+    chunks = struct.pack("<II", len(payload), 0x4E4F534A) + payload
+    if binary:
+        chunks += struct.pack("<II", len(binary), 0x004E4942) + binary
+    return struct.pack("<III", 0x46546C67, 2, 12 + len(chunks)) + chunks
+
+
+def triangle(**extra: Any) -> tuple[dict[str, Any], bytes]:
+    """One triangle on a node called ``stage_x``."""
+    binary = struct.pack("<9f", 0, 0, 0, 1, 0, 0, 0, 1, 0)
+    document: dict[str, Any] = {
+        "asset": {"version": "2.0"},
+        "buffers": [{"byteLength": len(binary)}],
+        "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": len(binary)}],
+        "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+        "nodes": [{"name": "stage_x", "mesh": 0}, {"name": "turret"}],
+    }
+    document.update(extra)
+    return document, binary
+
+
+def model_ref(data: bytes) -> str:
+    """The reference of these exact bytes."""
+    return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
 def png(width: int = 64, height: int = 32) -> bytes:
@@ -54,12 +86,13 @@ def admin(db, backend_stack) -> tuple[HttpContext, Agent]:
 
 @pytest.fixture
 def media_bucket(s3, settings):
-    """A datalayer with a media bucket, on moto."""
+    """A datalayer with a media bucket (images) and a kulisse bucket (3D models), on moto."""
     from arkitekt_datalayer import datalayer as module
 
-    settings.DATALAYER = {"allow_unscoped_fallback": True, "access_key": "testing", "secret_key": "testing", "media": {"path": "media"}}
+    settings.DATALAYER = {"allow_unscoped_fallback": True, "access_key": "testing", "secret_key": "testing", "media": {"path": "media"}, "kulisse": {"path": "kulisse"}}
     module.GLOBAL_DL = None
     get_current_datalayer()._s3.create_bucket(Bucket="media")
+    get_current_datalayer()._s3.create_bucket(Bucket="kulisse")
     yield
     module.GLOBAL_DL = None
 
@@ -108,7 +141,7 @@ class TestAssetStore:
         repeated = await _create(context, ref, again)
         assert repeated.data["createAsset"]["id"] == asset["id"]
         assert await sync_to_async(Asset.objects.filter(ref=ref).count)() == 1
-        assert not await sync_to_async(MediaStore.objects.filter(id=again).exists)(), "the surplus upload was kept"
+        assert not await sync_to_async(DatalayerStore.objects.filter(id=again).exists)(), "the surplus upload was kept"
 
         listed = await schema.execute(AGENT_ASSETS, context_value=context, variable_values={"id": str(agent.pk)})
         assert listed.data["agent"]["assets"] == [{"name": "scope", "kind": "MODEL_3D", "ref": ref, "size": len(data), "source": None, "asset": {"id": asset["id"], "ref": ref}}]
@@ -146,7 +179,7 @@ class TestAssetStore:
         store = await _upload(context, data, claimed)
         refused = await _create(context, claimed, store)
         assert refused.errors and refused.errors[0].extensions == {"code": "hash_mismatch"}
-        assert not await sync_to_async(MediaStore.objects.filter(id=store).exists)()
+        assert not await sync_to_async(DatalayerStore.objects.filter(id=store).exists)()
         assert not await sync_to_async(Asset.objects.filter(ref=claimed).exists)()
 
     async def test_a_file_is_held_to_the_rules_of_the_kind_it_is_declared_as(self, caller: tuple[HttpContext, Agent], media_bucket: None) -> None:
@@ -234,7 +267,7 @@ class TestAssetStore:
         store = await _upload(admin[0], data, claimed, size=len(data))
         refused = await _create(admin[0], claimed, store)
         assert refused.errors and refused.errors[0].extensions == {"code": "hash_mismatch"}
-        assert not await sync_to_async(MediaStore.objects.filter(id=store).exists)()
+        assert not await sync_to_async(DatalayerStore.objects.filter(id=store).exists)()
 
     async def test_the_policy_names_the_limits_of_each_kind(self, caller: tuple[HttpContext, Agent]) -> None:
         policy = (await schema.execute(POLICY, context_value=caller[0])).data["assetPolicy"]

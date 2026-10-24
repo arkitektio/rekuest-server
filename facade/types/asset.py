@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+from typing import Annotated
 
 import strawberry
 import strawberry_django
@@ -10,6 +11,8 @@ from django.db.models import QuerySet
 from kante.types import Info
 
 from arkitekt_datalayer import types as dtypes
+from arkitekt_datalayer.scalars import ByteCount
+from strawberry.scalars import JSON
 from facade import models
 from facade.types.base import build_prescoped_queryset, row_of
 from rekuest_core import enums
@@ -42,6 +45,27 @@ class ImagePolicy:
     formats: list[str] = strawberry.field(description="The formats an image may be in.")
 
 
+@strawberry.type(description="Temporary S3 credentials for uploading one asset: to a kulisse store for a 3D model, to a media store for an image. Write the file to `key`, then call `createAsset` with `store`.")
+class AssetUploadGrant:
+    status: str
+    access_key: str
+    secret_key: str
+    session_token: str
+    region: str
+    bucket: str
+    key: str
+    path: str
+    expires_in: int
+    store: str
+    max_bytes: ByteCount
+    original_file_name: str | None
+    upload_file_name: str
+    upload_content_type: str | None
+
+
+AssetFile = Annotated[dtypes.KulisseStore | dtypes.MediaStore, strawberry.union("AssetFile", description="Where an asset's bytes are: a kulisse store for a 3D model, a media store for an image.")]
+
+
 @strawberry.type(description="The limits each kind of asset is held to.")
 class AssetPolicy:
     model: ModelPolicy
@@ -53,9 +77,17 @@ class Asset:
     id: strawberry.ID
     ref: str = strawberry_django.field(description="'sha256:' and the hex SHA-256 of the file's exact bytes.")
     kind: enums.AssetKind = strawberry_django.field(description="What the file is.")
-    file: dtypes.MediaStore
     size: int = strawberry_django.field(description="The size of the file in bytes, measured by the server.")
     created_at: datetime.datetime
+
+    @strawberry_django.field(description="The stored file: a kulisse store for a 3D model, a media store for an image.", select_related=["file"])
+    def file(self) -> AssetFile:
+        store = row_of(self, models.Asset).file
+        return store.get_real_instance()  # type: ignore[return-value]
+
+    @strawberry_django.field(description="A 3D model's joint table (name, node, type, axis, limit, mimic). Empty for other kinds.", only=["meta"])
+    def joints(self) -> JSON:
+        return list(row_of(self, models.Asset).meta.get("joints") or [])
 
     @strawberry_django.field(description="A 3D model's node names: what blok bindings can address. Empty for other kinds.", only=["meta"])
     def nodes(self) -> list[str]:

@@ -94,7 +94,7 @@ contract = Contract(
         name="rekuest",
         identifier="live.arkitekt.rekuest",
         summary="Assigns work to agents and keeps the record of it.",
-        needs=Needs(scopes=SCOPES, roles=ROLES, storage=["media"], instance_key=True, peers=[TAKT]),
+        needs=Needs(scopes=SCOPES, roles=ROLES, storage=["media", "kulisse"], instance_key=True, peers=[TAKT]),
         offers=Offers(health="ht"),
         hosts=HOSTS,
         # Its other half: every agent connects to takt, not to this server, and the two are

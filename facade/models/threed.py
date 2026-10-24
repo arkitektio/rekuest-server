@@ -2,28 +2,6 @@ from authentikate.models import Organization
 from django.db.models.functions import Now
 from django.contrib.auth import get_user_model
 from django.db import models
-from arkitekt_datalayer.models import MediaStore
-
-
-class ThreeDModel(models.Model):
-    organization = models.ForeignKey(
-        "authentikate.Organization",
-        on_delete=models.CASCADE,
-        related_name="threed_models",
-        help_text="The organization this 3D model belongs to. Access is scoped to it.",
-    )
-    name = models.CharField(max_length=1000)
-    description = models.TextField(null=True, blank=True)
-    file = models.ForeignKey(
-        MediaStore,
-        on_delete=models.CASCADE,
-        related_name="threedmodels",
-        help_text="The media file containing this 3D model",
-    )
-    transfer_function = models.CharField(max_length=10000, default="", db_default="", help_text="Unused: scene bloks bind a model's nodes to state. Kept so the previous release still runs on this schema.")
-    dependency = models.JSONField(help_text="The protocol of the agent that we need to show this model", null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
-    updated_at = models.DateTimeField(auto_now=True, db_default=Now())
 
 
 class Space(models.Model):
@@ -48,9 +26,24 @@ class Space(models.Model):
 class Placement(models.Model):
     space = models.ForeignKey(Space, on_delete=models.CASCADE, related_name="placements")
     agent = models.ForeignKey("Agent", on_delete=models.CASCADE, related_name="placements")
-    model = models.ForeignKey(ThreeDModel, on_delete=models.CASCADE, related_name="placements", null=True, blank=True, help_text="An optional 3D model to represent this placement in a 3D space")
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
     role = models.CharField(max_length=1000, help_text="The role of this placement ")
     affine_matrix = models.JSONField(help_text="The affine matrix of this placement (e.g. the position and orientation of the agent in the space)", null=True, blank=True)
     blok = models.ForeignKey("MaterializedBlok", on_delete=models.CASCADE, related_name="placements", null=True, blank=True, help_text="An optional Blok to represent this placement in a 3D space and to define its interactions")
+
+
+class SpacePlacement(models.Model):
+    """A 3D blok placed in a space at an affine transform, with no agent of its own.
+
+    The space's twin of ``DashboardPlacement``: what a scene shows besides its agents -- a
+    ``<Model>`` or ``<Robot>`` blok over a kulisse asset (a stage, a fixture, a room), placed by
+    its 4x4 transform. An agent's own presence in a space is a ``Placement``.
+    """
+
+    space = models.ForeignKey(Space, on_delete=models.CASCADE, related_name="blok_placements")
+    blok = models.ForeignKey("MaterializedBlok", on_delete=models.CASCADE, related_name="space_placements", help_text="The 3D blok drawn at this placement")
+    name = models.CharField(max_length=1000, null=True, blank=True, help_text="What this placement is called in its space")
+    affine_matrix = models.JSONField(null=True, blank=True, help_text="Where the blok sits in the space: a 4x4 affine matrix, row-major, from the blok's frame into the space's. Null is the identity")
+    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
+    updated_at = models.DateTimeField(auto_now=True, db_default=Now())
