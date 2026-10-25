@@ -1647,3 +1647,67 @@ async fn a_probe_lives_in_redis_and_mirrors_to_its_requester() {
     );
     ctx.channel_layer.unsubscribe(&channel);
 }
+
+/// A space of `agent`'s organization (and user), named `name`.
+async fn space(ctx: &Context, agent: i64, name: &str) -> i64 {
+    sqlx::query_scalar(
+        "INSERT INTO facade_space (name, creator_id, organization_id)
+         SELECT $2, a.user_id, a.organization_id FROM facade_agent a WHERE a.id = $1 RETURNING id",
+    )
+    .bind(agent)
+    .bind(name)
+    .fetch_one(&ctx.db)
+    .await
+    .unwrap()
+}
+
+async fn space_of(ctx: &Context, task: i64) -> Option<i64> {
+    sqlx::query_scalar("SELECT space_id FROM facade_task WHERE id = $1")
+        .bind(task)
+        .fetch_one(&ctx.db)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_root_run_keeps_the_space_it_was_started_in() {
+    let Some(ctx) = context().await else { return };
+    let executor = agent(&ctx, None).await;
+    let (_, implementation) = action(&ctx, executor, false).await;
+    let principal = principal(&ctx, executor).await;
+    let lab = space(&ctx, executor, "lab").await;
+
+    let hinted = AssignInput {
+        space: Some(lab.to_string()),
+        ..echo(implementation, 1, None)
+    };
+    let assigned = backend::assign_with_status(&ctx, &principal, &hinted, AssignOrigin::default())
+        .await
+        .unwrap();
+    assert_eq!(space_of(&ctx, assigned.task).await, Some(lab));
+
+    let plain = backend::assign_with_status(
+        &ctx,
+        &principal,
+        &echo(implementation, 2, None),
+        AssignOrigin::default(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(space_of(&ctx, plain.task).await, None);
+
+    // Another organization's space is refused as if it did not exist.
+    let stranger = agent(&ctx, None).await;
+    let theirs = space(&ctx, stranger, "elsewhere").await;
+    let foreign = AssignInput {
+        space: Some(theirs.to_string()),
+        ..echo(implementation, 3, None)
+    };
+    assert_eq!(
+        backend::assign_with_status(&ctx, &principal, &foreign, AssignOrigin::default())
+            .await
+            .unwrap_err()
+            .to_string(),
+        format!("No Space {theirs} in this organization.")
+    );
+}

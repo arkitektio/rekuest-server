@@ -30,6 +30,7 @@ from .task import (
     TaskInstruct,
 )
 from .blok import (
+    ActionBlok,
     Blok,
     BlokAgentMapping,
     BlokArgPort,
@@ -116,6 +117,7 @@ __all__ = [
     "Snapshot",
     # blok
     "Dashboard",
+    "ActionBlok",
     "Blok",
     "BlokDependency",
     "MaterializedBlok",

@@ -21,10 +21,11 @@ if TYPE_CHECKING:
     from facade.types.action import Action
     from facade.types.agent import Agent, Lock
     from facade.types.auth import Caller
-    from facade.types.blok import MaterializedBlok
+    from facade.types.blok import ActionBlok, MaterializedBlok
     from facade.types.dependency import Resolution
     from facade.types.implementation import Implementation
     from facade.types.schedule import Schedule
+    from facade.types.threed import Space
     from facade.types.trigger import Signal, Trigger
 
 
@@ -37,6 +38,20 @@ class TaskBlok:
     values: scalars.Args | None = strawberry.field(description="The answer to an ask, by the blok's returns.")
     decided_by: str | None = strawberry.field(description="The user (sub) who answered or dismissed an ask.")
     created_at: datetime.datetime = strawberry.field(description="When the task showed it.")
+
+
+@strawberry.type(description="An agent a task got for one of its action's dependencies, as it was resolved when the task was assigned.")
+class TaskDependencyAgent:
+    key: str = strawberry.field(description="The dependency key, as the action's implementation declares it and the action's bloks name it.")
+    agent: "Agent" = strawberry.field(description="The agent bound to it for this run. A key bound to several agents comes once per agent.")
+
+
+def dependency_agents(task: models.Task) -> list[TaskDependencyAgent]:
+    """The top level of the dependency tree frozen on ``task`` (``Task.dependencies``): per key, the agents it got, in order."""
+    level = DependencyLevel.model_validate({"dependencies": task.dependencies or {}})
+    bound = [(key, agent.agent) for key, agents in level.dependencies.items() for agent in agents or []]
+    agents = models.Agent.objects.filter(id__in=[agent for _, agent in bound if agent.isdigit()], organization_id__in=models.Agent.objects.filter(pk=task.agent_id).values("organization_id")).in_bulk()
+    return [TaskDependencyAgent(key=key, agent=cast("Agent", agents[int(agent)])) for key, agent in bound if agent.isdigit() and int(agent) in agents]
 
 
 def task_bloks(task: models.Task) -> list[TaskBlok]:
@@ -114,6 +129,16 @@ class Task:
     @strawberry_django.field(description="The bloks this task showed a person, oldest first: asks it holds on (or held on) and informs.")
     def bloks(self) -> list[TaskBlok]:
         return task_bloks(row_of(self, models.Task))
+
+    @strawberry_django.field(description="Its action's own bloks (`Action.bloks`), at most one per context: how a client shows this run, with each dependency key bound by `dependencyAgents`.")
+    def action_bloks(self) -> list["ActionBlok"]:
+        return cast("list[ActionBlok]", list(models.ActionBlok.objects.filter(action_id=row_of(self, models.Task).action_id).order_by("context")))
+
+    @strawberry_django.field(description="The agents this run got for its action's dependencies, by key: the top level of the tree resolved when it was assigned. What an action blok's `<At dependency>` anchors at.")
+    def dependency_agents(self) -> list[TaskDependencyAgent]:
+        return dependency_agents(row_of(self, models.Task))
+
+    space: Optional["Space"] = strawberry_django.field(description="The space the caller started this run in (the assign's `space`): where a client draws the action's overlay. Null when none was named, or the space is gone.")
     schedule: Optional["Schedule"] = strawberry.field(description="The schedule this task is a run of, if any.")
     signal: Optional["Signal"] = strawberry.field(description="The signal that caused this task, if a trigger fired it.")
     trigger: Optional["Trigger"] = strawberry.field(description="The trigger that fired this task, if any.")

@@ -90,6 +90,8 @@ def materialize_blok(info: Info, input: inputs.MaterializeBlokInput) -> types.Ma
     """Create a materialization of a blok with validated agent bindings, optionally placed on a dashboard."""
     organization = organization_of(info)
     blok = scoped_get(models.Blok, info, input.blok, field="organization")
+    if blok.held_by_action:
+        raise ValueError("This blok is an action's own: a client shows it with the action's runs, bound to the agents each run got; it is not materialized on its own.")
     for_message = input.scope == enums.MaterializationScope.MESSAGE
     # A message shows a provided blok as it is now, bound for that one message: nothing to fork.
     if blok.app_id is not None and not for_message:

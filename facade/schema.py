@@ -97,6 +97,7 @@ class Query:
     agent: types.Agent = field(resolver=queries.agent, description="Fetch a specific agent by ID or by app, version and device_id.")
 
     spaces: list[types.Space] = field(description="List all spaces.")
+    spaces_for_agents = field(resolver=types.threed.spaces_for_agents, description="The spaces that place any of these agents (e.g. the ones a dependencyTree dry run binds), those placing the most first, then the most recently changed: where to run a workflow over them.")
     space: types.Space = field(description="Fetch a specific space by ID.")
     placements: list[types.Placement] = field(description="List all placements.")
     placement: types.Placement = field(description="Fetch a specific placement by ID.")

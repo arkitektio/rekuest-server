@@ -48,7 +48,7 @@ from .task import (
 from .probe import Probe, ProbeEvent, ProbeStats
 from .auth import App, Caller, Client, Device, Organization, Release, User
 from .base import build_prescoped_queryset
-from .blok import Blok, BlokAgentMapping, BlokDependency, BlokEdit, BlokRevision, MaterializedBlok, RevisionDependency
+from .blok import ActionBlok, Blok, BlokAgentMapping, BlokDependency, BlokEdit, BlokRevision, MaterializedBlok, RevisionDependency
 from .dashboard import BaseCatalog, Dashboard, DashboardPlacement, UICatalog
 from .demand import (
     ActionDemand,
@@ -90,7 +90,7 @@ from .structure import (
 )
 from .testcase import TestCase, TestResult
 from .asset import AgentAsset, Asset, AssetPolicy, AssetUploadGrant, ImagePolicy, ModelPolicy, ModelStats
-from .threed import Placement, Space, SpacePlacement
+from .threed import Placement, Space, SpaceForAgents, SpacePlacement
 from .toolbox import Collection, Protocol, Shortcut, Toolbox
 
 __all__ = [
@@ -178,6 +178,8 @@ __all__ = [
     "ModelPolicy",
     "ModelStats",
     "Space",
+    "SpaceForAgents",
+    "ActionBlok",
     "Placement",
 ]
 

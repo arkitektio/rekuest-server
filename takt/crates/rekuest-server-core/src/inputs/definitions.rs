@@ -262,6 +262,10 @@ pub struct DefinitionInputModel {
     /// part of `unique_hash`.
     #[serde(default)]
     pub protocols: Vec<String>,
+    /// The action's own bloks, at most one per context: how a client shows a run of it. Not
+    /// part of `unique_hash`. Left out of its dump when empty, as before actions had bloks.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bloks: Vec<ActionBlokInputModel>,
 }
 
 /// A port path (`a..b..c`) resolves through `children` from the root ports.
@@ -313,10 +317,29 @@ impl DefinitionInputModel {
         for target in &self.is_test_for {
             target.validate()?;
         }
+        for blok in &mut self.bloks {
+            blok.validate()?;
+        }
+        self.check_bloks()?;
         self.check_keys()?;
         self.check_port_groups()?;
         self.check_protocols()?;
         self.check_dependencies()
+    }
+
+    /// An action has one blok per context (`check_bloks`).
+    fn check_bloks(&self) -> Result<(), ValidationError> {
+        let mut seen: HashSet<ComponentContext> = HashSet::new();
+        for blok in &self.bloks {
+            if !seen.insert(blok.context) {
+                return Err(ValidationError(format!(
+                    "Definition {}: the {} blok is given twice; an action has one blok per context",
+                    self.key,
+                    blok.context.value().to_lowercase()
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// A protocol hint is a name to filter on: one word, said once.
@@ -652,7 +675,14 @@ impl ImplementationInputModel {
         for optimistic in self.optimistics.iter_mut().flatten() {
             optimistic.validate()?;
         }
-        self.check_widget_targets()
+        self.check_widget_targets()?;
+        // The action's bloks name devices by the dependency keys this implementation declares.
+        let dependency_keys: HashSet<String> =
+            self.dependencies.iter().map(|d| d.key.clone()).collect();
+        for blok in &self.definition.bloks {
+            check_action_blok(blok, &dependency_keys)?;
+        }
+        Ok(())
     }
 
     /// PROXY and STATE_CHOICE widgets may only name agent dependencies this implementation declares.
@@ -1258,8 +1288,219 @@ impl BlokImplementationInputModel {
         )?;
         check_blok_args(self.context, &self.args, &dependency_keys)?;
         check_blok_persist(&self.persist, &dependency_keys, state_keys.as_ref())?;
-        check_blok_services(self.components.as_deref(), &self.services)
+        check_blok_services(self.components.as_deref(), &self.services)?;
+        if self.context == ComponentContext::OVERLAY {
+            return Err(ValidationError(
+                "Blok manifest: an overlay blok is an action's own (its definition's `bloks`), drawn into the space that hosts a run of it; an agent does not declare one".into(),
+            ));
+        }
+        Ok(())
     }
+}
+
+/// The root an action's blok reads the run it is shown for under (`ACTION_BLOK_TASK_ROOT`).
+pub const ACTION_BLOK_TASK_ROOT: &str = "task";
+/// The key an action's blok reads the agent running the action under (`ACTION_BLOK_SELF_KEY`).
+pub const ACTION_BLOK_SELF_KEY: &str = "self";
+/// The component anchoring its children at the agent bound to a dependency (`AT_COMPONENT`).
+pub const AT_COMPONENT: &str = "At";
+/// The component drawing a line through the agents bound to dependencies (`ROUTE_COMPONENT`).
+pub const ROUTE_COMPONENT: &str = "Route";
+
+/// An action's own blok for one context (`ActionBlokInputModel`): no name, never listed on its
+/// own, its dependencies the action's, named by key.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActionBlokInputModel {
+    /// HTML (a task panel), SCENE (a 3D view of its own) or OVERLAY (drawn into the hosting space).
+    #[serde(default = "html_")]
+    pub context: ComponentContext,
+    /// The tree, unless the blok is sent as its `source`; `validate` parses that into this.
+    #[serde(default)]
+    pub components: Option<Vec<ComponentNodeInputModel>>,
+    /// The blok as BSX. Exactly one of the two is sent.
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub catalog: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    /// Its own locals and their initial values.
+    #[serde(default)]
+    pub demo_state: Option<serde_json::Map<String, Value>>,
+    /// The locals a renderer may keep between openings, on the device.
+    #[serde(default)]
+    pub persist: Vec<BlokPersistInputModel>,
+}
+
+impl ActionBlokInputModel {
+    /// Sent one way (its source parsed into its tree), in a context an action has a blok for,
+    /// its locals none of the roots the renderer fills (`check_action_blok` of the model).
+    pub fn validate(&mut self) -> Result<(), ValidationError> {
+        match (self.components.is_some(), self.source.take()) {
+            (true, Some(_)) => {
+                return Err(ValidationError(
+                    "a blok is sent as its components or as its BSX source, not both".to_string(),
+                ))
+            }
+            (false, None) => {
+                return Err(ValidationError(
+                    "a blok is sent as its components or as its BSX source".to_string(),
+                ))
+            }
+            (false, Some(source)) => {
+                let tree = crate::bsx::parse_bsx(&source).map_err(ValidationError)?;
+                self.components = Some(vec![tree]);
+            }
+            (true, None) => {}
+        }
+        for component in self.components.iter_mut().flatten() {
+            component.validate()?;
+        }
+        for local in &self.persist {
+            min_length(&local.key, "key")?;
+        }
+        if !matches!(
+            self.context,
+            ComponentContext::HTML | ComponentContext::SCENE | ComponentContext::OVERLAY
+        ) {
+            return Err(ValidationError(format!(
+                "Blok manifest: an action's blok is html, scene or overlay, not {}",
+                self.context.value().to_lowercase()
+            )));
+        }
+        let mut filled: Vec<&str> = self
+            .demo_state
+            .iter()
+            .flat_map(|state| state.keys())
+            .map(String::as_str)
+            .filter(|key| {
+                [
+                    ACTION_BLOK_TASK_ROOT,
+                    BLOK_ARGS_ROOT,
+                    ACTION_BLOK_SELF_KEY,
+                    BLOK_EVENT_ROOT,
+                ]
+                .contains(key)
+            })
+            .collect();
+        filled.sort_unstable();
+        if let Some(first) = filled.first() {
+            return Err(ValidationError(format!(
+                "Blok manifest: demo_state names {}, which the renderer fills for an action's blok",
+                repr_str(first)
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// The dependency keys a `through` prop names (`through_keys`): `"['robot', 'frame']"` (as BSX
+/// writes a list), `'["robot"]'` or `"robot, frame"`.
+pub fn through_keys(value: &str) -> Vec<String> {
+    let mut inner = value.trim();
+    if inner.starts_with('[') && inner.ends_with(']') && inner.len() >= 2 {
+        inner = &inner[1..inner.len() - 1];
+    }
+    inner
+        .split(',')
+        .filter(|item| !item.trim().is_empty())
+        .map(|item| {
+            item.trim()
+                .trim_matches(|c| c == '\'' || c == '"')
+                .trim()
+                .to_owned()
+        })
+        .collect()
+}
+
+/// Every `<At dependency>` and `<Route through>` names dependencies of the action
+/// (`check_action_blok_anchors`). Bound dynamically, they are left to the renderer.
+pub fn check_action_blok_anchors(
+    components: Option<&[ComponentNodeInputModel]>,
+    dependency_keys: &HashSet<String>,
+) -> Result<(), ValidationError> {
+    for node in iter_component_nodes(components) {
+        for prop in node.props.iter().flatten() {
+            let Some(Value::String(value)) = &prop.static_value else {
+                continue;
+            };
+            let named = if node.component == AT_COMPONENT && prop.key == "dependency" {
+                vec![value.clone()]
+            } else if node.component == ROUTE_COMPONENT && prop.key == "through" {
+                through_keys(value)
+            } else {
+                continue;
+            };
+            for key in named {
+                if !dependency_keys.contains(&key) {
+                    let mut known: Vec<&String> = dependency_keys.iter().collect();
+                    known.sort_unstable();
+                    let known = if known.is_empty() {
+                        "none".to_owned()
+                    } else {
+                        known
+                            .iter()
+                            .map(|k| repr_str(k))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    };
+                    return Err(ValidationError(format!(
+                        "Blok manifest: component {} names {}, which is not a dependency of the action (its dependencies: {known})",
+                        repr_str(&node.id),
+                        repr_str(&key)
+                    )));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// An action's blok against the dependencies its implementation declares (`check_action_blok`):
+/// its path roots are those dependencies, `self`, `task`, `args`, its own locals and `$event`;
+/// `At`/`Route` name only the dependencies.
+pub fn check_action_blok(
+    blok: &ActionBlokInputModel,
+    dependency_keys: &HashSet<String>,
+) -> Result<(), ValidationError> {
+    let mut reserved: Vec<&str> = [ACTION_BLOK_TASK_ROOT, BLOK_ARGS_ROOT]
+        .into_iter()
+        .filter(|root| dependency_keys.contains(*root))
+        .collect();
+    reserved.sort_unstable();
+    if let Some(first) = reserved.first() {
+        return Err(ValidationError(format!(
+            "Blok manifest: an action's blok reads its run under {} and the run's args under {}, so no dependency can be called {}",
+            repr_str(ACTION_BLOK_TASK_ROOT),
+            repr_str(BLOK_ARGS_ROOT),
+            repr_str(first)
+        )));
+    }
+    let mut keys = dependency_keys.clone();
+    keys.insert(ACTION_BLOK_SELF_KEY.to_owned());
+    let state_keys: HashSet<String> = blok
+        .demo_state
+        .iter()
+        .flat_map(|state| state.keys().cloned())
+        .collect();
+    let mut shadowed: Vec<&String> = state_keys.intersection(&keys).collect();
+    shadowed.sort_unstable();
+    if let Some(first) = shadowed.first() {
+        return Err(ValidationError(format!(
+            "Blok manifest: demo_state names {}, which is a dependency of the action, not a local",
+            repr_str(first)
+        )));
+    }
+    check_blok_persist(&blok.persist, &keys, Some(&state_keys))?;
+    if blok.components.is_none() {
+        return Ok(());
+    }
+    let mut roots = state_keys.clone();
+    roots.insert(ACTION_BLOK_TASK_ROOT.to_owned());
+    roots.insert(BLOK_ARGS_ROOT.to_owned());
+    check_blok_manifest(blok.components.as_deref(), &keys, Some(&roots))?;
+    check_action_blok_anchors(blok.components.as_deref(), dependency_keys)
 }
 
 /// A catalog's default widget for ports of a kind and/or identifier (`WidgetDefaultInputModel`).
@@ -1349,12 +1590,21 @@ impl CatalogComponentInputModel {
             self.props.iter().map(|p| p.key.as_str()),
             &format!("catalog component {}", self.name),
         )?;
-        // ACTION_LOGO is a blok's context, never a component's (`check_no_action_logo_context`).
+        // ACTION_LOGO and OVERLAY are a blok's contexts, never a component's
+        // (`check_no_action_logo_context`).
         if self.context == ComponentContext::ACTION_LOGO
             || self.children_context == Some(ComponentContext::ACTION_LOGO)
         {
             return Err(ValidationError(format!(
                 "catalog component {}: ACTION_LOGO is a blok context only; its shapes are LOGO components",
+                self.name
+            )));
+        }
+        if self.context == ComponentContext::OVERLAY
+            || self.children_context == Some(ComponentContext::OVERLAY)
+        {
+            return Err(ValidationError(format!(
+                "catalog component {}: OVERLAY is a blok context only; what an overlay draws are SCENE components",
                 self.name
             )));
         }

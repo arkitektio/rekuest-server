@@ -25,6 +25,7 @@ from rekuest_core.objects import types as rtypes
 
 if TYPE_CHECKING:
     # Named in annotations only: strawberry resolves them when it builds the schema.
+    from facade.types.action import Action
     from facade.types.agent import Agent
     from facade.types.auth import App, User
     from facade.types.dashboard import DashboardPlacement, UICatalog
@@ -48,10 +49,11 @@ class ListedMaterializationsField(StrawberryDjangoField):
 
 
 class ListedBloksField(StrawberryDjangoField):
-    """The bloks a list shows: not the ones a task made from its BSX to show, which go with their task."""
+    """The bloks a list shows: not the ones a task made from its BSX to show, which go with their task,
+    nor an action's own, which its action shows (``Action.bloks``)."""
 
     def get_queryset(self, queryset, info, **kwargs):  # noqa: ANN001, ANN201  strawberry_django's own signature
-        return super().get_queryset(queryset.filter(owner_task__isnull=True), info, **kwargs)
+        return super().get_queryset(queryset.filter(owner_task__isnull=True, held_by_action=False), info, **kwargs)
 
 
 @strawberry_django.type(models.Blok, filters=filters.BlokFilter, pagination=True)
@@ -66,6 +68,8 @@ class Blok:
     @strawberry_django.field(description="Whether an app's agents provide this blok (see `app`).", only=["app_id"])
     def provided(self) -> bool:
         return row_of(self, models.Blok).app_id is not None
+
+    held_by_action: bool = strawberry_django.field(description="Whether this blok is an action's own (`Action.bloks`): declared with the action, never listed, materialized or edited on its own.")
 
     @strawberry_django.field(description="The agents that currently provide this blok, each through its own materialization.")
     def providers(self, info: Info) -> list[Agent]:
@@ -138,6 +142,20 @@ class Blok:
     @classmethod
     def get_queryset(cls, queryset: QuerySet[models.Blok], info: Info, **kwargs: object) -> QuerySet[models.Blok]:
         return build_prescoped_queryset(info, queryset, field="organization")
+
+
+@strawberry_django.type(
+    models.ActionBlok,
+    description="An action's own blok for one context: how a client shows a run of the action there. It names devices only by the action's dependency keys: a run binds them through `Task.dependencyAgents`, a preview through the `dependencyTree` dry run.",
+)
+class ActionBlok:
+    id: strawberry.ID
+    action: Action = strawberry_django.field(description="The action whose runs it shows.")
+    blok: Blok = strawberry_django.field(description="What it draws: a blok held by its actions only (`heldByAction`), shared by every action of the app declaring the same.")
+
+    @strawberry_django.field(description="Where a client shows a run with it: HTML in a task panel, SCENE as a 3D view of its own, OVERLAY drawn into the space that hosts the run, over the agents placed there.")
+    def context(self) -> renums.ComponentContext:
+        return renums.ComponentContext(self.context)
 
 
 @strawberry.type(description="A dependency as a blok revision declares it.")

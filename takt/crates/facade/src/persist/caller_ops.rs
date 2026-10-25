@@ -95,6 +95,8 @@ pub fn assign_input(message: &FromAgent<impl Sized>) -> Option<BackendResult<Ass
         policy: None,
         prompt: prompt.clone(),
         state_requires: (!state_requires.is_empty()).then(|| state_requires.clone()),
+        // An agent's child runs in its root's space.
+        space: None,
         unheld: false,
     }))
 }

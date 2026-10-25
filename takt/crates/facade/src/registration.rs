@@ -194,15 +194,18 @@ pub async fn unshelve(
 }
 
 use rekuest_core::inputs::{
-    BlokImplementationInputModel, ImplementAgentInputModel, StateImplementationInputModel,
+    BlokImplementationInputModel, DefinitionInputModel, ImplementAgentInputModel,
+    StateImplementationInputModel,
 };
 use sqlx::PgConnection;
 
 use crate::catalog_validation::{
-    dump_diagnostics, validate_manifest_against_catalog, Catalog, Diagnostic,
+    dump_diagnostics, validate_action_blok_against_catalog, validate_manifest_against_catalog,
+    Catalog, Diagnostic,
 };
 use crate::deletion::{
-    delete_implementations, delete_materialized_bloks, delete_states, gc_provided_bloks,
+    delete_implementations, delete_materialized_bloks, delete_states, gc_action_bloks,
+    gc_provided_bloks,
 };
 use crate::mutations::blok::sync_blok_dependencies;
 use crate::mutations::implementation::{
@@ -212,7 +215,7 @@ use crate::mutations::implementation::{
 use crate::mutations::Refusal;
 use crate::registration_lock::lock_organization;
 use crate::signals::{OnCommit, Signal};
-use crate::unique::{hash_blok_definition, hash_state_definition};
+use crate::unique::{hash_action_blok, hash_blok_definition, hash_state_definition};
 
 /// What a registration did: the diagnostics to hand back on `INIT`, the signals to publish
 /// once it committed, and the hash the agent now holds.
@@ -374,6 +377,82 @@ async fn register_blok(
         .execute(&mut *conn)
         .await?;
     }
+    Ok(diagnostics)
+}
+
+/// An action's own bloks, as its definition declares them now (`ActionBlok`): each checked
+/// against its catalog, written as a blok of the agent's app held by actions only
+/// (`held_by_action`), content-addressed like an agent's template and shared by every action of
+/// the app declaring the same, and bound to the action for its context. A context the definition
+/// no longer has is let go, and a blok no action holds any more is collected. Their diagnostics.
+pub async fn sync_action_bloks(
+    conn: &mut PgConnection,
+    agent: &AgentIdentity,
+    action: i64,
+    definition: &DefinitionInputModel,
+) -> Result<Vec<Diagnostic>, Refusal> {
+    let held: Vec<i64> =
+        sqlx::query_scalar("SELECT blok_id FROM facade_actionblok WHERE action_id = $1")
+            .bind(action)
+            .fetch_all(&mut *conn)
+            .await?;
+    let mut diagnostics = vec![];
+    let mut contexts: Vec<&str> = vec![];
+    for blok in &definition.bloks {
+        let catalog_name = blok
+            .catalog
+            .as_deref()
+            .filter(|c| !c.is_empty())
+            .unwrap_or(STANDARD_CATALOG_NAME);
+        let catalog = Catalog::get_or_create(conn, catalog_name, agent.organization).await?;
+        let found = validate_action_blok_against_catalog(
+            &catalog,
+            blok.components.as_deref(),
+            blok.context,
+            blok.demo_state.as_ref(),
+        )?;
+        // Its name only says whose it is: an action's blok is never listed or looked up by it.
+        let name = format!("{}:{}", definition.key, blok.context.value().to_lowercase());
+        let id: i64 = sqlx::query_scalar(
+            "INSERT INTO facade_blok (name, description, components, demo_state, diagnostics, creator_id, organization_id,
+                                      catalog_id, context, app_id, declaration_hash, persist, held_by_action)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true)
+             ON CONFLICT (organization_id, app_id, name, declaration_hash) WHERE app_id IS NOT NULL DO UPDATE SET
+                 diagnostics = excluded.diagnostics
+             RETURNING id",
+        )
+        .bind(&name)
+        .bind(&blok.description)
+        .bind(serde_json::to_value(blok.components.as_deref().unwrap_or_default()).expect("components serialize"))
+        .bind(serde_json::Value::Object(blok.demo_state.clone().unwrap_or_default()))
+        .bind(dump_diagnostics(&found))
+        .bind(agent.user)
+        .bind(agent.organization)
+        .bind(catalog.id)
+        .bind(blok.context.value())
+        .bind(agent.app)
+        .bind(hash_action_blok(blok))
+        .bind(serde_json::to_value(&blok.persist).expect("blok persist serialize"))
+        .fetch_one(&mut *conn)
+        .await?;
+        sqlx::query(
+            "INSERT INTO facade_actionblok (action_id, context, blok_id) VALUES ($1, $2, $3)
+             ON CONFLICT (action_id, context) DO UPDATE SET blok_id = excluded.blok_id, updated_at = now()",
+        )
+        .bind(action)
+        .bind(blok.context.value())
+        .bind(id)
+        .execute(&mut *conn)
+        .await?;
+        contexts.push(blok.context.value());
+        diagnostics.extend(found);
+    }
+    sqlx::query("DELETE FROM facade_actionblok WHERE action_id = $1 AND NOT (context = ANY($2))")
+        .bind(action)
+        .bind(&contexts)
+        .execute(&mut *conn)
+        .await?;
+    gc_action_bloks(conn, &held).await?;
     Ok(diagnostics)
 }
 

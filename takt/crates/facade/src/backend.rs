@@ -155,6 +155,10 @@ pub struct AssignInput {
     /// and sent with every dispatch of it.
     #[serde(default)]
     pub state_requires: Option<Vec<StateRequirement>>,
+    /// The space (of the caller's organization) a root run is started in: where a client draws
+    /// the action's overlay. Only a UI reads it (`Task.space`); a child's is ignored.
+    #[serde(default)]
+    pub space: Option<String>,
     /// A child the server makes itself (an init hook, a trigger's run): never held. With
     /// `policy`, it runs under that instead of its parent's. Not on the wire.
     #[serde(skip)]
@@ -1068,6 +1072,8 @@ struct NewTask {
     held: bool,
     /// What the agent's state must hold for it to run; stored NULL when there is none.
     state_requires: Vec<StateRequirement>,
+    /// The space a root run was started in (the assign's `space`).
+    space: Option<i64>,
 }
 
 impl NewTask {
@@ -1104,6 +1110,7 @@ impl NewTask {
             policy: holds::ASK,
             held: false,
             state_requires: vec![],
+            space: None,
         }
     }
 
@@ -1115,10 +1122,10 @@ impl NewTask {
                  dependency_method, resolution_id, is_higher_order_child, latest_event_kind,
                  latest_instruct_kind, dependencies, caller_id, dispatched_at, dispatch_attempts,
                  not_before, schedule_id, ephemeral, signal_id, trigger_id, trigger_depth, revision,
-                 policy, state_requires)
+                 policy, state_requires, space_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
                      $18, CASE WHEN $30 THEN 'HELD' ELSE 'QUEUED' END, 'ASSIGN', $19, $20, $21,
-                     $22, $23, $24, $25, $26, $27, $28, 1, $29, $31)
+                     $22, $23, $24, $25, $26, $27, $28, 1, $29, $31, $32)
              RETURNING id",
         )
         .bind(self.action)
@@ -1152,6 +1159,7 @@ impl NewTask {
         .bind(self.policy)
         .bind(self.held)
         .bind((!self.state_requires.is_empty()).then_some(sqlx::types::Json(&self.state_requires)))
+        .bind(self.space)
         .fetch_one(conn)
         .await
     }
@@ -1194,6 +1202,31 @@ pub(crate) async fn dispatch(ctx: &Context, task: i64, agent: i64, assign: Assig
         }
     }
     delivered
+}
+
+/// The space a root assign names (`space`), in the caller's organization; refused as missing
+/// otherwise. A child's is ignored: the run's space is its root's.
+async fn hinted_space(
+    ctx: &Context,
+    organization: i64,
+    input: &AssignInput,
+    parent: Option<i64>,
+) -> BackendResult<Option<i64>> {
+    let Some(space) = input.space.as_deref().filter(|s| !s.is_empty()) else {
+        return Ok(None);
+    };
+    if parent.is_some() {
+        return Ok(None);
+    }
+    let found: Option<i64> =
+        sqlx::query_scalar("SELECT id FROM facade_space WHERE id = $1 AND organization_id = $2")
+            .bind(parse_id(space)?)
+            .bind(organization)
+            .fetch_optional(&ctx.db)
+            .await?;
+    found
+        .map(Some)
+        .ok_or_else(|| BackendError::Forbidden(format!("No Space {space} in this organization.")))
 }
 
 /// Create (or find) the task of an assign (`assign_with_status`). `created` is false for a resend.
@@ -1306,6 +1339,7 @@ pub async fn assign_with_status(
         None => (None, holds::root_policy(input.policy.as_deref())?),
     };
     let held = parent.is_some() && policy == holds::ASK && !input.unheld;
+    let space = hinted_space(ctx, organization, input, parent).await?;
 
     let not_before = input.not_before;
     let delayed = not_before.is_some_and(|at| at > Utc::now());
@@ -1335,7 +1369,7 @@ pub async fn assign_with_status(
             caller,
             root,
             parent,
-            (policy, held),
+            (policy, held, space),
         )
         .await;
     }
@@ -1390,6 +1424,7 @@ pub async fn assign_with_status(
         policy,
         held,
         state_requires: state_requires.clone(),
+        space,
         ..NewTask::new(
             action.id,
             implementation.id,
@@ -1546,7 +1581,7 @@ async fn assign_higher_order(
     caller: i64,
     root: Option<i64>,
     parent: Option<i64>,
-    (policy, held): (&'static str, bool),
+    (policy, held, space): (&'static str, bool, Option<i64>),
 ) -> BackendResult<Assigned> {
     let config = &higher.higher_order_config;
     let lower = implementation_row(
@@ -1590,6 +1625,7 @@ async fn assign_higher_order(
         dependencies: Value::Object(higher_dependencies),
         policy,
         held,
+        space,
         ..NewTask::new(
             higher.action_id,
             higher.id,

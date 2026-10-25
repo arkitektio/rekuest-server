@@ -25,11 +25,12 @@ def test_validation_case(case: dict) -> None:
     ]
     components = [rimodels.ComponentNodeInputModel.model_validate(node) for node in case["components"]]
     context = enums.ComponentContext(case.get("context", "HTML"))
+    action = bool(case.get("action", False))
     expect = case["expect"]
 
     if expect["refused"] is not None:
         with pytest.raises(ValueError, match=re.escape(expect["refused"])):
-            validate_components_against_catalogs(catalogs, components, context, case.get("demo_state"))
+            validate_components_against_catalogs(catalogs, components, context, case.get("demo_state"), action=action)
         return
-    diagnostics = validate_components_against_catalogs(catalogs, components, context, case.get("demo_state"))
+    diagnostics = validate_components_against_catalogs(catalogs, components, context, case.get("demo_state"), action=action)
     assert [diagnostic.code for diagnostic in diagnostics] == expect["diagnostics"]

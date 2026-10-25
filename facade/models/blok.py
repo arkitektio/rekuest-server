@@ -88,6 +88,7 @@ class Blok(models.Model):
         help_text="The app whose agents provide this Blok. NULL for a custom Blok a user made.",
     )
     declaration_hash = models.CharField(max_length=64, null=True, blank=True, help_text="sha256 of the declared content of a provided Blok (not the rendering `hash` the API computes); NULL for a custom one.")
+    held_by_action = models.BooleanField(default=False, db_default=False, help_text="Whether this provided Blok is an action's own (`ActionBlok`): declared inline with the action, it has no name of its own and is never listed, materialized or edited. takt deletes it once no action holds it.")
     origin = models.CharField(max_length=2000, null=True, blank=True, help_text="Where a custom Blok was installed from, e.g. kabinet's `github:<owner>/<repo>:<branch>#<key>`; NULL for one made here. Installing from the same origin again updates this row.")
     origin_hash = models.CharField(max_length=100, null=True, blank=True, help_text="The hash its origin gave what it draws when it was installed: an origin whose hash differs has an update.")
     head = models.ForeignKey(
@@ -107,6 +108,29 @@ class Blok(models.Model):
             models.UniqueConstraint(fields=["organization", "app", "name", "declaration_hash"], condition=models.Q(app__isnull=False), name="blok_unique_provided"),
             models.UniqueConstraint(fields=["organization", "origin"], condition=models.Q(app__isnull=True, origin__isnull=False), name="unique_blok_origin_per_organization"),
         ]
+
+
+class ActionBlok(models.Model):
+    """An action's own blok for one context: how a client shows a run of the action there.
+
+    Declared inline with the action at registration and not part of its hash. The blok is a
+    provided ``Blok`` with ``held_by_action`` set, content-addressed and shared by every action
+    of the app declaring the same; takt writes these rows on every registration (the latest one
+    wins, like protocol hints) and collects a blok once no action holds it. Its dependencies are
+    never stored: the blok names them by the action's dependency keys.
+    """
+
+    action_id: int
+    blok_id: int
+
+    action = models.ForeignKey("Action", on_delete=models.CASCADE, related_name="bloks", help_text="The action this blok shows runs of.")
+    context = models.CharField(max_length=16, help_text="Where a client shows a run with it (rekuest_core ComponentContext): HTML, SCENE or OVERLAY. One blok per context.")
+    blok = models.ForeignKey(Blok, on_delete=models.CASCADE, related_name="action_bloks", help_text="The blok: a provided one, held by its actions only. takt collects it once no action holds it; going with its catalog or creator, it takes this row along.")
+    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
+    updated_at = models.DateTimeField(auto_now=True, db_default=Now())
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["action", "context"], name="unique_action_blok_context")]
 
 
 class BlokRevision(models.Model):

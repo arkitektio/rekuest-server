@@ -17667,5 +17667,1639 @@
   },
   "error": "String should have at least 1 character",
   "error_type": "string_too_short"
+ },
+ "action bloks": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": [
+           {
+            "id": "at-robot",
+            "component": "At",
+            "props": [
+             {
+              "key": "dependency",
+              "static_value": "robot"
+             }
+            ],
+            "children": [
+             {
+              "id": "glow",
+              "component": "Glow",
+              "props": [
+               {
+                "key": "on",
+                "dynamic_value": {
+                 "path": "self.helsinki.stage"
+                }
+               }
+              ]
+             },
+             {
+              "id": "ask",
+              "component": "TaskAsk"
+             }
+            ]
+           },
+           {
+            "id": "route",
+            "component": "Route",
+            "props": [
+             {
+              "key": "through",
+              "static_value": "['robot', 'frame', 'robot']"
+             },
+             {
+              "key": "progress",
+              "dynamic_value": {
+               "path": "task.progress"
+              }
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "demo_state": {
+         "show_path": true
+        },
+        "persist": [
+         {
+          "key": "show_path"
+         }
+        ]
+       },
+       {
+        "context": "HTML",
+        "components": [
+         {
+          "id": "card",
+          "component": "Card",
+          "props": [
+           {
+            "key": "value",
+            "dynamic_value": {
+             "path": "args.slides"
+            }
+           }
+          ]
+         }
+        ],
+        "description": "The run"
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": [
+    {
+     "definition": {
+      "key": "act",
+      "version": "1",
+      "description": null,
+      "collections": [],
+      "name": "Act",
+      "stateful": false,
+      "pure": false,
+      "idempotent": false,
+      "allow_probe": false,
+      "port_groups": [],
+      "args": [],
+      "returns": [],
+      "kind": "FUNCTION",
+      "is_test_for": [],
+      "is_dev": false,
+      "catalogs": [],
+      "protocols": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "props": null,
+          "children": [
+           {
+            "id": "at-robot",
+            "component": "At",
+            "props": [
+             {
+              "key": "dependency",
+              "static_value": "robot",
+              "dynamic_value": null,
+              "declares_value": null,
+              "agent_call": null,
+              "util_call": null
+             }
+            ],
+            "children": [
+             {
+              "id": "glow",
+              "component": "Glow",
+              "props": [
+               {
+                "key": "on",
+                "static_value": null,
+                "dynamic_value": {
+                 "literal": null,
+                 "path": "self.helsinki.stage"
+                },
+                "declares_value": null,
+                "agent_call": null,
+                "util_call": null
+               }
+              ],
+              "children": null
+             },
+             {
+              "id": "ask",
+              "component": "TaskAsk",
+              "props": null,
+              "children": null
+             }
+            ]
+           },
+           {
+            "id": "route",
+            "component": "Route",
+            "props": [
+             {
+              "key": "through",
+              "static_value": "['robot', 'frame', 'robot']",
+              "dynamic_value": null,
+              "declares_value": null,
+              "agent_call": null,
+              "util_call": null
+             },
+             {
+              "key": "progress",
+              "static_value": null,
+              "dynamic_value": {
+               "literal": null,
+               "path": "task.progress"
+              },
+              "declares_value": null,
+              "agent_call": null,
+              "util_call": null
+             }
+            ],
+            "children": null
+           }
+          ]
+         }
+        ],
+        "source": null,
+        "catalog": null,
+        "description": null,
+        "demo_state": {
+         "show_path": true
+        },
+        "persist": [
+         {
+          "key": "show_path",
+          "description": null
+         }
+        ]
+       },
+       {
+        "context": "HTML",
+        "components": [
+         {
+          "id": "card",
+          "component": "Card",
+          "props": [
+           {
+            "key": "value",
+            "static_value": null,
+            "dynamic_value": {
+             "literal": null,
+             "path": "args.slides"
+            },
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           }
+          ],
+          "children": null
+         }
+        ],
+        "source": null,
+        "catalog": null,
+        "description": "The run",
+        "demo_state": null,
+        "persist": []
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": null,
+       "state_dependencies": null,
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      },
+      {
+       "key": "frame",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": null,
+       "state_dependencies": null,
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      }
+     ],
+     "tracks": null,
+     "interface": "act",
+     "params": null,
+     "instance_id": null,
+     "locks": null,
+     "optimistics": null,
+     "manipulates": null,
+     "needs_token": true,
+     "provenance_audience": null,
+     "effects": "UNKNOWN",
+     "execution": "PLAIN",
+     "code_hash": null,
+     "logo": null
+    }
+   ],
+   "locks": null,
+   "bloks": null,
+   "assets": null,
+   "hash": null
+  },
+  "hashes": [
+   "f2b2860085defd0cbf2dc539a340d7deef051b2d01a028c0e7c42ca4e2ff75dd"
+  ]
+ },
+ "action blok through in JSON quotes": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": [
+           {
+            "id": "route",
+            "component": "Route",
+            "props": [
+             {
+              "key": "through",
+              "static_value": "[\"robot\", \"frame\"]"
+             },
+             {
+              "key": "progress",
+              "dynamic_value": {
+               "path": "task.progress"
+              }
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": [
+    {
+     "definition": {
+      "key": "act",
+      "version": "1",
+      "description": null,
+      "collections": [],
+      "name": "Act",
+      "stateful": false,
+      "pure": false,
+      "idempotent": false,
+      "allow_probe": false,
+      "port_groups": [],
+      "args": [],
+      "returns": [],
+      "kind": "FUNCTION",
+      "is_test_for": [],
+      "is_dev": false,
+      "catalogs": [],
+      "protocols": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "props": null,
+          "children": [
+           {
+            "id": "route",
+            "component": "Route",
+            "props": [
+             {
+              "key": "through",
+              "static_value": "[\"robot\", \"frame\"]",
+              "dynamic_value": null,
+              "declares_value": null,
+              "agent_call": null,
+              "util_call": null
+             },
+             {
+              "key": "progress",
+              "static_value": null,
+              "dynamic_value": {
+               "literal": null,
+               "path": "task.progress"
+              },
+              "declares_value": null,
+              "agent_call": null,
+              "util_call": null
+             }
+            ],
+            "children": null
+           }
+          ]
+         }
+        ],
+        "source": null,
+        "catalog": null,
+        "description": null,
+        "demo_state": null,
+        "persist": []
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": null,
+       "state_dependencies": null,
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      },
+      {
+       "key": "frame",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": null,
+       "state_dependencies": null,
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      }
+     ],
+     "tracks": null,
+     "interface": "act",
+     "params": null,
+     "instance_id": null,
+     "locks": null,
+     "optimistics": null,
+     "manipulates": null,
+     "needs_token": true,
+     "provenance_audience": null,
+     "effects": "UNKNOWN",
+     "execution": "PLAIN",
+     "code_hash": null,
+     "logo": null
+    }
+   ],
+   "locks": null,
+   "bloks": null,
+   "assets": null,
+   "hash": null
+  },
+  "hashes": [
+   "f2b2860085defd0cbf2dc539a340d7deef051b2d01a028c0e7c42ca4e2ff75dd"
+  ]
+ },
+ "action blok through as a plain list": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": [
+           {
+            "id": "route",
+            "component": "Route",
+            "props": [
+             {
+              "key": "through",
+              "static_value": "robot, frame"
+             },
+             {
+              "key": "progress",
+              "dynamic_value": {
+               "path": "task.progress"
+              }
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": [
+    {
+     "definition": {
+      "key": "act",
+      "version": "1",
+      "description": null,
+      "collections": [],
+      "name": "Act",
+      "stateful": false,
+      "pure": false,
+      "idempotent": false,
+      "allow_probe": false,
+      "port_groups": [],
+      "args": [],
+      "returns": [],
+      "kind": "FUNCTION",
+      "is_test_for": [],
+      "is_dev": false,
+      "catalogs": [],
+      "protocols": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "props": null,
+          "children": [
+           {
+            "id": "route",
+            "component": "Route",
+            "props": [
+             {
+              "key": "through",
+              "static_value": "robot, frame",
+              "dynamic_value": null,
+              "declares_value": null,
+              "agent_call": null,
+              "util_call": null
+             },
+             {
+              "key": "progress",
+              "static_value": null,
+              "dynamic_value": {
+               "literal": null,
+               "path": "task.progress"
+              },
+              "declares_value": null,
+              "agent_call": null,
+              "util_call": null
+             }
+            ],
+            "children": null
+           }
+          ]
+         }
+        ],
+        "source": null,
+        "catalog": null,
+        "description": null,
+        "demo_state": null,
+        "persist": []
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": null,
+       "state_dependencies": null,
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      },
+      {
+       "key": "frame",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": null,
+       "state_dependencies": null,
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      }
+     ],
+     "tracks": null,
+     "interface": "act",
+     "params": null,
+     "instance_id": null,
+     "locks": null,
+     "optimistics": null,
+     "manipulates": null,
+     "needs_token": true,
+     "provenance_audience": null,
+     "effects": "UNKNOWN",
+     "execution": "PLAIN",
+     "code_hash": null,
+     "logo": null
+    }
+   ],
+   "locks": null,
+   "bloks": null,
+   "assets": null,
+   "hash": null
+  },
+  "hashes": [
+   "f2b2860085defd0cbf2dc539a340d7deef051b2d01a028c0e7c42ca4e2ff75dd"
+  ]
+ },
+ "action blok through an unknown key": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": [
+           {
+            "id": "route",
+            "component": "Route",
+            "props": [
+             {
+              "key": "through",
+              "static_value": "['robot', 'stitcher']"
+             },
+             {
+              "key": "progress",
+              "dynamic_value": {
+               "path": "task.progress"
+              }
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok manifest: component 'route' names 'stitcher', which is not a dependency of the action (its dependencies: 'frame', 'robot')",
+  "error_type": "value_error"
+ },
+ "action blok at an unknown key": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": [
+           {
+            "id": "at-stitcher",
+            "component": "At",
+            "props": [
+             {
+              "key": "dependency",
+              "static_value": "stitcher"
+             }
+            ],
+            "children": null
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok manifest: component 'at-stitcher' names 'stitcher', which is not a dependency of the action (its dependencies: 'frame', 'robot')",
+  "error_type": "value_error"
+ },
+ "action blok at self": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": [
+           {
+            "id": "at-self",
+            "component": "At",
+            "props": [
+             {
+              "key": "dependency",
+              "static_value": "self"
+             }
+            ],
+            "children": null
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok manifest: component 'at-self' names 'self', which is not a dependency of the action (its dependencies: 'frame', 'robot')",
+  "error_type": "value_error"
+ },
+ "action blok at a dynamic key": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": [
+           {
+            "id": "at",
+            "component": "At",
+            "props": [
+             {
+              "key": "dependency",
+              "dynamic_value": {
+               "path": "show_path"
+              }
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "demo_state": {
+         "show_path": true
+        }
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": [
+    {
+     "definition": {
+      "key": "act",
+      "version": "1",
+      "description": null,
+      "collections": [],
+      "name": "Act",
+      "stateful": false,
+      "pure": false,
+      "idempotent": false,
+      "allow_probe": false,
+      "port_groups": [],
+      "args": [],
+      "returns": [],
+      "kind": "FUNCTION",
+      "is_test_for": [],
+      "is_dev": false,
+      "catalogs": [],
+      "protocols": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "props": null,
+          "children": [
+           {
+            "id": "at",
+            "component": "At",
+            "props": [
+             {
+              "key": "dependency",
+              "static_value": null,
+              "dynamic_value": {
+               "literal": null,
+               "path": "show_path"
+              },
+              "declares_value": null,
+              "agent_call": null,
+              "util_call": null
+             }
+            ],
+            "children": null
+           }
+          ]
+         }
+        ],
+        "source": null,
+        "catalog": null,
+        "description": null,
+        "demo_state": {
+         "show_path": true
+        },
+        "persist": []
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": null,
+       "state_dependencies": null,
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      },
+      {
+       "key": "frame",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": null,
+       "state_dependencies": null,
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      }
+     ],
+     "tracks": null,
+     "interface": "act",
+     "params": null,
+     "instance_id": null,
+     "locks": null,
+     "optimistics": null,
+     "manipulates": null,
+     "needs_token": true,
+     "provenance_audience": null,
+     "effects": "UNKNOWN",
+     "execution": "PLAIN",
+     "code_hash": null,
+     "logo": null
+    }
+   ],
+   "locks": null,
+   "bloks": null,
+   "assets": null,
+   "hash": null
+  },
+  "hashes": [
+   "f2b2860085defd0cbf2dc539a340d7deef051b2d01a028c0e7c42ca4e2ff75dd"
+  ]
+ },
+ "action blok reading an unknown root": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": [
+           {
+            "id": "t",
+            "component": "Text",
+            "props": [
+             {
+              "key": "text",
+              "dynamic_value": {
+               "path": "stage.position"
+              }
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "prop 'text' of component 't' references 'stage' but it is neither a demo_state key, a declared value nor a dependency key",
+  "error_type": "value_error"
+ },
+ "action blok calling a dependency": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": [
+           {
+            "id": "b",
+            "component": "Button",
+            "props": [
+             {
+              "key": "onClick",
+              "agent_call": {
+               "dependency": "robot",
+               "operation": "home"
+              }
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": [
+    {
+     "definition": {
+      "key": "act",
+      "version": "1",
+      "description": null,
+      "collections": [],
+      "name": "Act",
+      "stateful": false,
+      "pure": false,
+      "idempotent": false,
+      "allow_probe": false,
+      "port_groups": [],
+      "args": [],
+      "returns": [],
+      "kind": "FUNCTION",
+      "is_test_for": [],
+      "is_dev": false,
+      "catalogs": [],
+      "protocols": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "props": null,
+          "children": [
+           {
+            "id": "b",
+            "component": "Button",
+            "props": [
+             {
+              "key": "onClick",
+              "static_value": null,
+              "dynamic_value": null,
+              "declares_value": null,
+              "agent_call": {
+               "dependency": "robot",
+               "operation": "home",
+               "arguments": null
+              },
+              "util_call": null
+             }
+            ],
+            "children": null
+           }
+          ]
+         }
+        ],
+        "source": null,
+        "catalog": null,
+        "description": null,
+        "demo_state": null,
+        "persist": []
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": null,
+       "state_dependencies": null,
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      },
+      {
+       "key": "frame",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": null,
+       "state_dependencies": null,
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      }
+     ],
+     "tracks": null,
+     "interface": "act",
+     "params": null,
+     "instance_id": null,
+     "locks": null,
+     "optimistics": null,
+     "manipulates": null,
+     "needs_token": true,
+     "provenance_audience": null,
+     "effects": "UNKNOWN",
+     "execution": "PLAIN",
+     "code_hash": null,
+     "logo": null
+    }
+   ],
+   "locks": null,
+   "bloks": null,
+   "assets": null,
+   "hash": null
+  },
+  "hashes": [
+   "f2b2860085defd0cbf2dc539a340d7deef051b2d01a028c0e7c42ca4e2ff75dd"
+  ]
+ },
+ "action blok calling an undeclared agent": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": [
+           {
+            "id": "b",
+            "component": "Button",
+            "props": [
+             {
+              "key": "onClick",
+              "agent_call": {
+               "dependency": "stage",
+               "operation": "home"
+              }
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "prop 'onClick' of component 'b': agent_call targets undeclared dependency 'stage'",
+  "error_type": "value_error"
+ },
+ "action bloks twice in one context": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": []
+         }
+        ]
+       },
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": []
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Definition act: the overlay blok is given twice; an action has one blok per context",
+  "error_type": "value_error"
+ },
+ "action blok in a logo context": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "LOGO",
+        "components": [
+         {
+          "id": "root",
+          "component": "SVG"
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok manifest: an action's blok is html, scene or overlay, not logo",
+  "error_type": "value_error"
+ },
+ "action blok sent twice": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "HTML",
+        "components": [
+         {
+          "id": "root",
+          "component": "Card"
+         }
+        ],
+        "source": "<Card />"
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "a blok is sent as its components or as its BSX source, not both",
+  "error_type": "value_error"
+ },
+ "action blok sent not at all": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "HTML"
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "a blok is sent as its components or as its BSX source",
+  "error_type": "value_error"
+ },
+ "action blok seeding its task": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": []
+         }
+        ],
+        "demo_state": {
+         "task": {}
+        }
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok manifest: demo_state names 'task', which the renderer fills for an action's blok",
+  "error_type": "value_error"
+ },
+ "action blok shadowing a dependency": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": []
+         }
+        ],
+        "demo_state": {
+         "robot": {}
+        }
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok manifest: demo_state names 'robot', which is a dependency of the action, not a local",
+  "error_type": "value_error"
+ },
+ "action blok persisting an unknown local": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": []
+         }
+        ],
+        "demo_state": {
+         "show_path": true
+        },
+        "persist": [
+         {
+          "key": "zoom"
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok manifest: persist names 'zoom', which is not a demo_state key: a persisted local takes its demo value as its default",
+  "error_type": "value_error"
+ },
+ "action blok beside a dependency named task": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": []
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "task"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok manifest: an action's blok reads its run under 'task' and the run's args under 'args', so no dependency can be called 'task'",
+  "error_type": "value_error"
+ },
+ "action blok with an unknown field": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": []
+         }
+        ],
+        "name": "nope"
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Extra inputs are not permitted",
+  "error_type": "extra_forbidden"
+ },
+ "agent declaring an overlay blok": {
+  "input": {
+   "bloks": [
+    {
+     "key": "over",
+     "context": "OVERLAY",
+     "components": [
+      {
+       "id": "root",
+       "component": "Overlay"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok manifest: an overlay blok is an action's own (its definition's `bloks`), drawn into the space that hosts a run of it; an agent does not declare one",
+  "error_type": "value_error"
  }
 }

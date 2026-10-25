@@ -84,6 +84,11 @@ type Action {
   logo: Blok
 
   """
+  The action's own bloks, at most one per context (HTML for a task panel, OVERLAY drawn into the space that hosts a run): declared with the action, the latest registration's. Not part of its hash.
+  """
+  bloks: [ActionBlok!]!
+
+  """
   How many of its implementations sit on an agent that can take work now (connected, or a webhook agent) — one per agent. Kept by the database as agents connect and leave, a moment behind (takt recomputes it on commit); a crashed agent counts until takt's stale sweep notices (seconds).
   """
   liveImplementations: Int!
@@ -175,6 +180,62 @@ input ActionArgumentInput {
   Defines a list of key-value pairs if this argument should be a dictionary.
   """
   valueDict: [ActionArgumentInput!] = null
+}
+
+"""
+An action's own blok for one context: how a client shows a run of the action there. It names devices only by the action's dependency keys: a run binds them through `Task.dependencyAgents`, a preview through the `dependencyTree` dry run.
+"""
+type ActionBlok {
+  id: ID!
+
+  """The action whose runs it shows."""
+  action: Action!
+
+  """
+  What it draws: a blok held by its actions only (`heldByAction`), shared by every action of the app declaring the same.
+  """
+  blok: Blok!
+
+  """
+  Where a client shows a run with it: HTML in a task panel, SCENE as a 3D view of its own, OVERLAY drawn into the space that hosts the run, over the agents placed there.
+  """
+  context: ComponentContext!
+}
+
+"""
+An action's own blok: how a client shows a run of it in one context, naming devices by the action's dependency keys.
+"""
+input ActionBlokInput {
+  """
+  Where a client shows the run with it: HTML in a task panel, SCENE as a 3D view of its own, OVERLAY drawn into the space that hosts the run (its root an `Overlay`).
+  """
+  context: ComponentContext! = HTML
+
+  """The UI component tree, unless the blok is sent as its `source`."""
+  components: [ComponentNodeInput!] = null
+
+  """
+  The blok as BSX, parsed by the server into its component tree. Exactly one of `components` and `source` is sent.
+  """
+  source: String = null
+
+  """
+  The UI catalog the blok renders against; the Orkestrator's when absent.
+  """
+  catalog: String = null
+
+  """What the blok shows of a run."""
+  description: String = null
+
+  """
+  The blok's own locals and their initial values: path roots beside the action's dependency keys, `self`, `task` and `args`.
+  """
+  demoState: JSONSerializable = null
+
+  """
+  The locals a renderer may keep between openings, on the device (never on a server): each a top-level `demo_state` key, whose demo value is the default.
+  """
+  persist: [BlokPersistInput!]! = []
 }
 
 """
@@ -1107,6 +1168,11 @@ input AssignInput {
   What the agent's state must hold for the task to run. Refused unless the agent says it tests them, and for a state or path its declaration does not have.
   """
   stateRequires: [StateRequirementInput!] = null
+
+  """
+  The space (in the caller's organization) the run is started in: where a client draws the action's overlay over the placed agents (`Task.space`). Only a UI reads it; nothing runs differently. Honoured on a root only.
+  """
+  space: ID = null
 }
 
 interface AssignWidget {
@@ -1269,6 +1335,11 @@ type Blok {
   The app whose agents provide this blok; null for a custom blok a user made. A provided blok changes and goes with its agents' registrations and cannot be edited or materialized by hand: fork it.
   """
   app: App
+
+  """
+  Whether this blok is an action's own (`Action.bloks`): declared with the action, never listed, materialized or edited on its own.
+  """
+  heldByAction: Boolean!
 
   """
   Materialized bloks that are instances of this blok, but the ones made for a message.
@@ -1969,13 +2040,14 @@ type Collection {
 }
 
 """
-The renderer a catalog component lives in. A component may only be placed where its context is in force.
+The renderer a catalog component lives in. A component may only be placed where its context is in force. ACTION_LOGO and OVERLAY are blok contexts only: an OVERLAY blok is an action's own, drawn into the space that hosts its run.
 """
 enum ComponentContext {
   HTML
   SCENE
   LOGO
   ACTION_LOGO
+  OVERLAY
 }
 
 """
@@ -2548,6 +2620,11 @@ input DefinitionInput {
   Where the action means to hook in (`on_scene_annotation`): hints a caller filters on, stored beside the protocols the server infers. Not a contract, and not part of the action's hash.
   """
   protocols: [String!]! = []
+
+  """
+  The action's own bloks, at most one per context: how a client shows a run of it (HTML in a task panel, OVERLAY drawn into the space that hosts the run). They name devices only by the action's dependency keys. Not part of the action's hash.
+  """
+  bloks: [ActionBlokInput!]! = []
 
   """
   The port groups of the definition. This is used to group ports together in the UI
@@ -4998,6 +5075,11 @@ type Query {
   dependencyTree(input: DependencyTreeInput!): DependencyTree! @auth
 
   """
+  The spaces that place any of these agents (e.g. the ones a dependencyTree dry run binds), those placing the most first, then the most recently changed: where to run a workflow over them.
+  """
+  spacesForAgents(agents: [ID!]!): [SpaceForAgents!]! @auth
+
+  """
   The stored asset of this reference ('sha256:...') in the caller's organization, or null if no agent has uploaded it.
   """
   asset(ref: String!): Asset @auth
@@ -6067,6 +6149,15 @@ input SpaceFilter {
   search: String
 }
 
+"""A space and how many of the agents asked about it places."""
+type SpaceForAgents {
+  """The space."""
+  space: Space!
+
+  """How many of the agents asked about this space places."""
+  placed: Int!
+}
+
 input SpaceOrder @oneOf {
   createdAt: Ordering
   updatedAt: Ordering
@@ -6738,6 +6829,11 @@ type Task {
   """Returns of the latest YIELD event."""
   latestReturns: AnyDefault
 
+  """
+  The space the caller started this run in (the assign's `space`): where a client draws the action's overlay. Null when none was named, or the space is gone.
+  """
+  space: Space
+
   """The schedule this task is a run of, if any."""
   schedule: Schedule
 
@@ -6774,6 +6870,16 @@ type Task {
   The bloks this task showed a person, oldest first: asks it holds on (or held on) and informs.
   """
   bloks: [TaskBlok!]!
+
+  """
+  Its action's own bloks (`Action.bloks`), at most one per context: how a client shows this run, with each dependency key bound by `dependencyAgents`.
+  """
+  actionBloks: [ActionBlok!]!
+
+  """
+  The agents this run got for its action's dependencies, by key: the top level of the tree resolved when it was assigned. What an action blok's `<At dependency>` anchors at.
+  """
+  dependencyAgents: [TaskDependencyAgent!]!
 
   """List of recent instructions for this task."""
   instructs: [TaskInstruct!]!
@@ -6865,6 +6971,21 @@ type TaskChange {
 type TaskChangeEvent {
   event: TaskEventChange
   create: TaskChange
+}
+
+"""
+An agent a task got for one of its action's dependencies, as it was resolved when the task was assigned.
+"""
+type TaskDependencyAgent {
+  """
+  The dependency key, as the action's implementation declares it and the action's bloks name it.
+  """
+  key: String!
+
+  """
+  The agent bound to it for this run. A key bound to several agents comes once per agent.
+  """
+  agent: Agent!
 }
 
 """An event that occurred during a task."""
@@ -7470,7 +7591,9 @@ type UICatalog {
   name: String!
   description: String
 
-  """Bloks rendered against this catalog."""
+  """
+  Bloks rendered against this catalog, but the ones a task made to show and an action's own (`Action.bloks`).
+  """
   bloks(filters: BlokFilter, pagination: OffsetPaginationInput): [Blok!]!
 
   """Registered components. Empty until a UI app registers the catalog."""

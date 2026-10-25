@@ -461,6 +461,10 @@ class DefinitionInput:
         default_factory=list,
         description="Where the action means to hook in (`on_scene_annotation`): hints a caller filters on, stored beside the protocols the server infers. Not a contract, and not part of the action's hash.",
     )
+    bloks: list[Annotated["ActionBlokInput", strawberry.lazy(__name__)]] = strawberry.field(
+        default_factory=list,
+        description="The action's own bloks, at most one per context: how a client shows a run of it (HTML in a task panel, OVERLAY drawn into the space that hosts the run). They name devices only by the action's dependency keys. Not part of the action's hash.",
+    )
     port_groups: list[PortGroupInput] = strawberry.field(
         default_factory=list,
         description="The port groups of the definition. This is used to group ports together in the UI",
@@ -652,6 +656,17 @@ class BlokImplementationInput:
     for_node: Optional[str] = None
     args: list[ArgPortInput] = strawberry.field(default_factory=list)
     services: list[BlokServiceInput] = strawberry.field(default_factory=list)
+    persist: list[BlokPersistInput] = strawberry.field(default_factory=list)
+
+
+@pydantic.input(models.ActionBlokInputModel, description="An action's own blok: how a client shows a run of it in one context, naming devices by the action's dependency keys.")
+class ActionBlokInput:
+    context: enums.ComponentContext = enums.ComponentContext.HTML
+    components: list[ComponentNodeInput] | None = None
+    source: str | None = None
+    catalog: Optional[str] = None
+    description: Optional[str] = None
+    demo_state: Optional[scalars.JSONSerializable] = None
     persist: list[BlokPersistInput] = strawberry.field(default_factory=list)
 
 

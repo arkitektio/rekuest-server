@@ -827,8 +827,24 @@ class DefinitionInputModel(BaseModel):
         default_factory=list,
         description="Where the action means to hook in (`on_scene_annotation`): hints a caller filters on, stored beside the protocols the server infers. Not a contract -- nothing checks the ports against them -- and not part of the action's hash.",
     )
+    bloks: list["ActionBlokInputModel"] = Field(
+        default_factory=list,
+        # Never dumped when empty: a definition without bloks is the bytes it was before actions
+        # had any, which an older takt (`deny_unknown_fields`) or kabinet still reads.
+        exclude_if=lambda bloks: not bloks,
+        description="The action's own bloks, at most one per context: how a client shows a run of it (`html` in a task panel, `overlay` drawn into the space that hosts the run). They name devices only by the action's dependency keys. Stored with the action, never listed on their own, and not part of the action's hash.",
+    )
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def check_bloks(self) -> Self:
+        """An action has one blok per context: the one a client picks for where it shows the run."""
+        contexts = [blok.context for blok in self.bloks]
+        twice = next((context for context in contexts if contexts.count(context) > 1), None)
+        if twice is not None:
+            raise ValueError(f"Definition {self.key}: the {twice.value.lower()} blok is given twice; an action has one blok per context")
+        return self
 
     @model_validator(mode="after")
     def check_protocols(self) -> Self:
@@ -985,6 +1001,14 @@ class ImplementationInputModel(BaseModel):
                 walk(port.children or [], f"{path}{PORT_PATH_SEPARATOR}")
 
         walk(self.definition.args)
+        return self
+
+    @model_validator(mode="after")
+    def check_action_bloks(self) -> Self:
+        """The action's bloks name devices by its dependency keys: the ones this implementation declares."""
+        dependency_keys = {dependency.key for dependency in self.dependencies}
+        for blok in self.definition.bloks:
+            check_action_blok(blok, dependency_keys)
         return self
 
 
@@ -1354,6 +1378,98 @@ class BlokImplementationInputModel(BaseModel):
         check_blok_persist(self.persist, {dep.key for dep in self.dependencies}, None if self.demo_state is None else set(self.demo_state))
         if self.components is not None:
             check_blok_services(self.components, self.services)
+        if self.context == enums.ComponentContext.OVERLAY:
+            raise ValueError("Blok manifest: an overlay blok is an action's own (its definition's `bloks`), drawn into the space that hosts a run of it; an agent does not declare one")
+        return self
+
+
+#: The root an action's blok reads the run it is shown for under (``@task.progress``): the renderer fills it.
+ACTION_BLOK_TASK_ROOT = "task"
+
+#: The key an action's blok reads the agent that runs the action under (``@self.<state>``).
+ACTION_BLOK_SELF_KEY = "self"
+
+#: The contexts an action has a blok for, one each.
+ACTION_BLOK_CONTEXTS = (enums.ComponentContext.HTML, enums.ComponentContext.SCENE, enums.ComponentContext.OVERLAY)
+
+#: The component that anchors its children at the agent bound to a dependency (``dependency``).
+AT_COMPONENT = "At"
+
+#: The component that draws a line through the agents bound to dependencies (``through``).
+ROUTE_COMPONENT = "Route"
+
+
+def through_keys(value: str) -> list[str]:
+    """The dependency keys a ``through`` prop names: ``"['robot', 'frame']"`` (as BSX writes a list), ``'["robot"]'`` or ``"robot, frame"``."""
+    inner = value.strip()
+    if inner.startswith("[") and inner.endswith("]"):
+        inner = inner[1:-1]
+    return [item.strip().strip("'\"").strip() for item in inner.split(",") if item.strip()]
+
+
+def check_action_blok_anchors(components: Optional[List[ComponentNodeInputModel]], dependency_keys: set[str]) -> None:
+    """Every ``<At dependency>`` and ``<Route through>`` names dependencies of the action. Bound
+    dynamically, they are left to the renderer."""
+    for node in iter_component_nodes(components):
+        for prop in node.props or []:
+            if not isinstance(prop.static_value, str):
+                continue
+            if node.component == AT_COMPONENT and prop.key == "dependency":
+                named = [prop.static_value]
+            elif node.component == ROUTE_COMPONENT and prop.key == "through":
+                named = through_keys(prop.static_value)
+            else:
+                continue
+            for key in named:
+                if key not in dependency_keys:
+                    known = ", ".join(repr(known) for known in sorted(dependency_keys)) or "none"
+                    raise ValueError(f"Blok manifest: component {node.id!r} names {key!r}, which is not a dependency of the action (its dependencies: {known})")
+
+
+def check_action_blok(blok: "ActionBlokInputModel", dependency_keys: set[str]) -> None:
+    """An action's blok against the dependencies its implementation declares.
+
+    Its path roots are those dependencies, ``self`` (the agent running the action), ``task`` (the
+    run), ``args`` (the run's args), its own locals and ``$event``; ``At``/``Route`` name only the
+    dependencies. A blok sent as its source is checked once takt has parsed it."""
+    reserved = sorted({ACTION_BLOK_TASK_ROOT, BLOK_ARGS_ROOT} & dependency_keys)
+    if reserved:
+        raise ValueError(f"Blok manifest: an action's blok reads its run under {ACTION_BLOK_TASK_ROOT!r} and the run's args under {BLOK_ARGS_ROOT!r}, so no dependency can be called {reserved[0]!r}")
+    keys = dependency_keys | {ACTION_BLOK_SELF_KEY}
+    state_keys = set(blok.demo_state or {})
+    shadowed = sorted(state_keys & keys)
+    if shadowed:
+        raise ValueError(f"Blok manifest: demo_state names {shadowed[0]!r}, which is a dependency of the action, not a local")
+    check_blok_persist(blok.persist, keys, state_keys)
+    if blok.components is None:
+        return
+    check_blok_manifest(blok.components, keys, state_keys | {ACTION_BLOK_TASK_ROOT, BLOK_ARGS_ROOT})
+    check_action_blok_anchors(blok.components, dependency_keys)
+
+
+class ActionBlokInputModel(BaseModel):
+    """An action's own blok: how a client shows a run of it in one context. It has no name and is never listed
+    on its own; its dependencies are the action's, which it names by key."""
+
+    context: enums.ComponentContext = Field(default=enums.ComponentContext.HTML, description="Where a client shows the run with it: HTML in a task panel, SCENE as a 3D view of its own, OVERLAY drawn into the space that hosts the run (its root an `Overlay`).")
+    components: Optional[list[ComponentNodeInputModel]] = Field(default=None, description="The UI component tree, unless the blok is sent as its `source`.")
+    source: Optional[str] = Field(default=None, description="The blok as BSX, parsed by the server into its component tree. Exactly one of `components` and `source` is sent.")
+    catalog: Optional[str] = Field(default=None, description="The UI catalog the blok renders against; the Orkestrator's when absent.")
+    description: Optional[str] = Field(default=None, description="What the blok shows of a run.")
+    demo_state: Optional[dict] = Field(default=None, description="The blok's own locals and their initial values: path roots beside the action's dependency keys, `self`, `task` and `args`.")
+    persist: list[BlokPersistInputModel] = Field(default_factory=list, description="The locals a renderer may keep between openings, on the device (never on a server): each a top-level `demo_state` key, whose demo value is the default.")
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def check_action_blok(self) -> Self:
+        """Sent one way, in a context an action has a blok for, its locals none of the roots the renderer fills."""
+        check_blok_sent_once(self.components, self.source, required=True)
+        if self.context not in ACTION_BLOK_CONTEXTS:
+            raise ValueError(f"Blok manifest: an action's blok is html, scene or overlay, not {self.context.value.lower()}")
+        filled = sorted({ACTION_BLOK_TASK_ROOT, BLOK_ARGS_ROOT, ACTION_BLOK_SELF_KEY, BLOK_EVENT_ROOT} & set(self.demo_state or {}))
+        if filled:
+            raise ValueError(f"Blok manifest: demo_state names {filled[0]!r}, which the renderer fills for an action's blok")
         return self
 
 
@@ -1393,6 +1509,8 @@ ReturnPortInputModel.model_rebuild()
 WidgetDefaultInputModel.model_rebuild()
 StateAccessorInputModel.model_rebuild()
 OptimisticInputModel.model_rebuild()
+DefinitionInputModel.model_rebuild()
+ImplementationInputModel.model_rebuild()
 
 
 # ============================================================================
@@ -1424,9 +1542,12 @@ class CatalogComponentInputModel(BaseModel):
 
     @model_validator(mode="after")
     def check_no_action_logo_context(self) -> Self:
-        """ACTION_LOGO is a blok's context, never a component's: an action logo draws logo components."""
+        """ACTION_LOGO and OVERLAY are a blok's contexts, never a component's: an action logo draws logo
+        components, an overlay scene components."""
         if enums.ComponentContext.ACTION_LOGO in (self.context, self.children_context):
             raise ValueError(f"catalog component {self.name}: ACTION_LOGO is a blok context only; its shapes are LOGO components")
+        if enums.ComponentContext.OVERLAY in (self.context, self.children_context):
+            raise ValueError(f"catalog component {self.name}: OVERLAY is a blok context only; what an overlay draws are SCENE components")
         return self
 
 

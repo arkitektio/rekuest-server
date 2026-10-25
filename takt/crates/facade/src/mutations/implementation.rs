@@ -17,6 +17,7 @@ use crate::deletion::{delete_actions, delete_dependencies};
 use crate::descriptors::compile_descriptors_to_jsonpath;
 use crate::protocol::action_protocols;
 use crate::provenance::audience;
+use crate::registration::sync_action_bloks;
 use crate::signals::{OnCommit, Signal};
 use crate::unique::infer_action_scope;
 
@@ -697,7 +698,7 @@ pub async fn create_implementation(
     let scope = infer_action_scope(definition).value();
     let idempotent = validate_qualifiers(definition, input.effects)?;
     check_descriptor_keys(conn, definition).await?;
-    let diagnostics = collect_diagnostics(
+    let mut diagnostics = collect_diagnostics(
         conn,
         definition,
         agent.organization,
@@ -749,6 +750,9 @@ pub async fn create_implementation(
         &protocols,
     )
     .await?;
+    // Likewise the action's own bloks: not part of the hash, the latest registration's. Their
+    // findings are stored on their bloks and handed back with the implementation's.
+    diagnostics.extend(sync_action_bloks(conn, agent, action.id, definition).await?);
 
     if definition_changed || !relational_state_is_current(conn, &action, definition).await? {
         rebuild_relational_ports(conn, &mut action, definition).await?;

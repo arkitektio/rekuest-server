@@ -170,6 +170,51 @@ BLOKS = {
     "blok persisting an empty key": blok(demo_state=LOCALS, persist=[{"key": ""}]),
 }
 
+def at(key: str, *children: dict) -> dict:
+    return {"id": f"at-{key}", "component": "At", "props": [{"key": "dependency", "static_value": key}], "children": list(children) or None}
+
+
+def through(value: str) -> dict:
+    return {"id": "route", "component": "Route", "props": [{"key": "through", "static_value": value}, {"key": "progress", "dynamic_value": {"path": "task.progress"}}]}
+
+
+def overlay(*children: dict, **fields) -> dict:
+    return {"context": "OVERLAY", "components": [{"id": "root", "component": "Overlay", "children": list(children)}], **fields}
+
+
+def flow(*bloks: dict, dependencies: tuple[str, ...] = ("robot", "frame")) -> dict:
+    return {**impl(bloks=list(bloks)), "dependencies": [{"key": key} for key in dependencies]}
+
+
+GLOW = {"id": "glow", "component": "Glow", "props": [{"key": "on", "dynamic_value": {"path": "self.helsinki.stage"}}]}
+SHOW = {"show_path": True}
+
+ACTION_BLOKS = {
+    "action bloks": flow(
+        overlay(at("robot", GLOW, {"id": "ask", "component": "TaskAsk"}), through("['robot', 'frame', 'robot']"), demo_state=SHOW, persist=[{"key": "show_path"}]),
+        {"context": "HTML", "components": [{"id": "card", "component": "Card", "props": [{"key": "value", "dynamic_value": {"path": "args.slides"}}]}], "description": "The run"},
+    ),
+    "action blok through in JSON quotes": flow(overlay(through('["robot", "frame"]'))),
+    "action blok through as a plain list": flow(overlay(through("robot, frame"))),
+    "action blok through an unknown key": flow(overlay(through("['robot', 'stitcher']"))),
+    "action blok at an unknown key": flow(overlay(at("stitcher"))),
+    "action blok at self": flow(overlay(at("self"))),
+    "action blok at a dynamic key": flow(overlay({"id": "at", "component": "At", "props": [{"key": "dependency", "dynamic_value": {"path": "show_path"}}]}, demo_state=SHOW)),
+    "action blok reading an unknown root": flow(overlay({"id": "t", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "stage.position"}}]})),
+    "action blok calling a dependency": flow(overlay({"id": "b", "component": "Button", "props": [{"key": "onClick", "agent_call": {"dependency": "robot", "operation": "home"}}]})),
+    "action blok calling an undeclared agent": flow(overlay({"id": "b", "component": "Button", "props": [{"key": "onClick", "agent_call": {"dependency": "stage", "operation": "home"}}]})),
+    "action bloks twice in one context": flow(overlay(), overlay()),
+    "action blok in a logo context": flow({"context": "LOGO", "components": [{"id": "root", "component": "SVG"}]}),
+    "action blok sent twice": flow({"context": "HTML", "components": [{"id": "root", "component": "Card"}], "source": "<Card />"}),
+    "action blok sent not at all": flow({"context": "HTML"}),
+    "action blok seeding its task": flow(overlay(demo_state={"task": {}})),
+    "action blok shadowing a dependency": flow(overlay(demo_state={"robot": {}})),
+    "action blok persisting an unknown local": flow(overlay(demo_state=SHOW, persist=[{"key": "zoom"}])),
+    "action blok beside a dependency named task": flow(overlay(), dependencies=("task",)),
+    "action blok with an unknown field": flow({**overlay(), "name": "nope"}),
+    "agent declaring an overlay blok": {"bloks": [{"key": "over", "context": "OVERLAY", "components": [{"id": "root", "component": "Overlay"}]}]},
+}
+
 cases = {}
 for name, declaration in json.loads((HERE / "app_declarations.json").read_text()).items():
     cases[f"app {name}"] = record(declaration)
@@ -181,6 +226,9 @@ for name, declared in ASSETS.items():
 
 for name, declared in BLOKS.items():
     cases[name] = record({"bloks": [declared]})
+
+for name, declared in ACTION_BLOKS.items():
+    cases[name] = record(declared if "bloks" in declared and "definition" not in declared else {"implementations": [declared]})
 
 (HERE / "declarations.json").write_text(json.dumps(cases, indent=1, ensure_ascii=False) + "\n")
 valid = sum(1 for c in cases.values() if "dump" in c)

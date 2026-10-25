@@ -23,6 +23,7 @@ class Task(models.Model):
     schedule_id: int | None
     signal_id: int | None
     trigger_id: int | None
+    space_id: int | None
 
     acted_on = ArrayField(base_field=models.CharField(max_length=1000), help_text="Which structures were acted on in this task", default=list, db_default=[])
     implementation = models.ForeignKey(
@@ -156,6 +157,14 @@ class Task(models.Model):
         default="ASK",
         db_default="ASK",
         help_text="ASK: a child an agent assigns waits until a person approves it (HELD), and the task's own holds wait for a decision. AUTO: both are approved without asking. A root's is set on its assign; a child always takes its parent's.",
+    )
+    space = models.ForeignKey(
+        "Space",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tasks",
+        help_text="The space the caller started this run in (the assign's `space` hint): where a client draws the action's overlay over the placed agents. Only a UI reads it; nothing runs differently.",
     )
     state_requires = models.JSONField(
         null=True,

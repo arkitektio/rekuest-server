@@ -57,8 +57,14 @@ fn every_shared_case_holds() {
             serde_json::from_value(case.get("context").cloned().unwrap_or(Value::from("HTML")))
                 .unwrap();
         let demo_state = case.get("demo_state").and_then(Value::as_object);
-        let outcome =
-            validate_components_against_catalogs(&catalogs, Some(&components), context, demo_state);
+        let action = case.get("action").and_then(Value::as_bool).unwrap_or(false);
+        let outcome = validate_components_against_catalogs(
+            &catalogs,
+            Some(&components),
+            context,
+            demo_state,
+            action,
+        );
         match (case["expect"]["refused"].as_str(), outcome) {
             (Some(refused), Err(reason)) if reason.contains(refused) => {}
             (None, Ok(diagnostics)) => {

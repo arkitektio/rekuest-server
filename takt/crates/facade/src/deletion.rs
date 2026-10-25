@@ -381,12 +381,20 @@ pub async fn delete_actions(
         actions,
     )
     .await?;
+    // Their own bloks (CASCADE), and the bloks no other action holds then.
+    let held = ids(
+        conn,
+        "DELETE FROM facade_actionblok WHERE action_id = ANY($1) RETURNING blok_id",
+        actions,
+    )
+    .await?;
     exec(
         conn,
         "DELETE FROM facade_action WHERE id = ANY($1)",
         actions,
     )
     .await?;
+    gc_action_bloks(conn, &held).await?;
     Ok(deleted)
 }
 
@@ -469,10 +477,11 @@ pub async fn gc_provided_bloks(
     if candidates.is_empty() {
         return Ok(());
     }
+    // An action's own blok has no slot either: its actions hold it ([`gc_action_bloks`]).
     let orphans = ids(
         conn,
         "SELECT b.id FROM facade_blok b
-          WHERE b.id = ANY($1) AND b.app_id IS NOT NULL
+          WHERE b.id = ANY($1) AND b.app_id IS NOT NULL AND NOT b.held_by_action
             AND NOT EXISTS (SELECT 1 FROM facade_materializedblok m WHERE m.blok_id = b.id)",
         candidates,
     )
@@ -494,6 +503,33 @@ pub async fn gc_provided_bloks(
                                    WHERE i.action_id = a.id AND i.logo_id IS NOT NULL
                                    ORDER BY i.updated_at DESC, i.id DESC LIMIT 1)
           WHERE a.latest_logo_id = ANY($1)",
+        "DELETE FROM facade_blokargport WHERE blok_id = ANY($1)",
+        "DELETE FROM facade_blok WHERE id = ANY($1)",
+    ] {
+        exec(conn, statement, &orphans).await?;
+    }
+    Ok(())
+}
+
+/// Of `candidates`, the actions' own bloks no action holds any more (`ActionBlok.blok`): deleted.
+/// Nothing else points at one (it is never materialized, edited or a logo, and carries no
+/// dependency rows), so it goes with its arg ports, which it never has either.
+pub async fn gc_action_bloks(
+    conn: &mut PgConnection,
+    candidates: &[i64],
+) -> Result<(), sqlx::Error> {
+    if candidates.is_empty() {
+        return Ok(());
+    }
+    let orphans = ids(
+        conn,
+        "SELECT b.id FROM facade_blok b
+          WHERE b.id = ANY($1) AND b.held_by_action
+            AND NOT EXISTS (SELECT 1 FROM facade_actionblok ab WHERE ab.blok_id = b.id)",
+        candidates,
+    )
+    .await?;
+    for statement in [
         "DELETE FROM facade_blokargport WHERE blok_id = ANY($1)",
         "DELETE FROM facade_blok WHERE id = ANY($1)",
     ] {

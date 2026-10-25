@@ -43,9 +43,14 @@ pub fn context_root(context: ComponentContext) -> Option<&'static str> {
         ComponentContext::SCENE => Some("Scene"),
         ComponentContext::LOGO => Some("SVG"),
         ComponentContext::ACTION_LOGO => Some("ActionLogo"),
+        ComponentContext::OVERLAY => Some("Overlay"),
         ComponentContext::HTML => None,
     }
 }
+
+/// The components that read a run or a dependency of an action (`ACTION_BLOK_COMPONENTS`): only
+/// an action's own bloks have either, so only they (or an overlay) may hold one.
+pub const ACTION_BLOK_COMPONENTS: [&str; 3] = ["At", "Route", "TaskAsk"];
 
 /// A non-fatal registration finding (`DiagnosticModel`), dumped as stored on the row.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -463,13 +468,15 @@ fn check_asset_prop(
 
 /// Every component, prop and operation a tree uses is provided (`validate_components_against_catalogs`).
 /// `context` is the blok's own: a scene blok has one root, the scene, a logo blok one `SVG` and an
-/// action logo one `ActionLogo`, whatever is registered. Both logos are held to the size of an
-/// icon, and an action logo to the palette.
+/// action logo one `ActionLogo`, an overlay one `Overlay`, whatever is registered. Both logos are
+/// held to the size of an icon, and an action logo to the palette. `action` says the tree is an
+/// action's own blok: only such a tree, or an overlay, holds an [`ACTION_BLOK_COMPONENTS`] one.
 pub fn validate_components_against_catalogs(
     catalogs: &[Catalog],
     components: Option<&[ComponentNodeInputModel]>,
     context: ComponentContext,
     demo_state: Option<&serde_json::Map<String, Value>>,
+    action: bool,
 ) -> Result<Vec<Diagnostic>, String> {
     let (operations, mut diagnostics) = resolve_operations(catalogs);
     let (specs, conflicts) = resolve_components(catalogs);
@@ -502,6 +509,18 @@ pub fn validate_components_against_catalogs(
     }
     if context == ComponentContext::ACTION_LOGO {
         check_logo_palette(components.unwrap_or_default(), demo_state)?;
+    }
+    if !action && context != ComponentContext::OVERLAY {
+        if let Some(node) = rekuest_core::inputs::iter_component_nodes(components)
+            .into_iter()
+            .find(|node| ACTION_BLOK_COMPONENTS.contains(&node.component.as_str()))
+        {
+            return Err(format!(
+                "component {}: a {} reads a run of an action, so only an action's own blok (or an overlay) holds one",
+                repr_str(&node.id),
+                repr_str(&node.component)
+            ));
+        }
     }
     let mut ancestors = vec![];
     visit_components(
@@ -566,6 +585,7 @@ fn context_name(context: ComponentContext) -> &'static str {
         ComponentContext::SCENE => "scene",
         ComponentContext::LOGO => "logo",
         ComponentContext::ACTION_LOGO => "action_logo",
+        ComponentContext::OVERLAY => "overlay",
     }
 }
 
@@ -647,6 +667,24 @@ pub fn validate_manifest_against_catalog(
         components,
         context,
         demo_state,
+        false,
+    )
+}
+
+/// An action's own blok against its one catalog: as a blok manifest, and it may hold the
+/// components that read the run ([`ACTION_BLOK_COMPONENTS`]).
+pub fn validate_action_blok_against_catalog(
+    catalog: &Catalog,
+    components: Option<&[ComponentNodeInputModel]>,
+    context: ComponentContext,
+    demo_state: Option<&serde_json::Map<String, Value>>,
+) -> Result<Vec<Diagnostic>, String> {
+    validate_components_against_catalogs(
+        std::slice::from_ref(catalog),
+        components,
+        context,
+        demo_state,
+        true,
     )
 }
 

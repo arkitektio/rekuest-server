@@ -1,5 +1,5 @@
 {
-  "description": "Blok validation cases both server implementations must agree on: rekuest's facade/catalog_validation.py and takt's crates/facade/src/catalog_validation.rs. Each case is a component tree validated against base plus `catalogs` (stored-JSON form, snake_case) in `context` (default HTML), with `demo_state`. `expect.refused` is a substring of the refusal, or null when the blok is stored; `expect.diagnostics` are the finding codes, in order.",
+  "description": "Blok validation cases both server implementations must agree on: rekuest's facade/catalog_validation.py and takt's crates/facade/src/catalog_validation.rs. Each case is a component tree validated against base plus `catalogs` (stored-JSON form, snake_case) in `context` (default HTML), with `demo_state`, as an action's own blok when `action` is true (default false). `expect.refused` is a substring of the refusal, or null when the blok is stored; `expect.diagnostics` are the finding codes, in order.",
   "cases": [
     {
       "name": "a conforming blok has no findings",
@@ -835,6 +835,221 @@
       ],
       "expect": {
         "refused": "is an ASSET prop and must name an asset the app registered",
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "an overlay's root is the Overlay",
+      "catalogs": [],
+      "context": "OVERLAY",
+      "action": true,
+      "components": [
+        {
+          "id": "root",
+          "component": "Overlay",
+          "children": [
+            {
+              "id": "at",
+              "component": "At",
+              "props": [
+                {
+                  "key": "dependency",
+                  "static_value": "robot"
+                }
+              ],
+              "children": [
+                {
+                  "id": "ask",
+                  "component": "TaskAsk"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "refused": null,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "an overlay rooted elsewhere is refused",
+      "catalogs": [],
+      "context": "OVERLAY",
+      "action": true,
+      "components": [
+        {
+          "id": "root",
+          "component": "Scene",
+          "children": [
+            {
+              "id": "at",
+              "component": "At",
+              "props": [
+                {
+                  "key": "dependency",
+                  "static_value": "robot"
+                }
+              ],
+              "children": [
+                {
+                  "id": "ask",
+                  "component": "TaskAsk"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "refused": "the root of a overlay blok must be a 'Overlay', not 'Scene'",
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "an overlay has one root",
+      "catalogs": [],
+      "context": "OVERLAY",
+      "action": true,
+      "components": [
+        {
+          "id": "a",
+          "component": "Overlay"
+        },
+        {
+          "id": "b",
+          "component": "Overlay"
+        }
+      ],
+      "expect": {
+        "refused": "a overlay blok has exactly one root, a 'Overlay', not 2 roots",
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "an action's html blok may ask with its task",
+      "catalogs": [],
+      "action": true,
+      "components": [
+        {
+          "id": "root",
+          "component": "Card",
+          "children": [
+            {
+              "id": "ask",
+              "component": "TaskAsk"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "refused": null,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "an At outside an action's blok is refused",
+      "catalogs": [],
+      "components": [
+        {
+          "id": "root",
+          "component": "Box",
+          "children": [
+            {
+              "id": "at",
+              "component": "At",
+              "props": [
+                {
+                  "key": "dependency",
+                  "static_value": "robot"
+                }
+              ],
+              "children": [
+                {
+                  "id": "ask",
+                  "component": "TaskAsk"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "refused": "component 'at': a 'At' reads a run of an action, so only an action's own blok (or an overlay) holds one",
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "a TaskAsk in an agent's scene is refused",
+      "catalogs": [],
+      "context": "SCENE",
+      "components": [
+        {
+          "id": "root",
+          "component": "Scene",
+          "children": [
+            {
+              "id": "ask",
+              "component": "TaskAsk"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "refused": "component 'ask': a 'TaskAsk' reads a run of an action",
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "a Route outside an action's blok is refused",
+      "catalogs": [],
+      "components": [
+        {
+          "id": "root",
+          "component": "Box",
+          "children": [
+            {
+              "id": "route",
+              "component": "Route",
+              "props": [
+                {
+                  "key": "through",
+                  "static_value": "['robot', 'frame']"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "refused": "component 'route': a 'Route' reads a run of an action",
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "a logo's Path is no action component",
+      "catalogs": [],
+      "context": "LOGO",
+      "components": [
+        {
+          "id": "root",
+          "component": "SVG",
+          "children": [
+            {
+              "id": "p",
+              "component": "Path",
+              "props": [
+                {
+                  "key": "d",
+                  "static_value": "M0 0"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "refused": null,
         "diagnostics": []
       }
     }

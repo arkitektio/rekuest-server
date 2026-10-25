@@ -11,6 +11,7 @@ from kante.types import Info
 
 from facade import filters, models
 from facade.types.base import build_prescoped_queryset
+from facade.types.blok import ListedBloksField
 from rekuest_core.catalogs import load_base_catalog
 from rekuest_core.objects import models as rmodels
 from rekuest_core.objects import types as rtypes
@@ -36,7 +37,7 @@ class UICatalog:
     id: strawberry.ID
     name: str
     description: str | None
-    bloks: list["Blok"] = strawberry_django.field(description="Bloks rendered against this catalog.")
+    bloks: list["Blok"] = strawberry_django.field(field_cls=ListedBloksField, description="Bloks rendered against this catalog, but the ones a task made to show and an action's own (`Action.bloks`).")
 
     @strawberry_django.field(description="Registered components. Empty until a UI app registers the catalog.")
     def components(self) -> list[rtypes.CatalogComponent]:

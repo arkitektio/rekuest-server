@@ -153,6 +153,10 @@ class AssignInputModel(BaseModel):
         default=None,
         description="What the agent's state must hold for the task to run. Refused unless the agent says it tests them, and for a state or path its declaration does not have.",
     )
+    space: str | None = Field(
+        default=None,
+        description="The space (in the caller's organization) the run is started in: where a client draws the action's overlay over the placed agents (`Task.space`). Only a UI reads it; nothing runs differently. Honoured on a root only.",
+    )
 
 
 @pydantic.input(
@@ -175,6 +179,7 @@ class AssignInput:
     not_before: datetime.datetime | None = None
     policy: enums.TaskPolicy | None = None
     state_requires: list[StateRequirementInput] | None = None
+    space: strawberry.ID | None = None
 
 
 class CancelInputModel(BaseModel):

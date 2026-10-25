@@ -32,6 +32,12 @@ The client's offline check uses the same name, and takt's ``register_blok`` fall
 """
 
 
+def refuse_held_by_action(blok: models.Blok) -> None:
+    """An action's own blok changes only with its action's registrations: nothing edits, forks or materializes it."""
+    if blok.held_by_action:
+        raise ValueError("This blok is an action's own, declared with the action and shown with its runs; it changes only when the action is registered again.")
+
+
 def _catalog_for(info: Info, name: str | None) -> models.UICatalog:
     """The named catalog in the caller's organization, created empty if it does not exist yet."""
     return models.UICatalog.objects.get_or_create(name=name or STANDARD_CATALOG_NAME, organization=info.context.request.organization)[0]
@@ -165,6 +171,7 @@ def _free_name(organization_id: int, name: str) -> str:
 def fork_blok(info: Info, input: inputs.ForkBlokInput) -> types.Blok:
     """Copy a provided blok into a custom one, which lives on whatever its agents do."""
     provided = scoped_get(models.Blok, info, input.id, field="organization")
+    refuse_held_by_action(provided)
     if provided.app_id is None:
         raise ValueError(f"Blok '{provided.name}' is already custom.")
     return cast("types.Blok", _fork(provided, input.name or provided.name, CallerContext.from_info(info).user))
@@ -246,6 +253,7 @@ def edit_blok(info: Info, input: inputs.EditBlokInput) -> types.BlokEdit:
         blok = scoped_get(models.Blok, info, model.blok, field="organization")
     else:
         raise ValueError("Edit a blok, or a materialization of it: send `blok` or `materialized_blok`, one of the two.")
+    refuse_held_by_action(blok)
 
     provided = blok.app_id is not None
     if provided:

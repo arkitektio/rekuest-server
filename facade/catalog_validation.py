@@ -60,7 +60,11 @@ CONTEXT_ROOTS = {
     enums.ComponentContext.SCENE: "Scene",
     enums.ComponentContext.LOGO: "SVG",
     enums.ComponentContext.ACTION_LOGO: "ActionLogo",
+    enums.ComponentContext.OVERLAY: "Overlay",
 }
+# The components that read a run or a dependency of an action (the task it asks with, the agent
+# bound to a key): only an action's own bloks have either, so only they may hold one.
+ACTION_BLOK_COMPONENTS = ("At", "Route", "TaskAsk")
 # The blok contexts held to the size of an icon. ACTION_LOGO is a blok's context only: its
 # shapes are logo components, placed under an ActionLogo as under an SVG.
 LOGO_CONTEXTS = (enums.ComponentContext.LOGO, enums.ComponentContext.ACTION_LOGO)
@@ -255,13 +259,16 @@ def validate_components_against_catalogs(
     components: list[rimodels.ComponentNodeInputModel] | None,
     context: enums.ComponentContext = enums.ComponentContext.HTML,
     demo_state: Mapping[str, object] | None = None,
+    action: bool = False,
 ) -> list[DiagnosticModel]:
     """Every component, prop and operation a component tree uses is provided by base plus ``catalogs``.
 
     ``context`` is the blok's own: a scene blok has one root, the scene, a logo blok one
-    ``SVG`` and an action logo one ``ActionLogo``, whatever is registered. Both logos are held
-    to the size of an icon (:func:`check_logo_complexity`), their loops counted in
-    ``demo_state``, and an action logo to the palette (:func:`check_logo_palette`).
+    ``SVG``, an action logo one ``ActionLogo`` and an overlay one ``Overlay``, whatever is
+    registered. Both logos are held to the size of an icon (:func:`check_logo_complexity`),
+    their loops counted in ``demo_state``, and an action logo to the palette
+    (:func:`check_logo_palette`). ``action`` says the tree is an action's own blok: only such a
+    tree, or an overlay, holds the components of :data:`ACTION_BLOK_COMPONENTS`.
     """
     diagnostics: list[DiagnosticModel] = []
     operations = resolve_operations(catalogs, diagnostics)
@@ -287,6 +294,10 @@ def validate_components_against_catalogs(
         check_logo_complexity(components or [], demo_state)
     if context == enums.ComponentContext.ACTION_LOGO:
         check_logo_palette(components or [], demo_state)
+    if not action and context != enums.ComponentContext.OVERLAY:
+        for node in rimodels.iter_component_nodes(components):
+            if node.component in ACTION_BLOK_COMPONENTS:
+                raise ValueError(f"component {node.id!r}: a {node.component!r} reads a run of an action, so only an action's own blok (or an overlay) holds one")
     visit(components, (), enums.ComponentContext.HTML)
     return diagnostics
 

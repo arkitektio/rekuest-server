@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import strawberry
 import strawberry_django
 from django.db.models import QuerySet
 from kante.types import Info
+
+from django.db.models import Count
 
 from facade import filters, models, scalars
 from facade.types.base import build_prescoped_queryset
@@ -40,6 +42,24 @@ class Space:
     @classmethod
     def get_queryset(cls, queryset: QuerySet[models.Space], info: Info, **kwargs: object) -> QuerySet[models.Space]:
         return build_prescoped_queryset(info, queryset, field="organization")
+
+
+@strawberry.type(description="A space and how many of the agents asked about it places.")
+class SpaceForAgents:
+    space: Space = strawberry.field(description="The space.")
+    placed: int = strawberry.field(description="How many of the agents asked about this space places.")
+
+
+def spaces_for_agents(info: Info, agents: list[strawberry.ID]) -> list[SpaceForAgents]:
+    """The caller's spaces that place any of ``agents``, those placing the most first, then the most recently changed."""
+    counts = dict(
+        models.Placement.objects.filter(space__organization=info.context.request.organization, agent_id__in=[agent for agent in agents if str(agent).isdigit()])
+        .values_list("space_id")
+        .annotate(placed=Count("agent_id", distinct=True))
+        .values_list("space_id", "placed")
+    )
+    spaces = sorted(models.Space.objects.filter(id__in=counts), key=lambda space: (-counts[space.pk], -space.updated_at.timestamp(), space.pk))
+    return [SpaceForAgents(space=cast("Space", space), placed=counts[space.pk]) for space in spaces]
 
 
 @strawberry_django.type(
