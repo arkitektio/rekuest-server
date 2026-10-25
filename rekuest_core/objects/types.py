@@ -410,6 +410,12 @@ class BlokService:
     schema_hash: Optional[str] = strawberry.field(default=None, description="'sha256:<hex>' of the canonical GraphQL schema the blok's queries were checked against.")
 
 
+@pydantic.type(models.BlokPersistModel, description="A local a renderer may keep between openings, on the device (never on a server): its demo value is the default.")
+class BlokPersist:
+    key: str = strawberry.field(description="The local: a top-level `demoState` key.")
+    description: Optional[str] = strawberry.field(default=None, description="What the kept value is, for whoever resets it.")
+
+
 @pydantic.type(models.CatalogArgumentModel, description="An argument a catalog operation accepts.")
 class CatalogArgument:
     key: str = strawberry.field(description="The argument key a UtilCall argument must use.")

@@ -151,6 +151,7 @@ def blok(**fields) -> dict:
 
 
 IMAGE = port("image", "STRUCTURE", identifier="@mikro/image", nullable=False)
+LOCALS = {"args": {"image": None}, "pose": [1, 0, 0, 0], "zoom": 1}
 
 BLOKS = {
     "blok without args": blok(demo_state={"label": "x"}, components=[{"id": "root", "component": "Box"}]),
@@ -160,6 +161,13 @@ BLOKS = {
     "blok args on a scene": blok(context="SCENE", args=[IMAGE]),
     "blok args beside a dependency named args": blok(args=[IMAGE], dependencies=[{"key": "args"}]),
     "blok arg of a bad shape": blok(args=[port("image", "STRUCTURE", nullable=False)]),
+    "blok persisting locals": blok(demo_state=LOCALS, persist=[{"key": "pose", "description": "Where the gizmo left it"}, {"key": "zoom"}]),
+    "blok persisting an unknown local": blok(demo_state=LOCALS, persist=[{"key": "speed"}]),
+    "blok persisting a local twice": blok(demo_state=LOCALS, persist=[{"key": "pose"}, {"key": "pose"}]),
+    "blok persisting its args": blok(demo_state=LOCALS, persist=[{"key": "args"}]),
+    "blok persisting a dependency": blok(demo_state={**LOCALS, "stage": {}}, dependencies=[{"key": "stage"}], persist=[{"key": "stage"}]),
+    "blok persisting without demo state": blok(demo_state=None, components=[{"id": "root", "component": "Box"}], persist=[{"key": "pose"}]),
+    "blok persisting an empty key": blok(demo_state=LOCALS, persist=[{"key": ""}]),
 }
 
 cases = {}

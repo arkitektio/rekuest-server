@@ -628,6 +628,12 @@ class BlokServiceInput:
     schema_hash: Optional[str] = None
 
 
+@pydantic.input(models.BlokPersistInputModel, description="A local a renderer may keep between openings, on the device: its demo value is the default.")
+class BlokPersistInput:
+    key: str
+    description: Optional[str] = None
+
+
 @pydantic.input(
     models.BlokImplementationInputModel,
     description="Which locks does the agent provide in general",
@@ -646,6 +652,7 @@ class BlokImplementationInput:
     for_node: Optional[str] = None
     args: list[ArgPortInput] = strawberry.field(default_factory=list)
     services: list[BlokServiceInput] = strawberry.field(default_factory=list)
+    persist: list[BlokPersistInput] = strawberry.field(default_factory=list)
 
 
 @pydantic.input(models.CatalogPropInputModel, description="A prop a catalog component accepts.")

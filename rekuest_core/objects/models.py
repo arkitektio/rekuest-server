@@ -386,6 +386,11 @@ class BlokServiceModel(BaseModel):
     schema_hash: str | None = None
 
 
+class BlokPersistModel(BaseModel):
+    key: str
+    description: str | None = None
+
+
 class DiagnosticModel(BaseModel):
     """A non-fatal registration finding, stored on the registered row."""
 

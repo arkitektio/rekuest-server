@@ -58,6 +58,7 @@ class CreateBlokInputModel(BaseModel):
     )
     source: str | None = Field(default=None, description="The blok as BSX, which the server parses into `components`: send one of the two.")
     services: list[rimodels.BlokServiceInputModel] | None = Field(default=None, description="The backend services the blok's queries read from, each frozen at the version it was written against. Every `query`'s `schema` must name one.")
+    persist: list[rimodels.BlokPersistInputModel] | None = Field(default=None, description="The locals a renderer may keep between openings, on the device: each a top-level `demo_state` key. Kept when omitted (a blok created again keeps its own); an empty list removes them.")
     demo_state: dict[str, JSON] | None = Field(
         default=None,
         description="The initial state of the blok. This is used to set the initial state of the blok when it is materialized.",
@@ -94,6 +95,7 @@ class CreateBlokInput:
     components: list[ritypes.ComponentNodeInput] | None = None
     source: str | None = None
     services: list[ritypes.BlokServiceInput] | None = None
+    persist: list[ritypes.BlokPersistInput] | None = None
     demo_state: scalars.Args | None = None
     # Nullable, not defaulted: a client generated from the schema must not have to pass it.
     context: renums.ComponentContext | None = None
@@ -198,6 +200,7 @@ class EditBlokInputModel(BaseModel):
     dependencies: list[rimodels.AgentDependencyInputModel] | None = Field(default=None, description="The full list of agent dependencies. Kept when omitted; keys not listed are removed.")
     args: list[rimodels.ArgPortInputModel] | None = Field(default=None, description="The full list of the items the blok is opened for, read under `@args.<key>` (html bloks only). Kept when omitted; an empty list removes them.")
     services: list[rimodels.BlokServiceInputModel] | None = Field(default=None, description="The full list of the backend services the blok's queries read from, each frozen at its version. Kept when omitted; an empty list removes them.")
+    persist: list[rimodels.BlokPersistInputModel] | None = Field(default=None, description="The full list of the locals a renderer may keep between openings, on the device: each a top-level `demo_state` key. Kept when omitted; an empty list removes them.")
     agent_mappings: list[MappedAgentInputModel] | None = Field(default=None, description="Bindings on `materialized_blok`, by dependency key, over the ones it has. Bindings of keys the edit removes go. Refused with `blok`: a blok binds no agents, its materializations do.")
     message: str | None = Field(default=None, description="What changed and why, in a sentence; kept with the revision.")
     task: str | None = Field(default=None, description="The task making the edit (one the caller's agent runs), kept with the revision.")
@@ -225,6 +228,7 @@ class EditBlokInput:
     dependencies: list[ritypes.AgentDependencyInput] | None = None
     args: list[ritypes.ArgPortInput] | None = None
     services: list[ritypes.BlokServiceInput] | None = None
+    persist: list[ritypes.BlokPersistInput] | None = None
     agent_mappings: list[MappedAgentInput] | None = None
     message: str | None = None
     task: strawberry.ID | None = None

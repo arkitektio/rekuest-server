@@ -14722,7 +14722,8 @@
        "requires": null
       }
      ],
-     "services": []
+     "services": [],
+     "persist": []
     }
    ],
    "assets": null,
@@ -16891,7 +16892,8 @@
      "for_model": null,
      "for_node": null,
      "args": [],
-     "services": []
+     "services": [],
+     "persist": []
     }
    ],
    "assets": null,
@@ -17009,7 +17011,8 @@
        ]
       }
      ],
-     "services": []
+     "services": [],
+     "persist": []
     }
    ],
    "assets": null,
@@ -17140,7 +17143,8 @@
        "requires": null
       }
      ],
-     "services": []
+     "services": [],
+     "persist": []
     }
    ],
    "assets": null,
@@ -17310,5 +17314,358 @@
   },
   "error": "Port 'image' of kind STRUCTURE must declare an identifier (@package/key)",
   "error_type": "value_error"
+ },
+ "blok persisting locals": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "components": [
+      {
+       "id": "root",
+       "component": "Box",
+       "props": [
+        {
+         "key": "label",
+         "dynamic_value": {
+          "path": "args.image"
+         }
+        }
+       ]
+      }
+     ],
+     "demo_state": {
+      "args": {
+       "image": null
+      },
+      "pose": [
+       1,
+       0,
+       0,
+       0
+      ],
+      "zoom": 1
+     },
+     "persist": [
+      {
+       "key": "pose",
+       "description": "Where the gizmo left it"
+      },
+      {
+       "key": "zoom"
+      }
+     ]
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": null,
+   "locks": null,
+   "bloks": [
+    {
+     "key": "inspector",
+     "dependencies": [],
+     "components": [
+      {
+       "id": "root",
+       "component": "Box",
+       "props": [
+        {
+         "key": "label",
+         "static_value": null,
+         "dynamic_value": {
+          "literal": null,
+          "path": "args.image"
+         },
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        }
+       ],
+       "children": null
+      }
+     ],
+     "source": null,
+     "catalog": null,
+     "description": null,
+     "demo_state": {
+      "args": {
+       "image": null
+      },
+      "pose": [
+       1,
+       0,
+       0,
+       0
+      ],
+      "zoom": 1
+     },
+     "context": "HTML",
+     "default": false,
+     "for_model": null,
+     "for_node": null,
+     "args": [],
+     "services": [],
+     "persist": [
+      {
+       "key": "pose",
+       "description": "Where the gizmo left it"
+      },
+      {
+       "key": "zoom",
+       "description": null
+      }
+     ]
+    }
+   ],
+   "assets": null,
+   "hash": null
+  },
+  "hashes": []
+ },
+ "blok persisting an unknown local": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "components": [
+      {
+       "id": "root",
+       "component": "Box",
+       "props": [
+        {
+         "key": "label",
+         "dynamic_value": {
+          "path": "args.image"
+         }
+        }
+       ]
+      }
+     ],
+     "demo_state": {
+      "args": {
+       "image": null
+      },
+      "pose": [
+       1,
+       0,
+       0,
+       0
+      ],
+      "zoom": 1
+     },
+     "persist": [
+      {
+       "key": "speed"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok manifest: persist names 'speed', which is not a demo_state key: a persisted local takes its demo value as its default",
+  "error_type": "value_error"
+ },
+ "blok persisting a local twice": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "components": [
+      {
+       "id": "root",
+       "component": "Box",
+       "props": [
+        {
+         "key": "label",
+         "dynamic_value": {
+          "path": "args.image"
+         }
+        }
+       ]
+      }
+     ],
+     "demo_state": {
+      "args": {
+       "image": null
+      },
+      "pose": [
+       1,
+       0,
+       0,
+       0
+      ],
+      "zoom": 1
+     },
+     "persist": [
+      {
+       "key": "pose"
+      },
+      {
+       "key": "pose"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok manifest persist: duplicate key 'pose'",
+  "error_type": "value_error"
+ },
+ "blok persisting its args": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "components": [
+      {
+       "id": "root",
+       "component": "Box",
+       "props": [
+        {
+         "key": "label",
+         "dynamic_value": {
+          "path": "args.image"
+         }
+        }
+       ]
+      }
+     ],
+     "demo_state": {
+      "args": {
+       "image": null
+      },
+      "pose": [
+       1,
+       0,
+       0,
+       0
+      ],
+      "zoom": 1
+     },
+     "persist": [
+      {
+       "key": "args"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok manifest: persist names 'args', which is not a local but a root the renderer fills",
+  "error_type": "value_error"
+ },
+ "blok persisting a dependency": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "components": [
+      {
+       "id": "root",
+       "component": "Box",
+       "props": [
+        {
+         "key": "label",
+         "dynamic_value": {
+          "path": "args.image"
+         }
+        }
+       ]
+      }
+     ],
+     "demo_state": {
+      "args": {
+       "image": null
+      },
+      "pose": [
+       1,
+       0,
+       0,
+       0
+      ],
+      "zoom": 1,
+      "stage": {}
+     },
+     "dependencies": [
+      {
+       "key": "stage"
+      }
+     ],
+     "persist": [
+      {
+       "key": "stage"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok manifest: persist names 'stage', which is not a local but a root the renderer fills",
+  "error_type": "value_error"
+ },
+ "blok persisting without demo state": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "components": [
+      {
+       "id": "root",
+       "component": "Box"
+      }
+     ],
+     "demo_state": null,
+     "persist": [
+      {
+       "key": "pose"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok manifest: persist names 'pose', which is not a demo_state key: a persisted local takes its demo value as its default",
+  "error_type": "value_error"
+ },
+ "blok persisting an empty key": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "components": [
+      {
+       "id": "root",
+       "component": "Box",
+       "props": [
+        {
+         "key": "label",
+         "dynamic_value": {
+          "path": "args.image"
+         }
+        }
+       ]
+      }
+     ],
+     "demo_state": {
+      "args": {
+       "image": null
+      },
+      "pose": [
+       1,
+       0,
+       0,
+       0
+      ],
+      "zoom": 1
+     },
+     "persist": [
+      {
+       "key": ""
+      }
+     ]
+    }
+   ]
+  },
+  "error": "String should have at least 1 character",
+  "error_type": "string_too_short"
  }
 }

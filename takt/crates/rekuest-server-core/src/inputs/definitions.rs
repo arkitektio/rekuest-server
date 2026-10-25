@@ -1026,6 +1026,21 @@ pub struct BlokImplementationInputModel {
     /// was written against.
     #[serde(default)]
     pub services: Vec<BlokServiceInputModel>,
+    /// The locals a renderer may keep between openings, on the device: each a top-level
+    /// `demo_state` key, whose demo value is the default.
+    #[serde(default)]
+    pub persist: Vec<BlokPersistInputModel>,
+}
+
+/// A local a renderer may keep between openings, on the device (`BlokPersistInputModel`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BlokPersistInputModel {
+    /// The local: a top-level `demo_state` key that is neither a dependency nor a reserved root.
+    pub key: String,
+    /// What the kept value is, for whoever resets it.
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 /// A backend service a blok reads from, frozen at the version it was written against
@@ -1127,6 +1142,38 @@ pub fn check_blok_args(
     Ok(())
 }
 
+/// A blok persists only its locals, each once (`check_blok_persist`): a top-level `demo_state`
+/// key, which is not a dependency's key nor a root the renderer fills (`args`, `$event`).
+pub fn check_blok_persist(
+    persist: &[BlokPersistInputModel],
+    dependency_keys: &HashSet<String>,
+    state_keys: Option<&HashSet<String>>,
+) -> Result<(), ValidationError> {
+    for local in persist {
+        min_length(&local.key, "key")?;
+    }
+    check_unique_keys(
+        persist.iter().map(|p| p.key.as_str()),
+        "Blok manifest persist",
+    )?;
+    for local in persist {
+        let key = local.key.as_str();
+        if key == BLOK_ARGS_ROOT || key == BLOK_EVENT_ROOT || dependency_keys.contains(key) {
+            return Err(ValidationError(format!(
+                "Blok manifest: persist names {}, which is not a local but a root the renderer fills",
+                repr_str(key)
+            )));
+        }
+        if !state_keys.is_some_and(|keys| keys.contains(key)) {
+            return Err(ValidationError(format!(
+                "Blok manifest: persist names {}, which is not a demo_state key: a persisted local takes its demo value as its default",
+                repr_str(key)
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Whether `value` is `sha256:` and 64 lowercase hex characters (`MODEL_REF_PATTERN`).
 pub fn is_model_ref(value: &str) -> bool {
     value.strip_prefix("sha256:").is_some_and(|hex| {
@@ -1210,6 +1257,7 @@ impl BlokImplementationInputModel {
             self.for_node.as_deref(),
         )?;
         check_blok_args(self.context, &self.args, &dependency_keys)?;
+        check_blok_persist(&self.persist, &dependency_keys, state_keys.as_ref())?;
         check_blok_services(self.components.as_deref(), &self.services)
     }
 }

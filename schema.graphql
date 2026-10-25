@@ -1328,6 +1328,11 @@ type Blok {
   services: [BlokService!]!
 
   """
+  The locals a renderer may keep between openings, on the device (never on a server): each a top-level `demoState` key, whose demo value is the default. Empty for a blok that keeps nothing.
+  """
+  persist: [BlokPersist!]!
+
+  """
   The whole component tree as one JSON value, in the wire spelling (snake_case keys). Unlike `components` it has no depth limit, which a selection set always has.
   """
   componentTree: AnyDefault!
@@ -1549,6 +1554,32 @@ input BlokImplementationInput {
   The backend services this Blok reads from (its `query` components name them), each frozen at the version it was written against.
   """
   services: [BlokServiceInput!]! = []
+
+  """
+  The locals a renderer may keep between openings, on the device (never on a server): each a top-level `demo_state` key, whose demo value is the default.
+  """
+  persist: [BlokPersistInput!]! = []
+}
+
+"""
+A local a renderer may keep between openings, on the device (never on a server): its demo value is the default.
+"""
+type BlokPersist {
+  key: String!
+  description: String
+}
+
+"""
+A local a renderer may keep between openings, on the device: its demo value is the default.
+"""
+input BlokPersistInput {
+  """
+  The local: a top-level `demo_state` key that is neither a dependency nor a reserved root.
+  """
+  key: String!
+
+  """What the kept value is, for whoever resets it."""
+  description: String = null
 }
 
 """
@@ -1598,6 +1629,11 @@ type BlokRevision {
   A SHA-256 of what this revision renders, as `Blok.hash` is of the head.
   """
   hash: String!
+
+  """
+  The locals this revision lets a renderer keep between openings, on the device.
+  """
+  persist: [BlokPersist!]!
 
   """The agent dependencies of this revision."""
   dependencies: [RevisionDependency!]!
@@ -2059,6 +2095,11 @@ input CreateBlokInput {
   The backend services the blok's queries read from, each frozen at the version it was written against. Every `query`'s `schema` must name one.
   """
   services: [BlokServiceInput!] = null
+
+  """
+  The locals a renderer may keep between openings, on the device: each a top-level `demo_state` key. Kept when omitted (a blok created again keeps its own); an empty list removes them.
+  """
+  persist: [BlokPersistInput!] = null
 
   """
   The initial state of the blok. This is used to set the initial state of the blok when it is materialized.
@@ -2815,6 +2856,11 @@ input EditBlokInput {
   The full list of the backend services the blok's queries read from, each frozen at its version. Kept when omitted; an empty list removes them.
   """
   services: [BlokServiceInput!] = null
+
+  """
+  The full list of the locals a renderer may keep between openings, on the device: each a top-level `demo_state` key. Kept when omitted; an empty list removes them.
+  """
+  persist: [BlokPersistInput!] = null
 
   """
   Bindings on `materialized_blok`, by dependency key, over the ones it has. Bindings of keys the edit removes go. Refused with `blok`: a blok binds no agents, its materializations do.

@@ -69,6 +69,7 @@ class Blok(models.Model):
     args = models.JSONField(default=list, db_default=[], help_text="The items this Blok is opened for: its declared arg ports (rekuest_core ArgPortInput), read under `@args.<key>`. Matched through its BlokArgPort rows.")
     returns = models.JSONField(default=list, db_default=[], help_text="What a person answers through this Blok when a task asks with it (rekuest_core ReturnPortInput): the values `blok.answer` hands back.")
     services = models.JSONField(default=list, db_default=[], help_text="The backend services this Blok reads from (rekuest_core BlokServiceInput: key, service, version, schema_hash), each frozen at the version it was written against.")
+    persist = models.JSONField(default=list, db_default=[], help_text="The locals a renderer may keep between openings, on the device (rekuest_core BlokPersistInput: key, description). Only the declaration is stored here: the values never reach a server.")
     owner_task = models.ForeignKey(
         "Task",
         on_delete=models.CASCADE,
@@ -135,6 +136,7 @@ class BlokRevision(models.Model):
     args = models.JSONField(default=list, db_default=[], help_text="The args of this revision (rekuest_core ArgPortInput): the items the blok is opened for.")
     returns = models.JSONField(default=list, db_default=[], help_text="The returns of this revision (rekuest_core ReturnPortInput): what a person answers through the blok.")
     services = models.JSONField(default=list, db_default=[], help_text="The services of this revision (rekuest_core BlokServiceInput): what its queries read from, at the version they were written against.")
+    persist = models.JSONField(default=list, db_default=[], help_text="The persisted locals of this revision (rekuest_core BlokPersistInput): what a renderer may keep between openings, on the device.")
     content_hash = models.CharField(max_length=64, help_text="sha256 of everything above: two revisions with the same hash are the same blok.")
     author = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name="blok_revisions", help_text="The user this revision was written as.")
     task = models.ForeignKey("Task", on_delete=models.SET_NULL, null=True, blank=True, related_name="blok_revisions", help_text="The task that wrote this revision, e.g. the assistant turn that designed it.")

@@ -95,6 +95,10 @@ class Blok:
     def services(self) -> list[rtypes.BlokService]:
         return cast("list[rtypes.BlokService]", [rmodels.BlokServiceModel(**i) for i in self.services])
 
+    @strawberry_django.field(description="The locals a renderer may keep between openings, on the device (never on a server): each a top-level `demoState` key, whose demo value is the default. Empty for a blok that keeps nothing.")
+    def persist(self) -> list[rtypes.BlokPersist]:
+        return cast("list[rtypes.BlokPersist]", [rmodels.BlokPersistModel(**i) for i in self.persist])
+
     for_model: str | None = strawberry_django.field(description="The model reference this blok decorates, if any.")
     for_node: str | None = strawberry_django.field(description="The node of `forModel` this blok attaches to; the model's root when null.")
     origin: str | None = strawberry_django.field(description="Where this custom blok was installed from (e.g. kabinet's `RepoBlok.origin`); null for one made here.")
@@ -178,6 +182,10 @@ class BlokRevision:
     def hash(self) -> str:
         row = row_of(self, models.BlokRevision)
         return blok_hash(row.components, row.demo_state, row.context)
+
+    @strawberry_django.field(description="The locals this revision lets a renderer keep between openings, on the device.")
+    def persist(self) -> list[rtypes.BlokPersist]:
+        return cast("list[rtypes.BlokPersist]", [rmodels.BlokPersistModel(**i) for i in self.persist])
 
     @strawberry_django.field(description="The agent dependencies of this revision.")
     def dependencies(self) -> list[RevisionDependency]:

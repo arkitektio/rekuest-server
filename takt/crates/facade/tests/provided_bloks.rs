@@ -376,3 +376,38 @@ async fn a_blok_with_args_writes_them_as_port_rows_once_per_template() {
     let left = "SELECT count(*) FROM facade_blokargport WHERE blok_id = $1";
     assert_eq!(f.count(left, blok).await, 0);
 }
+
+#[tokio::test]
+async fn a_blok_stores_the_locals_it_persists_and_a_new_list_is_a_new_template() {
+    let Some(f) = fleet().await else { return };
+    f.catalog().await;
+    let agent = f.agent("first", "app", "1").await;
+    let posed = |persist: Value| {
+        json!({"key": "posed", "catalog": "electron", "demo_state": {"pose": [1, 0, 0, 0], "zoom": 1},
+            "persist": persist, "components": [{"id": "root", "component": "Box"}]})
+    };
+
+    f.register(agent, declaring(json!([posed(json!([]))])))
+        .await;
+    let (slot, plain) = f.slot(agent, "posed").await.unwrap();
+    let stored: Value = sqlx::query_scalar("SELECT persist FROM facade_blok WHERE id = $1")
+        .bind(plain)
+        .fetch_one(&f.db)
+        .await
+        .unwrap();
+    assert_eq!(stored, json!([]));
+
+    let persist = json!([{"key": "pose", "description": "Where the gizmo left it"}]);
+    f.register(agent, declaring(json!([posed(persist.clone())])))
+        .await;
+    let (same_slot, kept) = f.slot(agent, "posed").await.unwrap();
+    assert_eq!(same_slot, slot, "the slot keeps its id");
+    assert_ne!(kept, plain, "persisting a local is other content");
+    let stored: Value = sqlx::query_scalar("SELECT persist FROM facade_blok WHERE id = $1")
+        .bind(kept)
+        .fetch_one(&f.db)
+        .await
+        .unwrap();
+    assert_eq!(stored, persist);
+    f.delete(agent).await;
+}

@@ -50,6 +50,8 @@ class BlokContent:
     """The items the blok is opened for, read under ``@args.<key>``."""
     services: list[rimodels.BlokServiceInputModel] = dataclasses.field(default_factory=list)
     """The backend services the blok's queries read from, frozen at their versions."""
+    persist: list[rimodels.BlokPersistInputModel] = dataclasses.field(default_factory=list)
+    """The locals a renderer may keep between openings, on the device."""
 
     def but(
         self,
@@ -60,6 +62,7 @@ class BlokContent:
         dependencies: list[rimodels.AgentDependencyInputModel] | None = None,
         args: list[rimodels.ArgPortInputModel] | None = None,
         services: list[rimodels.BlokServiceInputModel] | None = None,
+        persist: list[rimodels.BlokPersistInputModel] | None = None,
     ) -> BlokContent:
         """This content with every part that is given replaced; ``None`` keeps a part."""
         return BlokContent(
@@ -70,6 +73,7 @@ class BlokContent:
             dependencies=self.dependencies if dependencies is None else dependencies,
             args=self.args if args is None else args,
             services=self.services if services is None else services,
+            persist=self.persist if persist is None else persist,
         )
 
     def parsed_components(self) -> list[rimodels.ComponentNodeInputModel]:
@@ -84,11 +88,14 @@ class BlokContent:
     def stored_services(self) -> list[dict]:
         return [service.model_dump(mode="json") for service in self.services]
 
+    def stored_persist(self) -> list[dict]:
+        return [local.model_dump(mode="json") for local in self.persist]
+
     def hash(self) -> str:
         """sha256 of canonical JSON of every part; the catalog by its id.
 
-        Args and services count only when there are some, so a revision written before revisions
-        held them keeps its hash."""
+        Args, services and persisted locals count only when there are some, so a revision written
+        before revisions held them keeps its hash."""
         parts = {
             "components": self.components,
             "demo_state": self.demo_state,
@@ -100,6 +107,8 @@ class BlokContent:
             parts["args"] = self.stored_args()
         if self.services:
             parts["services"] = self.stored_services()
+        if self.persist:
+            parts["persist"] = self.stored_persist()
         canonical = json.dumps(
             parts,
             sort_keys=True,
@@ -113,6 +122,7 @@ class BlokContent:
         dependency_keys = {dependency.key for dependency in self.dependencies}
         rimodels.check_blok_manifest(self.parsed_components(), dependency_keys, set(self.demo_state))
         rimodels.check_blok_args(self.context, self.args, dependency_keys)
+        rimodels.check_blok_persist(self.persist, dependency_keys, set(self.demo_state))
         rimodels.check_blok_services(self.parsed_components(), self.services)
 
 
@@ -142,6 +152,7 @@ def content_of_blok(blok: models.Blok) -> BlokContent:
         dependencies=[dependency_input_of(row) for row in blok.dependencies.order_by("key")],
         args=[rimodels.ArgPortInputModel(**arg) for arg in blok.args or []],
         services=[rimodels.BlokServiceInputModel(**service) for service in blok.services or []],
+        persist=[rimodels.BlokPersistInputModel(**local) for local in blok.persist or []],
     )
 
 
@@ -154,6 +165,7 @@ def content_of_revision(revision: models.BlokRevision) -> BlokContent:
         dependencies=[rimodels.AgentDependencyInputModel(**dependency) for dependency in revision.dependencies],
         args=[rimodels.ArgPortInputModel(**arg) for arg in revision.args or []],
         services=[rimodels.BlokServiceInputModel(**service) for service in revision.services or []],
+        persist=[rimodels.BlokPersistInputModel(**local) for local in revision.persist or []],
     )
 
 
@@ -269,6 +281,7 @@ def commit_revision(
         dependencies=content.stored_dependencies(),
         args=content.stored_args(),
         services=content.stored_services(),
+        persist=content.stored_persist(),
         content_hash=content_hash,
         author=author,
         task=task,
@@ -285,7 +298,8 @@ def commit_revision(
     args_changed = locked.args != revision.args
     locked.args = revision.args
     locked.services = revision.services
-    locked.save(update_fields=["components", "demo_state", "context", "catalog", "args", "services", "diagnostics", "head"])
+    locked.persist = revision.persist
+    locked.save(update_fields=["components", "demo_state", "context", "catalog", "args", "services", "persist", "diagnostics", "head"])
     sync_blok_dependencies(locked, content.dependencies)
     if args_changed:
         sync_blok_arg_ports(locked, content.args)

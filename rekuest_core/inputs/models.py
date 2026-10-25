@@ -1305,6 +1305,24 @@ def check_blok_args(context: enums.ComponentContext, args: list["ArgPortInputMod
         raise ValueError(f"Blok manifest: a blok with args reads them under {BLOK_ARGS_ROOT!r}, so no dependency can be called that")
 
 
+class BlokPersistInputModel(BaseModel):
+    """A local a renderer may keep between openings, on the device: its demo value is the default."""
+
+    key: str = Field(min_length=1, description="The local: a top-level `demo_state` key that is neither a dependency nor a reserved root.")
+    description: Optional[str] = Field(default=None, description="What the kept value is, for whoever resets it.")
+
+
+def check_blok_persist(persist: list[BlokPersistInputModel], dependency_keys: set[str], state_keys: Optional[set[str]]) -> None:
+    """A blok persists only its locals, each once: a top-level ``demo_state`` key, which is not a
+    dependency's key nor a root the renderer fills (``args``, ``$event``)."""
+    _check_unique(persist, "key", "Blok manifest persist")
+    for local in persist:
+        if local.key in (BLOK_ARGS_ROOT, BLOK_EVENT_ROOT) or local.key in dependency_keys:
+            raise ValueError(f"Blok manifest: persist names {local.key!r}, which is not a local but a root the renderer fills")
+        if state_keys is None or local.key not in state_keys:
+            raise ValueError(f"Blok manifest: persist names {local.key!r}, which is not a demo_state key: a persisted local takes its demo value as its default")
+
+
 class BlokImplementationInputModel(BaseModel):
     "Base model for a Blok implementation manifest, which compiles all necessary information to materialize a Blok instance in the Arkitekt ecosystem."
 
@@ -1321,6 +1339,7 @@ class BlokImplementationInputModel(BaseModel):
     for_node: Optional[str] = Field(default=None, description="The node of `for_model` this Blok attaches to; the model's root when absent.")
     args: list[ArgPortInputModel] = Field(default_factory=list, description="The items this Blok is opened for, declared like an action's args and read under `@args.<key>`. A UI offers the Blok on any item its args accept (`MaterializedBlokFilter.demands`). HTML bloks only.")
     services: list[BlokServiceInputModel] = Field(default_factory=list, description="The backend services this Blok reads from (its `query` components name them), each frozen at the version it was written against.")
+    persist: list[BlokPersistInputModel] = Field(default_factory=list, description="The locals a renderer may keep between openings, on the device (never on a server): each a top-level `demo_state` key, whose demo value is the default.")
 
     @model_validator(mode="after")
     def check_manifest(self) -> Self:
@@ -1332,6 +1351,7 @@ class BlokImplementationInputModel(BaseModel):
             check_blok_manifest(self.components, {dep.key for dep in self.dependencies}, None if self.demo_state is None else set(self.demo_state))
         check_blok_target(self.context, self.for_model, self.for_node)
         check_blok_args(self.context, self.args, {dep.key for dep in self.dependencies})
+        check_blok_persist(self.persist, {dep.key for dep in self.dependencies}, None if self.demo_state is None else set(self.demo_state))
         if self.components is not None:
             check_blok_services(self.components, self.services)
         return self

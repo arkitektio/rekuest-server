@@ -102,7 +102,11 @@ def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
         # createBlok declares no args: a blok created again keeps the ones it has.
         args=[rimodels.ArgPortInputModel(**arg) for arg in blok.args or []],
         services=list(model.services or []),
+        # Kept when omitted, as an edit keeps them: a blok created again keeps its persisted locals.
+        persist=[rimodels.BlokPersistInputModel(**local) for local in blok.persist or []] if model.persist is None else list(model.persist),
     )
+    # Neither the upsert nor the commit checks the content: the persisted locals must still be locals.
+    rimodels.check_blok_persist(content.persist, {dependency.key for dependency in content.dependencies}, set(content.demo_state))
     commit_revision(blok, content, base=None, guarded=False, author=CallerContext.from_info(info).user, message="Created" if blok.head_id is None else "Created again")
 
     return cast("types.Blok", blok)
@@ -131,6 +135,7 @@ def _fork(provided: models.Blok, name: str, user: User) -> models.Blok:
         for_node=provided.for_node,
         args=provided.args,
         services=provided.services,
+        persist=provided.persist,
     )
     # Rows are written parents first, so in id order every parent is copied before its children.
     copies: dict[int, models.BlokArgPort] = {}
@@ -195,6 +200,7 @@ def _edited(
     dependencies: list[rimodels.AgentDependencyInputModel] | None,
     args: list[rimodels.ArgPortInputModel] | None,
     services: list[rimodels.BlokServiceInputModel] | None = None,
+    persist: list[rimodels.BlokPersistInputModel] | None = None,
 ) -> BlokContent:
     """The blok's head content with every part that is given replaced."""
     current = content_of_revision(blok.head) if blok.head is not None else content_of_blok(blok)
@@ -206,6 +212,7 @@ def _edited(
         dependencies=dependencies,
         args=args,
         services=services,
+        persist=persist,
     )
 
 
@@ -254,7 +261,7 @@ def edit_blok(info: Info, input: inputs.EditBlokInput) -> types.BlokEdit:
         if (None if base is None else base.pk) != blok.head_id:
             raise StaleRevisionError(blok, base, blok.head)
 
-    content = _edited(info, blok, model.source, model.components, model.demo_state, model.catalog, model.dependencies, model.args, model.services)
+    content = _edited(info, blok, model.source, model.components, model.demo_state, model.catalog, model.dependencies, model.args, model.services, model.persist)
     content.check()
 
     # The bindings an edit through a materialization leaves: the ones kept for keys still
