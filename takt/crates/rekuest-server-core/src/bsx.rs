@@ -116,14 +116,9 @@ impl Markup<'_> {
     }
 
     fn at(&self, text: &str) -> bool {
-        let mut i = self.index;
-        for c in text.chars() {
-            if self.source.get(i) != Some(&c) {
-                return false;
-            }
-            i += 1;
-        }
-        true
+        (self.index..)
+            .zip(text.chars())
+            .all(|(i, c)| self.source.get(i) == Some(&c))
     }
 
     fn find(&self, text: &str, from: usize) -> Option<usize> {

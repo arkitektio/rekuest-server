@@ -239,14 +239,9 @@ fn is_name_part(c: char) -> bool {
 }
 
 fn starts_with(text: &[char], index: usize, pattern: &str) -> bool {
-    let mut i = index;
-    for p in pattern.chars() {
-        if text.get(i) != Some(&p) {
-            return false;
-        }
-        i += 1;
-    }
-    true
+    (index..)
+        .zip(pattern.chars())
+        .all(|(i, p)| text.get(i) == Some(&p))
 }
 
 struct Lexer<'a> {
