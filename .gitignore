@@ -145,3 +145,6 @@ media
 export
 static_collected
 data
+
+# takt compiles the blok vocabulary, catalogs and modules in: source, not data.
+!takt/crates/rekuest-server-core/src/blok/data/
