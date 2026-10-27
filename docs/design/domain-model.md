@@ -171,7 +171,7 @@ State changes fan out over `patches_state_{id}` / `patches_agent_{id}`; see [rea
 ## 6. Catalogue metadata & extras
 
 Supporting models round out the catalogue: `Collection` / `Protocol` (groupings and behaviour
-contracts on Actions), `UICatalog`, `Toolbox` / `Shortcut` (saved task configs), `TestCase` /
+contracts on Actions), `Module`, `Toolbox` / `Shortcut` (saved task configs), `TestCase` /
 `TestResult`, the `Blok` / `Dashboard` UI models, the 3D models (`ThreeDModel`, `Space`,
 `Placement`), and the agent's in-memory storage for inter-task data (`MemoryShelve` and its
 `MemoryDrawer`s).

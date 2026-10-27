@@ -19,13 +19,6 @@ pub fn value_path_root(value_path: &str) -> &str {
     trimmed.split('/').next().unwrap_or("")
 }
 
-/// First segment of a blok path, split on `/` and `.` like the renderer does.
-pub fn blok_path_root(path: &str) -> &str {
-    path.split(['/', '.'])
-        .find(|segment| !segment.is_empty())
-        .unwrap_or("")
-}
-
 fn py_opt_str(value: &Option<String>) -> String {
     value
         .as_deref()
@@ -171,7 +164,7 @@ impl ActionArgumentInputModel {
             .filter(|(_, s)| *s)
             .map(|(n, _)| *n)
             .collect();
-        if bound.len() != 1 {
+        if bound.len() > 1 {
             let got = if bound.is_empty() {
                 "none".to_owned()
             } else {
@@ -185,7 +178,7 @@ impl ActionArgumentInputModel {
                 )
             };
             return Err(ValidationError(format!(
-                "ActionArgument {} must set exactly one of {} (got {got})",
+                "ActionArgument {} must set at most one of {} (got {got})",
                 py_opt_str(&self.key),
                 Self::BINDINGS.join(", ")
             )));
@@ -206,6 +199,100 @@ impl ActionArgumentInputModel {
             )));
         }
         Ok(())
+    }
+}
+
+/// A v2 blok's arguments: bound at most one way (none is `null`), a literal kept as written
+/// (a bool stays a bool), `value_dict` uniquely keyed and `value_list` unkeyed. Port calls keep
+/// the v1 rules ([`ActionArgumentInputModel::validate`]): they feed the definition hash.
+fn validate_blok_arguments(
+    arguments: Option<&[ActionArgumentInputModel]>,
+    owner: &str,
+) -> Result<(), ValidationError> {
+    check_keyed(arguments, owner)?;
+    for argument in arguments.unwrap_or_default() {
+        argument.validate_blok()?;
+    }
+    Ok(())
+}
+
+impl AgentProbeInputModel {
+    /// [`AgentProbeInputModel::validate`] for a v2 blok tree: nothing is rewritten.
+    pub fn validate_blok(&self) -> Result<(), ValidationError> {
+        super::min_length(&self.dependency, "dependency")?;
+        super::min_length(&self.operation, "operation")?;
+        validate_blok_arguments(
+            self.arguments.as_deref(),
+            &format!("arguments of agent call {}", self.operation),
+        )
+    }
+}
+
+impl UtilCallInputModel {
+    /// [`UtilCallInputModel::validate`] for a v2 blok tree: nothing is rewritten.
+    pub fn validate_blok(&self) -> Result<(), ValidationError> {
+        super::min_length(&self.operation, "operation")?;
+        validate_blok_arguments(
+            self.arguments.as_deref(),
+            &format!("arguments of {}", self.operation),
+        )
+    }
+}
+
+impl ActionArgumentInputModel {
+    /// [`ActionArgumentInputModel::validate`] for a v2 blok tree: at most one binding (none is
+    /// `null`), literals kept as written.
+    pub fn validate_blok(&self) -> Result<(), ValidationError> {
+        let set = [
+            self.value_literal.is_some(),
+            self.value_path.is_some(),
+            self.agent_call.is_some(),
+            self.util_call.is_some(),
+            self.value_list.is_some(),
+            self.value_dict.is_some(),
+        ];
+        let bound: Vec<&str> = Self::BINDINGS
+            .iter()
+            .zip(set)
+            .filter(|(_, s)| *s)
+            .map(|(n, _)| *n)
+            .collect();
+        if bound.len() > 1 {
+            return Err(ValidationError(format!(
+                "ActionArgument {} must set at most one of {} (got [{}])",
+                py_opt_str(&self.key),
+                Self::BINDINGS.join(", "),
+                bound
+                    .iter()
+                    .map(|b| repr_str(b))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )));
+        }
+        if let Some(call) = &self.agent_call {
+            call.validate_blok()?;
+        }
+        if let Some(call) = &self.util_call {
+            call.validate_blok()?;
+        }
+        if self
+            .value_list
+            .iter()
+            .flatten()
+            .any(|entry| entry.key.is_some())
+        {
+            return Err(ValidationError(format!(
+                "value_list entries of argument {} must not carry a key",
+                py_opt_str(&self.key)
+            )));
+        }
+        for entry in self.value_list.iter().flatten() {
+            entry.validate_blok()?;
+        }
+        validate_blok_arguments(
+            self.value_dict.as_deref(),
+            &format!("value_dict of argument {}", py_opt_str(&self.key)),
+        )
     }
 }
 
@@ -281,6 +368,8 @@ pub struct ComponentPropInputModel {
     pub declares_value: Option<String>,
     #[serde(default)]
     pub agent_call: Option<AgentProbeInputModel>,
+    /// A function the prop's value is, or in a callback the effect it runs (`ui.copy`,
+    /// `task.answer`, `query.refetch`, `query.fetch_more`).
     #[serde(default)]
     pub util_call: Option<UtilCallInputModel>,
 }
@@ -289,6 +378,45 @@ impl ComponentPropInputModel {
     const BINDINGS: [&'static str; 4] =
         ["static_value", "dynamic_value", "agent_call", "util_call"];
 
+    /// A prop of a v2 blok tree: bound at most one way (none is `null`), its static value any
+    /// JSON value kept as written (`persist` stays `true`, a list stays a list).
+    pub fn validate_blok(&self) -> Result<(), ValidationError> {
+        let set = [
+            self.static_value.is_some(),
+            self.dynamic_value.is_some(),
+            self.agent_call.is_some(),
+            self.util_call.is_some(),
+        ];
+        let bound: Vec<&str> = Self::BINDINGS
+            .iter()
+            .zip(set)
+            .filter(|(_, s)| *s)
+            .map(|(n, _)| *n)
+            .collect();
+        if bound.len() > 1 {
+            return Err(ValidationError(format!(
+                "ComponentProp {} must set at most one of {} (got [{}])",
+                repr_str(&self.key),
+                Self::BINDINGS.join(", "),
+                bound
+                    .iter()
+                    .map(|b| repr_str(b))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )));
+        }
+        if let Some(call) = &self.agent_call {
+            call.validate_blok()?;
+        }
+        if let Some(call) = &self.util_call {
+            call.validate_blok()?;
+        }
+        Ok(())
+    }
+
+    /// A port widget's prop, by the v1 rules that feed the definition hash: bound at most one
+    /// way or declaring a value, a bool static value turned into its int (pydantic's lax
+    /// mode), a list refused. Blok trees use [`Self::validate_blok`].
     pub fn validate(&mut self) -> Result<(), ValidationError> {
         if let Some(call) = self.agent_call.as_mut() {
             call.validate()?;
@@ -382,9 +510,11 @@ pub struct ComponentNodeInputModel {
 }
 
 impl ComponentNodeInputModel {
+    /// A v2 blok tree's node, its props and children ([`ComponentPropInputModel::validate_blok`]):
+    /// nothing is rewritten, so the tree is stored as sent.
     pub fn validate(&mut self) -> Result<(), ValidationError> {
-        for prop in self.props.iter_mut().flatten() {
-            prop.validate()?;
+        for prop in self.props.iter().flatten() {
+            prop.validate_blok()?;
         }
         for child in self.children.iter_mut().flatten() {
             child.validate()?;

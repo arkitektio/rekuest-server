@@ -76,7 +76,7 @@ class Query:
         extensions=[AuthExtension()],
         description="List of UI Blok. Leaves out the materializations made for a message: each is shown in its message and reached by its id.",
     )
-    ui_catalogs: list[types.UICatalog] = field(description="UI catalogs registered in the caller's organization: the components and operations UI apps can render and evaluate.")
+    modules: list[types.Module] = field(description="Modules registered in the caller's organization: the components and operations UI apps can render and evaluate beyond the spec's catalogs.")
     base_catalog = field(resolver=types.dashboard.base_catalog, description="The built-in base catalog every definition and blok is validated against before any registered UI catalog (virtual: shipped with the server, not registered).")
     memory_shelves: list[types.MemoryShelve] = field(description="All memory shelves.")
     memory_drawers: list[types.MemoryDrawer] = field(description="All memory drawers.")
@@ -151,9 +151,9 @@ class Query:
     def materialized_blok(self, info: Info, id: strawberry.ID) -> types.MaterializedBlok:
         return cast(types.MaterializedBlok, scoped_get(models.MaterializedBlok, info, id, field="blok__organization"))
 
-    @field(description="Get a UI catalog by ID.")
-    def ui_catalog(self, info: Info, id: strawberry.ID) -> types.UICatalog:
-        return cast(types.UICatalog, scoped_get(models.UICatalog, info, id, field="organization"))
+    @field(description="Get a module by ID.")
+    def module(self, info: Info, id: strawberry.ID) -> types.Module:
+        return cast(types.Module, scoped_get(models.Module, info, id, field="organization"))
 
     @field(description="Get toolbox by ID.")
     def toolbox(self, info: Info, id: strawberry.ID) -> types.Toolbox:
@@ -298,7 +298,7 @@ class Mutation:
 
     # Datalayer. These use the local ``mutation()`` wrapper, not ``kante.django_mutation``:
     # the latter is plain ``strawberry_django.mutation`` and so skips ``AuthExtension``, which
-    # left these three as the only mutations in the schema carrying no @auth directive.
+    # left these as the only mutations in the schema carrying no @auth directive.
     request_media_upload = mutation(
         description="Upload media and return a URL for access",
         resolver=datalayer_mutations.request_media_upload,
@@ -306,6 +306,10 @@ class Mutation:
     finish_media_upload = mutation(
         description="Finalize a media upload after the client has written the object",
         resolver=datalayer_mutations.finish_media_upload,
+    )
+    refresh_media_upload = mutation(
+        description="Reissue upload credentials for a media upload still in flight, to the same key, so a write that outlives its credentials carries on. Only the uploader may, never for a finished store, and never past the upload's time limit",
+        resolver=datalayer_mutations.refresh_media_upload,
     )
     request_media_access = mutation(
         description="Request temporary S3 read credentials for a media file",
@@ -319,13 +323,13 @@ class Mutation:
     # Blok
     delete_blok = mutation(resolver=mutations.delete_blok, description="Delete a blok by ID.")
     fork_blok = mutation(resolver=mutations.fork_blok, description="Copy a blok an app provides into a custom blok, to edit it or bind other agents to it. The copy lives on whatever the providing agents do.")
-    update_blok = mutation(resolver=mutations.update_blok, description="Update properties of a blok such as its name, description, components, demo state, catalog, or dependencies.")
+    update_blok = mutation(resolver=mutations.update_blok, description="Update properties of a blok such as its name, description, components, module, or dependencies.")
     edit_blok = mutation(resolver=mutations.edit_blok, description="Edit a blok as one new revision on top of the head the editor read: on the blok itself (an editor of the blok), or through a materialization, with its bindings there (an assistant at a dashboard). A provided blok is forked first. With dryRun, every check runs and nothing is kept.")
     revert_blok = mutation(resolver=mutations.revert_blok, description="Make an earlier revision's content a custom blok's head again, as a new revision.")
     delete_materialized_blok = mutation(resolver=mutations.delete_materialized_blok, description="Delete a materialized blok by ID.")
     update_materialized_blok = mutation(resolver=mutations.update_materialized_blok, description="Update properties of a materialized blok such as its agent mappings.")
     pin_materialized_blok = mutation(resolver=mutations.pin_materialized_blok, description="Keep a materialization at one revision of its blok, or let it follow the head again.")
-    register_ui_catalog = mutation(resolver=mutations.register_ui_catalog, description="Register the components and operations a UI app can render and evaluate (upsert by name in the caller's organization). Bloks and definitions that name the catalog are validated against it.")
+    register_module = mutation(resolver=mutations.register_module, description="Register a module: the components and operations a UI app can render and evaluate beyond the spec's catalogs, and the catalogs it implements whole (upsert by name in the caller's organization). Bloks (`module`) and definitions (`catalogs`) that name it are validated against it.")
     # Implement Agent
     implement_agent = mutation(resolver=mutations.implement_agent, description="Implement an agent with given states and implementations. This is used to set up an agent with its initial configuration and capabilities.")
 

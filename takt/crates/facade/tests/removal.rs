@@ -73,9 +73,10 @@ async fn registered(ctx: &Context, org: &str) -> (i64, i64) {
             "dependencies": [{"key": "camera", "action_dependencies": [{"key": "snap"}]}],
             "definition": {"key": format!("move-{unique}"), "name": "Move", "kind": "FUNCTION"},
         }],
-        "bloks": [{"key": format!("panel-{unique}"), "description": "A panel", "components": [
-            {"id": "root", "component": "Text", "props": [{"key": "text", "static_value": "hi"}]}],
-            "dependencies": [{"key": "camera"}], "demo_state": {}}],
+        "bloks": [{"key": format!("panel-{unique}"), "vocab": 2, "description": "A panel", "components": [
+            {"id": "html", "component": "Html", "children": [
+                {"id": "root", "component": "Text", "props": [{"key": "text", "static_value": "hi"}]}]}],
+            "dependencies": [{"key": "camera"}]}],
     }))
     .unwrap();
     let mut tx = ctx.db.begin().await.unwrap();

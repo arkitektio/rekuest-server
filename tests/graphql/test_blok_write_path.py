@@ -10,7 +10,7 @@ from asgiref.sync import sync_to_async
 from authentikate.models import App, Client, Device, Organization, Release, User
 from kante.context import HttpContext
 
-from facade.models import Agent, Blok, BlokAgentMapping, BlokDependency, Caller, Dashboard, DashboardPlacement, MaterializedBlok, UICatalog
+from facade.models import Agent, Blok, BlokAgentMapping, BlokDependency, Caller, Dashboard, DashboardPlacement, MaterializedBlok, Module
 from facade.schema import schema
 from tests.graphql_ops import CREATE_BLOK, DELETE_MATERIALIZED_BLOK, MATERIALIZE_BLOK, UPDATE_BLOK, UPDATE_MATERIALIZED_BLOK
 
@@ -27,8 +27,8 @@ def _agent_in(org: Organization, user: User, prefix: str) -> Agent:
 def _seed(context: HttpContext, prefix: str, *, camera_optional: bool = False) -> dict:
     """A blok with two dependencies, a dashboard and one agent per dependency, all in the caller's org."""
     org, user = context.request.organization, context.request.user
-    catalog = UICatalog.objects.get_or_create(name="default", organization=org)[0]
-    blok = Blok.objects.create(name=f"{prefix}-blok", creator=user, organization=org, catalog=catalog)
+    catalog = Module.objects.get_or_create(name="default", organization=org)[0]
+    blok = Blok.objects.create(name=f"{prefix}-blok", creator=user, organization=org, module=catalog)
     BlokDependency.objects.create(blok=blok, key="stage", optional=False)
     BlokDependency.objects.create(blok=blok, key="camera", optional=camera_optional)
     dashboard = Dashboard.objects.create(name=f"{prefix}-dash", organization=org)
@@ -54,7 +54,7 @@ class TestBlokWritePath:
         created = await schema.execute(
             CREATE_BLOK,
             context_value=authenticated_context,
-            variable_values={"input": {"name": "Updatable", "description": "before", "dependencies": [{"key": "stage"}]}},
+            variable_values={"input": {"name": "Updatable", "vocab": 2, "description": "before", "dependencies": [{"key": "stage"}], "locals": [{"key": "exposure", "default": 3, "kind": "INT"}]}},
         )
         assert not created.errors, created.errors
         blok_id = created.data["createBlok"]["id"]
@@ -65,9 +65,8 @@ class TestBlokWritePath:
             variable_values={
                 "input": {
                     "id": blok_id,
-                    "demoState": {"exposure": 3},
-                    "catalog": "custom",
-                    "components": [{"id": "root", "component": "Slider"}],
+                    "module": "custom",
+                    "components": [{"id": "html", "component": "Html", "children": [{"id": "root", "component": "Slider"}]}],
                     "dependencies": [{"key": "camera", "optional": True}],
                 }
             },
@@ -77,10 +76,13 @@ class TestBlokWritePath:
         blok = result.data["updateBlok"]
         assert blok["name"] == "Updatable"
         assert blok["description"] == "before"
-        assert blok["demoState"] == {"exposure": 3}
-        assert blok["catalog"]["name"] == "custom"
+        # updateBlok keeps what it is not given: the locals and the language version.
+        assert blok["vocab"] == 2
+        assert blok["locals"] == [{"key": "exposure", "kind": "INT", "default": 3, "persist": False}]
+        assert blok["module"]["name"] == "custom"
         assert blok["dependencies"] == [{"key": "camera", "optional": True}]
-        assert blok["components"] == [{"id": "root", "component": "Slider"}]
+        # The selection reads the root only: the html blok's `Html`, holding the Slider.
+        assert blok["components"] == [{"id": "html", "component": "Html"}]
 
     async def test_materialize_blok_with_two_dependencies(self, authenticated_context: HttpContext) -> None:
         """Both mappings are written under their own keys, the placement is created, and a second materialization is a second row."""
@@ -202,18 +204,21 @@ class TestBlokWritePath:
         assert await _counts() == (0, 0, 0)
 
     async def test_update_blok_validates_the_merged_manifest(self, authenticated_context: HttpContext) -> None:
-        """New components are checked against the dependencies in force after the update."""
+        """New components are checked against the dependencies in force after the update: a
+        dependency the tree calls but the blok does not declare is refused, never inferred."""
         created = await schema.execute(
             CREATE_BLOK,
             context_value=authenticated_context,
-            variable_values={"input": {"name": "Checked", "dependencies": [{"key": "stage"}], "demoState": {}}},
+            variable_values={"input": {"name": "Checked", "vocab": 2, "dependencies": [{"key": "stage"}]}},
         )
         assert not created.errors, created.errors
         blok_id = created.data["createBlok"]["id"]
-        components = [{"id": "root", "component": "Button", "props": [{"key": "onClick", "agentCall": {"dependency": "laser", "operation": "fire"}}]}]
+        components = [{"id": "html", "component": "Html", "children": [{"id": "root", "component": "Button", "props": [{"key": "onClick", "agentCall": {"dependency": "laser", "operation": "fire"}}]}]}]
 
         rejected = await schema.execute(UPDATE_BLOK, context_value=authenticated_context, variable_values={"input": {"id": blok_id, "components": components}})
-        assert rejected.errors and "undeclared dependency 'laser'" in rejected.errors[0].message
+        assert rejected.errors
+        assert "'laser' is not a dependency of the blok" in rejected.errors[0].message
+        assert 'Fix: dependencies=[AgentDependencyInput(key="laser")]' in rejected.errors[0].message
 
         accepted = await schema.execute(
             UPDATE_BLOK,

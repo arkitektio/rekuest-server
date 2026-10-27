@@ -2,7 +2,7 @@
 //! (`rekuest_core/catalogs/__init__.py`).
 //!
 //! `base_v1.json` is the source of truth, embedded byte for byte as the Python server ships it.
-//! The base catalog is virtual: never a `UICatalog` row, merged under every named catalog, and
+//! The base catalog is virtual: never a `Module` row, merged under every named catalog, and
 //! UI catalogs may not redefine its operation or component names. Its components are control
 //! flow (`foreach`, `if`, `match`/`case`/`default`, `when`, the record slots, `query`), named in
 //! lowercase; what a UI draws is its own catalog's.

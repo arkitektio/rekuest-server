@@ -8,7 +8,7 @@ an inform SHOWN. They are never listed.
 import pytest
 
 from facade import enums
-from facade.models import Blok, MaterializedBlok, TaskEvent, UICatalog
+from facade.models import Blok, MaterializedBlok, TaskEvent, Module
 from facade.types.task import task_bloks
 from tests.factories import _build_task
 
@@ -19,7 +19,7 @@ def _shown(task, role: str) -> MaterializedBlok:
         name=f"task-{task.id}-{role}",
         organization=organization,
         creator=task.agent.user,
-        catalog=UICatalog.objects.get_or_create(name="orkestrator", organization=organization)[0],
+        module=Module.objects.get_or_create(name="orkestrator", organization=organization)[0],
         owner_task=task,
         returns=[{"key": "image", "kind": "STRUCTURE", "identifier": "@mikro/image", "nullable": False}],
     )

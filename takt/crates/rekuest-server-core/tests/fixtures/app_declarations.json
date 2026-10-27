@@ -4902,7 +4902,7 @@
   "implementations": [
    {
     "definition": {
-     "description": "Greet\n\nSays hello. The docstring's first line is the action's title, the rest its\ndescription \u2014 this is the whole UI, generated from the signature.",
+     "description": "Greet\n\nSays hello. The docstring's first line is the action's title, the rest its\ndescription — this is the whole UI, generated from the signature.",
      "collections": [],
      "key": "greet",
      "version": "1",
@@ -6651,7 +6651,7 @@
      ],
      "returns": [
       {
-       "key": "return0",
+       "key": "histogram",
        "label": null,
        "kind": "LIST",
        "description": null,
@@ -6753,7 +6753,7 @@
          "return_matches": [
           {
            "at": 0,
-           "key": "return0",
+           "key": "histogram",
            "kind": "LIST",
            "identifier": null,
            "nullable": false,
@@ -6798,395 +6798,8 @@
       "auto_resolvable": false
      }
     ],
-    "components": [
-     {
-      "id": "Resizable",
-      "component": "Resizable",
-      "props": [
-       {
-        "key": "direction",
-        "static_value": "row"
-       },
-       {
-        "key": "className",
-        "static_value": "rounded-xl border"
-       }
-      ],
-      "children": [
-       {
-        "id": "Resizable/ResizablePanel[0]",
-        "component": "ResizablePanel",
-        "props": [
-         {
-          "key": "defaultSize",
-          "static_value": "55"
-         },
-         {
-          "key": "minSize",
-          "static_value": "30"
-         }
-        ],
-        "children": [
-         {
-          "id": "Resizable/ResizablePanel[0]/Card[0]",
-          "component": "Card",
-          "props": [
-           {
-            "key": "className",
-            "static_value": "h-full rounded-none border-0"
-           }
-          ],
-          "children": [
-           {
-            "id": "Resizable/ResizablePanel[0]/Card[0]/CardHeader[0]",
-            "component": "CardHeader",
-            "props": null,
-            "children": [
-             {
-              "id": "Resizable/ResizablePanel[0]/Card[0]/CardHeader[0]/CardTitle[0]",
-              "component": "CardTitle",
-              "props": [
-               {
-                "key": "text",
-                "static_value": "Dataset"
-               }
-              ],
-              "children": null
-             },
-             {
-              "id": "Resizable/ResizablePanel[0]/Card[0]/CardHeader[0]/StructureDisplay[0]",
-              "component": "StructureDisplay",
-              "props": [
-               {
-                "key": "value",
-                "dynamic_value": {
-                 "path": "args.dataset"
-                }
-               },
-               {
-                "key": "variant",
-                "static_value": "inline"
-               }
-              ],
-              "children": null
-             }
-            ]
-           },
-           {
-            "id": "Resizable/ResizablePanel[0]/Card[0]/CardContent[0]",
-            "component": "CardContent",
-            "props": null,
-            "children": [
-             {
-              "id": "Resizable/ResizablePanel[0]/Card[0]/CardContent[0]/StructureViewer[0]",
-              "component": "StructureViewer",
-              "props": [
-               {
-                "key": "value",
-                "dynamic_value": {
-                 "path": "args.dataset"
-                }
-               },
-               {
-                "key": "height",
-                "static_value": "32rem"
-               },
-               {
-                "key": "emptyText",
-                "static_value": "Open this from a dataset."
-               }
-              ],
-              "children": null
-             }
-            ]
-           }
-          ]
-         }
-        ]
-       },
-       {
-        "id": "Resizable/ResizableHandle[0]",
-        "component": "ResizableHandle",
-        "props": [
-         {
-          "key": "withHandle",
-          "static_value": "true"
-         }
-        ],
-        "children": null
-       },
-       {
-        "id": "Resizable/ResizablePanel[1]",
-        "component": "ResizablePanel",
-        "props": [
-         {
-          "key": "defaultSize",
-          "static_value": "45"
-         },
-         {
-          "key": "minSize",
-          "static_value": "25"
-         }
-        ],
-        "children": [
-         {
-          "id": "Resizable/ResizablePanel[1]/Card[0]",
-          "component": "Card",
-          "props": [
-           {
-            "key": "className",
-            "static_value": "h-full rounded-none border-0"
-           }
-          ],
-          "children": [
-           {
-            "id": "Resizable/ResizablePanel[1]/Card[0]/CardHeader[0]",
-            "component": "CardHeader",
-            "props": null,
-            "children": [
-             {
-              "id": "Resizable/ResizablePanel[1]/Card[0]/CardHeader[0]/CardTitle[0]",
-              "component": "CardTitle",
-              "props": [
-               {
-                "key": "text",
-                "static_value": "Intensities"
-               }
-              ],
-              "children": null
-             },
-             {
-              "id": "Resizable/ResizablePanel[1]/Card[0]/CardHeader[0]/CardDescription[0]",
-              "component": "CardDescription",
-              "props": [
-               {
-                "key": "text",
-                "static_value": "How the dataset's values are spread."
-               }
-              ],
-              "children": null
-             }
-            ]
-           },
-           {
-            "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]",
-            "component": "CardContent",
-            "props": [
-             {
-              "key": "className",
-              "static_value": "grid gap-4"
-             }
-            ],
-            "children": [
-             {
-              "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Field[0]",
-              "component": "Field",
-              "props": [
-               {
-                "key": "label",
-                "static_value": "Bins"
-               }
-              ],
-              "children": [
-               {
-                "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Field[0]/Slider[0]",
-                "component": "Slider",
-                "props": [
-                 {
-                  "key": "bind",
-                  "static_value": "form.bins"
-                 },
-                 {
-                  "key": "min",
-                  "static_value": "4"
-                 },
-                 {
-                  "key": "max",
-                  "static_value": "256"
-                 },
-                 {
-                  "key": "step",
-                  "static_value": "4"
-                 }
-                ],
-                "children": null
-               },
-               {
-                "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Field[0]/Text[0]",
-                "component": "Text",
-                "props": [
-                 {
-                  "key": "text",
-                  "dynamic_value": {
-                   "path": "form.bins"
-                  }
-                 },
-                 {
-                  "key": "tone",
-                  "static_value": "muted"
-                 },
-                 {
-                  "key": "size",
-                  "static_value": "sm"
-                 }
-                ],
-                "children": null
-               }
-              ]
-             },
-             {
-              "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Button[0]",
-              "component": "Button",
-              "props": [
-               {
-                "key": "label",
-                "static_value": "Measure"
-               },
-               {
-                "key": "fullWidth",
-                "static_value": "true"
-               },
-               {
-                "key": "disabled",
-                "dynamic_value": {
-                 "path": "run.running"
-                }
-               },
-               {
-                "key": "onClick",
-                "declares_value": "run",
-                "agent_call": {
-                 "dependency": "self",
-                 "operation": "intensity_histogram",
-                 "arguments": [
-                  {
-                   "key": "dataset",
-                   "value_path": "args.dataset"
-                  },
-                  {
-                   "key": "bins",
-                   "value_path": "form.bins"
-                  }
-                 ]
-                }
-               }
-              ],
-              "children": null
-             },
-             {
-              "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Progress[0]",
-              "component": "Progress",
-              "props": [
-               {
-                "key": "value",
-                "dynamic_value": {
-                 "path": "run.progress"
-                }
-               }
-              ],
-              "children": null
-             },
-             {
-              "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Text[0]",
-              "component": "Text",
-              "props": [
-               {
-                "key": "text",
-                "dynamic_value": {
-                 "path": "run.message"
-                }
-               },
-               {
-                "key": "tone",
-                "static_value": "muted"
-               },
-               {
-                "key": "size",
-                "static_value": "sm"
-               }
-              ],
-              "children": null
-             },
-             {
-              "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Text[1]",
-              "component": "Text",
-              "props": [
-               {
-                "key": "text",
-                "dynamic_value": {
-                 "path": "run.error"
-                }
-               },
-               {
-                "key": "tone",
-                "static_value": "destructive"
-               },
-               {
-                "key": "size",
-                "static_value": "sm"
-               }
-              ],
-              "children": null
-             },
-             {
-              "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Chart[0]",
-              "component": "Chart",
-              "props": [
-               {
-                "key": "type",
-                "static_value": "bar"
-               },
-               {
-                "key": "data",
-                "dynamic_value": {
-                 "path": "run.result"
-                }
-               },
-               {
-                "key": "categoryKey",
-                "static_value": "name"
-               },
-               {
-                "key": "series",
-                "static_value": "[{\"key\": \"count\", \"label\": \"Values\"}]"
-               },
-               {
-                "key": "height",
-                "static_value": "280"
-               }
-              ],
-              "children": null
-             }
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     }
-    ],
-    "catalog": null,
+    "module": null,
     "description": "A dataset next to the histogram of its intensities.",
-    "demo_state": {
-     "args": {
-      "dataset": null
-     },
-     "form": {
-      "bins": 32
-     },
-     "run": {
-      "status": "idle",
-      "running": false,
-      "done": false,
-      "failed": false,
-      "progress": 0,
-      "message": "",
-      "error": "",
-      "result": null,
-      "returns": {}
-     }
-    },
     "context": "HTML",
     "default": false,
     "for_model": null,
@@ -7211,7 +6824,21 @@
       },
       "requires": null
      }
-    ]
+    ],
+    "vocab": 2,
+    "source": "<Html><Resizable direction=\"row\" className=\"rounded-xl border\"><ResizablePanel><StructureDisplay value={args.dataset} /></ResizablePanel><ResizablePanel><Card><Slider bind={bins} /><Button onClick={self.intensity_histogram(dataset: args.dataset, bins: bins) into run}>Histogram</Button><Progress value={run.progress} /><Chart data={run.returns.histogram} /></Card></ResizablePanel></Resizable></Html>",
+    "locals": [
+     {
+      "key": "bins",
+      "kind": "INT",
+      "default": 32
+     }
+    ],
+    "demo": {
+     "args": {
+      "dataset": null
+     }
+    }
    }
   ]
  }

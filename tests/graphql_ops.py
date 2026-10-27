@@ -69,8 +69,22 @@ UPDATE_BLOK = """
             id
             name
             description
-            demoState
-            catalog {
+            vocab
+            catalogs
+            locals {
+                key
+                kind
+                default
+                persist
+            }
+            demo {
+                deps
+                args
+                task
+                queries
+                subscriptions
+            }
+            module {
                 name
             }
             dependencies {

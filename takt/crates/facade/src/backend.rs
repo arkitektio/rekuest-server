@@ -29,7 +29,7 @@ use crate::holds::{self, HeldChild};
 use crate::messages::{Assign, AssignPrompt, StateRequirement, ToAgent};
 use crate::persist::transitions::{insert_event, NewEvent};
 use crate::provenance::canonical::args_hash;
-use crate::provenance::{mint_token_for_task, MintError, MintTask};
+use crate::provenance::{assigner, mint_token_for_task, MintError, MintTask};
 use crate::{signals, transport};
 
 #[derive(Debug, thiserror::Error)]
@@ -1457,6 +1457,7 @@ pub async fn assign_with_status(
         principal,
     )
     .await?;
+    let assigner = assigner(&mut tx, parent, &principal.user_sub).await?;
     let held_events = match (held, parent, root) {
         (true, Some(parent), Some(root)) => {
             holds::record_held_child(
@@ -1507,7 +1508,11 @@ pub async fn assign_with_status(
             args: input.args.clone(),
             message: None,
             user: principal.user_sub.clone(),
-            org: principal.organization_slug.clone().unwrap_or_default(),
+            assigner,
+            org: principal
+                .organization_identifier
+                .clone()
+                .unwrap_or_default(),
             action: action.hash.clone(),
             implementation: implementation.id.to_string(),
             token,
@@ -1684,6 +1689,7 @@ async fn assign_higher_order(
         principal,
     )
     .await?;
+    let assigner = assigner(&mut tx, Some(higher_task), &principal.user_sub).await?;
     let held_events = match (held, parent, root) {
         (true, Some(parent), Some(root)) => {
             holds::record_held_child(
@@ -1734,7 +1740,11 @@ async fn assign_higher_order(
             args: lower_args,
             message: None,
             user: principal.user_sub.clone(),
-            org: principal.organization_slug.clone().unwrap_or_default(),
+            assigner,
+            org: principal
+                .organization_identifier
+                .clone()
+                .unwrap_or_default(),
             action: lower_action.hash.clone(),
             implementation: lower.id.to_string(),
             token,

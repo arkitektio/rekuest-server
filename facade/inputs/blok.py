@@ -1,13 +1,14 @@
 """Inputs for bloks and materialized bloks."""
 
 import strawberry
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 from strawberry.experimental import pydantic
 from typing_extensions import Self
 
-from facade import enums, scalars
+from facade import enums
 from facade.inputs.dependency import MappedAgentInput, MappedAgentInputModel
-from facade.json_types import JSON
 from rekuest_core import enums as renums
 from rekuest_core.inputs import models as rimodels
 from rekuest_core.inputs import types as ritypes
@@ -34,7 +35,7 @@ class CreateBlokInputModel(BaseModel):
         name: The name of the Blok, used for identification in the system.
         dependencies: An optional list of agent dependencies declared in the Blok manifest, used to identify the Blok in the system.
         description: An optional description of the Blok and its purpose.
-        catalog: An optional universal ID for the Blok.
+        module: The module (an app's own UI extras) it renders against; the Orkestrator's when absent.
         uri: The URI of the Blok, used to link to it in the system.
         components: An optional list of component nodes defining the Blok's visual structure and behavior.
     """
@@ -48,21 +49,21 @@ class CreateBlokInputModel(BaseModel):
         default=None,
         description="The description of the blok. This can described the blok and its purpose.",
     )
-    catalog: str | None = Field(
+    module: str | None = Field(
         default=None,
-        description="The universal id",
+        description="The module (an app's own unversioned UI extras, by name in the caller's organization) the blok renders against besides its catalogs; the Orkestrator's when absent.",
     )
     components: list[rimodels.ComponentNodeInputModel] | None = Field(
         default=None,
         description="The schema of the blok. This can be used to validate the blok input and output.",
     )
-    source: str | None = Field(default=None, description="The blok as BSX, which the server parses into `components`: send one of the two.")
-    services: list[rimodels.BlokServiceInputModel] | None = Field(default=None, description="The backend services the blok's queries read from, each frozen at the version it was written against. Every `query`'s `schema` must name one.")
-    persist: list[rimodels.BlokPersistInputModel] | None = Field(default=None, description="The locals a renderer may keep between openings, on the device: each a top-level `demo_state` key. Kept when omitted (a blok created again keeps its own); an empty list removes them.")
-    demo_state: dict[str, JSON] | None = Field(
-        default=None,
-        description="The initial state of the blok. This is used to set the initial state of the blok when it is materialized.",
-    )
+    source: str | None = Field(default=None, description="The blok as v2 BSX, which the server parses into `components`: send one of the two.")
+    vocab: Literal[2] = Field(description="The blok language version the blok speaks; 2 is the only one.")
+    catalogs: list[str] = Field(default_factory=list, description="The catalogs it needs, as name@version ('ui@1').")
+    locals: list[rimodels.BlokLocalInputModel] = Field(default_factory=list, description="Its locals: form state that feeds a call, written only through bind.")
+    demo: rimodels.BlokDemoInputModel | None = Field(default=None, description="What a preview renders it with.")
+    queries: list[rimodels.BlokQueryInputModel] = Field(default_factory=list, description="Its declared reads, as `queries.<key>`.")
+    subscriptions: list[rimodels.BlokSubscriptionInputModel] = Field(default_factory=list, description="Its declared streams, as `subscriptions.<key>`.")
     context: renums.ComponentContext = Field(default=renums.ComponentContext.HTML, description="The renderer for the blok's root: HTML, or SCENE for a full 3D view.")
     for_model: str | None = Field(default=None, description="The model ('sha256:...') this blok decorates. HTML bloks only.")
     for_node: str | None = Field(default=None, description="The node of `for_model` this blok attaches to; the model's root when absent.")
@@ -77,11 +78,18 @@ class CreateBlokInputModel(BaseModel):
 
     @model_validator(mode="after")
     def check_manifest(self) -> Self:
-        """Sent one way; the component tree coherent with the declared dependencies and demo state.
-
-        A source is checked once ``createBlok`` has had takt parse it into components."""
+        """Sent one way; what it declares well-formed. The tree is checked against it (and the
+        module) once ``createBlok`` has it, parsed by takt when sent as source."""
         rimodels.check_blok_sent_once(self.components, self.source, required=False)
-        rimodels.check_blok_manifest(self.components, {dep.key for dep in self.dependencies or []}, None if self.demo_state is None else set(self.demo_state))
+        rimodels.check_blok_declarations(
+            kind="custom",
+            catalogs=self.catalogs,
+            locals=self.locals,
+            queries=self.queries,
+            subscriptions=self.subscriptions,
+            dependency_keys={dep.key for dep in self.dependencies or []},
+            demo=self.demo,
+        )
         rimodels.check_blok_target(self.context, self.for_model, self.for_node)
         if self.context == renums.ComponentContext.OVERLAY:
             raise ValueError("An overlay blok is an action's own: it is declared with the action (its definition's `bloks`), not created on its own")
@@ -93,12 +101,15 @@ class CreateBlokInput:
     name: str
     dependencies: list[ritypes.AgentDependencyInput] | None = None
     description: str | None = None
-    catalog: str | None = None
+    module: str | None = None
     components: list[ritypes.ComponentNodeInput] | None = None
     source: str | None = None
-    services: list[ritypes.BlokServiceInput] | None = None
-    persist: list[ritypes.BlokPersistInput] | None = None
-    demo_state: scalars.Args | None = None
+    vocab: int = strawberry.field(description="The blok language version the blok speaks; 2 is the only one.")
+    catalogs: list[str] | None = strawberry.field(default=None, description="The catalogs it needs, as name@version ('ui@1', 'scene@1').")
+    locals: list[ritypes.BlokLocalInput] | None = strawberry.field(default=None, description="Its locals: form state that feeds a call, written only through bind.")
+    demo: ritypes.BlokDemoInput | None = strawberry.field(default=None, description="What a preview renders it with.")
+    queries: list[ritypes.BlokQueryInput] | None = strawberry.field(default=None, description="Its declared reads, as `queries.<key>`.")
+    subscriptions: list[ritypes.BlokSubscriptionInput] | None = strawberry.field(default=None, description="Its declared streams, as `subscriptions.<key>`.")
     # Nullable, not defaulted: a client generated from the schema must not have to pass it.
     context: renums.ComponentContext | None = None
     for_model: str | None = None
@@ -124,13 +135,10 @@ class UpdateBlokInputModel(BaseModel):
         """A new tree comes as components or as source, not both."""
         rimodels.check_blok_sent_once(self.components, self.source, required=False)
         return self
-    demo_state: dict[str, JSON] | None = Field(
+
+    module: str | None = Field(
         default=None,
-        description="The demo state used to preview this blok. Replaces the existing demo state when provided.",
-    )
-    catalog: str | None = Field(
-        default=None,
-        description="Name of the UI catalog (in the caller's organization) this blok renders against. Created if missing.",
+        description="Name of the module (in the caller's organization) this blok renders against. Created if missing.",
     )
     dependencies: list[rimodels.AgentDependencyInputModel] | None = Field(
         default=None,
@@ -148,8 +156,7 @@ class UpdateBlokInput:
     description: str | None = None
     components: list[ritypes.ComponentNodeInput] | None = strawberry.field(default=None, deprecation_reason=EDIT_CONTENT)
     source: str | None = strawberry.field(default=None, deprecation_reason=EDIT_CONTENT)
-    demo_state: scalars.Args | None = strawberry.field(default=None, deprecation_reason=EDIT_CONTENT)
-    catalog: str | None = strawberry.field(default=None, deprecation_reason=EDIT_CONTENT)
+    module: str | None = strawberry.field(default=None, deprecation_reason=EDIT_CONTENT)
     dependencies: list[ritypes.AgentDependencyInput] | None = strawberry.field(default=None, deprecation_reason=EDIT_CONTENT)
 
 
@@ -197,12 +204,15 @@ class EditBlokInputModel(BaseModel):
     base: str | None = Field(default=None, description="The revision the edit starts from. It must still be the blok's head, or the edit is refused. Required for a custom blok; a provided blok has no revisions and is forked.")
     components: list[rimodels.ComponentNodeInputModel] | None = Field(default=None, description="The full component tree. Kept when omitted.")
     source: str | None = Field(default=None, description="The full component tree as BSX, which the server parses: send it or `components`, not both.")
-    demo_state: dict[str, JSON] | None = Field(default=None, description="The full local state. Kept when omitted.")
-    catalog: str | None = Field(default=None, description="Name of the UI catalog (in the caller's organization) the blok renders against. Kept when omitted.")
+    module: str | None = Field(default=None, description="Name of the module (in the caller's organization) the blok renders against. Kept when omitted.")
     dependencies: list[rimodels.AgentDependencyInputModel] | None = Field(default=None, description="The full list of agent dependencies. Kept when omitted; keys not listed are removed.")
-    args: list[rimodels.ArgPortInputModel] | None = Field(default=None, description="The full list of the items the blok is opened for, read under `@args.<key>` (html bloks only). Kept when omitted; an empty list removes them.")
-    services: list[rimodels.BlokServiceInputModel] | None = Field(default=None, description="The full list of the backend services the blok's queries read from, each frozen at its version. Kept when omitted; an empty list removes them.")
-    persist: list[rimodels.BlokPersistInputModel] | None = Field(default=None, description="The full list of the locals a renderer may keep between openings, on the device: each a top-level `demo_state` key. Kept when omitted; an empty list removes them.")
+    args: list[rimodels.ArgPortInputModel] | None = Field(default=None, description="The full list of the items the blok is opened for, read under `args.<key>` (html bloks only). Kept when omitted; an empty list removes them.")
+    vocab: Literal[2] | None = Field(default=None, description="The blok language version the edit is written in; 2 when omitted, the only one.")
+    catalogs: list[str] | None = Field(default=None, description="The full list of the catalogs it needs. Kept when omitted; an empty list removes them.")
+    locals: list[rimodels.BlokLocalInputModel] | None = Field(default=None, description="The full list of its locals. Kept when omitted; an empty list removes them.")
+    demo: rimodels.BlokDemoInputModel | None = Field(default=None, description="What a preview renders it with. Kept when omitted.")
+    queries: list[rimodels.BlokQueryInputModel] | None = Field(default=None, description="The full list of its declared reads. Kept when omitted; an empty list removes them.")
+    subscriptions: list[rimodels.BlokSubscriptionInputModel] | None = Field(default=None, description="The full list of its declared streams. Kept when omitted; an empty list removes them.")
     agent_mappings: list[MappedAgentInputModel] | None = Field(default=None, description="Bindings on `materialized_blok`, by dependency key, over the ones it has. Bindings of keys the edit removes go. Refused with `blok`: a blok binds no agents, its materializations do.")
     message: str | None = Field(default=None, description="What changed and why, in a sentence; kept with the revision.")
     task: str | None = Field(default=None, description="The task making the edit (one the caller's agent runs), kept with the revision.")
@@ -225,12 +235,15 @@ class EditBlokInput:
     base: strawberry.ID | None = None
     components: list[ritypes.ComponentNodeInput] | None = None
     source: str | None = None
-    demo_state: scalars.Args | None = None
-    catalog: str | None = None
+    module: str | None = None
     dependencies: list[ritypes.AgentDependencyInput] | None = None
     args: list[ritypes.ArgPortInput] | None = None
-    services: list[ritypes.BlokServiceInput] | None = None
-    persist: list[ritypes.BlokPersistInput] | None = None
+    vocab: int | None = None
+    catalogs: list[str] | None = None
+    locals: list[ritypes.BlokLocalInput] | None = None
+    demo: ritypes.BlokDemoInput | None = None
+    queries: list[ritypes.BlokQueryInput] | None = None
+    subscriptions: list[ritypes.BlokSubscriptionInput] | None = None
     agent_mappings: list[MappedAgentInput] | None = None
     message: str | None = None
     task: strawberry.ID | None = None

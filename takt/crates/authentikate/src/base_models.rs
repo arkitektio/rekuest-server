@@ -98,6 +98,15 @@ pub struct JwtToken {
 }
 
 impl JwtToken {
+    /// The organization the token acts in, unique across issuers: `"<iss>#<org>"`
+    /// (`JWTToken.org_identifier`). Two issuers may both have an org `1`; this says whose.
+    pub fn org_identifier(&self) -> Option<String> {
+        self.org
+            .as_deref()
+            .filter(|org| !org.is_empty())
+            .map(|org| format!("{}#{org}", self.iss))
+    }
+
     /// A hash that changes when the user changes: JSON of `[sub, preferred_username,
     /// sorted(roles), org, profile]` with compact separators, sha256, as authentikate 5
     /// computes it. It is persisted on the user, so it must match the Python side byte for byte.

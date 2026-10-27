@@ -25,7 +25,7 @@ def test_child_clause_indexes_from_zero() -> None:
 @pytest.mark.django_db
 def test_state_demand_matches_every_child_position() -> None:
     """A two-child demand finds the definition; the same demand with the children swapped does not."""
-    org = Organization.objects.create(slug="matcher-children-org")
+    org = Organization.objects.create(identifier="matcher-children-org")
     ports = [{"key": "parent", "kind": "MODEL", "nullable": False, "children": [{"key": "first", "kind": "INT", "nullable": False}, {"key": "second", "kind": "STRING", "nullable": False}]}]
     definition = StateDefinition.objects.create(name="two children", hash="matcher-children-hash", ports=ports, description="", organization=org)
 

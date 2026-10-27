@@ -12,13 +12,13 @@ from asgiref.sync import sync_to_async
 from authentikate.models import App, Client, Device, Organization, Release, User
 from kante.context import HttpContext
 
-from facade.models import Agent, Blok, BlokAgentMapping, BlokRevision, Caller, MaterializedBlok, UICatalog
+from facade.models import Agent, Blok, BlokAgentMapping, BlokRevision, Caller, MaterializedBlok, Module
 from facade.schema import schema
 from tests.factories import _build_task
 from tests.graphql_ops import CREATE_BLOK, MATERIALIZE_BLOK, UPDATE_BLOK
 
-BOX = [{"id": "root", "component": "Box"}]
-TEXT = [{"id": "root", "component": "Text"}]
+BOX = [{"id": "Html[0]", "component": "Html", "children": [{"id": "Html[0]/Box[0]", "component": "Box"}]}]
+TEXT = [{"id": "Html[0]", "component": "Html", "children": [{"id": "Html[0]/Text[0]", "component": "Text"}]}]
 
 REVISION = """
     id
@@ -62,6 +62,7 @@ EDIT_BLOK = f"""
             revision {{ {REVISION} }}
             materializedBlok {{ id blok {{ id provided }} agentMappings {{ key agent {{ id }} }} }}
             diagnostics {{ message }}
+            resolvedLocals {{ key kind default }}
         }}
     }}
 """
@@ -80,8 +81,8 @@ PIN = """
 
 
 def _drawn(tree: list[dict]) -> list[dict]:
-    """A tree without the unset parts a parsed component is stored with."""
-    return [{key: value for key, value in node.items() if value is not None} for node in tree]
+    """A tree without the unset parts a parsed component is stored with (at any depth)."""
+    return [{key: _drawn(value) if key == "children" else value for key, value in node.items() if value is not None} for node in tree]
 
 
 def _agent_in(org: Organization, user: User, prefix: str) -> Agent:
@@ -106,7 +107,7 @@ async def _refused(context: HttpContext, operation: str, variables: dict) -> str
 
 async def _blok_with_two_materializations(context: HttpContext) -> dict:
     """A custom blok (revision 1) shown by two materializations."""
-    created = await _run(context, CREATE_BLOK, {"input": {"name": "panel", "components": BOX}})
+    created = await _run(context, CREATE_BLOK, {"input": {"name": "panel", "vocab": 2, "components": BOX}})
     blok_id = created["createBlok"]["id"]
     first = await _run(context, MATERIALIZE_BLOK, {"input": {"blok": blok_id, "name": "first"}})
     second = await _run(context, MATERIALIZE_BLOK, {"input": {"blok": blok_id, "name": "second"}})
@@ -123,7 +124,7 @@ def _revision_count(blok_id: str) -> int:
 @pytest.mark.asyncio
 class TestBlokRevisions:
     async def test_every_write_is_a_revision_and_one_that_changes_nothing_is_not(self, authenticated_context: HttpContext) -> None:
-        created = await _run(authenticated_context, CREATE_BLOK, {"input": {"name": "history", "components": BOX}})
+        created = await _run(authenticated_context, CREATE_BLOK, {"input": {"name": "history", "vocab": 2, "components": BOX}})
         blok_id = created["createBlok"]["id"]
         await _run(authenticated_context, UPDATE_BLOK, {"input": {"id": blok_id, "components": TEXT}})
         await _run(authenticated_context, UPDATE_BLOK, {"input": {"id": blok_id, "components": TEXT}})
@@ -173,22 +174,36 @@ class TestBlokRevisions:
         # Someone else changes the blok meanwhile.
         await _run(authenticated_context, UPDATE_BLOK, {"input": {"id": env["blok"], "components": TEXT}})
 
-        message = await _refused(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "base": env["head"], "demoState": {"x": 1}}})
+        message = await _refused(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "base": env["head"], "locals": [{"key": "x", "kind": "INT", "default": 1}]}})
         assert "changed since revision 1" in message
         assert await _revision_count(env["blok"]) == 2
 
     async def test_a_dry_run_checks_and_keeps_nothing(self, authenticated_context: HttpContext) -> None:
         env = await _blok_with_two_materializations(authenticated_context)
 
-        checked = await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "base": env["head"], "components": TEXT, "catalog": "brand-new", "dryRun": True}})
+        checked = await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "base": env["head"], "components": TEXT, "module": "brand-new", "dryRun": True}})
         assert checked["editBlok"]["applied"] is False
         assert checked["editBlok"]["revision"] is None
         assert await _revision_count(env["blok"]) == 1
-        assert not await sync_to_async(UICatalog.objects.filter(name="brand-new").exists)()
+        assert not await sync_to_async(Module.objects.filter(name="brand-new").exists)()
 
         # A dry run refuses what the write would.
         message = await _refused(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "base": env["head"], "dependencies": [{"key": "stage"}], "dryRun": True}})
         assert "required but no agent was mapped" in message
+
+    async def test_a_dry_run_shows_the_kinds_it_infers(self, authenticated_context: HttpContext) -> None:
+        """An editor shows inferred kinds before saving: the dry run answers the resolved locals,
+        and the locals it would store stay as written."""
+        env = await _blok_with_two_materializations(authenticated_context)
+        components = [{"id": "Html[0]", "component": "Html", "children": [{"id": "Html[0]/Switch[0]", "component": "Switch", "props": [{"key": "bind", "dynamicValue": {"path": "on"}}]}]}]
+        written = [{"key": "zoom", "default": 2}, {"key": "on"}]
+
+        checked = (await _run(authenticated_context, EDIT_BLOK, {"input": {"blok": env["blok"], "base": env["head"], "components": components, "locals": written, "dryRun": True}}))["editBlok"]
+        assert checked["applied"] is False
+        assert checked["resolvedLocals"] == [{"key": "zoom", "kind": "INT", "default": 2}, {"key": "on", "kind": "BOOL", "default": None}]
+
+        saved = (await _run(authenticated_context, EDIT_BLOK, {"input": {"blok": env["blok"], "base": env["head"], "components": components, "locals": written}}))["editBlok"]
+        assert saved["resolvedLocals"] == checked["resolvedLocals"]
 
     async def test_a_refused_binding_writes_nothing(self, authenticated_context: HttpContext) -> None:
         env = await _blok_with_two_materializations(authenticated_context)
@@ -230,7 +245,7 @@ class TestBlokRevisions:
         assert _drawn(pinned["revision"]["componentTree"]) == BOX
 
         # Edited where it is shown, so shown as edited.
-        await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["second"], "base": head, "demoState": {"x": 1}}})
+        await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["second"], "base": head, "locals": [{"key": "x", "kind": "INT", "default": 1}]}})
         unpinned = (await _run(authenticated_context, MATERIALIZED, {"id": env["second"]}))["materializedBlok"]
         assert unpinned["pinnedRevision"] is None
         assert unpinned["revision"]["number"] == 3
@@ -241,13 +256,13 @@ class TestBlokRevisions:
         @sync_to_async
         def provided() -> tuple[Blok, MaterializedBlok, Agent]:
             agent = _agent_in(org, user, "viewer")
-            catalog = UICatalog.objects.get_or_create(name="orkestrator", organization=org)[0]
-            blok = Blok.objects.create(name="panel", creator=user, organization=org, catalog=catalog, app=agent.app, declaration_hash="a" * 64, components=BOX)
+            catalog = Module.objects.get_or_create(name="orkestrator", organization=org)[0]
+            blok = Blok.objects.create(name="panel", creator=user, organization=org, module=catalog, app=agent.app, declaration_hash="a" * 64, components=BOX)
             blok.dependencies.create(key="self")
             slot = MaterializedBlok.objects.create(blok=blok, declared_by=agent, name="panel", description="")
             BlokAgentMapping.objects.create(materialized_blok=slot, key="self", dependency=blok.dependencies.get(), agent=agent)
             # A custom blok of the same name exists already: the fork takes the next free one.
-            Blok.objects.create(name="panel", creator=user, organization=org, catalog=catalog)
+            Blok.objects.create(name="panel", creator=user, organization=org, module=catalog)
             return blok, slot, agent
 
         blok, slot, agent = await provided()
@@ -275,8 +290,8 @@ class TestBlokRevisions:
 
         @sync_to_async
         def bare() -> MaterializedBlok:
-            catalog = UICatalog.objects.get_or_create(name="orkestrator", organization=org)[0]
-            blok = Blok.objects.create(name="bare", creator=user, organization=org, catalog=catalog, components=BOX)
+            catalog = Module.objects.get_or_create(name="orkestrator", organization=org)[0]
+            blok = Blok.objects.create(name="bare", creator=user, organization=org, module=catalog, components=BOX)
             return MaterializedBlok.objects.create(blok=blok, name="bare", description="")
 
         mblok = await bare()
@@ -319,7 +334,7 @@ class TestBlokRevisions:
             assert (await _run(authenticated_context, MATERIALIZED, {"id": materialized}))["materializedBlok"]["unboundDependencies"] == ["stage"]
 
         # An assistant saved meanwhile: the editor, still on revision 1, is refused.
-        message = await _refused(authenticated_context, EDIT_BLOK, {"input": {"blok": env["blok"], "base": env["head"], "demoState": {"x": 1}}})
+        message = await _refused(authenticated_context, EDIT_BLOK, {"input": {"blok": env["blok"], "base": env["head"], "locals": [{"key": "x", "kind": "INT", "default": 1}]}})
         assert "changed since revision 1" in message
         assert await _revision_count(env["blok"]) == 2
 
@@ -337,8 +352,8 @@ class TestBlokRevisions:
         @sync_to_async
         def provided() -> Blok:
             agent = _agent_in(org, user, "editor-viewer")
-            catalog = UICatalog.objects.get_or_create(name="orkestrator", organization=org)[0]
-            blok = Blok.objects.create(name="viewer", creator=user, organization=org, catalog=catalog, app=agent.app, declaration_hash="b" * 64, components=BOX)
+            catalog = Module.objects.get_or_create(name="orkestrator", organization=org)[0]
+            blok = Blok.objects.create(name="viewer", creator=user, organization=org, module=catalog, app=agent.app, declaration_hash="b" * 64, components=BOX)
             MaterializedBlok.objects.create(blok=blok, declared_by=agent, name="viewer", description="")
             return blok
 

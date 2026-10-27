@@ -41,7 +41,7 @@ TEST_TOKEN = "test"
 def create_registry_bundle(prefix: str) -> tuple[User, Client, Organization, Caller]:
     user = User.objects.create(username=f"{prefix}-user", password="testpass")
     client = Client.objects.create(client_id=f"{prefix}-client")
-    org = Organization.objects.create(slug=f"{prefix}-org")
+    org = Organization.objects.create(identifier=f"{prefix}-org")
     caller = Caller.objects.create(client=client, user=user, organization=org)
     return user, client, org, caller
 
@@ -133,7 +133,7 @@ def _build_task(prefix, *, effects="UNKNOWN", idempotent=False, pure=False, pare
     user = User.objects.create(username=f"{prefix}-user", password="x", sub=f"{prefix}-sub")
     device = Device.objects.create(device_id=f"{prefix}-device")
     client = Client.objects.create(client_id=f"{prefix}-client", device=device)
-    org = Organization.objects.create(slug=f"{prefix}-org")
+    org = Organization.objects.create(identifier=f"{prefix}-org")
     caller = Caller.objects.create(client=client, user=user, organization=org)
 
     app = App.objects.create(identifier=f"{prefix}-app")
@@ -306,7 +306,7 @@ def _seed_throwaway_agent_graph(prefix):
     user = User.objects.create(username=f"{prefix}-user", password="x", sub=f"{prefix}-sub")
     device = Device.objects.create(device_id=f"{prefix}-device")
     client = Client.objects.create(client_id=f"{prefix}-client", device=device)
-    organization = Organization.objects.create(slug=f"{prefix}-org")
+    organization = Organization.objects.create(identifier=f"{prefix}-org")
     app = App.objects.create(identifier=f"{prefix}-app")
     release = Release.objects.create(app=app, version="1.0.0")
     return Agent.objects.create(app=app, hash=f"{prefix}-hash", release=release, user=user, client=client, organization=organization)
@@ -330,7 +330,7 @@ def _build_webhook_agent(prefix, secret="s3cr3t", hook_url="https://hook.example
     user = User.objects.create(username=f"{prefix}-user", password="x", sub=f"{prefix}-sub")
     device = Device.objects.create(device_id=f"{prefix}-device")
     client = Client.objects.create(client_id=f"{prefix}-client", device=device)
-    org = Organization.objects.create(slug=f"{prefix}-org")
+    org = Organization.objects.create(identifier=f"{prefix}-org")
     app = App.objects.create(identifier=f"{prefix}-app")
     release = Release.objects.create(app=app, version="1.0.0")
     return Agent.objects.create(

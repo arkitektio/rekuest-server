@@ -73,7 +73,8 @@ pub struct NewProbe<'a> {
     pub agent: i64,
     pub caller: i64,
     pub user_sub: &'a str,
-    pub org_slug: &'a str,
+    /// The organization it runs in, `"<iss>#<org>"`.
+    pub org: &'a str,
     pub action: i64,
     pub implementation: i64,
     pub interface: &'a str,
@@ -92,7 +93,7 @@ pub async fn create(
         ("agent", new.agent.to_string()),
         ("caller", new.caller.to_string()),
         ("user", new.user_sub.to_owned()),
-        ("org", new.org_slug.to_owned()),
+        ("org", new.org.to_owned()),
         ("action", new.action.to_string()),
         ("impl", new.implementation.to_string()),
         ("iface", new.interface.to_owned()),

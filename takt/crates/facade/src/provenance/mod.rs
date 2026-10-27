@@ -12,4 +12,4 @@ pub mod mint;
 pub mod principal;
 pub mod verify;
 
-pub use mint::{mint_token_for_task, MintError, MintTask};
+pub use mint::{assigner, mint_token_for_task, MintError, MintTask};

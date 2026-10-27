@@ -52,12 +52,7 @@ class TestHookAgents:
     def test_every_organization_has_its_own_agent(self, hub, lab):
         an_organization("clinic")
         hook_agents.provision_all()
-        assert {agent.organization.slug for agent in models.Agent.objects.filter(name="janitor")} >= {"lab", "clinic"}
-
-    def test_there_is_no_internal_organization(self, hub, lab):
-        internal = an_organization(hook_agents.RETIRED_ORGANIZATION)
-        hook_agents.provision_all()
-        assert not models.Agent.objects.filter(organization=internal).exists()
+        assert {agent.organization.identifier for agent in models.Agent.objects.filter(name="janitor")} >= {"lab", "clinic"}
 
     def test_an_agent_that_offers_nothing_is_not_created(self, hub, lab):
         janitor._actions.clear()
@@ -86,7 +81,7 @@ class TestHookAgents:
 
     def test_a_new_organization_gets_its_agents_on_the_fly(self, hub):
         """No provisioning pass is asked for: creating the organization is enough."""
-        newcomer = Organization.objects.create(slug="newcomer")
+        newcomer = Organization.objects.create(identifier="newcomer")
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline and not models.Implementation.objects.filter(agent__organization=newcomer).exists():
             time.sleep(0.05)

@@ -44,7 +44,7 @@ async fn tenant() -> Option<Tenant> {
 impl Tenant {
     async fn catalog(&self, name: &str, operations: Value, components: Value) {
         sqlx::query(
-            "INSERT INTO facade_uicatalog (name, components, operations, widget_defaults, organization_id)
+            "INSERT INTO facade_module (name, components, operations, widget_defaults, organization_id)
              VALUES ($1, $2, $3, '[]', $4)
              ON CONFLICT (organization_id, name) DO UPDATE SET components = excluded.components, operations = excluded.operations",
         )
@@ -295,24 +295,26 @@ async fn agent_declared_bloks_are_validated_against_their_catalog() {
         json!([{"name": "Box", "props": [{"key": "v", "kind": "ANY"}]}]),
     )
     .await;
-    let knob = json!([{"key": "panel", "catalog": "electron", "components": [{"id": "root", "component": "Knob"}]}]);
+    let knob = json!([{"key": "panel", "vocab": 2, "module": "electron", "components": [
+        {"id": "html", "component": "Html", "children": [{"id": "root", "component": "Knob"}]}]}]);
     let knob = t.findings(payload(&[], "gt", ("a", "b"), knob)).await;
     assert!(
         found(
             &knob,
-            "unknown_component",
-            "component 'Knob' is not registered"
+            "catalog.unknown_component",
+            "<Knob> is in no catalog in force"
         ),
         "{knob:?}"
     );
 
-    let boxed = json!([{"key": "panel", "catalog": "electron", "components": [
-        {"id": "root", "component": "Box", "props": [{"key": "v", "util_call": {"operation": "fizz"}}]}]}]);
+    let boxed = json!([{"key": "panel", "vocab": 2, "module": "electron", "components": [
+        {"id": "html", "component": "Html", "children": [
+            {"id": "root", "component": "Box", "props": [{"key": "v", "util_call": {"operation": "fmt.fizz"}}]}]}]}]);
     t.register(payload(&[], "gt", ("a", "b"), boxed))
         .await
         .unwrap();
     let (catalog, diagnostics): (String, Value) = sqlx::query_as(
-        "SELECT c.name, b.diagnostics FROM facade_blok b JOIN facade_uicatalog c ON c.id = b.catalog_id
+        "SELECT c.name, b.diagnostics FROM facade_blok b JOIN facade_module c ON c.id = b.module_id
           WHERE b.organization_id = $1 AND b.name = 'panel'",
     )
     .bind(t.organization)
@@ -322,7 +324,7 @@ async fn agent_declared_bloks_are_validated_against_their_catalog() {
     assert_eq!(catalog, "electron");
     assert_eq!(
         codes(diagnostics.as_array().unwrap()),
-        ["unknown_operation"]
+        ["expr.unknown_function"]
     );
 }
 
@@ -331,21 +333,23 @@ async fn a_blok_naming_no_catalog_is_checked_against_the_standard_one() {
     let Some(t) = tenant().await else { return };
     t.catalog("orkestrator", json!([]), json!([{"name": "Box"}]))
         .await;
-    let knob = json!([{"key": "panel", "components": [{"id": "root", "component": "Knob"}]}]);
+    let knob = json!([{"key": "panel", "vocab": 2, "components": [{"id": "html", "component": "Html", "children": [{"id": "root", "component": "Knob"}]}]}]);
     let knob = t.findings(payload(&[], "gt", ("a", "b"), knob)).await;
     assert!(
         found(
             &knob,
-            "unknown_component",
-            "component 'Knob' is not registered"
+            "catalog.unknown_component",
+            "<Knob> is in no catalog in force"
         ),
         "{knob:?}"
     );
 
-    let boxed = json!([{"key": "panel", "components": [{"id": "root", "component": "Box"}]}]);
-    t.register(payload(&[], "gt", ("a", "b"), boxed))
-        .await
-        .unwrap();
+    // What the Orkestrator registered beyond the spec's catalogs, and the spec's own components.
+    let boxed = json!([{"key": "panel", "vocab": 2, "source": "<Html><Box><Card><Button>Go</Button></Card></Box></Html>"}]);
+    assert_eq!(
+        t.findings(payload(&[], "gt", ("a", "b"), boxed)).await,
+        vec![]
+    );
 }
 
 #[tokio::test]
@@ -354,152 +358,97 @@ async fn components_are_held_to_their_declared_placement() {
     t.catalog(
         "electron",
         json!([]),
-        json!([
-            {"name": "Box"},
-            {"name": "Label", "accepts_children": false},
-            {"name": "Scene", "children_context": "SCENE", "not_downstream_of": ["Scene"]},
-            {"name": "Model", "context": "SCENE", "downstream_of": ["Scene"]},
-            {"name": "Move", "context": "SCENE", "downstream_of": ["Model", "Robot"], "accepts_children": false},
-            {"name": "Popout", "context": "SCENE", "children_context": "HTML", "downstream_of": ["Model", "Robot"]},
-        ]),
+        json!([{"name": "Box"}, {"name": "Caption", "accepts_children": false}]),
     )
     .await;
-    fn node(component: &str, children: Vec<Value>) -> Value {
-        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-        let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        json!({"id": format!("{component}{id}"), "component": component, "children": children})
-    }
-    let blok = |tree: Value| json!([{"key": "panel", "catalog": "electron", "components": [tree]}]);
+    let blok = |source: &str| json!([{"key": "panel", "vocab": 2, "module": "electron", "source": source}]);
 
-    let accepted = node(
-        "Box",
-        vec![node(
-            "Scene",
-            vec![node(
-                "Model",
-                vec![
-                    node("Move", vec![]),
-                    node("Popout", vec![node("Box", vec![node("Label", vec![])])]),
-                ],
-            )],
-        )],
-    );
-    t.register(payload(&[], "gt", ("a", "b"), blok(accepted)))
-        .await
-        .unwrap();
+    let accepted = r#"<Html><Box><Scene><Model src={self.assets.scope}><Move node="arm" axis="x" /><Popout><Box><Caption /></Box></Popout></Model></Scene></Box></Html>"#;
+    let mut declared = payload(&[], "gt", ("a", "b"), blok(accepted));
+    declared["assets"] = json!([{"name": "scope", "kind": "MODEL_3D", "ref": format!("sha256:{}", "9f".repeat(32)), "size": 1}]);
+    assert_eq!(t.findings(declared).await, vec![]);
 
-    for (tree, message) in [
+    for (source, message) in [
         (
-            node("Model", vec![]),
-            "component 'Model' is a scene component and cannot be placed in the html context",
+            "<Html><Box><Move node=\"arm\" axis=\"x\" /></Box></Html>",
+            "<Move> is a scene component, not one of the html context",
         ),
         (
-            node("Scene", vec![node("Label", vec![])]),
-            "component 'Label' is a html component and cannot be placed in the scene context",
+            "<Html><Scene><Caption /></Scene></Html>",
+            "<Caption> is a html component, not one of the scene context",
         ),
         (
-            node("Scene", vec![node("Move", vec![])]),
-            "component 'Move' must be inside one of ['Model', 'Robot']",
+            "<Html><Scene><Move node=\"arm\" axis=\"x\" /></Scene></Html>",
+            "<Move> must be inside one of ['Model', 'Robot']",
         ),
         (
-            node(
-                "Scene",
-                vec![node(
-                    "Model",
-                    vec![node("Popout", vec![node("Scene", vec![])])],
-                )],
-            ),
-            "component 'Scene' must not be inside ['Scene']",
+            "<Html><Box><Caption><Box /></Caption></Box></Html>",
+            "<Caption> takes no children",
         ),
     ] {
-        let findings = t.findings(payload(&[], "gt", ("a", "b"), blok(tree))).await;
-        assert!(
-            found(&findings, "misplaced_component", message),
-            "{findings:?}"
-        );
+        let findings = t
+            .findings(payload(&[], "gt", ("a", "b"), blok(source)))
+            .await;
+        let code = if message.contains("takes no children") {
+            "catalog.children"
+        } else {
+            "catalog.placement"
+        };
+        assert!(found(&findings, code, message), "{source}: {findings:?}");
     }
 }
 
 #[tokio::test]
-async fn a_logo_blok_is_one_svg_and_control_flow_takes_its_context() {
+async fn a_logo_blok_is_one_logo_and_control_flow_takes_its_context() {
     let Some(t) = tenant().await else { return };
-    t.catalog(
-        "electron",
-        json!([]),
-        json!([
-            {"name": "Box"},
-            {"name": "foreach", "inherits_context": true},
-            {"name": "SVG", "children_context": "LOGO", "not_downstream_of": ["SVG"]},
-            {"name": "Path", "context": "LOGO", "downstream_of": ["SVG"], "accepts_children": false},
-            {"name": "Scene", "children_context": "SCENE", "not_downstream_of": ["Scene"]},
-            {"name": "Model", "context": "SCENE", "downstream_of": ["Scene"]},
-        ]),
-    )
-    .await;
-    let blok = |context: &str, components: Value| json!([{"key": "view", "catalog": "electron", "context": context, "components": components}]);
-    let looped = |child: Value| json!({"id": "loop", "component": "foreach", "children": [child]});
-    let path = json!({"id": "p", "component": "Path"});
+    t.catalog("electron", json!([]), json!([{"name": "Box"}]))
+        .await;
+    let blok = |context: &str, source: &str| json!([{"key": "view", "vocab": 2, "module": "electron", "context": context, "source": source}]);
 
     for bloks in [
         blok(
             "LOGO",
-            json!([{"id": "logo", "component": "SVG", "children": [looped(path.clone())]}]),
-        ),
-        blok(
-            "SCENE",
-            json!([{"id": "scene", "component": "Scene", "children": [
-            looped(json!({"id": "m", "component": "Model"}))]}]),
+            r#"<AgentLogo><foreach items={self.lamps} let="lamp" key={lamp}><Path d="M0 0" /></foreach></AgentLogo>"#,
         ),
         blok(
             "HTML",
-            json!([{"id": "root", "component": "Box", "children": [
-            {"id": "logo", "component": "SVG", "children": [path.clone()]}]}]),
+            r#"<Html><Box><AgentLogo><Path d="M0 0" /></AgentLogo></Box></Html>"#,
         ),
     ] {
-        t.register(payload(&[], "gt", ("a", "b"), bloks))
-            .await
-            .unwrap();
+        assert_eq!(
+            t.findings(payload(&[], "gt", ("a", "b"), bloks)).await,
+            vec![]
+        );
     }
 
-    // The root a context requires still refuses; where the catalog places a component is a finding.
+    // The root a context requires refuses (an error of the vocabulary); where the catalog
+    // places a component is a warning.
     for (bloks, code, message) in [
         (
-            blok("LOGO", json!([path.clone()])),
+            blok("LOGO", r#"<Path d="M0 0" />"#),
             "refused",
-            "the root of a logo blok must be a 'SVG', not 'Path'",
+            "[context.root]",
         ),
         (
             blok(
                 "LOGO",
-                json!([{"id": "logo", "component": "SVG"}, {"id": "other", "component": "SVG"}]),
+                r#"<foreach items={self.lamps} let="lamp" key={lamp}><AgentLogo /></foreach>"#,
             ),
             "refused",
-            "a logo blok has exactly one root, a 'SVG', not 2 roots",
+            "[context.root]",
+        ),
+        (
+            blok("HTML", r#"<Html><Box><Path d="M0 0" /></Box></Html>"#),
+            "catalog.placement",
+            "<Path> is a logo component, not one of the html context",
         ),
         (
             blok(
                 "LOGO",
-                json!([looped(json!({"id": "logo", "component": "SVG"}))]),
+                r#"<AgentLogo><foreach items={self.lamps} let="lamp" key={lamp}><Box /></foreach></AgentLogo>"#,
             ),
-            "refused",
-            "the root of a logo blok must be a 'SVG', not 'foreach'",
-        ),
-        (
-            blok(
-                "HTML",
-                json!([{"id": "root", "component": "Box", "children": [path.clone()]}]),
-            ),
-            "misplaced_component",
-            "component 'Path' is a logo component and cannot be placed in the html context",
-        ),
-        (
-            blok(
-                "LOGO",
-                json!([{"id": "logo", "component": "SVG", "children": [
-                looped(json!({"id": "b", "component": "Box"}))]}]),
-            ),
-            "misplaced_component",
-            "component 'Box' is a html component and cannot be placed in the logo context",
+            "catalog.placement",
+            "<Box> is a html component, not one of the logo context",
         ),
     ] {
         let findings = t.findings(payload(&[], "gt", ("a", "b"), bloks)).await;
@@ -510,21 +459,12 @@ async fn a_logo_blok_is_one_svg_and_control_flow_takes_its_context() {
 #[tokio::test]
 async fn a_scene_blok_opens_a_scene_names_its_models_and_may_be_the_default() {
     let Some(t) = tenant().await else { return };
-    t.catalog(
-        "electron",
-        json!([]),
-        json!([
-            {"name": "Box"},
-            {"name": "Scene", "children_context": "SCENE", "not_downstream_of": ["Scene"]},
-            {"name": "Model", "context": "SCENE", "downstream_of": ["Scene"], "props": [
-                {"key": "src", "kind": "ASSET", "required": true}]},
-        ]),
-    )
-    .await;
+    t.catalog("electron", json!([]), json!([{"name": "Box"}]))
+        .await;
     let reference = format!("sha256:{}", "9f".repeat(32));
     // A model named by an asset path, in a blok that declares the dependency the path names.
     let scene = |key: &str, path: &str, extra: Value| {
-        let mut blok = json!({"key": key, "catalog": "electron", "context": "SCENE",
+        let mut blok = json!({"key": key, "vocab": 2, "module": "electron", "context": "SCENE",
             "dependencies": [{"key": "self"}], "components": [
             {"id": "scene", "component": "Scene", "children": [
                 {"id": "model", "component": "Model", "props": [
@@ -540,40 +480,34 @@ async fn a_scene_blok_opens_a_scene_names_its_models_and_may_be_the_default() {
             json!([{"name": "scope", "kind": "MODEL_3D", "ref": reference, "size": 1024}]);
         payload
     };
+    let viewed = |components: Value| json!([{"key": "view", "vocab": 2, "module": "electron", "context": "SCENE", "components": components}]);
 
     for (bloks, message) in [
         (
-            json!([{"key": "view", "catalog": "electron", "context": "SCENE", "components": [{"id": "root", "component": "Box"}]}]),
-            "the root of a scene blok must be a 'Scene', not 'Box'",
+            viewed(json!([{"id": "root", "component": "Box"}])),
+            "[context.root]",
         ),
         (
-            json!([{"key": "view", "catalog": "electron", "context": "SCENE", "components": [
-                {"id": "root", "component": "Box", "children": [{"id": "scene", "component": "Scene"}]}]}]),
-            "the root of a scene blok must be a 'Scene', not 'Box'",
+            viewed(
+                json!([{"id": "root", "component": "Box", "children": [{"id": "scene", "component": "Scene"}]}]),
+            ),
+            "[context.root]",
         ),
         (
-            // No component is registered in this catalog, so nothing else could tell a scene from a box.
-            json!([{"key": "view", "catalog": "unregistered", "context": "SCENE", "components": [{"id": "root", "component": "Box"}]}]),
-            "the root of a scene blok must be a 'Scene', not 'Box'",
+            // A catalog nothing registered in: the root is still the vocabulary's.
+            json!([{"key": "view", "vocab": 2, "module": "unregistered", "context": "SCENE", "components": [{"id": "root", "component": "Box"}]}]),
+            "[context.root]",
         ),
         (
-            json!([{"key": "view", "catalog": "electron", "context": "SCENE", "components": [
-                {"id": "scene", "component": "Scene"}, {"id": "other", "component": "Scene"}]}]),
-            "a scene blok has exactly one root, a 'Scene', not 2 roots",
+            viewed(
+                json!([{"id": "scene", "component": "Scene"}, {"id": "other", "component": "Scene"}]),
+            ),
+            "a blok has one root, not 2",
         ),
-        (
-            json!([{"key": "view", "catalog": "electron", "context": "SCENE", "components": []}]),
-            "a scene blok has exactly one root, a 'Scene', not 0 roots",
-        ),
-        (
-            json!([{"key": "view", "catalog": "electron", "context": "SCENE", "components": [
-                {"id": "scene", "component": "Scene", "children": [
-                    {"id": "model", "component": "Model", "props": [{"key": "src", "static_value": reference}]}]}]}]),
-            "is an ASSET prop and must name an asset",
-        ),
+        (viewed(json!([])), "a blok has one root, not 0"),
         (
             json!([scene("view", "self.assets", json!({}))]),
-            "is an ASSET prop and must name an asset",
+            "[deps.asset]",
         ),
         (
             json!([scene("view", "self.assets.absent", json!({}))]),
@@ -590,6 +524,17 @@ async fn a_scene_blok_opens_a_scene_names_its_models_and_may_be_the_default() {
             .unwrap_err();
         assert!(refused.contains(message), "{refused}");
     }
+    // A model named by a literal instead of an asset is a finding of the catalog's.
+    let literal = viewed(json!([{"id": "scene", "component": "Scene", "children": [
+        {"id": "model", "component": "Model", "props": [{"key": "src", "static_value": reference}]}]}]));
+    let findings = t
+        .findings(with_assets(payload(&[], "gt", ("a", "b"), literal)))
+        .await;
+    assert!(
+        found(&findings, "catalog.asset", "src of <Model>"),
+        "{findings:?}"
+    );
+
     for (assets, message) in [
         (
             json!([{"name": "my-scope", "kind": "MODEL_3D", "ref": reference, "size": 1}]),
@@ -635,8 +580,8 @@ async fn a_scene_blok_opens_a_scene_names_its_models_and_may_be_the_default() {
     };
     let first = json!([
         scene("view", named, json!({"default": true})),
-        {"key": "panel", "catalog": "electron", "default": true, "for_model": reference, "for_node": "turret",
-         "components": [{"id": "root", "component": "Box"}]},
+        {"key": "panel", "vocab": 2, "module": "electron", "default": true, "for_model": reference, "for_node": "turret",
+         "components": [{"id": "html", "component": "Html", "children": [{"id": "root", "component": "Box"}]}]},
     ]);
     t.register(with_assets(payload(&[], "gt", ("a", "b"), first.clone())))
         .await
@@ -708,7 +653,7 @@ async fn a_scene_blok_opens_a_scene_names_its_models_and_may_be_the_default() {
     let second = json!([
         scene("view", "self.assets.stage", json!({})),
         scene("other_view", "self.assets.stage", json!({"default": true})),
-        {"key": "panel", "catalog": "electron", "default": true, "components": [{"id": "root", "component": "Box"}]},
+        {"key": "panel", "vocab": 2, "module": "electron", "default": true, "components": [{"id": "html", "component": "Html", "children": [{"id": "root", "component": "Box"}]}]},
     ]);
     // A re-registration that names its file differently: the old name is gone, not kept.
     let mut renamed = payload(&[], "lt", ("a", "b"), second);
@@ -1131,23 +1076,15 @@ async fn a_descriptor_is_declared_for_its_structure() {
 #[tokio::test]
 async fn an_implementation_is_drawn_by_the_action_logo_blok_it_names() {
     let Some(t) = tenant().await else { return };
-    t.catalog(
-        "electron",
-        json!([]),
-        json!([
-            {"name": "SVG", "children_context": "LOGO", "not_downstream_of": ["SVG", "ActionLogo"]},
-            {"name": "ActionLogo", "children_context": "LOGO", "not_downstream_of": ["SVG", "ActionLogo"]},
-            {"name": "Path", "context": "LOGO", "downstream_of": ["SVG", "ActionLogo"], "accepts_children": false,
-             "props": [{"key": "d", "kind": "STRING"}, {"key": "fill", "kind": "STRING", "required": false}]},
-            {"name": "foreach", "inherits_context": true, "props": [{"key": "items", "kind": "LIST"}]},
-        ]),
-    )
-    .await;
-    let logo = |key: &str, components: Value, demo_state: Value| json!({"key": key, "catalog": "electron", "context": "LOGO", "components": components, "demo_state": demo_state});
-    let svg = |children: Value| json!([{"id": "logo", "component": "SVG", "children": children}]);
-    let action_logo = |key: &str, children: Value, demo_state: Value| {
-        json!({"key": key, "catalog": "electron", "context": "ACTION_LOGO",
-        "components": [{"id": "logo", "component": "ActionLogo", "children": children}], "demo_state": demo_state})
+    t.catalog("electron", json!([]), json!([{"name": "Box"}]))
+        .await;
+    let logo = |key: &str, children: Value, demo: Value| {
+        json!({"key": key, "vocab": 2, "module": "electron", "context": "LOGO",
+        "components": [{"id": "logo", "component": "AgentLogo", "children": children}], "demo": demo})
+    };
+    let action_logo = |key: &str, children: Value| {
+        json!({"key": key, "vocab": 2, "module": "electron", "context": "ACTION_LOGO",
+        "components": [{"id": "logo", "component": "ActionLogo", "children": children}]})
     };
     let painted = |id: &str, fill: Value| json!({"id": id, "component": "Path", "props": [{"key": "d", "static_value": "M0 0"}, fill]});
     let path = |i: usize| json!({"id": format!("p{i}"), "component": "Path", "props": [{"key": "d", "static_value": "M0 0"}]});
@@ -1178,7 +1115,7 @@ async fn an_implementation_is_drawn_by_the_action_logo_blok_it_names() {
         .unwrap()
     };
 
-    let crop = action_logo("crop", json!([path(0)]), json!({"task": null}));
+    let crop = action_logo("crop", json!([path(0)]));
     t.register(drawn_by(
         payload(&[], "gt", ("a", "b"), json!([crop.clone()])),
         Some("crop"),
@@ -1198,14 +1135,14 @@ async fn an_implementation_is_drawn_by_the_action_logo_blok_it_names() {
     assert_eq!(logo_of_scan().await, None);
     assert_eq!(action_logo_of_scan().await, None);
 
-    let panel = json!({"key": "panel", "components": [{"id": "root", "component": "Box"}]});
-    // An agent's logo keeps any SVG colour, but draws no action.
+    let panel = json!({"key": "panel", "vocab": 2, "components": [{"id": "html", "component": "Html", "children": [{"id": "root", "component": "Box"}]}]});
+    // An agent's logo draws no action.
     let app = logo(
         "app",
-        svg(json!([painted(
+        json!([painted(
             "p",
-            json!({"key": "fill", "static_value": "#fbbf24"})
-        )])),
+            json!({"key": "fill", "static_value": "brand"})
+        )]),
         json!({}),
     );
     for name in ["nowhere", "panel", "app"] {
@@ -1229,7 +1166,7 @@ async fn an_implementation_is_drawn_by_the_action_logo_blok_it_names() {
         );
     }
 
-    // An action logo paints with the palette: as written, and as its demo state resolves a binding.
+    // A logo paints with the pens, or a url(#id), and an action logo reads only its task.
     let quiet = action_logo(
         "quiet",
         json!([
@@ -1237,10 +1174,9 @@ async fn an_implementation_is_drawn_by_the_action_logo_blok_it_names() {
             painted("glow", json!({"key": "fill", "static_value": "url(#glow)"})),
             painted(
                 "tint",
-                json!({"key": "fill", "dynamic_value": {"path": "task.tint"}})
+                json!({"key": "fill", "dynamic_value": {"path": "task.message"}})
             )
         ]),
-        json!({"task": null}),
     );
     t.register(payload(&[], "gt", ("a", "b"), json!([quiet, app.clone()])))
         .await
@@ -1253,24 +1189,33 @@ async fn an_implementation_is_drawn_by_the_action_logo_blok_it_names() {
                     "p",
                     json!({"key": "fill", "static_value": "#fbbf24"})
                 )]),
-                json!({"task": null}),
             ),
-            "not '#fbbf24' in 'fill'",
+            "[palette.logo_paint]",
+        ),
+        (
+            logo(
+                "loud",
+                json!([painted(
+                    "p",
+                    json!({"key": "fill", "static_value": "#fbbf24"})
+                )]),
+                json!({}),
+            ),
+            "[palette.logo_paint]",
         ),
         (
             action_logo(
-                "tinted",
+                "nosy",
                 json!([painted(
                     "p",
-                    json!({"key": "fill", "dynamic_value": {"path": "task.tint"}})
+                    json!({"key": "fill", "dynamic_value": {"path": "self.mode"}})
                 )]),
-                json!({"task": {"tint": "red"}}),
             ),
-            "not 'red' in 'fill'",
+            "[roots.not_in_kind]",
         ),
         (
-            json!({"key": "rooted", "catalog": "electron", "context": "ACTION_LOGO", "components": svg(json!([])), "demo_state": {}}),
-            "the root of a action_logo blok must be a 'ActionLogo', not 'SVG'",
+            json!({"key": "rooted", "vocab": 2, "module": "electron", "context": "ACTION_LOGO", "components": [{"id": "root", "component": "Box"}]}),
+            "[context.root]",
         ),
     ] {
         let refused = t
@@ -1280,14 +1225,16 @@ async fn an_implementation_is_drawn_by_the_action_logo_blok_it_names() {
         assert!(refused.contains(message), "{refused}");
     }
 
-    let lamps = |n: usize| json!({"lamps": (0..n).collect::<Vec<_>>()});
-    let looped = json!([{"id": "loop", "component": "foreach", "props": [{"key": "items", "dynamic_value": {"path": "lamps"}}],
-                         "children": [path(0)]}]);
+    let lamps = |n: usize| json!({"deps": {"self": {"lamps": (0..n).collect::<Vec<_>>()}}});
+    let looped = json!([{"id": "loop", "component": "foreach", "props": [
+        {"key": "items", "dynamic_value": {"path": "self.lamps"}},
+        {"key": "let", "static_value": "lamp", "declares_value": "lamp"},
+        {"key": "key", "dynamic_value": {"path": "lamp"}}], "children": [path(0)]}]);
     t.register(payload(
         &[],
         "gt",
         ("a", "b"),
-        json!([logo("lamps", svg(looped.clone()), lamps(64))]),
+        json!([logo("lamps", looped.clone(), lamps(64))]),
     ))
     .await
     .unwrap();
@@ -1295,21 +1242,19 @@ async fn an_implementation_is_drawn_by_the_action_logo_blok_it_names() {
         (
             logo(
                 "big",
-                svg(json!((0..200).map(path).collect::<Vec<_>>())),
+                json!((0..200).map(path).collect::<Vec<_>>()),
                 json!({}),
             ),
             "a logo has at most 200 components, this one 201",
         ),
         (
-            logo("lamps", svg(looped.clone()), lamps(65)),
-            "a foreach in a logo draws at most 64 items, its demo state has 65",
+            logo("lamps", looped.clone(), lamps(65)),
+            "a foreach in a logo draws at most 64 items, its demo has 65",
         ),
         (
             logo(
                 "long",
-                svg(
-                    json!([{"id": "p", "component": "Path", "props": [{"key": "d", "static_value": "M".repeat(16385)}]}]),
-                ),
+                json!([{"id": "p", "component": "Path", "props": [{"key": "d", "static_value": "M".repeat(16385)}]}]),
                 json!({}),
             ),
             "a logo holds at most 16384 characters of path data, this one 16385",
@@ -1329,7 +1274,7 @@ async fn a_blok_may_be_registered_as_its_bsx_source() {
     t.catalog(
         "electron",
         json!([]),
-        json!([{"name": "Box"}, {"name": "Label", "accepts_children": false, "props": [{"key": "text", "kind": "STRING"}]}]),
+        json!([{"name": "Frame"}, {"name": "Caption", "accepts_children": false, "props": [{"key": "text", "kind": "STRING"}]}]),
     )
     .await;
     let stored = || async {
@@ -1341,43 +1286,45 @@ async fn a_blok_may_be_registered_as_its_bsx_source() {
         .await
         .unwrap()
     };
-    let tree = json!([{"id": "Box", "component": "Box", "children": [
-        {"id": "Box/Label[0]", "component": "Label", "props": [{"key": "text", "static_value": "hi"}]}]}]);
+    let tree = json!([{"id": "Html[0]", "component": "Html", "children": [
+        {"id": "Html[0]/Frame[0]", "component": "Frame", "children": [
+            {"id": "Html[0]/Frame[0]/Caption[0]", "component": "Caption", "props": [{"key": "text", "static_value": "hi"}]}]}]}]);
 
     t.register(payload(
         &[],
         "gt",
         ("a", "b"),
-        json!([{"key": "panel", "catalog": "electron", "components": tree}]),
+        json!([{"key": "panel", "vocab": 2, "module": "electron", "components": tree}]),
     ))
     .await
     .unwrap();
     let from_tree = stored().await;
-    t.register(payload(&[], "gt", ("a", "b"), json!([{"key": "panel", "catalog": "electron", "source": "<Box><Label text=\"hi\" /></Box>"}])))
+    assert_eq!(from_tree, tree, "stored without its nulls");
+    t.register(payload(&[], "gt", ("a", "b"), json!([{"key": "panel", "vocab": 2, "module": "electron", "source": "<Html><Frame><Caption text=\"hi\" /></Frame></Html>"}])))
         .await
         .unwrap();
     assert_eq!(stored().await, from_tree);
 
     for (blok, code, message) in [
         (
-            json!({"key": "panel", "components": tree, "source": "<Box />"}),
+            json!({"key": "panel", "vocab": 2, "components": tree, "source": "<Html><Frame /></Html>"}),
             "refused",
             "not both",
         ),
         (
-            json!({"key": "panel"}),
+            json!({"key": "panel", "vocab": 2}),
             "refused",
-            "a blok is sent as its components or as its BSX source",
+            "and this one has neither",
         ),
         (
-            json!({"key": "panel", "source": "<Box><Label></Box>"}),
+            json!({"key": "panel", "vocab": 2, "source": "<Html><Frame><Caption></Frame></Html>"}),
             "refused",
-            "Failed to parse BSX/XML at line 1",
+            "line 1, column",
         ),
         (
-            json!({"key": "panel", "catalog": "electron", "source": "<Box><Knob /></Box>"}),
-            "unknown_component",
-            "component 'Knob' is not registered",
+            json!({"key": "panel", "vocab": 2, "module": "electron", "source": "<Html><Frame><Knob /></Frame></Html>"}),
+            "catalog.unknown_component",
+            "<Knob> is in no catalog in force",
         ),
     ] {
         let findings = t
@@ -1399,8 +1346,8 @@ async fn a_blok_arg_constrains_only_declared_descriptors() {
     let size = format!("@d{unique}/z_size");
     declare_structure(&t.db, &image, &[&size]).await;
     let inspector = |key: &str| {
-        let bloks = json!([{"key": "inspector", "demo_state": {"args": {"image": null}},
-            "components": [{"id": "root", "component": "Box"}],
+        let bloks = json!([{"key": "inspector", "vocab": 2, "demo": {"args": {"image": null}},
+            "components": [{"id": "html", "component": "Html", "children": [{"id": "root", "component": "Box"}]}],
             "args": [{"key": "image", "kind": "STRUCTURE", "identifier": image, "nullable": false,
                       "requires": [{"key": key, "operator": "GTE", "value": 2}]}]}]);
         payload(&[], "gt", ("a", "b"), bloks)

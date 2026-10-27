@@ -168,8 +168,8 @@ def test_resolve_operations_without_catalog_is_base() -> None:
 @pytest.mark.django_db
 def test_resolve_operations_unions_extension() -> None:
     """A registered catalog adds to base."""
-    org = __import__("authentikate.models", fromlist=["Organization"]).Organization.objects.create(slug="base-cat-org")
-    catalog = models.UICatalog.objects.create(name="electron", organization=org, operations=[{"name": "clamp", "arguments": [{"key": "v", "kind": "FLOAT"}], "returns": "FLOAT"}])
+    org = __import__("authentikate.models", fromlist=["Organization"]).Organization.objects.create(identifier="base-cat-org")
+    catalog = models.Module.objects.create(name="electron", organization=org, operations=[{"name": "clamp", "arguments": [{"key": "v", "kind": "FLOAT"}], "returns": "FLOAT"}])
     resolved = resolve_operations([catalog])
     assert set(resolved) == V1_NAMES | STD_NAMES | {"clamp"}
     assert resolved["gt"] is base_operations()["gt"]
@@ -221,15 +221,15 @@ def test_resolve_components_is_none_until_a_catalog_registers_components() -> No
     from facade.catalog_validation import resolve_components
 
     assert resolve_components([]) is None
-    assert resolve_components([models.UICatalog(name="a", operations=[{"name": "x", "arguments": [], "returns": "ANY"}])]) is None
+    assert resolve_components([models.Module(name="a", operations=[{"name": "x", "arguments": [], "returns": "ANY"}])]) is None
 
     box = {"name": "Box", "props": [], "accepts_children": True}
     knob = {"name": "Knob", "props": [{"key": "value", "kind": "FLOAT", "required": False, "description": None}], "accepts_children": False, "description": None}
-    resolved = resolve_components([models.UICatalog(name="a", components=[box]), models.UICatalog(name="b", components=[box, knob])])
+    resolved = resolve_components([models.Module(name="a", components=[box]), models.Module(name="b", components=[box, knob])])
     assert set(resolved) == {"Box", "Knob"} | BASE_COMPONENTS
 
     with pytest.raises(ValueError, match="component 'Knob' is defined differently by catalogs 'a' and 'b'"):
-        resolve_components([models.UICatalog(name="a", components=[knob]), models.UICatalog(name="b", components=[{**knob, "accepts_children": True}])])
+        resolve_components([models.Module(name="a", components=[knob]), models.Module(name="b", components=[{**knob, "accepts_children": True}])])
 
 
 def test_extension_cannot_shadow_a_base_component() -> None:
@@ -244,8 +244,8 @@ def test_extension_cannot_shadow_a_base_component() -> None:
 @pytest.mark.django_db
 def test_base_components_win_over_an_older_registration() -> None:
     """A catalog registered before a component joined base may still list it; base's definition is used."""
-    org = __import__("authentikate.models", fromlist=["Organization"]).Organization.objects.create(slug="base-comp-org")
-    catalog = models.UICatalog.objects.create(
+    org = __import__("authentikate.models", fromlist=["Organization"]).Organization.objects.create(identifier="base-comp-org")
+    catalog = models.Module.objects.create(
         name="electron",
         organization=org,
         components=[{"name": "foreach", "props": []}, {"name": "Button", "props": []}],

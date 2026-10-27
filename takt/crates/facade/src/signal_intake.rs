@@ -24,6 +24,7 @@ pub struct SignalMessage {
     pub kind: String,
     pub identifier: String,
     pub object: String,
+    /// The organization the object belongs to, `"<iss>#<org>"`.
     pub organization: String,
     #[serde(default)]
     pub descriptors: Map<String, Value>,
@@ -76,7 +77,7 @@ async fn store(
     message: &SignalMessage,
 ) -> Result<Option<(i64, bool, Option<i64>)>, sqlx::Error> {
     let organization: Option<i64> =
-        sqlx::query_scalar("SELECT id FROM authentikate_organization WHERE slug = $1")
+        sqlx::query_scalar("SELECT id FROM authentikate_organization WHERE identifier = $1")
             .bind(&message.organization)
             .fetch_optional(&ctx.db)
             .await?;

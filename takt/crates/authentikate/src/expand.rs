@@ -51,24 +51,32 @@ fn unusable_password() -> String {
     format!("!{}", Alphanumeric.sample_string(&mut rand::rng(), 40))
 }
 
-async fn get_or_create_organization(db: &PgPool, slug: &str) -> Result<i64, AuthentikateError> {
+async fn get_or_create_organization(
+    db: &PgPool,
+    identifier: &str,
+) -> Result<i64, AuthentikateError> {
     Ok(sqlx::query_scalar(
-        "INSERT INTO authentikate_organization (slug) VALUES ($1)
-         ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug RETURNING id",
+        "INSERT INTO authentikate_organization (identifier) VALUES ($1)
+         ON CONFLICT (identifier) DO UPDATE SET identifier = EXCLUDED.identifier RETURNING id",
     )
-    .bind(slug)
+    .bind(identifier)
     .fetch_one(db)
     .await?)
 }
 
-/// The organization the token acts in (`aexpand_organization_from_token`).
+/// The organization the token acts in (`aexpand_organization_from_token`), by its identifier
+/// `"<iss>#<org>"`: an issuer with a `#` is malformed (OIDC forbids it), it would split wrong.
 pub async fn expand_organization(db: &PgPool, token: &JwtToken) -> Result<i64, AuthentikateError> {
-    let slug = token
-        .org
-        .as_deref()
-        .filter(|org| !org.is_empty())
+    if token.iss.contains('#') {
+        return Err(AuthentikateError::MalformedJwtToken(format!(
+            "an issuer must not contain '#': {:?}",
+            token.iss
+        )));
+    }
+    let identifier = token
+        .org_identifier()
         .ok_or(AuthentikateError::MissingActiveOrganization)?;
-    get_or_create_organization(db, slug).await
+    get_or_create_organization(db, &identifier).await
 }
 
 /// The user, created on first sight and synced when the token's user metadata changed

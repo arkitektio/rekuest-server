@@ -109,7 +109,10 @@ pub async fn probe(
         )
         .await?;
         drop(conn);
-        let org = principal.organization_slug.clone().unwrap_or_default();
+        let org = principal
+            .organization_identifier
+            .clone()
+            .unwrap_or_default();
         let state = store::create(
             ctx,
             &probe,
@@ -117,7 +120,7 @@ pub async fn probe(
                 agent: implementation.agent_id,
                 caller,
                 user_sub: &principal.user_sub,
-                org_slug: &org,
+                org: &org,
                 action: action.id,
                 implementation: implementation.id,
                 interface: &implementation.interface,
@@ -144,6 +147,8 @@ pub async fn probe(
                 args: input.args.clone(),
                 message: None,
                 user: principal.user_sub.clone(),
+                // A probe is always a root: whoever fired it assigned it.
+                assigner: Some(principal.user_sub.clone()),
                 org,
                 action: action.hash.clone(),
                 implementation: implementation.id.to_string(),

@@ -4,7 +4,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
-from facade.models import Blok, MaterializedBlok, Space, SpacePlacement, UICatalog
+from facade.models import Blok, MaterializedBlok, Space, SpacePlacement, Module
 from facade.schema import schema
 from tests.graphql.test_cross_tenant_isolation import OTHER_TOKEN, TEST_TOKEN, tenant_context
 
@@ -20,8 +20,8 @@ SHIFTED = [[1.0, 0.0, 0.0, 10.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0
 def _seed(token: str = TEST_TOKEN) -> tuple[HttpContext, Space, MaterializedBlok]:
     """A space and a materialized 3D blok in the token's organization."""
     context, user, _client, org = tenant_context(token)
-    catalog = UICatalog.objects.get_or_create(name="default", organization=org)[0]
-    blok = Blok.objects.create(name=f"stage-{token}", creator=user, organization=org, catalog=catalog, context="SCENE")
+    catalog = Module.objects.get_or_create(name="default", organization=org)[0]
+    blok = Blok.objects.create(name=f"stage-{token}", creator=user, organization=org, module=catalog, context="SCENE")
     materialized = MaterializedBlok.objects.create(blok=blok, name=blok.name, description="")
     space = Space.objects.create(name=f"lab-{token}", creator=user, organization=org)
     return context, space, materialized

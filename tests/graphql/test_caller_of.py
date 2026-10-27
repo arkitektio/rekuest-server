@@ -119,7 +119,7 @@ class TestCallerOf:
 
     async def test_a_task_of_another_organization_has_no_callers_here(self, authenticated_context: HttpContext):
         def elsewhere() -> models.Task:
-            other = Organization.objects.create(slug="caller-elsewhere-org")
+            other = Organization.objects.create(identifier="caller-elsewhere-org")
             ui = _agent(authenticated_context, "caller-elsewhere-ui", organization=other)
             agent = _agent(authenticated_context, "caller-elsewhere", organization=other)
             return _task(agent, caller_agent=ui)

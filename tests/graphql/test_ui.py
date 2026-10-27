@@ -35,7 +35,7 @@ class TestGraphQLUI:
 
     async def test_create_blok_mutation(self, authenticated_context: HttpContext):
         """Test creating a UI blok via mutation."""
-        result = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "Test UI Blok", "description": "A test UI component", "demoState": {}}})
+        result = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "Test UI Blok", "description": "A test UI component", "vocab": 2}})
 
         assert result.data is not None, f"Errors: {result.errors}"
         assert "createBlok" in result.data

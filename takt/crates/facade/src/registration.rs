@@ -193,14 +193,18 @@ pub async fn unshelve(
     }
 }
 
+use std::collections::HashMap;
+
+use rekuest_core::blok::infer::ArgPorts;
 use rekuest_core::inputs::{
-    BlokImplementationInputModel, DefinitionInputModel, ImplementAgentInputModel,
+    blok_kind, AgentDependencyInputModel, BlokDemoInputModel, BlokImplementationInputModel,
+    ComponentNodeInputModel, DefinitionInputModel, ImplementAgentInputModel,
     StateImplementationInputModel,
 };
 use sqlx::PgConnection;
 
 use crate::catalog_validation::{
-    dump_diagnostics, validate_action_blok_against_catalog, validate_manifest_against_catalog,
+    dump_diagnostics, module_unknown, validate_blok_against_catalog, validate_blok_with_arg_ports,
     Catalog, Diagnostic,
 };
 use crate::deletion::{
@@ -267,43 +271,100 @@ async fn register_state(
 /// The client's offline check and Django's `createBlok` use the same name.
 const STANDARD_CATALOG_NAME: &str = "orkestrator";
 
-/// One declared blok: its catalog, manifest check, the app's template for this content (shared
+/// The fields whose value is a JSON literal of the author's: their nulls are data.
+const LITERAL_FIELDS: [&str; 3] = ["static_value", "value_literal", "default"];
+
+/// A model's dump without the fields it leaves unset, as Django stores a blok's parts
+/// (pydantic's `exclude_none`): a null field goes, a null inside a literal stays.
+pub fn without_nulls(value: serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => serde_json::Value::Object(
+            map.into_iter()
+                .filter(|(_, v)| !v.is_null())
+                .map(|(k, v)| {
+                    if LITERAL_FIELDS.contains(&k.as_str()) {
+                        (k, v)
+                    } else {
+                        (k, without_nulls(v))
+                    }
+                })
+                .collect(),
+        ),
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.into_iter().map(without_nulls).collect())
+        }
+        other => other,
+    }
+}
+
+/// A blok's tree as stored: one root, without its nulls.
+pub fn stored_components(components: Option<&[ComponentNodeInputModel]>) -> serde_json::Value {
+    without_nulls(
+        serde_json::to_value(components.unwrap_or_default()).expect("components serialize"),
+    )
+}
+
+/// A blok's locals, queries or subscriptions as stored.
+pub fn stored_list<T: serde::Serialize>(items: &[T]) -> serde_json::Value {
+    without_nulls(serde_json::to_value(items).expect("blok declarations serialize"))
+}
+
+/// A blok's demo as stored: `{}` when it has none.
+pub fn stored_demo(demo: Option<&BlokDemoInputModel>) -> serde_json::Value {
+    let Some(serde_json::Value::Object(fields)) =
+        demo.map(|demo| serde_json::to_value(demo).expect("blok demo serializes"))
+    else {
+        return serde_json::json!({});
+    };
+    // Every field of a demo is the author's JSON: only an unset one goes.
+    serde_json::Value::Object(fields.into_iter().filter(|(_, v)| !v.is_null()).collect())
+}
+
+/// One declared blok: its module, manifest check, the app's template for this content (shared
 /// by every agent of the app declaring the same, `hash_blok_definition`), and the agent's slot
 /// for the blok's key re-pointed at it, with a mapping per dependency. Its diagnostics.
 async fn register_blok(
     conn: &mut PgConnection,
     agent: &AgentIdentity,
     blok: &BlokImplementationInputModel,
+    self_arg_ports: &ArgPorts,
 ) -> Result<Vec<Diagnostic>, Refusal> {
     let catalog_name = blok
-        .catalog
+        .module
         .as_deref()
         .filter(|c| !c.is_empty())
         .unwrap_or(STANDARD_CATALOG_NAME);
     let catalog = Catalog::get_or_create(conn, catalog_name, agent.organization).await?;
-    let diagnostics = validate_manifest_against_catalog(
+    let checked = validate_blok_with_arg_ports(
         &catalog,
         blok.components.as_deref(),
-        blok.context,
-        blok.demo_state.as_ref(),
+        &blok.scope(blok_kind(blok.context)),
+        self_arg_ports,
     )?;
+    // What is hashed and stored is the blok as sent; its locals as resolved are stored beside
+    // (`resolved_locals`), recomputed on every registration.
+    let mut diagnostics: Vec<Diagnostic> = module_unknown(conn, &catalog, agent.organization)
+        .await?
+        .into_iter()
+        .collect();
+    diagnostics.extend(checked.diagnostics);
     check_blok_arg_descriptor_keys(conn, &blok.key, &blok.args).await?;
 
     // Same content, same row: only the findings (which depend on the catalog as it is now) are
     // rewritten. A user's blok of the same name is custom and never matches.
     // `xmax = 0` only on a row this statement inserted: an existing template already has its port rows.
     let (id, name, description, inserted): (i64, String, Option<String>, bool) = sqlx::query_as(
-        "INSERT INTO facade_blok (name, description, components, demo_state, diagnostics, creator_id, organization_id, catalog_id,
-                                  context, for_model, for_node, app_id, declaration_hash, args, returns, services, persist)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        "INSERT INTO facade_blok (name, description, components, diagnostics, creator_id, organization_id, module_id,
+                                  context, for_model, for_node, app_id, declaration_hash, args, returns,
+                                  vocab, catalogs, locals, resolved_locals, demo, queries, subscriptions)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
          ON CONFLICT (organization_id, app_id, name, declaration_hash) WHERE app_id IS NOT NULL DO UPDATE SET
-             diagnostics = excluded.diagnostics
+             diagnostics = excluded.diagnostics, resolved_locals = excluded.resolved_locals
          RETURNING id, name, description, (xmax = 0)",
     )
     .bind(&blok.key)
     .bind(&blok.description)
-    .bind(serde_json::to_value(blok.components.as_deref().unwrap_or_default()).expect("components serialize"))
-    .bind(serde_json::Value::Object(blok.demo_state.clone().unwrap_or_default()))
+    .bind(stored_components(blok.components.as_deref()))
     .bind(dump_diagnostics(&diagnostics))
     .bind(agent.user)
     .bind(agent.organization)
@@ -315,8 +376,13 @@ async fn register_blok(
     .bind(hash_blok_definition(blok))
     .bind(serde_json::to_value(&blok.args).expect("blok args serialize"))
     .bind(serde_json::to_value(&blok.returns).expect("blok returns serialize"))
-    .bind(serde_json::to_value(&blok.services).expect("blok services serialize"))
-    .bind(serde_json::to_value(&blok.persist).expect("blok persist serialize"))
+    .bind(blok.vocab as i16)
+    .bind(serde_json::to_value(&blok.catalogs).expect("blok catalogs serialize"))
+    .bind(stored_list(&blok.locals))
+    .bind(stored_list(&checked.scope.locals))
+    .bind(stored_demo(blok.demo.as_ref()))
+    .bind(stored_list(&blok.queries))
+    .bind(stored_list(&blok.subscriptions))
     .fetch_one(&mut *conn)
     .await?;
     if inserted {
@@ -390,7 +456,9 @@ pub async fn sync_action_bloks(
     agent: &AgentIdentity,
     action: i64,
     definition: &DefinitionInputModel,
+    dependencies: &[AgentDependencyInputModel],
 ) -> Result<Vec<Diagnostic>, Refusal> {
+    let arg_keys: Vec<String> = definition.args.iter().map(|a| a.key.clone()).collect();
     let held: Vec<i64> =
         sqlx::query_scalar("SELECT blok_id FROM facade_actionblok WHERE action_id = $1")
             .bind(action)
@@ -400,31 +468,35 @@ pub async fn sync_action_bloks(
     let mut contexts: Vec<&str> = vec![];
     for blok in &definition.bloks {
         let catalog_name = blok
-            .catalog
+            .module
             .as_deref()
             .filter(|c| !c.is_empty())
             .unwrap_or(STANDARD_CATALOG_NAME);
         let catalog = Catalog::get_or_create(conn, catalog_name, agent.organization).await?;
-        let found = validate_action_blok_against_catalog(
+        let checked = validate_blok_against_catalog(
             &catalog,
             blok.components.as_deref(),
-            blok.context,
-            blok.demo_state.as_ref(),
+            &blok.scope(dependencies, Some(arg_keys.clone())),
         )?;
+        let mut found: Vec<Diagnostic> = module_unknown(conn, &catalog, agent.organization)
+            .await?
+            .into_iter()
+            .collect();
+        found.extend(checked.diagnostics);
         // Its name only says whose it is: an action's blok is never listed or looked up by it.
         let name = format!("{}:{}", definition.key, blok.context.value().to_lowercase());
         let id: i64 = sqlx::query_scalar(
-            "INSERT INTO facade_blok (name, description, components, demo_state, diagnostics, creator_id, organization_id,
-                                      catalog_id, context, app_id, declaration_hash, persist, held_by_action)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true)
+            "INSERT INTO facade_blok (name, description, components, diagnostics, creator_id, organization_id,
+                                      module_id, context, app_id, declaration_hash, held_by_action,
+                                      vocab, catalogs, locals, resolved_locals, demo, queries, subscriptions)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13, $14, $15, $16, $17)
              ON CONFLICT (organization_id, app_id, name, declaration_hash) WHERE app_id IS NOT NULL DO UPDATE SET
-                 diagnostics = excluded.diagnostics
+                 diagnostics = excluded.diagnostics, resolved_locals = excluded.resolved_locals
              RETURNING id",
         )
         .bind(&name)
         .bind(&blok.description)
-        .bind(serde_json::to_value(blok.components.as_deref().unwrap_or_default()).expect("components serialize"))
-        .bind(serde_json::Value::Object(blok.demo_state.clone().unwrap_or_default()))
+        .bind(stored_components(blok.components.as_deref()))
         .bind(dump_diagnostics(&found))
         .bind(agent.user)
         .bind(agent.organization)
@@ -432,7 +504,13 @@ pub async fn sync_action_bloks(
         .bind(blok.context.value())
         .bind(agent.app)
         .bind(hash_action_blok(blok))
-        .bind(serde_json::to_value(&blok.persist).expect("blok persist serialize"))
+        .bind(blok.vocab as i16)
+        .bind(serde_json::to_value(&blok.catalogs).expect("blok catalogs serialize"))
+        .bind(stored_list(&blok.locals))
+        .bind(stored_list(&checked.scope.locals))
+        .bind(stored_demo(blok.demo.as_ref()))
+        .bind(stored_list(&blok.queries))
+        .bind(stored_list(&blok.subscriptions))
         .fetch_one(&mut *conn)
         .await?;
         sqlx::query(
@@ -611,9 +689,20 @@ pub async fn implement_agent(
             .bind(agent)
             .fetch_all(&mut *conn)
             .await?;
+    // A local passed whole to one of the agent's own actions takes that action's full arg port,
+    // as the SDK resolves it (`self_arg_ports`): a demand's arg match has no choices or units.
+    let self_arg_ports: ArgPorts = HashMap::from([(
+        "self".to_owned(),
+        payload
+            .implementations
+            .iter()
+            .flatten()
+            .map(|i| (i.interface.clone(), i.definition.args.clone()))
+            .collect(),
+    )]);
     let mut declared_bloks = vec![];
     for blok in payload.bloks.iter().flatten() {
-        diagnostics.extend(register_blok(conn, &identity, blok).await?);
+        diagnostics.extend(register_blok(conn, &identity, blok, &self_arg_ports).await?);
         declared_bloks.push(blok.key.clone());
     }
     let dropped: Vec<i64> = sqlx::query_scalar(

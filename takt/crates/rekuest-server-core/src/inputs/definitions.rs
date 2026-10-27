@@ -7,15 +7,21 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use super::bloks::{
+    check_blok_declarations, check_blok_sent_once, wrong_context, BlokDeclarations,
+    BlokDemoInputModel, BlokLocalInputModel, BlokQueryInputModel, BlokSubscriptionInputModel,
+};
 use super::calls::{
-    blok_path_root, check_pure_call, iter_component_nodes, ActionArgumentInputModel,
-    AgentProbeInputModel, ComponentNodeInputModel, UtilCallInputModel, PORT_PATH_SEPARATOR,
+    check_pure_call, iter_component_nodes, ComponentNodeInputModel, UtilCallInputModel,
+    PORT_PATH_SEPARATOR,
 };
 use super::ports::{
     check_unique_keys, ArgPortInputModel, AssignWidgetInputModel, EffectInputModel,
     ReturnPortInputModel, ReturnWidgetInputModel,
 };
 use super::{min_length, ValidationError};
+use crate::blok::check::validate_blok;
+use crate::blok::{BlokScope, Finding};
 use crate::enums::{
     ActionKind, AssetKind, CatalogValueKind, ComponentContext, Effects, Execution, PortKind,
     WindowFunction,
@@ -27,8 +33,6 @@ type DependencyCheck<'a> = dyn Fn(Option<&[String]>, &str) -> Result<(), Validat
 /// A check of a port's effects, named for its path.
 type EffectsCheck<'a> =
     dyn Fn(Option<&[EffectInputModel]>, &str) -> Result<(), ValidationError> + 'a;
-/// A check of a blok path's root, named for its owner.
-type RootCheck<'a> = dyn Fn(Option<&str>, &str) -> Result<(), ValidationError> + 'a;
 
 /// A group of root arg ports (`PortGroupInputModel`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -677,10 +681,9 @@ impl ImplementationInputModel {
         }
         self.check_widget_targets()?;
         // The action's bloks name devices by the dependency keys this implementation declares.
-        let dependency_keys: HashSet<String> =
-            self.dependencies.iter().map(|d| d.key.clone()).collect();
+        let arg_keys: Vec<String> = self.definition.args.iter().map(|a| a.key.clone()).collect();
         for blok in &self.definition.bloks {
-            check_action_blok(blok, &dependency_keys)?;
+            check_action_blok(blok, &self.dependencies, Some(arg_keys.clone()))?;
         }
         Ok(())
     }
@@ -796,24 +799,30 @@ pub struct LockImplementationInputModel {
     pub definition: LockDefinitionInputModel,
 }
 
-/// The root a handler's arguments read the value that triggered them from (`$event/value`).
-pub const BLOK_EVENT_ROOT: &str = "$event";
-
-/// What follows a dependency's key in the path of one of its assets (`self.assets.scope`).
+/// What follows an agent in the path of one of its assets (`self.assets.scope`).
 pub const BLOK_ASSETS_SEGMENT: &str = "assets";
 
-/// The `(dependency key, asset name)` of `<dependency>.assets.<name>`, or `None` if `path` is
-/// not exactly that (`blok_asset_path`).
+/// The `(dependency key, asset name)` of `self.assets.<name>` or `deps.<key>.assets.<name>`,
+/// or `None` if `path` is not exactly that (`blok_asset_path`).
 pub fn blok_asset_path(path: &str) -> Option<(&str, &str)> {
-    let mut parts = path.split('.');
-    match (parts.next(), parts.next(), parts.next(), parts.next()) {
-        (Some(dependency), Some(BLOK_ASSETS_SEGMENT), Some(name), None)
-            if !dependency.is_empty() && !name.is_empty() =>
-        {
-            Some((dependency, name))
+    let parts: Vec<&str> = path.split('.').collect();
+    match parts.as_slice() {
+        ["self", BLOK_ASSETS_SEGMENT, name] if !name.is_empty() => Some(("self", name)),
+        ["deps", key, BLOK_ASSETS_SEGMENT, name] if !key.is_empty() && !name.is_empty() => {
+            Some((key, name))
         }
         _ => None,
     }
+}
+
+/// `sha256:` and 64 lowercase hex characters (`MODEL_REF_PATTERN`).
+pub fn is_model_ref(value: &str) -> bool {
+    value.strip_prefix("sha256:").is_some_and(|hex| {
+        hex.len() == 64
+            && hex
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    })
 }
 
 /// A file an agent brings with it: the name its bloks call it by, and what the bytes are
@@ -879,161 +888,107 @@ impl AssetInputModel {
     }
 }
 
-/// Coherence of a blok component tree (`check_blok_manifest`): unique component ids and
-/// declared values, agent calls only to declared dependencies, and (with a demo state) every
-/// path rooted in a demo-state key, a declared value or a dependency key.
-pub fn check_blok_manifest(
-    components: Option<&[ComponentNodeInputModel]>,
-    dependency_keys: &HashSet<String>,
-    state_keys: Option<&HashSet<String>>,
+/// The kind of a blok an agent declares (`blok_kind`): an action logo when drawn as one.
+pub fn blok_kind(context: ComponentContext) -> &'static str {
+    if context == ComponentContext::ACTION_LOGO {
+        "action_logo"
+    } else {
+        "agent"
+    }
+}
+
+/// Sent one way: the tree, or the source, which is parsed (v2 BSX) into it.
+fn parse_sent(
+    components: &mut Option<Vec<ComponentNodeInputModel>>,
+    source: &mut Option<String>,
 ) -> Result<(), ValidationError> {
-    let mut ids = HashSet::new();
-    let mut declared = HashSet::new();
-    for node in iter_component_nodes(components) {
-        if !ids.insert(node.id.as_str()) {
-            return Err(ValidationError(format!(
-                "Blok manifest: duplicate component id {}",
-                repr_str(&node.id)
-            )));
+    check_blok_sent_once(components.is_some(), source.is_some(), true)?;
+    match (components.is_some(), source.take()) {
+        (false, Some(source)) => {
+            let tree = crate::bsx::parse_bsx_default(&source)
+                .map_err(|e| ValidationError(e.to_string()))?;
+            *components = Some(vec![tree]);
+            Ok(())
         }
-        for prop in node.props.iter().flatten() {
-            if let Some(value) = prop.declares_value.as_deref().filter(|v| !v.is_empty()) {
-                if !declared.insert(value.to_owned()) {
-                    return Err(ValidationError(format!(
-                        "Blok manifest: value {} declared twice",
-                        repr_str(value)
-                    )));
-                }
-            }
-        }
+        _ => Ok(()),
     }
-    let roots: Option<HashSet<String>> = state_keys.map(|keys| {
-        keys.iter()
-            .chain(declared.iter())
-            .chain(dependency_keys.iter())
-            .cloned()
-            .chain(std::iter::once(BLOK_EVENT_ROOT.to_owned()))
-            .collect()
-    });
-    let check_root = |path: Option<&str>, owner: &str| -> Result<(), ValidationError> {
-        let Some(path) = path else {
-            return Ok(());
-        };
-        // A file of a declared dependency: there is no value at this path to resolve.
-        if blok_asset_path(path).is_some_and(|(dependency, _)| dependency_keys.contains(dependency))
-        {
-            return Ok(());
-        }
-        let Some(roots) = roots.as_ref() else {
-            return Ok(());
-        };
-        let root = blok_path_root(path);
-        if !roots.contains(root) {
-            return Err(ValidationError(format!(
-                "{owner} references {} but it is neither a demo_state key, a declared value nor a dependency key",
-                repr_str(root)
-            )));
-        }
-        Ok(())
-    };
-    fn walk_arguments(
-        arguments: Option<&[ActionArgumentInputModel]>,
-        owner: &str,
-        dependency_keys: &HashSet<String>,
-        check_root: &RootCheck<'_>,
-    ) -> Result<(), ValidationError> {
-        for argument in arguments.unwrap_or_default() {
-            check_root(argument.value_path.as_deref(), owner)?;
-            if let Some(call) = &argument.agent_call {
-                check_agent_call(call, owner, dependency_keys, check_root)?;
-            }
-            if let Some(call) = &argument.util_call {
-                walk_arguments(
-                    call.arguments.as_deref(),
-                    owner,
-                    dependency_keys,
-                    check_root,
-                )?;
-            }
-            walk_arguments(
-                argument.value_list.as_deref(),
-                owner,
-                dependency_keys,
-                check_root,
-            )?;
-            walk_arguments(
-                argument.value_dict.as_deref(),
-                owner,
-                dependency_keys,
-                check_root,
-            )?;
-        }
-        Ok(())
-    }
-    fn check_agent_call(
-        call: &AgentProbeInputModel,
-        owner: &str,
-        dependency_keys: &HashSet<String>,
-        check_root: &RootCheck<'_>,
-    ) -> Result<(), ValidationError> {
-        if !dependency_keys.contains(&call.dependency) {
-            return Err(ValidationError(format!(
-                "{owner}: agent_call targets undeclared dependency {}",
-                repr_str(&call.dependency)
-            )));
-        }
-        walk_arguments(
-            call.arguments.as_deref(),
-            owner,
-            dependency_keys,
-            check_root,
-        )
-    }
-    for node in iter_component_nodes(components) {
-        for prop in node.props.iter().flatten() {
-            let owner = format!(
-                "prop {} of component {}",
-                repr_str(&prop.key),
-                repr_str(&node.id)
-            );
-            if let Some(dynamic) = &prop.dynamic_value {
-                check_root(dynamic.path.as_deref(), &owner)?;
-            }
-            if let Some(call) = &prop.agent_call {
-                check_agent_call(call, &owner, dependency_keys, &check_root)?;
-            }
-            if let Some(call) = &prop.util_call {
-                walk_arguments(
-                    call.arguments.as_deref(),
-                    &owner,
-                    dependency_keys,
-                    &check_root,
-                )?;
-            }
-        }
+}
+
+fn check_vocab(vocab: u32) -> Result<(), ValidationError> {
+    if vocab != 2 {
+        return Err(ValidationError(format!(
+            "Blok manifest: vocab {vocab} is not a blok language this server speaks (2)"
+        )));
     }
     Ok(())
 }
 
-/// A blok an agent declares (`BlokImplementationInputModel`).
+/// A v2 tree against what its blok declares and its kind, without a catalog
+/// (`check_blok_manifest`): refused on its first error, its warnings returned. A tree is one root.
+pub fn check_blok_manifest(
+    components: Option<&[ComponentNodeInputModel]>,
+    scope: &BlokScope,
+) -> Result<Vec<Finding>, ValidationError> {
+    let Some(components) = components else {
+        return Ok(vec![]);
+    };
+    let [tree] = components else {
+        return Err(ValidationError(format!(
+            "Blok manifest: a blok has one root, not {}",
+            components.len()
+        )));
+    };
+    // A tree sent as such was never parsed: its ids are held to what the parser holds them to.
+    let mut seen = HashSet::new();
+    for node in iter_component_nodes(Some(components)) {
+        if !seen.insert(node.id.as_str()) {
+            let finding = Finding::of(
+                "bsx.duplicate_id",
+                None,
+                &[("id", Value::String(node.id.clone()))],
+            );
+            return Err(ValidationError(finding.to_string()));
+        }
+    }
+    validate_blok(tree, scope, None).map_err(|finding| ValidationError(finding.to_string()))
+}
+
+/// A blok's args are the items it is opened for: an html blok's, keyed once (`check_blok_args`).
+pub fn check_blok_args(
+    context: ComponentContext,
+    args: &[ArgPortInputModel],
+) -> Result<(), ValidationError> {
+    if args.is_empty() {
+        return Ok(());
+    }
+    if context != ComponentContext::HTML {
+        return Err(ValidationError(format!(
+            "Blok manifest: only an html blok takes args, not a {} blok",
+            context.value()
+        )));
+    }
+    check_unique_keys(args.iter().map(|a| a.key.as_str()), "Blok manifest args")
+}
+
+/// A blok an agent declares (`BlokImplementationInputModel`, blok language v2).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BlokImplementationInputModel {
     pub key: String,
     #[serde(default)]
     pub dependencies: Vec<AgentDependencyInputModel>,
-    /// The tree, unless the blok is sent as its `source`; `validate` parses that into this.
+    /// The tree (one root), unless the blok is sent as its `source`; `validate` parses that into this.
     #[serde(default)]
     pub components: Option<Vec<ComponentNodeInputModel>>,
-    /// The blok as BSX, three times fewer bytes than its tree. Exactly one of the two is sent.
+    /// The blok as v2 BSX. Exactly one of the two is sent.
     #[serde(default)]
     pub source: Option<String>,
+    /// The module (an app's own unversioned extras) it renders against besides its catalogs;
+    /// the Orkestrator's when absent.
     #[serde(default)]
-    pub catalog: Option<String>,
+    pub module: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
-    #[serde(default)]
-    pub demo_state: Option<serde_json::Map<String, Value>>,
-    /// The renderer for the blok's root: HTML, or SCENE for a full 3D view.
+    /// The renderer for the blok's root: HTML, SCENE, LOGO or ACTION_LOGO.
     #[serde(default = "html_")]
     pub context: ComponentContext,
     /// Whether this is its agent's default blok for its context.
@@ -1045,173 +1000,25 @@ pub struct BlokImplementationInputModel {
     /// The node of `for_model` this blok attaches to; the model's root when absent.
     #[serde(default)]
     pub for_node: Option<String>,
-    /// The items this blok is opened for, read under `@args.<key>`. HTML bloks only.
+    /// The items this blok is opened for, read under `args.<key>`. HTML bloks only.
     #[serde(default)]
     pub args: Vec<ArgPortInputModel>,
-    /// What a person answers through this blok when a task asks with it: the values its tree
-    /// hands back with `blok.answer`. Left out of its dump when empty, as before bloks had returns.
+    /// What a person answers through this blok when a task asks with it (`task.answer`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub returns: Vec<ReturnPortInputModel>,
-    /// The backend services its `query` components read from, each frozen at the version it
-    /// was written against.
+    /// The blok language version; 2 is the only one.
+    pub vocab: u32,
+    /// The catalogs it needs, as name@version (`ui@1`).
     #[serde(default)]
-    pub services: Vec<BlokServiceInputModel>,
-    /// The locals a renderer may keep between openings, on the device: each a top-level
-    /// `demo_state` key, whose demo value is the default.
+    pub catalogs: Vec<String>,
     #[serde(default)]
-    pub persist: Vec<BlokPersistInputModel>,
-}
-
-/// A local a renderer may keep between openings, on the device (`BlokPersistInputModel`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct BlokPersistInputModel {
-    /// The local: a top-level `demo_state` key that is neither a dependency nor a reserved root.
-    pub key: String,
-    /// What the kept value is, for whoever resets it.
+    pub locals: Vec<BlokLocalInputModel>,
     #[serde(default)]
-    pub description: Option<String>,
-}
-
-/// A backend service a blok reads from, frozen at the version it was written against
-/// (`BlokServiceInputModel`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct BlokServiceInputModel {
-    /// The service's key, as a `query`'s `schema` names it: `mikro`.
-    pub key: String,
-    /// The service type, in reverse-domain form: `live.arkitekt.mikro`.
+    pub demo: Option<BlokDemoInputModel>,
     #[serde(default)]
-    pub service: Option<String>,
-    /// The server version the blok was written against, as the service declaration names it.
+    pub queries: Vec<BlokQueryInputModel>,
     #[serde(default)]
-    pub version: Option<String>,
-    /// `sha256:<hex>` of the canonical GraphQL schema the blok's queries were checked against.
-    #[serde(default)]
-    pub schema_hash: Option<String>,
-}
-
-/// The base component that reads a service (`QUERY_COMPONENT`).
-pub const QUERY_COMPONENT: &str = "query";
-
-/// A blok names each service once, and every `query` in it runs on one it names
-/// (`check_blok_services`).
-pub fn check_blok_services(
-    components: Option<&[ComponentNodeInputModel]>,
-    services: &[BlokServiceInputModel],
-) -> Result<(), ValidationError> {
-    for service in services {
-        min_length(&service.key, "key")?;
-    }
-    check_unique_keys(
-        services.iter().map(|s| s.key.as_str()),
-        "Blok manifest services",
-    )?;
-    let declared: HashSet<&str> = services.iter().map(|s| s.key.as_str()).collect();
-    for node in iter_component_nodes(components) {
-        if node.component != QUERY_COMPONENT {
-            continue;
-        }
-        let schema = node
-            .props
-            .iter()
-            .flatten()
-            .find(|prop| prop.key == "schema")
-            .and_then(|prop| prop.static_value.as_ref())
-            .and_then(Value::as_str);
-        if let Some(schema) = schema.filter(|s| !declared.contains(s)) {
-            let mut known: Vec<&str> = declared.iter().copied().collect();
-            known.sort_unstable();
-            let known = if known.is_empty() {
-                "none".to_owned()
-            } else {
-                format!(
-                    "[{}]",
-                    known
-                        .iter()
-                        .map(|k| repr_str(k))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            };
-            return Err(ValidationError(format!(
-                "Blok manifest: component {} queries the {} service, which the blok does not declare in its services (declared: {known})",
-                repr_str(&node.id),
-                repr_str(schema)
-            )));
-        }
-    }
-    Ok(())
-}
-
-/// The root a blok reads its args under (`BLOK_ARGS_ROOT`).
-pub const BLOK_ARGS_ROOT: &str = "args";
-
-/// A blok's args are an html blok's, keyed once, and no dependency takes their root (`check_blok_args`).
-pub fn check_blok_args(
-    context: ComponentContext,
-    args: &[ArgPortInputModel],
-    dependency_keys: &HashSet<String>,
-) -> Result<(), ValidationError> {
-    if args.is_empty() {
-        return Ok(());
-    }
-    if context != ComponentContext::HTML {
-        return Err(ValidationError(format!(
-            "Blok manifest: only an html blok takes args, not a {} blok",
-            context.value()
-        )));
-    }
-    check_unique_keys(args.iter().map(|p| p.key.as_str()), "Blok manifest args")?;
-    if dependency_keys.contains(BLOK_ARGS_ROOT) {
-        return Err(ValidationError(format!(
-            "Blok manifest: a blok with args reads them under {}, so no dependency can be called that",
-            repr_str(BLOK_ARGS_ROOT)
-        )));
-    }
-    Ok(())
-}
-
-/// A blok persists only its locals, each once (`check_blok_persist`): a top-level `demo_state`
-/// key, which is not a dependency's key nor a root the renderer fills (`args`, `$event`).
-pub fn check_blok_persist(
-    persist: &[BlokPersistInputModel],
-    dependency_keys: &HashSet<String>,
-    state_keys: Option<&HashSet<String>>,
-) -> Result<(), ValidationError> {
-    for local in persist {
-        min_length(&local.key, "key")?;
-    }
-    check_unique_keys(
-        persist.iter().map(|p| p.key.as_str()),
-        "Blok manifest persist",
-    )?;
-    for local in persist {
-        let key = local.key.as_str();
-        if key == BLOK_ARGS_ROOT || key == BLOK_EVENT_ROOT || dependency_keys.contains(key) {
-            return Err(ValidationError(format!(
-                "Blok manifest: persist names {}, which is not a local but a root the renderer fills",
-                repr_str(key)
-            )));
-        }
-        if !state_keys.is_some_and(|keys| keys.contains(key)) {
-            return Err(ValidationError(format!(
-                "Blok manifest: persist names {}, which is not a demo_state key: a persisted local takes its demo value as its default",
-                repr_str(key)
-            )));
-        }
-    }
-    Ok(())
-}
-
-/// Whether `value` is `sha256:` and 64 lowercase hex characters (`MODEL_REF_PATTERN`).
-pub fn is_model_ref(value: &str) -> bool {
-    value.strip_prefix("sha256:").is_some_and(|hex| {
-        hex.len() == 64
-            && hex
-                .bytes()
-                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-    })
+    pub subscriptions: Vec<BlokSubscriptionInputModel>,
 }
 
 /// A blok that decorates a model names it by reference, and is an html blok (`check_blok_target`).
@@ -1242,25 +1049,40 @@ pub fn check_blok_target(
     Ok(())
 }
 
+fn reserved(name: &str) -> bool {
+    crate::blok::vocabulary().is_reserved(name)
+}
+
 impl BlokImplementationInputModel {
-    pub fn validate(&mut self) -> Result<(), ValidationError> {
-        match (self.components.is_some(), self.source.take()) {
-            (true, Some(_)) => {
-                return Err(ValidationError(
-                    "a blok is sent as its components or as its BSX source, not both".to_string(),
-                ))
-            }
-            (false, None) => {
-                return Err(ValidationError(
-                    "a blok is sent as its components or as its BSX source".to_string(),
-                ))
-            }
-            (false, Some(source)) => {
-                let tree = crate::bsx::parse_bsx(&source).map_err(ValidationError)?;
-                self.components = Some(vec![tree]);
-            }
-            (true, None) => {}
+    /// What the tree is checked against, as `kind` (`agent`, `action_logo`, or `task` for a
+    /// task's blok).
+    pub fn scope(&self, kind: &str) -> BlokScope {
+        BlokScope {
+            kind: kind.to_owned(),
+            context: self.context.value().to_owned(),
+            dependencies: self.dependencies.clone(),
+            locals: self.locals.clone(),
+            queries: self.queries.clone(),
+            subscriptions: self.subscriptions.clone(),
+            args: (!self.args.is_empty())
+                .then(|| self.args.iter().map(|a| a.key.clone()).collect()),
+            catalogs: self.catalogs.clone(),
+            demo: self.demo.clone(),
+            assets: None,
         }
+    }
+
+    /// Validated as the blok of an agent (or an action logo).
+    pub fn validate(&mut self) -> Result<(), ValidationError> {
+        self.validate_as(blok_kind(self.context))
+    }
+
+    /// Sent one way (its source parsed into its tree); what it declares well-formed; its tree
+    /// coherent with that and with its kind's roots (the language rules; the catalog rules are
+    /// the catalog check's).
+    pub fn validate_as(&mut self, kind: &str) -> Result<(), ValidationError> {
+        parse_sent(&mut self.components, &mut self.source)?;
+        check_vocab(self.vocab)?;
         for component in self.components.iter_mut().flatten() {
             component.validate()?;
         }
@@ -1270,45 +1092,45 @@ impl BlokImplementationInputModel {
         for port in &mut self.returns {
             port.validate()?;
         }
-        let dependency_keys: HashSet<String> =
-            self.dependencies.iter().map(|d| d.key.clone()).collect();
-        let state_keys: Option<HashSet<String>> = self
-            .demo_state
-            .as_ref()
-            .map(|s| s.keys().cloned().collect());
-        check_blok_manifest(
-            self.components.as_deref(),
-            &dependency_keys,
-            state_keys.as_ref(),
+        for local in &mut self.locals {
+            local.validate()?;
+        }
+        if self.context == ComponentContext::OVERLAY {
+            return Err(wrong_context("agent", self.context));
+        }
+        let keys: Vec<&str> = self.dependencies.iter().map(|d| d.key.as_str()).collect();
+        check_blok_declarations(
+            BlokDeclarations {
+                catalogs: &self.catalogs,
+                locals: &self.locals,
+                queries: &self.queries,
+                subscriptions: &self.subscriptions,
+                dependency_keys: &keys,
+                demo: self.demo.as_ref(),
+            },
+            kind,
+            &reserved,
         )?;
         check_blok_target(
             self.context,
             self.for_model.as_deref(),
             self.for_node.as_deref(),
         )?;
-        check_blok_args(self.context, &self.args, &dependency_keys)?;
-        check_blok_persist(&self.persist, &dependency_keys, state_keys.as_ref())?;
-        check_blok_services(self.components.as_deref(), &self.services)?;
-        if self.context == ComponentContext::OVERLAY {
-            return Err(ValidationError(
-                "Blok manifest: an overlay blok is an action's own (its definition's `bloks`), drawn into the space that hosts a run of it; an agent does not declare one".into(),
-            ));
-        }
+        check_blok_args(self.context, &self.args)?;
+        check_blok_manifest(self.components.as_deref(), &self.scope(kind))?;
         Ok(())
     }
 }
 
-/// The root an action's blok reads the run it is shown for under (`ACTION_BLOK_TASK_ROOT`).
-pub const ACTION_BLOK_TASK_ROOT: &str = "task";
-/// The key an action's blok reads the agent running the action under (`ACTION_BLOK_SELF_KEY`).
-pub const ACTION_BLOK_SELF_KEY: &str = "self";
-/// The component anchoring its children at the agent bound to a dependency (`AT_COMPONENT`).
-pub const AT_COMPONENT: &str = "At";
-/// The component drawing a line through the agents bound to dependencies (`ROUTE_COMPONENT`).
+/// The component anchoring its children at the agent bound to a dependency (`dep`).
+pub const ANCHOR_COMPONENT: &str = "Anchor";
+/// The component drawing a line through the agents bound to dependencies (`through`).
 pub const ROUTE_COMPONENT: &str = "Route";
+/// The run's open ask form.
+pub const ASK_COMPONENT: &str = "ask";
 
-/// An action's own blok for one context (`ActionBlokInputModel`): no name, never listed on its
-/// own, its dependencies the action's, named by key.
+/// An action's own blok for one context (`ActionBlokInputModel`, blok language v2): no name,
+/// never listed on its own, its dependencies the action's, named by key.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ActionBlokInputModel {
@@ -1318,189 +1140,155 @@ pub struct ActionBlokInputModel {
     /// The tree, unless the blok is sent as its `source`; `validate` parses that into this.
     #[serde(default)]
     pub components: Option<Vec<ComponentNodeInputModel>>,
-    /// The blok as BSX. Exactly one of the two is sent.
+    /// The blok as v2 BSX. Exactly one of the two is sent.
     #[serde(default)]
     pub source: Option<String>,
+    /// The module it renders against besides its catalogs; the Orkestrator's when absent.
     #[serde(default)]
-    pub catalog: Option<String>,
+    pub module: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
-    /// Its own locals and their initial values.
+    pub vocab: u32,
+    /// The catalogs it needs, as name@version.
     #[serde(default)]
-    pub demo_state: Option<serde_json::Map<String, Value>>,
-    /// The locals a renderer may keep between openings, on the device.
+    pub catalogs: Vec<String>,
     #[serde(default)]
-    pub persist: Vec<BlokPersistInputModel>,
+    pub locals: Vec<BlokLocalInputModel>,
+    #[serde(default)]
+    pub demo: Option<BlokDemoInputModel>,
+    #[serde(default)]
+    pub queries: Vec<BlokQueryInputModel>,
+    #[serde(default)]
+    pub subscriptions: Vec<BlokSubscriptionInputModel>,
 }
 
 impl ActionBlokInputModel {
-    /// Sent one way (its source parsed into its tree), in a context an action has a blok for,
-    /// its locals none of the roots the renderer fills (`check_action_blok` of the model).
+    /// Sent one way (its source parsed into its tree), in a context an action has a blok for.
     pub fn validate(&mut self) -> Result<(), ValidationError> {
-        match (self.components.is_some(), self.source.take()) {
-            (true, Some(_)) => {
-                return Err(ValidationError(
-                    "a blok is sent as its components or as its BSX source, not both".to_string(),
-                ))
-            }
-            (false, None) => {
-                return Err(ValidationError(
-                    "a blok is sent as its components or as its BSX source".to_string(),
-                ))
-            }
-            (false, Some(source)) => {
-                let tree = crate::bsx::parse_bsx(&source).map_err(ValidationError)?;
-                self.components = Some(vec![tree]);
-            }
-            (true, None) => {}
-        }
+        parse_sent(&mut self.components, &mut self.source)?;
+        check_vocab(self.vocab)?;
         for component in self.components.iter_mut().flatten() {
             component.validate()?;
         }
-        for local in &self.persist {
-            min_length(&local.key, "key")?;
+        for local in &mut self.locals {
+            local.validate()?;
         }
         if !matches!(
             self.context,
             ComponentContext::HTML | ComponentContext::SCENE | ComponentContext::OVERLAY
         ) {
-            return Err(ValidationError(format!(
-                "Blok manifest: an action's blok is html, scene or overlay, not {}",
-                self.context.value().to_lowercase()
-            )));
-        }
-        let mut filled: Vec<&str> = self
-            .demo_state
-            .iter()
-            .flat_map(|state| state.keys())
-            .map(String::as_str)
-            .filter(|key| {
-                [
-                    ACTION_BLOK_TASK_ROOT,
-                    BLOK_ARGS_ROOT,
-                    ACTION_BLOK_SELF_KEY,
-                    BLOK_EVENT_ROOT,
-                ]
-                .contains(key)
-            })
-            .collect();
-        filled.sort_unstable();
-        if let Some(first) = filled.first() {
-            return Err(ValidationError(format!(
-                "Blok manifest: demo_state names {}, which the renderer fills for an action's blok",
-                repr_str(first)
-            )));
+            return Err(wrong_context("action", self.context));
         }
         Ok(())
     }
-}
 
-/// The dependency keys a `through` prop names (`through_keys`): `"['robot', 'frame']"` (as BSX
-/// writes a list), `'["robot"]'` or `"robot, frame"`.
-pub fn through_keys(value: &str) -> Vec<String> {
-    let mut inner = value.trim();
-    if inner.starts_with('[') && inner.ends_with(']') && inner.len() >= 2 {
-        inner = &inner[1..inner.len() - 1];
+    /// What its tree is checked against: kind `action`, the action's dependencies and args.
+    pub fn scope(
+        &self,
+        dependencies: &[AgentDependencyInputModel],
+        arg_keys: Option<Vec<String>>,
+    ) -> BlokScope {
+        BlokScope {
+            kind: "action".into(),
+            context: self.context.value().to_owned(),
+            dependencies: dependencies.to_vec(),
+            locals: self.locals.clone(),
+            queries: self.queries.clone(),
+            subscriptions: self.subscriptions.clone(),
+            args: arg_keys,
+            catalogs: self.catalogs.clone(),
+            demo: self.demo.clone(),
+            assets: None,
+        }
     }
-    inner
-        .split(',')
-        .filter(|item| !item.trim().is_empty())
-        .map(|item| {
-            item.trim()
-                .trim_matches(|c| c == '\'' || c == '"')
-                .trim()
-                .to_owned()
-        })
-        .collect()
 }
 
-/// Every `<At dependency>` and `<Route through>` names dependencies of the action
-/// (`check_action_blok_anchors`). Bound dynamically, they are left to the renderer.
+/// Every dependency key an `<Anchor dep>` or `<Route through>` names, with the node's id
+/// (`anchored_keys`). Bound dynamically, they are left to the renderer.
+pub fn anchored_keys(components: Option<&[ComponentNodeInputModel]>) -> Vec<(String, String)> {
+    let mut named = vec![];
+    for node in iter_component_nodes(components) {
+        for prop in node.props.iter().flatten() {
+            match (
+                node.component.as_str(),
+                prop.key.as_str(),
+                &prop.static_value,
+            ) {
+                (ANCHOR_COMPONENT, "dep", Some(Value::String(key))) => {
+                    named.push((key.clone(), node.id.clone()))
+                }
+                (ROUTE_COMPONENT, "through", Some(Value::Array(keys))) => named.extend(
+                    keys.iter()
+                        .filter_map(Value::as_str)
+                        .map(|key| (key.to_owned(), node.id.clone())),
+                ),
+                _ => {}
+            }
+        }
+    }
+    named
+}
+
+/// Every `<Anchor dep>` and `<Route through>` names dependencies of the action
+/// (`check_action_blok_anchors`).
 pub fn check_action_blok_anchors(
     components: Option<&[ComponentNodeInputModel]>,
     dependency_keys: &HashSet<String>,
 ) -> Result<(), ValidationError> {
-    for node in iter_component_nodes(components) {
-        for prop in node.props.iter().flatten() {
-            let Some(Value::String(value)) = &prop.static_value else {
-                continue;
-            };
-            let named = if node.component == AT_COMPONENT && prop.key == "dependency" {
-                vec![value.clone()]
-            } else if node.component == ROUTE_COMPONENT && prop.key == "through" {
-                through_keys(value)
+    for (key, node_id) in anchored_keys(components) {
+        if !dependency_keys.contains(&key) {
+            let mut known: Vec<&String> = dependency_keys.iter().collect();
+            known.sort_unstable();
+            let known = if known.is_empty() {
+                "none".to_owned()
             } else {
-                continue;
+                known
+                    .iter()
+                    .map(|k| repr_str(k))
+                    .collect::<Vec<_>>()
+                    .join(", ")
             };
-            for key in named {
-                if !dependency_keys.contains(&key) {
-                    let mut known: Vec<&String> = dependency_keys.iter().collect();
-                    known.sort_unstable();
-                    let known = if known.is_empty() {
-                        "none".to_owned()
-                    } else {
-                        known
-                            .iter()
-                            .map(|k| repr_str(k))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    };
-                    return Err(ValidationError(format!(
-                        "Blok manifest: component {} names {}, which is not a dependency of the action (its dependencies: {known})",
-                        repr_str(&node.id),
-                        repr_str(&key)
-                    )));
-                }
-            }
+            return Err(ValidationError(format!(
+                "Blok manifest: component {} names {}, which is not a dependency of the action (its dependencies: {known})",
+                repr_str(&node_id),
+                repr_str(&key)
+            )));
         }
     }
     Ok(())
 }
 
-/// An action's blok against the dependencies its implementation declares (`check_action_blok`):
-/// its path roots are those dependencies, `self`, `task`, `args`, its own locals and `$event`;
-/// `At`/`Route` name only the dependencies.
+/// An action's blok against the dependencies its implementation declares and the action's args
+/// (`check_action_blok`): it reads the run as `task`, its args as `args`, the agent running it
+/// as `self` and the agents the run got as `deps.<key>`; `Anchor`/`Route` name only the
+/// dependencies. Its warnings are returned.
 pub fn check_action_blok(
     blok: &ActionBlokInputModel,
-    dependency_keys: &HashSet<String>,
-) -> Result<(), ValidationError> {
-    let mut reserved: Vec<&str> = [ACTION_BLOK_TASK_ROOT, BLOK_ARGS_ROOT]
-        .into_iter()
-        .filter(|root| dependency_keys.contains(*root))
-        .collect();
-    reserved.sort_unstable();
-    if let Some(first) = reserved.first() {
-        return Err(ValidationError(format!(
-            "Blok manifest: an action's blok reads its run under {} and the run's args under {}, so no dependency can be called {}",
-            repr_str(ACTION_BLOK_TASK_ROOT),
-            repr_str(BLOK_ARGS_ROOT),
-            repr_str(first)
-        )));
-    }
-    let mut keys = dependency_keys.clone();
-    keys.insert(ACTION_BLOK_SELF_KEY.to_owned());
-    let state_keys: HashSet<String> = blok
-        .demo_state
-        .iter()
-        .flat_map(|state| state.keys().cloned())
-        .collect();
-    let mut shadowed: Vec<&String> = state_keys.intersection(&keys).collect();
-    shadowed.sort_unstable();
-    if let Some(first) = shadowed.first() {
-        return Err(ValidationError(format!(
-            "Blok manifest: demo_state names {}, which is a dependency of the action, not a local",
-            repr_str(first)
-        )));
-    }
-    check_blok_persist(&blok.persist, &keys, Some(&state_keys))?;
+    dependencies: &[AgentDependencyInputModel],
+    arg_keys: Option<Vec<String>>,
+) -> Result<Vec<Finding>, ValidationError> {
+    let keys: Vec<&str> = dependencies.iter().map(|d| d.key.as_str()).collect();
+    check_blok_declarations(
+        BlokDeclarations {
+            catalogs: &blok.catalogs,
+            locals: &blok.locals,
+            queries: &blok.queries,
+            subscriptions: &blok.subscriptions,
+            dependency_keys: &keys,
+            demo: blok.demo.as_ref(),
+        },
+        "action",
+        &reserved,
+    )?;
     if blok.components.is_none() {
-        return Ok(());
+        return Ok(vec![]);
     }
-    let mut roots = state_keys.clone();
-    roots.insert(ACTION_BLOK_TASK_ROOT.to_owned());
-    roots.insert(BLOK_ARGS_ROOT.to_owned());
-    check_blok_manifest(blok.components.as_deref(), &keys, Some(&roots))?;
-    check_action_blok_anchors(blok.components.as_deref(), dependency_keys)
+    let key_set: HashSet<String> = keys.iter().map(|k| (*k).to_owned()).collect();
+    check_action_blok_anchors(blok.components.as_deref(), &key_set)?;
+    check_blok_manifest(
+        blok.components.as_deref(),
+        &blok.scope(dependencies, arg_keys),
+    )
 }
 
 /// A catalog's default widget for ports of a kind and/or identifier (`WidgetDefaultInputModel`).
@@ -1547,6 +1335,18 @@ pub struct CatalogPropInputModel {
     pub required: bool,
     #[serde(default)]
     pub description: Option<String>,
+    /// For a CALLBACK prop: the fields of the event it hands its callback (`event.<key>`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event: Option<Vec<CatalogEventFieldInputModel>>,
+}
+
+/// A field of the event a CALLBACK prop hands its callback (`CatalogEventFieldInputModel`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CatalogEventFieldInputModel {
+    pub key: String,
+    pub kind: CatalogValueKind,
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 /// A component a UI can render (`CatalogComponentInputModel`).
@@ -1574,6 +1374,12 @@ pub struct CatalogComponentInputModel {
     /// None of these may be an ancestor.
     #[serde(default)]
     pub not_downstream_of: Vec<String>,
+    /// The prop text children fill (`<Button>Go</Button>` sets `label`); none takes no text.
+    #[serde(default)]
+    pub text_prop: Option<String>,
+    /// The catalog it belongs to, as name@version (`ui@1`), or the name of the module it is from.
+    #[serde(default)]
+    pub catalog: Option<String>,
 }
 
 fn html_() -> ComponentContext {
@@ -1721,7 +1527,8 @@ impl ImplementAgentInputModel {
                     let Some((dependency, name)) = blok_asset_path(path) else {
                         continue;
                     };
-                    if blok.dependencies.iter().any(|d| d.key == dependency)
+                    if (dependency == "self"
+                        || blok.dependencies.iter().any(|d| d.key == dependency))
                         && !names.contains(name)
                     {
                         let mut declared: Vec<&str> = names.iter().copied().collect();

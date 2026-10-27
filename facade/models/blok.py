@@ -55,21 +55,25 @@ class Blok(models.Model):
         related_name="bloks",
         help_text="The user that created this Blok",
     )
-    catalog = models.ForeignKey(
-        "UICatalog",
+    module = models.ForeignKey(
+        "Module",
         on_delete=models.CASCADE,
         related_name="bloks",
-        help_text="The catalog this Blok belongs to",
+        help_text="The module (an app's own UI extras) this Blok renders against besides its catalogs.",
     )
-    components = models.JSONField(help_text="The UI schema for this Blok", default=list, db_default=[])
-    demo_state = models.JSONField(help_text="The initial state for this Blok (to display in the ui a fake version)", default=dict, db_default={})
+    components = models.JSONField(help_text="The component tree of this Blok (blok language v2): one root, as rekuest_core ComponentNodeInput.", default=list, db_default=[])
+    vocab = models.PositiveSmallIntegerField(default=2, db_default=2, help_text="The blok language version this Blok speaks (rekuest_core.vocabulary); 2 is the only one.")
+    catalogs = models.JSONField(default=list, db_default=[], help_text="The catalogs this Blok needs, as name@version ('ui@1', 'scene@1').")
+    locals = models.JSONField(default=list, db_default=[], help_text="Its locals as written (rekuest_core BlokLocalInput: an arg port plus persist; a kind left out stays out): form state that feeds a call, written only through bind. A persisted value stays on the device, never here.")
+    resolved_locals = models.JSONField(default=list, db_default=[], help_text="Its locals as its current tree resolves them (rekuest_core.vocabulary.infer), each with a kind: derived, recomputed on every write, never hashed.")
+    demo = models.JSONField(default=dict, db_default={}, help_text="What a preview renders it with (rekuest_core BlokDemoInput: deps, args, task, queries, subscriptions).")
+    queries = models.JSONField(default=list, db_default=[], help_text="Its declared reads (rekuest_core BlokQueryInput), as `queries.<key>`.")
+    subscriptions = models.JSONField(default=list, db_default=[], help_text="Its declared streams (rekuest_core BlokSubscriptionInput), as `subscriptions.<key>`.")
     context = models.CharField(max_length=16, default="HTML", db_default="HTML", help_text="The renderer for this Blok's root (rekuest_core ComponentContext): HTML, or SCENE for a full 3D view.")
     for_model = models.CharField(max_length=71, null=True, blank=True, db_index=True, help_text="The model reference ('sha256:...') this Blok decorates, if any. Viewers showing that model offer the Blok at `for_node`.")
     for_node = models.CharField(max_length=1000, null=True, blank=True, help_text="The node of `for_model` this Blok attaches to; the model's root when NULL.")
     args = models.JSONField(default=list, db_default=[], help_text="The items this Blok is opened for: its declared arg ports (rekuest_core ArgPortInput), read under `@args.<key>`. Matched through its BlokArgPort rows.")
     returns = models.JSONField(default=list, db_default=[], help_text="What a person answers through this Blok when a task asks with it (rekuest_core ReturnPortInput): the values `blok.answer` hands back.")
-    services = models.JSONField(default=list, db_default=[], help_text="The backend services this Blok reads from (rekuest_core BlokServiceInput: key, service, version, schema_hash), each frozen at the version it was written against.")
-    persist = models.JSONField(default=list, db_default=[], help_text="The locals a renderer may keep between openings, on the device (rekuest_core BlokPersistInput: key, description). Only the declaration is stored here: the values never reach a server.")
     owner_task = models.ForeignKey(
         "Task",
         on_delete=models.CASCADE,
@@ -78,7 +82,7 @@ class Blok(models.Model):
         related_name="owned_bloks",
         help_text="The task that made this Blok from its BSX to show it (ask or inform). It is never listed and goes with its task. NULL for every other Blok.",
     )
-    diagnostics = models.JSONField(default=list, help_text="Non-fatal registration findings (rekuest_core Diagnostic), e.g. manifest util calls naming operations that neither the base catalog nor this blok's catalog provides. Replaced on every write.", db_default=[])
+    diagnostics = models.JSONField(default=list, help_text="Findings on this Blok (rekuest_core Diagnostic: level, code, message, path), with the blok vocabulary's codes: the warnings of its last write, replaced on every write.", db_default=[])
     app = models.ForeignKey(
         App,
         on_delete=models.CASCADE,
@@ -125,7 +129,7 @@ class ActionBlok(models.Model):
 
     action = models.ForeignKey("Action", on_delete=models.CASCADE, related_name="bloks", help_text="The action this blok shows runs of.")
     context = models.CharField(max_length=16, help_text="Where a client shows a run with it (rekuest_core ComponentContext): HTML, SCENE or OVERLAY. One blok per context.")
-    blok = models.ForeignKey(Blok, on_delete=models.CASCADE, related_name="action_bloks", help_text="The blok: a provided one, held by its actions only. takt collects it once no action holds it; going with its catalog or creator, it takes this row along.")
+    blok = models.ForeignKey(Blok, on_delete=models.CASCADE, related_name="action_bloks", help_text="The blok: a provided one, held by its actions only. takt collects it once no action holds it; going with its module or creator, it takes this row along.")
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
 
@@ -146,21 +150,25 @@ class BlokRevision(models.Model):
     # reverse relation's manager) without saying so in a way it can read.
     blok_id: int
     parent_id: int | None
-    catalog_id: int
+    module_id: int
     task_id: int | None
 
     blok = models.ForeignKey(Blok, on_delete=models.CASCADE, related_name="revisions")
     number = models.PositiveIntegerField(help_text="The place of this revision in its blok's history, from 1.")
     parent = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="children", help_text="The revision this one was made from; NULL for the first.")
-    components = models.JSONField(default=list, db_default=[], help_text="The component tree of this revision.")
-    demo_state = models.JSONField(default=dict, db_default={}, help_text="The local state of this revision.")
+    components = models.JSONField(default=list, db_default=[], help_text="The component tree of this revision (blok language v2).")
+    vocab = models.PositiveSmallIntegerField(default=2, db_default=2, help_text="The blok language version of this revision.")
+    catalogs = models.JSONField(default=list, db_default=[], help_text="The catalogs of this revision.")
+    locals = models.JSONField(default=list, db_default=[], help_text="The locals of this revision as written (rekuest_core BlokLocalInput).")
+    resolved_locals = models.JSONField(default=list, db_default=[], help_text="The locals of this revision as its tree resolves them, each with a kind: derived, never hashed.")
+    demo = models.JSONField(default=dict, db_default={}, help_text="The demo of this revision (rekuest_core BlokDemoInput).")
+    queries = models.JSONField(default=list, db_default=[], help_text="The declared reads of this revision (rekuest_core BlokQueryInput).")
+    subscriptions = models.JSONField(default=list, db_default=[], help_text="The declared streams of this revision (rekuest_core BlokSubscriptionInput).")
     context = models.CharField(max_length=16, default="HTML", db_default="HTML", help_text="The renderer for this revision's root (rekuest_core ComponentContext).")
-    catalog = models.ForeignKey("UICatalog", on_delete=models.CASCADE, related_name="blok_revisions", help_text="The catalog this revision renders against.")
+    module = models.ForeignKey("Module", on_delete=models.CASCADE, related_name="blok_revisions", help_text="The module this revision renders against.")
     dependencies = models.JSONField(default=list, db_default=[], help_text="The agent dependencies of this revision (rekuest_core AgentDependencyInput), as the blok's dependency rows held them.")
     args = models.JSONField(default=list, db_default=[], help_text="The args of this revision (rekuest_core ArgPortInput): the items the blok is opened for.")
     returns = models.JSONField(default=list, db_default=[], help_text="The returns of this revision (rekuest_core ReturnPortInput): what a person answers through the blok.")
-    services = models.JSONField(default=list, db_default=[], help_text="The services of this revision (rekuest_core BlokServiceInput): what its queries read from, at the version they were written against.")
-    persist = models.JSONField(default=list, db_default=[], help_text="The persisted locals of this revision (rekuest_core BlokPersistInput): what a renderer may keep between openings, on the device.")
     content_hash = models.CharField(max_length=64, help_text="sha256 of everything above: two revisions with the same hash are the same blok.")
     author = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name="blok_revisions", help_text="The user this revision was written as.")
     task = models.ForeignKey("Task", on_delete=models.SET_NULL, null=True, blank=True, related_name="blok_revisions", help_text="The task that wrote this revision, e.g. the assistant turn that designed it.")

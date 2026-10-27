@@ -17,16 +17,17 @@ from kante.types import Info
 from facade import inputs, models, takt, takt_api, types
 from facade.blok_revisions import BlokContent, StaleRevisionError, commit_revision, content_of_blok, content_of_revision, lock_blok
 from facade.caller_context import CallerContext
-from facade.catalog_validation import validate_manifest_against_catalog
+from facade.catalog_validation import blok_findings_against_module, validate_blok_against_module
 from facade.mutations.materialized_blok import check_agent_mappings, organization_of, write_mappings
 from facade.types.base import scoped_get
 from facade.json_types import JSONObject, json_object
 from rekuest_core.inputs import models as rimodels
+from rekuest_core.objects import models as rmodels
 from rekuest_core.objects import types as rtypes
 
 
-STANDARD_CATALOG_NAME = "orkestrator"
-"""The catalog a blok naming none is checked against: the one the Orkestrator app registers.
+STANDARD_MODULE_NAME = "orkestrator"
+"""The module a blok naming none is checked against: the one the Orkestrator app registers.
 
 The client's offline check uses the same name, and takt's ``register_blok`` falls back to it too.
 """
@@ -38,9 +39,9 @@ def refuse_held_by_action(blok: models.Blok) -> None:
         raise ValueError("This blok is an action's own, declared with the action and shown with its runs; it changes only when the action is registered again.")
 
 
-def _catalog_for(info: Info, name: str | None) -> models.UICatalog:
-    """The named catalog in the caller's organization, created empty if it does not exist yet."""
-    return models.UICatalog.objects.get_or_create(name=name or STANDARD_CATALOG_NAME, organization=info.context.request.organization)[0]
+def _module_for(info: Info, name: str | None) -> models.Module:
+    """The named module in the caller's organization, created empty if it does not exist yet."""
+    return models.Module.objects.get_or_create(name=name or STANDARD_MODULE_NAME, organization=info.context.request.organization)[0]
 
 
 def _custom(info: Info, id: str) -> models.Blok:
@@ -62,13 +63,9 @@ def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
     """Create or replace a custom blok in the caller's organization: by its name, or by its ``origin`` when it is installed from one."""
     model = input.to_pydantic()
     if model.source is not None:
-        components = _parsed(model.source)
-        rimodels.check_blok_manifest(components, {dep.key for dep in model.dependencies or []}, None if model.demo_state is None else set(model.demo_state))
-        model = model.model_copy(update={"components": components, "source": None})
-    # Every query in the tree runs on a service the blok names.
-    rimodels.check_blok_services(model.components, list(model.services or []))
+        model = model.model_copy(update={"components": _parsed(model.source), "source": None})
     organization = info.context.request.organization
-    catalog = _catalog_for(info, model.catalog)
+    module = _module_for(info, model.module)
 
     # ``organization`` is part of the lookup, not the defaults: keyed on name alone this was a
     # global upsert, so any user could overwrite another organization's blok by name.
@@ -91,7 +88,7 @@ def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
             **installed,
             description=model.description,
             creator=info.context.request.user,
-            catalog=catalog,
+            module=module,
             for_model=model.for_model,
             for_node=model.for_node,
         ),
@@ -100,19 +97,19 @@ def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
     # create is an upsert on (name, organization): it commits what it is given as the blok's next
     # revision, dependencies a previous one declared but this one does not included.
     content = BlokContent(
-        components=[json_object(component.model_dump()) for component in model.components or []],
-        demo_state=model.demo_state or {},
+        components=[json_object(component.model_dump(mode="json", exclude_none=True)) for component in model.components or []],
         context=model.context,
-        catalog=catalog,
+        module=module,
         dependencies=list(model.dependencies or []),
         # createBlok declares no args: a blok created again keeps the ones it has.
         args=[rimodels.ArgPortInputModel(**arg) for arg in blok.args or []],
-        services=list(model.services or []),
-        # Kept when omitted, as an edit keeps them: a blok created again keeps its persisted locals.
-        persist=[rimodels.BlokPersistInputModel(**local) for local in blok.persist or []] if model.persist is None else list(model.persist),
-    )
-    # Neither the upsert nor the commit checks the content: the persisted locals must still be locals.
-    rimodels.check_blok_persist(content.persist, {dependency.key for dependency in content.dependencies}, set(content.demo_state))
+        catalogs=list(model.catalogs),
+        locals=list(model.locals),
+        demo=model.demo,
+        queries=list(model.queries),
+        subscriptions=list(model.subscriptions),
+    ).resolved()
+    content.check()
     commit_revision(blok, content, base=None, guarded=False, author=CallerContext.from_info(info).user, message="Created" if blok.head_id is None else "Created again")
 
     return cast("types.Blok", blok)
@@ -135,13 +132,11 @@ def _fork(provided: models.Blok, name: str, user: User) -> models.Blok:
         name=name,
         description=provided.description,
         creator=user,
-        catalog=provided.catalog,
+        module=provided.module,
         context=provided.context,
         for_model=provided.for_model,
         for_node=provided.for_node,
         args=provided.args,
-        services=provided.services,
-        persist=provided.persist,
     )
     # Rows are written parents first, so in id order every parent is copied before its children.
     copies: dict[int, models.BlokArgPort] = {}
@@ -191,7 +186,7 @@ def update_blok(info: Info, input: inputs.UpdateBlokInput) -> types.Blok:
 
     # A partial update is validated as the content it results in: new components against the
     # dependencies and local state that will be in force after the update.
-    content = _edited(info, lock_blok(blok.pk), model.source, model.components, model.demo_state, model.catalog, model.dependencies, None)
+    content = _edited(info, lock_blok(blok.pk), model.source, model.components, model.module, model.dependencies, None).resolved()
     content.check()
     commit_revision(blok, content, base=None, guarded=False, author=CallerContext.from_info(info).user)
     return cast("types.Blok", blok)
@@ -202,24 +197,24 @@ def _edited(
     blok: models.Blok,
     source: str | None,
     components: list[rimodels.ComponentNodeInputModel] | None,
-    demo_state: JSONObject | None,
-    catalog: str | None,
+    module: str | None,
     dependencies: list[rimodels.AgentDependencyInputModel] | None,
     args: list[rimodels.ArgPortInputModel] | None,
-    services: list[rimodels.BlokServiceInputModel] | None = None,
-    persist: list[rimodels.BlokPersistInputModel] | None = None,
+    edit: inputs.EditBlokInputModel | None = None,
 ) -> BlokContent:
     """The blok's head content with every part that is given replaced."""
     current = content_of_revision(blok.head) if blok.head is not None else content_of_blok(blok)
     tree = _parsed(source) if source is not None else components
     return current.but(
-        components=None if tree is None else [json_object(component.model_dump()) for component in tree],
-        demo_state=demo_state,
-        catalog=None if catalog is None else _catalog_for(info, catalog),
+        components=None if tree is None else [json_object(component.model_dump(mode="json", exclude_none=True)) for component in tree],
+        module=None if module is None else _module_for(info, module),
         dependencies=dependencies,
         args=args,
-        services=services,
-        persist=persist,
+        catalogs=edit.catalogs if edit is not None else None,
+        locals=edit.locals if edit is not None else None,
+        demo=edit.demo if edit is not None else None,
+        queries=edit.queries if edit is not None else None,
+        subscriptions=edit.subscriptions if edit is not None else None,
     )
 
 
@@ -269,8 +264,15 @@ def edit_blok(info: Info, input: inputs.EditBlokInput) -> types.BlokEdit:
         if (None if base is None else base.pk) != blok.head_id:
             raise StaleRevisionError(blok, base, blok.head)
 
-    content = _edited(info, blok, model.source, model.components, model.demo_state, model.catalog, model.dependencies, model.args, model.services, model.persist)
-    content.check()
+    # Resolved before anything reads it: its locals as written (the head's, when the edit
+    # leaves them out) are resolved against the new tree, and checked and stored that way.
+    content = _edited(info, blok, model.source, model.components, model.module, model.dependencies, model.args, model).resolved()
+    if model.dry_run:
+        # A dry run shows every finding, errors included, with its vocabulary code: what is
+        # declared beside the tree must still hold, the tree is only reported on.
+        content.check_declarations()
+    else:
+        content.check()
 
     # The bindings an edit through a materialization leaves: the ones kept for keys still
     # declared, the given ones over them. An edit of the blok itself binds nothing; a required
@@ -281,12 +283,19 @@ def edit_blok(info: Info, input: inputs.EditBlokInput) -> types.BlokEdit:
         wanted = {mapping.key: str(mapping.agent_id) for mapping in mblok.agent_mappings.all() if mapping.key in declared}
         wanted.update({mapping.key: mapping.agent for mapping in model.agent_mappings or []})
         bound = check_agent_mappings(organization_of(info), blok.name, content.dependencies, wanted)
-    diagnostics = cast("list[rtypes.Diagnostic]", validate_manifest_against_catalog(content.catalog, content.parsed_components(), content.context, content.demo_state))
+    if not content.components:
+        diagnostics = []
+    elif model.dry_run:
+        diagnostics = cast("list[rtypes.Diagnostic]", blok_findings_against_module(content.module, content.parsed_components(), content.scope()))
+    else:
+        diagnostics = cast("list[rtypes.Diagnostic]", validate_blok_against_module(content.module, content.parsed_components(), content.scope()))
+
+    resolved_locals = cast("list[rtypes.ResolvedBlokLocal]", [rmodels.ResolvedBlokLocalModel(**local) for local in content.stored_resolved_locals()])
 
     if model.dry_run:
-        # A catalog named for the first time was created on the way: nothing of it is kept.
+        # A module named for the first time was created on the way: nothing of it is kept.
         transaction.set_rollback(True)
-        return types.BlokEdit(applied=False, forked=provided, blok=cast("types.Blok", blok), revision=None, materialized_blok=cast("types.MaterializedBlok | None", mblok), diagnostics=diagnostics)
+        return types.BlokEdit(applied=False, forked=provided, blok=cast("types.Blok", blok), revision=None, materialized_blok=cast("types.MaterializedBlok | None", mblok), diagnostics=diagnostics, resolved_locals=resolved_locals)
 
     target = mblok
     if provided:
@@ -302,7 +311,7 @@ def edit_blok(info: Info, input: inputs.EditBlokInput) -> types.BlokEdit:
             target.pinned_revision = None
             target.save(update_fields=["pinned_revision", "updated_at"])
         write_mappings(target, bound)
-    return types.BlokEdit(applied=True, forked=provided, blok=cast("types.Blok", blok), revision=cast("types.BlokRevision", revision), materialized_blok=cast("types.MaterializedBlok | None", target), diagnostics=diagnostics)
+    return types.BlokEdit(applied=True, forked=provided, blok=cast("types.Blok", blok), revision=cast("types.BlokRevision", revision), materialized_blok=cast("types.MaterializedBlok | None", target), diagnostics=diagnostics, resolved_locals=resolved_locals)
 
 
 @transaction.atomic

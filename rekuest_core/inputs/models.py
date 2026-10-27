@@ -1,11 +1,15 @@
 import hashlib
 import json
 import re
-from typing import Annotated, Any, ClassVar, Iterator, List, Literal, Optional, Union
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Iterator, List, Literal, Optional, Union
 from rekuest_core import enums, units
 from rekuest_core.values import value_mismatch
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, SerializerFunctionWrapHandler, field_validator, model_serializer, model_validator
 from typing_extensions import Self
+from strawberry.types.unset import UnsetType
+
+if TYPE_CHECKING:
+    from rekuest_core.vocabulary.vocabulary import Finding
 
 
 class BindsInputModel(BaseModel):
@@ -58,24 +62,18 @@ def _value_path_root(value_path: str) -> str:
     return value_path.lstrip("/").split("/", 1)[0]
 
 
-#: The root a handler's arguments read the value that triggered them from (``$event/value``).
-BLOK_EVENT_ROOT = "$event"
-
-#: What follows a dependency's key in the path of one of its assets (``self.assets.scope``).
+#: What follows an agent in the path of one of its assets (``self.assets.scope``, ``deps.robot.assets.arm``).
 BLOK_ASSETS_SEGMENT = "assets"
 
 
 def blok_asset_path(path: str) -> tuple[str, str] | None:
-    """The ``(dependency key, asset name)`` of ``<dependency>.assets.<name>``, or None if ``path`` is not exactly that."""
+    """The ``(dependency key, asset name)`` of ``self.assets.<name>`` or ``deps.<key>.assets.<name>``, or None if ``path`` is not exactly that."""
     parts = path.split(".")
-    if len(parts) == 3 and parts[1] == BLOK_ASSETS_SEGMENT and all(parts):
-        return parts[0], parts[2]
+    if len(parts) == 3 and parts[0] == "self" and parts[1] == BLOK_ASSETS_SEGMENT and parts[2]:
+        return "self", parts[2]
+    if len(parts) == 4 and parts[0] == "deps" and parts[1] and parts[2] == BLOK_ASSETS_SEGMENT and parts[3]:
+        return parts[1], parts[3]
     return None
-
-
-def _blok_path_root(path: str) -> str:
-    """First segment of a blok path, split on '/' and '.' like the renderer's splitPathSegments ('self.scope.x' -> 'self', '/exposure/current' -> 'exposure')."""
-    return next((segment for segment in re.split(r"[/.]", path) if segment), "")
 
 
 def _resolve_port_path(path: str, ports: list["PortInputModel"]) -> bool:
@@ -131,6 +129,10 @@ def _check_pure_call(call: "UtilCallInputModel", dependencies: list[str] | None,
 
     def walk(arguments: Optional[List["ActionArgumentInputModel"]]) -> None:
         for argument in arguments or []:
+            # A port call is held to base@1, as before blok language v2: its literal bool is the
+            # int it always was (pydantic's lax mode), so the definition hashes as it did.
+            if isinstance(argument.value_literal, bool):
+                argument.value_literal = int(argument.value_literal)
             if argument.agent_call is not None:
                 raise ValueError(f"{owner} must be pure: nested agent calls are not allowed")
             if argument.value_path is not None:
@@ -217,11 +219,25 @@ class StateAccessorInputModel(BaseModel):
         return self
 
 
+def _as_widget_prop(prop: "ComponentPropInputModel", owner: str) -> None:
+    """A widget's prop is held to base@1, as before blok language v2: its widget feeds the
+    definition's hash. A static value is a string, number or object (a bool is its int, as it
+    always was); it is bound one way or declares a value."""
+    if isinstance(prop.static_value, bool):
+        prop.static_value = int(prop.static_value)
+    elif isinstance(prop.static_value, list):
+        raise ValueError(f"{owner}: static_value must be a string, number or dict")
+    bound = [name for name in ("static_value", "dynamic_value", "agent_call", "util_call") if getattr(prop, name) is not None]
+    if not bound and not prop.declares_value:
+        raise ValueError(f"ComponentProp {prop.key!r} is neither bound nor declares a value")
+
+
 def _check_widget_props(props: Optional[List["ComponentPropInputModel"]], dependencies: list[str] | None, owner: str) -> None:
     """Custom widget props: no agent calls; value_paths only reference `value` and `dependencies`."""
     allowed = set(dependencies or []) | {"value"}
     for prop in props or []:
         prop_owner = f"{owner} prop {prop.key!r}"
+        _as_widget_prop(prop, prop_owner)
         if prop.agent_call is not None:
             raise ValueError(f"{prop_owner} must be pure: agent calls are not allowed in widgets")
         if prop.dynamic_value is not None and prop.dynamic_value.path is not None:
@@ -1006,9 +1022,9 @@ class ImplementationInputModel(BaseModel):
     @model_validator(mode="after")
     def check_action_bloks(self) -> Self:
         """The action's bloks name devices by its dependency keys: the ones this implementation declares."""
-        dependency_keys = {dependency.key for dependency in self.dependencies}
+        arg_keys = [port.key for port in self.definition.args]
         for blok in self.definition.bloks:
-            check_action_blok(blok, dependency_keys)
+            check_action_blok(blok, list(self.dependencies), arg_keys)
         return self
 
 
@@ -1068,29 +1084,37 @@ class AssetInputModel(BaseModel):
 # -- and its `definition: LockDefinitionInputModel` named a lock, not a blok.
 
 
-class DynamicValueInputModel(BaseModel):
-    """Base model for a dynamic value input, which can reference a variable in a Blok state instance.
+# ============================================================================
+# Blok trees (blok language v2, ``rekuest_core/vocabulary``)
+# ============================================================================
+# A v2 blok is stored as one tree of ComponentNodeInput {id, component, props?, children?}.
+# A prop holds at most one of static_value (any JSON) | dynamic_value {path} | util_call |
+# agent_call (its ``into`` name in declares_value); a prop or argument that holds none is
+# null. ``queries.x.refetch()`` / ``.fetch_more(...)`` are util_calls of the effects
+# ``query.refetch`` / ``query.fetch_more``, the query named by a literal. Paths are written as
+# in BSX (``deps.robot.arm.joints``, ``move.progress``).
+# Port calls (effects, validators, widgets) share the call models but stay on base@1.
 
-    Attributes:
-        literal: An optional static fallback literal value, passed as a serialized string or JSON primitive.
-    """
+
+class DynamicValueInputModel(BaseModel):
+    """A path a prop reads, as BSX writes it (``deps.robot.arm.joints``, ``event.value``, a bare local)."""
 
     literal: str | None = Field(default=None, description="A static fallback literal value (serialized string or JSON primitive) used when `path` does not resolve.")
-    path: str | None = Field(default=None, description="JSON Pointer to a variable inside the Blok's isolated data model (e.g., '/microscope/exposure').")
+    path: str | None = Field(default=None, description="The path the prop reads: a root (`self`, `deps`, `args`, `task`, `queries`, `subscriptions`, `viewer`, `then`, `event`, `error`), a local, a loop variable or a record, and what follows it.")
 
 
 class AgentProbeInputModel(BaseModel):
-    """A callback that routes user interactions directly to an Arkitekt Agent via Rekuest.
+    """A task call: ``self.<action>(...)`` or ``deps.<key>.<action>(...)``, a callback's one thing.
 
     Attributes:
-        dependency: The abstract agent dependency key declared in the Blok manifest (e.g., 'stage_dep').
-        operation: The target function name registered on that specific agent's worker thread loop.
-        arguments: An optional list of key-value arguments compiled for the target agent call.
+        dependency: ``self`` or the dependency key of the blok.
+        operation: The action, by its key in the dependency's demands.
+        arguments: Its arguments, every one named.
     """
 
-    dependency: str = Field(min_length=1, description="The abstract agent dependency key declared in the Blok manifest (e.g., 'stage_dep').")
-    operation: str = Field(min_length=1, description="The target function name registered on that specific agent's worker thread loop.")
-    arguments: Optional[List["ActionArgumentInputModel"]] = Field(default=None, description="Key-value arguments map compiled for the target agent call.")
+    dependency: str = Field(min_length=1, description="`self`, or the dependency key the task goes to (`deps.<key>`).")
+    operation: str = Field(min_length=1, description="The action called, by its key in the dependency's action demands.")
+    arguments: Optional[List["ActionArgumentInputModel"]] = Field(default=None, description="Its arguments, each named.")
 
     @model_validator(mode="after")
     def check_argument_keys(self) -> Self:
@@ -1100,7 +1124,7 @@ class AgentProbeInputModel(BaseModel):
 
 
 class UtilCallInputModel(BaseModel):
-    operation: str = Field(min_length=1, description="The utility function name to invoke.")
+    operation: str = Field(min_length=1, description="The function called (`str.upper`), or in a callback the effect (`ui.copy`, `task.answer`).")
     arguments: Optional[List["ActionArgumentInputModel"]] = Field(default=None, description="Key-value arguments map compiled for the target utility call.")
 
     @model_validator(mode="after")
@@ -1111,21 +1135,21 @@ class UtilCallInputModel(BaseModel):
 
 
 class ActionArgumentInputModel(BaseModel):
-    """Base model for an action argument input, which can be a static literal or a dynamic state reference.
+    """An argument of a call: a literal, a path, a nested call, a list or an object; null when it holds none.
 
     Attributes:
-        key: The argument property name.
-        value_literal: An optional static literal string value if not dynamically bound.
-        value_path: An optional JSON Pointer referencing the shared Blok state to inject into this argument slot dynamically.
+        key: The argument's name (none in a list).
+        value_literal: A JSON literal.
+        value_path: A path it reads.
     """
 
     key: str | None = Field(default=None, description="The argument property name.")
-    value_literal: Optional[str | int | float | dict | list] = Field(default=None, description="Static literal value if not dynamically bound.")
-    value_path: Optional[str] = Field(default=None, description="JSON Pointer referencing the shared Blok state to inject into this argument slot dynamically.")
+    value_literal: JsonValue = Field(default=None, description="A JSON literal.")
+    value_path: Optional[str] = Field(default=None, description="A path the argument reads, as a prop's dynamic_value does.")
 
     # Separated nested calls
     agent_call: Optional["AgentProbeInputModel"] = Field(default=None, description="Defines a nested agent call if this argument should trigger an agent interaction.")
-    util_call: Optional["UtilCallInputModel"] = Field(default=None, description="Defines a nested utility call if this argument should trigger a system utility interaction.")
+    util_call: Optional["UtilCallInputModel"] = Field(default=None, description="A nested function call.")
 
     value_list: Optional[List["ActionArgumentInputModel"]] = Field(default=None, description="Defines a list of values if this argument should be an array.")
     value_dict: Optional[List["ActionArgumentInputModel"]] = Field(default=None, description="Defines a list of key-value pairs if this argument should be a dictionary.")
@@ -1133,11 +1157,11 @@ class ActionArgumentInputModel(BaseModel):
     BINDINGS: ClassVar[tuple[str, ...]] = ("value_literal", "value_path", "agent_call", "util_call", "value_list", "value_dict")
 
     @model_validator(mode="after")
-    def check_exactly_one_binding(self) -> Self:
-        """An argument is bound in exactly one way; list entries are unkeyed, dict entries uniquely keyed."""
+    def check_at_most_one_binding(self) -> Self:
+        """An argument is bound at most one way (none: null); list entries are unkeyed, dict entries uniquely keyed."""
         bound = [name for name in self.BINDINGS if getattr(self, name) is not None]
-        if len(bound) != 1:
-            raise ValueError(f"ActionArgument {self.key!r} must set exactly one of {', '.join(self.BINDINGS)} (got {bound or 'none'})")
+        if len(bound) > 1:
+            raise ValueError(f"ActionArgument {self.key!r} must set at most one of {', '.join(self.BINDINGS)} (got {bound})")
         _check_keyed(self.value_dict, f"value_dict of argument {self.key!r}")
         for entry in self.value_list or []:
             if entry.key is not None:
@@ -1149,124 +1173,324 @@ class ActionArgumentInputModel(BaseModel):
 # 2. Abstract Component Property Bindings
 # ============================================================================
 class ComponentPropInputModel(BaseModel):
-    """Base model for a single key-value prop configuration for a component layout node.
+    """One prop of a component node: a literal, a path, a function call, a task call (a callback's
+    one thing, named by ``declares_value``), or nothing (null).
 
-    Attributes:
-        key: The prop key name matching the target UI catalog constraint.
-        static_value: An optional raw scalar or JSON-stringified literal configuration parameter (e.g., '40x' or True).
-        dynamic_value: An optional reactive state data-binding rule.
-        agent_action: An optional imperative interactive network action callback loop.
+    Custom port widgets reuse it for their props under base@1 rules (:func:`_check_widget_props`).
     """
 
     key: str = Field(description="The prop key name matching the target UI catalog constraint.")
-    static_value: Optional[str | int | float | dict] = Field(default=None, description="A raw scalar or JSON-stringified literal configuration parameter (e.g. '40x' or True).")
-    dynamic_value: Optional[DynamicValueInputModel] = Field(default=None, description="A reactive state data-binding rule.")
-    declares_value: Optional[str] = Field(default=None, description="If set, this prop declares a new 'value' in the Blok state that can be referenced by other props or actions. The value of this field should be the name of the declared value (e.g., 'selected_user').")
+    static_value: JsonValue = Field(default=None, description="A JSON literal: a string, number, bool, list or object.")
+    dynamic_value: Optional[DynamicValueInputModel] = Field(default=None, description="A path the prop reads.")
+    declares_value: Optional[str] = Field(default=None, description="The name a task call writes its record to (`... into move`), or the loop variable of a `foreach` (its `let`).")
 
     # Separated top-level callbacks
-    agent_call: Optional["AgentProbeInputModel"] = Field(default=None, description="Defines an imperative interactive network action callback loop if this prop should trigger an agent interaction.")
-    util_call: Optional["UtilCallInputModel"] = Field(default=None, description="Defines an imperative interactive network action callback loop if this prop should trigger a system utility interaction.")
+    agent_call: Optional["AgentProbeInputModel"] = Field(default=None, description="A task call: a callback's one thing.")
+    util_call: Optional["UtilCallInputModel"] = Field(default=None, description="A function the prop's value is, or in a callback the effect it runs (ui.copy, task.answer, query.refetch, query.fetch_more).")
 
     BINDINGS: ClassVar[tuple[str, ...]] = ("static_value", "dynamic_value", "agent_call", "util_call")
 
     @model_validator(mode="after")
     def check_at_most_one_binding(self) -> Self:
-        """A prop is bound at most one way; an unbound prop must at least declare a value."""
+        """A prop is bound at most one way; one bound no way is null."""
         bound = [name for name in self.BINDINGS if getattr(self, name) is not None]
         if len(bound) > 1:
             raise ValueError(f"ComponentProp {self.key!r} must set at most one of {', '.join(self.BINDINGS)} (got {bound})")
-        if not bound and not self.declares_value:
-            raise ValueError(f"ComponentProp {self.key!r} is neither bound nor declares a value")
         return self
 
 
 # 3. The Unified Abstract Component Node Input
 # ============================================================================
 class ComponentNodeInputModel(BaseModel):
-    """Base model for an abstract structural visual element inside a Blok blueprint manifest.
+    """A node of a blok tree.
 
     Attributes:
-        id: Unique structural string identifying this node instance inside the flat workspace layout tree.
-        component: The type indicator token matching your Electron app's registered catalog specs (e.g. 'Slider').
-        props: The collection of static values, state pointers, or action endpoints assigned to this component.
-        children: Flat adjacency pointer list mapping out IDs nested inside this specific component layer.
+        id: An explicit id (``^[A-Za-z_][A-Za-z0-9_.:-]*$``) or one derived from its place (``Card[0]/Button[1]``).
+        component: The catalog component (``Button``) or language component (``if``, ``foreach``).
+        props: Its props.
+        children: Its children.
     """
 
-    id: str = Field(description="Unique structural string identifying this node instance inside the flat workspace layout tree.")
-    component: str = Field(description="The type indicator token matching your Electron app's registered catalog specs (e.g. 'Slider').")
+    id: str = Field(description="An explicit id, or one derived from the node's place (`Card[0]/Button[1]`); unique in the tree.")
+    component: str = Field(description="The catalog component (`Button`) or language component (`if`, `foreach`, `suspense`).")
     props: list[ComponentPropInputModel] | None = Field(default=None, description="The collection of static values, state pointers, or action endpoints assigned to this component.")
-    children: list["ComponentNodeInputModel"] | None = Field(default=None, description="Flat adjacency pointer list mapping out IDs nested inside this specific component layer.")
+    children: list["ComponentNodeInputModel"] | None = Field(default=None, description="Its children, in order.")
+
+
+class BlokLocalInputModel(BaseModel):
+    """A local: blok-level form state that feeds a call, written only through ``bind`` on controls.
+
+    A local is a port, typed like an action's argument: its ``key`` is the name the tree reads it
+    by (``{iterations}``, never a reserved root), its ``kind`` says what the controls bound to it
+    must write and what a task call may pass it to, its ``default`` is the value it starts with.
+    A default that does not fit is the checker's finding (``local.default``), not a refusal of
+    the port.
+
+    ``kind`` is a port kind or ``ANY`` (an untyped value). Left out (``None``; a null is left out
+    too) it is inferred from the tree (``rekuest_core.vocabulary.infer``); nothing fills it in
+    here, so a left-out kind stays distinct from a given ``ANY`` until the scope is resolved. Only
+    the fields the author sent are set (``model_fields_set``): a null is dropped before
+    validation, so a resolved type fills what the author left out and nothing they said.
+    """
+
+    key: str = Field(description="The local's name, read bare in the tree (`{iterations}`); never a reserved root.")
+    label: str | None = Field(default=None, description="Its label.")
+    kind: enums.LocalKind | None = Field(default=None, description="What it holds: a port kind (what the controls bound to it must write, `locals.bind_kinds`, and what a task call may pass it to, `locals.arg_kinds`) or ANY. Left out, it is inferred from the tree.")
+    description: str | None = Field(default=None, description="What it is for.")
+    identifier: str | None = Field(default=None, description="The structure (or model, enum) identifier of what it holds.")
+    nullable: bool = Field(default=False, description="Whether it may hold null.")
+    effects: list[EffectInputModel] | None = Field(default=None, description="Its effects.")
+    choices: list[ChoiceInputModel] | None = Field(default=None, description="The values it takes (an ENUM's).")
+    reference_unit: str | None = Field(default=None, description="For a QUANTITY: its reference unit.")
+    proposed_units: list[str] | None = Field(default=None, description="For a QUANTITY: the units offered.")
+    dimension: str | None = Field(default=None, description="For a QUANTITY: its dimensionality (derived).")
+    children: list[ArgPortInputModel] | None = Field(default=None, description="Its child ports (the item of a LIST, the fields of a DICT or MODEL).")
+    validators: list[ValidatorInputModel] | None = Field(default=None, description="Its validators.")
+    default: JsonValue = Field(default=None, description="The value it starts with.")
+    widget: Optional["AssignWidgetInputModel"] = Field(default=None, description="The widget a form of it uses.")
+    requires: list[RequiresInputModel] | None = Field(default=None, description="Its descriptor requirements.")
+    persist: bool = Field(default=False, description="Remember the last input on this device (never on a server).")
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _null_is_left_out(cls, value: object) -> object:
+        """A null, or a GraphQL field left out (``UNSET``), is a field left out."""
+        if isinstance(value, dict):
+            return {key: item for key, item in value.items() if item is not None and not isinstance(item, UnsetType)}
+        return value
+
+    @field_validator("widget", mode="before")
+    @classmethod
+    def _plain_widget(cls, value: object) -> object:
+        return _as_plain(value)
+
+    @model_validator(mode="after")
+    def check_port(self) -> Self:
+        """A typed local is held to the arg port rules (its default is the checker's,
+        ``local.default``); an ``ANY`` or left-out one only to its key."""
+        _check_port_key(self.key, "Local")
+        port = self.arg_port()
+        if port is not None and port.dimension != self.dimension:
+            self.dimension = port.dimension
+        return self
+
+    @model_serializer(mode="wrap")
+    def _left_out_stays_out(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        """A local whose kind is left out goes out with only the fields its author sent, so
+        whoever resolves it next (takt, at registration) still fills what was left out."""
+        dumped: dict[str, object] = handler(self)
+        if self.kind is not None:
+            return dumped
+        return {key: value for key, value in dumped.items() if key in self.model_fields_set}
+
+    def arg_port(self) -> ArgPortInputModel | None:
+        """The local as the arg port it is (its default left out), or None for an ``ANY`` or
+        left-out kind: no port is ``ANY``."""
+        if self.kind is None or self.kind == enums.LocalKind.ANY:
+            return None
+        fields = {name: getattr(self, name) for name in self.model_fields_set if name not in ("persist", "default", "kind")}
+        return ArgPortInputModel.model_validate({**fields, "kind": enums.PortKind(self.kind.value)})
+
+
+class BlokQueryInputModel(BaseModel):
+    """A declared read: a GraphQL query on a service, re-run when its variables change."""
+
+    key: str = Field(min_length=1, description="Its name: the blok reads it as `queries.<key>` (status, value, error, refetching, fetching_more).")
+    service: str = Field(min_length=1, description="The service it runs on, by its key ('mikro').")
+    document: str = Field(min_length=1, description="One GraphQL `query` operation; never a mutation.")
+    variables: list[ActionArgumentInputModel] = Field(default_factory=list, description="Its variables, each an expression over args, locals and dependencies (as a call argument is stored).")
+    poll: float | None = Field(default=None, gt=0, description="Re-run every this many seconds, besides when its variables change.")
+    more: str | None = Field(default=None, description="The list field of its result that `queries.<key>.fetch_more(...)` appends new pages to, as a dotted path into the data (`positions`, `images.items`). A query without it cannot fetch more.")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class BlokSubscriptionInputModel(BaseModel):
+    """A declared stream: a GraphQL subscription on a service, re-subscribed when its variables change."""
+
+    key: str = Field(min_length=1, description="Its name: the blok reads it as `subscriptions.<key>` (status, value, error).")
+    service: str = Field(min_length=1, description="The service it runs on, by its key.")
+    document: str = Field(min_length=1, description="One GraphQL `subscription` operation.")
+    variables: list[ActionArgumentInputModel] = Field(default_factory=list, description="Its variables, as a query's.")
+    keep: int | None = Field(default=None, ge=1, description="Keep the last this many payloads as a list; the latest only when absent.")
+    history: str | None = Field(default=None, description="A declared query to replay from while travelling; without it the value at travel start shows, stale.")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class BlokDemoInputModel(BaseModel):
+    """What a preview renders the blok with, mirroring the roots it reads. Never what it shows live."""
+
+    deps: JsonValue = Field(default=None, description="Per dependency key (`self` included), its states and tasks: `{self: {arm: {joints: [...]}}}`.")
+    args: JsonValue = Field(default=None, description="What it is opened on.")
+    task: JsonValue = Field(default=None, description="The task record it is about (task and action bloks, action logos).")
+    queries: JsonValue = Field(default=None, description="Per declared query, the value it answers.")
+    subscriptions: JsonValue = Field(default=None, description="Per declared subscription, its value.")
+
+    model_config = ConfigDict(extra="forbid")
 
 
 def check_blok_sent_once(components: object | None, source: str | None, *, required: bool) -> None:
     """A blok is sent as its components or as its BSX source: not both, and (where it must be sent) not neither."""
+    from rekuest_core.vocabulary import BlokError
+
     if components is not None and source is not None:
-        raise ValueError("a blok is sent as its components or as its BSX source, not both")
+        raise BlokError("manifest.sent", problem="not both")
     if required and components is None and source is None:
-        raise ValueError("a blok is sent as its components or as its BSX source")
+        raise BlokError("manifest.sent", problem="and this one has neither")
 
 
-def check_blok_manifest(components: Optional[List[ComponentNodeInputModel]], dependency_keys: set[str], state_keys: Optional[set[str]]) -> None:
-    """Coherence of a blok component tree.
+_CATALOG = re.compile(r"[a-z][a-z0-9_-]*@[0-9]+")
+CATALOG_PATTERN = _CATALOG
+"""How a catalog is spelled: ``name@version`` (``ui@1``)."""
+_FIELD_PATH = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*")
+"""A query's ``more``: a dotted path into its data (``positions``, ``images.items``)."""
+_LOCAL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_GRAPHQL_COMMENT = re.compile(r"#[^\n]*")
 
-    * component ids are unique across the whole tree
-    * ``declares_value`` names are unique
-    * every ``agent_call.dependency`` names a declared blok dependency
-    * every ``value_path`` / ``dynamic_value.path`` root resolves to a demo-state key, a declared
-      value, a dependency key or ``$event`` -- skipped when ``state_keys`` is ``None`` (no demo state given)
-    * ``<dependency>.assets.<name>`` names a file of a declared dependency, not a value
+
+def operation_keyword(document: str) -> str:
+    """The kind of a GraphQL document's first operation: ``query`` (also for ``{ ... }``),
+    ``mutation``, ``subscription``, or whatever word it starts with."""
+    text = _GRAPHQL_COMMENT.sub("", document).lstrip()
+    if text.startswith("{"):
+        return "query"
+    match = re.match(r"[A-Za-z_]+", text)
+    return match.group(0) if match else ""
+
+
+def check_operation(kind: str, name: str, operation: str) -> None:
+    """A query's document is a ``query``, a subscription's a ``subscription``; neither writes."""
+    from rekuest_core.vocabulary import BlokError
+
+    if operation == kind:
+        return
+    if operation == "mutation":
+        raise BlokError("query.read_only", kind=kind, name=name, problem="is a mutation: a blok reads, and writes only through a task")
+    raise BlokError("query.kind", kind=kind, name=name, operation=operation or "document without an operation")
+
+
+def wrong_context(kind: str, context: enums.ComponentContext) -> ValueError:
+    """``context.kind``: a blok of ``kind`` drawn in a context its kind has no blok for."""
+    from rekuest_core.vocabulary import BlokError, load_vocabulary
+
+    contexts = load_vocabulary().kind(kind).contexts
+    return BlokError("context.kind", n="n" if kind[:1] in "aeiou" else "", kind=kind, contexts=", ".join(contexts), context=context.value)
+
+
+def check_blok_declarations(
+    *,
+    kind: str,
+    catalogs: list[str],
+    locals: list[BlokLocalInputModel],
+    queries: list[BlokQueryInputModel],
+    subscriptions: list[BlokSubscriptionInputModel],
+    dependency_keys: set[str],
+    demo: "BlokDemoInputModel | None",
+) -> None:
+    """What a v2 blok declares beside its tree, as arkitekt-spec's ``check_blok_declarations`` has it.
+
+    Its catalogs spelled ``name@version``; its locals, queries and subscriptions each named once,
+    by a name (a local by none the vocabulary reserves); a query a ``query``, a subscription a
+    ``subscription``, neither a mutation; a query's ``more`` a dotted field path; a subscription's history a declared query; an action
+    logo declaring nothing; ``demo.deps`` naming only dependencies (and ``self``). Each refusal
+    is a row of the vocabulary's diagnostic table (``manifest.*``, ``query.*``, ``roots.reserved``).
     """
-    ids: set[str] = set()
-    declared: set[str] = set()
+    from rekuest_core.vocabulary import BlokError, load_vocabulary
+
+    reserved = load_vocabulary().reserved
+    for catalog in catalogs:
+        if not _CATALOG.fullmatch(catalog):
+            raise BlokError("manifest.catalog", catalog=catalog)
+    named: tuple[tuple[str, list[str]], ...] = (
+        ("locals", [local.key for local in locals]),
+        ("queries", [query.key for query in queries]),
+        ("subscriptions", [subscription.key for subscription in subscriptions]),
+    )
+    for what, keys in named:
+        twice = next((key for key in keys if keys.count(key) > 1), None)
+        if twice is not None:
+            raise BlokError("manifest.duplicate", what=what, key=twice)
+        for key in keys:
+            if not _LOCAL_NAME.fullmatch(key):
+                raise BlokError("manifest.name", what=what, key=key)
+            if what == "locals" and key in reserved:
+                raise BlokError("roots.reserved", name=key)
+    for query in queries:
+        check_operation("query", query.key, operation_keyword(query.document))
+        if query.more is not None and not _FIELD_PATH.fullmatch(query.more):
+            raise BlokError("query.more", name=query.key, more=query.more, problem="is not a field path into its data (positions, images.items)")
+    declared = {query.key for query in queries}
+    for subscription in subscriptions:
+        check_operation("subscription", subscription.key, operation_keyword(subscription.document))
+        if subscription.history is not None and subscription.history not in declared:
+            raise BlokError("query.history", name=subscription.key, history=subscription.history)
+    if kind == "action_logo" and (locals or queries or subscriptions or dependency_keys):
+        raise BlokError("manifest.action_logo")
+    deps = demo.deps if demo is not None else None
+    if isinstance(deps, dict):
+        unknown = sorted(set(deps) - dependency_keys - {"self"})
+        if unknown:
+            raise BlokError("manifest.demo", keys=", ".join(unknown))
+
+
+def blok_kind(context: enums.ComponentContext) -> str:
+    """The kind of a blok an agent declares: an action logo when drawn as one, else an agent blok."""
+    return "action_logo" if context == enums.ComponentContext.ACTION_LOGO else "agent"
+
+
+def check_blok_manifest(
+    components: Optional[List[ComponentNodeInputModel]],
+    *,
+    kind: str,
+    context: enums.ComponentContext,
+    dependencies: list[AgentDependencyInputModel],
+    locals: list[BlokLocalInputModel],
+    queries: list[BlokQueryInputModel],
+    subscriptions: list[BlokSubscriptionInputModel],
+    args: list[str] | None,
+    catalogs: list[str],
+    demo: "BlokDemoInputModel | None" = None,
+) -> list["Finding"]:
+    """A v2 tree against what its blok declares and its kind, without a catalog (the language
+    rules of ``rekuest_core.vocabulary.check``): refused on the first error, its warnings returned.
+
+    A tree is one root. Its catalog findings (component names, props, placement) are the
+    catalog check's (``facade/catalog_validation.py``), which runs where the catalogs are.
+
+    Raises:
+        BlokError: With the code of the first error finding.
+    """
+    from rekuest_core.vocabulary import BlokError, BlokScope, check_blok_tree
+
+    if components is None:
+        return []
+    if len(components) != 1:
+        raise ValueError(f"Blok manifest: a blok has one root, not {len(components)}")
+    # A tree sent as such was never parsed: its ids are held to what the parser holds them to.
+    seen: set[str] = set()
     for node in iter_component_nodes(components):
-        if node.id in ids:
-            raise ValueError(f"Blok manifest: duplicate component id {node.id!r}")
-        ids.add(node.id)
-        for prop in node.props or []:
-            if prop.declares_value:
-                if prop.declares_value in declared:
-                    raise ValueError(f"Blok manifest: value {prop.declares_value!r} declared twice")
-                declared.add(prop.declares_value)
-
-    roots = None if state_keys is None else (state_keys | declared | dependency_keys | {BLOK_EVENT_ROOT})
-
-    def check_root(path: Optional[str], owner: str) -> None:
-        if path is None:
-            return
-        named = blok_asset_path(path)
-        if named is not None and named[0] in dependency_keys:
-            # A file of a declared dependency: there is no value at this path to resolve.
-            return
-        if roots is None:
-            return
-        root = _blok_path_root(path)
-        if root not in roots:
-            raise ValueError(f"{owner} references {root!r} but it is neither a demo_state key, a declared value nor a dependency key")
-
-    def check_agent_call(agent_call, owner: str) -> None:
-        if agent_call.dependency not in dependency_keys:
-            raise ValueError(f"{owner}: agent_call targets undeclared dependency {agent_call.dependency!r}")
-        walk_arguments(agent_call.arguments, owner)
-
-    def walk_arguments(arguments: Optional[List[ActionArgumentInputModel]], owner: str) -> None:
-        for argument in arguments or []:
-            check_root(argument.value_path, owner)
-            if argument.agent_call is not None:
-                check_agent_call(argument.agent_call, owner)
-            if argument.util_call is not None:
-                walk_arguments(argument.util_call.arguments, owner)
-            walk_arguments(argument.value_list, owner)
-            walk_arguments(argument.value_dict, owner)
-
-    for node in iter_component_nodes(components):
-        for prop in node.props or []:
-            owner = f"prop {prop.key!r} of component {node.id!r}"
-            if prop.dynamic_value is not None:
-                check_root(prop.dynamic_value.path, owner)
-            if prop.agent_call is not None:
-                check_agent_call(prop.agent_call, owner)
-            if prop.util_call is not None:
-                walk_arguments(prop.util_call.arguments, owner)
+        if node.id in seen:
+            raise BlokError("bsx.duplicate_id", id=node.id)
+        seen.add(node.id)
+    scope = BlokScope(
+        kind=kind,
+        context=context.value,
+        dependencies=tuple(dependencies),
+        locals=tuple(locals),
+        queries=tuple(queries),
+        subscriptions=tuple(subscriptions),
+        args=tuple(args) if args is not None else None,
+        catalogs=tuple(catalogs),
+        demo=demo,
+    )
+    findings = check_blok_tree(components[0], scope, None)
+    for finding in findings:
+        if finding.level == "error":
+            raise BlokError.from_finding(finding)
+    return findings
 
 
 MODEL_REF_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
@@ -1287,164 +1511,128 @@ def check_blok_target(context: enums.ComponentContext, for_model: Optional[str],
 BLOK_ARGS_ROOT = "args"
 
 
-QUERY_COMPONENT = "query"
-"""The base catalog's GraphQL read: it runs on the service its ``schema`` prop names."""
-
-
-class BlokServiceInputModel(BaseModel):
-    """A backend service a blok reads from, frozen at the version it was written against."""
-
-    key: str = Field(min_length=1, description="The service's key, as a `query`'s `schema` names it: 'mikro'.")
-    service: Optional[str] = Field(default=None, description="The service type, in reverse-domain form: 'live.arkitekt.mikro'.")
-    version: Optional[str] = Field(default=None, description="The server version the blok was written against, as the service declaration names it ('8').")
-    schema_hash: Optional[str] = Field(default=None, description="'sha256:<hex>' of the canonical GraphQL schema the blok's queries were checked against.")
-
-
-def check_blok_services(components: Optional[List["ComponentNodeInputModel"]], services: list[BlokServiceInputModel]) -> None:
-    """A blok names each service once, and every ``query`` in it runs on one it names."""
-    _check_unique(services, "key", "Blok manifest services")
-    declared = {service.key for service in services}
-
-    def visit(nodes: Optional[List["ComponentNodeInputModel"]]) -> None:
-        for node in nodes or []:
-            if node.component == QUERY_COMPONENT:
-                schema = next((prop.static_value for prop in node.props or [] if prop.key == "schema"), None)
-                if isinstance(schema, str) and schema not in declared:
-                    raise ValueError(f"Blok manifest: component {node.id!r} queries the {schema!r} service, which the blok does not declare in its services (declared: {sorted(declared) or 'none'})")
-            visit(node.children)
-
-    visit(components)
-
-
-def check_blok_args(context: enums.ComponentContext, args: list["ArgPortInputModel"], dependency_keys: set[str]) -> None:
-    """A blok's args are the items it is opened for: an html blok's, keyed once, read under ``@args``.
-
-    The root ``args`` is the blok's own then, so no dependency may take the name."""
+def check_blok_args(context: enums.ComponentContext, args: list["ArgPortInputModel"]) -> None:
+    """A blok's args are the items it is opened for: an html blok's, keyed once, read under ``args.<key>``."""
     if not args:
         return
     if context != enums.ComponentContext.HTML:
         raise ValueError(f"Blok manifest: only an html blok takes args, not a {context.value} blok")
     _check_unique(args, "key", "Blok manifest args")
-    if BLOK_ARGS_ROOT in dependency_keys:
-        raise ValueError(f"Blok manifest: a blok with args reads them under {BLOK_ARGS_ROOT!r}, so no dependency can be called that")
-
-
-class BlokPersistInputModel(BaseModel):
-    """A local a renderer may keep between openings, on the device: its demo value is the default."""
-
-    key: str = Field(min_length=1, description="The local: a top-level `demo_state` key that is neither a dependency nor a reserved root.")
-    description: Optional[str] = Field(default=None, description="What the kept value is, for whoever resets it.")
-
-
-def check_blok_persist(persist: list[BlokPersistInputModel], dependency_keys: set[str], state_keys: Optional[set[str]]) -> None:
-    """A blok persists only its locals, each once: a top-level ``demo_state`` key, which is not a
-    dependency's key nor a root the renderer fills (``args``, ``$event``)."""
-    _check_unique(persist, "key", "Blok manifest persist")
-    for local in persist:
-        if local.key in (BLOK_ARGS_ROOT, BLOK_EVENT_ROOT) or local.key in dependency_keys:
-            raise ValueError(f"Blok manifest: persist names {local.key!r}, which is not a local but a root the renderer fills")
-        if state_keys is None or local.key not in state_keys:
-            raise ValueError(f"Blok manifest: persist names {local.key!r}, which is not a demo_state key: a persisted local takes its demo value as its default")
 
 
 class BlokImplementationInputModel(BaseModel):
-    "Base model for a Blok implementation manifest, which compiles all necessary information to materialize a Blok instance in the Arkitekt ecosystem."
+    "A blok an agent declares (blok language v2): its tree (or BSX source) and what it declares beside it."
 
     key: str = Field(description="The key of this Blok implementation.")
-    dependencies: list[AgentDependencyInputModel] = Field(default_factory=list, description="The dependencies required by this Blok.")
-    components: Optional[list[ComponentNodeInputModel]] = Field(default=None, description="The UI component tree blueprint for this Blok, unless it is sent as its `source`.")
-    source: Optional[str] = Field(default=None, description="The Blok as BSX, parsed by the server into its component tree: three times fewer bytes than the tree. Exactly one of `components` and `source` is sent.")
-    catalog: Optional[str] = Field(default=None, description="The optional catalog name if this Blok should be registered inside a specific namespace in your Electron app's UI component registry.")
+    dependencies: list[AgentDependencyInputModel] = Field(default_factory=list, description="The dependencies required by this Blok: for an agent's blok the one dependency `self`, its demands what the tree reads and calls of it.")
+    components: Optional[list[ComponentNodeInputModel]] = Field(default=None, description="The UI component tree blueprint for this Blok (one root), unless it is sent as its `source`.")
+    source: Optional[str] = Field(default=None, description="The Blok as v2 BSX, parsed by the server into its component tree. Exactly one of `components` and `source` is sent.")
+    module: Optional[str] = Field(default=None, description="The module (an app's own unversioned extras, registered by a UI app such as the Orkestrator) the blok renders against besides its catalogs; the Orkestrator's when absent.")
     description: Optional[str] = Field(default=None, description="A human-readable description about this Blok's purpose and functionality.")
-    demo_state: Optional[dict] = Field(default=None, description="An optional JSON-serializable object providing demo state values for this Blok's internal reactive data model, useful for testing and development purposes.")
-    context: enums.ComponentContext = Field(default=enums.ComponentContext.HTML, description="The renderer for this Blok's root: HTML for panels and dashboards, SCENE for a full 3D view whose root opens a scene.")
+    context: enums.ComponentContext = Field(default=enums.ComponentContext.HTML, description="The renderer for this Blok's root: HTML for panels and dashboards, SCENE for a full 3D view whose root is a Scene, LOGO an agent's logo, ACTION_LOGO an action's.")
     default: bool = Field(default=False, description="Whether this Blok is its agent's default for its context. A newly declared default replaces the previous one.")
     for_model: Optional[str] = Field(default=None, description="The model ('sha256:...') this Blok decorates: viewers showing that model offer this Blok at `for_node`. HTML bloks only.")
     for_node: Optional[str] = Field(default=None, description="The node of `for_model` this Blok attaches to; the model's root when absent.")
-    args: list[ArgPortInputModel] = Field(default_factory=list, description="The items this Blok is opened for, declared like an action's args and read under `@args.<key>`. A UI offers the Blok on any item its args accept (`MaterializedBlokFilter.demands`). HTML bloks only.")
-    services: list[BlokServiceInputModel] = Field(default_factory=list, description="The backend services this Blok reads from (its `query` components name them), each frozen at the version it was written against.")
-    persist: list[BlokPersistInputModel] = Field(default_factory=list, description="The locals a renderer may keep between openings, on the device (never on a server): each a top-level `demo_state` key, whose demo value is the default.")
+    args: list[ArgPortInputModel] = Field(default_factory=list, description="The items this Blok is opened for, declared like an action's args and read under `args.<key>`. A UI offers the Blok on any item its args accept (`MaterializedBlokFilter.demands`). HTML bloks only.")
+    vocab: Literal[2] = Field(description="The blok language version the blok speaks; 2 is the only one.")
+    catalogs: list[str] = Field(default_factory=list, description="The catalogs it needs, as name@version ('ui@1', 'scene@1').")
+    locals: list[BlokLocalInputModel] = Field(default_factory=list, description="Its locals: form state that feeds a call, written only through bind.")
+    demo: Optional[BlokDemoInputModel] = Field(default=None, description="What a preview renders it with.")
+    queries: list[BlokQueryInputModel] = Field(default_factory=list, description="Its declared reads, as `queries.<key>`.")
+    subscriptions: list[BlokSubscriptionInputModel] = Field(default_factory=list, description="Its declared streams, as `subscriptions.<key>`.")
 
     @model_validator(mode="after")
     def check_manifest(self) -> Self:
-        """Sent one way; the component tree coherent with the declared dependencies and demo state.
+        """Sent one way; its declarations well-formed; its tree (when sent as one) coherent with them.
 
         A blok sent as its source is checked once takt has parsed it, at registration."""
         check_blok_sent_once(self.components, self.source, required=True)
-        if self.components is not None:
-            check_blok_manifest(self.components, {dep.key for dep in self.dependencies}, None if self.demo_state is None else set(self.demo_state))
-        check_blok_target(self.context, self.for_model, self.for_node)
-        check_blok_args(self.context, self.args, {dep.key for dep in self.dependencies})
-        check_blok_persist(self.persist, {dep.key for dep in self.dependencies}, None if self.demo_state is None else set(self.demo_state))
-        if self.components is not None:
-            check_blok_services(self.components, self.services)
         if self.context == enums.ComponentContext.OVERLAY:
-            raise ValueError("Blok manifest: an overlay blok is an action's own (its definition's `bloks`), drawn into the space that hosts a run of it; an agent does not declare one")
+            raise wrong_context("agent", self.context)
+        kind = blok_kind(self.context)
+        dependency_keys = {dependency.key for dependency in self.dependencies}
+        check_blok_declarations(kind=kind, catalogs=self.catalogs, locals=self.locals, queries=self.queries, subscriptions=self.subscriptions, dependency_keys=dependency_keys, demo=self.demo)
+        check_blok_target(self.context, self.for_model, self.for_node)
+        check_blok_args(self.context, self.args)
+        check_blok_manifest(
+            self.components,
+            kind=kind,
+            context=self.context,
+            dependencies=self.dependencies,
+            locals=self.locals,
+            queries=self.queries,
+            subscriptions=self.subscriptions,
+            args=[arg.key for arg in self.args] if self.args else None,
+            catalogs=self.catalogs,
+            demo=self.demo,
+        )
         return self
 
-
-#: The root an action's blok reads the run it is shown for under (``@task.progress``): the renderer fills it.
-ACTION_BLOK_TASK_ROOT = "task"
-
-#: The key an action's blok reads the agent that runs the action under (``@self.<state>``).
-ACTION_BLOK_SELF_KEY = "self"
 
 #: The contexts an action has a blok for, one each.
 ACTION_BLOK_CONTEXTS = (enums.ComponentContext.HTML, enums.ComponentContext.SCENE, enums.ComponentContext.OVERLAY)
 
-#: The component that anchors its children at the agent bound to a dependency (``dependency``).
-AT_COMPONENT = "At"
+#: The component that anchors its children at the agent bound to a dependency (``dep``).
+ANCHOR_COMPONENT = "Anchor"
 
 #: The component that draws a line through the agents bound to dependencies (``through``).
 ROUTE_COMPONENT = "Route"
 
+#: The run's open ask form.
+ASK_COMPONENT = "ask"
 
-def through_keys(value: str) -> list[str]:
-    """The dependency keys a ``through`` prop names: ``"['robot', 'frame']"`` (as BSX writes a list), ``'["robot"]'`` or ``"robot, frame"``."""
-    inner = value.strip()
-    if inner.startswith("[") and inner.endswith("]"):
-        inner = inner[1:-1]
-    return [item.strip().strip("'\"").strip() for item in inner.split(",") if item.strip()]
+#: The components that read a run or a dependency of one: only an action's own blok (or an overlay) holds them.
+ACTION_BLOK_COMPONENTS = (ANCHOR_COMPONENT, ROUTE_COMPONENT, ASK_COMPONENT)
+
+
+def anchored_keys(components: Optional[List[ComponentNodeInputModel]]) -> list[tuple[str, str]]:
+    """Every dependency key an ``<Anchor dep>`` or ``<Route through>`` names, with the node's id."""
+    named: list[tuple[str, str]] = []
+    for node in iter_component_nodes(components):
+        for prop in node.props or []:
+            if node.component == ANCHOR_COMPONENT and prop.key == "dep" and isinstance(prop.static_value, str):
+                named.append((prop.static_value, node.id))
+            elif node.component == ROUTE_COMPONENT and prop.key == "through" and isinstance(prop.static_value, list):
+                named.extend((key, node.id) for key in prop.static_value if isinstance(key, str))
+    return named
 
 
 def check_action_blok_anchors(components: Optional[List[ComponentNodeInputModel]], dependency_keys: set[str]) -> None:
-    """Every ``<At dependency>`` and ``<Route through>`` names dependencies of the action. Bound
+    """Every ``<Anchor dep>`` and ``<Route through>`` names dependencies of the action. Bound
     dynamically, they are left to the renderer."""
-    for node in iter_component_nodes(components):
-        for prop in node.props or []:
-            if not isinstance(prop.static_value, str):
-                continue
-            if node.component == AT_COMPONENT and prop.key == "dependency":
-                named = [prop.static_value]
-            elif node.component == ROUTE_COMPONENT and prop.key == "through":
-                named = through_keys(prop.static_value)
-            else:
-                continue
-            for key in named:
-                if key not in dependency_keys:
-                    known = ", ".join(repr(known) for known in sorted(dependency_keys)) or "none"
-                    raise ValueError(f"Blok manifest: component {node.id!r} names {key!r}, which is not a dependency of the action (its dependencies: {known})")
+    for key, node_id in anchored_keys(components):
+        if key not in dependency_keys:
+            known = ", ".join(repr(known) for known in sorted(dependency_keys)) or "none"
+            raise ValueError(f"Blok manifest: component {node_id!r} names {key!r}, which is not a dependency of the action (its dependencies: {known})")
 
 
-def check_action_blok(blok: "ActionBlokInputModel", dependency_keys: set[str]) -> None:
-    """An action's blok against the dependencies its implementation declares.
+def check_action_blok(blok: "ActionBlokInputModel", dependencies: list[AgentDependencyInputModel], arg_keys: list[str] | None = None) -> list["Finding"]:
+    """An action's blok against the dependencies its implementation declares (kind ``action``).
 
-    Its path roots are those dependencies, ``self`` (the agent running the action), ``task`` (the
-    run), ``args`` (the run's args), its own locals and ``$event``; ``At``/``Route`` name only the
-    dependencies. A blok sent as its source is checked once takt has parsed it."""
-    reserved = sorted({ACTION_BLOK_TASK_ROOT, BLOK_ARGS_ROOT} & dependency_keys)
-    if reserved:
-        raise ValueError(f"Blok manifest: an action's blok reads its run under {ACTION_BLOK_TASK_ROOT!r} and the run's args under {BLOK_ARGS_ROOT!r}, so no dependency can be called {reserved[0]!r}")
-    keys = dependency_keys | {ACTION_BLOK_SELF_KEY}
-    state_keys = set(blok.demo_state or {})
-    shadowed = sorted(state_keys & keys)
-    if shadowed:
-        raise ValueError(f"Blok manifest: demo_state names {shadowed[0]!r}, which is a dependency of the action, not a local")
-    check_blok_persist(blok.persist, keys, state_keys)
+    It reads the run as ``task``, its args as ``args``, the agent running it as ``self`` and the
+    agents the run got as ``deps.<key>``; ``Anchor``/``Route`` name only the dependencies. A
+    blok sent as its source is checked once takt has parsed it. Its warnings are returned.
+
+    Raises:
+        BlokError: With the code of the first error finding.
+    """
+    keys = {dependency.key for dependency in dependencies}
+    check_blok_declarations(kind="action", catalogs=blok.catalogs, locals=blok.locals, queries=blok.queries, subscriptions=blok.subscriptions, dependency_keys=keys, demo=blok.demo)
     if blok.components is None:
-        return
-    check_blok_manifest(blok.components, keys, state_keys | {ACTION_BLOK_TASK_ROOT, BLOK_ARGS_ROOT})
-    check_action_blok_anchors(blok.components, dependency_keys)
+        return []
+    check_action_blok_anchors(blok.components, keys)
+    return check_blok_manifest(
+        blok.components,
+        kind="action",
+        context=blok.context,
+        dependencies=dependencies,
+        locals=blok.locals,
+        queries=blok.queries,
+        subscriptions=blok.subscriptions,
+        args=arg_keys,
+        catalogs=blok.catalogs,
+        demo=blok.demo,
+    )
 
 
 class ActionBlokInputModel(BaseModel):
@@ -1453,23 +1641,24 @@ class ActionBlokInputModel(BaseModel):
 
     context: enums.ComponentContext = Field(default=enums.ComponentContext.HTML, description="Where a client shows the run with it: HTML in a task panel, SCENE as a 3D view of its own, OVERLAY drawn into the space that hosts the run (its root an `Overlay`).")
     components: Optional[list[ComponentNodeInputModel]] = Field(default=None, description="The UI component tree, unless the blok is sent as its `source`.")
-    source: Optional[str] = Field(default=None, description="The blok as BSX, parsed by the server into its component tree. Exactly one of `components` and `source` is sent.")
-    catalog: Optional[str] = Field(default=None, description="The UI catalog the blok renders against; the Orkestrator's when absent.")
+    source: Optional[str] = Field(default=None, description="The blok as v2 BSX, parsed by the server into its component tree. Exactly one of `components` and `source` is sent.")
+    module: Optional[str] = Field(default=None, description="The module the blok renders against besides its catalogs; the Orkestrator's when absent.")
     description: Optional[str] = Field(default=None, description="What the blok shows of a run.")
-    demo_state: Optional[dict] = Field(default=None, description="The blok's own locals and their initial values: path roots beside the action's dependency keys, `self`, `task` and `args`.")
-    persist: list[BlokPersistInputModel] = Field(default_factory=list, description="The locals a renderer may keep between openings, on the device (never on a server): each a top-level `demo_state` key, whose demo value is the default.")
+    vocab: Literal[2] = Field(description="The blok language version the blok speaks; 2 is the only one.")
+    catalogs: list[str] = Field(default_factory=list, description="The catalogs it needs, as name@version.")
+    locals: list[BlokLocalInputModel] = Field(default_factory=list, description="Its locals: form state that feeds a call, written only through bind.")
+    demo: Optional[BlokDemoInputModel] = Field(default=None, description="What a preview renders it with.")
+    queries: list[BlokQueryInputModel] = Field(default_factory=list, description="Its declared reads.")
+    subscriptions: list[BlokSubscriptionInputModel] = Field(default_factory=list, description="Its declared streams.")
 
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
     def check_action_blok(self) -> Self:
-        """Sent one way, in a context an action has a blok for, its locals none of the roots the renderer fills."""
+        """Sent one way, in a context an action has a blok for."""
         check_blok_sent_once(self.components, self.source, required=True)
         if self.context not in ACTION_BLOK_CONTEXTS:
-            raise ValueError(f"Blok manifest: an action's blok is html, scene or overlay, not {self.context.value.lower()}")
-        filled = sorted({ACTION_BLOK_TASK_ROOT, BLOK_ARGS_ROOT, ACTION_BLOK_SELF_KEY, BLOK_EVENT_ROOT} & set(self.demo_state or {}))
-        if filled:
-            raise ValueError(f"Blok manifest: demo_state names {filled[0]!r}, which the renderer fills for an action's blok")
+            raise wrong_context("action", self.context)
         return self
 
 
@@ -1505,6 +1694,7 @@ CustomAssignWidgetInputModel.model_rebuild()
 StateChoiceAssignWidgetInputModel.model_rebuild()
 CustomReturnWidgetInputModel.model_rebuild()
 ArgPortInputModel.model_rebuild()
+BlokLocalInputModel.model_rebuild()
 ReturnPortInputModel.model_rebuild()
 WidgetDefaultInputModel.model_rebuild()
 StateAccessorInputModel.model_rebuild()
@@ -1516,11 +1706,18 @@ ImplementationInputModel.model_rebuild()
 # ============================================================================
 # UI catalog registry: what a UI app can render (components) and evaluate (operations)
 # ============================================================================
+class CatalogEventFieldInputModel(BaseModel):
+    key: str = Field(min_length=1, description="The field a callback reads as `event.<key>`.")
+    kind: enums.CatalogValueKind = Field(description="The value kind of the field.")
+    description: str | None = Field(default=None, description="Human-readable description of the field.")
+
+
 class CatalogPropInputModel(BaseModel):
     key: str = Field(min_length=1, description="The prop key a ComponentProp.key must match.")
-    kind: enums.CatalogValueKind = Field(description="The value kind this prop accepts. CALLBACK props must be bound via agent_call or util_call.")
+    kind: enums.CatalogValueKind = Field(description="The value kind this prop accepts. CALLBACK props hold one task call or one effect. On `bind`, the kind the control writes (`locals.bind_kinds`).")
     required: bool = Field(default=False, description="Whether every component instance must set this prop.")
     description: str | None = Field(default=None, description="Human-readable description of the prop.")
+    event: list[CatalogEventFieldInputModel] | None = Field(default=None, description="For a CALLBACK prop: the fields of the event it hands its callback (`event.<key>`); none when it hands none.")
 
 
 class CatalogComponentInputModel(BaseModel):
@@ -1533,6 +1730,8 @@ class CatalogComponentInputModel(BaseModel):
     inherits_context: bool = Field(default=False, description="Whether the component may be placed in any context, taking its parent's for itself and its children (control flow such as foreach or if). Its context is then ignored.")
     downstream_of: list[str] = Field(default_factory=list, description="Component names of which at least one must be an ancestor, at any depth. Empty means no requirement.")
     not_downstream_of: list[str] = Field(default_factory=list, description="Component names of which none may be an ancestor.")
+    text_prop: str | None = Field(default=None, description="The prop text children fill (`<Button>Go</Button>` sets `label`); none: the component takes no text.")
+    catalog: str | None = Field(default=None, description="The catalog it belongs to, as name@version (`ui@1`), or the name of the module it is from.")
 
     @model_validator(mode="after")
     def check_unique_props(self) -> Self:

@@ -9,7 +9,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
-from facade.models import Blok, BlokAgentMapping, BlokDependency, Dashboard, DashboardPlacement, MaterializedBlok, UICatalog
+from facade.models import Blok, BlokAgentMapping, BlokDependency, Dashboard, DashboardPlacement, MaterializedBlok, Module
 from facade.schema import schema
 from facade.models import Caller
 from tests.factories import TEST_TOKEN, create_agent_for_registry
@@ -25,8 +25,8 @@ def _seed_two_tenants(prefix: str) -> dict:
         context, user, client, org = tenant_context(token)
         caller, _ = Caller.objects.get_or_create(client=client, user=user, organization=org)
         agent = create_agent_for_registry(caller, user, org, f"{prefix}-{side}")
-        catalog = UICatalog.objects.get_or_create(name="default", organization=org)[0]
-        blok = Blok.objects.create(name=f"{prefix}-{side}-blok", creator=user, organization=org, catalog=catalog)
+        catalog = Module.objects.get_or_create(name="default", organization=org)[0]
+        blok = Blok.objects.create(name=f"{prefix}-{side}-blok", creator=user, organization=org, module=catalog)
         BlokDependency.objects.create(blok=blok, key="stage")
         mblok = MaterializedBlok.objects.create(blok=blok, name=blok.name, description="")
         BlokAgentMapping.objects.create(materialized_blok=mblok, key="stage", dependency=blok.dependencies.get(), agent=agent)

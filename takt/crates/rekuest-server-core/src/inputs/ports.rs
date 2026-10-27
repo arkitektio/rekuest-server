@@ -894,6 +894,35 @@ port_model!(
 
 impl ArgPortInputModel {
     pub fn validate(&mut self) -> Result<(), ValidationError> {
+        self.validate_port(true)
+    }
+
+    /// What holds of a port whatever its kind (a blok local of kind ANY, or one whose kind is
+    /// still to be inferred): its key, and its children, validators, widget, effects and
+    /// descriptors each valid on their own. No per-kind shape rule, no widget fit.
+    pub fn validate_untyped(&mut self) -> Result<(), ValidationError> {
+        for child in self.children.iter_mut().flatten() {
+            child.validate()?;
+        }
+        for validator in self.validators.iter_mut().flatten() {
+            validator.validate()?;
+        }
+        if let Some(widget) = self.widget.as_mut() {
+            widget.validate()?;
+        }
+        for descriptor in self.requires.iter().flatten() {
+            descriptor.validate("requires")?;
+        }
+        for effect in self.effects.iter_mut().flatten() {
+            effect.validate()?;
+        }
+        check_port_key(&self.key, "Port")
+    }
+
+    /// The arg port's validators; `check_default` false leaves a default that does not fit to
+    /// whoever reads it (a blok local's is the checker's `local.default`). Children are held
+    /// to every rule.
+    pub fn validate_port(&mut self, check_default: bool) -> Result<(), ValidationError> {
         for child in self.children.iter_mut().flatten() {
             child.validate()?;
         }
@@ -910,12 +939,16 @@ impl ArgPortInputModel {
         let child_keys: Vec<&str> = child_keys.iter().map(String::as_str).collect();
         self.common().validate(&child_keys)?;
 
-        if let Some(default) = self.default.as_ref() {
+        if let (Some(default), true) = (self.default.as_ref(), check_default) {
             if let Some(mismatch) = value_mismatch(self, default, None, false) {
                 return Err(ValidationError(format!("Port default {mismatch}")));
             }
         }
-        if let (Some(default), false) = (self.default.as_ref(), self.choice_values().is_empty()) {
+        if let (Some(default), false, true) = (
+            self.default.as_ref(),
+            self.choice_values().is_empty(),
+            check_default,
+        ) {
             let values = self.choice_values();
             if !values.contains(&default) {
                 return Err(ValidationError(format!(

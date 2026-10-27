@@ -145,74 +145,106 @@ ASSETS = {
     "asset bad reference": asset(ref="md5:abc", size=1),
 }
 
+def html(*children: dict) -> list[dict]:
+    """An html blok's tree: its root is `Html` (the root names the context)."""
+    return [{"id": "Html[0]", "component": "Html", "children": list(children)}]
+
+
 def blok(**fields) -> dict:
-    tree = [{"id": "root", "component": "Box", "props": [{"key": "label", "dynamic_value": {"path": "args.image"}}]}]
-    return {"key": "inspector", "components": tree, "demo_state": {"args": {"image": None}}, **fields}
+    """An agent blok; an html one's single root wrapped in `Html` (two roots are left as sent)."""
+    tree = [{"id": "Box[0]", "component": "Box", "props": [{"key": "label", "dynamic_value": {"path": "args.image"}}]}]
+    components = fields.pop("components", tree)
+    if fields.get("context", "HTML") == "HTML" and len(components) == 1:
+        components = html(*components)
+    return {"key": "inspector", "vocab": 2, "components": components, **fields}
 
 
 IMAGE = port("image", "STRUCTURE", identifier="@mikro/image", nullable=False)
-LOCALS = {"args": {"image": None}, "pose": [1, 0, 0, 0], "zoom": 1}
+POSE = [{"key": "pose", "kind": "LIST", "children": [{"key": "...", "kind": "FLOAT"}], "default": [1, 0, 0, 0], "persist": True}, {"key": "zoom", "kind": "INT", "default": 1}]
+SELF = [{"key": "self", "state_dependencies": [{"key": "arm", "demand": {"matches": [{"key": "mode", "kind": "STRING"}]}}], "action_dependencies": [{"key": "move", "demand": {"arg_matches": [{"key": "to"}]}}]}]
+POSITIONS = {"key": "positions", "service": "mikro", "document": "query($slide: ID!) { positions(slide: $slide) { id } }", "variables": [{"key": "slide", "value_path": "args.image"}]}
 
 BLOKS = {
-    "blok without args": blok(demo_state={"label": "x"}, components=[{"id": "root", "component": "Box"}]),
+    "blok without args": blok(components=[{"id": "Box[0]", "component": "Box"}]),
     "blok with args": blok(args=[{**IMAGE, "requires": [{"key": "@mikro/z_size", "operator": "GTE", "value": 2}]}]),
-    "blok with a list arg": blok(args=[port("images", "LIST", nullable=False, children=[IMAGE])]),
+    "blok with a list arg": blok(args=[port("images", "LIST", nullable=False, children=[IMAGE])], components=[{"id": "Box[0]", "component": "Box"}]),
     "blok args keyed twice": blok(args=[IMAGE, IMAGE]),
     "blok args on a scene": blok(context="SCENE", args=[IMAGE]),
-    "blok args beside a dependency named args": blok(args=[IMAGE], dependencies=[{"key": "args"}]),
     "blok arg of a bad shape": blok(args=[port("image", "STRUCTURE", nullable=False)]),
-    "blok persisting locals": blok(demo_state=LOCALS, persist=[{"key": "pose", "description": "Where the gizmo left it"}, {"key": "zoom"}]),
-    "blok persisting an unknown local": blok(demo_state=LOCALS, persist=[{"key": "speed"}]),
-    "blok persisting a local twice": blok(demo_state=LOCALS, persist=[{"key": "pose"}, {"key": "pose"}]),
-    "blok persisting its args": blok(demo_state=LOCALS, persist=[{"key": "args"}]),
-    "blok persisting a dependency": blok(demo_state={**LOCALS, "stage": {}}, dependencies=[{"key": "stage"}], persist=[{"key": "stage"}]),
-    "blok persisting without demo state": blok(demo_state=None, components=[{"id": "root", "component": "Box"}], persist=[{"key": "pose"}]),
-    "blok persisting an empty key": blok(demo_state=LOCALS, persist=[{"key": ""}]),
+    "blok without vocab": {"key": "inspector", "components": html({"id": "Box[0]", "component": "Box"})},
+    "blok of another vocab": blok(vocab=1),
+    "blok with locals, demo and catalogs": blok(components=[{"id": "Box[0]", "component": "Box"}], locals=POSE, demo={"args": {"image": None}}, catalogs=["ui@1"], module="orkestrator"),
+    "blok with a local twice": blok(locals=[POSE[0], POSE[0]]),
+    "blok with a reserved local": blok(locals=[{"key": "task", "kind": "STRING"}]),
+    "blok with a local of no kind": blok(locals=[{"key": "zoom", "default": 1}]),
+    "blok with a local whose default does not fit": blok(locals=[{"key": "zoom", "kind": "INT", "default": "1"}]),
+    "blok with a local of a bad shape": blok(locals=[{"key": "form", "kind": "DICT"}]),
+    "blok with a catalog badly spelled": blok(catalogs=["ui"]),
+    "blok with a query": blok(args=[IMAGE], queries=[POSITIONS], components=[{"id": "Text[0]", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "queries.positions.status"}}]}]),
+    "blok with a mutation": blok(queries=[{**POSITIONS, "document": "mutation { a }"}]),
+    "blok with a query key that is no name": blok(queries=[{**POSITIONS, "key": "my positions"}]),
+    "blok with a query twice": blok(queries=[POSITIONS, POSITIONS]),
+    "blok with locals twice out of order": blok(locals=[{"key": k, "kind": "STRING"} for k in ("a", "b", "b", "a")]),
+    "blok with a query fetching more": blok(queries=[{**POSITIONS, "more": "positions"}], components=[{"id": "Button[0]", "component": "Button", "props": [{"key": "onClick", "util_call": {"operation": "query.fetch_more", "arguments": [{"key": "query", "value_literal": "positions"}, {"key": "variables", "value_dict": [{"key": "after", "value_literal": 1}]}]}}]}]),
+    "blok fetching more of a query without more": blok(queries=[POSITIONS], components=[{"id": "Button[0]", "component": "Button", "props": [{"key": "onClick", "util_call": {"operation": "query.fetch_more", "arguments": [{"key": "query", "value_literal": "positions"}]}}]}]),
+    "blok with a query more that is no path": blok(queries=[{**POSITIONS, "more": "positions[0]"}]),
+    "blok with a subscription document as a query": blok(queries=[{**POSITIONS, "document": "subscription { a }"}]),
+    "blok with a query of no operation": blok(queries=[{**POSITIONS, "document": "  # nothing"}]),
+    "blok with a query document as a subscription": blok(subscriptions=[{"key": "s", "service": "rekuest", "document": "query { a }"}]),
+    "blok with a subscription that is a mutation": blok(subscriptions=[{"key": "s", "service": "rekuest", "document": "mutation { a }"}]),
+    "blok with a subscription replaying an unknown query": blok(subscriptions=[{"key": "s", "service": "rekuest", "document": "subscription { a }", "history": "nope"}]),
+    "blok reading an undeclared query": blok(components=[{"id": "Text[0]", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "queries.positions.value"}}]}]),
+    "blok reading deps as an agent": blok(dependencies=SELF, components=[{"id": "Text[0]", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "deps.robot.arm"}}]}]),
+    "blok reading its own state": blok(dependencies=SELF, components=[{"id": "Text[0]", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "self.arm.mode"}}]}]),
+    "blok calling itself into a record": blok(dependencies=SELF, components=[{"id": "Button[0]", "component": "Button", "props": [{"key": "onClick", "declares_value": "move", "agent_call": {"dependency": "self", "operation": "move", "arguments": [{"key": "to", "value_literal": True}]}}, {"key": "disabled", "dynamic_value": {"path": "move.running"}}]}]),
+    "blok reading now": blok(components=[{"id": "Text[0]", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "now"}}]}]),
+    "blok reading then": blok(components=[{"id": "Text[0]", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "then"}}]}]),
+    "blok with an old now_interval": blok(now_interval=5),
+    "blok with two roots": blok(components=[{"id": "Box[0]", "component": "Box"}, {"id": "Box[1]", "component": "Box"}]),
+    "blok demo naming no dependency": blok(demo={"deps": {"robot": {}}}),
+    "action logo declaring a local": blok(context="ACTION_LOGO", components=[{"id": "Logo[0]", "component": "ActionLogo"}], locals=[{"key": "x", "kind": "STRING"}]),
 }
 
-def at(key: str, *children: dict) -> dict:
-    return {"id": f"at-{key}", "component": "At", "props": [{"key": "dependency", "static_value": key}], "children": list(children) or None}
+def anchor(key: str, *children: dict) -> dict:
+    return {"id": f"anchor-{key}", "component": "Anchor", "props": [{"key": "dep", "static_value": key}], "children": list(children) or None}
 
 
-def through(value: str) -> dict:
-    return {"id": "route", "component": "Route", "props": [{"key": "through", "static_value": value}, {"key": "progress", "dynamic_value": {"path": "task.progress"}}]}
+def through(*keys: str) -> dict:
+    return {"id": "route", "component": "Route", "props": [{"key": "through", "static_value": list(keys)}, {"key": "progress", "dynamic_value": {"path": "task.progress"}}]}
 
 
 def overlay(*children: dict, **fields) -> dict:
-    return {"context": "OVERLAY", "components": [{"id": "root", "component": "Overlay", "children": list(children)}], **fields}
+    return {"context": "OVERLAY", "vocab": 2, "components": [{"id": "root", "component": "Overlay", "children": list(children)}], **fields}
 
 
 def flow(*bloks: dict, dependencies: tuple[str, ...] = ("robot", "frame")) -> dict:
-    return {**impl(bloks=list(bloks)), "dependencies": [{"key": key} for key in dependencies]}
+    return {**impl(bloks=list(bloks), args=[port("slides", "LIST", nullable=False, children=[port("...", "STRING", nullable=False)])]), "dependencies": [{"key": key} for key in dependencies]}
 
 
 GLOW = {"id": "glow", "component": "Glow", "props": [{"key": "on", "dynamic_value": {"path": "self.helsinki.stage"}}]}
-SHOW = {"show_path": True}
+SHOW = [{"key": "show_path", "kind": "BOOL", "default": True, "persist": True}]
 
 ACTION_BLOKS = {
     "action bloks": flow(
-        overlay(at("robot", GLOW, {"id": "ask", "component": "TaskAsk"}), through("['robot', 'frame', 'robot']"), demo_state=SHOW, persist=[{"key": "show_path"}]),
-        {"context": "HTML", "components": [{"id": "card", "component": "Card", "props": [{"key": "value", "dynamic_value": {"path": "args.slides"}}]}], "description": "The run"},
+        overlay(anchor("robot", GLOW), through("robot", "frame", "robot"), locals=SHOW),
+        {"context": "HTML", "vocab": 2, "components": html({"id": "card", "component": "Card", "props": [{"key": "value", "dynamic_value": {"path": "args.slides"}}], "children": [{"id": "ask", "component": "ask"}]}), "description": "The run"},
     ),
-    "action blok through in JSON quotes": flow(overlay(through('["robot", "frame"]'))),
-    "action blok through as a plain list": flow(overlay(through("robot, frame"))),
-    "action blok through an unknown key": flow(overlay(through("['robot', 'stitcher']"))),
-    "action blok at an unknown key": flow(overlay(at("stitcher"))),
-    "action blok at self": flow(overlay(at("self"))),
-    "action blok at a dynamic key": flow(overlay({"id": "at", "component": "At", "props": [{"key": "dependency", "dynamic_value": {"path": "show_path"}}]}, demo_state=SHOW)),
+    "action blok through an unknown key": flow(overlay(through("robot", "stitcher"))),
+    "action blok anchored at an unknown key": flow(overlay(anchor("stitcher"))),
+    "action blok anchored at self": flow(overlay(anchor("self"))),
+    "action blok anchored at a dynamic key": flow(overlay({"id": "at", "component": "Anchor", "props": [{"key": "dep", "dynamic_value": {"path": "show_path"}}]}, locals=SHOW)),
     "action blok reading an unknown root": flow(overlay({"id": "t", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "stage.position"}}]})),
+    "action blok reading an undeclared arg": flow(overlay({"id": "t", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "args.nope"}}]})),
     "action blok calling a dependency": flow(overlay({"id": "b", "component": "Button", "props": [{"key": "onClick", "agent_call": {"dependency": "robot", "operation": "home"}}]})),
     "action blok calling an undeclared agent": flow(overlay({"id": "b", "component": "Button", "props": [{"key": "onClick", "agent_call": {"dependency": "stage", "operation": "home"}}]})),
     "action bloks twice in one context": flow(overlay(), overlay()),
-    "action blok in a logo context": flow({"context": "LOGO", "components": [{"id": "root", "component": "SVG"}]}),
-    "action blok sent twice": flow({"context": "HTML", "components": [{"id": "root", "component": "Card"}], "source": "<Card />"}),
-    "action blok sent not at all": flow({"context": "HTML"}),
-    "action blok seeding its task": flow(overlay(demo_state={"task": {}})),
-    "action blok shadowing a dependency": flow(overlay(demo_state={"robot": {}})),
-    "action blok persisting an unknown local": flow(overlay(demo_state=SHOW, persist=[{"key": "zoom"}])),
-    "action blok beside a dependency named task": flow(overlay(), dependencies=("task",)),
+    "action blok in a logo context": flow({"context": "LOGO", "vocab": 2, "components": [{"id": "root", "component": "AgentLogo"}]}),
+    "action blok sent twice": flow({"context": "HTML", "vocab": 2, "components": html({"id": "root", "component": "Card"}), "source": "<Html><Card /></Html>"}),
+    "action blok sent not at all": flow({"context": "HTML", "vocab": 2}),
+    "action blok without vocab": flow({"context": "HTML", "components": html({"id": "root", "component": "Card"})}),
     "action blok with an unknown field": flow({**overlay(), "name": "nope"}),
-    "agent declaring an overlay blok": {"bloks": [{"key": "over", "context": "OVERLAY", "components": [{"id": "root", "component": "Overlay"}]}]},
+    "action blok with an old field": flow({**overlay(), "demo_state": {}}),
+    "agent declaring an overlay blok": {"bloks": [{"key": "over", "vocab": 2, "context": "OVERLAY", "components": [{"id": "root", "component": "Overlay"}]}]},
 }
 
 cases = {}

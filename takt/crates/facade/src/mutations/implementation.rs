@@ -752,7 +752,8 @@ pub async fn create_implementation(
     .await?;
     // Likewise the action's own bloks: not part of the hash, the latest registration's. Their
     // findings are stored on their bloks and handed back with the implementation's.
-    diagnostics.extend(sync_action_bloks(conn, agent, action.id, definition).await?);
+    diagnostics
+        .extend(sync_action_bloks(conn, agent, action.id, definition, &input.dependencies).await?);
 
     if definition_changed || !relational_state_is_current(conn, &action, definition).await? {
         rebuild_relational_ports(conn, &mut action, definition).await?;

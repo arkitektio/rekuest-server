@@ -179,6 +179,7 @@ mod tests {
             args: Default::default(),
             message: None,
             user: "u".into(),
+            assigner: None,
             org: "o".into(),
             action: "h".into(),
             implementation: "2".into(),

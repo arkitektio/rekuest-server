@@ -10,7 +10,7 @@ from .schedule import create_schedule, update_schedule, delete_schedule, trigger
 from .wiregram import delete_wiregram, export_wiregram, import_wiregram
 from .trigger import create_trigger, update_trigger, delete_trigger, fire_trigger
 from .blok import create_blok, delete_blok, edit_blok, fork_blok, revert_blok, update_blok
-from .catalog import register_ui_catalog
+from .catalog import register_module
 from .materialized_blok import materialize_blok, delete_materialized_blok, pin_materialized_blok, update_materialized_blok
 from .action import cleanup_actions
 from .resolution import auto_resolve
@@ -57,7 +57,7 @@ __all__ = [
     "delete_implementation",
     "create_dashboard",
     "create_blok",
-    "register_ui_catalog",
+    "register_module",
     "create_space",
     "create_placement",
     "create_space_placement",

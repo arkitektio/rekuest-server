@@ -12,6 +12,7 @@
 //! | `iat`, `exp`, `jti` | issued at, expiry (`TOKEN_TTL_SECONDS`), a fresh uuid4 |
 //! | `tsk`, `ptk`, `rtk` | this task, its parent (null for a root), its root (== `tsk` for a root) |
 //! | `rcb` | root caused by: the human at the root of the tree |
+//! | `org` | the organization the task runs in, `"<iss>#<org>"` |
 //! | `ahs`, `aha` | the args hash (`canonical`) and how it was computed |
 
 use serde_json::{json, Map, Value};
@@ -62,6 +63,38 @@ async fn resolve_root(conn: &mut PgConnection, parent: i64) -> Result<i64, sqlx:
     Ok(current)
 }
 
+/// The root of `parent`'s tree and who called it: the caller's id and user sub, None when the
+/// root's caller is gone.
+async fn root_caller(
+    conn: &mut PgConnection,
+    parent: i64,
+) -> Result<(i64, Option<(i64, String)>), sqlx::Error> {
+    let root = resolve_root(conn, parent).await?;
+    let caller = sqlx::query_as(
+        "SELECT c.id, u.sub FROM facade_task t
+           JOIN facade_caller c ON c.id = t.caller_id
+           JOIN authentikate_user u ON u.id = c.user_id
+          WHERE t.id = $1",
+    )
+    .bind(root)
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok((root, caller))
+}
+
+/// Who assigned a task: the user at the root of its tree, the same for every task it delegated
+/// to however deep (the token's `rcb`, the Assign's `assigner`). For a root it is its caller.
+pub async fn assigner(
+    conn: &mut PgConnection,
+    parent_id: Option<i64>,
+    caller_sub: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    match parent_id {
+        None => Ok(Some(caller_sub.to_owned())),
+        Some(parent) => Ok(root_caller(conn, parent).await?.1.map(|(_, sub)| sub)),
+    }
+}
+
 /// Mint the token for `task`, or `None` to skip: the implementation opts out (`needs_token`),
 /// or the root cannot be confirmed human under a lenient policy (`mint_token_for_task`).
 pub async fn mint_token_for_task(
@@ -98,16 +131,7 @@ pub async fn mint_token_for_task(
             principal::is_human_by_roles(provenance, &ctx.roles),
         ),
         Some(parent) => {
-            let root = resolve_root(conn, parent).await?;
-            let caller: Option<(i64, String)> = sqlx::query_as(
-                "SELECT c.id, u.sub FROM facade_task t
-                   JOIN facade_caller c ON c.id = t.caller_id
-                   JOIN authentikate_user u ON u.id = c.user_id
-                  WHERE t.id = $1",
-            )
-            .bind(root)
-            .fetch_optional(&mut *conn)
-            .await?;
+            let (root, caller) = root_caller(conn, parent).await?;
             match caller {
                 None => (root.to_string(), None, false),
                 Some((caller, caller_sub)) => (
@@ -154,6 +178,7 @@ pub async fn mint_token_for_task(
         "ptk": task.parent_id.map(|p| p.to_string()),
         "rtk": root,
         "rcb": root_caused_by,
+        "org": ctx.organization_identifier,
         "ahs": canonical::args_hash(task.args),
         "aha": canonical::algorithm(),
     });

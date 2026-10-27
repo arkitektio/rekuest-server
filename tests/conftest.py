@@ -190,7 +190,7 @@ def django_db_modify_db_settings(backend_stack):
 def authenticated_context(db, backend_stack):
     # Derive the identity from the same static token the agent sockets use, so a caller built
     # here and an agent from ``seed_agent`` land in the SAME organization. This used to
-    # hardcode ``slug="test-organization"`` while ``seed_agent`` resolved the token's own org,
+    # hardcode a fixed organization while ``seed_agent`` resolved the token's own org,
     # which silently put caller and agent in different tenants — invisible until the resolvers
     # started enforcing organization scoping.
     from asgiref.sync import async_to_sync

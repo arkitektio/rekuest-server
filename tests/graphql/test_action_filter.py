@@ -58,7 +58,7 @@ def _seed_action_requiring_axes_c(context):
     REQUIRES ``axes == "c"``.
 
     The action is seeded into the *exact* org/user/client the request carries (not re-looked-up by
-    slug), so it matches the org-prescope the ``actions`` query applies. Going through
+    id), so it matches the org-prescope the ``actions`` query applies. Going through
     ``_create_implementation`` also creates the Implementation/Agent, so the action is fully visible.
     """
     request = context.request

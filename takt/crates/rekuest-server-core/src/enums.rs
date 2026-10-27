@@ -33,6 +33,55 @@ wire_enum!(
     PortKind { INT, STRING, STRUCTURE, LIST, BOOL, DICT, FLOAT, DATE, UNION, ENUM, MODEL, MEMORY_STRUCTURE, INTERFACE, QUANTITY }
 );
 wire_enum!(
+    /// A blok local's kind: a port kind, or ANY (an untyped value; no action port is ever ANY).
+    LocalKind { INT, STRING, STRUCTURE, LIST, BOOL, DICT, FLOAT, DATE, UNION, ENUM, MODEL, MEMORY_STRUCTURE, INTERFACE, QUANTITY, ANY }
+);
+
+impl LocalKind {
+    /// The port kind it is, or none for ANY.
+    pub fn port_kind(self) -> Option<PortKind> {
+        match self {
+            LocalKind::INT => Some(PortKind::INT),
+            LocalKind::STRING => Some(PortKind::STRING),
+            LocalKind::STRUCTURE => Some(PortKind::STRUCTURE),
+            LocalKind::LIST => Some(PortKind::LIST),
+            LocalKind::BOOL => Some(PortKind::BOOL),
+            LocalKind::DICT => Some(PortKind::DICT),
+            LocalKind::FLOAT => Some(PortKind::FLOAT),
+            LocalKind::DATE => Some(PortKind::DATE),
+            LocalKind::UNION => Some(PortKind::UNION),
+            LocalKind::ENUM => Some(PortKind::ENUM),
+            LocalKind::MODEL => Some(PortKind::MODEL),
+            LocalKind::MEMORY_STRUCTURE => Some(PortKind::MEMORY_STRUCTURE),
+            LocalKind::INTERFACE => Some(PortKind::INTERFACE),
+            LocalKind::QUANTITY => Some(PortKind::QUANTITY),
+            LocalKind::ANY => None,
+        }
+    }
+}
+
+impl From<PortKind> for LocalKind {
+    fn from(kind: PortKind) -> Self {
+        match kind {
+            PortKind::INT => LocalKind::INT,
+            PortKind::STRING => LocalKind::STRING,
+            PortKind::STRUCTURE => LocalKind::STRUCTURE,
+            PortKind::LIST => LocalKind::LIST,
+            PortKind::BOOL => LocalKind::BOOL,
+            PortKind::DICT => LocalKind::DICT,
+            PortKind::FLOAT => LocalKind::FLOAT,
+            PortKind::DATE => LocalKind::DATE,
+            PortKind::UNION => LocalKind::UNION,
+            PortKind::ENUM => LocalKind::ENUM,
+            PortKind::MODEL => LocalKind::MODEL,
+            PortKind::MEMORY_STRUCTURE => LocalKind::MEMORY_STRUCTURE,
+            PortKind::INTERFACE => LocalKind::INTERFACE,
+            PortKind::QUANTITY => LocalKind::QUANTITY,
+        }
+    }
+}
+
+wire_enum!(
     /// The kind of assign widget.
     AssignWidgetKind { SEARCH, CHOICE, SLIDER, CUSTOM, STRING, STATE_CHOICE, PROXY }
 );

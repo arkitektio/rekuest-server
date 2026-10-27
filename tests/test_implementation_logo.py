@@ -8,9 +8,9 @@ from pydantic import ValidationError
 from facade.inputs import ImplementAgentInputModel
 
 DEFINITION = {"key": "crop", "name": "Crop", "kind": "FUNCTION", "args": [], "returns": []}
-LOGO = {"key": "crop", "context": "ACTION_LOGO", "components": [{"id": "logo", "component": "ActionLogo"}]}
-AGENT_LOGO = {"key": "app", "context": "LOGO", "components": [{"id": "logo", "component": "SVG"}]}
-PANEL = {"key": "panel", "components": [{"id": "root", "component": "Box"}]}
+LOGO = {"key": "crop", "vocab": 2, "context": "ACTION_LOGO", "components": [{"id": "logo", "component": "ActionLogo"}]}
+AGENT_LOGO = {"key": "app", "vocab": 2, "context": "LOGO", "components": [{"id": "logo", "component": "AgentLogo"}]}
+PANEL = {"key": "panel", "vocab": 2, "components": [{"id": "html", "component": "Html", "children": [{"id": "root", "component": "Card"}]}]}
 
 
 def _agent(logo: str | None, *bloks: dict) -> ImplementAgentInputModel:
@@ -41,36 +41,31 @@ def test_no_catalog_component_lives_in_the_action_logo_context() -> None:
             CatalogComponentInputModel(name="ActionLogo", **context)
 
 
-def _shape(paint: str, key: str = "fill") -> dict:
-    return {"id": "p", "component": "Path", "props": [{"key": key, "dynamic_value": {"path": paint[1:]}} if paint.startswith("@") else {"key": key, "static_value": paint}]}
-
-
 @pytest.mark.parametrize(
-    ("node", "demo_state", "message"),
-    [
-        (_shape("#fbbf24"), None, "not '#fbbf24' in 'fill'"),
-        (_shape("currentColor", "stroke"), None, "not 'currentColor' in 'stroke'"),
-        (_shape("@task.tint"), {"task": {"tint": "red"}}, "not 'red' in 'fill'"),
-        (
-            {"id": "loop", "component": "foreach", "props": [{"key": "items", "dynamic_value": {"path": "task.lamps"}}, {"key": "let", "declares_value": "lamp"}], "children": [_shape("@lamp.paint")]},
-            {"task": {"lamps": [{"paint": "brand"}, {"paint": "#00ff00"}]}},
-            "not '#00ff00' in 'fill'",
-        ),
-    ],
+    ("paint", "key"),
+    [("#fbbf24", "fill"), ("currentColor", "stroke")],
 )
-def test_an_action_logo_paints_only_with_the_palette(node: dict, demo_state: dict | None, message: str) -> None:
-    from facade.catalog_validation import check_logo_palette
-    from rekuest_core.inputs.models import ComponentNodeInputModel
-
-    root = ComponentNodeInputModel.model_validate({"id": "logo", "component": "ActionLogo", "children": [node]})
-    with pytest.raises(ValueError, match=re.escape(message)):
-        check_logo_palette([root], demo_state)
+def test_a_logo_paints_only_with_the_pens(paint: str, key: str) -> None:
+    shape = {"id": "p", "component": "Path", "props": [{"key": "d", "static_value": "M0 0"}, {"key": key, "static_value": paint}]}
+    logo = {**LOGO, "components": [{"id": "logo", "component": "ActionLogo", "children": [shape]}]}
+    with pytest.raises(ValidationError, match=re.escape("[palette.logo_paint]")):
+        _agent("crop", logo)
 
 
-def test_palette_tokens_references_and_unheld_paths_pass() -> None:
-    from facade.catalog_validation import check_logo_palette
-    from rekuest_core.inputs.models import ComponentNodeInputModel
+def test_pens_references_and_the_task_pass() -> None:
+    def shape(index: int, prop: dict) -> dict:
+        return {"id": f"p{index}", "component": "Path", "props": [{"key": "d", "static_value": "M0 0"}, prop]}
 
-    children = [_shape("brand-soft"), _shape("ink", "stroke"), _shape("url(#glow)"), _shape("none", "stroke"), _shape("@task.status")]
-    root = ComponentNodeInputModel.model_validate({"id": "logo", "component": "ActionLogo", "children": children})
-    check_logo_palette([root], {"task": None})
+    children = [
+        shape(0, {"key": "fill", "static_value": "brand-soft"}),
+        shape(1, {"key": "stroke", "static_value": "ink"}),
+        shape(2, {"key": "fill", "static_value": "url(#glow)"}),
+        shape(3, {"key": "fill", "dynamic_value": {"path": "task.message"}}),
+    ]
+    _agent("crop", {**LOGO, "components": [{"id": "logo", "component": "ActionLogo", "children": children}]})
+
+
+def test_an_action_logo_reads_only_its_task() -> None:
+    shape = {"id": "p", "component": "Path", "props": [{"key": "fill", "dynamic_value": {"path": "self.mode"}}]}
+    with pytest.raises(ValidationError, match=re.escape("[roots.not_in_kind]")):
+        _agent("crop", {**LOGO, "components": [{"id": "logo", "component": "ActionLogo", "children": [shape]}]})

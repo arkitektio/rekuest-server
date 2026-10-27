@@ -45,7 +45,7 @@ from .catalog import (
     Protocol,
     Shortcut,
     Toolbox,
-    UICatalog,
+    Module,
 )
 from .implementation import (
     Dependency,
@@ -83,7 +83,7 @@ __all__ = [
     # catalog
     "Collection",
     "Protocol",
-    "UICatalog",
+    "Module",
     "Toolbox",
     "Shortcut",
     # action

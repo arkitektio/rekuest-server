@@ -58,13 +58,13 @@ def rebuild_relational_ports(action: models.Action, definition: DefinitionInputM
 
 def create_blok(organization: t.Any, creator: t.Any, name: str, args: t.Sequence[dict] = (), **fields: t.Any) -> models.Blok:
     """A blok with its declared args stored and as BlokArgPort rows, as takt registers them."""
-    declared = BlokImplementationInputModel(key=name, components=[], args=list(args))
-    catalog = models.UICatalog.objects.get_or_create(name="orkestrator", organization=organization)[0]
+    declared = BlokImplementationInputModel(key=name, vocab=2, components=[{"id": "Html[0]", "component": "Html", "children": [{"id": "Html[0]/Card[0]", "component": "Card"}]}], args=list(args))
+    catalog = models.Module.objects.get_or_create(name="orkestrator", organization=organization)[0]
     blok = models.Blok.objects.create(
         name=name,
         organization=organization,
         creator=creator,
-        catalog=catalog,
+        module=catalog,
         args=declared.model_dump(mode="json")["args"],
         **fields,
     )

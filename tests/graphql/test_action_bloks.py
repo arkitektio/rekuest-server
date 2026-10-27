@@ -19,11 +19,11 @@ from rekuest_core.inputs.models import DefinitionInputModel, ImplementationInput
 from tests.graphql_ops import BLOKS, CREATE_BLOK, DELETE_BLOK, FORK_BLOK, MATERIALIZE_BLOK, UPDATE_BLOK
 from tests.registered import create_implementation
 
-OVERLAY = [{"id": "root", "component": "Overlay", "children": [{"id": "at", "component": "At", "props": [{"key": "dependency", "static_value": "relay"}]}]}]
+OVERLAY = [{"id": "root", "component": "Overlay", "children": [{"id": "at", "component": "Anchor", "props": [{"key": "dep", "static_value": "relay"}]}]}]
 
 ACTION = """
 query Action($id: ID!) {
-  action(id: $id) { bloks { context blok { id heldByAction provided context componentTree persist { key } } } }
+  action(id: $id) { bloks { context blok { id heldByAction provided context componentTree vocab locals { key kind default persist } } } }
 }
 """
 
@@ -63,18 +63,17 @@ def _seed(context: HttpContext) -> dict:
         flow_agent,
     )
     relay = create_implementation(ImplementationInputModel.model_validate({"interface": "relay", "definition": _definition("relay")}), relay_agent)
-    catalog = models.UICatalog.objects.get_or_create(name="orkestrator", organization=org)[0]
+    catalog = models.Module.objects.get_or_create(name="orkestrator", organization=org)[0]
     blok = models.Blok.objects.create(
         name="workflow:overlay",
         creator=user,
         organization=org,
-        catalog=catalog,
+        module=catalog,
         app=flow_agent.app,
         declaration_hash="b" * 64,
         context="OVERLAY",
         components=OVERLAY,
-        demo_state={"show_path": True},
-        persist=[{"key": "show_path", "description": None}],
+        locals=[{"key": "show_path", "kind": "BOOL", "default": True, "persist": True}],
         held_by_action=True,
     )
     models.ActionBlok.objects.create(action=workflow.action, context="OVERLAY", blok=blok)
@@ -91,7 +90,7 @@ async def _run(context: HttpContext, operation: str, variables: dict) -> dict:
 def test_bloks_are_not_part_of_the_actions_hash() -> None:
     """An action with bloks is the action without them: the same hash, pinned as it was before bloks existed."""
     plain = DefinitionInputModel.model_validate(_definition("workflow"))
-    with_bloks = DefinitionInputModel.model_validate({**_definition("workflow"), "bloks": [{"context": "OVERLAY", "components": OVERLAY}, {"context": "HTML", "source": "<Card />"}]})
+    with_bloks = DefinitionInputModel.model_validate({**_definition("workflow"), "bloks": [{"context": "OVERLAY", "vocab": 2, "components": OVERLAY}, {"context": "HTML", "vocab": 2, "source": "<Html><Card /></Html>"}]})
     assert with_bloks.unique_hash == plain.unique_hash == "fe79742535ec9df6b24d85b1d6b85f0e252173a39333bda6b3549e6bfe987932"
 
 
@@ -102,17 +101,17 @@ class TestActionBloks:
         env = await sync_to_async(_seed)(authenticated_context)
         (shown,) = (await _run(authenticated_context, ACTION, {"id": str(env["workflow"].action_id)}))["action"]["bloks"]
         assert shown["context"] == "OVERLAY"
-        assert shown["blok"] == {"id": str(env["blok"].id), "heldByAction": True, "provided": True, "context": "OVERLAY", "componentTree": OVERLAY, "persist": [{"key": "show_path"}]}
+        assert shown["blok"] == {"id": str(env["blok"].id), "heldByAction": True, "provided": True, "context": "OVERLAY", "componentTree": OVERLAY, "vocab": 2, "locals": [{"key": "show_path", "kind": "BOOL", "default": True, "persist": True}]}
 
         listed = (await _run(authenticated_context, BLOKS, {}))["bloks"]
         assert "workflow:overlay" not in [blok["name"] for blok in listed]
 
     async def test_a_catalog_lists_no_actions_blok_and_takes_it_along(self, authenticated_context: HttpContext) -> None:
         env = await sync_to_async(_seed)(authenticated_context)
-        catalogs = (await _run(authenticated_context, "query { uiCatalogs { name bloks { id } } }", {}))["uiCatalogs"]
+        catalogs = (await _run(authenticated_context, "query { modules { name bloks { id } } }", {}))["modules"]
         assert [catalog["bloks"] for catalog in catalogs if catalog["name"] == "orkestrator"] == [[]]
         # Its catalog going takes the blok, and the action's hold on it, along.
-        await models.UICatalog.objects.filter(name="orkestrator", organization=authenticated_context.request.organization).adelete()
+        await models.Module.objects.filter(name="orkestrator", organization=authenticated_context.request.organization).adelete()
         assert not await models.Blok.objects.filter(id=env["blok"].id).aexists()
         assert not await models.ActionBlok.objects.filter(action_id=env["workflow"].action_id).aexists()
         assert await models.Action.objects.filter(id=env["workflow"].action_id).aexists()
@@ -123,7 +122,7 @@ class TestActionBloks:
         refused = {
             "materializeBlok": (MATERIALIZE_BLOK, {"blok": blok, "agentMappings": [{"key": "relay", "agent": agent}]}),
             "materializeBlok for a message": (MATERIALIZE_BLOK, {"blok": blok, "scope": "MESSAGE", "agentMappings": []}),
-            "editBlok": (EDIT, {"blok": blok, "demoState": {"show_path": False}}),
+            "editBlok": (EDIT, {"blok": blok, "locals": [{"key": "show_path", "kind": "BOOL", "default": False}]}),
             "forkBlok": (FORK_BLOK, {"id": blok, "name": "mine"}),
             "updateBlok": (UPDATE_BLOK, {"id": blok, "description": "mine now"}),
             "deleteBlok": (DELETE_BLOK, {"id": blok}),
@@ -135,11 +134,13 @@ class TestActionBloks:
         assert await models.Blok.objects.filter(held_by_action=False, app__isnull=True).acount() == 0, "nothing was forked"
         assert await models.Blok.objects.filter(id=env["blok"].id).aexists()
 
-    async def test_an_overlay_and_a_run_reading_component_are_an_actions_only(self, authenticated_context: HttpContext) -> None:
-        overlay = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "mine", "context": "OVERLAY", "components": [{"id": "root", "component": "Overlay"}]}})
+    async def test_an_overlay_and_a_run_reading_component_are_an_actions_only(self, authenticated_context: HttpContext, takt: str) -> None:
+        overlay = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "mine", "vocab": 2, "context": "OVERLAY", "components": [{"id": "root", "component": "Overlay"}]}})
         assert overlay.errors and "an action's own" in overlay.errors[0].message
-        asking = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "mine", "components": [{"id": "root", "component": "Card", "children": [{"id": "ask", "component": "TaskAsk"}]}]}})
-        assert asking.errors and "reads a run of an action" in asking.errors[0].message
+        asking = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "mine", "vocab": 2, "source": "<Html><Card><ask /></Card></Html>"}})
+        assert asking.errors and "shows a task's open ask" in asking.errors[0].message
+        anchored = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "mine", "vocab": 2, "context": "SCENE", "source": '<Scene><Anchor dep="relay" /></Scene>'}})
+        assert anchored.errors and "reads the agents of a run" in anchored.errors[0].message
 
     async def test_a_run_knows_its_agents_its_bloks_and_its_space(self, authenticated_context: HttpContext, takt: str) -> None:
         await schema.execute("query { __typename }", context_value=authenticated_context)

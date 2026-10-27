@@ -8,7 +8,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
-from facade.models import Blok, MaterializedBlok, UICatalog
+from facade.models import Blok, MaterializedBlok, Module
 from facade.schema import schema
 from tests.factories import TEST_TOKEN
 from tests.graphql.test_cross_tenant_isolation import tenant_context
@@ -27,9 +27,9 @@ MATERIALIZED_BLOKS = """
 def _seed(prefix: str) -> HttpContext:
     """One materialized blok per context, in the token-"test" organization."""
     context, user, _client, org = tenant_context(TEST_TOKEN)
-    catalog = UICatalog.objects.get_or_create(name="default", organization=org)[0]
+    catalog = Module.objects.get_or_create(name="default", organization=org)[0]
     for blok_context in ("HTML", "SCENE", "LOGO", "ACTION_LOGO"):
-        blok = Blok.objects.create(name=f"{prefix}-{blok_context}", creator=user, organization=org, catalog=catalog, context=blok_context)
+        blok = Blok.objects.create(name=f"{prefix}-{blok_context}", creator=user, organization=org, module=catalog, context=blok_context)
         MaterializedBlok.objects.create(blok=blok, name=blok.name, description="")
     return context
 

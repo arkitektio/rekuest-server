@@ -14,7 +14,7 @@ def probe(info: Info, id: strawberry.ID) -> types.Probe:
     if state is None:
         raise ValueError(f"Unknown or expired probe {id}")
     organization = CallerContext.from_info(info).organization
-    if organization is None or state.org != organization.slug:
+    if organization is None or state.org != organization.identifier:
         raise PermissionError("Not authorized to view this probe.")
     return types.Probe.from_state(state)
 

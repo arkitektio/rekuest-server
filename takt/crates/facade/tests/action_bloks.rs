@@ -97,19 +97,18 @@ impl Lab {
     }
 }
 
-fn overlay(through: &str) -> Value {
-    json!({"context": "OVERLAY", "demo_state": {"show_path": true}, "persist": [{"key": "show_path"}],
+fn overlay(through: &[&str]) -> Value {
+    json!({"context": "OVERLAY", "vocab": 2, "locals": [{"key": "show_path", "kind": "BOOL", "default": true, "persist": true}],
            "components": [{"id": "root", "component": "Overlay", "children": [
-               {"id": "robot", "component": "At", "props": [{"key": "dependency", "static_value": "robot"}], "children": [
-                   {"id": "glow", "component": "Glow", "props": [{"key": "on", "dynamic_value": {"path": "self.helsinki.stage"}}]},
-                   {"id": "ask", "component": "TaskAsk"}]},
+               {"id": "robot", "component": "Anchor", "props": [{"key": "dep", "static_value": "robot"}], "children": [
+                   {"id": "glow", "component": "Glow", "props": [{"key": "on", "dynamic_value": {"path": "self.helsinki.stage"}}]}]},
                {"id": "route", "component": "Route", "props": [
                    {"key": "through", "static_value": through},
                    {"key": "progress", "dynamic_value": {"path": "task.progress"}}]}]}]})
 }
 
 fn panel() -> Value {
-    json!({"context": "HTML", "source": "<Card><Progress value=\"@task.progress\" /><TaskAsk /></Card>"})
+    json!({"context": "HTML", "vocab": 2, "source": "<Html><Card><Progress value={task.progress} /><ask /></Card></Html>"})
 }
 
 fn workflow(bloks: Value) -> Value {
@@ -126,7 +125,7 @@ async fn an_actions_bloks_are_held_by_it_shared_and_collected() {
     let first = lab.agent("first").await;
     let second = lab.agent("second").await;
 
-    let bloks = json!([overlay("['robot', 'frame', 'robot']"), panel()]);
+    let bloks = json!([overlay(&["robot", "frame", "robot"]), panel()]);
     lab.register(first, workflow(bloks.clone())).await.unwrap();
     let (action, hash) = lab.action().await;
     let written = lab.bloks(action).await;
@@ -135,7 +134,7 @@ async fn an_actions_bloks_are_held_by_it_shared_and_collected() {
             .iter()
             .map(|(context, _, held, root)| (context.as_str(), *held, root.as_str()))
             .collect::<Vec<_>>(),
-        vec![("HTML", true, "Card"), ("OVERLAY", true, "Overlay")],
+        vec![("HTML", true, "Html"), ("OVERLAY", true, "Overlay")],
         "one blok per context, the BSX parsed, both held by the action"
     );
     // Not an agent's: no slot holds it, and it is not part of the action's hash.
@@ -160,7 +159,7 @@ async fn an_actions_bloks_are_held_by_it_shared_and_collected() {
     // A change to one blok: the action holds the new content, the old one is collected.
     lab.register(
         second,
-        workflow(json!([overlay("['robot', 'frame']"), panel()])),
+        workflow(json!([overlay(&["robot", "frame"]), panel()])),
     )
     .await
     .unwrap();
@@ -196,7 +195,7 @@ async fn an_actions_bloks_name_only_its_dependencies() {
     let agent = lab.agent("first").await;
 
     let refused = lab
-        .register(agent, workflow(json!([overlay("['robot', 'stitcher']")])))
+        .register(agent, workflow(json!([overlay(&["robot", "stitcher"])])))
         .await
         .unwrap_err();
     assert_eq!(
@@ -204,9 +203,9 @@ async fn an_actions_bloks_name_only_its_dependencies() {
         "Blok manifest: component 'route' names 'stitcher', which is not a dependency of the action (its dependencies: 'frame', 'robot')"
     );
 
-    let wandering = json!([{"context": "HTML", "source": "<Text text=\"@stage.position\" />"}]);
+    let wandering = json!([{"context": "HTML", "vocab": 2, "source": "<Html><Text text={stage.position} /></Html>"}]);
     let refused = lab.register(agent, workflow(wandering)).await.unwrap_err();
-    assert!(refused.contains("references 'stage'"), "{refused}");
+    assert!(refused.contains("[roots.unknown]"), "{refused}");
 
     let twice = json!([panel(), panel()]);
     let refused = lab.register(agent, workflow(twice)).await.unwrap_err();
@@ -216,12 +215,9 @@ async fn an_actions_bloks_name_only_its_dependencies() {
     );
 
     // An overlay's root is the Overlay, whatever the catalog says.
-    let rooted = json!([{"context": "OVERLAY", "source": "<Scene />"}]);
+    let rooted = json!([{"context": "OVERLAY", "vocab": 2, "source": "<Scene />"}]);
     let refused = lab.register(agent, workflow(rooted)).await.unwrap_err();
-    assert!(
-        refused.contains("the root of a overlay blok must be a 'Overlay', not 'Scene'"),
-        "{refused}"
-    );
+    assert!(refused.contains("[context.root]"), "{refused}");
 }
 
 #[tokio::test]
@@ -229,20 +225,19 @@ async fn only_an_actions_blok_reads_a_run() {
     let Some(lab) = lab().await else { return };
     let agent = lab.agent("first").await;
 
-    // An agent's own blok holding an At or a TaskAsk is refused: it has no run to read.
-    let asking = json!({"bloks": [{"key": "panel", "source": "<Card><TaskAsk /></Card>"}]});
+    // An agent's own blok holding an Anchor or an ask is refused: it has no run to read.
+    let asking = json!({"bloks": [{"key": "panel", "vocab": 2, "source": "<Html><Card><ask /></Card></Html>"}]});
     let refused = lab.register(agent, asking).await.unwrap_err();
     assert!(
-        refused.contains("a 'TaskAsk' reads a run of an action"),
+        refused.contains("an 'ask' shows a task's open ask"),
         "{refused}"
     );
+    let anchored = json!({"bloks": [{"key": "panel", "vocab": 2, "source": "<Scene><Anchor dep=\"robot\" /></Scene>", "context": "SCENE"}]});
+    let refused = lab.register(agent, anchored).await.unwrap_err();
+    assert!(refused.contains("reads the agents of a run"), "{refused}");
 
     // Nor does an agent declare an overlay: an overlay is an action's.
-    let overlaid =
-        json!({"bloks": [{"key": "over", "context": "OVERLAY", "source": "<Overlay />"}]});
+    let overlaid = json!({"bloks": [{"key": "over", "vocab": 2, "context": "OVERLAY", "source": "<Overlay />"}]});
     let refused = lab.register(agent, overlaid).await.unwrap_err();
-    assert!(
-        refused.contains("an overlay blok is an action's own"),
-        "{refused}"
-    );
+    assert!(refused.contains("not OVERLAY. [context.kind]"), "{refused}");
 }

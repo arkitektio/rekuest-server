@@ -75,21 +75,21 @@ class Protocol(models.Model):
         return self.name
 
 
-class UICatalog(models.Model):
-    """A UICatalog is a collection of UI components that are used to
-    represent actions in the UI. You can create your own UI catalogs
-    and use them to customize the look of your actions.
-
+class Module(models.Model):
+    """A module: an app's own, unversioned UI extras (components and operations), registered by
+    the app (the Orkestrator registers ``orkestrator``) with the spec's versioned catalogs it
+    implements in full. A blok names at most one, as its ``module``; definitions name the
+    modules their effect and validator calls use (``DefinitionInput.catalogs``, base@1).
     """
 
     organization = models.ForeignKey(
         "authentikate.Organization",
         on_delete=models.CASCADE,
-        related_name="ui_catalogs",
-        help_text="The organization this UICatalog belongs to. Access is scoped to it.",
+        related_name="modules",
+        help_text="The organization this Module belongs to. Access is scoped to it.",
     )
     name = models.CharField(max_length=1000)
-    description = models.TextField(null=True, blank=True, help_text="A description of this catalog")
+    description = models.TextField(null=True, blank=True, help_text="A description of this module")
     components = models.JSONField(
         default=list,
         help_text="Registered component specs (rekuest_core CatalogComponent): the names a ComponentNode.component may use and the props each accepts.",
@@ -105,21 +105,26 @@ class UICatalog(models.Model):
         help_text="Default widgets per port kind and/or structure identifier (rekuest_core WidgetDefault), applied by the UI to ports that declare no widget.",
         db_default=[],
     )
+    catalogs = models.JSONField(
+        default=list,
+        help_text="The spec's versioned catalogs the UI app implements whole, as name@version ('ui@1', 'scene@1'), as it registered them.",
+        db_default=[],
+    )
     registered_by = models.ForeignKey(
         Client,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        related_name="registered_ui_catalogs",
-        help_text="The client (UI app) that last registered this catalog's components and operations.",
+        related_name="registered_modules",
+        help_text="The client (UI app) that last registered this module's components and operations.",
     )
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["organization", "name"], name="unique_ui_catalog_name_per_organization")]
+        constraints = [models.UniqueConstraint(fields=["organization", "name"], name="unique_module_name_per_organization")]
 
     @property
     def is_registered(self) -> bool:
-        """A catalog only created by ``get_or_create`` (no components, no operations) validates nothing."""
+        """A module only created by ``get_or_create`` (no components, no operations) validates nothing."""
         return bool(self.components) or bool(self.operations)
 
     def get_components(self) -> list[CatalogComponentInputModel]:

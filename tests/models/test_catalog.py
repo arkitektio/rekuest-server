@@ -9,9 +9,9 @@ from facade.models import Action, Protocol, StateDefinition
 from tests.factories import create_action_for_organization
 
 
-def _org(slug="catalog-test-org"):
+def _org(name="catalog-test-org"):
     """Protocol and StateDefinition are organization-scoped; these tests only need *an* org."""
-    return Organization.objects.get_or_create(slug=slug)[0]
+    return Organization.objects.get_or_create(identifier=name)[0]
 
 
 @pytest.mark.django_db(transaction=True)
@@ -35,7 +35,7 @@ class TestCatalogModels:
 
     def test_action_creation(self):
         """Test creating an Action model instance."""
-        org = Organization.objects.create(slug="test-org-3")
+        org = Organization.objects.create(identifier="test-org-3")
 
         action = create_action_for_organization(
             organization=org,
@@ -72,7 +72,7 @@ class TestCatalogModels:
         """Test the relationship between Protocol and Action."""
         protocol = Protocol.objects.create(organization=_org(), name="Relationship Test Protocol", description="Testing protocol-action relationship")
 
-        org = Organization.objects.create(slug="test-org-3")
+        org = Organization.objects.create(identifier="test-org-3")
 
         # Create multiple actions and associate them with the protocol
         action1 = create_action_for_organization(

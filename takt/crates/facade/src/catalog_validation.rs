@@ -1,22 +1,30 @@
-//! Blok manifests, port calls and port widgets checked against the base catalog and the
-//! organization's UI catalogs (`facade/catalog_validation.py`).
+//! Blok trees checked against the v2 catalogs, and port calls and widgets against base@1
+//! (`facade/catalog_validation.py`).
 //!
-//! Two kinds of finding: hard errors (`Err`, the registration is refused) for a known operation
-//! called wrongly, an unknown component once a catalog has registered components, or two catalogs
-//! disagreeing; warnings ([`Diagnostic`], stored on the row) for an operation or catalog nobody
-//! provides yet, so UI apps can roll out operations before agents are redeployed.
+//! A blok tree (blok language v2) is checked by `rekuest_core::blok`'s checker against a view:
+//! the spec's catalogs (base@2, the standard catalogs and the Orkestrator's module, vendored with
+//! the vocabulary) plus what the blok's `Module` registered beyond them. Every finding carries
+//! its vocabulary code; an error refuses the blok, a warning is stored with it.
+//!
+//! Port calls and widgets feed an action's definition hash, so they stay on base@1: hard errors
+//! (`Err`) for a known operation called wrongly or two catalogs disagreeing; warnings
+//! ([`Diagnostic`], stored on the row) for an operation or catalog nobody provides yet.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+use rekuest_core::blok::infer::{resolve_scope, ArgPorts};
+use rekuest_core::blok::view::ORKESTRATOR_MODULE;
+use rekuest_core::blok::{blok_view, check_blok_tree, BlokScope, BlokView, Finding};
 use rekuest_core::catalogs::{
     base_components, base_operations, base_version_named, BASE_CATALOG_ID, BASE_CATALOG_VERSION,
 };
-use rekuest_core::enums::{CatalogValueKind, ComponentContext};
+use rekuest_core::enums::CatalogValueKind;
 use rekuest_core::inputs::{
-    blok_asset_path, iter_util_calls, ArgPortInputModel, AssignWidgetInputModel,
-    CatalogComponentInputModel, CatalogOperationInputModel, ComponentNodeInputModel,
-    ComponentPropInputModel, DefinitionInputModel, OptimisticInputModel, ReturnPortInputModel,
-    ReturnWidgetInputModel, UtilCallInputModel,
+    blok_asset_path, iter_component_nodes, iter_util_calls, ArgPortInputModel,
+    AssignWidgetInputModel, CatalogComponentInputModel, CatalogOperationInputModel,
+    ComponentNodeInputModel, ComponentPropInputModel, DefinitionInputModel, OptimisticInputModel,
+    ReturnPortInputModel, ReturnWidgetInputModel, UtilCallInputModel, ANCHOR_COMPONENT,
+    ASK_COMPONENT, ROUTE_COMPONENT,
 };
 use rekuest_core::pyjson::{repr, repr_str};
 use serde::Serialize;
@@ -37,35 +45,20 @@ pub const UNBOUND_CALLBACK: &str = "unbound_callback";
 pub const MISPLACED_COMPONENT: &str = "misplaced_component";
 pub const OPERATION_ARGUMENTS: &str = "operation_arguments";
 pub const CATALOG_CONFLICT: &str = "catalog_conflict";
-/// The one component a blok of a context may have as its root, for the contexts that have one.
-pub fn context_root(context: ComponentContext) -> Option<&'static str> {
-    match context {
-        ComponentContext::SCENE => Some("Scene"),
-        ComponentContext::LOGO => Some("SVG"),
-        ComponentContext::ACTION_LOGO => Some("ActionLogo"),
-        ComponentContext::OVERLAY => Some("Overlay"),
-        ComponentContext::HTML => None,
-    }
-}
-
-/// The components that read a run or a dependency of an action (`ACTION_BLOK_COMPONENTS`): only
-/// an action's own bloks have either, so only they (or an overlay) may hold one.
-pub const ACTION_BLOK_COMPONENTS: [&str; 3] = ["At", "Route", "TaskAsk"];
-
 /// A non-fatal registration finding (`DiagnosticModel`), dumped as stored on the row.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Diagnostic {
     pub level: &'static str,
-    pub code: &'static str,
+    pub code: String,
     pub message: String,
     pub path: Option<String>,
 }
 
 impl Diagnostic {
-    fn warning(code: &'static str, message: String, path: String) -> Self {
+    fn warning(code: &str, message: String, path: String) -> Self {
         Self {
             level: "WARNING",
-            code,
+            code: code.to_owned(),
             message,
             path: Some(path),
         }
@@ -77,7 +70,7 @@ pub fn dump_diagnostics(diagnostics: &[Diagnostic]) -> Value {
     serde_json::to_value(diagnostics).expect("diagnostics serialize")
 }
 
-/// A registered `UICatalog`, as the checks read it.
+/// A registered `Module`, as the checks read it.
 #[derive(Debug, Clone)]
 pub struct Catalog {
     pub id: i64,
@@ -87,6 +80,12 @@ pub struct Catalog {
 }
 
 impl Catalog {
+    /// Whether an app registered it: one only created by naming it (no components, no
+    /// operations) checks nothing (`Module.is_registered`).
+    pub fn is_registered(&self) -> bool {
+        !self.components.is_empty() || !self.operations.is_empty()
+    }
+
     fn from_row(
         id: i64,
         name: String,
@@ -120,7 +119,7 @@ impl Catalog {
         organization: i64,
     ) -> Result<Option<Self>, String> {
         let row: Option<(i64, String, Value, Value)> = sqlx::query_as(
-            "SELECT id, name, components, operations FROM facade_uicatalog WHERE name = $1 AND organization_id = $2",
+            "SELECT id, name, components, operations FROM facade_module WHERE name = $1 AND organization_id = $2",
         )
         .bind(name)
         .bind(organization)
@@ -134,14 +133,14 @@ impl Catalog {
     }
 
     /// The named catalog of the organization, created empty if it does not exist yet
-    /// (`UICatalog.objects.get_or_create`).
+    /// (`Module.objects.get_or_create`).
     pub async fn get_or_create(
         conn: &mut PgConnection,
         name: &str,
         organization: i64,
     ) -> Result<Self, String> {
         sqlx::query(
-            "INSERT INTO facade_uicatalog (name, organization_id)
+            "INSERT INTO facade_module (name, organization_id)
              VALUES ($1, $2) ON CONFLICT (organization_id, name) DO NOTHING",
         )
         .bind(name)
@@ -466,450 +465,144 @@ fn check_asset_prop(
     Ok(())
 }
 
-/// Every component, prop and operation a tree uses is provided (`validate_components_against_catalogs`).
-/// `context` is the blok's own: a scene blok has one root, the scene, a logo blok one `SVG` and an
-/// action logo one `ActionLogo`, an overlay one `Overlay`, whatever is registered. Both logos are
-/// held to the size of an icon, and an action logo to the palette. `action` says the tree is an
-/// action's own blok: only such a tree, or an overlay, holds an [`ACTION_BLOK_COMPONENTS`] one.
-pub fn validate_components_against_catalogs(
-    catalogs: &[Catalog],
-    components: Option<&[ComponentNodeInputModel]>,
-    context: ComponentContext,
-    demo_state: Option<&serde_json::Map<String, Value>>,
-    action: bool,
-) -> Result<Vec<Diagnostic>, String> {
-    let (operations, mut diagnostics) = resolve_operations(catalogs);
-    let (specs, conflicts) = resolve_components(catalogs);
-    diagnostics.extend(conflicts);
-    let label = catalog_label(catalogs);
-    if let Some(required) = context_root(context) {
-        let kind = context_name(context);
-        let roots = components.unwrap_or_default();
-        let [root] = roots else {
+/// `Anchor` and `Route` read the agents a run got, so only an action's own blok holds them;
+/// `ask` a task's open ask, so only a blok that has a task (`check_run_components`).
+pub fn check_run_components(
+    components: &[ComponentNodeInputModel],
+    kind: &str,
+) -> Result<(), String> {
+    for node in iter_component_nodes(Some(components)) {
+        let run = matches!(node.component.as_str(), ANCHOR_COMPONENT | ROUTE_COMPONENT);
+        if run && kind != "action" {
             return Err(format!(
-                "a {kind} blok has exactly one root, a {}, not {} roots",
-                repr_str(required),
-                roots.len()
-            ));
-        };
-        if root.component != required {
-            return Err(format!(
-                "component {}: the root of a {kind} blok must be a {}, not {}",
-                repr_str(&root.id),
-                repr_str(required),
-                repr_str(&root.component)
-            ));
-        }
-    }
-    if matches!(
-        context,
-        ComponentContext::LOGO | ComponentContext::ACTION_LOGO
-    ) {
-        check_logo_complexity(components.unwrap_or_default(), demo_state)?;
-    }
-    if context == ComponentContext::ACTION_LOGO {
-        check_logo_palette(components.unwrap_or_default(), demo_state)?;
-    }
-    if !action && context != ComponentContext::OVERLAY {
-        if let Some(node) = rekuest_core::inputs::iter_component_nodes(components)
-            .into_iter()
-            .find(|node| ACTION_BLOK_COMPONENTS.contains(&node.component.as_str()))
-        {
-            return Err(format!(
-                "component {}: a {} reads a run of an action, so only an action's own blok (or an overlay) holds one",
+                "component {}: a {} reads the agents of a run, so only an action's own blok holds one",
                 repr_str(&node.id),
                 repr_str(&node.component)
             ));
         }
-    }
-    let mut ancestors = vec![];
-    visit_components(
-        components.unwrap_or_default(),
-        &mut ancestors,
-        ComponentContext::HTML,
-        specs.as_ref(),
-        &operations,
-        &label,
-        &mut diagnostics,
-    )?;
-    Ok(diagnostics)
-}
-
-/// The tree in pre-order, carrying each node's ancestors and the context in force for it.
-fn visit_components<'a>(
-    nodes: &'a [ComponentNodeInputModel],
-    ancestors: &mut Vec<&'a str>,
-    context: ComponentContext,
-    specs: Option<&Components>,
-    operations: &Operations,
-    label: &str,
-    diagnostics: &mut Vec<Diagnostic>,
-) -> Result<(), String> {
-    for node in nodes {
-        let owner = format!("component {}", repr_str(&node.id));
-        diagnostics.extend(check_component(
-            &node.component,
-            node.props.as_deref(),
-            node.children.as_ref().is_some_and(|c| !c.is_empty()),
-            specs,
-            operations,
-            label,
-            &owner,
-        )?);
-        let inner = check_placement(
-            &node.component,
-            ancestors,
-            context,
-            specs,
-            &owner,
-            diagnostics,
-        );
-        ancestors.push(&node.component);
-        visit_components(
-            node.children.as_deref().unwrap_or_default(),
-            ancestors,
-            inner,
-            specs,
-            operations,
-            label,
-            diagnostics,
-        )?;
-        ancestors.pop();
-    }
-    Ok(())
-}
-
-fn context_name(context: ComponentContext) -> &'static str {
-    match context {
-        ComponentContext::HTML => "html",
-        ComponentContext::SCENE => "scene",
-        ComponentContext::LOGO => "logo",
-        ComponentContext::ACTION_LOGO => "action_logo",
-        ComponentContext::OVERLAY => "overlay",
-    }
-}
-
-/// Where a component sits in the tree, against what it declares; the context of its children
-/// (`_check_placement`). A tree starts in the html context, and a component whose
-/// `children_context` differs from its own bridges two renderers. One that `inherits_context`
-/// sits in whichever context is in force and passes it on.
-fn check_placement(
-    component: &str,
-    ancestors: &[&str],
-    context: ComponentContext,
-    specs: Option<&Components>,
-    owner: &str,
-    diagnostics: &mut Vec<Diagnostic>,
-) -> ComponentContext {
-    let Some(spec) = specs.and_then(|specs| specs.get(component)) else {
-        return context;
-    };
-    let mut misplaced = |message: String| {
-        diagnostics.push(Diagnostic::warning(
-            MISPLACED_COMPONENT,
-            message,
-            owner.to_owned(),
-        ))
-    };
-    if !spec.inherits_context && spec.context != context {
-        misplaced(format!(
-            "{owner}: component {} is a {} component and cannot be placed in the {} context",
-            repr_str(component),
-            context_name(spec.context),
-            context_name(context)
-        ));
-    }
-    if !spec.downstream_of.is_empty()
-        && !spec
-            .downstream_of
-            .iter()
-            .any(|name| ancestors.contains(&name.as_str()))
-    {
-        let mut required: Vec<&str> = spec.downstream_of.iter().map(String::as_str).collect();
-        required.sort();
-        required.dedup();
-        misplaced(format!(
-            "{owner}: component {} must be inside one of {}",
-            repr_str(component),
-            py_list(&required)
-        ));
-    }
-    let mut forbidden: Vec<&str> = spec
-        .not_downstream_of
-        .iter()
-        .map(String::as_str)
-        .filter(|name| ancestors.contains(name))
-        .collect();
-    forbidden.sort();
-    forbidden.dedup();
-    if !forbidden.is_empty() {
-        misplaced(format!(
-            "{owner}: component {} must not be inside {}",
-            repr_str(component),
-            py_list(&forbidden)
-        ));
-    }
-    if spec.inherits_context {
-        return context;
-    }
-    spec.children_context.unwrap_or(spec.context)
-}
-
-/// `validate_manifest_against_catalog`: a blok manifest against its one catalog.
-pub fn validate_manifest_against_catalog(
-    catalog: &Catalog,
-    components: Option<&[ComponentNodeInputModel]>,
-    context: ComponentContext,
-    demo_state: Option<&serde_json::Map<String, Value>>,
-) -> Result<Vec<Diagnostic>, String> {
-    validate_components_against_catalogs(
-        std::slice::from_ref(catalog),
-        components,
-        context,
-        demo_state,
-        false,
-    )
-}
-
-/// An action's own blok against its one catalog: as a blok manifest, and it may hold the
-/// components that read the run ([`ACTION_BLOK_COMPONENTS`]).
-pub fn validate_action_blok_against_catalog(
-    catalog: &Catalog,
-    components: Option<&[ComponentNodeInputModel]>,
-    context: ComponentContext,
-    demo_state: Option<&serde_json::Map<String, Value>>,
-) -> Result<Vec<Diagnostic>, String> {
-    validate_components_against_catalogs(
-        std::slice::from_ref(catalog),
-        components,
-        context,
-        demo_state,
-        true,
-    )
-}
-
-/// What a logo blok may hold at most: a logo is an icon.
-pub const LOGO_MAX_NODES: usize = 200;
-pub const LOGO_MAX_DEPTH: usize = 12;
-pub const LOGO_MAX_PATH_DATA: usize = 16 * 1024;
-pub const LOGO_MAX_FOREACH_ITEMS: usize = 64;
-const LOGO_PATH_DATA_PROPS: [&str; 2] = ["d", "points"];
-
-/// `check_logo_complexity`: how many components, how deep, how much path data, and how many
-/// items a foreach draws of the blok's demo state (a list it does not find there draws nothing).
-pub fn check_logo_complexity(
-    components: &[ComponentNodeInputModel],
-    demo_state: Option<&serde_json::Map<String, Value>>,
-) -> Result<(), String> {
-    fn visit(
-        node: &ComponentNodeInputModel,
-        depth: usize,
-        demo_state: Option<&serde_json::Map<String, Value>>,
-        nodes: &mut usize,
-        path_data: &mut usize,
-    ) -> Result<(), String> {
-        *nodes += 1;
-        if depth > LOGO_MAX_DEPTH {
+        if node.component == ASK_COMPONENT && kind != "action" && kind != "task" {
             return Err(format!(
-                "component {}: a logo nests at most {LOGO_MAX_DEPTH} deep",
+                "component {}: an 'ask' shows a task's open ask, so only a task's or an action's blok holds one",
                 repr_str(&node.id)
             ));
         }
-        for prop in node.props.iter().flatten() {
-            if LOGO_PATH_DATA_PROPS.contains(&prop.key.as_str()) {
-                if let Some(Value::String(data)) = &prop.static_value {
-                    *path_data += data.chars().count();
-                }
-            }
-            if node.component == "foreach" && prop.key == "items" {
-                let items = demo_items(prop, demo_state);
-                if items > LOGO_MAX_FOREACH_ITEMS {
-                    return Err(format!(
-                        "component {}: a foreach in a logo draws at most {LOGO_MAX_FOREACH_ITEMS} items, its demo state has {items}",
-                        repr_str(&node.id)
-                    ));
-                }
-            }
-        }
-        for child in node.children.iter().flatten() {
-            visit(child, depth + 1, demo_state, nodes, path_data)?;
-        }
-        Ok(())
-    }
-
-    let (mut nodes, mut path_data) = (0, 0);
-    for root in components {
-        visit(root, 1, demo_state, &mut nodes, &mut path_data)?;
-    }
-    if nodes > LOGO_MAX_NODES {
-        return Err(format!(
-            "a logo has at most {LOGO_MAX_NODES} components, this one {nodes}"
-        ));
-    }
-    if path_data > LOGO_MAX_PATH_DATA {
-        return Err(format!(
-            "a logo holds at most {LOGO_MAX_PATH_DATA} characters of path data, this one {path_data}"
-        ));
     }
     Ok(())
 }
 
-/// What an action logo paints with: the viewer's palette, or a `url(#id)` to a gradient or clip path.
-pub const LOGO_PAINT_TOKENS: [&str; 7] = [
-    "ink",
-    "muted",
-    "brand",
-    "brand-strong",
-    "brand-soft",
-    "surface",
-    "none",
-];
-const LOGO_PAINT_PROPS: [&str; 3] = ["fill", "stroke", "stopColor"];
-
-/// `check_logo_palette`: an action logo paints only with `LOGO_PAINT_TOKENS` or a `url(#id)`; a
-/// static paint as written, a bound one as the demo state resolves it, for every item when it reads
-/// a foreach's let. A path the demo state does not hold draws nothing and is not checked.
-pub fn check_logo_palette(
-    components: &[ComponentNodeInputModel],
-    demo_state: Option<&serde_json::Map<String, Value>>,
-) -> Result<(), String> {
-    fn visit(
-        node: &ComponentNodeInputModel,
-        demo_state: Option<&serde_json::Map<String, Value>>,
-        scope: &HashMap<String, Vec<Value>>,
-    ) -> Result<(), String> {
-        for prop in node.props.iter().flatten() {
-            if !LOGO_PAINT_PROPS.contains(&prop.key.as_str()) {
-                continue;
-            }
-            let values = if let Some(value) = prop.static_value.as_ref().filter(|v| !v.is_null()) {
-                vec![value.clone()]
-            } else if let Some(path) = prop
-                .dynamic_value
-                .as_ref()
-                .and_then(|d| d.path.as_deref())
-                .filter(|p| !p.is_empty())
-            {
-                resolve(path, demo_state, scope)
-            } else {
-                vec![]
-            };
-            for value in values {
-                if !is_logo_paint(&value) {
-                    let shown = match &value {
-                        Value::String(text) => repr_str(text),
-                        other => other.to_string(),
-                    };
-                    return Err(format!(
-                        "component {}: a logo paints with {}|url(#…), not {shown} in {}",
-                        repr_str(&node.id),
-                        LOGO_PAINT_TOKENS.join("|"),
-                        repr_str(&prop.key)
-                    ));
-                }
-            }
-        }
-        let mut inner = None;
-        if node.component == "foreach" {
-            let props = || node.props.iter().flatten();
-            let let_name = props()
-                .find(|p| p.key == "let")
-                .and_then(|p| p.declares_value.clone());
-            let items = props()
-                .find(|p| p.key == "items")
-                .and_then(|p| p.dynamic_value.as_ref())
-                .and_then(|d| d.path.clone())
-                .filter(|p| !p.is_empty());
-            if let (Some(let_name), Some(items)) = (let_name, items) {
-                let mut scoped = scope.clone();
-                let drawn = resolve(&items, demo_state, scope)
-                    .into_iter()
-                    .filter_map(|found| match found {
-                        Value::Array(items) => Some(items),
-                        _ => None,
-                    })
-                    .flatten()
-                    .collect();
-                scoped.insert(let_name, drawn);
-                inner = Some(scoped);
-            }
-        }
-        for child in node.children.iter().flatten() {
-            visit(child, demo_state, inner.as_ref().unwrap_or(scope))?;
-        }
-        Ok(())
-    }
-
-    for root in components {
-        visit(root, demo_state, &HashMap::new())?;
-    }
-    Ok(())
-}
-
-/// A palette token, or a `url(#id)` reference to a gradient or clip path.
-pub fn is_logo_paint(value: &Value) -> bool {
-    let Some(paint) = value.as_str().map(str::trim) else {
-        return false;
-    };
-    LOGO_PAINT_TOKENS.contains(&paint) || (paint.starts_with("url(#") && paint.ends_with(')'))
-}
-
-/// What `path` holds: one value from the demo state, or one per item of a foreach's let.
-fn resolve(
-    path: &str,
-    demo_state: Option<&serde_json::Map<String, Value>>,
-    scope: &HashMap<String, Vec<Value>>,
-) -> Vec<Value> {
-    let segments: Vec<&str> = path.split(['.', '/']).filter(|s| !s.is_empty()).collect();
-    let Some((first, rest)) = segments.split_first() else {
-        return vec![];
-    };
-    let (roots, rest): (Vec<Value>, &[&str]) = match scope.get(*first) {
-        Some(items) => (items.clone(), rest),
-        None => (
-            vec![Value::Object(demo_state.cloned().unwrap_or_default())],
-            &segments[..],
-        ),
-    };
-    roots
-        .into_iter()
-        .filter_map(|root| {
-            let mut value = root;
-            for segment in rest {
-                value = value.as_object()?.get(*segment)?.clone();
-            }
-            Some(value)
+/// What a blok of `catalog` is checked against (`blok_view_for`): the spec's catalogs plus what
+/// `catalog` registered beyond them (a component it defines differently from a standard catalog
+/// is drawn as it defines it, `catalog.shadow` where a tree uses it). Unknown components are
+/// findings once the catalog has registered any (the Orkestrator's always).
+pub fn blok_view_for(catalog: &Catalog) -> BlokView {
+    let complete = catalog.name == ORKESTRATOR_MODULE || !catalog.components.is_empty();
+    // A registered component says which catalog it came from, unless it names its module.
+    let components: Vec<CatalogComponentInputModel> = catalog
+        .components
+        .iter()
+        .cloned()
+        .map(|mut component| {
+            component
+                .catalog
+                .get_or_insert_with(|| catalog.name.clone());
+            component
         })
-        .collect()
+        .collect();
+    blok_view(
+        Some((&catalog.name, &components)),
+        &catalog.operations,
+        complete,
+    )
 }
 
-/// How many items a foreach's `items` gives in the demo state; 0 when it names none.
-fn demo_items(
-    prop: &ComponentPropInputModel,
-    demo_state: Option<&serde_json::Map<String, Value>>,
-) -> usize {
-    if let Some(Value::Array(items)) = &prop.static_value {
-        return items.len();
+/// `module.unknown` (a warning): the blok names a module that is not the Orkestrator's and that
+/// nothing registered in the organization, so its own components are not checked. `None` for a
+/// known module.
+pub async fn module_unknown(
+    conn: &mut PgConnection,
+    catalog: &Catalog,
+    organization: i64,
+) -> Result<Option<Diagnostic>, sqlx::Error> {
+    if catalog.name == ORKESTRATOR_MODULE || catalog.is_registered() {
+        return Ok(None);
     }
-    let Some(path) = prop.dynamic_value.as_ref().and_then(|d| d.path.as_deref()) else {
-        return 0;
-    };
-    let Some(state) = demo_state else { return 0 };
-    let mut value = &Value::Null;
-    let mut first = true;
-    for segment in path.split(['.', '/']).filter(|s| !s.is_empty()) {
-        let next = if first {
-            state.get(segment)
+    let mut modules: Vec<String> = sqlx::query_scalar(
+        "SELECT name FROM facade_module
+          WHERE organization_id = $1 AND (components <> '[]'::jsonb OR operations <> '[]'::jsonb)",
+    )
+    .bind(organization)
+    .fetch_all(conn)
+    .await?;
+    modules.push(ORKESTRATOR_MODULE.to_owned());
+    modules.sort();
+    modules.dedup();
+    let fields = [
+        ("module", Value::String(catalog.name.clone())),
+        ("modules", Value::String(modules.join(", "))),
+    ];
+    Ok(Some(diagnostic_of(&Finding::of(
+        "module.unknown",
+        None,
+        &fields,
+    ))))
+}
+
+/// A blok checked against its catalog: its warnings, and its scope resolved (its locals'
+/// kinds), whose locals are stored as the blok's `resolved_locals`.
+#[derive(Debug, Clone)]
+pub struct CheckedBlok {
+    pub diagnostics: Vec<Diagnostic>,
+    pub scope: BlokScope,
+}
+
+/// A finding as a row stores it.
+pub fn diagnostic_of(finding: &Finding) -> Diagnostic {
+    Diagnostic {
+        level: if finding.is_error() {
+            "ERROR"
         } else {
-            value.as_object().and_then(|object| object.get(segment))
-        };
-        first = false;
-        match next {
-            Some(found) => value = found,
-            None => return 0,
-        }
+            "WARNING"
+        },
+        code: finding.code.clone(),
+        message: finding.message.clone(),
+        path: finding.path.clone(),
     }
-    value.as_array().map_or(0, Vec::len)
+}
+
+/// A v2 blok tree against what its blok declares (`scope`) and its catalog's view
+/// (`validate_blok_against_catalog`): its scope resolved first (`resolve_scope`), then refused
+/// on its first error (the finding, with its code); its warnings and resolved scope returned.
+pub fn validate_blok_against_catalog(
+    catalog: &Catalog,
+    components: Option<&[ComponentNodeInputModel]>,
+    scope: &BlokScope,
+) -> Result<CheckedBlok, String> {
+    validate_blok_with_arg_ports(catalog, components, scope, &ArgPorts::new())
+}
+
+/// [`validate_blok_against_catalog`], its locals resolved with `arg_ports` too: the full arg
+/// ports of the actions the blok's agent registers (`self`), as the SDK resolves them.
+pub fn validate_blok_with_arg_ports(
+    catalog: &Catalog,
+    components: Option<&[ComponentNodeInputModel]>,
+    scope: &BlokScope,
+    arg_ports: &ArgPorts,
+) -> Result<CheckedBlok, String> {
+    let roots = components.unwrap_or_default();
+    let [tree] = roots else {
+        return Err(format!("a blok has exactly one root, not {}", roots.len()));
+    };
+    check_run_components(roots, &scope.kind)?;
+    let view = blok_view_for(catalog);
+    let resolved = resolve_scope(tree, scope, Some(&view), arg_ports);
+    let findings = check_blok_tree(tree, &resolved, Some(&view));
+    if let Some(error) = findings.iter().find(|f| f.is_error()) {
+        return Err(error.to_string());
+    }
+    Ok(CheckedBlok {
+        diagnostics: findings.iter().map(diagnostic_of).collect(),
+        scope: resolved,
+    })
 }
 
 /// A widget of a definition, assign or return side.

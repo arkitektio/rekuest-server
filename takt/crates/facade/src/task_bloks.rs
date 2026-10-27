@@ -19,9 +19,12 @@ use sqlx::PgConnection;
 use rekuest_core::inputs::{ArgPortInputModel, BlokImplementationInputModel, ReturnPortInputModel};
 use rekuest_core::values::validate_assignment_args;
 
-use crate::catalog_validation::{dump_diagnostics, validate_manifest_against_catalog, Catalog};
+use crate::catalog_validation::{
+    dump_diagnostics, module_unknown, validate_blok_against_catalog, Catalog, Diagnostic,
+};
 use crate::messages::TaskBlok;
 use crate::mutations::blok::sync_blok_dependencies;
+use crate::registration::{stored_components, stored_demo, stored_list};
 
 /// Why a task's blok shows: the task holds until a person answers it, or carries on.
 pub const ASK: &str = "ASK";
@@ -33,8 +36,9 @@ const SELF_DEPENDENCY: &str = "self";
 /// The catalog a BSX blok naming none renders against (as registration's).
 const STANDARD_CATALOG_NAME: &str = "orkestrator";
 
-/// Roots a task's blok reads besides its state: what it is opened on, and its ask.
-const TASK_BLOK_ROOTS: [&str; 3] = ["args", "returns", "ask"];
+/// The kind of a task's blok in the vocabulary's root matrix: it reads `self` (the sending
+/// agent), `deps` (its dependencies, mapped), `args` and `task`.
+const TASK_KIND: &str = "task";
 
 #[derive(Debug, thiserror::Error)]
 pub enum TaskBlokError {
@@ -118,64 +122,70 @@ async fn blok_from_source(
         .unwrap_or_else(|| format!("Task {task} {}", role.to_lowercase()));
     let mut model: BlokImplementationInputModel = serde_json::from_value(json!({
         "key": name,
+        "vocab": sent.vocab.unwrap_or(2),
         "source": source,
         "dependencies": dependencies,
         "returns": sent.returns.clone().unwrap_or_default(),
-        "catalog": sent.catalog,
-        "demo_state": sent.demo_state,
-        "services": sent.services.clone().unwrap_or_default(),
+        "catalogs": sent.catalogs.clone().unwrap_or_default(),
+        "module": sent.module,
+        "locals": sent.locals.clone().unwrap_or_default(),
+        "demo": sent.demo,
+        "queries": sent.queries.clone().unwrap_or_default(),
+        "subscriptions": sent.subscriptions.clone().unwrap_or_default(),
     }))
     .map_err(|e| refused(format!("The blok is not a blok: {e}")))?;
-    // Its tree may read what it is opened on and its ask besides its state: checked as if
-    // the state held them, kept as sent.
-    let demo_state = model.demo_state.clone();
-    if let Some(state) = model.demo_state.as_mut() {
-        for root in TASK_BLOK_ROOTS {
-            state.entry(root).or_insert(Value::Null);
-        }
-    }
     model
-        .validate()
+        .validate_as(TASK_KIND)
         .map_err(|e| refused(format!("The blok does not hold: {e}")))?;
-    model.demo_state = demo_state;
 
     let catalog_name = model
-        .catalog
+        .module
         .as_deref()
         .filter(|c| !c.is_empty())
         .unwrap_or(STANDARD_CATALOG_NAME);
     let catalog = Catalog::get_or_create(conn, catalog_name, sender.organization_id)
         .await
         .map_err(refused)?;
-    let diagnostics = validate_manifest_against_catalog(
+    let checked = validate_blok_against_catalog(
         &catalog,
         model.components.as_deref(),
-        model.context,
-        model.demo_state.as_ref(),
+        &model.scope(TASK_KIND),
     )
     .map_err(|e| {
         refused(format!(
             "The blok does not fit the catalog {catalog_name:?}: {e}"
         ))
     })?;
+    // Stored as sent, its locals as resolved beside (`resolved_locals`).
+    let mut diagnostics: Vec<Diagnostic> = module_unknown(conn, &catalog, sender.organization_id)
+        .await?
+        .into_iter()
+        .collect();
+    diagnostics.extend(checked.diagnostics);
 
     let id: i64 = sqlx::query_scalar(
-        "INSERT INTO facade_blok (name, components, demo_state, diagnostics, creator_id, organization_id, catalog_id,
-                                  context, args, returns, services, owner_task_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '[]'::jsonb, $9, $10, $11)
+        "INSERT INTO facade_blok (name, components, diagnostics, creator_id, organization_id, module_id,
+                                  context, args, returns, owner_task_id, vocab, catalogs, locals, resolved_locals,
+                                  demo, queries, subscriptions)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, '[]'::jsonb, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          RETURNING id",
     )
     .bind(&model.key)
-    .bind(serde_json::to_value(model.components.as_deref().unwrap_or_default()).expect("components serialize"))
-    .bind(Value::Object(model.demo_state.clone().unwrap_or_default()))
+    .bind(stored_components(model.components.as_deref()))
     .bind(dump_diagnostics(&diagnostics))
     .bind(sender.user_id)
     .bind(sender.organization_id)
     .bind(catalog.id)
     .bind(model.context.value())
     .bind(serde_json::to_value(&model.returns).expect("returns serialize"))
-    .bind(serde_json::to_value(&model.services).expect("services serialize"))
     .bind(task)
+    .bind(model.vocab as i16)
+    .bind(serde_json::to_value(&model.catalogs).expect("blok catalogs serialize"))
+    .bind(stored_list(&model.locals))
+    .bind(stored_list(&checked.scope.locals))
+    .bind(stored_demo(model.demo.as_ref()))
+    .bind(stored_list(&model.queries))
+    .bind(stored_list(&model.subscriptions))
     .fetch_one(&mut *conn)
     .await?;
     sync_blok_dependencies(conn, id, &model.dependencies, true).await?;

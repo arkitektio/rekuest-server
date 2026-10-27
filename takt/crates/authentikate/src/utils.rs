@@ -12,8 +12,14 @@ fn check_organization_allowed(
     settings: &AuthentikateSettings,
 ) -> Result<(), AuthentikateError> {
     match &settings.allowed_organizations {
-        Some(allowed) if !token.org.as_ref().is_some_and(|org| allowed.contains(org)) => {
-            Err(AuthentikateError::OrganizationNotAllowed(token.org.clone()))
+        Some(allowed)
+            if !token
+                .org_identifier()
+                .is_some_and(|identifier| allowed.contains(&identifier)) =>
+        {
+            Err(AuthentikateError::OrganizationNotAllowed(
+                token.org_identifier(),
+            ))
         }
         _ => Ok(()),
     }
@@ -84,7 +90,7 @@ mod tests {
             &serde_json::json!({
                 "audience": "rekuest",
                 "static_tokens": {"t": {"sub": "1", "org": "lab"}, "other": {"sub": "2", "org": "elsewhere"}, "guest": {"sub": "3", "org": "lab", "roles": [], "collabs": {"12": {"5": []}}}},
-                "allowed_organizations": ["lab"],
+                "allowed_organizations": ["static_issuer#lab"],
             }),
             true,
         )

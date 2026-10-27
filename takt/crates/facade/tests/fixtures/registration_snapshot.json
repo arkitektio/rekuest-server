@@ -8522,580 +8522,143 @@
       "bloks": [
         {
           "blok": {
+            "demo": {
+              "args": {
+                "dataset": null
+              }
+            },
             "name": "dataset_inspector",
-            "catalog": "orkestrator",
+            "vocab": 2,
+            "locals": [
+              {
+                "key": "bins",
+                "kind": "INT",
+                "default": 32,
+                "persist": false,
+                "nullable": false
+              }
+            ],
+            "module": "orkestrator",
+            "queries": [],
+            "catalogs": [],
             "components": [
               {
-                "id": "Resizable",
-                "props": [
-                  {
-                    "key": "direction",
-                    "util_call": null,
-                    "agent_call": null,
-                    "static_value": "row",
-                    "dynamic_value": null,
-                    "declares_value": null
-                  },
-                  {
-                    "key": "className",
-                    "util_call": null,
-                    "agent_call": null,
-                    "static_value": "rounded-xl border",
-                    "dynamic_value": null,
-                    "declares_value": null
-                  }
-                ],
+                "id": "Html[0]",
                 "children": [
                   {
-                    "id": "Resizable/ResizablePanel[0]",
+                    "id": "Html[0]/Resizable[0]",
                     "props": [
                       {
-                        "key": "defaultSize",
-                        "util_call": null,
-                        "agent_call": null,
-                        "static_value": "55",
-                        "dynamic_value": null,
-                        "declares_value": null
+                        "key": "direction",
+                        "static_value": "row"
                       },
                       {
-                        "key": "minSize",
-                        "util_call": null,
-                        "agent_call": null,
-                        "static_value": "30",
-                        "dynamic_value": null,
-                        "declares_value": null
+                        "key": "className",
+                        "static_value": "rounded-xl border"
                       }
                     ],
                     "children": [
                       {
-                        "id": "Resizable/ResizablePanel[0]/Card[0]",
-                        "props": [
-                          {
-                            "key": "className",
-                            "util_call": null,
-                            "agent_call": null,
-                            "static_value": "h-full rounded-none border-0",
-                            "dynamic_value": null,
-                            "declares_value": null
-                          }
-                        ],
+                        "id": "Html[0]/Resizable[0]/ResizablePanel[0]",
                         "children": [
                           {
-                            "id": "Resizable/ResizablePanel[0]/Card[0]/CardHeader[0]",
-                            "props": null,
-                            "children": [
-                              {
-                                "id": "Resizable/ResizablePanel[0]/Card[0]/CardHeader[0]/CardTitle[0]",
-                                "props": [
-                                  {
-                                    "key": "text",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": "Dataset",
-                                    "dynamic_value": null,
-                                    "declares_value": null
-                                  }
-                                ],
-                                "children": null,
-                                "component": "CardTitle"
-                              },
-                              {
-                                "id": "Resizable/ResizablePanel[0]/Card[0]/CardHeader[0]/StructureDisplay[0]",
-                                "props": [
-                                  {
-                                    "key": "value",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": null,
-                                    "dynamic_value": {
-                                      "path": "args.dataset",
-                                      "literal": null
-                                    },
-                                    "declares_value": null
-                                  },
-                                  {
-                                    "key": "variant",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": "inline",
-                                    "dynamic_value": null,
-                                    "declares_value": null
-                                  }
-                                ],
-                                "children": null,
-                                "component": "StructureDisplay"
-                              }
-                            ],
-                            "component": "CardHeader"
-                          },
-                          {
-                            "id": "Resizable/ResizablePanel[0]/Card[0]/CardContent[0]",
-                            "props": null,
-                            "children": [
-                              {
-                                "id": "Resizable/ResizablePanel[0]/Card[0]/CardContent[0]/StructureViewer[0]",
-                                "props": [
-                                  {
-                                    "key": "value",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": null,
-                                    "dynamic_value": {
-                                      "path": "args.dataset",
-                                      "literal": null
-                                    },
-                                    "declares_value": null
-                                  },
-                                  {
-                                    "key": "height",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": "32rem",
-                                    "dynamic_value": null,
-                                    "declares_value": null
-                                  },
-                                  {
-                                    "key": "emptyText",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": "Open this from a dataset.",
-                                    "dynamic_value": null,
-                                    "declares_value": null
-                                  }
-                                ],
-                                "children": null,
-                                "component": "StructureViewer"
-                              }
-                            ],
-                            "component": "CardContent"
-                          }
-                        ],
-                        "component": "Card"
-                      }
-                    ],
-                    "component": "ResizablePanel"
-                  },
-                  {
-                    "id": "Resizable/ResizableHandle[0]",
-                    "props": [
-                      {
-                        "key": "withHandle",
-                        "util_call": null,
-                        "agent_call": null,
-                        "static_value": "true",
-                        "dynamic_value": null,
-                        "declares_value": null
-                      }
-                    ],
-                    "children": null,
-                    "component": "ResizableHandle"
-                  },
-                  {
-                    "id": "Resizable/ResizablePanel[1]",
-                    "props": [
-                      {
-                        "key": "defaultSize",
-                        "util_call": null,
-                        "agent_call": null,
-                        "static_value": "45",
-                        "dynamic_value": null,
-                        "declares_value": null
-                      },
-                      {
-                        "key": "minSize",
-                        "util_call": null,
-                        "agent_call": null,
-                        "static_value": "25",
-                        "dynamic_value": null,
-                        "declares_value": null
-                      }
-                    ],
-                    "children": [
-                      {
-                        "id": "Resizable/ResizablePanel[1]/Card[0]",
-                        "props": [
-                          {
-                            "key": "className",
-                            "util_call": null,
-                            "agent_call": null,
-                            "static_value": "h-full rounded-none border-0",
-                            "dynamic_value": null,
-                            "declares_value": null
-                          }
-                        ],
-                        "children": [
-                          {
-                            "id": "Resizable/ResizablePanel[1]/Card[0]/CardHeader[0]",
-                            "props": null,
-                            "children": [
-                              {
-                                "id": "Resizable/ResizablePanel[1]/Card[0]/CardHeader[0]/CardTitle[0]",
-                                "props": [
-                                  {
-                                    "key": "text",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": "Intensities",
-                                    "dynamic_value": null,
-                                    "declares_value": null
-                                  }
-                                ],
-                                "children": null,
-                                "component": "CardTitle"
-                              },
-                              {
-                                "id": "Resizable/ResizablePanel[1]/Card[0]/CardHeader[0]/CardDescription[0]",
-                                "props": [
-                                  {
-                                    "key": "text",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": "How the dataset's values are spread.",
-                                    "dynamic_value": null,
-                                    "declares_value": null
-                                  }
-                                ],
-                                "children": null,
-                                "component": "CardDescription"
-                              }
-                            ],
-                            "component": "CardHeader"
-                          },
-                          {
-                            "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]",
+                            "id": "Html[0]/Resizable[0]/ResizablePanel[0]/StructureDisplay[0]",
                             "props": [
                               {
-                                "key": "className",
-                                "util_call": null,
-                                "agent_call": null,
-                                "static_value": "grid gap-4",
-                                "dynamic_value": null,
-                                "declares_value": null
+                                "key": "value",
+                                "dynamic_value": {
+                                  "path": "args.dataset"
+                                }
                               }
                             ],
+                            "component": "StructureDisplay"
+                          }
+                        ],
+                        "component": "ResizablePanel"
+                      },
+                      {
+                        "id": "Html[0]/Resizable[0]/ResizablePanel[1]",
+                        "children": [
+                          {
+                            "id": "Html[0]/Resizable[0]/ResizablePanel[1]/Card[0]",
                             "children": [
                               {
-                                "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Field[0]",
+                                "id": "Html[0]/Resizable[0]/ResizablePanel[1]/Card[0]/Slider[0]",
                                 "props": [
                                   {
-                                    "key": "label",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": "Bins",
-                                    "dynamic_value": null,
-                                    "declares_value": null
+                                    "key": "bind",
+                                    "dynamic_value": {
+                                      "path": "bins"
+                                    }
                                   }
                                 ],
-                                "children": [
-                                  {
-                                    "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Field[0]/Slider[0]",
-                                    "props": [
-                                      {
-                                        "key": "bind",
-                                        "util_call": null,
-                                        "agent_call": null,
-                                        "static_value": "form.bins",
-                                        "dynamic_value": null,
-                                        "declares_value": null
-                                      },
-                                      {
-                                        "key": "min",
-                                        "util_call": null,
-                                        "agent_call": null,
-                                        "static_value": "4",
-                                        "dynamic_value": null,
-                                        "declares_value": null
-                                      },
-                                      {
-                                        "key": "max",
-                                        "util_call": null,
-                                        "agent_call": null,
-                                        "static_value": "256",
-                                        "dynamic_value": null,
-                                        "declares_value": null
-                                      },
-                                      {
-                                        "key": "step",
-                                        "util_call": null,
-                                        "agent_call": null,
-                                        "static_value": "4",
-                                        "dynamic_value": null,
-                                        "declares_value": null
-                                      }
-                                    ],
-                                    "children": null,
-                                    "component": "Slider"
-                                  },
-                                  {
-                                    "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Field[0]/Text[0]",
-                                    "props": [
-                                      {
-                                        "key": "text",
-                                        "util_call": null,
-                                        "agent_call": null,
-                                        "static_value": null,
-                                        "dynamic_value": {
-                                          "path": "form.bins",
-                                          "literal": null
-                                        },
-                                        "declares_value": null
-                                      },
-                                      {
-                                        "key": "tone",
-                                        "util_call": null,
-                                        "agent_call": null,
-                                        "static_value": "muted",
-                                        "dynamic_value": null,
-                                        "declares_value": null
-                                      },
-                                      {
-                                        "key": "size",
-                                        "util_call": null,
-                                        "agent_call": null,
-                                        "static_value": "sm",
-                                        "dynamic_value": null,
-                                        "declares_value": null
-                                      }
-                                    ],
-                                    "children": null,
-                                    "component": "Text"
-                                  }
-                                ],
-                                "component": "Field"
+                                "component": "Slider"
                               },
                               {
-                                "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Button[0]",
+                                "id": "Html[0]/Resizable[0]/ResizablePanel[1]/Card[0]/Button[0]",
                                 "props": [
                                   {
-                                    "key": "label",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": "Measure",
-                                    "dynamic_value": null,
-                                    "declares_value": null
-                                  },
-                                  {
-                                    "key": "fullWidth",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": "true",
-                                    "dynamic_value": null,
-                                    "declares_value": null
-                                  },
-                                  {
-                                    "key": "disabled",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": null,
-                                    "dynamic_value": {
-                                      "path": "run.running",
-                                      "literal": null
-                                    },
-                                    "declares_value": null
-                                  },
-                                  {
                                     "key": "onClick",
-                                    "util_call": null,
                                     "agent_call": {
                                       "arguments": [
                                         {
                                           "key": "dataset",
-                                          "util_call": null,
-                                          "agent_call": null,
-                                          "value_dict": null,
-                                          "value_list": null,
-                                          "value_path": "args.dataset",
-                                          "value_literal": null
+                                          "value_path": "args.dataset"
                                         },
                                         {
                                           "key": "bins",
-                                          "util_call": null,
-                                          "agent_call": null,
-                                          "value_dict": null,
-                                          "value_list": null,
-                                          "value_path": "form.bins",
-                                          "value_literal": null
+                                          "value_path": "bins"
                                         }
                                       ],
                                       "operation": "intensity_histogram",
                                       "dependency": "self"
                                     },
-                                    "static_value": null,
-                                    "dynamic_value": null,
                                     "declares_value": "run"
+                                  },
+                                  {
+                                    "key": "label",
+                                    "static_value": "Histogram"
                                   }
                                 ],
-                                "children": null,
                                 "component": "Button"
                               },
                               {
-                                "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Progress[0]",
+                                "id": "Html[0]/Resizable[0]/ResizablePanel[1]/Card[0]/Progress[0]",
                                 "props": [
                                   {
                                     "key": "value",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": null,
                                     "dynamic_value": {
-                                      "path": "run.progress",
-                                      "literal": null
-                                    },
-                                    "declares_value": null
+                                      "path": "run.progress"
+                                    }
                                   }
                                 ],
-                                "children": null,
                                 "component": "Progress"
                               },
                               {
-                                "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Text[0]",
+                                "id": "Html[0]/Resizable[0]/ResizablePanel[1]/Card[0]/Chart[0]",
                                 "props": [
-                                  {
-                                    "key": "text",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": null,
-                                    "dynamic_value": {
-                                      "path": "run.message",
-                                      "literal": null
-                                    },
-                                    "declares_value": null
-                                  },
-                                  {
-                                    "key": "tone",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": "muted",
-                                    "dynamic_value": null,
-                                    "declares_value": null
-                                  },
-                                  {
-                                    "key": "size",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": "sm",
-                                    "dynamic_value": null,
-                                    "declares_value": null
-                                  }
-                                ],
-                                "children": null,
-                                "component": "Text"
-                              },
-                              {
-                                "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Text[1]",
-                                "props": [
-                                  {
-                                    "key": "text",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": null,
-                                    "dynamic_value": {
-                                      "path": "run.error",
-                                      "literal": null
-                                    },
-                                    "declares_value": null
-                                  },
-                                  {
-                                    "key": "tone",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": "destructive",
-                                    "dynamic_value": null,
-                                    "declares_value": null
-                                  },
-                                  {
-                                    "key": "size",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": "sm",
-                                    "dynamic_value": null,
-                                    "declares_value": null
-                                  }
-                                ],
-                                "children": null,
-                                "component": "Text"
-                              },
-                              {
-                                "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Chart[0]",
-                                "props": [
-                                  {
-                                    "key": "type",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": "bar",
-                                    "dynamic_value": null,
-                                    "declares_value": null
-                                  },
                                   {
                                     "key": "data",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": null,
                                     "dynamic_value": {
-                                      "path": "run.result",
-                                      "literal": null
-                                    },
-                                    "declares_value": null
-                                  },
-                                  {
-                                    "key": "categoryKey",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": "name",
-                                    "dynamic_value": null,
-                                    "declares_value": null
-                                  },
-                                  {
-                                    "key": "series",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": "[{\"key\": \"count\", \"label\": \"Values\"}]",
-                                    "dynamic_value": null,
-                                    "declares_value": null
-                                  },
-                                  {
-                                    "key": "height",
-                                    "util_call": null,
-                                    "agent_call": null,
-                                    "static_value": "280",
-                                    "dynamic_value": null,
-                                    "declares_value": null
+                                      "path": "run.returns.histogram"
+                                    }
                                   }
                                 ],
-                                "children": null,
                                 "component": "Chart"
                               }
                             ],
-                            "component": "CardContent"
+                            "component": "Card"
                           }
                         ],
-                        "component": "Card"
+                        "component": "ResizablePanel"
                       }
                     ],
-                    "component": "ResizablePanel"
+                    "component": "Resizable"
                   }
                 ],
-                "component": "Resizable"
+                "component": "Html"
               }
             ],
-            "demo_state": {
-              "run": {
-                "done": false,
-                "error": "",
-                "failed": false,
-                "result": null,
-                "status": "idle",
-                "message": "",
-                "returns": {},
-                "running": false,
-                "progress": 0
-              },
-              "args": {
-                "dataset": null
-              },
-              "form": {
-                "bins": 32
-              }
-            },
             "description": "A dataset next to the histogram of its intensities.",
             "diagnostics": [],
             "dependencies": [
@@ -9143,7 +8706,7 @@
                       "return_matches": [
                         {
                           "at": 0,
-                          "key": "return0",
+                          "key": "histogram",
                           "kind": "LIST",
                           "children": [
                             {
@@ -9196,6 +8759,16 @@
                 "auto_resolvable": false,
                 "max_viable_instances": null,
                 "min_viable_instances": null
+              }
+            ],
+            "subscriptions": [],
+            "resolved_locals": [
+              {
+                "key": "bins",
+                "kind": "INT",
+                "default": 32,
+                "persist": false,
+                "nullable": false
               }
             ]
           },
@@ -9262,7 +8835,7 @@
                 "reference_unit": null
               }
             ],
-            "hash": "e83303ff879fb7d8f3e9bb3aa744cc4f1cf303024bbcd750a9ab76d6865e6fb7",
+            "hash": "3642df28f6eefc89acececd7dc7fb6c26ed420bbb878ed29f19f6ec754416659",
             "kind": "FUNCTION",
             "name": "Intensity Histogram",
             "pure": false,
@@ -9292,12 +8865,12 @@
                 "compiled_jsonpath": null
               },
               {
-                "key": "return0",
+                "key": "histogram",
                 "kind": "LIST",
                 "side": "return",
                 "index": 0,
                 "parent": null,
-                "key_path": "return0",
+                "key_path": "histogram",
                 "nullable": false,
                 "dimension": null,
                 "identifier": null,
@@ -9308,8 +8881,8 @@
                 "kind": "MODEL",
                 "side": "return",
                 "index": 0,
-                "parent": "return0",
-                "key_path": "return0....",
+                "parent": "histogram",
+                "key_path": "histogram....",
                 "nullable": false,
                 "dimension": null,
                 "identifier": "@dataset-inspector/histogram_bin",
@@ -9320,8 +8893,8 @@
                 "kind": "INT",
                 "side": "return",
                 "index": 1,
-                "parent": "return0....",
-                "key_path": "return0.....count",
+                "parent": "histogram....",
+                "key_path": "histogram.....count",
                 "nullable": false,
                 "dimension": null,
                 "identifier": null,
@@ -9332,8 +8905,8 @@
                 "kind": "STRING",
                 "side": "return",
                 "index": 0,
-                "parent": "return0....",
-                "key_path": "return0.....name",
+                "parent": "histogram....",
+                "key_path": "histogram.....name",
                 "nullable": false,
                 "dimension": null,
                 "identifier": null,
@@ -9344,7 +8917,7 @@
             "is_dev": false,
             "returns": [
               {
-                "key": "return0",
+                "key": "histogram",
                 "kind": "LIST",
                 "label": null,
                 "widget": null,
@@ -9468,9 +9041,21 @@
         },
         {
           "level": "WARNING",
-          "code": "unknown_operation",
-          "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered",
-          "path": "prop 'onClick' of component 'root'"
+          "code": "catalog.unknown_component",
+          "message": "<Stack> is in no catalog in force (base@2 + ui@1 + scene@1 + logo@1 + structure@1 + html@1 + orkestrator + orkestrator).",
+          "path": "root"
+        },
+        {
+          "level": "WARNING",
+          "code": "palette.raw_colour",
+          "message": "bg-red-500: a blok picks a colour role, not a colour; try bg-destructive.",
+          "path": "root"
+        },
+        {
+          "level": "WARNING",
+          "code": "expr.unknown_function",
+          "message": "fmt.made_up_ui_operation is not a function of the blok language or the catalogs in force.",
+          "path": "leaf"
         }
       ]
     },
@@ -9484,54 +9069,77 @@
       "bloks": [
         {
           "blok": {
+            "demo": {
+              "args": {
+                "x": 1
+              }
+            },
             "name": "panel-<side>",
-            "catalog": "orkestrator",
-            "components": [
+            "vocab": 2,
+            "locals": [
               {
-                "id": "root",
-                "props": [
-                  {
-                    "key": "onClick",
-                    "util_call": {
-                      "arguments": [],
-                      "operation": "made_up_ui_operation"
-                    },
-                    "agent_call": null,
-                    "static_value": null,
-                    "dynamic_value": null,
-                    "declares_value": null
-                  }
-                ],
-                "children": [
-                  {
-                    "id": "leaf",
-                    "props": [
-                      {
-                        "key": "text",
-                        "util_call": null,
-                        "agent_call": null,
-                        "static_value": "hi",
-                        "dynamic_value": null,
-                        "declares_value": null
-                      }
-                    ],
-                    "children": null,
-                    "component": "Text"
-                  }
-                ],
-                "component": "Stack"
+                "key": "x",
+                "kind": "INT",
+                "default": 1,
+                "persist": false,
+                "nullable": false
               }
             ],
-            "demo_state": {
-              "x": 1
-            },
+            "module": "orkestrator",
+            "queries": [],
+            "catalogs": [],
+            "components": [
+              {
+                "id": "html",
+                "children": [
+                  {
+                    "id": "root",
+                    "props": [
+                      {
+                        "key": "className",
+                        "static_value": "bg-red-500"
+                      }
+                    ],
+                    "children": [
+                      {
+                        "id": "leaf",
+                        "props": [
+                          {
+                            "key": "text",
+                            "util_call": {
+                              "arguments": [],
+                              "operation": "fmt.made_up_ui_operation"
+                            }
+                          }
+                        ],
+                        "component": "Text"
+                      }
+                    ],
+                    "component": "Stack"
+                  }
+                ],
+                "component": "Html"
+              }
+            ],
             "description": "A panel",
             "diagnostics": [
               {
-                "code": "unknown_operation",
-                "path": "prop 'onClick' of component 'root'",
+                "code": "catalog.unknown_component",
+                "path": "root",
                 "level": "WARNING",
-                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered"
+                "message": "<Stack> is in no catalog in force (base@2 + ui@1 + scene@1 + logo@1 + structure@1 + html@1 + orkestrator + orkestrator)."
+              },
+              {
+                "code": "palette.raw_colour",
+                "path": "root",
+                "level": "WARNING",
+                "message": "bg-red-500: a blok picks a colour role, not a colour; try bg-destructive."
+              },
+              {
+                "code": "expr.unknown_function",
+                "path": "leaf",
+                "level": "WARNING",
+                "message": "fmt.made_up_ui_operation is not a function of the blok language or the catalogs in force."
               }
             ],
             "dependencies": [
@@ -9558,6 +9166,16 @@
                 "auto_resolvable": false,
                 "max_viable_instances": null,
                 "min_viable_instances": null
+              }
+            ],
+            "subscriptions": [],
+            "resolved_locals": [
+              {
+                "key": "x",
+                "kind": "INT",
+                "default": 1,
+                "persist": false,
+                "nullable": false
               }
             ]
           },
@@ -9988,9 +9606,21 @@
         },
         {
           "level": "WARNING",
-          "code": "unknown_operation",
-          "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered",
-          "path": "prop 'onClick' of component 'root'"
+          "code": "catalog.unknown_component",
+          "message": "<Stack> is in no catalog in force (base@2 + ui@1 + scene@1 + logo@1 + structure@1 + html@1 + orkestrator + orkestrator).",
+          "path": "root"
+        },
+        {
+          "level": "WARNING",
+          "code": "palette.raw_colour",
+          "message": "bg-red-500: a blok picks a colour role, not a colour; try bg-destructive.",
+          "path": "root"
+        },
+        {
+          "level": "WARNING",
+          "code": "expr.unknown_function",
+          "message": "fmt.made_up_ui_operation is not a function of the blok language or the catalogs in force.",
+          "path": "leaf"
         }
       ]
     },
@@ -10004,54 +9634,77 @@
       "bloks": [
         {
           "blok": {
+            "demo": {
+              "args": {
+                "x": 1
+              }
+            },
             "name": "panel-<side>",
-            "catalog": "orkestrator",
-            "components": [
+            "vocab": 2,
+            "locals": [
               {
-                "id": "root",
-                "props": [
-                  {
-                    "key": "onClick",
-                    "util_call": {
-                      "arguments": [],
-                      "operation": "made_up_ui_operation"
-                    },
-                    "agent_call": null,
-                    "static_value": null,
-                    "dynamic_value": null,
-                    "declares_value": null
-                  }
-                ],
-                "children": [
-                  {
-                    "id": "leaf",
-                    "props": [
-                      {
-                        "key": "text",
-                        "util_call": null,
-                        "agent_call": null,
-                        "static_value": "hi",
-                        "dynamic_value": null,
-                        "declares_value": null
-                      }
-                    ],
-                    "children": null,
-                    "component": "Text"
-                  }
-                ],
-                "component": "Stack"
+                "key": "x",
+                "kind": "INT",
+                "default": 1,
+                "persist": false,
+                "nullable": false
               }
             ],
-            "demo_state": {
-              "x": 1
-            },
+            "module": "orkestrator",
+            "queries": [],
+            "catalogs": [],
+            "components": [
+              {
+                "id": "html",
+                "children": [
+                  {
+                    "id": "root",
+                    "props": [
+                      {
+                        "key": "className",
+                        "static_value": "bg-red-500"
+                      }
+                    ],
+                    "children": [
+                      {
+                        "id": "leaf",
+                        "props": [
+                          {
+                            "key": "text",
+                            "util_call": {
+                              "arguments": [],
+                              "operation": "fmt.made_up_ui_operation"
+                            }
+                          }
+                        ],
+                        "component": "Text"
+                      }
+                    ],
+                    "component": "Stack"
+                  }
+                ],
+                "component": "Html"
+              }
+            ],
             "description": "A panel",
             "diagnostics": [
               {
-                "code": "unknown_operation",
-                "path": "prop 'onClick' of component 'root'",
+                "code": "catalog.unknown_component",
+                "path": "root",
                 "level": "WARNING",
-                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered"
+                "message": "<Stack> is in no catalog in force (base@2 + ui@1 + scene@1 + logo@1 + structure@1 + html@1 + orkestrator + orkestrator)."
+              },
+              {
+                "code": "palette.raw_colour",
+                "path": "root",
+                "level": "WARNING",
+                "message": "bg-red-500: a blok picks a colour role, not a colour; try bg-destructive."
+              },
+              {
+                "code": "expr.unknown_function",
+                "path": "leaf",
+                "level": "WARNING",
+                "message": "fmt.made_up_ui_operation is not a function of the blok language or the catalogs in force."
               }
             ],
             "dependencies": [
@@ -10066,6 +9719,16 @@
                 "auto_resolvable": false,
                 "max_viable_instances": null,
                 "min_viable_instances": null
+              }
+            ],
+            "subscriptions": [],
+            "resolved_locals": [
+              {
+                "key": "x",
+                "kind": "INT",
+                "default": 1,
+                "persist": false,
+                "nullable": false
               }
             ]
           },
@@ -10493,9 +10156,21 @@
         },
         {
           "level": "WARNING",
-          "code": "unknown_operation",
-          "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered",
-          "path": "prop 'onClick' of component 'root'"
+          "code": "catalog.unknown_component",
+          "message": "<Stack> is in no catalog in force (base@2 + ui@1 + scene@1 + logo@1 + structure@1 + html@1 + orkestrator + orkestrator).",
+          "path": "root"
+        },
+        {
+          "level": "WARNING",
+          "code": "palette.raw_colour",
+          "message": "bg-red-500: a blok picks a colour role, not a colour; try bg-destructive.",
+          "path": "root"
+        },
+        {
+          "level": "WARNING",
+          "code": "expr.unknown_function",
+          "message": "fmt.made_up_ui_operation is not a function of the blok language or the catalogs in force.",
+          "path": "leaf"
         }
       ]
     },
@@ -10509,54 +10184,77 @@
       "bloks": [
         {
           "blok": {
+            "demo": {
+              "args": {
+                "x": 1
+              }
+            },
             "name": "panel-<side>",
-            "catalog": "orkestrator",
-            "components": [
+            "vocab": 2,
+            "locals": [
               {
-                "id": "root",
-                "props": [
-                  {
-                    "key": "onClick",
-                    "util_call": {
-                      "arguments": [],
-                      "operation": "made_up_ui_operation"
-                    },
-                    "agent_call": null,
-                    "static_value": null,
-                    "dynamic_value": null,
-                    "declares_value": null
-                  }
-                ],
-                "children": [
-                  {
-                    "id": "leaf",
-                    "props": [
-                      {
-                        "key": "text",
-                        "util_call": null,
-                        "agent_call": null,
-                        "static_value": "hi",
-                        "dynamic_value": null,
-                        "declares_value": null
-                      }
-                    ],
-                    "children": null,
-                    "component": "Text"
-                  }
-                ],
-                "component": "Stack"
+                "key": "x",
+                "kind": "INT",
+                "default": 1,
+                "persist": false,
+                "nullable": false
               }
             ],
-            "demo_state": {
-              "x": 1
-            },
+            "module": "orkestrator",
+            "queries": [],
+            "catalogs": [],
+            "components": [
+              {
+                "id": "html",
+                "children": [
+                  {
+                    "id": "root",
+                    "props": [
+                      {
+                        "key": "className",
+                        "static_value": "bg-red-500"
+                      }
+                    ],
+                    "children": [
+                      {
+                        "id": "leaf",
+                        "props": [
+                          {
+                            "key": "text",
+                            "util_call": {
+                              "arguments": [],
+                              "operation": "fmt.made_up_ui_operation"
+                            }
+                          }
+                        ],
+                        "component": "Text"
+                      }
+                    ],
+                    "component": "Stack"
+                  }
+                ],
+                "component": "Html"
+              }
+            ],
             "description": "A panel",
             "diagnostics": [
               {
-                "code": "unknown_operation",
-                "path": "prop 'onClick' of component 'root'",
+                "code": "catalog.unknown_component",
+                "path": "root",
                 "level": "WARNING",
-                "message": "prop 'onClick' of component 'root': operation 'made_up_ui_operation' is not provided by the catalog (base@1 + orkestrator); the UI cannot evaluate this call until it is registered"
+                "message": "<Stack> is in no catalog in force (base@2 + ui@1 + scene@1 + logo@1 + structure@1 + html@1 + orkestrator + orkestrator)."
+              },
+              {
+                "code": "palette.raw_colour",
+                "path": "root",
+                "level": "WARNING",
+                "message": "bg-red-500: a blok picks a colour role, not a colour; try bg-destructive."
+              },
+              {
+                "code": "expr.unknown_function",
+                "path": "leaf",
+                "level": "WARNING",
+                "message": "fmt.made_up_ui_operation is not a function of the blok language or the catalogs in force."
               }
             ],
             "dependencies": [
@@ -10571,6 +10269,16 @@
                 "auto_resolvable": false,
                 "max_viable_instances": null,
                 "min_viable_instances": null
+              }
+            ],
+            "subscriptions": [],
+            "resolved_locals": [
+              {
+                "key": "x",
+                "kind": "INT",
+                "default": 1,
+                "persist": false,
+                "nullable": false
               }
             ]
           },

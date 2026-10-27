@@ -16,11 +16,11 @@ from facade import managers, models
 from rekuest_core.enums import PortKind
 
 
-def _org(slug="test-org-scope"):
+def _org(name="test-org-scope"):
     """Protocol / StateDefinition / Blok / Dashboard are organization-scoped; any org will do here."""
     from authentikate.models import Organization
 
-    return Organization.objects.get_or_create(slug=slug)[0]
+    return Organization.objects.get_or_create(identifier=name)[0]
 
 
 def pm(at=None, key=None, kind=None, identifier=None, nullable=None, children=None):

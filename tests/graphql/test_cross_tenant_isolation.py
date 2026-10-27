@@ -37,7 +37,7 @@ def tenant_context(token: str = TEST_TOKEN) -> tuple[HttpContext, User, Client, 
 
     ``AuthentikateExtension`` overwrites the request's user/client/organization from the bearer
     token on every execution and rejects requests without one, so a tenant can only be expressed
-    as a token: ``TEST_TOKEN`` lives in ``static_org``, ``OTHER_TOKEN`` in ``other_org`` (see
+    as a token: ``TEST_TOKEN`` lives in organization 1, ``OTHER_TOKEN`` in organization 2 (see
     ``rekuest/settings_test.py``). Contexts that pre-set a different organization and still sent
     ``Bearer test`` silently collapsed into the same tenant, which made every cross-tenant
     assertion vacuous.

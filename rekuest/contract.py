@@ -100,7 +100,7 @@ contract = Contract(
         # Its other half: every agent connects to takt, not to this server, and the two are
         # released together under the same tag (takt even names the migrations it expects).
         sidecars=[Sidecar(name="takt", image="{repository}-takt:{tag}", summary="The agent protocol: registration, assignment, liveness.")],
-        upgrade_from="10.0.0",
+        upgrade_from="11.0.0",
     ),
     settings=Settings,
     render=render,

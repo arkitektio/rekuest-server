@@ -6,6 +6,8 @@ use rekuest_core::inputs::{
     ReturnPortInputModel, StateDefinitionInputModel,
 };
 use rekuest_core::pyjson::dumps;
+
+use crate::registration::without_nulls;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -18,43 +20,57 @@ pub fn hash_state_definition(definition: &StateDefinitionInputModel) -> String {
     hex::encode(Sha256::digest(dumps(&subset, true).as_bytes()))
 }
 
-/// sha256 over an action's own blok: what makes two actions' bloks one row. The BSX `source`
-/// (already parsed into `components`) is left out; the `action_blok` envelope keeps it from ever
-/// equalling an agent's template ([`hash_blok_definition`]), which shares the unique constraint.
-pub fn hash_action_blok(blok: &ActionBlokInputModel) -> String {
-    let mut dump = serde_json::to_value(blok).expect("an action blok serializes");
-    if let Value::Object(fields) = &mut dump {
-        fields.remove("source");
+/// The fields of a blok declaration hashed even when empty (the spec's dump rule): everything
+/// else counts only when it is set, so a field added in a later vocabulary version leaves the
+/// hash of a blok without it alone.
+const ALWAYS_HASHED: [&str; 4] = ["key", "vocab", "dependencies", "context"];
+
+/// A blok declaration's dump as hashed: without its nulls (at any depth), and at the top
+/// without what is not set; `source` (already parsed into `components`) and `default` (the
+/// agent's own choice) never count.
+fn hashed_dump(dump: Value) -> Value {
+    let Value::Object(mut fields) = dump else {
+        unreachable!("a blok declaration dumps as an object")
+    };
+    // A demo is the author's JSON, its own nulls included.
+    let demo = fields.remove("demo");
+    let Value::Object(mut fields) = without_nulls(Value::Object(fields)) else {
+        unreachable!("a blok declaration dumps as an object")
+    };
+    if let Some(Value::Object(demo)) = demo {
+        fields.insert(
+            "demo".into(),
+            Value::Object(demo.into_iter().filter(|(_, v)| !v.is_null()).collect()),
+        );
     }
+    Value::Object(
+        fields
+            .into_iter()
+            .filter(|(key, value)| {
+                key != "source"
+                    && key != "default"
+                    && (ALWAYS_HASHED.contains(&key.as_str())
+                        || !matches!(value, Value::Bool(false))
+                            && value != &Value::Array(vec![])
+                            && value != &Value::Object(serde_json::Map::new()))
+            })
+            .collect(),
+    )
+}
+
+/// sha256 over an action's own blok (blok language v2): what makes two actions' bloks one row.
+/// The `action_blok` envelope keeps it from ever equalling an agent's template
+/// ([`hash_blok_definition`]), which shares the unique constraint.
+pub fn hash_action_blok(blok: &ActionBlokInputModel) -> String {
+    let dump = hashed_dump(serde_json::to_value(blok).expect("an action blok serializes"));
     let envelope = serde_json::json!({ "action_blok": dump });
     hex::encode(Sha256::digest(dumps(&envelope, true).as_bytes()))
 }
 
-/// sha256 over a declared blok's content: what makes two agents' bloks the same template. The
-/// agent's own choices (`default`) and the BSX `source` (already parsed into `components`) are
-/// left out, so a blok sent as BSX and the same one sent as a tree share a template. So are
-/// empty `args`, `services` and `persist`: a blok without them keeps the template it had
-/// before bloks took them.
+/// sha256 over a declared blok's content (blok language v2): what makes two agents' bloks the
+/// same template. A blok sent as BSX and the same one sent as a tree share a template.
 pub fn hash_blok_definition(blok: &BlokImplementationInputModel) -> String {
-    let mut dump = serde_json::to_value(blok).expect("a blok declaration serializes");
-    if let Value::Object(fields) = &mut dump {
-        fields.remove("default");
-        fields.remove("source");
-        if blok.args.is_empty() {
-            fields.remove("args");
-        }
-        if blok.services.is_empty() {
-            fields.remove("services");
-        }
-        // Declarations made before bloks named persisted locals keep their hash.
-        if blok.persist.is_empty() {
-            fields.remove("persist");
-        }
-        // Declarations made before bloks had returns keep their hash.
-        if blok.returns.is_empty() {
-            fields.remove("returns");
-        }
-    }
+    let dump = hashed_dump(serde_json::to_value(blok).expect("a blok declaration serializes"));
     hex::encode(Sha256::digest(dumps(&dump, true).as_bytes()))
 }
 
@@ -83,71 +99,58 @@ pub fn infer_action_scope(definition: &DefinitionInputModel) -> ActionScope {
 mod tests {
     use super::*;
 
-    #[test]
-    fn a_blok_without_args_hashes_as_before_args_existed() {
-        let blok: BlokImplementationInputModel = serde_json::from_value(serde_json::json!({
-            "key": "panel", "components": [{"id": "root", "component": "Box"}]}))
-        .unwrap();
-        let mut dump = serde_json::to_value(&blok).unwrap();
-        let fields = dump.as_object_mut().unwrap();
-        assert_eq!(fields.remove("args"), Some(serde_json::json!([])));
-        fields.remove("services");
-        fields.remove("persist");
-        fields.remove("default");
-        fields.remove("source");
-        let before = hex::encode(Sha256::digest(dumps(&dump, true).as_bytes()));
-        assert_eq!(hash_blok_definition(&blok), before);
-        let mut with_args = blok.clone();
-        with_args.args = serde_json::from_value(serde_json::json!([
-            {"key": "image", "kind": "STRUCTURE", "identifier": "@mikro/image", "nullable": false}]))
-        .unwrap();
-        assert_ne!(
-            hash_blok_definition(&blok),
-            hash_blok_definition(&with_args)
-        );
+    fn blok(fields: Value) -> BlokImplementationInputModel {
+        let mut blok: BlokImplementationInputModel = serde_json::from_value(fields).unwrap();
+        blok.validate().unwrap();
+        blok
     }
 
+    /// The digest is pinned: a template keeps its row across server versions as long as its
+    /// declaration does not change.
     #[test]
-    fn a_blok_without_services_hashes_as_before_services_existed() {
-        let blok: BlokImplementationInputModel = serde_json::from_value(serde_json::json!({
-            "key": "panel", "components": [{"id": "root", "component": "Box"}]}))
-        .unwrap();
-        let mut dump = serde_json::to_value(&blok).unwrap();
-        let fields = dump.as_object_mut().unwrap();
-        assert_eq!(fields.remove("services"), Some(serde_json::json!([])));
-        for field in ["args", "returns", "persist", "default", "source"] {
-            fields.remove(field);
-        }
-        let before = hex::encode(Sha256::digest(dumps(&dump, true).as_bytes()));
-        assert_eq!(hash_blok_definition(&blok), before);
-        let mut with_services = blok.clone();
-        with_services.services =
-            serde_json::from_value(serde_json::json!([{"key": "mikro", "version": "8"}])).unwrap();
-        assert_ne!(
-            hash_blok_definition(&blok),
-            hash_blok_definition(&with_services)
+    fn a_v2_blok_has_a_pinned_hash() {
+        let panel = blok(
+            serde_json::json!({"key": "panel", "vocab": 2, "source": "<Html><Card><Button>Go</Button></Card></Html>"}),
         );
-    }
-
-    /// A provided blok declared before bloks named persisted locals keeps its template: the
-    /// digest is pinned as it was computed before `persist` existed.
-    #[test]
-    fn a_blok_without_persist_keeps_its_pinned_hash() {
-        let blok: BlokImplementationInputModel = serde_json::from_value(serde_json::json!({
-            "key": "stage", "description": "Moves the stage",
-            "components": [{"id": "root", "component": "Box"}],
-            "demo_state": {"pose": [1, 0, 0, 0], "speed": 2}}))
-        .unwrap();
         assert_eq!(
-            hash_blok_definition(&blok),
-            "2c5fd3af5a93dccaedf59e482b14a5447e207f48c1a38d51ec62ed6c5c818dc8"
+            hash_blok_definition(&panel),
+            "103a18f95c478800a4e9895abf4d215b75c06535cacf2577177567ff14144798"
         );
-        let mut with_persist = blok.clone();
-        with_persist.persist =
-            serde_json::from_value(serde_json::json!([{"key": "pose"}])).unwrap();
-        assert_ne!(
-            hash_blok_definition(&blok),
-            hash_blok_definition(&with_persist)
+    }
+
+    #[test]
+    fn source_and_tree_share_a_template_and_defaults_do_not_count() {
+        let sent = blok(
+            serde_json::json!({"key": "panel", "vocab": 2, "source": "<Html><Card /></Html>", "default": true}),
         );
+        let tree = blok(
+            serde_json::json!({"key": "panel", "vocab": 2, "components": [{"id": "Html[0]", "component": "Html", "children": [{"id": "Html[0]/Card[0]", "component": "Card"}]}],
+            "locals": [], "catalogs": []}),
+        );
+        assert_eq!(hash_blok_definition(&sent), hash_blok_definition(&tree));
+    }
+
+    #[test]
+    fn what_a_blok_declares_beside_its_tree_counts() {
+        let plain = blok(
+            serde_json::json!({"key": "panel", "vocab": 2, "source": "<Html><Card /></Html>"}),
+        );
+        for extra in [
+            serde_json::json!({"locals": [{"key": "n", "kind": "INT", "default": 1}]}),
+            serde_json::json!({"catalogs": ["ui@1"]}),
+            serde_json::json!({"module": "orkestrator"}),
+            serde_json::json!({"demo": {"args": {"x": 1}}}),
+        ] {
+            let mut fields =
+                serde_json::json!({"key": "panel", "vocab": 2, "source": "<Html><Card /></Html>"});
+            fields
+                .as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
+            assert_ne!(
+                hash_blok_definition(&plain),
+                hash_blok_definition(&blok(fields))
+            );
+        }
     }
 }

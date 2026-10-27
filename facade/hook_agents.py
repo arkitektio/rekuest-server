@@ -45,10 +45,6 @@ logger = logging.getLogger(__name__)
 ISSUER = "rekuest"
 _TIMEOUT = 5.0
 
-#: An organization that used to hold every service's agent, before organizations got their own.
-#: It gets no agents.
-RETIRED_ORGANIZATION = "rekuest-system"
-
 #: How rekuest named the clients it minted while a hook agent was taken to be "the agent of a
 #: service". Agents under such a client are retired; what replaces them is a hook agent's own.
 FORMER_CLIENT_PREFIX = "rekuest:service-"
@@ -136,7 +132,7 @@ def provision_agent(entry: HookAgentEntry, manifest: HookManifest, organization:
 def provision(entry: HookAgentEntry, organizations: list[Organization] | None = None) -> None:
     """One hook agent, in every organization (or just ``organizations``)."""
     manifest = fetch_manifest(entry)
-    for organization in Organization.objects.exclude(slug=RETIRED_ORGANIZATION) if organizations is None else organizations:
+    for organization in Organization.objects.all() if organizations is None else organizations:
         provision_agent(entry, manifest, organization)
 
 
@@ -155,7 +151,7 @@ def retire_former_agents() -> None:
     for agent in stale.select_related("user", "client", "organization"):
         principal = Principal.of(CallerContext(user=agent.user, client=agent.client, organization=agent.organization))
         takt.call(takt_api.DELETE_AGENT, takt_api.AgentRequest(principal=principal, agent=str(agent.pk)))
-        logger.info("Retired the former service agent %s of %s", agent.name, agent.organization.slug)
+        logger.info("Retired the former service agent %s of %s", agent.name, agent.organization_id)
 
 
 def provision_all(organizations: list[Organization] | None = None) -> list[str]:
@@ -184,15 +180,15 @@ def provision_new_organization(organization: Organization) -> None:
 
     from facade import provisioning
 
-    if not configured() or organization.slug == RETIRED_ORGANIZATION:
+    if not configured():
         return
 
     def run() -> None:
         try:
             provisioning.provision_hook_agents([organization])
         except Exception as error:  # noqa: BLE001
-            logger.warning("Could not provision the hook agents of the new organization %s: %s", organization.slug, error)
+            logger.warning("Could not provision the hook agents of the new organization %s: %s", organization.pk, error)
         finally:
             close_old_connections()
 
-    threading.Thread(target=run, name=f"provision-{organization.slug}", daemon=True).start()
+    threading.Thread(target=run, name=f"provision-{organization.pk}", daemon=True).start()

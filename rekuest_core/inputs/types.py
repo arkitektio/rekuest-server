@@ -1,6 +1,9 @@
-from typing import Annotated, List, Optional
+import dataclasses
+from typing import Annotated, List, Optional, Protocol, runtime_checkable
 from strawberry.experimental import pydantic
 from strawberry import LazyType
+from pydantic import BaseModel
+from strawberry.types.unset import UnsetType
 from rekuest_core.inputs import models
 import strawberry
 from rekuest_core import enums, scalars
@@ -592,7 +595,7 @@ class UtilCallInput:
     arguments: Optional[List[Annotated["ActionArgumentInput", strawberry.lazy(__name__)]]] = None
 
 
-@pydantic.input(models.ActionArgumentInputModel, description="A JSON-serializable argument entry for a multi-agent action trigger.")
+@pydantic.input(models.ActionArgumentInputModel, description="An argument of a call: a literal, a path, a nested call, a list or an object; null when it sets none.")
 class ActionArgumentInput:
     key: str | None = None
     value_literal: Optional[scalars.JSONSerializable] = None
@@ -604,7 +607,7 @@ class ActionArgumentInput:
     value_dict: Optional[List[Annotated["ActionArgumentInput", strawberry.lazy(__name__)]]] = None
 
 
-@pydantic.input(models.ComponentPropInputModel, description="A single key-value prop configuration for a component layout node.")
+@pydantic.input(models.ComponentPropInputModel, description="One prop of a component node: a literal, a path, a function call, a task call (named by `declaresValue`), an effect (`query.refetch`, `query.fetch_more`, `ui.copy`, `task.answer`), or nothing (null).")
 class ComponentPropInput:
     key: str
 
@@ -616,7 +619,7 @@ class ComponentPropInput:
     declares_value: Optional[str] = None
 
 
-@pydantic.input(models.ComponentNodeInputModel, description="An abstract structural visual element inside a Blok blueprint manifest.")
+@pydantic.input(models.ComponentNodeInputModel, description="A node of a blok tree (blok language v2).")
 class ComponentNodeInput:
     id: str
     component: str
@@ -624,50 +627,126 @@ class ComponentNodeInput:
     children: Optional[List[Annotated["ComponentNodeInput", strawberry.lazy(__name__)]]] = None
 
 
-@pydantic.input(models.BlokServiceInputModel, description="A backend service a blok reads from, frozen at the version it was written against.")
-class BlokServiceInput:
-    key: str
-    service: Optional[str] = None
-    version: Optional[str] = None
-    schema_hash: Optional[str] = None
+@runtime_checkable
+class _Converts(Protocol):
+    """A strawberry input made from a pydantic model."""
+
+    def to_pydantic(self) -> BaseModel: ...
 
 
-@pydantic.input(models.BlokPersistInputModel, description="A local a renderer may keep between openings, on the device: its demo value is the default.")
-class BlokPersistInput:
+def _sent(value: object) -> object:
+    """A sent input value as its pydantic model takes it: nested inputs converted."""
+    if isinstance(value, list):
+        return [_sent(item) for item in value]
+    if isinstance(value, _Converts):
+        return value.to_pydantic()
+    return value
+
+
+@strawberry.input(description="A local: blok-level form state that feeds a call, written only through `bind` on controls. A local is an arg port plus `persist`; its `kind` is a port kind or ANY. Every field left out (or null) is the tree's to tell: the kind is inferred (its default, the task argument it is passed to whole, the control bound to it; ANY when nothing tells), and an inferred port fills only the fields the local leaves out.")
+class BlokLocalInput:
+    key: str = strawberry.field(description="Its name, read bare in the tree (`{iterations}`); never a reserved root.")
+    kind: enums.LocalKind | None = strawberry.field(default=strawberry.UNSET, description="A port kind or ANY. Left out or null: inferred from the tree, ANY when nothing tells.")
+    label: str | None = strawberry.field(default=strawberry.UNSET, description="Its label.")
+    description: str | None = strawberry.field(default=strawberry.UNSET, description="What it is for.")
+    identifier: str | None = strawberry.field(default=strawberry.UNSET, description="The structure (or model, enum) identifier of what it holds.")
+    nullable: bool | None = strawberry.field(default=strawberry.UNSET, description="Whether it may hold null; left out, what is inferred says (false when nothing does).")
+    validators: list[ValidatorInput] | None = strawberry.field(default=strawberry.UNSET, description="Its validators.")
+    effects: list[EffectInput] | None = strawberry.field(default=strawberry.UNSET, description="Its effects.")
+    choices: list[ChoiceInput] | None = strawberry.field(default=strawberry.UNSET, description="The values it takes (an ENUM's).")
+    default: scalars.AnyDefault | None = strawberry.field(default=strawberry.UNSET, description="The value it starts with.")
+    children: list[ArgPortInput] | None = strawberry.field(default=strawberry.UNSET, description="Its child ports (the item of a LIST, the fields of a DICT or MODEL).")
+    widget: Optional[AssignWidgetInput] = strawberry.field(default=strawberry.UNSET, description="The widget a form of it uses.")
+    requires: list[RequiresInput] | None = strawberry.field(default=strawberry.UNSET, description="Its descriptor requirements.")
+    reference_unit: str | None = strawberry.field(default=strawberry.UNSET, description="For a QUANTITY: its reference unit.")
+    proposed_units: list[str] | None = strawberry.field(default=strawberry.UNSET, description="For a QUANTITY: the units offered.")
+    dimension: str | None = strawberry.field(default=strawberry.UNSET, description="For a QUANTITY: its dimensionality (derived from the unit).")
+    persist: bool | None = strawberry.field(default=strawberry.UNSET, description="Remember the last input on this device (never on a server); false when left out.")
+
+    def to_pydantic(self) -> models.BlokLocalInputModel:
+        """The local with only the fields that were sent: a field left out stays unset, so
+        what the tree infers fills it (``model_fields_set``); a null is dropped by the model."""
+        sent: dict[str, object] = {}
+        for each in dataclasses.fields(self):
+            value: object = getattr(self, each.name)
+            if not isinstance(value, UnsetType):
+                sent[each.name] = _sent(value)
+        return models.BlokLocalInputModel.model_validate(sent)
+
+
+@pydantic.input(models.BlokQueryInputModel, description="A declared read: one GraphQL query on a service, re-run when its variables change; the blok reads it as `queries.<key>`.")
+class BlokQueryInput:
     key: str
-    description: Optional[str] = None
+    service: str
+    document: str
+    variables: list[ActionArgumentInput] = strawberry.field(default_factory=list)
+    poll: Optional[float] = None
+    more: Optional[str] = None
+
+
+@pydantic.input(models.BlokSubscriptionInputModel, description="A declared stream: one GraphQL subscription on a service; the blok reads it as `subscriptions.<key>`.")
+class BlokSubscriptionInput:
+    key: str
+    service: str
+    document: str
+    variables: list[ActionArgumentInput] = strawberry.field(default_factory=list)
+    keep: Optional[int] = None
+    history: Optional[str] = None
+
+
+@pydantic.input(models.BlokDemoInputModel, description="What a preview renders a blok with, mirroring the roots it reads.")
+class BlokDemoInput:
+    deps: Optional[scalars.JSONSerializable] = None
+    args: Optional[scalars.JSONSerializable] = None
+    task: Optional[scalars.JSONSerializable] = None
+    queries: Optional[scalars.JSONSerializable] = None
+    subscriptions: Optional[scalars.JSONSerializable] = None
 
 
 @pydantic.input(
     models.BlokImplementationInputModel,
-    description="Which locks does the agent provide in general",
+    description="A blok an agent declares (blok language v2).",
 )
 class BlokImplementationInput:
     key: str
+    vocab: int
     dependencies: list[AgentDependencyInput] = strawberry.field(default_factory=list)
     components: list[ComponentNodeInput] | None = None
     source: str | None = None
-    catalog: Optional[str] = None
-    demo_state: Optional[scalars.JSONSerializable] = None
+    module: Optional[str] = None
     description: Optional[str] = None
     context: enums.ComponentContext = enums.ComponentContext.HTML
     default: bool = False
     for_model: Optional[str] = None
     for_node: Optional[str] = None
     args: list[ArgPortInput] = strawberry.field(default_factory=list)
-    services: list[BlokServiceInput] = strawberry.field(default_factory=list)
-    persist: list[BlokPersistInput] = strawberry.field(default_factory=list)
+    catalogs: list[str] = strawberry.field(default_factory=list)
+    locals: list[BlokLocalInput] = strawberry.field(default_factory=list)
+    demo: Optional[BlokDemoInput] = None
+    queries: list[BlokQueryInput] = strawberry.field(default_factory=list)
+    subscriptions: list[BlokSubscriptionInput] = strawberry.field(default_factory=list)
 
 
-@pydantic.input(models.ActionBlokInputModel, description="An action's own blok: how a client shows a run of it in one context, naming devices by the action's dependency keys.")
+@pydantic.input(models.ActionBlokInputModel, description="An action's own blok (blok language v2): how a client shows a run of it in one context, naming devices by the action's dependency keys.")
 class ActionBlokInput:
+    vocab: int
     context: enums.ComponentContext = enums.ComponentContext.HTML
     components: list[ComponentNodeInput] | None = None
     source: str | None = None
-    catalog: Optional[str] = None
+    module: Optional[str] = None
     description: Optional[str] = None
-    demo_state: Optional[scalars.JSONSerializable] = None
-    persist: list[BlokPersistInput] = strawberry.field(default_factory=list)
+    catalogs: list[str] = strawberry.field(default_factory=list)
+    locals: list[BlokLocalInput] = strawberry.field(default_factory=list)
+    demo: Optional[BlokDemoInput] = None
+    queries: list[BlokQueryInput] = strawberry.field(default_factory=list)
+    subscriptions: list[BlokSubscriptionInput] = strawberry.field(default_factory=list)
+
+
+@pydantic.input(models.CatalogEventFieldInputModel, description="A field of the event a CALLBACK prop hands its callback (`event.<key>`).")
+class CatalogEventFieldInput:
+    key: str
+    kind: enums.CatalogValueKind
+    description: Optional[str] = None
 
 
 @pydantic.input(models.CatalogPropInputModel, description="A prop a catalog component accepts.")
@@ -676,6 +755,7 @@ class CatalogPropInput:
     kind: enums.CatalogValueKind
     required: bool = False
     description: Optional[str] = None
+    event: Optional[List[CatalogEventFieldInput]] = None
 
 
 @pydantic.input(models.CatalogComponentInputModel, description="A component a UI catalog can render.")
@@ -689,6 +769,8 @@ class CatalogComponentInput:
     inherits_context: bool = False
     downstream_of: List[str] = strawberry.field(default_factory=list)
     not_downstream_of: List[str] = strawberry.field(default_factory=list)
+    text_prop: Optional[str] = None
+    catalog: Optional[str] = None
 
 
 @pydantic.input(models.CatalogArgumentInputModel, description="An argument a catalog operation accepts.")

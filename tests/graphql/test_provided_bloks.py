@@ -11,7 +11,7 @@ from asgiref.sync import sync_to_async
 from authentikate.models import App, Client, Device, Release
 from kante.context import HttpContext
 
-from facade.models import Agent, Blok, BlokDependency, Caller, MaterializedBlok, UICatalog
+from facade.models import Agent, Blok, BlokDependency, Caller, MaterializedBlok, Module
 from facade.schema import schema
 from tests.graphql_ops import BLOKS, CREATE_BLOK, DELETE_BLOK, DELETE_MATERIALIZED_BLOK, FORK_BLOK, MATERIALIZE_BLOK, UPDATE_BLOK, UPDATE_MATERIALIZED_BLOK
 
@@ -24,15 +24,15 @@ def _provided(context: HttpContext) -> dict:
     Caller.objects.create(client=client, user=user, organization=org)
     release = Release.objects.create(app=App.objects.create(identifier="viewer"), version="1.0.0")
     agent = Agent.objects.create(app=release.app, hash="h", release=release, user=user, client=client, organization=org)
-    catalog = UICatalog.objects.get_or_create(name="orkestrator", organization=org)[0]
+    catalog = Module.objects.get_or_create(name="orkestrator", organization=org)[0]
     blok = Blok.objects.create(
         name="panel",
         creator=user,
         organization=org,
-        catalog=catalog,
+        module=catalog,
         app=release.app,
         declaration_hash="a" * 64,
-        components=[{"id": "root", "component": "Box"}],
+        components=[{"id": "Html[0]", "component": "Html", "children": [{"id": "Html[0]/Box[0]", "component": "Box"}]}],
     )
     BlokDependency.objects.create(blok=blok, key="self")
     slot = MaterializedBlok.objects.create(blok=blok, declared_by=agent, name="panel", description="")
@@ -60,7 +60,7 @@ class TestProvidedBloks:
 
     async def test_create_blok_never_replaces_a_provided_one(self, authenticated_context: HttpContext) -> None:
         env = await _provided(authenticated_context)
-        created = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "panel", "description": "mine"}})
+        created = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "panel", "vocab": 2, "description": "mine"}})
         assert not created.errors, created.errors
         assert created.data["createBlok"]["id"] != str(env["blok"].id)
         assert await sync_to_async(Blok.objects.filter(name="panel").count)() == 2
@@ -72,7 +72,7 @@ class TestProvidedBloks:
         fork = forked.data["forkBlok"]
         assert fork["name"] == "my-panel"
         assert fork["provided"] is False
-        assert fork["componentTree"] == [{"id": "root", "component": "Box"}]
+        assert fork["componentTree"] == [{"id": "Html[0]", "component": "Html", "children": [{"id": "Html[0]/Box[0]", "component": "Box"}]}]
         assert fork["dependencies"] == [{"key": "self"}]
 
         # The copy is the user's: editable, and it outlives the provided one.
@@ -86,7 +86,7 @@ class TestProvidedBloks:
 
     async def test_provided_tells_the_two_apart(self, authenticated_context: HttpContext) -> None:
         env = await _provided(authenticated_context)
-        created = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "custom"}})
+        created = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "custom", "vocab": 2}})
         assert not created.errors, created.errors
 
         for provided, expected in [

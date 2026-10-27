@@ -23,7 +23,7 @@ use crate::persist::leases::{self, IN_FLIGHT};
 use crate::persist::transitions::{
     self, insert_event, update_task_kind, Claim, Guard, NewEvent, TaskRow, TASK_ROW,
 };
-use crate::provenance::{mint_token_for_task, MintTask};
+use crate::provenance::{assigner, mint_token_for_task, MintTask};
 use crate::signals;
 use crate::transport;
 
@@ -137,7 +137,7 @@ struct AssignSource {
     execution: Option<String>,
     action_hash: String,
     user_sub: Option<String>,
-    org_slug: Option<String>,
+    org_identifier: Option<String>,
     state_requires: Option<Json<Vec<StateRequirement>>>,
 }
 
@@ -151,7 +151,7 @@ pub async fn build_redispatch_assign(
     let source: Option<AssignSource> = sqlx::query_as(
         "SELECT t.args, t.reference, t.capture, t.step, t.resolution_id, t.parent_id, t.root_id,
                 t.implementation_id, i.interface, i.execution, a.hash AS action_hash,
-                u.sub AS user_sub, o.slug AS org_slug, t.state_requires
+                u.sub AS user_sub, o.identifier AS org_identifier, t.state_requires
            FROM facade_task t
            JOIN facade_action a ON a.id = t.action_id
            LEFT JOIN facade_implementation i ON i.id = t.implementation_id
@@ -170,10 +170,11 @@ pub async fn build_redispatch_assign(
         source.implementation_id,
         source.interface,
         source.user_sub,
-        source.org_slug,
+        source.org_identifier,
     ) else {
         return Ok(None);
     };
+    let assigner = assigner(&mut *ctx.db.acquire().await?, source.parent_id, &user).await?;
     let token = match redispatch_token(ctx, task).await {
         Ok(token) => token,
         Err(refusal) => {
@@ -200,6 +201,7 @@ pub async fn build_redispatch_assign(
         args: source.args.map(|args| args.0).unwrap_or_default(),
         message: None,
         user,
+        assigner,
         org,
         action: source.action_hash,
         implementation: implementation.to_string(),

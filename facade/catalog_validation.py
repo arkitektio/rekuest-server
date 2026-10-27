@@ -1,39 +1,28 @@
-"""Validate blok manifests, port calls and port widgets against the base catalog and registered UI catalogs.
+"""Validate blok trees against the v2 catalogs, and port calls and port widgets against base@1.
 
-Every definition and blok is checked against the *base catalog* (``rekuest_core.catalogs``): the
-pure operations every UI implements. A ``UICatalog`` a UI app has registered *extends* it with the
-components it can render and further operations; it may not redefine base names.
+**Blok trees** (blok language v2) are checked by ``rekuest_core.vocabulary``'s checker against a
+*view*: the spec's own catalogs (base@2, the standard catalogs ``ui@1`` ``scene@1`` ``logo@1``
+``structure@1`` ``html@1``) and the Orkestrator's module, vendored with the vocabulary, plus what
+the blok's ``Module`` registered beyond them. A module's component that a standard catalog defines
+differently is drawn as the module defines it, with a ``catalog.shadow`` warning where a tree
+uses it; a blok naming a module nobody registered in the organization gets ``module.unknown``,
+before its tree's findings. The scope is resolved first (``rekuest_core.vocabulary.infer``):
+the tree is checked against its locals resolved (every local kinded), which are stored beside the
+locals as written (``resolved_locals``); dependencies are never inferred. Every finding
+carries its vocabulary code (``catalog.props``, ``palette.raw_colour``, ...): an error refuses the
+blok (``BlokError``), a warning is stored with it (``Blok.diagnostics``) and shown by the UI.
 
-Every catalog finding is a warning (:class:`DiagnosticModel`): the blok is stored, the finding
-with it, and the UI shows it. The catalog is the UI's own; the server holds only the copy a UI
-registered, which may be older or newer than the UI that draws the blok, and a renderer draws a
-node it does not know as an inline error anyway. So nothing here refuses a blok for:
-
-- a component, prop or child the catalog does not know, or one placed where its spec says it may
-  not be (``unknown_component``, ``unknown_prop``, ``missing_prop``, ``children_not_accepted``,
-  ``unbound_callback``, ``misplaced_component``);
-- an operation the catalogs do not provide (``unknown_operation``), or a known one called with
-  argument keys it does not take (``operation_arguments``);
-- two catalogs defining one operation or component differently (``catalog_conflict``: the first
-  catalog's definition is used).
-
-What stays a refusal (``ValueError``) is what makes the stored row coherent whatever the catalog
-says: the context root, a logo's size and palette, and an ASSET prop that must name an asset the
-app registered (its relation is built from it). Authors get strict checking where they write:
-arkitekt-spec's ``mode="strict"`` and the BSX editor, both against the UI's own catalog.
+**Port calls and widgets** (effects, validators, CUSTOM widgets) feed an action's definition hash,
+so they stay on the base@1 catalog (``rekuest_core.catalogs``): a ``Module`` a UI app has
+registered *extends* it with the components it can render and further operations, and may not
+redefine base names. Those findings are warnings with the codes below; nothing there refuses a
+definition except two catalogs defining one operation differently where no findings are collected.
 
 The same rules run in takt (``crates/facade/src/catalog_validation.rs``), which registers agents'
-bloks; ``rekuest_core/catalogs/validation_cases.json`` holds the cases both must agree on.
-
-Components are only checked once a named catalog has registered any (before that the catalog is
-just a name), so a CUSTOM widget or blok component in an unregistered catalog is accepted silently.
-
-Widgets are validated exactly like blok components: a CUSTOM widget is a one-node manifest, and
-every call a widget carries (custom props, ``state_call``, state accessors, optimistic pointers)
-goes through the same operation check as validators and effects.
+bloks; the spec corpus (``bsx_v2.json``) holds both blok checkers to the same codes.
 """
 
-from typing import Iterable, Iterator, Mapping, Sequence
+from typing import Iterable, Iterator, Sequence
 
 from facade import models
 from rekuest_core import enums
@@ -41,6 +30,8 @@ from rekuest_core.catalogs import BASE_CATALOG_ID, base_component_names, base_co
 from rekuest_core.inputs import models as rimodels
 from rekuest_core.inputs.models import iter_util_calls
 from rekuest_core.objects.models import DiagnosticModel
+from rekuest_core.vocabulary import BlokError, BlokScope, BlokView, Finding, blok_view, check_blok_tree, resolve_scope
+from rekuest_core.vocabulary.view import ORKESTRATOR_MODULE
 
 UNKNOWN_OPERATION = "unknown_operation"
 OPERATION_ARGUMENTS = "operation_arguments"
@@ -55,33 +46,11 @@ MISPLACED_COMPONENT = "misplaced_component"
 
 def _warning(code: str, message: str, path: str | None) -> DiagnosticModel:
     return DiagnosticModel(level=enums.DiagnosticLevel.WARNING, code=code, message=message, path=path)
-# The one component a blok of each of these contexts may have as its root.
-CONTEXT_ROOTS = {
-    enums.ComponentContext.SCENE: "Scene",
-    enums.ComponentContext.LOGO: "SVG",
-    enums.ComponentContext.ACTION_LOGO: "ActionLogo",
-    enums.ComponentContext.OVERLAY: "Overlay",
-}
-# The components that read a run or a dependency of an action (the task it asks with, the agent
-# bound to a key): only an action's own bloks have either, so only they may hold one.
-ACTION_BLOK_COMPONENTS = ("At", "Route", "TaskAsk")
-# The blok contexts held to the size of an icon. ACTION_LOGO is a blok's context only: its
-# shapes are logo components, placed under an ActionLogo as under an SVG.
-LOGO_CONTEXTS = (enums.ComponentContext.LOGO, enums.ComponentContext.ACTION_LOGO)
-# What an action logo paints with: the viewer's palette, or a url(#id) to a gradient or clip path.
-LOGO_PAINT_TOKENS = ("ink", "muted", "brand", "brand-strong", "brand-soft", "surface", "none")
-LOGO_PAINT_PROPS = ("fill", "stroke", "stopColor")
-# A logo is an icon: what a logo blok may hold at most.
-LOGO_MAX_NODES = 200
-LOGO_MAX_DEPTH = 12
-LOGO_MAX_PATH_DATA = 16 * 1024
-LOGO_MAX_FOREACH_ITEMS = 64
-LOGO_PATH_DATA_PROPS = ("d", "points")
 Widget = rimodels._AssignWidgetBase | rimodels._ReturnWidgetBase
 
 
 def resolve_operations(
-    catalogs: Sequence[models.UICatalog], findings: list[DiagnosticModel] | None = None
+    catalogs: Sequence[models.Module], findings: list[DiagnosticModel] | None = None
 ) -> dict[str, rimodels.CatalogOperationInputModel]:
     """The operations in force: the base catalog plus everything the given catalogs registered.
 
@@ -109,7 +78,7 @@ def resolve_operations(
 
 
 def resolve_components(
-    catalogs: Sequence[models.UICatalog], findings: list[DiagnosticModel] | None = None
+    catalogs: Sequence[models.Module], findings: list[DiagnosticModel] | None = None
 ) -> dict[str, rimodels.CatalogComponentInputModel] | None:
     """The components in force: the base catalog's plus the union of what the given catalogs registered.
 
@@ -155,7 +124,7 @@ def check_extension_does_not_shadow_base(
         raise ValueError(f"catalog {catalog_name!r} cannot redefine base components {shadowed}")
 
 
-def _catalog_label(catalogs: Sequence[models.UICatalog]) -> str:
+def _catalog_label(catalogs: Sequence[models.Module]) -> str:
     return " + ".join([BASE_CATALOG_ID, *(catalog.name for catalog in catalogs)])
 
 
@@ -190,7 +159,7 @@ def _check_calls(calls: Iterable[rimodels.UtilCallInputModel], operations: dict[
     return diagnostics
 
 
-def validate_calls_against_catalogs(catalogs: Sequence[models.UICatalog], calls: Iterable[rimodels.UtilCallInputModel], owner: str) -> list[DiagnosticModel]:
+def validate_calls_against_catalogs(catalogs: Sequence[models.Module], calls: Iterable[rimodels.UtilCallInputModel], owner: str) -> list[DiagnosticModel]:
     """Check every call (and every call nested in its arguments) against base plus ``catalogs``.
 
     Returns the findings: unknown operations, argument-key mismatches on known ones, and
@@ -201,7 +170,7 @@ def validate_calls_against_catalogs(catalogs: Sequence[models.UICatalog], calls:
     return [*findings, *_check_calls(calls, operations, _catalog_label(catalogs), owner)]
 
 
-def validate_calls_against_catalog(catalog: models.UICatalog | None, calls: Iterable[rimodels.UtilCallInputModel], owner: str) -> list[DiagnosticModel]:
+def validate_calls_against_catalog(catalog: models.Module | None, calls: Iterable[rimodels.UtilCallInputModel], owner: str) -> list[DiagnosticModel]:
     """Single-catalog form of :func:`validate_calls_against_catalogs` (``None`` means base only)."""
     return validate_calls_against_catalogs([] if catalog is None else [catalog], calls, owner)
 
@@ -254,198 +223,95 @@ def _check_asset_prop(kind: enums.CatalogValueKind | None, prop: rimodels.Compon
         raise ValueError(f"{prop_owner} is an ASSET prop and must name an asset the app registered, as in {prop.key}=\"@self.assets.<name>\"")
 
 
-def validate_components_against_catalogs(
-    catalogs: Sequence[models.UICatalog],
-    components: list[rimodels.ComponentNodeInputModel] | None,
-    context: enums.ComponentContext = enums.ComponentContext.HTML,
-    demo_state: Mapping[str, object] | None = None,
-    action: bool = False,
-) -> list[DiagnosticModel]:
-    """Every component, prop and operation a component tree uses is provided by base plus ``catalogs``.
-
-    ``context`` is the blok's own: a scene blok has one root, the scene, a logo blok one
-    ``SVG``, an action logo one ``ActionLogo`` and an overlay one ``Overlay``, whatever is
-    registered. Both logos are held to the size of an icon (:func:`check_logo_complexity`),
-    their loops counted in ``demo_state``, and an action logo to the palette
-    (:func:`check_logo_palette`). ``action`` says the tree is an action's own blok: only such a
-    tree, or an overlay, holds the components of :data:`ACTION_BLOK_COMPONENTS`.
-    """
-    diagnostics: list[DiagnosticModel] = []
-    operations = resolve_operations(catalogs, diagnostics)
-    component_specs = resolve_components(catalogs, diagnostics)
-    catalog_label = _catalog_label(catalogs)
-
-    def visit(nodes: list[rimodels.ComponentNodeInputModel] | None, ancestors: tuple[str, ...], context: enums.ComponentContext) -> None:
-        for node in nodes or []:
-            owner = f"component {node.id!r}"
-            diagnostics.extend(_check_component(node, component_specs, operations, catalog_label, owner))
-            inner = _check_placement(node.component, ancestors, context, component_specs, owner, diagnostics)
-            visit(node.children, (*ancestors, node.component), inner)
-
-    root = CONTEXT_ROOTS.get(context)
-    if root is not None:
-        roots = components or []
-        kind = context.value.lower()
-        if len(roots) != 1:
-            raise ValueError(f"a {kind} blok has exactly one root, a {root!r}, not {len(roots)} roots")
-        if roots[0].component != root:
-            raise ValueError(f"component {roots[0].id!r}: the root of a {kind} blok must be a {root!r}, not {roots[0].component!r}")
-    if context in LOGO_CONTEXTS:
-        check_logo_complexity(components or [], demo_state)
-    if context == enums.ComponentContext.ACTION_LOGO:
-        check_logo_palette(components or [], demo_state)
-    if not action and context != enums.ComponentContext.OVERLAY:
-        for node in rimodels.iter_component_nodes(components):
-            if node.component in ACTION_BLOK_COMPONENTS:
-                raise ValueError(f"component {node.id!r}: a {node.component!r} reads a run of an action, so only an action's own blok (or an overlay) holds one")
-    visit(components, (), enums.ComponentContext.HTML)
-    return diagnostics
+# --------------------------------------------------------------------------- blok trees (v2)
 
 
-def check_logo_complexity(components: list[rimodels.ComponentNodeInputModel], demo_state: Mapping[str, object] | None = None) -> None:
-    """A logo has at most LOGO_MAX_NODES components, nests at most LOGO_MAX_DEPTH deep, holds at most
-    LOGO_MAX_PATH_DATA characters of path data, and a foreach in it draws at most LOGO_MAX_FOREACH_ITEMS
-    items of the blok's demo state (a list it does not find there draws nothing)."""
-    nodes = 0
-    path_data = 0
-
-    def visit(node: rimodels.ComponentNodeInputModel, depth: int) -> None:
-        nonlocal nodes, path_data
-        nodes += 1
-        if depth > LOGO_MAX_DEPTH:
-            raise ValueError(f"component {node.id!r}: a logo nests at most {LOGO_MAX_DEPTH} deep")
-        for prop in node.props or []:
-            if prop.key in LOGO_PATH_DATA_PROPS and isinstance(prop.static_value, str):
-                path_data += len(prop.static_value)
-            if node.component == "foreach" and prop.key == "items":
-                items = _demo_items(prop, demo_state)
-                if items > LOGO_MAX_FOREACH_ITEMS:
-                    raise ValueError(f"component {node.id!r}: a foreach in a logo draws at most {LOGO_MAX_FOREACH_ITEMS} items, its demo state has {items}")
-        for child in node.children or []:
-            visit(child, depth + 1)
-
-    for root in components:
-        visit(root, 1)
-    if nodes > LOGO_MAX_NODES:
-        raise ValueError(f"a logo has at most {LOGO_MAX_NODES} components, this one {nodes}")
-    if path_data > LOGO_MAX_PATH_DATA:
-        raise ValueError(f"a logo holds at most {LOGO_MAX_PATH_DATA} characters of path data, this one {path_data}")
+#: The components that read a run or a dependency of one: ``Anchor`` and ``Route`` only an action's
+#: own blok holds, ``ask`` (a task's open ask) any blok that has a task.
+RUN_COMPONENTS = ("Anchor", "Route")
+ASK_COMPONENT = "ask"
 
 
-def check_logo_palette(components: list[rimodels.ComponentNodeInputModel], demo_state: Mapping[str, object] | None = None) -> None:
-    """An action logo paints only with LOGO_PAINT_TOKENS or a url(#id): a static paint as written, a
-    bound one as the demo state resolves it, for every item when it reads a foreach's let. A path the
-    demo state does not hold draws nothing and is not checked."""
-
-    def visit(node: rimodels.ComponentNodeInputModel, scope: Mapping[str, list[object]]) -> None:
-        for prop in node.props or []:
-            if prop.key not in LOGO_PAINT_PROPS:
-                continue
-            if prop.static_value is not None:
-                values: list[object] = [prop.static_value]
-            elif prop.dynamic_value is not None and prop.dynamic_value.path:
-                values = _resolve(prop.dynamic_value.path, demo_state, scope)
-            else:
-                values = []
-            for value in values:
-                if not is_logo_paint(value):
-                    raise ValueError(f"component {node.id!r}: a logo paints with {'|'.join(LOGO_PAINT_TOKENS)}|url(#…), not {value!r} in {prop.key!r}")
-        inner = scope
-        if node.component == "foreach":
-            let = next((prop.declares_value for prop in node.props or [] if prop.key == "let" and prop.declares_value), None)
-            items = next((prop.dynamic_value.path for prop in node.props or [] if prop.key == "items" and prop.dynamic_value is not None and prop.dynamic_value.path), None)
-            if let and items:
-                inner = {**scope, let: [item for found in _resolve(items, demo_state, scope) if isinstance(found, list) for item in found]}
-        for child in node.children or []:
-            visit(child, inner)
-
-    for root in components:
-        visit(root, {})
+def blok_view_for(module: models.Module | None) -> BlokView:
+    """What a blok of ``module`` is checked against: the spec's catalogs plus what ``module``
+    registered beyond them. Unknown components are findings once the module has registered any
+    (the Orkestrator's always: the spec writes it)."""
+    if module is None:
+        return blok_view()
+    complete = module.name == ORKESTRATOR_MODULE or bool(module.components)
+    return blok_view([(module.name, module.get_components(), module.get_operations())], complete=complete)
 
 
-def is_logo_paint(value: object) -> bool:
-    """A palette token, or a url(#id) reference to a gradient or clip path."""
-    if not isinstance(value, str):
-        return False
-    paint = value.strip()
-    return paint in LOGO_PAINT_TOKENS or (paint.startswith("url(#") and paint.endswith(")"))
-
-
-def _resolve(path: str, demo_state: Mapping[str, object] | None, scope: Mapping[str, list[object]]) -> list[object]:
-    """What ``path`` holds: one value from the demo state, or one per item of a foreach's let."""
-    segments = [segment for segment in path.replace("/", ".").split(".") if segment]
-    if not segments:
+def module_findings(module: models.Module | None) -> list[Finding]:
+    """``module.unknown`` when ``module`` is neither the Orkestrator's nor registered in its
+    organization: nothing then checks the components the blok takes from it."""
+    if module is None or module.name == ORKESTRATOR_MODULE or module.is_registered:
         return []
-    roots: list[object]
-    if segments[0] in scope:
-        roots, segments = list(scope[segments[0]]), segments[1:]
-    else:
-        roots = [demo_state or {}]
-    found: list[object] = []
-    for value in roots:
-        for segment in segments:
-            if not isinstance(value, Mapping) or segment not in value:
-                break
-            value = value[segment]
-        else:
-            found.append(value)
-    return found
+    registered = [other.name for other in models.Module.objects.filter(organization=module.organization) if other.is_registered]
+    modules = ", ".join(sorted({ORKESTRATOR_MODULE, *registered}))
+    return [Finding.of("module.unknown", None, module=module.name, modules=modules)]
 
 
-def _demo_items(prop: rimodels.ComponentPropInputModel, demo_state: Mapping[str, object] | None) -> int:
-    """How many items a foreach's ``items`` gives in the demo state; 0 when it names none."""
-    if isinstance(prop.static_value, list):
-        return len(prop.static_value)
-    path = prop.dynamic_value.path if prop.dynamic_value is not None else None
-    value: object = demo_state or {}
-    for segment in (path or "").replace("/", ".").split("."):
-        if not segment:
-            continue
-        if not isinstance(value, Mapping) or segment not in value:
-            return 0
-        value = value[segment]
-    return len(value) if isinstance(value, list) else 0
+def resolved_scope(module: models.Module | None, components: list[rimodels.ComponentNodeInputModel] | None, scope: BlokScope) -> BlokScope:
+    """``scope`` resolved against its one-root tree and its module's view: each local's left-out
+    kind (stored as the blok's ``resolved_locals``). Unchanged without one root."""
+    roots = components or []
+    if len(roots) != 1:
+        return scope
+    return resolve_scope(roots[0], scope, blok_view_for(module))
 
 
-def _check_placement(
-    component: str,
-    ancestors: tuple[str, ...],
-    context: enums.ComponentContext,
-    component_specs: dict[str, rimodels.CatalogComponentInputModel] | None,
-    owner: str,
-    diagnostics: list[DiagnosticModel],
-) -> enums.ComponentContext:
-    """Where a component sits in the tree, against what it declares; returns the context of its children.
-
-    A component placed where its spec says it may not be is a finding (``misplaced_component``).
-
-    A tree starts in the html context. A component whose ``children_context`` differs from its
-    own bridges two renderers, and everything below it is checked in the new one. One that
-    ``inherits_context`` sits in whichever context is in force and passes it on.
-    """
-    spec = component_specs.get(component) if component_specs is not None else None
-    if spec is None:
-        return context
-    if not spec.inherits_context and spec.context != context:
-        diagnostics.append(_warning(MISPLACED_COMPONENT, f"{owner}: component {component!r} is a {spec.context.value.lower()} component and cannot be placed in the {context.value.lower()} context", owner))
-    if spec.downstream_of and not set(spec.downstream_of) & set(ancestors):
-        diagnostics.append(_warning(MISPLACED_COMPONENT, f"{owner}: component {component!r} must be inside one of {sorted(spec.downstream_of)}", owner))
-    forbidden = sorted(set(spec.not_downstream_of) & set(ancestors))
-    if forbidden:
-        diagnostics.append(_warning(MISPLACED_COMPONENT, f"{owner}: component {component!r} must not be inside {forbidden}", owner))
-    if spec.inherits_context:
-        return context
-    return spec.children_context or spec.context
+def diagnostic_of(finding: Finding) -> DiagnosticModel:
+    """A finding as a blok row stores it."""
+    level = enums.DiagnosticLevel.ERROR if finding.level == "error" else enums.DiagnosticLevel.WARNING
+    return DiagnosticModel(level=level, code=finding.code, message=finding.message, path=finding.path)
 
 
-def validate_manifest_against_catalog(
-    catalog: models.UICatalog,
+def check_run_components(components: list[rimodels.ComponentNodeInputModel], kind: str) -> None:
+    """``Anchor``/``Route`` read the agents a run got, so only an action's own blok holds them;
+    ``ask`` a task's open ask, so only a blok that has a task."""
+    for node in rimodels.iter_component_nodes(components):
+        if node.component in RUN_COMPONENTS and kind != "action":
+            raise ValueError(f"component {node.id!r}: a {node.component!r} reads the agents of a run, so only an action's own blok holds one")
+        if node.component == ASK_COMPONENT and kind not in ("action", "task"):
+            raise ValueError(f"component {node.id!r}: an 'ask' shows a task's open ask, so only a task's or an action's blok holds one")
+
+
+def blok_findings_against_module(
+    module: models.Module | None,
     components: list[rimodels.ComponentNodeInputModel] | None,
-    context: enums.ComponentContext = enums.ComponentContext.HTML,
-    demo_state: Mapping[str, object] | None = None,
+    scope: BlokScope,
 ) -> list[DiagnosticModel]:
-    """Single-catalog form of :func:`validate_components_against_catalogs` for blok manifests."""
-    return validate_components_against_catalogs([catalog], components, context, demo_state)
+    """Every finding of a v2 tree against ``scope`` and its module's view, errors included and
+    nothing refused: what an editor's dry run shows. ``module.unknown`` comes first."""
+    roots = components or []
+    if len(roots) != 1:
+        raise ValueError(f"a blok has exactly one root, not {len(roots)}")
+    check_run_components(roots, scope.kind)
+    view = blok_view_for(module)
+    return [diagnostic_of(finding) for finding in (*module_findings(module), *check_blok_tree(roots[0], scope, view))]
+
+
+def validate_blok_against_module(
+    module: models.Module | None,
+    components: list[rimodels.ComponentNodeInputModel] | None,
+    scope: BlokScope,
+) -> list[DiagnosticModel]:
+    """A v2 blok tree against what its blok declares (``scope``) and its module's view.
+
+    Refused (``BlokError``, with the vocabulary code) on its first error; its warnings returned,
+    ``module.unknown`` first.
+    """
+    roots = components or []
+    if len(roots) != 1:
+        raise ValueError(f"a blok has exactly one root, not {len(roots)}")
+    check_run_components(roots, scope.kind)
+    view = blok_view_for(module)
+    findings = check_blok_tree(roots[0], scope, view)
+    for finding in findings:
+        if finding.level == "error":
+            raise BlokError.from_finding(finding)
+    return [diagnostic_of(finding) for finding in (*module_findings(module), *findings)]
 
 
 def _prop_calls(prop: rimodels.ComponentPropInputModel) -> Iterator[rimodels.UtilCallInputModel]:
@@ -468,7 +334,7 @@ def iter_widget_calls(widget: Widget) -> Iterator[rimodels.UtilCallInputModel]:
                 yield accessor.call
 
 
-def validate_widgets_against_catalogs(catalogs: Sequence[models.UICatalog], widgets: Iterable[tuple[str, Widget]]) -> list[DiagnosticModel]:
+def validate_widgets_against_catalogs(catalogs: Sequence[models.Module], widgets: Iterable[tuple[str, Widget]]) -> list[DiagnosticModel]:
     """Widgets are validated like blok components: a CUSTOM widget is a one-node manifest, and every call it carries is checked."""
     diagnostics: list[DiagnosticModel] = []
     operations = resolve_operations(catalogs, diagnostics)

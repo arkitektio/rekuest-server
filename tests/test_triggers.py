@@ -21,10 +21,10 @@ def mikro_service(settings):
     return settings
 
 
-def _org(slug: str):
+def _org(name: str):
     from authentikate.models import Organization
 
-    return Organization.objects.get_or_create(slug=slug)[0]
+    return Organization.objects.get_or_create(identifier=name)[0]
 
 
 def _target(prefix: str, org, *, needs_token: bool = False) -> models.Implementation:

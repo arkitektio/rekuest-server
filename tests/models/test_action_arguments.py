@@ -22,15 +22,14 @@ def test_each_single_binding_is_accepted(binding: dict) -> None:
     imodels.ActionArgumentInputModel(key="a", **binding)
 
 
-def test_unbound_argument_is_rejected() -> None:
-    """An argument without any binding is meaningless."""
-    with pytest.raises(ValidationError, match="exactly one of"):
-        imodels.ActionArgumentInputModel(key="a")
+def test_unbound_argument_is_null() -> None:
+    """An argument without any binding is null (blok language v2)."""
+    assert imodels.ActionArgumentInputModel(key="a").value_literal is None
 
 
 def test_doubly_bound_argument_is_rejected() -> None:
     """Resolution order between two bindings would be left to the client."""
-    with pytest.raises(ValidationError, match="exactly one of"):
+    with pytest.raises(ValidationError, match="at most one of"):
         imodels.ActionArgumentInputModel(key="a", value_literal=1, value_path="/value")
 
 

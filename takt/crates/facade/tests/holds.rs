@@ -727,7 +727,7 @@ async fn a_held_child_never_outlives_its_parent() {
 /// The standard catalog of `agent`'s organization, drawing `Box`.
 async fn standard_catalog(ctx: &Context, agent: i64) {
     sqlx::query(
-        "INSERT INTO facade_uicatalog (name, components, operations, widget_defaults, organization_id)
+        "INSERT INTO facade_module (name, components, operations, widget_defaults, organization_id)
          SELECT 'orkestrator', '[{\"name\": \"Box\"}]', '[]', '[]', organization_id FROM facade_agent WHERE id = $1
          ON CONFLICT (organization_id, name) DO UPDATE SET components = excluded.components",
     )
@@ -795,7 +795,7 @@ async fn a_task_asks_through_a_blok_it_writes_and_gets_the_values_back() {
         frame(json!({
             "type": "HELD", "task": task.to_string(), "message": "Which one?",
             "blok": {
-                "source": "<Box/>", "name": "Pick an image", "args": {"images": images},
+                "source": "<Html><Box/></Html>", "name": "Pick an image", "args": {"images": images},
                 "returns": [{"key": "image", "kind": "STRUCTURE", "identifier": "@mikro/image",
                              "nullable": false, "effects": []}],
             },
@@ -912,7 +912,7 @@ async fn a_blok_that_cannot_be_made_refuses_the_hold_and_says_why() {
         (json!({"source": "<Box"}), "does not hold"),
         (json!({"key": "nothing"}), "declares no blok"),
         (
-            json!({"source": "<Box/>", "agent_mappings": {"other": "1"}}),
+            json!({"source": "<Html><Box/></Html>", "agent_mappings": {"other": "1"}}),
             "no dependency",
         ),
     ] {
@@ -959,7 +959,7 @@ async fn a_blok_the_catalog_does_not_know_still_holds_and_says_so() {
     route(
         &ctx,
         holder,
-        &frame(json!({"type": "HELD", "task": task.to_string(), "blok": {"source": "<Box><Knob/></Box>"}})),
+        &frame(json!({"type": "HELD", "task": task.to_string(), "blok": {"source": "<Html><Box><Knob/></Box></Html>"}})),
         None,
     )
     .await
@@ -973,8 +973,111 @@ async fn a_blok_the_catalog_does_not_know_still_holds_and_says_so() {
     .fetch_one(&ctx.db)
     .await
     .unwrap();
-    assert_eq!(findings[0]["code"], "unknown_component", "{findings}");
-    assert!(findings[0]["message"].as_str().unwrap().contains("'Knob'"));
+    assert_eq!(
+        findings[0]["code"], "catalog.unknown_component",
+        "{findings}"
+    );
+    assert!(findings[0]["message"].as_str().unwrap().contains("<Knob>"));
+}
+
+/// A `source` blok sent with a task keeps every v2 field it declares beside its tree, as a
+/// declared blok does: its vocab, catalogs, module, locals, demo, queries and subscriptions.
+#[tokio::test]
+async fn a_source_blok_keeps_what_it_declares_beside_its_tree() {
+    let Some(ctx) = context().await else { return };
+    let person = Person::new();
+    let holder = person.agent(&ctx).await;
+    standard_catalog(&ctx, holder).await;
+    let (_, workflow) = action(&ctx, holder).await;
+    let desk = person.at_a_desk(&ctx).await;
+    let local = json!({"key": "note", "kind": "STRING", "default": "", "persist": true});
+    let query = json!({"key": "positions", "service": "mikro", "document": "query Positions { positions { id } }",
+                       "variables": [], "poll": 5.0, "more": "positions"});
+    let subscription = json!({"key": "live", "service": "mikro", "document": "subscription Live { live { id } }",
+                              "variables": [], "keep": 3, "history": "positions"});
+
+    let task = root(&ctx, &desk, workflow, "ASK").await;
+    route(
+        &ctx,
+        holder,
+        &frame(json!({
+            "type": "INFORM", "task": task.to_string(),
+            "blok": {
+                "source": "<Html><Box/></Html>", "vocab": 2, "catalogs": ["ui@1"], "module": "orkestrator",
+                "locals": [local], "demo": {"args": {"done": 5}},
+                "queries": [query], "subscriptions": [subscription],
+            },
+        })),
+        None,
+    )
+    .await
+    .unwrap();
+    let refused = of_type(queued(&ctx, holder).await, "BLOK_REFUSED");
+    assert!(refused.is_empty(), "{refused:?}");
+    assert_stored(&ctx, task, &query).await;
+
+    // As arkitekt-runtime dumps it: every unset field null, each local a full port.
+    let task = root(&ctx, &desk, workflow, "ASK").await;
+    route(
+        &ctx,
+        holder,
+        &frame(json!({
+            "type": "INFORM", "task": task.to_string(),
+            "blok": {"key": null, "id": null, "source": "<Html><Box/></Html>", "name": null, "args": null,
+                     "returns": [{"key": "image", "label": null, "kind": "STRUCTURE", "description": null,
+                                  "identifier": "@mikro/image", "nullable": false, "effects": null, "choices": null,
+                                  "reference_unit": null, "proposed_units": null, "dimension": null,
+                                  "children": null, "widget": null, "provides": null}],
+                     "dependencies": null, "agent_mappings": null, "vocab": 2, "catalogs": ["ui@1"],
+                     "locals": [{"key": "note", "label": null, "description": null, "identifier": null,
+                                 "nullable": false, "effects": null, "choices": null, "reference_unit": null,
+                                 "proposed_units": null, "dimension": null, "children": null, "validators": null,
+                                 "default": "", "widget": null, "requires": null, "kind": "STRING", "persist": true}],
+                     "demo": {"deps": null, "args": {"done": 5}, "task": null, "queries": null, "subscriptions": null},
+                     "queries": [{"key": "positions", "service": "mikro", "document": "query Positions { positions { id } }",
+                                  "variables": [], "poll": 5.0, "more": "positions"}],
+                     "subscriptions": [{"key": "live", "service": "mikro", "document": "subscription Live { live { id } }",
+                                        "variables": [], "keep": 3, "history": "positions"}],
+                     "module": "orkestrator"},
+        })),
+        None,
+    )
+    .await
+    .unwrap();
+    let refused = of_type(queued(&ctx, holder).await, "BLOK_REFUSED");
+    assert!(refused.is_empty(), "{refused:?}");
+    assert_stored(&ctx, task, &query).await;
+}
+
+async fn assert_stored(ctx: &Context, task: i64, query: &Value) {
+    let (vocab, catalogs, module, locals, demo, queries, subscriptions): (
+        i16,
+        Value,
+        String,
+        Value,
+        Value,
+        Value,
+        Value,
+    ) = sqlx::query_as(
+        "SELECT b.vocab, b.catalogs, mo.name, b.locals, b.demo, b.queries, b.subscriptions
+           FROM facade_materializedblok m JOIN facade_blok b ON b.id = m.blok_id
+           JOIN facade_module mo ON mo.id = b.module_id
+          WHERE m.owner_task_id = $1",
+    )
+    .bind(task)
+    .fetch_one(&ctx.db)
+    .await
+    .unwrap();
+    assert_eq!((vocab, module.as_str()), (2, "orkestrator"));
+    assert_eq!(catalogs, json!(["ui@1"]));
+    assert_eq!(locals[0]["key"], "note");
+    assert_eq!(locals[0]["kind"], "STRING");
+    assert_eq!(locals[0]["persist"], true);
+    assert_eq!(demo["args"], json!({"done": 5}));
+    assert_eq!(queries[0]["more"], "positions");
+    assert_eq!(queries[0]["document"], query["document"]);
+    assert_eq!(subscriptions[0]["history"], "positions");
+    assert_eq!(subscriptions[0]["keep"], 3);
 }
 
 #[tokio::test]
@@ -992,7 +1095,7 @@ async fn an_inform_shows_a_blok_and_goes_with_its_task() {
         holder,
         &frame(json!({
             "type": "INFORM", "task": task.to_string(), "message": "Halfway there",
-            "blok": {"source": "<Box/>", "name": "Progress"},
+            "blok": {"source": "<Html><Box/></Html>", "name": "Progress"},
         })),
         None,
     )

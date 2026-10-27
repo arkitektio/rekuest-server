@@ -489,8 +489,8 @@ struct ParseBlokRequest {
 }
 
 internal!(parse_blok, ParseBlokRequest, |_state, request| {
-    let tree = rekuest_core::bsx::parse_bsx(&request.source)
-        .map_err(|message| Refusal(StatusCode::BAD_REQUEST, message))?;
+    let tree = rekuest_core::bsx::parse_bsx_default(&request.source)
+        .map_err(|error| Refusal(StatusCode::BAD_REQUEST, error.to_string()))?;
     Ok(Json(json!({"components": [tree]})))
 });
 

@@ -26,11 +26,17 @@ action) could deadlock with a registration (action, then agent row). So:
 - Nothing else writes the column: a guard keeps the stored value through any other update (a
   full ``save()`` of a stale instance included) and starts every new action at 0.
 
-It also lets a blok revision go of its task in the database, not only in Django: takt deletes
-tasks with its own SQL, so ``ON DELETE SET NULL`` sits on the constraint itself.
+Two foreign keys get the action they need in the database, not only in Django, because takt
+deletes rows with its own SQL:
 
-Hand-written, so re-add it whenever the history is regenerated: ``makemigrations`` emits none
-of this. In its own migration because Django adds 0001's foreign keys only as that one ends.
+- a blok revision lets go of its task: ``ON DELETE SET NULL`` on ``facade_blokrevision.task_id``;
+- an action's own bloks go with their action: ``ON DELETE CASCADE`` on
+  ``facade_actionblok.action_id`` (an older takt, after a failed update or a rollback, does not
+  know the table and deletes the action alone; the bloks it leaves without an action are
+  collected by the next registration that held them).
+
+Hand-written, so re-add all of it whenever the history is regenerated: ``makemigrations`` emits
+none of this. In its own migration because Django adds 0001's foreign keys only as that one ends.
 """
 
 from django.db import migrations
@@ -145,12 +151,6 @@ BEGIN
 END
 $$;
 
-SELECT set_config('facade.live_implementations_refresh', 'on', true);
-UPDATE facade_action a SET live_implementations = r.n
-  FROM (SELECT x.id, {COUNT} AS n FROM facade_action x) r
- WHERE a.id = r.id;
-SELECT set_config('facade.live_implementations_refresh', 'off', true);
-
 CREATE TRIGGER facade_action_guard_live_implementations_insert
     BEFORE INSERT ON facade_action
     FOR EACH ROW
@@ -217,6 +217,20 @@ BEGIN
 END $$;
 """
 
+CASCADE = """
+DO $$
+DECLARE name text;
+BEGIN
+    SELECT c.conname INTO name
+      FROM pg_constraint c
+      JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+     WHERE c.conrelid = 'facade_actionblok'::regclass AND c.contype = 'f' AND a.attname = 'action_id';
+    EXECUTE format('ALTER TABLE facade_actionblok DROP CONSTRAINT %I', name);
+    ALTER TABLE facade_actionblok ADD CONSTRAINT facade_actionblok_action_id_fk_facade_action_id
+        FOREIGN KEY (action_id) REFERENCES facade_action (id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
+END $$;
+"""
+
 
 class Migration(migrations.Migration):
     dependencies = [
@@ -226,4 +240,5 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunSQL(FUNCTIONS, DROP_FUNCTIONS),
         migrations.RunSQL(SET_NULL, migrations.RunSQL.noop),
+        migrations.RunSQL(CASCADE, migrations.RunSQL.noop),
     ]

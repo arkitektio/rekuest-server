@@ -224,16 +224,16 @@ class TestGraphQLAgents:
 
     async def test_an_agent_names_its_default_blok_per_context(self, authenticated_context: HttpContext):
         """A client finds an agent's logo without listing every blok it declared."""
-        from facade.models import Blok, MaterializedBlok, UICatalog
+        from facade.models import Blok, MaterializedBlok, Module
 
         ensured = await schema.execute(ENSURE_AGENT, context_value=authenticated_context, variable_values={"input": {"name": "Logo Agent"}})
         agent_id = ensured.data["ensureAgent"]["id"]
 
         def declare() -> None:
             agent = Agent.objects.get(id=agent_id)
-            catalog, _ = UICatalog.objects.get_or_create(organization=agent.organization, name="orkestrator")
+            catalog, _ = Module.objects.get_or_create(organization=agent.organization, name="orkestrator")
             for name, context, default in (("panel", "HTML", True), ("logo", "LOGO", True), ("old-logo", "LOGO", False)):
-                blok = Blok.objects.create(organization=agent.organization, creator=agent.user, catalog=catalog, name=name, context=context)
+                blok = Blok.objects.create(organization=agent.organization, creator=agent.user, module=catalog, name=name, context=context)
                 MaterializedBlok.objects.create(blok=blok, declared_by=agent, name=name, description=name, is_default=default)
 
         await sync_to_async(declare)()
@@ -253,7 +253,7 @@ class TestGraphQLAgents:
 
     async def test_an_implementation_and_its_action_are_drawn_by_a_logo(self, authenticated_context: HttpContext):
         """`Implementation.logo` is the blok it named; `Action.logo` the logo of one of its implementations."""
-        from facade.models import Action, Blok, Implementation, UICatalog
+        from facade.models import Action, Blok, Implementation, Module
         from rekuest_core.inputs.models import DefinitionInputModel, ImplementationInputModel
         from tests import registered
 
@@ -265,8 +265,8 @@ class TestGraphQLAgents:
             definition = DefinitionInputModel(key="crop", name="Crop", kind="FUNCTION", args=[], returns=[])
             implementation = registered.create_implementation(ImplementationInputModel(interface="crop", definition=definition), agent)
             plain = registered.create_implementation(ImplementationInputModel(interface="plain", definition=DefinitionInputModel(key="plain", name="Plain", kind="FUNCTION", args=[], returns=[])), agent)
-            catalog, _ = UICatalog.objects.get_or_create(organization=agent.organization, name="orkestrator")
-            logo = Blok.objects.create(organization=agent.organization, creator=agent.user, catalog=catalog, name="crop", context="ACTION_LOGO")
+            catalog, _ = Module.objects.get_or_create(organization=agent.organization, name="orkestrator")
+            logo = Blok.objects.create(organization=agent.organization, creator=agent.user, module=catalog, name="crop", context="ACTION_LOGO")
             Implementation.objects.filter(id=implementation.id).update(logo=logo)
             # What takt writes as it links the logo.
             Action.objects.filter(id=implementation.action_id).update(latest_logo=logo)

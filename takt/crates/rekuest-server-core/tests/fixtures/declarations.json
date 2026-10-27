@@ -13291,7 +13291,7 @@
       ],
       "returns": [
        {
-        "key": "return0",
+        "key": "histogram",
         "label": null,
         "kind": "LIST",
         "description": null,
@@ -13393,7 +13393,7 @@
           "return_matches": [
            {
             "at": 0,
-            "key": "return0",
+            "key": "histogram",
             "kind": "LIST",
             "identifier": null,
             "nullable": false,
@@ -13438,395 +13438,8 @@
        "auto_resolvable": false
       }
      ],
-     "components": [
-      {
-       "id": "Resizable",
-       "component": "Resizable",
-       "props": [
-        {
-         "key": "direction",
-         "static_value": "row"
-        },
-        {
-         "key": "className",
-         "static_value": "rounded-xl border"
-        }
-       ],
-       "children": [
-        {
-         "id": "Resizable/ResizablePanel[0]",
-         "component": "ResizablePanel",
-         "props": [
-          {
-           "key": "defaultSize",
-           "static_value": "55"
-          },
-          {
-           "key": "minSize",
-           "static_value": "30"
-          }
-         ],
-         "children": [
-          {
-           "id": "Resizable/ResizablePanel[0]/Card[0]",
-           "component": "Card",
-           "props": [
-            {
-             "key": "className",
-             "static_value": "h-full rounded-none border-0"
-            }
-           ],
-           "children": [
-            {
-             "id": "Resizable/ResizablePanel[0]/Card[0]/CardHeader[0]",
-             "component": "CardHeader",
-             "props": null,
-             "children": [
-              {
-               "id": "Resizable/ResizablePanel[0]/Card[0]/CardHeader[0]/CardTitle[0]",
-               "component": "CardTitle",
-               "props": [
-                {
-                 "key": "text",
-                 "static_value": "Dataset"
-                }
-               ],
-               "children": null
-              },
-              {
-               "id": "Resizable/ResizablePanel[0]/Card[0]/CardHeader[0]/StructureDisplay[0]",
-               "component": "StructureDisplay",
-               "props": [
-                {
-                 "key": "value",
-                 "dynamic_value": {
-                  "path": "args.dataset"
-                 }
-                },
-                {
-                 "key": "variant",
-                 "static_value": "inline"
-                }
-               ],
-               "children": null
-              }
-             ]
-            },
-            {
-             "id": "Resizable/ResizablePanel[0]/Card[0]/CardContent[0]",
-             "component": "CardContent",
-             "props": null,
-             "children": [
-              {
-               "id": "Resizable/ResizablePanel[0]/Card[0]/CardContent[0]/StructureViewer[0]",
-               "component": "StructureViewer",
-               "props": [
-                {
-                 "key": "value",
-                 "dynamic_value": {
-                  "path": "args.dataset"
-                 }
-                },
-                {
-                 "key": "height",
-                 "static_value": "32rem"
-                },
-                {
-                 "key": "emptyText",
-                 "static_value": "Open this from a dataset."
-                }
-               ],
-               "children": null
-              }
-             ]
-            }
-           ]
-          }
-         ]
-        },
-        {
-         "id": "Resizable/ResizableHandle[0]",
-         "component": "ResizableHandle",
-         "props": [
-          {
-           "key": "withHandle",
-           "static_value": "true"
-          }
-         ],
-         "children": null
-        },
-        {
-         "id": "Resizable/ResizablePanel[1]",
-         "component": "ResizablePanel",
-         "props": [
-          {
-           "key": "defaultSize",
-           "static_value": "45"
-          },
-          {
-           "key": "minSize",
-           "static_value": "25"
-          }
-         ],
-         "children": [
-          {
-           "id": "Resizable/ResizablePanel[1]/Card[0]",
-           "component": "Card",
-           "props": [
-            {
-             "key": "className",
-             "static_value": "h-full rounded-none border-0"
-            }
-           ],
-           "children": [
-            {
-             "id": "Resizable/ResizablePanel[1]/Card[0]/CardHeader[0]",
-             "component": "CardHeader",
-             "props": null,
-             "children": [
-              {
-               "id": "Resizable/ResizablePanel[1]/Card[0]/CardHeader[0]/CardTitle[0]",
-               "component": "CardTitle",
-               "props": [
-                {
-                 "key": "text",
-                 "static_value": "Intensities"
-                }
-               ],
-               "children": null
-              },
-              {
-               "id": "Resizable/ResizablePanel[1]/Card[0]/CardHeader[0]/CardDescription[0]",
-               "component": "CardDescription",
-               "props": [
-                {
-                 "key": "text",
-                 "static_value": "How the dataset's values are spread."
-                }
-               ],
-               "children": null
-              }
-             ]
-            },
-            {
-             "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]",
-             "component": "CardContent",
-             "props": [
-              {
-               "key": "className",
-               "static_value": "grid gap-4"
-              }
-             ],
-             "children": [
-              {
-               "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Field[0]",
-               "component": "Field",
-               "props": [
-                {
-                 "key": "label",
-                 "static_value": "Bins"
-                }
-               ],
-               "children": [
-                {
-                 "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Field[0]/Slider[0]",
-                 "component": "Slider",
-                 "props": [
-                  {
-                   "key": "bind",
-                   "static_value": "form.bins"
-                  },
-                  {
-                   "key": "min",
-                   "static_value": "4"
-                  },
-                  {
-                   "key": "max",
-                   "static_value": "256"
-                  },
-                  {
-                   "key": "step",
-                   "static_value": "4"
-                  }
-                 ],
-                 "children": null
-                },
-                {
-                 "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Field[0]/Text[0]",
-                 "component": "Text",
-                 "props": [
-                  {
-                   "key": "text",
-                   "dynamic_value": {
-                    "path": "form.bins"
-                   }
-                  },
-                  {
-                   "key": "tone",
-                   "static_value": "muted"
-                  },
-                  {
-                   "key": "size",
-                   "static_value": "sm"
-                  }
-                 ],
-                 "children": null
-                }
-               ]
-              },
-              {
-               "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Button[0]",
-               "component": "Button",
-               "props": [
-                {
-                 "key": "label",
-                 "static_value": "Measure"
-                },
-                {
-                 "key": "fullWidth",
-                 "static_value": "true"
-                },
-                {
-                 "key": "disabled",
-                 "dynamic_value": {
-                  "path": "run.running"
-                 }
-                },
-                {
-                 "key": "onClick",
-                 "declares_value": "run",
-                 "agent_call": {
-                  "dependency": "self",
-                  "operation": "intensity_histogram",
-                  "arguments": [
-                   {
-                    "key": "dataset",
-                    "value_path": "args.dataset"
-                   },
-                   {
-                    "key": "bins",
-                    "value_path": "form.bins"
-                   }
-                  ]
-                 }
-                }
-               ],
-               "children": null
-              },
-              {
-               "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Progress[0]",
-               "component": "Progress",
-               "props": [
-                {
-                 "key": "value",
-                 "dynamic_value": {
-                  "path": "run.progress"
-                 }
-                }
-               ],
-               "children": null
-              },
-              {
-               "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Text[0]",
-               "component": "Text",
-               "props": [
-                {
-                 "key": "text",
-                 "dynamic_value": {
-                  "path": "run.message"
-                 }
-                },
-                {
-                 "key": "tone",
-                 "static_value": "muted"
-                },
-                {
-                 "key": "size",
-                 "static_value": "sm"
-                }
-               ],
-               "children": null
-              },
-              {
-               "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Text[1]",
-               "component": "Text",
-               "props": [
-                {
-                 "key": "text",
-                 "dynamic_value": {
-                  "path": "run.error"
-                 }
-                },
-                {
-                 "key": "tone",
-                 "static_value": "destructive"
-                },
-                {
-                 "key": "size",
-                 "static_value": "sm"
-                }
-               ],
-               "children": null
-              },
-              {
-               "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Chart[0]",
-               "component": "Chart",
-               "props": [
-                {
-                 "key": "type",
-                 "static_value": "bar"
-                },
-                {
-                 "key": "data",
-                 "dynamic_value": {
-                  "path": "run.result"
-                 }
-                },
-                {
-                 "key": "categoryKey",
-                 "static_value": "name"
-                },
-                {
-                 "key": "series",
-                 "static_value": "[{\"key\": \"count\", \"label\": \"Values\"}]"
-                },
-                {
-                 "key": "height",
-                 "static_value": "280"
-                }
-               ],
-               "children": null
-              }
-             ]
-            }
-           ]
-          }
-         ]
-        }
-       ]
-      }
-     ],
-     "catalog": null,
+     "module": null,
      "description": "A dataset next to the histogram of its intensities.",
-     "demo_state": {
-      "args": {
-       "dataset": null
-      },
-      "form": {
-       "bins": 32
-      },
-      "run": {
-       "status": "idle",
-       "running": false,
-       "done": false,
-       "failed": false,
-       "progress": 0,
-       "message": "",
-       "error": "",
-       "result": null,
-       "returns": {}
-      }
-     },
      "context": "HTML",
      "default": false,
      "for_model": null,
@@ -13851,7 +13464,21 @@
        },
        "requires": null
       }
-     ]
+     ],
+     "vocab": 2,
+     "source": "<Html><Resizable direction=\"row\" className=\"rounded-xl border\"><ResizablePanel><StructureDisplay value={args.dataset} /></ResizablePanel><ResizablePanel><Card><Slider bind={bins} /><Button onClick={self.intensity_histogram(dataset: args.dataset, bins: bins) into run}>Histogram</Button><Progress value={run.progress} /><Chart data={run.returns.histogram} /></Card></ResizablePanel></Resizable></Html>",
+     "locals": [
+      {
+       "key": "bins",
+       "kind": "INT",
+       "default": 32
+      }
+     ],
+     "demo": {
+      "args": {
+       "dataset": null
+      }
+     }
     }
    ]
   },
@@ -13920,7 +13547,7 @@
       ],
       "returns": [
        {
-        "key": "return0",
+        "key": "histogram",
         "label": null,
         "kind": "LIST",
         "description": null,
@@ -14055,7 +13682,7 @@
           "return_matches": [
            {
             "at": 0,
-            "key": "return0",
+            "key": "histogram",
             "kind": "LIST",
             "identifier": null,
             "nullable": false,
@@ -14115,581 +13742,10 @@
        "prefered_instances": null
       }
      ],
-     "components": [
-      {
-       "id": "Resizable",
-       "component": "Resizable",
-       "props": [
-        {
-         "key": "direction",
-         "static_value": "row",
-         "dynamic_value": null,
-         "declares_value": null,
-         "agent_call": null,
-         "util_call": null
-        },
-        {
-         "key": "className",
-         "static_value": "rounded-xl border",
-         "dynamic_value": null,
-         "declares_value": null,
-         "agent_call": null,
-         "util_call": null
-        }
-       ],
-       "children": [
-        {
-         "id": "Resizable/ResizablePanel[0]",
-         "component": "ResizablePanel",
-         "props": [
-          {
-           "key": "defaultSize",
-           "static_value": "55",
-           "dynamic_value": null,
-           "declares_value": null,
-           "agent_call": null,
-           "util_call": null
-          },
-          {
-           "key": "minSize",
-           "static_value": "30",
-           "dynamic_value": null,
-           "declares_value": null,
-           "agent_call": null,
-           "util_call": null
-          }
-         ],
-         "children": [
-          {
-           "id": "Resizable/ResizablePanel[0]/Card[0]",
-           "component": "Card",
-           "props": [
-            {
-             "key": "className",
-             "static_value": "h-full rounded-none border-0",
-             "dynamic_value": null,
-             "declares_value": null,
-             "agent_call": null,
-             "util_call": null
-            }
-           ],
-           "children": [
-            {
-             "id": "Resizable/ResizablePanel[0]/Card[0]/CardHeader[0]",
-             "component": "CardHeader",
-             "props": null,
-             "children": [
-              {
-               "id": "Resizable/ResizablePanel[0]/Card[0]/CardHeader[0]/CardTitle[0]",
-               "component": "CardTitle",
-               "props": [
-                {
-                 "key": "text",
-                 "static_value": "Dataset",
-                 "dynamic_value": null,
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                }
-               ],
-               "children": null
-              },
-              {
-               "id": "Resizable/ResizablePanel[0]/Card[0]/CardHeader[0]/StructureDisplay[0]",
-               "component": "StructureDisplay",
-               "props": [
-                {
-                 "key": "value",
-                 "static_value": null,
-                 "dynamic_value": {
-                  "literal": null,
-                  "path": "args.dataset"
-                 },
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                },
-                {
-                 "key": "variant",
-                 "static_value": "inline",
-                 "dynamic_value": null,
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                }
-               ],
-               "children": null
-              }
-             ]
-            },
-            {
-             "id": "Resizable/ResizablePanel[0]/Card[0]/CardContent[0]",
-             "component": "CardContent",
-             "props": null,
-             "children": [
-              {
-               "id": "Resizable/ResizablePanel[0]/Card[0]/CardContent[0]/StructureViewer[0]",
-               "component": "StructureViewer",
-               "props": [
-                {
-                 "key": "value",
-                 "static_value": null,
-                 "dynamic_value": {
-                  "literal": null,
-                  "path": "args.dataset"
-                 },
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                },
-                {
-                 "key": "height",
-                 "static_value": "32rem",
-                 "dynamic_value": null,
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                },
-                {
-                 "key": "emptyText",
-                 "static_value": "Open this from a dataset.",
-                 "dynamic_value": null,
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                }
-               ],
-               "children": null
-              }
-             ]
-            }
-           ]
-          }
-         ]
-        },
-        {
-         "id": "Resizable/ResizableHandle[0]",
-         "component": "ResizableHandle",
-         "props": [
-          {
-           "key": "withHandle",
-           "static_value": "true",
-           "dynamic_value": null,
-           "declares_value": null,
-           "agent_call": null,
-           "util_call": null
-          }
-         ],
-         "children": null
-        },
-        {
-         "id": "Resizable/ResizablePanel[1]",
-         "component": "ResizablePanel",
-         "props": [
-          {
-           "key": "defaultSize",
-           "static_value": "45",
-           "dynamic_value": null,
-           "declares_value": null,
-           "agent_call": null,
-           "util_call": null
-          },
-          {
-           "key": "minSize",
-           "static_value": "25",
-           "dynamic_value": null,
-           "declares_value": null,
-           "agent_call": null,
-           "util_call": null
-          }
-         ],
-         "children": [
-          {
-           "id": "Resizable/ResizablePanel[1]/Card[0]",
-           "component": "Card",
-           "props": [
-            {
-             "key": "className",
-             "static_value": "h-full rounded-none border-0",
-             "dynamic_value": null,
-             "declares_value": null,
-             "agent_call": null,
-             "util_call": null
-            }
-           ],
-           "children": [
-            {
-             "id": "Resizable/ResizablePanel[1]/Card[0]/CardHeader[0]",
-             "component": "CardHeader",
-             "props": null,
-             "children": [
-              {
-               "id": "Resizable/ResizablePanel[1]/Card[0]/CardHeader[0]/CardTitle[0]",
-               "component": "CardTitle",
-               "props": [
-                {
-                 "key": "text",
-                 "static_value": "Intensities",
-                 "dynamic_value": null,
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                }
-               ],
-               "children": null
-              },
-              {
-               "id": "Resizable/ResizablePanel[1]/Card[0]/CardHeader[0]/CardDescription[0]",
-               "component": "CardDescription",
-               "props": [
-                {
-                 "key": "text",
-                 "static_value": "How the dataset's values are spread.",
-                 "dynamic_value": null,
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                }
-               ],
-               "children": null
-              }
-             ]
-            },
-            {
-             "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]",
-             "component": "CardContent",
-             "props": [
-              {
-               "key": "className",
-               "static_value": "grid gap-4",
-               "dynamic_value": null,
-               "declares_value": null,
-               "agent_call": null,
-               "util_call": null
-              }
-             ],
-             "children": [
-              {
-               "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Field[0]",
-               "component": "Field",
-               "props": [
-                {
-                 "key": "label",
-                 "static_value": "Bins",
-                 "dynamic_value": null,
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                }
-               ],
-               "children": [
-                {
-                 "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Field[0]/Slider[0]",
-                 "component": "Slider",
-                 "props": [
-                  {
-                   "key": "bind",
-                   "static_value": "form.bins",
-                   "dynamic_value": null,
-                   "declares_value": null,
-                   "agent_call": null,
-                   "util_call": null
-                  },
-                  {
-                   "key": "min",
-                   "static_value": "4",
-                   "dynamic_value": null,
-                   "declares_value": null,
-                   "agent_call": null,
-                   "util_call": null
-                  },
-                  {
-                   "key": "max",
-                   "static_value": "256",
-                   "dynamic_value": null,
-                   "declares_value": null,
-                   "agent_call": null,
-                   "util_call": null
-                  },
-                  {
-                   "key": "step",
-                   "static_value": "4",
-                   "dynamic_value": null,
-                   "declares_value": null,
-                   "agent_call": null,
-                   "util_call": null
-                  }
-                 ],
-                 "children": null
-                },
-                {
-                 "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Field[0]/Text[0]",
-                 "component": "Text",
-                 "props": [
-                  {
-                   "key": "text",
-                   "static_value": null,
-                   "dynamic_value": {
-                    "literal": null,
-                    "path": "form.bins"
-                   },
-                   "declares_value": null,
-                   "agent_call": null,
-                   "util_call": null
-                  },
-                  {
-                   "key": "tone",
-                   "static_value": "muted",
-                   "dynamic_value": null,
-                   "declares_value": null,
-                   "agent_call": null,
-                   "util_call": null
-                  },
-                  {
-                   "key": "size",
-                   "static_value": "sm",
-                   "dynamic_value": null,
-                   "declares_value": null,
-                   "agent_call": null,
-                   "util_call": null
-                  }
-                 ],
-                 "children": null
-                }
-               ]
-              },
-              {
-               "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Button[0]",
-               "component": "Button",
-               "props": [
-                {
-                 "key": "label",
-                 "static_value": "Measure",
-                 "dynamic_value": null,
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                },
-                {
-                 "key": "fullWidth",
-                 "static_value": "true",
-                 "dynamic_value": null,
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                },
-                {
-                 "key": "disabled",
-                 "static_value": null,
-                 "dynamic_value": {
-                  "literal": null,
-                  "path": "run.running"
-                 },
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                },
-                {
-                 "key": "onClick",
-                 "static_value": null,
-                 "dynamic_value": null,
-                 "declares_value": "run",
-                 "agent_call": {
-                  "dependency": "self",
-                  "operation": "intensity_histogram",
-                  "arguments": [
-                   {
-                    "key": "dataset",
-                    "value_literal": null,
-                    "value_path": "args.dataset",
-                    "agent_call": null,
-                    "util_call": null,
-                    "value_list": null,
-                    "value_dict": null
-                   },
-                   {
-                    "key": "bins",
-                    "value_literal": null,
-                    "value_path": "form.bins",
-                    "agent_call": null,
-                    "util_call": null,
-                    "value_list": null,
-                    "value_dict": null
-                   }
-                  ]
-                 },
-                 "util_call": null
-                }
-               ],
-               "children": null
-              },
-              {
-               "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Progress[0]",
-               "component": "Progress",
-               "props": [
-                {
-                 "key": "value",
-                 "static_value": null,
-                 "dynamic_value": {
-                  "literal": null,
-                  "path": "run.progress"
-                 },
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                }
-               ],
-               "children": null
-              },
-              {
-               "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Text[0]",
-               "component": "Text",
-               "props": [
-                {
-                 "key": "text",
-                 "static_value": null,
-                 "dynamic_value": {
-                  "literal": null,
-                  "path": "run.message"
-                 },
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                },
-                {
-                 "key": "tone",
-                 "static_value": "muted",
-                 "dynamic_value": null,
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                },
-                {
-                 "key": "size",
-                 "static_value": "sm",
-                 "dynamic_value": null,
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                }
-               ],
-               "children": null
-              },
-              {
-               "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Text[1]",
-               "component": "Text",
-               "props": [
-                {
-                 "key": "text",
-                 "static_value": null,
-                 "dynamic_value": {
-                  "literal": null,
-                  "path": "run.error"
-                 },
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                },
-                {
-                 "key": "tone",
-                 "static_value": "destructive",
-                 "dynamic_value": null,
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                },
-                {
-                 "key": "size",
-                 "static_value": "sm",
-                 "dynamic_value": null,
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                }
-               ],
-               "children": null
-              },
-              {
-               "id": "Resizable/ResizablePanel[1]/Card[0]/CardContent[0]/Chart[0]",
-               "component": "Chart",
-               "props": [
-                {
-                 "key": "type",
-                 "static_value": "bar",
-                 "dynamic_value": null,
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                },
-                {
-                 "key": "data",
-                 "static_value": null,
-                 "dynamic_value": {
-                  "literal": null,
-                  "path": "run.result"
-                 },
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                },
-                {
-                 "key": "categoryKey",
-                 "static_value": "name",
-                 "dynamic_value": null,
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                },
-                {
-                 "key": "series",
-                 "static_value": "[{\"key\": \"count\", \"label\": \"Values\"}]",
-                 "dynamic_value": null,
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                },
-                {
-                 "key": "height",
-                 "static_value": "280",
-                 "dynamic_value": null,
-                 "declares_value": null,
-                 "agent_call": null,
-                 "util_call": null
-                }
-               ],
-               "children": null
-              }
-             ]
-            }
-           ]
-          }
-         ]
-        }
-       ]
-      }
-     ],
-     "source": null,
-     "catalog": null,
+     "components": null,
+     "source": "<Html><Resizable direction=\"row\" className=\"rounded-xl border\"><ResizablePanel><StructureDisplay value={args.dataset} /></ResizablePanel><ResizablePanel><Card><Slider bind={bins} /><Button onClick={self.intensity_histogram(dataset: args.dataset, bins: bins) into run}>Histogram</Button><Progress value={run.progress} /><Chart data={run.returns.histogram} /></Card></ResizablePanel></Resizable></Html>",
+     "module": null,
      "description": "A dataset next to the histogram of its intensities.",
-     "demo_state": {
-      "args": {
-       "dataset": null
-      },
-      "form": {
-       "bins": 32
-      },
-      "run": {
-       "status": "idle",
-       "running": false,
-       "done": false,
-       "failed": false,
-       "progress": 0,
-       "message": "",
-       "error": "",
-       "result": null,
-       "returns": {}
-      }
-     },
      "context": "HTML",
      "default": false,
      "for_model": null,
@@ -14722,15 +13778,47 @@
        "requires": null
       }
      ],
-     "services": [],
-     "persist": []
+     "vocab": 2,
+     "catalogs": [],
+     "locals": [
+      {
+       "key": "bins",
+       "label": null,
+       "kind": "INT",
+       "description": null,
+       "identifier": null,
+       "nullable": false,
+       "effects": null,
+       "choices": null,
+       "reference_unit": null,
+       "proposed_units": null,
+       "dimension": null,
+       "children": null,
+       "validators": null,
+       "default": 32,
+       "widget": null,
+       "requires": null,
+       "persist": false
+      }
+     ],
+     "demo": {
+      "deps": null,
+      "args": {
+       "dataset": null
+      },
+      "task": null,
+      "queries": null,
+      "subscriptions": null
+     },
+     "queries": [],
+     "subscriptions": []
     }
    ],
    "assets": null,
    "hash": "h"
   },
   "hashes": [
-   "e83303ff879fb7d8f3e9bb3aa744cc4f1cf303024bbcd750a9ab76d6865e6fb7"
+   "3642df28f6eefc89acececd7dc7fb6c26ed420bbb878ed29f19f6ec754416659"
   ]
  },
  "protocol hints": {
@@ -16294,7 +15382,7 @@
     }
    ]
   },
-  "error": "ActionArgument 'k' must set exactly one of value_literal, value_path, agent_call, util_call, value_list, value_dict (got ['value_literal', 'value_path'])",
+  "error": "ActionArgument 'k' must set at most one of value_literal, value_path, agent_call, util_call, value_list, value_dict (got ['value_literal', 'value_path'])",
   "error_type": "value_error"
  },
  "duplicate call argument key": {
@@ -16851,15 +15939,19 @@
    "bloks": [
     {
      "key": "inspector",
+     "vocab": 2,
      "components": [
       {
-       "id": "root",
-       "component": "Box"
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box"
+        }
+       ]
       }
-     ],
-     "demo_state": {
-      "label": "x"
-     }
+     ]
     }
    ]
   },
@@ -16875,25 +15967,33 @@
      "dependencies": [],
      "components": [
       {
-       "id": "root",
-       "component": "Box",
+       "id": "Html[0]",
+       "component": "Html",
        "props": null,
-       "children": null
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": null,
+         "children": null
+        }
+       ]
       }
      ],
      "source": null,
-     "catalog": null,
+     "module": null,
      "description": null,
-     "demo_state": {
-      "label": "x"
-     },
      "context": "HTML",
      "default": false,
      "for_model": null,
      "for_node": null,
      "args": [],
-     "services": [],
-     "persist": []
+     "vocab": 2,
+     "catalogs": [],
+     "locals": [],
+     "demo": null,
+     "queries": [],
+     "subscriptions": []
     }
    ],
    "assets": null,
@@ -16906,25 +16006,27 @@
    "bloks": [
     {
      "key": "inspector",
+     "vocab": 2,
      "components": [
       {
-       "id": "root",
-       "component": "Box",
-       "props": [
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
         {
-         "key": "label",
-         "dynamic_value": {
-          "path": "args.image"
-         }
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
         }
        ]
       }
      ],
-     "demo_state": {
-      "args": {
-       "image": null
-      }
-     },
      "args": [
       {
        "key": "image",
@@ -16955,32 +16057,34 @@
      "dependencies": [],
      "components": [
       {
-       "id": "root",
-       "component": "Box",
-       "props": [
+       "id": "Html[0]",
+       "component": "Html",
+       "props": null,
+       "children": [
         {
-         "key": "label",
-         "static_value": null,
-         "dynamic_value": {
-          "literal": null,
-          "path": "args.image"
-         },
-         "declares_value": null,
-         "agent_call": null,
-         "util_call": null
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "static_value": null,
+           "dynamic_value": {
+            "literal": null,
+            "path": "args.image"
+           },
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          }
+         ],
+         "children": null
         }
-       ],
-       "children": null
+       ]
       }
      ],
      "source": null,
-     "catalog": null,
+     "module": null,
      "description": null,
-     "demo_state": {
-      "args": {
-       "image": null
-      }
-     },
      "context": "HTML",
      "default": false,
      "for_model": null,
@@ -17011,8 +16115,12 @@
        ]
       }
      ],
-     "services": [],
-     "persist": []
+     "vocab": 2,
+     "catalogs": [],
+     "locals": [],
+     "demo": null,
+     "queries": [],
+     "subscriptions": []
     }
    ],
    "assets": null,
@@ -17025,25 +16133,19 @@
    "bloks": [
     {
      "key": "inspector",
+     "vocab": 2,
      "components": [
       {
-       "id": "root",
-       "component": "Box",
-       "props": [
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
         {
-         "key": "label",
-         "dynamic_value": {
-          "path": "args.image"
-         }
+         "id": "Box[0]",
+         "component": "Box"
         }
        ]
       }
      ],
-     "demo_state": {
-      "args": {
-       "image": null
-      }
-     },
      "args": [
       {
        "key": "images",
@@ -17074,32 +16176,22 @@
      "dependencies": [],
      "components": [
       {
-       "id": "root",
-       "component": "Box",
-       "props": [
+       "id": "Html[0]",
+       "component": "Html",
+       "props": null,
+       "children": [
         {
-         "key": "label",
-         "static_value": null,
-         "dynamic_value": {
-          "literal": null,
-          "path": "args.image"
-         },
-         "declares_value": null,
-         "agent_call": null,
-         "util_call": null
+         "id": "Box[0]",
+         "component": "Box",
+         "props": null,
+         "children": null
         }
-       ],
-       "children": null
+       ]
       }
      ],
      "source": null,
-     "catalog": null,
+     "module": null,
      "description": null,
-     "demo_state": {
-      "args": {
-       "image": null
-      }
-     },
      "context": "HTML",
      "default": false,
      "for_model": null,
@@ -17143,8 +16235,12 @@
        "requires": null
       }
      ],
-     "services": [],
-     "persist": []
+     "vocab": 2,
+     "catalogs": [],
+     "locals": [],
+     "demo": null,
+     "queries": [],
+     "subscriptions": []
     }
    ],
    "assets": null,
@@ -17157,25 +16253,27 @@
    "bloks": [
     {
      "key": "inspector",
+     "vocab": 2,
      "components": [
       {
-       "id": "root",
-       "component": "Box",
-       "props": [
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
         {
-         "key": "label",
-         "dynamic_value": {
-          "path": "args.image"
-         }
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
         }
        ]
       }
      ],
-     "demo_state": {
-      "args": {
-       "image": null
-      }
-     },
      "args": [
       {
        "key": "image",
@@ -17201,9 +16299,10 @@
    "bloks": [
     {
      "key": "inspector",
+     "vocab": 2,
      "components": [
       {
-       "id": "root",
+       "id": "Box[0]",
        "component": "Box",
        "props": [
         {
@@ -17215,11 +16314,6 @@
        ]
       }
      ],
-     "demo_state": {
-      "args": {
-       "image": null
-      }
-     },
      "context": "SCENE",
      "args": [
       {
@@ -17235,73 +16329,32 @@
   "error": "Blok manifest: only an html blok takes args, not a SCENE blok",
   "error_type": "value_error"
  },
- "blok args beside a dependency named args": {
-  "input": {
-   "bloks": [
-    {
-     "key": "inspector",
-     "components": [
-      {
-       "id": "root",
-       "component": "Box",
-       "props": [
-        {
-         "key": "label",
-         "dynamic_value": {
-          "path": "args.image"
-         }
-        }
-       ]
-      }
-     ],
-     "demo_state": {
-      "args": {
-       "image": null
-      }
-     },
-     "args": [
-      {
-       "key": "image",
-       "kind": "STRUCTURE",
-       "identifier": "@mikro/image",
-       "nullable": false
-      }
-     ],
-     "dependencies": [
-      {
-       "key": "args"
-      }
-     ]
-    }
-   ]
-  },
-  "error": "Blok manifest: a blok with args reads them under 'args', so no dependency can be called that",
-  "error_type": "value_error"
- },
  "blok arg of a bad shape": {
   "input": {
    "bloks": [
     {
      "key": "inspector",
+     "vocab": 2,
      "components": [
       {
-       "id": "root",
-       "component": "Box",
-       "props": [
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
         {
-         "key": "label",
-         "dynamic_value": {
-          "path": "args.image"
-         }
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
         }
        ]
       }
      ],
-     "demo_state": {
-      "args": {
-       "image": null
-      }
-     },
      "args": [
       {
        "key": "image",
@@ -17315,44 +16368,370 @@
   "error": "Port 'image' of kind STRUCTURE must declare an identifier (@package/key)",
   "error_type": "value_error"
  },
- "blok persisting locals": {
+ "blok without vocab": {
   "input": {
    "bloks": [
     {
      "key": "inspector",
      "components": [
       {
-       "id": "root",
-       "component": "Box",
-       "props": [
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
         {
-         "key": "label",
-         "dynamic_value": {
-          "path": "args.image"
-         }
+         "id": "Box[0]",
+         "component": "Box"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Field required",
+  "error_type": "missing"
+ },
+ "blok of another vocab": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 1,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Input should be 2",
+  "error_type": "literal_error"
+ },
+ "blok with locals, demo and catalogs": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box"
         }
        ]
       }
      ],
-     "demo_state": {
+     "locals": [
+      {
+       "key": "pose",
+       "kind": "LIST",
+       "children": [
+        {
+         "key": "...",
+         "kind": "FLOAT"
+        }
+       ],
+       "default": [
+        1,
+        0,
+        0,
+        0
+       ],
+       "persist": true
+      },
+      {
+       "key": "zoom",
+       "kind": "INT",
+       "default": 1
+      }
+     ],
+     "demo": {
+      "args": {
+       "image": null
+      }
+     },
+     "catalogs": [
+      "ui@1"
+     ],
+     "module": "orkestrator"
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": null,
+   "locks": null,
+   "bloks": [
+    {
+     "key": "inspector",
+     "dependencies": [],
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "props": null,
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": null,
+         "children": null
+        }
+       ]
+      }
+     ],
+     "source": null,
+     "module": "orkestrator",
+     "description": null,
+     "context": "HTML",
+     "default": false,
+     "for_model": null,
+     "for_node": null,
+     "args": [],
+     "vocab": 2,
+     "catalogs": [
+      "ui@1"
+     ],
+     "locals": [
+      {
+       "key": "pose",
+       "label": null,
+       "kind": "LIST",
+       "description": null,
+       "identifier": null,
+       "nullable": false,
+       "effects": null,
+       "choices": null,
+       "reference_unit": null,
+       "proposed_units": null,
+       "dimension": null,
+       "children": [
+        {
+         "key": "...",
+         "label": null,
+         "kind": "FLOAT",
+         "description": null,
+         "identifier": null,
+         "nullable": false,
+         "effects": null,
+         "choices": null,
+         "reference_unit": null,
+         "proposed_units": null,
+         "dimension": null,
+         "children": null,
+         "validators": null,
+         "default": null,
+         "widget": null,
+         "requires": null
+        }
+       ],
+       "validators": null,
+       "default": [
+        1,
+        0,
+        0,
+        0
+       ],
+       "widget": null,
+       "requires": null,
+       "persist": true
+      },
+      {
+       "key": "zoom",
+       "label": null,
+       "kind": "INT",
+       "description": null,
+       "identifier": null,
+       "nullable": false,
+       "effects": null,
+       "choices": null,
+       "reference_unit": null,
+       "proposed_units": null,
+       "dimension": null,
+       "children": null,
+       "validators": null,
+       "default": 1,
+       "widget": null,
+       "requires": null,
+       "persist": false
+      }
+     ],
+     "demo": {
+      "deps": null,
       "args": {
        "image": null
       },
-      "pose": [
-       1,
-       0,
-       0,
-       0
-      ],
-      "zoom": 1
+      "task": null,
+      "queries": null,
+      "subscriptions": null
      },
-     "persist": [
+     "queries": [],
+     "subscriptions": []
+    }
+   ],
+   "assets": null,
+   "hash": null
+  },
+  "hashes": []
+ },
+ "blok with a local twice": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "locals": [
       {
        "key": "pose",
-       "description": "Where the gizmo left it"
+       "kind": "LIST",
+       "children": [
+        {
+         "key": "...",
+         "kind": "FLOAT"
+        }
+       ],
+       "default": [
+        1,
+        0,
+        0,
+        0
+       ],
+       "persist": true
       },
       {
-       "key": "zoom"
+       "key": "pose",
+       "kind": "LIST",
+       "children": [
+        {
+         "key": "...",
+         "kind": "FLOAT"
+        }
+       ],
+       "default": [
+        1,
+        0,
+        0,
+        0
+       ],
+       "persist": true
+      }
+     ]
+    }
+   ]
+  },
+  "error": "locals: 'pose' is declared twice. [manifest.duplicate]",
+  "error_type": "value_error"
+ },
+ "blok with a reserved local": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "locals": [
+      {
+       "key": "task",
+       "kind": "STRING"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "'task' is reserved: no local, let or into may use it. [roots.reserved]",
+  "error_type": "value_error"
+ },
+ "blok with a local of no kind": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "locals": [
+      {
+       "key": "zoom",
+       "default": 1
       }
      ]
     }
@@ -17370,55 +16749,50 @@
      "dependencies": [],
      "components": [
       {
-       "id": "root",
-       "component": "Box",
-       "props": [
+       "id": "Html[0]",
+       "component": "Html",
+       "props": null,
+       "children": [
         {
-         "key": "label",
-         "static_value": null,
-         "dynamic_value": {
-          "literal": null,
-          "path": "args.image"
-         },
-         "declares_value": null,
-         "agent_call": null,
-         "util_call": null
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "static_value": null,
+           "dynamic_value": {
+            "literal": null,
+            "path": "args.image"
+           },
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          }
+         ],
+         "children": null
         }
-       ],
-       "children": null
+       ]
       }
      ],
      "source": null,
-     "catalog": null,
+     "module": null,
      "description": null,
-     "demo_state": {
-      "args": {
-       "image": null
-      },
-      "pose": [
-       1,
-       0,
-       0,
-       0
-      ],
-      "zoom": 1
-     },
      "context": "HTML",
      "default": false,
      "for_model": null,
      "for_node": null,
      "args": [],
-     "services": [],
-     "persist": [
-      {
-       "key": "pose",
-       "description": "Where the gizmo left it"
-      },
+     "vocab": 2,
+     "catalogs": [],
+     "locals": [
       {
        "key": "zoom",
-       "description": null
+       "default": 1
       }
-     ]
+     ],
+     "demo": null,
+     "queries": [],
+     "subscriptions": []
     }
    ],
    "assets": null,
@@ -17426,247 +16800,1731 @@
   },
   "hashes": []
  },
- "blok persisting an unknown local": {
+ "blok with a local whose default does not fit": {
   "input": {
    "bloks": [
     {
      "key": "inspector",
+     "vocab": 2,
      "components": [
       {
-       "id": "root",
-       "component": "Box",
-       "props": [
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
         {
-         "key": "label",
-         "dynamic_value": {
-          "path": "args.image"
-         }
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
         }
        ]
       }
      ],
-     "demo_state": {
-      "args": {
-       "image": null
-      },
-      "pose": [
-       1,
-       0,
-       0,
-       0
-      ],
-      "zoom": 1
-     },
-     "persist": [
+     "locals": [
       {
-       "key": "speed"
+       "key": "zoom",
+       "kind": "INT",
+       "default": "1"
       }
      ]
     }
    ]
   },
-  "error": "Blok manifest: persist names 'speed', which is not a demo_state key: a persisted local takes its demo value as its default",
+  "error": "locals.zoom: local 'zoom': its default '1' is not a INT. [local.default]",
   "error_type": "value_error"
  },
- "blok persisting a local twice": {
+ "blok with a local of a bad shape": {
   "input": {
    "bloks": [
     {
      "key": "inspector",
+     "vocab": 2,
      "components": [
       {
-       "id": "root",
-       "component": "Box",
-       "props": [
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
         {
-         "key": "label",
-         "dynamic_value": {
-          "path": "args.image"
-         }
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
         }
        ]
       }
      ],
-     "demo_state": {
-      "args": {
-       "image": null
-      },
-      "pose": [
-       1,
-       0,
-       0,
-       0
-      ],
-      "zoom": 1
-     },
-     "persist": [
+     "locals": [
       {
-       "key": "pose"
-      },
-      {
-       "key": "pose"
+       "key": "form",
+       "kind": "DICT"
       }
      ]
     }
    ]
   },
-  "error": "Blok manifest persist: duplicate key 'pose'",
+  "error": "Port 'form' of kind DICT must have at least 1 children, got 0",
   "error_type": "value_error"
  },
- "blok persisting its args": {
+ "blok with a catalog badly spelled": {
   "input": {
    "bloks": [
     {
      "key": "inspector",
+     "vocab": 2,
      "components": [
       {
-       "id": "root",
-       "component": "Box",
-       "props": [
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
         {
-         "key": "label",
-         "dynamic_value": {
-          "path": "args.image"
-         }
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
         }
        ]
       }
      ],
-     "demo_state": {
-      "args": {
-       "image": null
-      },
-      "pose": [
-       1,
-       0,
-       0,
-       0
-      ],
-      "zoom": 1
-     },
-     "persist": [
+     "catalogs": [
+      "ui"
+     ]
+    }
+   ]
+  },
+  "error": "Catalog 'ui' is not name@version (ui@1). [manifest.catalog]",
+  "error_type": "value_error"
+ },
+ "blok with a query": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
       {
-       "key": "args"
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Text[0]",
+         "component": "Text",
+         "props": [
+          {
+           "key": "text",
+           "dynamic_value": {
+            "path": "queries.positions.status"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "args": [
+      {
+       "key": "image",
+       "kind": "STRUCTURE",
+       "identifier": "@mikro/image",
+       "nullable": false
+      }
+     ],
+     "queries": [
+      {
+       "key": "positions",
+       "service": "mikro",
+       "document": "query($slide: ID!) { positions(slide: $slide) { id } }",
+       "variables": [
+        {
+         "key": "slide",
+         "value_path": "args.image"
+        }
+       ]
       }
      ]
     }
    ]
   },
-  "error": "Blok manifest: persist names 'args', which is not a local but a root the renderer fills",
-  "error_type": "value_error"
- },
- "blok persisting a dependency": {
-  "input": {
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": null,
+   "locks": null,
    "bloks": [
     {
      "key": "inspector",
+     "dependencies": [],
      "components": [
       {
-       "id": "root",
-       "component": "Box",
-       "props": [
+       "id": "Html[0]",
+       "component": "Html",
+       "props": null,
+       "children": [
         {
-         "key": "label",
-         "dynamic_value": {
-          "path": "args.image"
-         }
+         "id": "Text[0]",
+         "component": "Text",
+         "props": [
+          {
+           "key": "text",
+           "static_value": null,
+           "dynamic_value": {
+            "literal": null,
+            "path": "queries.positions.status"
+           },
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          }
+         ],
+         "children": null
         }
        ]
       }
      ],
-     "demo_state": {
-      "args": {
-       "image": null
+     "source": null,
+     "module": null,
+     "description": null,
+     "context": "HTML",
+     "default": false,
+     "for_model": null,
+     "for_node": null,
+     "args": [
+      {
+       "key": "image",
+       "label": null,
+       "kind": "STRUCTURE",
+       "description": null,
+       "identifier": "@mikro/image",
+       "nullable": false,
+       "effects": null,
+       "choices": null,
+       "reference_unit": null,
+       "proposed_units": null,
+       "dimension": null,
+       "children": null,
+       "validators": null,
+       "default": null,
+       "widget": null,
+       "requires": null
+      }
+     ],
+     "vocab": 2,
+     "catalogs": [],
+     "locals": [],
+     "demo": null,
+     "queries": [
+      {
+       "key": "positions",
+       "service": "mikro",
+       "document": "query($slide: ID!) { positions(slide: $slide) { id } }",
+       "variables": [
+        {
+         "key": "slide",
+         "value_literal": null,
+         "value_path": "args.image",
+         "agent_call": null,
+         "util_call": null,
+         "value_list": null,
+         "value_dict": null
+        }
+       ],
+       "poll": null,
+       "more": null
+      }
+     ],
+     "subscriptions": []
+    }
+   ],
+   "assets": null,
+   "hash": null
+  },
+  "hashes": []
+ },
+ "blok with a mutation": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "queries": [
+      {
+       "key": "positions",
+       "service": "mikro",
+       "document": "mutation { a }",
+       "variables": [
+        {
+         "key": "slide",
+         "value_path": "args.image"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "error": "query 'positions': is a mutation: a blok reads, and writes only through a task [query.read_only]",
+  "error_type": "value_error"
+ },
+ "blok with a query key that is no name": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "queries": [
+      {
+       "key": "my positions",
+       "service": "mikro",
+       "document": "query($slide: ID!) { positions(slide: $slide) { id } }",
+       "variables": [
+        {
+         "key": "slide",
+         "value_path": "args.image"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "error": "queries: 'my positions' is not a name. [manifest.name]",
+  "error_type": "value_error"
+ },
+ "blok with a query twice": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "queries": [
+      {
+       "key": "positions",
+       "service": "mikro",
+       "document": "query($slide: ID!) { positions(slide: $slide) { id } }",
+       "variables": [
+        {
+         "key": "slide",
+         "value_path": "args.image"
+        }
+       ]
       },
-      "pose": [
-       1,
-       0,
-       0,
-       0
-      ],
-      "zoom": 1,
-      "stage": {}
-     },
+      {
+       "key": "positions",
+       "service": "mikro",
+       "document": "query($slide: ID!) { positions(slide: $slide) { id } }",
+       "variables": [
+        {
+         "key": "slide",
+         "value_path": "args.image"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "error": "queries: 'positions' is declared twice. [manifest.duplicate]",
+  "error_type": "value_error"
+ },
+ "blok with locals twice out of order": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "locals": [
+      {
+       "key": "a",
+       "kind": "STRING"
+      },
+      {
+       "key": "b",
+       "kind": "STRING"
+      },
+      {
+       "key": "b",
+       "kind": "STRING"
+      },
+      {
+       "key": "a",
+       "kind": "STRING"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "locals: 'a' is declared twice. [manifest.duplicate]",
+  "error_type": "value_error"
+ },
+ "blok with a query fetching more": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Button[0]",
+         "component": "Button",
+         "props": [
+          {
+           "key": "onClick",
+           "util_call": {
+            "operation": "query.fetch_more",
+            "arguments": [
+             {
+              "key": "query",
+              "value_literal": "positions"
+             },
+             {
+              "key": "variables",
+              "value_dict": [
+               {
+                "key": "after",
+                "value_literal": 1
+               }
+              ]
+             }
+            ]
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "queries": [
+      {
+       "key": "positions",
+       "service": "mikro",
+       "document": "query($slide: ID!) { positions(slide: $slide) { id } }",
+       "variables": [
+        {
+         "key": "slide",
+         "value_path": "args.image"
+        }
+       ],
+       "more": "positions"
+      }
+     ]
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": null,
+   "locks": null,
+   "bloks": [
+    {
+     "key": "inspector",
+     "dependencies": [],
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "props": null,
+       "children": [
+        {
+         "id": "Button[0]",
+         "component": "Button",
+         "props": [
+          {
+           "key": "onClick",
+           "static_value": null,
+           "dynamic_value": null,
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": {
+            "operation": "query.fetch_more",
+            "arguments": [
+             {
+              "key": "query",
+              "value_literal": "positions",
+              "value_path": null,
+              "agent_call": null,
+              "util_call": null,
+              "value_list": null,
+              "value_dict": null
+             },
+             {
+              "key": "variables",
+              "value_literal": null,
+              "value_path": null,
+              "agent_call": null,
+              "util_call": null,
+              "value_list": null,
+              "value_dict": [
+               {
+                "key": "after",
+                "value_literal": 1,
+                "value_path": null,
+                "agent_call": null,
+                "util_call": null,
+                "value_list": null,
+                "value_dict": null
+               }
+              ]
+             }
+            ]
+           }
+          }
+         ],
+         "children": null
+        }
+       ]
+      }
+     ],
+     "source": null,
+     "module": null,
+     "description": null,
+     "context": "HTML",
+     "default": false,
+     "for_model": null,
+     "for_node": null,
+     "args": [],
+     "vocab": 2,
+     "catalogs": [],
+     "locals": [],
+     "demo": null,
+     "queries": [
+      {
+       "key": "positions",
+       "service": "mikro",
+       "document": "query($slide: ID!) { positions(slide: $slide) { id } }",
+       "variables": [
+        {
+         "key": "slide",
+         "value_literal": null,
+         "value_path": "args.image",
+         "agent_call": null,
+         "util_call": null,
+         "value_list": null,
+         "value_dict": null
+        }
+       ],
+       "poll": null,
+       "more": "positions"
+      }
+     ],
+     "subscriptions": []
+    }
+   ],
+   "assets": null,
+   "hash": null
+  },
+  "hashes": []
+ },
+ "blok fetching more of a query without more": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Button[0]",
+         "component": "Button",
+         "props": [
+          {
+           "key": "onClick",
+           "util_call": {
+            "operation": "query.fetch_more",
+            "arguments": [
+             {
+              "key": "query",
+              "value_literal": "positions"
+             }
+            ]
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "queries": [
+      {
+       "key": "positions",
+       "service": "mikro",
+       "document": "query($slide: ID!) { positions(slide: $slide) { id } }",
+       "variables": [
+        {
+         "key": "slide",
+         "value_path": "args.image"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Button[0]: queries.positions.fetch_more(): query 'positions' declares no more (the list field new pages append to), so it cannot fetch more. [query.fetch_more]",
+  "error_type": "value_error"
+ },
+ "blok with a query more that is no path": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "queries": [
+      {
+       "key": "positions",
+       "service": "mikro",
+       "document": "query($slide: ID!) { positions(slide: $slide) { id } }",
+       "variables": [
+        {
+         "key": "slide",
+         "value_path": "args.image"
+        }
+       ],
+       "more": "positions[0]"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "query 'positions': more 'positions[0]' is not a field path into its data (positions, images.items). [query.more]",
+  "error_type": "value_error"
+ },
+ "blok with a subscription document as a query": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "queries": [
+      {
+       "key": "positions",
+       "service": "mikro",
+       "document": "subscription { a }",
+       "variables": [
+        {
+         "key": "slide",
+         "value_path": "args.image"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "error": "query 'positions' is a subscription, not a query. [query.kind]",
+  "error_type": "value_error"
+ },
+ "blok with a query of no operation": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "queries": [
+      {
+       "key": "positions",
+       "service": "mikro",
+       "document": "  # nothing",
+       "variables": [
+        {
+         "key": "slide",
+         "value_path": "args.image"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "error": "query 'positions' is a document without an operation, not a query. [query.kind]",
+  "error_type": "value_error"
+ },
+ "blok with a query document as a subscription": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "subscriptions": [
+      {
+       "key": "s",
+       "service": "rekuest",
+       "document": "query { a }"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "subscription 's' is a query, not a subscription. [query.kind]",
+  "error_type": "value_error"
+ },
+ "blok with a subscription that is a mutation": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "subscriptions": [
+      {
+       "key": "s",
+       "service": "rekuest",
+       "document": "mutation { a }"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "subscription 's': is a mutation: a blok reads, and writes only through a task [query.read_only]",
+  "error_type": "value_error"
+ },
+ "blok with a subscription replaying an unknown query": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "subscriptions": [
+      {
+       "key": "s",
+       "service": "rekuest",
+       "document": "subscription { a }",
+       "history": "nope"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "subscription 's' replays from 'nope', which is no declared query. [query.history]",
+  "error_type": "value_error"
+ },
+ "blok reading an undeclared query": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Text[0]",
+         "component": "Text",
+         "props": [
+          {
+           "key": "text",
+           "dynamic_value": {
+            "path": "queries.positions.value"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Text[0]: queries.positions.value reads queries.positions, which the blok does not declare (declared: none). [query.unknown]",
+  "error_type": "value_error"
+ },
+ "blok reading deps as an agent": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Text[0]",
+         "component": "Text",
+         "props": [
+          {
+           "key": "text",
+           "dynamic_value": {
+            "path": "deps.robot.arm"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
      "dependencies": [
       {
-       "key": "stage"
-      }
-     ],
-     "persist": [
-      {
-       "key": "stage"
-      }
-     ]
-    }
-   ]
-  },
-  "error": "Blok manifest: persist names 'stage', which is not a local but a root the renderer fills",
-  "error_type": "value_error"
- },
- "blok persisting without demo state": {
-  "input": {
-   "bloks": [
-    {
-     "key": "inspector",
-     "components": [
-      {
-       "id": "root",
-       "component": "Box"
-      }
-     ],
-     "demo_state": null,
-     "persist": [
-      {
-       "key": "pose"
-      }
-     ]
-    }
-   ]
-  },
-  "error": "Blok manifest: persist names 'pose', which is not a demo_state key: a persisted local takes its demo value as its default",
-  "error_type": "value_error"
- },
- "blok persisting an empty key": {
-  "input": {
-   "bloks": [
-    {
-     "key": "inspector",
-     "components": [
-      {
-       "id": "root",
-       "component": "Box",
-       "props": [
+       "key": "self",
+       "state_dependencies": [
         {
-         "key": "label",
-         "dynamic_value": {
-          "path": "args.image"
+         "key": "arm",
+         "demand": {
+          "matches": [
+           {
+            "key": "mode",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ],
+       "action_dependencies": [
+        {
+         "key": "move",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "to"
+           }
+          ]
          }
         }
        ]
       }
-     ],
-     "demo_state": {
-      "args": {
-       "image": null
-      },
-      "pose": [
-       1,
-       0,
-       0,
-       0
-      ],
-      "zoom": 1
-     },
-     "persist": [
+     ]
+    }
+   ]
+  },
+  "error": "Text[0]: deps.robot.arm: an agent blok has no 'deps' (it reads args, queries, self, subscriptions, then, viewer). [roots.not_in_kind]",
+  "error_type": "value_error"
+ },
+ "blok reading its own state": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
       {
-       "key": ""
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Text[0]",
+         "component": "Text",
+         "props": [
+          {
+           "key": "text",
+           "dynamic_value": {
+            "path": "self.arm.mode"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "dependencies": [
+      {
+       "key": "self",
+       "state_dependencies": [
+        {
+         "key": "arm",
+         "demand": {
+          "matches": [
+           {
+            "key": "mode",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ],
+       "action_dependencies": [
+        {
+         "key": "move",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "to"
+           }
+          ]
+         }
+        }
+       ]
       }
      ]
     }
    ]
   },
-  "error": "String should have at least 1 character",
-  "error_type": "string_too_short"
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": null,
+   "locks": null,
+   "bloks": [
+    {
+     "key": "inspector",
+     "dependencies": [
+      {
+       "key": "self",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": [
+        {
+         "key": "move",
+         "description": null,
+         "demand": {
+          "hash": null,
+          "key": null,
+          "app": null,
+          "version": null,
+          "name": null,
+          "arg_matches": [
+           {
+            "at": null,
+            "key": "to",
+            "kind": null,
+            "identifier": null,
+            "nullable": null,
+            "dimension": null,
+            "descriptors": null,
+            "children": null
+           }
+          ],
+          "return_matches": null,
+          "protocols": null,
+          "force_arg_length": null,
+          "force_return_length": null,
+          "pure": null,
+          "idempotent": null,
+          "stateful": null
+         },
+         "optional": false,
+         "allow_inactive": true
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "arm",
+         "description": null,
+         "demand": {
+          "hash": null,
+          "key": null,
+          "app": null,
+          "matches": [
+           {
+            "at": null,
+            "key": "mode",
+            "kind": "STRING",
+            "identifier": null,
+            "nullable": null,
+            "dimension": null,
+            "descriptors": null,
+            "children": null
+           }
+          ],
+          "protocols": null
+         },
+         "optional": false,
+         "allow_inactive": true
+        }
+       ],
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      }
+     ],
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "props": null,
+       "children": [
+        {
+         "id": "Text[0]",
+         "component": "Text",
+         "props": [
+          {
+           "key": "text",
+           "static_value": null,
+           "dynamic_value": {
+            "literal": null,
+            "path": "self.arm.mode"
+           },
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          }
+         ],
+         "children": null
+        }
+       ]
+      }
+     ],
+     "source": null,
+     "module": null,
+     "description": null,
+     "context": "HTML",
+     "default": false,
+     "for_model": null,
+     "for_node": null,
+     "args": [],
+     "vocab": 2,
+     "catalogs": [],
+     "locals": [],
+     "demo": null,
+     "queries": [],
+     "subscriptions": []
+    }
+   ],
+   "assets": null,
+   "hash": null
+  },
+  "hashes": []
+ },
+ "blok calling itself into a record": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Button[0]",
+         "component": "Button",
+         "props": [
+          {
+           "key": "onClick",
+           "declares_value": "move",
+           "agent_call": {
+            "dependency": "self",
+            "operation": "move",
+            "arguments": [
+             {
+              "key": "to",
+              "value_literal": true
+             }
+            ]
+           }
+          },
+          {
+           "key": "disabled",
+           "dynamic_value": {
+            "path": "move.running"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "dependencies": [
+      {
+       "key": "self",
+       "state_dependencies": [
+        {
+         "key": "arm",
+         "demand": {
+          "matches": [
+           {
+            "key": "mode",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ],
+       "action_dependencies": [
+        {
+         "key": "move",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "to"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": null,
+   "locks": null,
+   "bloks": [
+    {
+     "key": "inspector",
+     "dependencies": [
+      {
+       "key": "self",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": [
+        {
+         "key": "move",
+         "description": null,
+         "demand": {
+          "hash": null,
+          "key": null,
+          "app": null,
+          "version": null,
+          "name": null,
+          "arg_matches": [
+           {
+            "at": null,
+            "key": "to",
+            "kind": null,
+            "identifier": null,
+            "nullable": null,
+            "dimension": null,
+            "descriptors": null,
+            "children": null
+           }
+          ],
+          "return_matches": null,
+          "protocols": null,
+          "force_arg_length": null,
+          "force_return_length": null,
+          "pure": null,
+          "idempotent": null,
+          "stateful": null
+         },
+         "optional": false,
+         "allow_inactive": true
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "arm",
+         "description": null,
+         "demand": {
+          "hash": null,
+          "key": null,
+          "app": null,
+          "matches": [
+           {
+            "at": null,
+            "key": "mode",
+            "kind": "STRING",
+            "identifier": null,
+            "nullable": null,
+            "dimension": null,
+            "descriptors": null,
+            "children": null
+           }
+          ],
+          "protocols": null
+         },
+         "optional": false,
+         "allow_inactive": true
+        }
+       ],
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      }
+     ],
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "props": null,
+       "children": [
+        {
+         "id": "Button[0]",
+         "component": "Button",
+         "props": [
+          {
+           "key": "onClick",
+           "static_value": null,
+           "dynamic_value": null,
+           "declares_value": "move",
+           "agent_call": {
+            "dependency": "self",
+            "operation": "move",
+            "arguments": [
+             {
+              "key": "to",
+              "value_literal": true,
+              "value_path": null,
+              "agent_call": null,
+              "util_call": null,
+              "value_list": null,
+              "value_dict": null
+             }
+            ]
+           },
+           "util_call": null
+          },
+          {
+           "key": "disabled",
+           "static_value": null,
+           "dynamic_value": {
+            "literal": null,
+            "path": "move.running"
+           },
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          }
+         ],
+         "children": null
+        }
+       ]
+      }
+     ],
+     "source": null,
+     "module": null,
+     "description": null,
+     "context": "HTML",
+     "default": false,
+     "for_model": null,
+     "for_node": null,
+     "args": [],
+     "vocab": 2,
+     "catalogs": [],
+     "locals": [],
+     "demo": null,
+     "queries": [],
+     "subscriptions": []
+    }
+   ],
+   "assets": null,
+   "hash": null
+  },
+  "hashes": []
+ },
+ "blok reading now": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Text[0]",
+         "component": "Text",
+         "props": [
+          {
+           "key": "text",
+           "dynamic_value": {
+            "path": "now"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Text[0]: now reads 'now', which is no root, local, loop variable or record of this blok. [roots.unknown]",
+  "error_type": "value_error"
+ },
+ "blok reading then": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Text[0]",
+         "component": "Text",
+         "props": [
+          {
+           "key": "text",
+           "dynamic_value": {
+            "path": "then"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": null,
+   "locks": null,
+   "bloks": [
+    {
+     "key": "inspector",
+     "dependencies": [],
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "props": null,
+       "children": [
+        {
+         "id": "Text[0]",
+         "component": "Text",
+         "props": [
+          {
+           "key": "text",
+           "static_value": null,
+           "dynamic_value": {
+            "literal": null,
+            "path": "then"
+           },
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          }
+         ],
+         "children": null
+        }
+       ]
+      }
+     ],
+     "source": null,
+     "module": null,
+     "description": null,
+     "context": "HTML",
+     "default": false,
+     "for_model": null,
+     "for_node": null,
+     "args": [],
+     "vocab": 2,
+     "catalogs": [],
+     "locals": [],
+     "demo": null,
+     "queries": [],
+     "subscriptions": []
+    }
+   ],
+   "assets": null,
+   "hash": null
+  },
+  "hashes": []
+ },
+ "blok with an old now_interval": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "now_interval": 5
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": null,
+   "locks": null,
+   "bloks": [
+    {
+     "key": "inspector",
+     "dependencies": [],
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "props": null,
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "static_value": null,
+           "dynamic_value": {
+            "literal": null,
+            "path": "args.image"
+           },
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          }
+         ],
+         "children": null
+        }
+       ]
+      }
+     ],
+     "source": null,
+     "module": null,
+     "description": null,
+     "context": "HTML",
+     "default": false,
+     "for_model": null,
+     "for_node": null,
+     "args": [],
+     "vocab": 2,
+     "catalogs": [],
+     "locals": [],
+     "demo": null,
+     "queries": [],
+     "subscriptions": []
+    }
+   ],
+   "assets": null,
+   "hash": null
+  },
+  "hashes": []
+ },
+ "blok with two roots": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Box[0]",
+       "component": "Box"
+      },
+      {
+       "id": "Box[1]",
+       "component": "Box"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok manifest: a blok has one root, not 2",
+  "error_type": "value_error"
+ },
+ "blok demo naming no dependency": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Html[0]",
+       "component": "Html",
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "demo": {
+      "deps": {
+       "robot": {}
+      }
+     }
+    }
+   ]
+  },
+  "error": "demo.deps names robot, which are not dependencies of the blok. [manifest.demo]",
+  "error_type": "value_error"
+ },
+ "action logo declaring a local": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Logo[0]",
+       "component": "ActionLogo"
+      }
+     ],
+     "context": "ACTION_LOGO",
+     "locals": [
+      {
+       "key": "x",
+       "kind": "STRING"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "An action logo reads only the task it is drawn against: no locals, queries, subscriptions or dependencies. [manifest.action_logo]",
+  "error_type": "value_error"
  },
  "action bloks": {
   "input": {
@@ -17677,22 +18535,36 @@
       "key": "act",
       "name": "Act",
       "kind": "FUNCTION",
-      "args": [],
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
       "returns": [],
       "bloks": [
        {
         "context": "OVERLAY",
+        "vocab": 2,
         "components": [
          {
           "id": "root",
           "component": "Overlay",
           "children": [
            {
-            "id": "at-robot",
-            "component": "At",
+            "id": "anchor-robot",
+            "component": "Anchor",
             "props": [
              {
-              "key": "dependency",
+              "key": "dep",
               "static_value": "robot"
              }
             ],
@@ -17708,10 +18580,6 @@
                 }
                }
               ]
-             },
-             {
-              "id": "ask",
-              "component": "TaskAsk"
              }
             ]
            },
@@ -17721,7 +18589,11 @@
             "props": [
              {
               "key": "through",
-              "static_value": "['robot', 'frame', 'robot']"
+              "static_value": [
+               "robot",
+               "frame",
+               "robot"
+              ]
              },
              {
               "key": "progress",
@@ -17734,27 +18606,40 @@
           ]
          }
         ],
-        "demo_state": {
-         "show_path": true
-        },
-        "persist": [
+        "locals": [
          {
-          "key": "show_path"
+          "key": "show_path",
+          "kind": "BOOL",
+          "default": true,
+          "persist": true
          }
         ]
        },
        {
         "context": "HTML",
+        "vocab": 2,
         "components": [
          {
-          "id": "card",
-          "component": "Card",
-          "props": [
+          "id": "Html[0]",
+          "component": "Html",
+          "children": [
            {
-            "key": "value",
-            "dynamic_value": {
-             "path": "args.slides"
-            }
+            "id": "card",
+            "component": "Card",
+            "props": [
+             {
+              "key": "value",
+              "dynamic_value": {
+               "path": "args.slides"
+              }
+             }
+            ],
+            "children": [
+             {
+              "id": "ask",
+              "component": "ask"
+             }
+            ]
            }
           ]
          }
@@ -17791,7 +18676,45 @@
       "idempotent": false,
       "allow_probe": false,
       "port_groups": [],
-      "args": [],
+      "args": [
+       {
+        "key": "slides",
+        "label": null,
+        "kind": "LIST",
+        "description": null,
+        "identifier": null,
+        "nullable": false,
+        "effects": null,
+        "choices": null,
+        "reference_unit": null,
+        "proposed_units": null,
+        "dimension": null,
+        "children": [
+         {
+          "key": "...",
+          "label": null,
+          "kind": "STRING",
+          "description": null,
+          "identifier": null,
+          "nullable": false,
+          "effects": null,
+          "choices": null,
+          "reference_unit": null,
+          "proposed_units": null,
+          "dimension": null,
+          "children": null,
+          "validators": null,
+          "default": null,
+          "widget": null,
+          "requires": null
+         }
+        ],
+        "validators": null,
+        "default": null,
+        "widget": null,
+        "requires": null
+       }
+      ],
       "returns": [],
       "kind": "FUNCTION",
       "is_test_for": [],
@@ -17808,11 +18731,11 @@
           "props": null,
           "children": [
            {
-            "id": "at-robot",
-            "component": "At",
+            "id": "anchor-robot",
+            "component": "Anchor",
             "props": [
              {
-              "key": "dependency",
+              "key": "dep",
               "static_value": "robot",
               "dynamic_value": null,
               "declares_value": null,
@@ -17838,12 +18761,6 @@
                }
               ],
               "children": null
-             },
-             {
-              "id": "ask",
-              "component": "TaskAsk",
-              "props": null,
-              "children": null
              }
             ]
            },
@@ -17853,7 +18770,11 @@
             "props": [
              {
               "key": "through",
-              "static_value": "['robot', 'frame', 'robot']",
+              "static_value": [
+               "robot",
+               "frame",
+               "robot"
+              ],
               "dynamic_value": null,
               "declares_value": null,
               "agent_call": null,
@@ -17877,45 +18798,80 @@
          }
         ],
         "source": null,
-        "catalog": null,
+        "module": null,
         "description": null,
-        "demo_state": {
-         "show_path": true
-        },
-        "persist": [
+        "vocab": 2,
+        "catalogs": [],
+        "locals": [
          {
           "key": "show_path",
-          "description": null
+          "label": null,
+          "kind": "BOOL",
+          "description": null,
+          "identifier": null,
+          "nullable": false,
+          "effects": null,
+          "choices": null,
+          "reference_unit": null,
+          "proposed_units": null,
+          "dimension": null,
+          "children": null,
+          "validators": null,
+          "default": true,
+          "widget": null,
+          "requires": null,
+          "persist": true
          }
-        ]
+        ],
+        "demo": null,
+        "queries": [],
+        "subscriptions": []
        },
        {
         "context": "HTML",
         "components": [
          {
-          "id": "card",
-          "component": "Card",
-          "props": [
+          "id": "Html[0]",
+          "component": "Html",
+          "props": null,
+          "children": [
            {
-            "key": "value",
-            "static_value": null,
-            "dynamic_value": {
-             "literal": null,
-             "path": "args.slides"
-            },
-            "declares_value": null,
-            "agent_call": null,
-            "util_call": null
+            "id": "card",
+            "component": "Card",
+            "props": [
+             {
+              "key": "value",
+              "static_value": null,
+              "dynamic_value": {
+               "literal": null,
+               "path": "args.slides"
+              },
+              "declares_value": null,
+              "agent_call": null,
+              "util_call": null
+             }
+            ],
+            "children": [
+             {
+              "id": "ask",
+              "component": "ask",
+              "props": null,
+              "children": null
+             }
+            ]
            }
-          ],
-          "children": null
+          ]
          }
         ],
         "source": null,
-        "catalog": null,
+        "module": null,
         "description": "The run",
-        "demo_state": null,
-        "persist": []
+        "vocab": 2,
+        "catalogs": [],
+        "locals": [],
+        "demo": null,
+        "queries": [],
+        "subscriptions": []
        }
       ]
      },
@@ -17972,363 +18928,7 @@
    "hash": null
   },
   "hashes": [
-   "f2b2860085defd0cbf2dc539a340d7deef051b2d01a028c0e7c42ca4e2ff75dd"
-  ]
- },
- "action blok through in JSON quotes": {
-  "input": {
-   "implementations": [
-    {
-     "interface": "act",
-     "definition": {
-      "key": "act",
-      "name": "Act",
-      "kind": "FUNCTION",
-      "args": [],
-      "returns": [],
-      "bloks": [
-       {
-        "context": "OVERLAY",
-        "components": [
-         {
-          "id": "root",
-          "component": "Overlay",
-          "children": [
-           {
-            "id": "route",
-            "component": "Route",
-            "props": [
-             {
-              "key": "through",
-              "static_value": "[\"robot\", \"frame\"]"
-             },
-             {
-              "key": "progress",
-              "dynamic_value": {
-               "path": "task.progress"
-              }
-             }
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     },
-     "dependencies": [
-      {
-       "key": "robot"
-      },
-      {
-       "key": "frame"
-      }
-     ]
-    }
-   ]
-  },
-  "dump": {
-   "name": null,
-   "description": null,
-   "states": null,
-   "implementations": [
-    {
-     "definition": {
-      "key": "act",
-      "version": "1",
-      "description": null,
-      "collections": [],
-      "name": "Act",
-      "stateful": false,
-      "pure": false,
-      "idempotent": false,
-      "allow_probe": false,
-      "port_groups": [],
-      "args": [],
-      "returns": [],
-      "kind": "FUNCTION",
-      "is_test_for": [],
-      "is_dev": false,
-      "catalogs": [],
-      "protocols": [],
-      "bloks": [
-       {
-        "context": "OVERLAY",
-        "components": [
-         {
-          "id": "root",
-          "component": "Overlay",
-          "props": null,
-          "children": [
-           {
-            "id": "route",
-            "component": "Route",
-            "props": [
-             {
-              "key": "through",
-              "static_value": "[\"robot\", \"frame\"]",
-              "dynamic_value": null,
-              "declares_value": null,
-              "agent_call": null,
-              "util_call": null
-             },
-             {
-              "key": "progress",
-              "static_value": null,
-              "dynamic_value": {
-               "literal": null,
-               "path": "task.progress"
-              },
-              "declares_value": null,
-              "agent_call": null,
-              "util_call": null
-             }
-            ],
-            "children": null
-           }
-          ]
-         }
-        ],
-        "source": null,
-        "catalog": null,
-        "description": null,
-        "demo_state": null,
-        "persist": []
-       }
-      ]
-     },
-     "dependencies": [
-      {
-       "key": "robot",
-       "app": null,
-       "version": null,
-       "name": null,
-       "description": null,
-       "optional": false,
-       "action_dependencies": null,
-       "state_dependencies": null,
-       "auto_resolvable": false,
-       "mutually_exclusive_keys": null,
-       "min_viable_instances": null,
-       "max_viable_instances": null,
-       "prefered_instances": null
-      },
-      {
-       "key": "frame",
-       "app": null,
-       "version": null,
-       "name": null,
-       "description": null,
-       "optional": false,
-       "action_dependencies": null,
-       "state_dependencies": null,
-       "auto_resolvable": false,
-       "mutually_exclusive_keys": null,
-       "min_viable_instances": null,
-       "max_viable_instances": null,
-       "prefered_instances": null
-      }
-     ],
-     "tracks": null,
-     "interface": "act",
-     "params": null,
-     "instance_id": null,
-     "locks": null,
-     "optimistics": null,
-     "manipulates": null,
-     "needs_token": true,
-     "provenance_audience": null,
-     "effects": "UNKNOWN",
-     "execution": "PLAIN",
-     "code_hash": null,
-     "logo": null
-    }
-   ],
-   "locks": null,
-   "bloks": null,
-   "assets": null,
-   "hash": null
-  },
-  "hashes": [
-   "f2b2860085defd0cbf2dc539a340d7deef051b2d01a028c0e7c42ca4e2ff75dd"
-  ]
- },
- "action blok through as a plain list": {
-  "input": {
-   "implementations": [
-    {
-     "interface": "act",
-     "definition": {
-      "key": "act",
-      "name": "Act",
-      "kind": "FUNCTION",
-      "args": [],
-      "returns": [],
-      "bloks": [
-       {
-        "context": "OVERLAY",
-        "components": [
-         {
-          "id": "root",
-          "component": "Overlay",
-          "children": [
-           {
-            "id": "route",
-            "component": "Route",
-            "props": [
-             {
-              "key": "through",
-              "static_value": "robot, frame"
-             },
-             {
-              "key": "progress",
-              "dynamic_value": {
-               "path": "task.progress"
-              }
-             }
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      ]
-     },
-     "dependencies": [
-      {
-       "key": "robot"
-      },
-      {
-       "key": "frame"
-      }
-     ]
-    }
-   ]
-  },
-  "dump": {
-   "name": null,
-   "description": null,
-   "states": null,
-   "implementations": [
-    {
-     "definition": {
-      "key": "act",
-      "version": "1",
-      "description": null,
-      "collections": [],
-      "name": "Act",
-      "stateful": false,
-      "pure": false,
-      "idempotent": false,
-      "allow_probe": false,
-      "port_groups": [],
-      "args": [],
-      "returns": [],
-      "kind": "FUNCTION",
-      "is_test_for": [],
-      "is_dev": false,
-      "catalogs": [],
-      "protocols": [],
-      "bloks": [
-       {
-        "context": "OVERLAY",
-        "components": [
-         {
-          "id": "root",
-          "component": "Overlay",
-          "props": null,
-          "children": [
-           {
-            "id": "route",
-            "component": "Route",
-            "props": [
-             {
-              "key": "through",
-              "static_value": "robot, frame",
-              "dynamic_value": null,
-              "declares_value": null,
-              "agent_call": null,
-              "util_call": null
-             },
-             {
-              "key": "progress",
-              "static_value": null,
-              "dynamic_value": {
-               "literal": null,
-               "path": "task.progress"
-              },
-              "declares_value": null,
-              "agent_call": null,
-              "util_call": null
-             }
-            ],
-            "children": null
-           }
-          ]
-         }
-        ],
-        "source": null,
-        "catalog": null,
-        "description": null,
-        "demo_state": null,
-        "persist": []
-       }
-      ]
-     },
-     "dependencies": [
-      {
-       "key": "robot",
-       "app": null,
-       "version": null,
-       "name": null,
-       "description": null,
-       "optional": false,
-       "action_dependencies": null,
-       "state_dependencies": null,
-       "auto_resolvable": false,
-       "mutually_exclusive_keys": null,
-       "min_viable_instances": null,
-       "max_viable_instances": null,
-       "prefered_instances": null
-      },
-      {
-       "key": "frame",
-       "app": null,
-       "version": null,
-       "name": null,
-       "description": null,
-       "optional": false,
-       "action_dependencies": null,
-       "state_dependencies": null,
-       "auto_resolvable": false,
-       "mutually_exclusive_keys": null,
-       "min_viable_instances": null,
-       "max_viable_instances": null,
-       "prefered_instances": null
-      }
-     ],
-     "tracks": null,
-     "interface": "act",
-     "params": null,
-     "instance_id": null,
-     "locks": null,
-     "optimistics": null,
-     "manipulates": null,
-     "needs_token": true,
-     "provenance_audience": null,
-     "effects": "UNKNOWN",
-     "execution": "PLAIN",
-     "code_hash": null,
-     "logo": null
-    }
-   ],
-   "locks": null,
-   "bloks": null,
-   "assets": null,
-   "hash": null
-  },
-  "hashes": [
-   "f2b2860085defd0cbf2dc539a340d7deef051b2d01a028c0e7c42ca4e2ff75dd"
+   "886545f7ab6379be425a13432bdfe27a6996b575bdb5e07bc8f8c4b9b1dbdefb"
   ]
  },
  "action blok through an unknown key": {
@@ -18340,11 +18940,25 @@
       "key": "act",
       "name": "Act",
       "kind": "FUNCTION",
-      "args": [],
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
       "returns": [],
       "bloks": [
        {
         "context": "OVERLAY",
+        "vocab": 2,
         "components": [
          {
           "id": "root",
@@ -18356,7 +18970,10 @@
             "props": [
              {
               "key": "through",
-              "static_value": "['robot', 'stitcher']"
+              "static_value": [
+               "robot",
+               "stitcher"
+              ]
              },
              {
               "key": "progress",
@@ -18386,7 +19003,7 @@
   "error": "Blok manifest: component 'route' names 'stitcher', which is not a dependency of the action (its dependencies: 'frame', 'robot')",
   "error_type": "value_error"
  },
- "action blok at an unknown key": {
+ "action blok anchored at an unknown key": {
   "input": {
    "implementations": [
     {
@@ -18395,22 +19012,36 @@
       "key": "act",
       "name": "Act",
       "kind": "FUNCTION",
-      "args": [],
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
       "returns": [],
       "bloks": [
        {
         "context": "OVERLAY",
+        "vocab": 2,
         "components": [
          {
           "id": "root",
           "component": "Overlay",
           "children": [
            {
-            "id": "at-stitcher",
-            "component": "At",
+            "id": "anchor-stitcher",
+            "component": "Anchor",
             "props": [
              {
-              "key": "dependency",
+              "key": "dep",
               "static_value": "stitcher"
              }
             ],
@@ -18433,10 +19064,10 @@
     }
    ]
   },
-  "error": "Blok manifest: component 'at-stitcher' names 'stitcher', which is not a dependency of the action (its dependencies: 'frame', 'robot')",
+  "error": "Blok manifest: component 'anchor-stitcher' names 'stitcher', which is not a dependency of the action (its dependencies: 'frame', 'robot')",
   "error_type": "value_error"
  },
- "action blok at self": {
+ "action blok anchored at self": {
   "input": {
    "implementations": [
     {
@@ -18445,22 +19076,36 @@
       "key": "act",
       "name": "Act",
       "kind": "FUNCTION",
-      "args": [],
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
       "returns": [],
       "bloks": [
        {
         "context": "OVERLAY",
+        "vocab": 2,
         "components": [
          {
           "id": "root",
           "component": "Overlay",
           "children": [
            {
-            "id": "at-self",
-            "component": "At",
+            "id": "anchor-self",
+            "component": "Anchor",
             "props": [
              {
-              "key": "dependency",
+              "key": "dep",
               "static_value": "self"
              }
             ],
@@ -18483,10 +19128,10 @@
     }
    ]
   },
-  "error": "Blok manifest: component 'at-self' names 'self', which is not a dependency of the action (its dependencies: 'frame', 'robot')",
+  "error": "Blok manifest: component 'anchor-self' names 'self', which is not a dependency of the action (its dependencies: 'frame', 'robot')",
   "error_type": "value_error"
  },
- "action blok at a dynamic key": {
+ "action blok anchored at a dynamic key": {
   "input": {
    "implementations": [
     {
@@ -18495,11 +19140,25 @@
       "key": "act",
       "name": "Act",
       "kind": "FUNCTION",
-      "args": [],
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
       "returns": [],
       "bloks": [
        {
         "context": "OVERLAY",
+        "vocab": 2,
         "components": [
          {
           "id": "root",
@@ -18507,10 +19166,10 @@
           "children": [
            {
             "id": "at",
-            "component": "At",
+            "component": "Anchor",
             "props": [
              {
-              "key": "dependency",
+              "key": "dep",
               "dynamic_value": {
                "path": "show_path"
               }
@@ -18520,9 +19179,14 @@
           ]
          }
         ],
-        "demo_state": {
-         "show_path": true
-        }
+        "locals": [
+         {
+          "key": "show_path",
+          "kind": "BOOL",
+          "default": true,
+          "persist": true
+         }
+        ]
        }
       ]
      },
@@ -18554,7 +19218,45 @@
       "idempotent": false,
       "allow_probe": false,
       "port_groups": [],
-      "args": [],
+      "args": [
+       {
+        "key": "slides",
+        "label": null,
+        "kind": "LIST",
+        "description": null,
+        "identifier": null,
+        "nullable": false,
+        "effects": null,
+        "choices": null,
+        "reference_unit": null,
+        "proposed_units": null,
+        "dimension": null,
+        "children": [
+         {
+          "key": "...",
+          "label": null,
+          "kind": "STRING",
+          "description": null,
+          "identifier": null,
+          "nullable": false,
+          "effects": null,
+          "choices": null,
+          "reference_unit": null,
+          "proposed_units": null,
+          "dimension": null,
+          "children": null,
+          "validators": null,
+          "default": null,
+          "widget": null,
+          "requires": null
+         }
+        ],
+        "validators": null,
+        "default": null,
+        "widget": null,
+        "requires": null
+       }
+      ],
       "returns": [],
       "kind": "FUNCTION",
       "is_test_for": [],
@@ -18572,10 +19274,10 @@
           "children": [
            {
             "id": "at",
-            "component": "At",
+            "component": "Anchor",
             "props": [
              {
-              "key": "dependency",
+              "key": "dep",
               "static_value": null,
               "dynamic_value": {
                "literal": null,
@@ -18592,12 +19294,34 @@
          }
         ],
         "source": null,
-        "catalog": null,
+        "module": null,
         "description": null,
-        "demo_state": {
-         "show_path": true
-        },
-        "persist": []
+        "vocab": 2,
+        "catalogs": [],
+        "locals": [
+         {
+          "key": "show_path",
+          "label": null,
+          "kind": "BOOL",
+          "description": null,
+          "identifier": null,
+          "nullable": false,
+          "effects": null,
+          "choices": null,
+          "reference_unit": null,
+          "proposed_units": null,
+          "dimension": null,
+          "children": null,
+          "validators": null,
+          "default": true,
+          "widget": null,
+          "requires": null,
+          "persist": true
+         }
+        ],
+        "demo": null,
+        "queries": [],
+        "subscriptions": []
        }
       ]
      },
@@ -18654,7 +19378,7 @@
    "hash": null
   },
   "hashes": [
-   "f2b2860085defd0cbf2dc539a340d7deef051b2d01a028c0e7c42ca4e2ff75dd"
+   "886545f7ab6379be425a13432bdfe27a6996b575bdb5e07bc8f8c4b9b1dbdefb"
   ]
  },
  "action blok reading an unknown root": {
@@ -18666,11 +19390,25 @@
       "key": "act",
       "name": "Act",
       "kind": "FUNCTION",
-      "args": [],
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
       "returns": [],
       "bloks": [
        {
         "context": "OVERLAY",
+        "vocab": 2,
         "components": [
          {
           "id": "root",
@@ -18705,7 +19443,72 @@
     }
    ]
   },
-  "error": "prop 'text' of component 't' references 'stage' but it is neither a demo_state key, a declared value nor a dependency key",
+  "error": "t: stage.position reads 'stage', which is no root, local, loop variable or record of this blok. [roots.unknown]",
+  "error_type": "value_error"
+ },
+ "action blok reading an undeclared arg": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "vocab": 2,
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": [
+           {
+            "id": "t",
+            "component": "Text",
+            "props": [
+             {
+              "key": "text",
+              "dynamic_value": {
+               "path": "args.nope"
+              }
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "t: args.nope reads args.nope, which the blok does not declare (declared: slides). [args.unknown]",
   "error_type": "value_error"
  },
  "action blok calling a dependency": {
@@ -18717,11 +19520,25 @@
       "key": "act",
       "name": "Act",
       "kind": "FUNCTION",
-      "args": [],
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
       "returns": [],
       "bloks": [
        {
         "context": "OVERLAY",
+        "vocab": 2,
         "components": [
          {
           "id": "root",
@@ -18774,7 +19591,45 @@
       "idempotent": false,
       "allow_probe": false,
       "port_groups": [],
-      "args": [],
+      "args": [
+       {
+        "key": "slides",
+        "label": null,
+        "kind": "LIST",
+        "description": null,
+        "identifier": null,
+        "nullable": false,
+        "effects": null,
+        "choices": null,
+        "reference_unit": null,
+        "proposed_units": null,
+        "dimension": null,
+        "children": [
+         {
+          "key": "...",
+          "label": null,
+          "kind": "STRING",
+          "description": null,
+          "identifier": null,
+          "nullable": false,
+          "effects": null,
+          "choices": null,
+          "reference_unit": null,
+          "proposed_units": null,
+          "dimension": null,
+          "children": null,
+          "validators": null,
+          "default": null,
+          "widget": null,
+          "requires": null
+         }
+        ],
+        "validators": null,
+        "default": null,
+        "widget": null,
+        "requires": null
+       }
+      ],
       "returns": [],
       "kind": "FUNCTION",
       "is_test_for": [],
@@ -18813,10 +19668,14 @@
          }
         ],
         "source": null,
-        "catalog": null,
+        "module": null,
         "description": null,
-        "demo_state": null,
-        "persist": []
+        "vocab": 2,
+        "catalogs": [],
+        "locals": [],
+        "demo": null,
+        "queries": [],
+        "subscriptions": []
        }
       ]
      },
@@ -18873,7 +19732,7 @@
    "hash": null
   },
   "hashes": [
-   "f2b2860085defd0cbf2dc539a340d7deef051b2d01a028c0e7c42ca4e2ff75dd"
+   "886545f7ab6379be425a13432bdfe27a6996b575bdb5e07bc8f8c4b9b1dbdefb"
   ]
  },
  "action blok calling an undeclared agent": {
@@ -18885,11 +19744,25 @@
       "key": "act",
       "name": "Act",
       "kind": "FUNCTION",
-      "args": [],
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
       "returns": [],
       "bloks": [
        {
         "context": "OVERLAY",
+        "vocab": 2,
         "components": [
          {
           "id": "root",
@@ -18925,7 +19798,7 @@
     }
    ]
   },
-  "error": "prop 'onClick' of component 'b': agent_call targets undeclared dependency 'stage'",
+  "error": "b: onClick of <Button> (b): 'stage' is not a dependency of the blok (its dependencies: frame, robot). Fix: add a dependency parameter `stage` to the action. [deps.unknown]",
   "error_type": "value_error"
  },
  "action bloks twice in one context": {
@@ -18937,11 +19810,25 @@
       "key": "act",
       "name": "Act",
       "kind": "FUNCTION",
-      "args": [],
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
       "returns": [],
       "bloks": [
        {
         "context": "OVERLAY",
+        "vocab": 2,
         "components": [
          {
           "id": "root",
@@ -18952,6 +19839,7 @@
        },
        {
         "context": "OVERLAY",
+        "vocab": 2,
         "components": [
          {
           "id": "root",
@@ -18985,15 +19873,29 @@
       "key": "act",
       "name": "Act",
       "kind": "FUNCTION",
-      "args": [],
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
       "returns": [],
       "bloks": [
        {
         "context": "LOGO",
+        "vocab": 2,
         "components": [
          {
           "id": "root",
-          "component": "SVG"
+          "component": "AgentLogo"
          }
         ]
        }
@@ -19010,7 +19912,7 @@
     }
    ]
   },
-  "error": "Blok manifest: an action's blok is html, scene or overlay, not logo",
+  "error": "An action blok is drawn in HTML, SCENE, OVERLAY, not LOGO. [context.kind]",
   "error_type": "value_error"
  },
  "action blok sent twice": {
@@ -19022,18 +19924,38 @@
       "key": "act",
       "name": "Act",
       "kind": "FUNCTION",
-      "args": [],
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
       "returns": [],
       "bloks": [
        {
         "context": "HTML",
+        "vocab": 2,
         "components": [
          {
-          "id": "root",
-          "component": "Card"
+          "id": "Html[0]",
+          "component": "Html",
+          "children": [
+           {
+            "id": "root",
+            "component": "Card"
+           }
+          ]
          }
         ],
-        "source": "<Card />"
+        "source": "<Html><Card /></Html>"
        }
       ]
      },
@@ -19048,7 +19970,7 @@
     }
    ]
   },
-  "error": "a blok is sent as its components or as its BSX source, not both",
+  "error": "A blok is sent as its components or as its BSX source, not both. [manifest.sent]",
   "error_type": "value_error"
  },
  "action blok sent not at all": {
@@ -19060,11 +19982,25 @@
       "key": "act",
       "name": "Act",
       "kind": "FUNCTION",
-      "args": [],
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
       "returns": [],
       "bloks": [
        {
-        "context": "HTML"
+        "context": "HTML",
+        "vocab": 2
        }
       ]
      },
@@ -19079,10 +20015,10 @@
     }
    ]
   },
-  "error": "a blok is sent as its components or as its BSX source",
+  "error": "A blok is sent as its components or as its BSX source, and this one has neither. [manifest.sent]",
   "error_type": "value_error"
  },
- "action blok seeding its task": {
+ "action blok without vocab": {
   "input": {
    "implementations": [
     {
@@ -19091,106 +20027,34 @@
       "key": "act",
       "name": "Act",
       "kind": "FUNCTION",
-      "args": [],
-      "returns": [],
-      "bloks": [
+      "args": [
        {
-        "context": "OVERLAY",
-        "components": [
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
          {
-          "id": "root",
-          "component": "Overlay",
-          "children": []
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
          }
-        ],
-        "demo_state": {
-         "task": {}
-        }
+        ]
        }
-      ]
-     },
-     "dependencies": [
-      {
-       "key": "robot"
-      },
-      {
-       "key": "frame"
-      }
-     ]
-    }
-   ]
-  },
-  "error": "Blok manifest: demo_state names 'task', which the renderer fills for an action's blok",
-  "error_type": "value_error"
- },
- "action blok shadowing a dependency": {
-  "input": {
-   "implementations": [
-    {
-     "interface": "act",
-     "definition": {
-      "key": "act",
-      "name": "Act",
-      "kind": "FUNCTION",
-      "args": [],
+      ],
       "returns": [],
       "bloks": [
        {
-        "context": "OVERLAY",
+        "context": "HTML",
         "components": [
          {
-          "id": "root",
-          "component": "Overlay",
-          "children": []
-         }
-        ],
-        "demo_state": {
-         "robot": {}
-        }
-       }
-      ]
-     },
-     "dependencies": [
-      {
-       "key": "robot"
-      },
-      {
-       "key": "frame"
-      }
-     ]
-    }
-   ]
-  },
-  "error": "Blok manifest: demo_state names 'robot', which is a dependency of the action, not a local",
-  "error_type": "value_error"
- },
- "action blok persisting an unknown local": {
-  "input": {
-   "implementations": [
-    {
-     "interface": "act",
-     "definition": {
-      "key": "act",
-      "name": "Act",
-      "kind": "FUNCTION",
-      "args": [],
-      "returns": [],
-      "bloks": [
-       {
-        "context": "OVERLAY",
-        "components": [
-         {
-          "id": "root",
-          "component": "Overlay",
-          "children": []
-         }
-        ],
-        "demo_state": {
-         "show_path": true
-        },
-        "persist": [
-         {
-          "key": "zoom"
+          "id": "Html[0]",
+          "component": "Html",
+          "children": [
+           {
+            "id": "root",
+            "component": "Card"
+           }
+          ]
          }
         ]
        }
@@ -19207,43 +20071,8 @@
     }
    ]
   },
-  "error": "Blok manifest: persist names 'zoom', which is not a demo_state key: a persisted local takes its demo value as its default",
-  "error_type": "value_error"
- },
- "action blok beside a dependency named task": {
-  "input": {
-   "implementations": [
-    {
-     "interface": "act",
-     "definition": {
-      "key": "act",
-      "name": "Act",
-      "kind": "FUNCTION",
-      "args": [],
-      "returns": [],
-      "bloks": [
-       {
-        "context": "OVERLAY",
-        "components": [
-         {
-          "id": "root",
-          "component": "Overlay",
-          "children": []
-         }
-        ]
-       }
-      ]
-     },
-     "dependencies": [
-      {
-       "key": "task"
-      }
-     ]
-    }
-   ]
-  },
-  "error": "Blok manifest: an action's blok reads its run under 'task' and the run's args under 'args', so no dependency can be called 'task'",
-  "error_type": "value_error"
+  "error": "Field required",
+  "error_type": "missing"
  },
  "action blok with an unknown field": {
   "input": {
@@ -19254,11 +20083,25 @@
       "key": "act",
       "name": "Act",
       "kind": "FUNCTION",
-      "args": [],
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
       "returns": [],
       "bloks": [
        {
         "context": "OVERLAY",
+        "vocab": 2,
         "components": [
          {
           "id": "root",
@@ -19284,11 +20127,65 @@
   "error": "Extra inputs are not permitted",
   "error_type": "extra_forbidden"
  },
+ "action blok with an old field": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "OVERLAY",
+        "vocab": 2,
+        "components": [
+         {
+          "id": "root",
+          "component": "Overlay",
+          "children": []
+         }
+        ],
+        "demo_state": {}
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Extra inputs are not permitted",
+  "error_type": "extra_forbidden"
+ },
  "agent declaring an overlay blok": {
   "input": {
    "bloks": [
     {
      "key": "over",
+     "vocab": 2,
      "context": "OVERLAY",
      "components": [
       {
@@ -19299,7 +20196,7 @@
     }
    ]
   },
-  "error": "Blok manifest: an overlay blok is an action's own (its definition's `bloks`), drawn into the space that hosts a run of it; an agent does not declare one",
+  "error": "An agent blok is drawn in HTML, SCENE, LOGO, not OVERLAY. [context.kind]",
   "error_type": "value_error"
  }
 }

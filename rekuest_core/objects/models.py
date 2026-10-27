@@ -1,6 +1,6 @@
 import strawberry
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue, field_validator
 from typing import Literal, Union
 import datetime
 from rekuest_core import enums
@@ -285,7 +285,7 @@ class ActionArgumentModel(BaseModel):
     """
 
     key: str | None = None
-    value_literal: Optional[str | int | float | dict | list] = None
+    value_literal: JsonValue = None
     value_path: Optional[str] = None
 
     # Separated nested calls
@@ -310,9 +310,9 @@ class ComponentPropModel(BaseModel):
     """
 
     key: str
-    static_value: Optional[str | int | float | dict] = None
+    static_value: JsonValue = None
     dynamic_value: Optional[DynamicValueModel] = None
-    declares_value: Optional[str] = None  # If true, this prop declares a new value in the Blok state that can be referenced by other props or actions.
+    declares_value: Optional[str] = None  # The record a task call writes (``into``), or a foreach's loop variable.
 
     # Separated top-level callbacks
     agent_call: Optional[AgentCallModel] = None
@@ -346,11 +346,18 @@ OptimisticModel.model_rebuild()
 # ============================================================================
 # UI catalog registry
 # ============================================================================
+class CatalogEventFieldModel(BaseModel):
+    key: str
+    kind: enums.CatalogValueKind
+    description: str | None = None
+
+
 class CatalogPropModel(BaseModel):
     key: str
     kind: enums.CatalogValueKind
     required: bool = False
     description: str | None = None
+    event: list[CatalogEventFieldModel] | None = None
 
 
 class CatalogComponentModel(BaseModel):
@@ -363,6 +370,8 @@ class CatalogComponentModel(BaseModel):
     inherits_context: bool = False
     downstream_of: list[str] = []
     not_downstream_of: list[str] = []
+    text_prop: str | None = None
+    catalog: str | None = None
 
 
 class CatalogArgumentModel(BaseModel):
@@ -379,22 +388,73 @@ class CatalogOperationModel(BaseModel):
     returns: enums.CatalogValueKind
 
 
-class BlokServiceModel(BaseModel):
-    key: str
-    service: str | None = None
-    version: str | None = None
-    schema_hash: str | None = None
+class BlokLocalModel(BaseModel):
+    """A stored local as written: an arg port's fields, its kind a
+    :class:`~rekuest_core.enums.LocalKind` (a port kind or ANY) or None when it was left out,
+    plus ``persist``."""
 
-
-class BlokPersistModel(BaseModel):
     key: str
+    label: str | None = None
+    kind: enums.LocalKind | None = None
     description: str | None = None
+    identifier: str | None = None
+    nullable: bool = False
+    effects: list[EffectModelUnion] | None = None
+    children: list[ArgPortModel] | None = None
+    choices: list[ChoiceModel] | None = None
+    reference_unit: str | None = None
+    proposed_units: list[str] | None = None
+    dimension: str | None = None
+    validators: list[ValidatorModel] | None = None
+    default: JsonValue = None
+    widget: Optional[AssignWidgetModelUnion] = None
+    requires: list[RequiresModel] | None = None
+    persist: bool = False
+
+
+class ResolvedBlokLocalModel(BlokLocalModel):
+    """A stored local as the blok's tree resolves it: its kind always set."""
+
+    kind: enums.LocalKind
+
+
+class BlokQueryModel(BaseModel):
+    key: str
+    service: str
+    document: str
+    variables: list[ActionArgumentModel] = []
+    poll: float | None = None
+    more: str | None = None
+
+
+class BlokSubscriptionModel(BaseModel):
+    key: str
+    service: str
+    document: str
+    variables: list[ActionArgumentModel] = []
+    keep: int | None = None
+    history: str | None = None
+
+
+class BlokDemoModel(BaseModel):
+    deps: JsonValue = None
+    args: JsonValue = None
+    task: JsonValue = None
+    queries: JsonValue = None
+    subscriptions: JsonValue = None
 
 
 class DiagnosticModel(BaseModel):
-    """A non-fatal registration finding, stored on the registered row."""
+    """A finding on a registered row: a warning of its last write, or what the blok v2 migration's
+    converter found (stored as the vocabulary's ``Finding.to_json()``, level in lowercase)."""
 
     level: enums.DiagnosticLevel = enums.DiagnosticLevel.WARNING
     code: str
     message: str
     path: str | None = None
+
+    @field_validator("level", mode="before")
+    @classmethod
+    def _upper_level(cls, level: object) -> object:
+        """``error``/``warning`` (the vocabulary's spelling) read as ERROR/WARNING."""
+        return level.upper() if isinstance(level, str) else level

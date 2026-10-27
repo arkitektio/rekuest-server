@@ -22,11 +22,11 @@ from tests.factories import create_agent_for_registry, create_registry_bundle
 from tests.models.test_action_matching import action_demand, make_action, pm
 
 
-def _org(slug="test-org-scope"):
+def _org(name="test-org-scope"):
     """Protocol / StateDefinition / Blok / Dashboard are organization-scoped; any org will do here."""
     from authentikate.models import Organization
 
-    return Organization.objects.get_or_create(slug=slug)[0]
+    return Organization.objects.get_or_create(identifier=name)[0]
 
 
 def pd(matches=None, kind="args", force_length=None, force_non_nullable_length=None, force_structure_length=None):

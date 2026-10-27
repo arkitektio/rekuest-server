@@ -3,7 +3,7 @@
 ``base_v1.json`` is the source of truth. It ships with the server (the Dockerfile copies the
 whole tree) and is vendored byte-for-byte by the Python client, so both sides resolve
 positional call arguments against the same parameter names. The base catalog is virtual:
-it is never a ``UICatalog`` row, it is merged under every named catalog, and UI apps may
+it is never a ``Module`` row, it is merged under every named catalog, and UI apps may
 not redefine its operation or component names. Its components are control flow
 (``foreach``, ``if``, ``match``/``case``/``default``, ``when``, the record slots), named in
 lowercase; what a UI draws is its own catalog's.

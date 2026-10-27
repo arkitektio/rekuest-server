@@ -49,7 +49,7 @@ from .probe import Probe, ProbeEvent, ProbeStats
 from .auth import App, Caller, Client, Device, Organization, Release, User
 from .base import build_prescoped_queryset
 from .blok import ActionBlok, Blok, BlokAgentMapping, BlokDependency, BlokEdit, BlokRevision, MaterializedBlok, RevisionDependency
-from .dashboard import BaseCatalog, Dashboard, DashboardPlacement, UICatalog
+from .dashboard import BaseCatalog, Dashboard, DashboardPlacement, Module
 from .demand import (
     ActionDemand,
     ActionDemandModel,
@@ -144,7 +144,7 @@ __all__ = [
     "TestCase",
     "TestResult",
     "Dashboard",
-    "UICatalog",
+    "Module",
     "BaseCatalog",
     "DashboardPlacement",
     "Blok",

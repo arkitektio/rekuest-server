@@ -66,7 +66,7 @@ from .blok import (
     UpdateBlokInputModel,
     UpdateMaterializedBlokInput,
 )
-from .catalog import RegisterUiCatalogInput, RegisterUiCatalogInputModel
+from .catalog import RegisterModuleInput, RegisterModuleInputModel
 from .dashboard import (
     CreateDashboardInput,
     DeleteDashboardInput,
@@ -194,8 +194,8 @@ __all__ = [
     "UpdateBlokInputModel",
     "UpdateMaterializedBlokInput",
     # catalog
-    "RegisterUiCatalogInput",
-    "RegisterUiCatalogInputModel",
+    "RegisterModuleInput",
+    "RegisterModuleInputModel",
     # dashboard
     "CreateDashboardInput",
     "DeleteDashboardInput",

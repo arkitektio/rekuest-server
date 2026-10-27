@@ -14,8 +14,8 @@ pub struct CallerContext {
     pub user_sub: String,
     pub client: i64,
     pub organization: Option<i64>,
-    /// `organization.slug`: the Assign's `org`.
-    pub organization_slug: Option<String>,
+    /// `organization.identifier`, `"<iss>#<org>"`: the Assign's `org`, the token's `org`.
+    pub organization_identifier: Option<String>,
     pub roles: Vec<String>,
 }
 
@@ -25,7 +25,7 @@ struct IdentityRow {
     sub: String,
     client_id: i64,
     organization_id: Option<i64>,
-    slug: Option<String>,
+    identifier: Option<String>,
 }
 
 impl CallerContext {
@@ -35,7 +35,7 @@ impl CallerContext {
             user_sub: row.sub,
             client: row.client_id,
             organization: row.organization_id,
-            organization_slug: row.slug,
+            organization_identifier: row.identifier,
             roles,
         }
     }
@@ -47,7 +47,7 @@ impl CallerContext {
         roles: Vec<String>,
     ) -> Result<Self, sqlx::Error> {
         let row: IdentityRow = sqlx::query_as(
-            "SELECT a.user_id, u.sub, a.client_id, a.organization_id, o.slug
+            "SELECT a.user_id, u.sub, a.client_id, a.organization_id, o.identifier
                FROM facade_agent a
                JOIN authentikate_user u ON u.id = a.user_id
                LEFT JOIN authentikate_organization o ON o.id = a.organization_id
@@ -69,7 +69,7 @@ impl CallerContext {
         roles: Vec<String>,
     ) -> Result<Self, sqlx::Error> {
         let row: IdentityRow = sqlx::query_as(
-            "SELECT u.id AS user_id, u.sub, c.id AS client_id, o.id AS organization_id, o.slug
+            "SELECT u.id AS user_id, u.sub, c.id AS client_id, o.id AS organization_id, o.identifier
                FROM authentikate_user u
                JOIN authentikate_client c ON c.id = $2
                LEFT JOIN authentikate_organization o ON o.id = $3

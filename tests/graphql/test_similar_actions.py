@@ -123,7 +123,7 @@ class TestSimilarActions:
         from authentikate.models import Organization
 
         await _warm(authenticated_context)
-        other = await Organization.objects.acreate(slug="similar-other-org")
+        other = await Organization.objects.acreate(identifier="similar-other-org")
         foreign = await sync_to_async(create_action_for_organization)(other, "foreign", name="Foreign")
 
         result = await schema.execute(ROOT, context_value=authenticated_context, variable_values={"action": str(foreign.pk)})

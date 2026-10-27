@@ -28,7 +28,7 @@ What this service declares:
 
 - Setup, in order: `ensureadmin`, `catalogue`.
 - Other jobs: none.
-- `upgrade_from` is `10.0.0`: the migration history restarted at `0001` there, so older hubs are refused (their database is reset). `facade/0001` re-adds the `vector` extension and `facade/0002` holds the hand-written SQL (liveness triggers, the revision `ON DELETE SET NULL`), and `facade/0005` the action blok `ON DELETE CASCADE`: all three must be carried by hand whenever the history is regenerated. takt names the migrations it expects (`takt/schema-migrations.txt`): a new migration is added there in the same commit. See `RELEASING.md`.
+- `upgrade_from` is `11.0.0`: the migration history restarted at `0001` there (blok language v2), so older hubs are refused (their database is reset). `facade/0001_initial` is what `makemigrations` emits plus `VectorExtension()` as its first operation (the embedding columns need pgvector). `facade/0002_database_functions` holds all the hand-written SQL: the liveness triggers and functions (`facade_actionlivenessdirty`, `facade_refresh_live_implementations`), the blok revision's task `ON DELETE SET NULL` and the action blok's action `ON DELETE CASCADE` (takt deletes tasks and actions with its own SQL). `makemigrations` emits none of this: carry both by hand whenever the history is regenerated. takt names the migrations it expects (`takt/schema-migrations.txt`): a new migration is added there in the same commit. See `RELEASING.md`.
 - Not jobs, on purpose: `migrate` is Django's own, shadowed to take a Postgres advisory lock so that two migration jobs cannot run at once; `arkitekt-service run migrate` runs it.
 
 `tests/test_prepared.py` holds the contract to this: migrations committed, every job a command

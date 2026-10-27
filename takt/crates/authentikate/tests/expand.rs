@@ -132,3 +132,28 @@ async fn a_blocked_membership_and_a_missing_organization_refuse() {
         Err(AuthentikateError::MissingActiveOrganization)
     ));
 }
+
+#[tokio::test]
+async fn two_issuers_with_the_same_org_are_two_organizations() {
+    let Some(db) = db().await else { return };
+    let org = format!("org-{}", uuid::Uuid::new_v4().simple());
+    let one = token(serde_json::json!({"iss": "lok-one", "org": org}));
+    let two = token(serde_json::json!({"iss": "lok-two", "org": org}));
+
+    let (one, two) = (
+        authentikate::expand::expand_organization(&db, &one)
+            .await
+            .unwrap(),
+        authentikate::expand::expand_organization(&db, &two)
+            .await
+            .unwrap(),
+    );
+    assert_ne!(one, two);
+    let identifier: String =
+        sqlx::query_scalar("SELECT identifier FROM authentikate_organization WHERE id = $1")
+            .bind(one)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert_eq!(identifier, format!("lok-one#{org}"));
+}

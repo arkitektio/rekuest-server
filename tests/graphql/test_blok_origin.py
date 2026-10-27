@@ -26,11 +26,11 @@ query Bloks($filters: BlokFilter) {
 """
 
 ORIGIN = "github:arkitektio/bloks:main#layers"
-TREE = [{"id": "root", "component": "Slider"}]
+TREE = [{"id": "Html[0]", "component": "Html", "children": [{"id": "Html[0]/Slider[0]", "component": "Slider"}]}]
 
 
 async def _create(context: HttpContext, **fields) -> dict:
-    result = await schema.execute(CREATE, context_value=context, variable_values={"input": {"components": TREE, **fields}})
+    result = await schema.execute(CREATE, context_value=context, variable_values={"input": {"vocab": 2, "components": TREE, **fields}})
     assert not result.errors, result.errors
     return result.data["createBlok"]
 
@@ -52,7 +52,7 @@ class TestBlokOrigin:
         result = await schema.execute(
             CREATE,
             context_value=authenticated_context,
-            variable_values={"input": {"name": "Layer picker", "components": TREE, "origin": ORIGIN, "originHash": "sha256:a"}},
+            variable_values={"input": {"name": "Layer picker", "vocab": 2, "components": TREE, "origin": ORIGIN, "originHash": "sha256:a"}},
         )
 
         assert result.errors and "exists already" in result.errors[0].message

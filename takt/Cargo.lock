@@ -56,6 +56,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkitekt-spec"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11e700bbb6c933761e264acce86fe93d9c6dde482ed15e1d21b82886dc9e1815"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "futures",
+ "getrandom 0.2.17",
+ "hex",
+ "rand 0.8.8",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.21",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1962,14 +1982,13 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "rekuest-protocol"
-version = "0.6.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47318bf68a83305772322c9a8a62e22bbabef0412f56f9aaea6e77793880fb87"
+checksum = "77d47c094b5087ff878931bf7ae2e721b3d7f469198f464f274c63e354fc7281"
 dependencies = [
- "hex",
+ "arkitekt-spec",
  "serde",
  "serde_json",
- "sha2",
  "uuid",
 ]
 

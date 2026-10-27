@@ -45,7 +45,8 @@ class Client:
 
 @strawberry_django.type(auth_models.Organization, filters=filters.OrganizationFilter, pagination=True, ordering=filters.OrganizationOrder, description="Represents an organization in the system.")
 class Organization:
-    slug: str = strawberry_django.field(description="Slug of the organization.")
+    id: strawberry.ID = strawberry_django.field(description="This service's id of the organization.")
+    identifier: str = strawberry_django.field(description="The organization across issuers and services: `<issuer>#<org>`.")
 
 
 @strawberry_django.type(models.Caller, description="The (client, user, organization) identity that requests work.")

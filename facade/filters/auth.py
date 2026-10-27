@@ -37,12 +37,12 @@ class UserOrder:
 
 @strawberry_django.order_type(Organization, description="A way to order registries")
 class OrganizationOrder:
-    slug: auto
+    identifier: auto
 
 
 @strawberry_django.filter_type(Organization, description="A way to filter organizations")
 class OrganizationFilter:
-    slug: Optional[FilterLookup[str]]
+    identifier: Optional[FilterLookup[str]]
 
     @filter_field
     def ids(self, info: Info, queryset: QuerySet[Organization], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[Organization], Q]:

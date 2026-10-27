@@ -266,6 +266,12 @@ async fn an_assign_is_persisted_dispatched_once_and_deduped() {
     assert_eq!(claims["rtk"], first.task.to_string());
     assert_eq!(claims["aud"], json!(["mikro"]));
     assert_eq!(claims["ahs"], json!(task.args_hash));
+    assert_eq!(
+        assign["assigner"], principal.user_sub,
+        "a root's assigner is its caller"
+    );
+    assert_eq!(assign["org"], json!(principal.organization_identifier));
+    assert_eq!(claims["org"], json!(principal.organization_identifier));
 
     let again = backend::assign_with_status(
         &ctx,
@@ -281,6 +287,69 @@ async fn an_assign_is_persisted_dispatched_once_and_deduped() {
         1,
         "a resend is not dispatched"
     );
+}
+
+/// A delegated task names who assigned the tree, however deep: its `user` is whoever caused
+/// this hop (the delegating agent), its `assigner` the root's caller, the token's `rcb`.
+#[tokio::test]
+async fn a_delegated_task_carries_the_roots_assigner() {
+    let Some(ctx) = context().await else { return };
+    let organization = format!("o-{}", uuid::Uuid::new_v4().simple());
+    let human = agent(&ctx, Some(&organization)).await;
+    let delegate = agent(&ctx, Some(&organization)).await;
+    let executor = agent(&ctx, Some(&organization)).await;
+    let (_, implementation) = action(&ctx, executor, false).await;
+    let root_caller = principal(&ctx, human).await;
+    let delegating = principal(&ctx, delegate).await;
+
+    // In auto-mode, so the children are sent at once rather than held for approval.
+    let root = backend::assign_with_status(
+        &ctx,
+        &root_caller,
+        &AssignInput {
+            policy: Some("AUTO".into()),
+            ..echo(implementation, 1, None)
+        },
+        AssignOrigin::default(),
+    )
+    .await
+    .unwrap()
+    .task;
+    let child = backend::assign_with_status(
+        &ctx,
+        &delegating,
+        &AssignInput {
+            parent: Some(root.to_string()),
+            ..echo(implementation, 2, None)
+        },
+        AssignOrigin::default(),
+    )
+    .await
+    .unwrap()
+    .task;
+    let grandchild = backend::assign_with_status(
+        &ctx,
+        &delegating,
+        &AssignInput {
+            parent: Some(child.to_string()),
+            ..echo(implementation, 3, None)
+        },
+        AssignOrigin::default(),
+    )
+    .await
+    .unwrap()
+    .task;
+
+    let frames = queued(&ctx, executor).await;
+    for task in [child, grandchild] {
+        let assign = frames
+            .iter()
+            .find(|frame| frame["task"] == task.to_string().as_str())
+            .expect("the task was dispatched");
+        assert_eq!(assign["user"], delegating.user_sub);
+        assert_eq!(assign["assigner"], root_caller.user_sub);
+        assert_eq!(assign["org"], json!(format!("assign-tests#{organization}")));
+    }
 }
 
 /// An empty reference is no reference: a client that always sends the field must get a new

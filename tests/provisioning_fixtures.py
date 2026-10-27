@@ -49,12 +49,12 @@ def hub(live_server, settings, declared):
     return settings
 
 
-def an_organization(slug: str) -> Organization:
+def an_organization(identifier: str) -> Organization:
     """An organization that is simply there — as one takt was first to see is. (One created
     while hook agents are configured gets its agents at once, in the background; the test for
     that is the only one that wants it.)"""
     with override_settings(HOOK_AGENTS=[]):
-        return Organization.objects.create(slug=slug)
+        return Organization.objects.create(identifier=identifier)
 
 
 @pytest.fixture

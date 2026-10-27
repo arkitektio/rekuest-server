@@ -14,7 +14,7 @@ from kante.types import Info
 from strawberry_django.fields.field import StrawberryDjangoField
 
 from facade import enums, filters, models, scalars
-from facade.blok_revisions import content_of_blok, content_of_revision
+from facade.blok_revisions import content_of_blok, content_of_revision, rendering_of
 from facade.types.base import build_prescoped_queryset, row_of
 from facade.types.demand import ActionDependencyModel, StateDependencyModel
 from rekuest_core import enums as renums
@@ -28,16 +28,30 @@ if TYPE_CHECKING:
     from facade.types.action import Action
     from facade.types.agent import Agent
     from facade.types.auth import App, User
-    from facade.types.dashboard import DashboardPlacement, UICatalog
+    from facade.types.dashboard import DashboardPlacement, Module
     from facade.types.task import Task
     from facade.types.demand import ActionDependency, StateDependency
     from facade.types.threed import Placement, SpacePlacement
 
 
-def blok_hash(components: object, demo_state: object, context: str) -> str:
-    """The hash of a blok's rendering: canonical JSON (sorted keys, no whitespace) of its parts."""
-    canonical = json.dumps({"components": components, "demo_state": demo_state, "context": context}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+def blok_hash(row: models.Blok | models.BlokRevision) -> str:
+    """The hash of a blok's rendering: canonical JSON (sorted keys, no whitespace) of what it draws."""
+    parts = rendering_of(row.components, row.context, row.vocab, row.catalogs, row.locals, row.demo, row.queries, row.subscriptions)
+    canonical = json.dumps(parts, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+RENDERING_FIELDS = ["components", "context", "vocab", "catalogs", "locals", "demo", "queries", "subscriptions"]
+
+V2_FIELD_DOCS = {
+    "vocab": "The blok language version it speaks; 2 is the only one.",
+    "catalogs": "The catalogs it needs, as name@version ('ui@1', 'scene@1').",
+    "locals": "Its locals as written: form state that feeds a call, written only through `bind`, read bare; each an arg port plus `persist`, its kind null when it was left out. A persisted one stays on the device, never on a server. What `hash` covers.",
+    "resolved_locals": "Its locals as its tree resolves them, each with a kind (a left-out kind inferred from its default, the task argument it is passed to or the control bound to it; ANY when nothing tells). Derived from the rest on every write: what renderers type the locals with, never part of `hash`.",
+    "demo": "What a preview renders it with, mirroring the roots it reads (deps, args, task, queries, subscriptions); null when it declares none.",
+    "queries": "Its declared reads, read as `queries.<key>`.",
+    "subscriptions": "Its declared streams, read as `subscriptions.<key>`.",
+}
 
 
 class ListedMaterializationsField(StrawberryDjangoField):
@@ -62,7 +76,7 @@ class Blok:
     name: str
     description: str | None
     creator: User
-    catalog: UICatalog
+    module: Module = strawberry_django.field(description="The module (an app's own UI extras) it renders against besides its catalogs.")
     app: App | None = strawberry_django.field(description="The app whose agents provide this blok; null for a custom blok a user made. A provided blok changes and goes with its agents' registrations and cannot be edited or materialized by hand: fork it.")
 
     @strawberry_django.field(description="Whether an app's agents provide this blok (see `app`).", only=["app_id"])
@@ -95,13 +109,28 @@ class Blok:
     def returns(self) -> list[rtypes.ReturnPort]:
         return cast("list[rtypes.ReturnPort]", [rmodels.ReturnPortModel(**i) for i in self.returns])
 
-    @strawberry_django.field(description="The backend services this blok reads from (its `query` components name them), each frozen at the version it was written against. A client warns when the live service differs.")
-    def services(self) -> list[rtypes.BlokService]:
-        return cast("list[rtypes.BlokService]", [rmodels.BlokServiceModel(**i) for i in self.services])
+    vocab: int = strawberry_django.field(description=V2_FIELD_DOCS["vocab"])
+    catalogs: list[str] = strawberry_django.field(description=V2_FIELD_DOCS["catalogs"])
 
-    @strawberry_django.field(description="The locals a renderer may keep between openings, on the device (never on a server): each a top-level `demoState` key, whose demo value is the default. Empty for a blok that keeps nothing.")
-    def persist(self) -> list[rtypes.BlokPersist]:
-        return cast("list[rtypes.BlokPersist]", [rmodels.BlokPersistModel(**i) for i in self.persist])
+    @strawberry_django.field(description=V2_FIELD_DOCS["locals"])
+    def locals(self) -> list[rtypes.BlokLocal]:
+        return cast("list[rtypes.BlokLocal]", [rmodels.BlokLocalModel(**i) for i in self.locals])
+
+    @strawberry_django.field(description=V2_FIELD_DOCS["resolved_locals"])
+    def resolved_locals(self) -> list[rtypes.ResolvedBlokLocal]:
+        return cast("list[rtypes.ResolvedBlokLocal]", [rmodels.ResolvedBlokLocalModel(**i) for i in self.resolved_locals])
+
+    @strawberry_django.field(description=V2_FIELD_DOCS["demo"])
+    def demo(self) -> rtypes.BlokDemo | None:
+        return cast("rtypes.BlokDemo", rmodels.BlokDemoModel(**self.demo)) if self.demo else None
+
+    @strawberry_django.field(description=V2_FIELD_DOCS["queries"])
+    def queries(self) -> list[rtypes.BlokQuery]:
+        return cast("list[rtypes.BlokQuery]", [rmodels.BlokQueryModel(**i) for i in self.queries])
+
+    @strawberry_django.field(description=V2_FIELD_DOCS["subscriptions"])
+    def subscriptions(self) -> list[rtypes.BlokSubscription]:
+        return cast("list[rtypes.BlokSubscription]", [rmodels.BlokSubscriptionModel(**i) for i in self.subscriptions])
 
     for_model: str | None = strawberry_django.field(description="The model reference this blok decorates, if any.")
     for_node: str | None = strawberry_django.field(description="The node of `forModel` this blok attaches to; the model's root when null.")
@@ -116,19 +145,14 @@ class Blok:
     def components(self) -> list[rtypes.ComponentNode]:
         return cast("list[rtypes.ComponentNode]", [rmodels.ComponentNodeModel(**i) for i in self.components])
 
-    @strawberry_django.field(description="Demo state used to render a preview of this blok without agents.")
-    def demo_state(self) -> scalars.Props:
-        return self.demo_state
-
     @strawberry_django.field(
-        description="A SHA-256 of what the blok renders: its component tree, demo state and context. Two bloks with the same hash draw the same thing, so a client may cache what it rendered under it.",
-        only=["components", "demo_state", "context"],
+        description="A SHA-256 of what the blok renders: its component tree, context, language version, catalogs, locals, demo, queries and subscriptions. Two bloks with the same hash draw the same thing, so a client may cache what it rendered under it.",
+        only=RENDERING_FIELDS,
     )
     def hash(self) -> str:
-        row = row_of(self, models.Blok)
-        return blok_hash(row.components, row.demo_state, row.context)
+        return blok_hash(row_of(self, models.Blok))
 
-    @strawberry_django.field(description="Non-fatal registration findings, e.g. manifest util calls naming operations that neither the base catalog nor this blok's catalog provides.")
+    @strawberry_django.field(description="The findings of its last write against its catalogs and module, with the blok vocabulary's codes (`catalog.props`, `palette.raw_colour`, ...): warnings only, since an error refuses the write.")
     def diagnostics(self) -> list[rtypes.Diagnostic]:
         return cast("list[rtypes.Diagnostic]", [rmodels.DiagnosticModel(**i) for i in self.diagnostics])
 
@@ -173,7 +197,7 @@ class BlokRevision:
     number: int = strawberry_django.field(description="The place of this revision in its blok's history, from 1.")
     blok: Blok
     parent: BlokRevision | None = strawberry_django.field(description="The revision this one was made from; null for the first.")
-    catalog: UICatalog
+    module: Module = strawberry_django.field(description="The module this revision renders against.")
     content_hash: str = strawberry_django.field(description="sha256 of everything this revision holds, its dependencies included (unlike `hash`).")
     author: User | None = strawberry_django.field(description="The user it was written as.")
     task: Task | None = strawberry_django.field(description="The task that wrote it, e.g. the assistant turn that designed it.")
@@ -192,18 +216,33 @@ class BlokRevision:
     def components(self) -> list[rtypes.ComponentNode]:
         return cast("list[rtypes.ComponentNode]", [rmodels.ComponentNodeModel(**i) for i in self.components])
 
-    @strawberry_django.field(description="The local state of this revision.")
-    def demo_state(self) -> scalars.Props:
-        return self.demo_state
-
-    @strawberry_django.field(description="A SHA-256 of what this revision renders, as `Blok.hash` is of the head.", only=["components", "demo_state", "context"])
+    @strawberry_django.field(description="A SHA-256 of what this revision renders, as `Blok.hash` is of the head.", only=RENDERING_FIELDS)
     def hash(self) -> str:
-        row = row_of(self, models.BlokRevision)
-        return blok_hash(row.components, row.demo_state, row.context)
+        return blok_hash(row_of(self, models.BlokRevision))
 
-    @strawberry_django.field(description="The locals this revision lets a renderer keep between openings, on the device.")
-    def persist(self) -> list[rtypes.BlokPersist]:
-        return cast("list[rtypes.BlokPersist]", [rmodels.BlokPersistModel(**i) for i in self.persist])
+    vocab: int = strawberry_django.field(description=V2_FIELD_DOCS["vocab"])
+    catalogs: list[str] = strawberry_django.field(description=V2_FIELD_DOCS["catalogs"])
+
+    @strawberry_django.field(description=V2_FIELD_DOCS["locals"])
+    def locals(self) -> list[rtypes.BlokLocal]:
+        return cast("list[rtypes.BlokLocal]", [rmodels.BlokLocalModel(**i) for i in self.locals])
+
+    @strawberry_django.field(description=V2_FIELD_DOCS["resolved_locals"])
+    def resolved_locals(self) -> list[rtypes.ResolvedBlokLocal]:
+        return cast("list[rtypes.ResolvedBlokLocal]", [rmodels.ResolvedBlokLocalModel(**i) for i in self.resolved_locals])
+
+    @strawberry_django.field(description=V2_FIELD_DOCS["demo"])
+    def demo(self) -> rtypes.BlokDemo | None:
+        return cast("rtypes.BlokDemo", rmodels.BlokDemoModel(**self.demo)) if self.demo else None
+
+    @strawberry_django.field(description=V2_FIELD_DOCS["queries"])
+    def queries(self) -> list[rtypes.BlokQuery]:
+        return cast("list[rtypes.BlokQuery]", [rmodels.BlokQueryModel(**i) for i in self.queries])
+
+    @strawberry_django.field(description=V2_FIELD_DOCS["subscriptions"])
+    def subscriptions(self) -> list[rtypes.BlokSubscription]:
+        return cast("list[rtypes.BlokSubscription]", [rmodels.BlokSubscriptionModel(**i) for i in self.subscriptions])
+
 
     @strawberry_django.field(description="The agent dependencies of this revision.")
     def dependencies(self) -> list[RevisionDependency]:
@@ -335,3 +374,4 @@ class BlokEdit:
     revision: BlokRevision | None = strawberry.field(description="The revision the blok is at after the edit; null for a dry run.")
     materialized_blok: MaterializedBlok | None = strawberry.field(description="The materialization that shows the edit: the one it was made through, or the fork's new one. Null for an edit of the blok itself.")
     diagnostics: list[rtypes.Diagnostic] = strawberry.field(description="Non-fatal findings about the new content, e.g. util calls no catalog provides.")
+    resolved_locals: list[rtypes.ResolvedBlokLocal] = strawberry.field(description="The new content's locals as its tree resolves them, each with a kind (a left-out kind inferred from its default, the task argument it is passed to or the control bound to it; ANY when nothing tells): what an editor types the locals with before saving, a dry run included.")
