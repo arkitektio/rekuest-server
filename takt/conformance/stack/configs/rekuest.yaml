@@ -20,6 +20,8 @@ authentikate:
       public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDXx/g7dyiwmfIQvkBKvUAM+KBuL1KdvZfZMlYhbyrz9Auk2xao1gLYiQJ183joiXadUreL4BugUrasQVdR9JvBWXOBeqm2FD5Ehf9VvqXdzCOQ7/fUXkb9N8sqmz5YitQuheKGDh0weNmVcfdsCGU38sACEvFQg+5dv1tqLbm7EllT+vogntDVX16DmvpvFEX4HYHpT8qM/xuqSB6yQ8+wBuQd3K7WTFgUrUqQx6zFrSMUbSArPrrY5Z0GJAeDAHKp4+V+um4mSHpYM2nBJ5pn80wYpsf97KIL9P+UJzjb/indB8dCqpPkAk3HogBhj67Tp5JoqCMoaXHFU3tiYQCp
   static_tokens:
     # One per conformance scenario: a token is one agent, and scenarios must not share a lease.
+    # Each is rekuest's admin through an app granted all of rekuest: the scenarios drive every
+    # kind of field, and what they test is the lease, not the grants.
     conf_1:
       sub: 101
       iss: lok
@@ -28,6 +30,8 @@ authentikate:
       client_app: conf_1
       client_release: v0.0.1
       client_id: conf_1
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_2:
       sub: 102
       iss: lok
@@ -36,6 +40,8 @@ authentikate:
       client_app: conf_2
       client_release: v0.0.1
       client_id: conf_2
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_3:
       sub: 103
       iss: lok
@@ -44,6 +50,8 @@ authentikate:
       client_app: conf_3
       client_release: v0.0.1
       client_id: conf_3
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_4:
       sub: 104
       iss: lok
@@ -52,6 +60,8 @@ authentikate:
       client_app: conf_4
       client_release: v0.0.1
       client_id: conf_4
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_5:
       sub: 105
       iss: lok
@@ -60,6 +70,8 @@ authentikate:
       client_app: conf_5
       client_release: v0.0.1
       client_id: conf_5
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_6:
       sub: 106
       iss: lok
@@ -68,6 +80,8 @@ authentikate:
       client_app: conf_6
       client_release: v0.0.1
       client_id: conf_6
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_7:
       sub: 107
       iss: lok
@@ -76,6 +90,8 @@ authentikate:
       client_app: conf_7
       client_release: v0.0.1
       client_id: conf_7
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_8:
       sub: 108
       iss: lok
@@ -84,6 +100,8 @@ authentikate:
       client_app: conf_8
       client_release: v0.0.1
       client_id: conf_8
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_9:
       sub: 109
       iss: lok
@@ -92,6 +110,8 @@ authentikate:
       client_app: conf_9
       client_release: v0.0.1
       client_id: conf_9
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_10:
       sub: 110
       iss: lok
@@ -100,6 +120,8 @@ authentikate:
       client_app: conf_10
       client_release: v0.0.1
       client_id: conf_10
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_11:
       sub: 111
       iss: lok
@@ -108,6 +130,8 @@ authentikate:
       client_app: conf_11
       client_release: v0.0.1
       client_id: conf_11
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_12:
       sub: 112
       iss: lok
@@ -116,6 +140,8 @@ authentikate:
       client_app: conf_12
       client_release: v0.0.1
       client_id: conf_12
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_13:
       sub: 113
       iss: lok
@@ -124,6 +150,8 @@ authentikate:
       client_app: conf_13
       client_release: v0.0.1
       client_id: conf_13
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_14:
       sub: 114
       iss: lok
@@ -132,6 +160,8 @@ authentikate:
       client_app: conf_14
       client_release: v0.0.1
       client_id: conf_14
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_15:
       sub: 115
       iss: lok
@@ -140,6 +170,8 @@ authentikate:
       client_app: conf_15
       client_release: v0.0.1
       client_id: conf_15
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_16:
       sub: 116
       iss: lok
@@ -148,6 +180,8 @@ authentikate:
       client_app: conf_16
       client_release: v0.0.1
       client_id: conf_16
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_17:
       sub: 117
       iss: lok
@@ -156,6 +190,8 @@ authentikate:
       client_app: conf_17
       client_release: v0.0.1
       client_id: conf_17
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_18:
       sub: 118
       iss: lok
@@ -164,6 +200,8 @@ authentikate:
       client_app: conf_18
       client_release: v0.0.1
       client_id: conf_18
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_19:
       sub: 119
       iss: lok
@@ -172,6 +210,8 @@ authentikate:
       client_app: conf_19
       client_release: v0.0.1
       client_id: conf_19
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_20:
       sub: 120
       iss: lok
@@ -180,6 +220,8 @@ authentikate:
       client_app: conf_20
       client_release: v0.0.1
       client_id: conf_20
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_21:
       sub: 121
       iss: lok
@@ -188,6 +230,8 @@ authentikate:
       client_app: conf_21
       client_release: v0.0.1
       client_id: conf_21
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_22:
       sub: 122
       iss: lok
@@ -196,6 +240,8 @@ authentikate:
       client_app: conf_22
       client_release: v0.0.1
       client_id: conf_22
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_23:
       sub: 123
       iss: lok
@@ -204,6 +250,8 @@ authentikate:
       client_app: conf_23
       client_release: v0.0.1
       client_id: conf_23
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_24:
       sub: 124
       iss: lok
@@ -212,6 +260,8 @@ authentikate:
       client_app: conf_24
       client_release: v0.0.1
       client_id: conf_24
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_25:
       sub: 125
       iss: lok
@@ -220,6 +270,8 @@ authentikate:
       client_app: conf_25
       client_release: v0.0.1
       client_id: conf_25
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_26:
       sub: 126
       iss: lok
@@ -228,6 +280,8 @@ authentikate:
       client_app: conf_26
       client_release: v0.0.1
       client_id: conf_26
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_27:
       sub: 127
       iss: lok
@@ -236,6 +290,8 @@ authentikate:
       client_app: conf_27
       client_release: v0.0.1
       client_id: conf_27
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_28:
       sub: 128
       iss: lok
@@ -244,6 +300,8 @@ authentikate:
       client_app: conf_28
       client_release: v0.0.1
       client_id: conf_28
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_29:
       sub: 129
       iss: lok
@@ -252,6 +310,8 @@ authentikate:
       client_app: conf_29
       client_release: v0.0.1
       client_id: conf_29
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_30:
       sub: 130
       iss: lok
@@ -260,6 +320,8 @@ authentikate:
       client_app: conf_30
       client_release: v0.0.1
       client_id: conf_30
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_31:
       sub: 131
       iss: lok
@@ -268,6 +330,8 @@ authentikate:
       client_app: conf_31
       client_release: v0.0.1
       client_id: conf_31
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_32:
       sub: 132
       iss: lok
@@ -276,6 +340,8 @@ authentikate:
       client_app: conf_32
       client_release: v0.0.1
       client_id: conf_32
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_33:
       sub: 133
       iss: lok
@@ -284,6 +350,8 @@ authentikate:
       client_app: conf_33
       client_release: v0.0.1
       client_id: conf_33
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_34:
       sub: 134
       iss: lok
@@ -292,6 +360,8 @@ authentikate:
       client_app: conf_34
       client_release: v0.0.1
       client_id: conf_34
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_35:
       sub: 135
       iss: lok
@@ -300,6 +370,8 @@ authentikate:
       client_app: conf_35
       client_release: v0.0.1
       client_id: conf_35
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_36:
       sub: 136
       iss: lok
@@ -308,6 +380,8 @@ authentikate:
       client_app: conf_36
       client_release: v0.0.1
       client_id: conf_36
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_37:
       sub: 137
       iss: lok
@@ -316,6 +390,8 @@ authentikate:
       client_app: conf_37
       client_release: v0.0.1
       client_id: conf_37
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_38:
       sub: 138
       iss: lok
@@ -324,6 +400,8 @@ authentikate:
       client_app: conf_38
       client_release: v0.0.1
       client_id: conf_38
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_39:
       sub: 139
       iss: lok
@@ -332,6 +410,8 @@ authentikate:
       client_app: conf_39
       client_release: v0.0.1
       client_id: conf_39
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_40:
       sub: 140
       iss: lok
@@ -340,6 +420,8 @@ authentikate:
       client_app: conf_40
       client_release: v0.0.1
       client_id: conf_40
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_41:
       sub: 141
       iss: lok
@@ -348,6 +430,8 @@ authentikate:
       client_app: conf_41
       client_release: v0.0.1
       client_id: conf_41
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_42:
       sub: 142
       iss: lok
@@ -356,6 +440,8 @@ authentikate:
       client_app: conf_42
       client_release: v0.0.1
       client_id: conf_42
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_43:
       sub: 143
       iss: lok
@@ -364,6 +450,8 @@ authentikate:
       client_app: conf_43
       client_release: v0.0.1
       client_id: conf_43
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_44:
       sub: 144
       iss: lok
@@ -372,6 +460,8 @@ authentikate:
       client_app: conf_44
       client_release: v0.0.1
       client_id: conf_44
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_45:
       sub: 145
       iss: lok
@@ -380,6 +470,8 @@ authentikate:
       client_app: conf_45
       client_release: v0.0.1
       client_id: conf_45
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_46:
       sub: 146
       iss: lok
@@ -388,6 +480,8 @@ authentikate:
       client_app: conf_46
       client_release: v0.0.1
       client_id: conf_46
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_47:
       sub: 147
       iss: lok
@@ -396,6 +490,8 @@ authentikate:
       client_app: conf_47
       client_release: v0.0.1
       client_id: conf_47
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_48:
       sub: 148
       iss: lok
@@ -404,6 +500,8 @@ authentikate:
       client_app: conf_48
       client_release: v0.0.1
       client_id: conf_48
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_49:
       sub: 149
       iss: lok
@@ -412,6 +510,8 @@ authentikate:
       client_app: conf_49
       client_release: v0.0.1
       client_id: conf_49
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_50:
       sub: 150
       iss: lok
@@ -420,6 +520,8 @@ authentikate:
       client_app: conf_50
       client_release: v0.0.1
       client_id: conf_50
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_51:
       sub: 151
       iss: lok
@@ -428,6 +530,8 @@ authentikate:
       client_app: conf_51
       client_release: v0.0.1
       client_id: conf_51
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_52:
       sub: 152
       iss: lok
@@ -436,6 +540,8 @@ authentikate:
       client_app: conf_52
       client_release: v0.0.1
       client_id: conf_52
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_53:
       sub: 153
       iss: lok
@@ -444,6 +550,8 @@ authentikate:
       client_app: conf_53
       client_release: v0.0.1
       client_id: conf_53
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_54:
       sub: 154
       iss: lok
@@ -452,6 +560,8 @@ authentikate:
       client_app: conf_54
       client_release: v0.0.1
       client_id: conf_54
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_55:
       sub: 155
       iss: lok
@@ -460,6 +570,8 @@ authentikate:
       client_app: conf_55
       client_release: v0.0.1
       client_id: conf_55
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_56:
       sub: 156
       iss: lok
@@ -468,6 +580,8 @@ authentikate:
       client_app: conf_55
       client_release: v0.0.1
       client_id: conf_56
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_57:
       sub: 157
       iss: lok
@@ -476,6 +590,8 @@ authentikate:
       client_app: conf_57
       client_release: v0.0.1
       client_id: conf_57
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_58:
       sub: 158
       iss: lok
@@ -484,6 +600,8 @@ authentikate:
       client_app: conf_58
       client_release: v0.0.1
       client_id: conf_58
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_59:
       sub: 159
       iss: lok
@@ -492,6 +610,8 @@ authentikate:
       client_app: conf_59
       client_release: v0.0.1
       client_id: conf_59
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_60:
       sub: 160
       iss: lok
@@ -500,6 +620,8 @@ authentikate:
       client_app: conf_60
       client_release: v0.0.1
       client_id: conf_60
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_61:
       sub: 161
       iss: lok
@@ -508,6 +630,8 @@ authentikate:
       client_app: conf_61
       client_release: v0.0.1
       client_id: conf_61
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_62:
       sub: 162
       iss: lok
@@ -516,6 +640,8 @@ authentikate:
       client_app: conf_62
       client_release: v0.0.1
       client_id: conf_62
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_63:
       sub: 163
       iss: lok
@@ -524,6 +650,8 @@ authentikate:
       client_app: conf_63
       client_release: v0.0.1
       client_id: conf_63
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_64:
       sub: 164
       iss: lok
@@ -532,6 +660,8 @@ authentikate:
       client_app: conf_64
       client_release: v0.0.1
       client_id: conf_64
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_65:
       sub: 165
       iss: lok
@@ -541,6 +671,8 @@ authentikate:
       client_app: conf_65
       client_release: v0.0.1
       client_id: conf_65
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_66:
       sub: 166
       iss: lok
@@ -549,6 +681,8 @@ authentikate:
       client_app: conf_66
       client_release: v0.0.1
       client_id: conf_66
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     conf_67:
       sub: 167
       iss: lok
@@ -557,6 +691,8 @@ authentikate:
       client_app: conf_67
       client_release: v0.0.1
       client_id: conf_67
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     test:
       sub: 1
       iss: lok

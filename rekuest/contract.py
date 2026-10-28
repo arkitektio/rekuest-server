@@ -7,20 +7,26 @@ the same commit, and no installer has to learn of it.
 
 from __future__ import annotations
 
-from arkitekt_service.contract import JSON, Contract, Description, Descriptor, Facts, Hosts, Job, Needs, Offers, Peer, Refused, Scope, Sidecar, Start, Structure, blocks
+from arkitekt_service.contract import JSON, Contract, Description, Descriptor, Facts, Hosts, Job, Needs, Offers, Peer, Refused, Role, Scope, Sidecar, Start, Structure, blocks
 
 from rekuest.configuration import Settings
 
 #: The peer that is this server's other half: the agents' endpoint and the internal API.
 TAKT = "takt"
 
-#: What a token may be allowed to do here: defined at the coordination server when the hub enrols.
+#: What an app may do here on a user's behalf: defined at the coordination server when the hub
+#: enrols. Every root field of the schema asks for one of them (`AuthExtension(scopes=...)`).
 SCOPES = [
-    Scope(key="rekuest_agent", description="Act as an agent"),
-    Scope(key="rekuest_call", description="Call other apps with rekuest"),
-    Scope(key="read", description="Read access to rekuest resources"),
-    Scope(key="write", description="Write access to rekuest resources"),
+    Scope(key="rekuest_read", description="See agents, actions, tasks, dashboards, bloks, spaces and automations."),
+    Scope(key="rekuest_call", description="Run actions on agents, and pause, resume, cancel or interrupt the tasks you started."),
+    Scope(key="rekuest_agent", description="Act as an agent: register actions and modules and receive tasks."),
+    Scope(key="rekuest_write", description="Create and change dashboards, bloks, spaces, shortcuts, test cases and assets."),
+    Scope(key="rekuest_automate", description="Create and change triggers, schedules and wiregrams that run actions automatically."),
+    Scope(key="rekuest_all", description="Do everything in Rekuest on your behalf.", is_all_scope=True),
 ]
+
+#: The scope that stands for every other one.
+ALL = "rekuest_all"
 
 #: What rekuest itself hosts: its agents, as something an action can take. It catalogues this
 #: beside its peers' declarations (``facade.service_catalog.catalogue_self``).
@@ -41,12 +47,17 @@ HOSTS = Hosts(
     ]
 )
 
-#: The roles a member of an organization can hold here.
+#: What a member of an organization may do here.
 ROLES = [
-    Scope(key="agent", description="Can act as a workflow agent"),
-    Scope(key="caller", description="Can call remote procedures"),
-    Scope(key="admin", description="Full administrative access"),
+    Role(key="rekuest_admin", description="Full control of Rekuest in this organization.", is_admin_role=True),
+    Role(key="rekuest_editor", description="Run actions, act as an agent, and build dashboards and bloks.", is_default_role=True),
+    Role(key="rekuest_automator", description="Set up automations that run on the organization's behalf."),
 ]
+
+#: The role every write asks for, the one automations ask for instead, and the one that holds both.
+EDITOR = "rekuest_editor"
+AUTOMATOR = "rekuest_automator"
+ADMIN = "rekuest_admin"
 
 
 def _service(name: str, peer: Peer) -> dict[str, JSON]:

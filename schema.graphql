@@ -4446,260 +4446,260 @@ type Mutation {
   """
   Deploy a higher-order implementation: a wrapper onto the agent of the implementation it wraps, linked to it.
   """
-  createHigherOrderImplementation(input: CreateHigherOrderImplementationInput!): Implementation! @auth
+  createHigherOrderImplementation(input: CreateHigherOrderImplementationInput!): Implementation! @auth(required_scopes: ["rekuest_agent"], any_role_of: ["rekuest_editor"])
 
   """Bounce an agent so it reconnects."""
-  bounce(input: BounceInput!): Agent! @auth
+  bounce(input: BounceInput!): Agent! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
 
   """Kick an agent to force disconnect. It will fail and not reconnect."""
-  kick(input: KickInput!): Agent! @auth
+  kick(input: KickInput!): Agent! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
 
   """Assign a task to an agent."""
-  assign(input: AssignInput!): Task! @auth
+  assign(input: AssignInput!): Task! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
 
   """
   Fire a probe at an agent — zero persistence, redis-held state under a TTL, never appears in task history. For high-frequency interactive work (previews, live parameter tweaks).
   """
-  probe(input: ProbeInput!): Probe! @auth
+  probe(input: ProbeInput!): Probe! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
 
   """
   Cancel a probe. Idempotent: cancelling a finished probe is a no-op returning its terminal state.
   """
-  cancelProbe(input: CancelProbeInput!): Probe! @auth
+  cancelProbe(input: CancelProbeInput!): Probe! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
 
   """
   Pause a probe. Idempotent on finished probes; the agent's Paused report settles the state.
   """
-  pauseProbe(input: PauseProbeInput!): Probe! @auth
+  pauseProbe(input: PauseProbeInput!): Probe! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
 
   """
   Resume a paused probe. Idempotent on finished probes; the agent's Resumed report settles the state.
   """
-  resumeProbe(input: ResumeProbeInput!): Probe! @auth
+  resumeProbe(input: ResumeProbeInput!): Probe! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
 
   """Cancel an active task."""
-  cancel(input: CancelInput!): Task! @auth
+  cancel(input: CancelInput!): Task! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
 
   """Pause an ongoing task."""
-  pause(input: PauseInput!): Task! @auth
+  pause(input: PauseInput!): Task! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
 
   """Resume a paused task."""
-  resume(input: ResumeInput!): Task! @auth
+  resume(input: ResumeInput!): Task! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
 
   """
   Answer a held task. A child an agent asked for runs once approved, or ends DENIED without running; a task that holds itself carries on with the decision. Only the user the task runs for may decide, and never from the client of the agent that asked.
   """
-  decide(input: DecideInput!): Task! @auth
+  decide(input: DecideInput!): Task! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
 
   """Collect results from a task."""
-  collect(input: CollectInput!): [String!]! @auth
+  collect(input: CollectInput!): [String!]! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
 
   """Interrupt the execution of a task."""
-  interrupt(input: InterruptInput!): Task! @auth
+  interrupt(input: InterruptInput!): Task! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
 
   """
   Create a trigger: run an action when a service signals a matching object.
   """
-  createTrigger(input: CreateTriggerInput!): Trigger! @auth
+  createTrigger(input: CreateTriggerInput!): Trigger! @auth(required_scopes: ["rekuest_automate"], any_role_of: ["rekuest_automator"])
 
   """Change a trigger."""
-  updateTrigger(input: UpdateTriggerInput!): Trigger! @auth
+  updateTrigger(input: UpdateTriggerInput!): Trigger! @auth(required_scopes: ["rekuest_automate"], any_role_of: ["rekuest_automator"])
 
   """Delete a trigger; its runs are kept."""
-  deleteTrigger(input: TriggerIdInput!): ID! @auth
+  deleteTrigger(input: TriggerIdInput!): ID! @auth(required_scopes: ["rekuest_automate"], any_role_of: ["rekuest_automator"])
 
   """
   Fire a trigger on a stored signal by hand (a replay). The run is created whether or not the signal satisfies the trigger, and logged as a firing of its own.
   """
-  fireTrigger(input: FireTriggerInput!): Firing! @auth
+  fireTrigger(input: FireTriggerInput!): Firing! @auth(required_scopes: ["rekuest_automate"], any_role_of: ["rekuest_automator"])
 
   """
   Import a wiregram: one document of schedules and triggers. All or nothing; importing the same key again updates what it created and removes what it no longer lists.
   """
-  importWiregram(input: WiregramInput!): Wiregram! @auth
+  importWiregram(input: WiregramInput!): Wiregram! @auth(required_scopes: ["rekuest_automate"], any_role_of: ["rekuest_automator"])
 
   """Delete a wiregram and the rules it owns."""
-  deleteWiregram(input: WiregramIdInput!): ID! @auth
+  deleteWiregram(input: WiregramIdInput!): ID! @auth(required_scopes: ["rekuest_automate"], any_role_of: ["rekuest_automator"])
 
   """
   Write existing schedules and triggers down as a wiregram document, to import elsewhere. Changes nothing.
   """
-  exportWiregram(input: ExportWiregramInput!): AnyDefault! @auth
+  exportWiregram(input: ExportWiregramInput!): AnyDefault! @auth(required_scopes: ["rekuest_read"])
 
   """
   Create a recurring assignment of an action. Its next run is planned immediately.
   """
-  createSchedule(input: CreateScheduleInput!): Schedule! @auth
+  createSchedule(input: CreateScheduleInput!): Schedule! @auth(required_scopes: ["rekuest_automate"], any_role_of: ["rekuest_automator"])
 
   """Change a schedule; a waiting run is re-planned."""
-  updateSchedule(input: UpdateScheduleInput!): Schedule! @auth
+  updateSchedule(input: UpdateScheduleInput!): Schedule! @auth(required_scopes: ["rekuest_automate"], any_role_of: ["rekuest_automator"])
 
   """Delete a schedule. Its waiting run is cancelled; history is kept."""
-  deleteSchedule(input: ScheduleIdInput!): ID! @auth
+  deleteSchedule(input: ScheduleIdInput!): ID! @auth(required_scopes: ["rekuest_automate"], any_role_of: ["rekuest_automator"])
 
   """
   Run a schedule now: its waiting run is moved to now. Refused while a run is executing.
   """
-  triggerSchedule(input: ScheduleIdInput!): Task! @auth
+  triggerSchedule(input: ScheduleIdInput!): Task! @auth(required_scopes: ["rekuest_automate"], any_role_of: ["rekuest_automator"])
 
   """Block an agent from connecting."""
-  block(input: BlockInput!): Agent! @auth
+  block(input: BlockInput!): Agent! @auth(required_scopes: ["rekuest_automate"], any_role_of: ["rekuest_editor"])
 
   """Unblock a previously blocked agent."""
-  unblock(input: UnblockInput!): Agent! @auth
+  unblock(input: UnblockInput!): Agent! @auth(required_scopes: ["rekuest_automate"], any_role_of: ["rekuest_editor"])
 
   """Delete a registered implementation."""
-  deleteImplementation(input: DeleteImplementationInput!): String! @auth
+  deleteImplementation(input: DeleteImplementationInput!): String! @auth(required_scopes: ["rekuest_agent"], any_role_of: ["rekuest_editor"])
 
   """Ensure agent record exists or is up to date."""
-  ensureAgent(input: AgentInput!): Agent! @auth
+  ensureAgent(input: AgentInput!): Agent! @auth(required_scopes: ["rekuest_agent"], any_role_of: ["rekuest_editor"])
 
   """Create a new test case."""
-  createTestCase(input: CreateTestCaseInput!): TestCase! @auth
+  createTestCase(input: CreateTestCaseInput!): TestCase! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Create a test result record."""
-  createTestResult(input: CreateTestResultInput!): TestResult! @auth
+  createTestResult(input: CreateTestResultInput!): TestResult! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Shelve data into a memory drawer."""
-  shelveInMemoryDrawer(input: ShelveInMemoryDrawerInput!): MemoryDrawer! @auth
+  shelveInMemoryDrawer(input: ShelveInMemoryDrawerInput!): MemoryDrawer! @auth(required_scopes: ["rekuest_agent"], any_role_of: ["rekuest_editor"])
 
   """Unshelve data from a memory drawer."""
-  unshelveMemoryDrawer(input: UnshelveMemoryDrawerInput!): ID! @auth
+  unshelveMemoryDrawer(input: UnshelveMemoryDrawerInput!): ID! @auth(required_scopes: ["rekuest_agent"], any_role_of: ["rekuest_editor"])
 
   """Create a dashboard layout."""
-  createDashboard(input: CreateDashboardInput!): Dashboard! @auth
+  createDashboard(input: CreateDashboardInput!): Dashboard! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Create a user interface panel."""
-  createBlok(input: CreateBlokInput!): Blok! @auth
+  createBlok(input: CreateBlokInput!): Blok! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Materialize a UI blok into a concrete instance on a dashboard."""
-  materializeBlok(input: MaterializeBlokInput!): MaterializedBlok! @auth
+  materializeBlok(input: MaterializeBlokInput!): MaterializedBlok! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Pin an agent to the user."""
-  pinAgent(input: PinInput!): Agent! @auth
+  pinAgent(input: PinInput!): Agent! @auth(required_scopes: ["rekuest_agent"], any_role_of: ["rekuest_editor"])
 
   """Delete an agent record."""
-  deleteAgent(input: DeleteAgentInput!): ID! @auth
+  deleteAgent(input: DeleteAgentInput!): ID! @auth(required_scopes: ["rekuest_agent"], any_role_of: ["rekuest_editor"])
 
   """Update properties of an agent such as its name."""
-  updateAgent(input: UpdateAgentInput!): Agent! @auth
+  updateAgent(input: UpdateAgentInput!): Agent! @auth(required_scopes: ["rekuest_agent"], any_role_of: ["rekuest_editor"])
 
   """Create a shortcut to an action."""
-  createShortcut(input: CreateShortcutInput!): Shortcut! @auth
+  createShortcut(input: CreateShortcutInput!): Shortcut! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Delete a shortcut."""
-  deleteShortcut(input: DeleteShortcutInput!): ID! @auth
+  deleteShortcut(input: DeleteShortcutInput!): ID! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Delete unreferenced actions from the system."""
-  cleanupActions(actionIds: [ID!] = null): Int! @auth
+  cleanupActions(actionIds: [ID!] = null): Int! @auth(required_scopes: ["rekuest_agent"], any_role_of: ["rekuest_editor"])
 
   """Automatically resolve dependencies for an implementation."""
-  autoResolve(input: AutoResolveInput!): Resolution! @auth
+  autoResolve(input: AutoResolveInput!): Resolution! @auth(required_scopes: ["rekuest_agent"], any_role_of: ["rekuest_editor"])
 
   """Upload media and return a URL for access"""
-  requestMediaUpload(input: RequestMediaUploadInput!): MediaUploadGrant! @auth
+  requestMediaUpload(input: RequestMediaUploadInput!): MediaUploadGrant! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Finalize a media upload after the client has written the object"""
-  finishMediaUpload(input: FinishMediaUploadInput!): MediaStore! @auth
+  finishMediaUpload(input: FinishMediaUploadInput!): MediaStore! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """
   Reissue upload credentials for a media upload still in flight, to the same key, so a write that outlives its credentials carries on. Only the uploader may, never for a finished store, and never past the upload's time limit
   """
-  refreshMediaUpload(input: RefreshUploadInput!): MediaUploadGrant! @auth
+  refreshMediaUpload(input: RefreshUploadInput!): MediaUploadGrant! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Request temporary S3 read credentials for a media file"""
-  requestMediaAccess(input: RequestMediaAccessInput!): MediaAccessGrant! @auth
+  requestMediaAccess(input: RequestMediaAccessInput!): MediaAccessGrant! @auth(required_scopes: ["rekuest_read"])
 
   """Delete a dashboard by ID."""
-  deleteDashboard(input: DeleteDashboardInput!): Boolean! @auth
+  deleteDashboard(input: DeleteDashboardInput!): Boolean! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """
   Update properties of a dashboard such as its name, associated bloks, or organization.
   """
-  updateDashboard(input: UpdateDashboardInput!): Dashboard! @auth
+  updateDashboard(input: UpdateDashboardInput!): Dashboard! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Delete a blok by ID."""
-  deleteBlok(input: DeleteBlokInput!): Boolean! @auth
+  deleteBlok(input: DeleteBlokInput!): Boolean! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """
   Copy a blok an app provides into a custom blok, to edit it or bind other agents to it. The copy lives on whatever the providing agents do.
   """
-  forkBlok(input: ForkBlokInput!): Blok! @auth
+  forkBlok(input: ForkBlokInput!): Blok! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """
   Update properties of a blok such as its name, description, components, module, or dependencies.
   """
-  updateBlok(input: UpdateBlokInput!): Blok! @auth
+  updateBlok(input: UpdateBlokInput!): Blok! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """
   Edit a blok as one new revision on top of the head the editor read: on the blok itself (an editor of the blok), or through a materialization, with its bindings there (an assistant at a dashboard). A provided blok is forked first. With dryRun, every check runs and nothing is kept.
   """
-  editBlok(input: EditBlokInput!): BlokEdit! @auth
+  editBlok(input: EditBlokInput!): BlokEdit! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """
   Make an earlier revision's content a custom blok's head again, as a new revision.
   """
-  revertBlok(input: RevertBlokInput!): BlokRevision! @auth
+  revertBlok(input: RevertBlokInput!): BlokRevision! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Delete a materialized blok by ID."""
-  deleteMaterializedBlok(input: DeleteMaterializedBlokInput!): Boolean! @auth
+  deleteMaterializedBlok(input: DeleteMaterializedBlokInput!): Boolean! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Update properties of a materialized blok such as its agent mappings."""
-  updateMaterializedBlok(input: UpdateMaterializedBlokInput!): MaterializedBlok! @auth
+  updateMaterializedBlok(input: UpdateMaterializedBlokInput!): MaterializedBlok! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """
   Keep a materialization at one revision of its blok, or let it follow the head again.
   """
-  pinMaterializedBlok(input: PinMaterializedBlokInput!): MaterializedBlok! @auth
+  pinMaterializedBlok(input: PinMaterializedBlokInput!): MaterializedBlok! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """
   Register a module: the components and operations a UI app can render and evaluate beyond the spec's catalogs, and the catalogs it implements whole (upsert by name in the caller's organization). Bloks (`module`) and definitions (`catalogs`) that name it are validated against it.
   """
-  registerModule(input: RegisterModuleInput!): Module! @auth
+  registerModule(input: RegisterModuleInput!): Module! @auth(required_scopes: ["rekuest_agent"], any_role_of: ["rekuest_editor"])
 
   """
   Implement an agent with given states and implementations. This is used to set up an agent with its initial configuration and capabilities.
   """
-  implementAgent(input: ImplementAgentInput!): Agent! @auth
+  implementAgent(input: ImplementAgentInput!): Agent! @auth(required_scopes: ["rekuest_agent"], any_role_of: ["rekuest_editor"])
 
   """
   A media upload grant for one asset. Issued for a file the caller's own agent declares (it registered with it), or, to an admin, for a file an agent of the organization names a source for; and only if its size passes the policy.
   """
-  requestAssetUpload(input: RequestAssetUploadInput!): AssetUploadGrant! @auth
+  requestAssetUpload(input: RequestAssetUploadInput!): AssetUploadGrant! @auth(required_scopes: ["rekuest_agent"], any_role_of: ["rekuest_editor"])
 
   """
   Verify an asset uploaded with a grant from `requestAssetUpload` (its hash and the rules of its kind) and record it. Returns the existing asset if the hash is stored already; a refusal carries its code in `extensions.code` and deletes the upload.
   """
-  createAsset(input: CreateAssetInput!): Asset! @auth
+  createAsset(input: CreateAssetInput!): Asset! @auth(required_scopes: ["rekuest_agent"], any_role_of: ["rekuest_editor"])
 
   """Create a new space."""
-  createSpace(input: CreateSpaceInput!): Space! @auth
+  createSpace(input: CreateSpaceInput!): Space! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Update an existing space."""
-  updateSpace(input: UpdateSpaceInput!): Space! @auth
+  updateSpace(input: UpdateSpaceInput!): Space! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Delete a space."""
-  deleteSpace(input: DeleteSpaceInput!): ID! @auth
+  deleteSpace(input: DeleteSpaceInput!): ID! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Create a new placement for an agent in a space."""
-  createPlacement(input: CreatePlacementInput!): Placement! @auth
+  createPlacement(input: CreatePlacementInput!): Placement! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Update an existing placement."""
-  updatePlacement(input: UpdatePlacementInput!): Placement! @auth
+  updatePlacement(input: UpdatePlacementInput!): Placement! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Delete a placement."""
-  deletePlacement(input: DeletePlacementInput!): ID! @auth
+  deletePlacement(input: DeletePlacementInput!): ID! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """
   Place a 3D blok (a Model or Robot over a kulisse asset) in a space at an affine transform.
   """
-  createSpacePlacement(input: CreateSpacePlacementInput!): SpacePlacement! @auth
+  createSpacePlacement(input: CreateSpacePlacementInput!): SpacePlacement! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Move or rename a placed 3D blok."""
-  updateSpacePlacement(input: UpdateSpacePlacementInput!): SpacePlacement! @auth
+  updateSpacePlacement(input: UpdateSpacePlacementInput!): SpacePlacement! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
   """Remove a placed 3D blok from its space."""
-  deleteSpacePlacement(input: DeleteSpacePlacementInput!): ID! @auth
+  deleteSpacePlacement(input: DeleteSpacePlacementInput!): ID! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 }
 
 input OffsetPaginationInput {
@@ -5230,295 +5230,295 @@ type Query {
   _service: _Service!
 
   """List all registered clients."""
-  clients(filters: ClientFilter, ordering: [ClientOrder!]! = [], pagination: OffsetPaginationInput): [Client!]! @auth
+  clients(filters: ClientFilter, ordering: [ClientOrder!]! = [], pagination: OffsetPaginationInput): [Client!]! @auth(required_scopes: ["rekuest_read"])
 
   """Retrieve all compute agents."""
-  agents(filters: AgentFilter, ordering: [AgentOrder!]! = [], pagination: OffsetPaginationInput): [Agent!]! @auth
+  agents(filters: AgentFilter, ordering: [AgentOrder!]! = [], pagination: OffsetPaginationInput): [Agent!]! @auth(required_scopes: ["rekuest_read"])
 
   """List of all available actions."""
-  actions(filters: ActionFilter, ordering: [ActionOrder!]! = [], pagination: OffsetPaginationInput): [Action!]! @auth
+  actions(filters: ActionFilter, ordering: [ActionOrder!]! = [], pagination: OffsetPaginationInput): [Action!]! @auth(required_scopes: ["rekuest_read"])
 
   """Retrieve protocols grouping actions."""
-  protocols(filters: ProtocolFilter, ordering: [ProtocolOrder!]! = [], pagination: OffsetPaginationInput): [Protocol!]! @auth
+  protocols(filters: ProtocolFilter, ordering: [ProtocolOrder!]! = [], pagination: OffsetPaginationInput): [Protocol!]! @auth(required_scopes: ["rekuest_read"])
 
   """All registered implementations."""
-  implementations(filters: ImplementationFilter, ordering: [ImplementationOrder!]! = [], pagination: OffsetPaginationInput): [Implementation!]! @auth
+  implementations(filters: ImplementationFilter, ordering: [ImplementationOrder!]! = [], pagination: OffsetPaginationInput): [Implementation!]! @auth(required_scopes: ["rekuest_read"])
 
   """Test results associated with test cases."""
-  testResults(filters: TestResultFilter, pagination: OffsetPaginationInput): [TestResult!]! @auth
+  testResults(filters: TestResultFilter, pagination: OffsetPaginationInput): [TestResult!]! @auth(required_scopes: ["rekuest_read"])
 
   """All test cases."""
-  testCases(filters: TestCaseFilter, pagination: OffsetPaginationInput): [TestCase!]! @auth
+  testCases(filters: TestCaseFilter, pagination: OffsetPaginationInput): [TestCase!]! @auth(required_scopes: ["rekuest_read"])
 
   """List of shortcuts."""
-  shortcuts(filters: ShortcutFilter, ordering: [ShortcutOrder!]! = [], pagination: OffsetPaginationInput): [Shortcut!]! @auth
+  shortcuts(filters: ShortcutFilter, ordering: [ShortcutOrder!]! = [], pagination: OffsetPaginationInput): [Shortcut!]! @auth(required_scopes: ["rekuest_read"])
 
   """List of toolboxes containing shortcuts."""
-  toolboxes(filters: ToolboxFilter, ordering: [ToolboxOrder!]! = [], pagination: OffsetPaginationInput): [Toolbox!]! @auth
+  toolboxes(filters: ToolboxFilter, ordering: [ToolboxOrder!]! = [], pagination: OffsetPaginationInput): [Toolbox!]! @auth(required_scopes: ["rekuest_read"])
 
   """All dashboards."""
-  dashboards: [Dashboard!]! @auth
+  dashboards: [Dashboard!]! @auth(required_scopes: ["rekuest_read"])
 
   """
   List of UI Blok. Leaves out the bloks a task made from its BSX to show: each goes with its task.
   """
-  bloks(filters: BlokFilter, pagination: OffsetPaginationInput): [Blok!]! @auth
+  bloks(filters: BlokFilter, pagination: OffsetPaginationInput): [Blok!]! @auth(required_scopes: ["rekuest_read"])
 
   """All resolutions."""
-  resolutions(filters: ResolutionFilter, pagination: OffsetPaginationInput): [Resolution!]! @auth
+  resolutions(filters: ResolutionFilter, pagination: OffsetPaginationInput): [Resolution!]! @auth(required_scopes: ["rekuest_read"])
 
   """
   List of UI Blok. Leaves out the materializations made for a message: each is shown in its message and reached by its id.
   """
-  materializedBloks(filters: MaterializedBlokFilter, ordering: [MaterializedBlokOrder!]! = [], pagination: OffsetPaginationInput): [MaterializedBlok!]! @auth
+  materializedBloks(filters: MaterializedBlokFilter, ordering: [MaterializedBlokOrder!]! = [], pagination: OffsetPaginationInput): [MaterializedBlok!]! @auth(required_scopes: ["rekuest_read"])
 
   """
   Modules registered in the caller's organization: the components and operations UI apps can render and evaluate beyond the spec's catalogs.
   """
-  modules: [Module!]! @auth
+  modules: [Module!]! @auth(required_scopes: ["rekuest_read"])
 
   """All memory shelves."""
-  memoryShelves(filters: MemoryShelveFilter, ordering: [MemoryShelveOrder!]! = [], pagination: OffsetPaginationInput): [MemoryShelve!]! @auth
+  memoryShelves(filters: MemoryShelveFilter, ordering: [MemoryShelveOrder!]! = [], pagination: OffsetPaginationInput): [MemoryShelve!]! @auth(required_scopes: ["rekuest_read"])
 
   """All memory drawers."""
-  memoryDrawers(filters: MemoryDrawerFilter, pagination: OffsetPaginationInput): [MemoryDrawer!]! @auth
+  memoryDrawers(filters: MemoryDrawerFilter, pagination: OffsetPaginationInput): [MemoryDrawer!]! @auth(required_scopes: ["rekuest_read"])
 
   """
   The descriptors the hub's services declare for the objects of the structures they host: searchable by key and description. Hub-wide.
   """
-  descriptors(filters: StructureDescriptorFilter, ordering: [StructureDescriptorOrder!]! = [], pagination: OffsetPaginationInput): [StructureDescriptor!]! @auth
+  descriptors(filters: StructureDescriptorFilter, ordering: [StructureDescriptorOrder!]! = [], pagination: OffsetPaginationInput): [StructureDescriptor!]! @auth(required_scopes: ["rekuest_read"])
 
   """
   The structures the hub's services host, as rows: searchable, with their descriptors. Hub-wide.
   """
-  hostedStructures(filters: HostedStructureFilter, ordering: [HostedStructureOrder!]! = [], pagination: OffsetPaginationInput): [HostedStructure!]! @auth
+  hostedStructures(filters: HostedStructureFilter, ordering: [HostedStructureOrder!]! = [], pagination: OffsetPaginationInput): [HostedStructure!]! @auth(required_scopes: ["rekuest_read"])
 
   """All tasks."""
-  tasks(filters: TaskFilter, ordering: [TaskOrder!]! = [], pagination: OffsetPaginationInput): [Task!]! @auth
+  tasks(filters: TaskFilter, ordering: [TaskOrder!]! = [], pagination: OffsetPaginationInput): [Task!]! @auth(required_scopes: ["rekuest_read"])
 
   """All schedules in the organization."""
-  schedules(filters: ScheduleFilter, ordering: [ScheduleOrder!]! = [], pagination: OffsetPaginationInput): [Schedule!]! @auth
+  schedules(filters: ScheduleFilter, ordering: [ScheduleOrder!]! = [], pagination: OffsetPaginationInput): [Schedule!]! @auth(required_scopes: ["rekuest_read"])
 
   """All triggers in the organization."""
-  triggers(filters: TriggerFilter, ordering: [TriggerOrder!]! = [], pagination: OffsetPaginationInput): [Trigger!]! @auth
+  triggers(filters: TriggerFilter, ordering: [TriggerOrder!]! = [], pagination: OffsetPaginationInput): [Trigger!]! @auth(required_scopes: ["rekuest_read"])
 
   """
   Signals services sent about the organization's objects, for inspection.
   """
-  signals(filters: SignalFilter, ordering: [SignalOrder!]! = [], pagination: OffsetPaginationInput): [Signal!]! @auth
+  signals(filters: SignalFilter, ordering: [SignalOrder!]! = [], pagination: OffsetPaginationInput): [Signal!]! @auth(required_scopes: ["rekuest_read"])
 
   """The automation documents the organization imported."""
-  wiregrams(pagination: OffsetPaginationInput): [Wiregram!]! @auth
+  wiregrams(pagination: OffsetPaginationInput): [Wiregram!]! @auth(required_scopes: ["rekuest_read"])
 
   """
   The firing log: what became of each trigger for each signal it listened for.
   """
-  firings(filters: FiringFilter, ordering: [FiringOrder!]! = [], pagination: OffsetPaginationInput): [Firing!]! @auth
+  firings(filters: FiringFilter, ordering: [FiringOrder!]! = [], pagination: OffsetPaginationInput): [Firing!]! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a specific agent by ID or by app, version and device_id."""
-  agent(id: ID = null, app: String = null, version: String = null, deviceId: String = null): Agent! @auth
+  agent(id: ID = null, app: String = null, version: String = null, deviceId: String = null): Agent! @auth(required_scopes: ["rekuest_read"])
 
   """List all spaces."""
-  spaces(filters: SpaceFilter, ordering: [SpaceOrder!]! = [], pagination: OffsetPaginationInput): [Space!]! @auth
+  spaces(filters: SpaceFilter, ordering: [SpaceOrder!]! = [], pagination: OffsetPaginationInput): [Space!]! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a specific space by ID."""
-  space(id: ID!): Space! @auth
+  space(id: ID!): Space! @auth(required_scopes: ["rekuest_read"])
 
   """List all placements."""
-  placements(filters: PlacementFilter, ordering: [PlacementOrder!]! = [], pagination: OffsetPaginationInput): [Placement!]! @auth
+  placements(filters: PlacementFilter, ordering: [PlacementOrder!]! = [], pagination: OffsetPaginationInput): [Placement!]! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a specific placement by ID."""
-  placement(id: ID!): Placement! @auth
+  placement(id: ID!): Placement! @auth(required_scopes: ["rekuest_read"])
 
   """List the 3D bloks placed in spaces."""
-  spacePlacements(filters: SpacePlacementFilter, ordering: [SpacePlacementOrder!]! = [], pagination: OffsetPaginationInput): [SpacePlacement!]! @auth
+  spacePlacements(filters: SpacePlacementFilter, ordering: [SpacePlacementOrder!]! = [], pagination: OffsetPaginationInput): [SpacePlacement!]! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch one placed 3D blok by ID."""
-  spacePlacement(id: ID!): SpacePlacement! @auth
+  spacePlacement(id: ID!): SpacePlacement! @auth(required_scopes: ["rekuest_read"])
 
   """List all sessions."""
-  sessions(filters: SessionFilter, ordering: [SessionOrder!]! = [], pagination: OffsetPaginationInput): [Session!]! @auth
+  sessions(filters: SessionFilter, ordering: [SessionOrder!]! = [], pagination: OffsetPaginationInput): [Session!]! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a specific session by ID."""
-  session(id: ID!): Session! @auth
+  session(id: ID!): Session! @auth(required_scopes: ["rekuest_read"])
 
   """Statistics about actions and their implementations."""
-  actionStats(filters: ActionFilter = null): ActionStats! @auth
+  actionStats(filters: ActionFilter = null): ActionStats! @auth(required_scopes: ["rekuest_read"])
 
   """Statistics about tasks and their states."""
-  taskStats(filters: TaskFilter = null): TaskStats! @auth
+  taskStats(filters: TaskFilter = null): TaskStats! @auth(required_scopes: ["rekuest_read"])
 
   """Get task boundaries."""
-  taskBoundaries(correlationId: String!, stateId: ID = null): TaskBoundary @auth
+  taskBoundaries(correlationId: String!, stateId: ID = null): TaskBoundary @auth(required_scopes: ["rekuest_read"])
 
   """Get session boundaries."""
-  sessionBoundaries(sessionId: ID!, stateId: ID = null): SessionBoundary @auth
+  sessionBoundaries(sessionId: ID!, stateId: ID = null): SessionBoundary @auth(required_scopes: ["rekuest_read"])
 
   """Get state at global revision."""
-  stateAtGlobalRev(globalRevision: Int!, stateId: ID = null, sessionId: String = null): [Snapshot!]! @auth
+  stateAtGlobalRev(globalRevision: Int!, stateId: ID = null, sessionId: String = null): [Snapshot!]! @auth(required_scopes: ["rekuest_read"])
 
   """Get forward events after revision."""
-  forwardEventsAfterRev(globalRevision: Int!, stateId: ID = null, sessionId: String = null, count: Int! = 100): [Patch!]! @auth
+  forwardEventsAfterRev(globalRevision: Int!, stateId: ID = null, sessionId: String = null, count: Int! = 100): [Patch!]! @auth(required_scopes: ["rekuest_read"])
 
   """Get patch events between global revisions."""
-  patchEventsBetweenGlobalRevs(fromGlobalRevision: Int!, toGlobalRevision: Int!, stateIds: [ID!] = null, sessionId: String = null): [Patch!]! @auth
+  patchEventsBetweenGlobalRevs(fromGlobalRevision: Int!, toGlobalRevision: Int!, stateIds: [ID!] = null, sessionId: String = null): [Patch!]! @auth(required_scopes: ["rekuest_read"])
 
   """Get snapshots around revision."""
-  snapshotsAroundRev(revision: Int!, stateId: ID = null, sessionId: String = null, before: Int! = 1, after: Int! = 1): [Snapshot!]! @auth
+  snapshotsAroundRev(revision: Int!, stateId: ID = null, sessionId: String = null, before: Int! = 1, after: Int! = 1): [Snapshot!]! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a specific action."""
-  action(id: ID = null, task: ID = null, implementation: ID = null, agent: ID = null, interface: String = null, hash: ActionHash = null, matching: ActionDemandInput = null): Action! @auth
+  action(id: ID = null, task: ID = null, implementation: ID = null, agent: ID = null, interface: String = null, hash: ActionHash = null, matching: ActionDemandInput = null): Action! @auth(required_scopes: ["rekuest_read"])
 
   """
   Actions whose name and description mean roughly what this action's do, nearest first: the org's other actions ranked by cosine distance between their embeddings. `filters` narrows the candidates like `actions` does; `maxDistance` (0 identical, 1 unrelated) cuts the tail, otherwise the nearest `limit` come back. Empty while the action has no vector yet or embeddings are off.
   """
-  similarActions(action: ID!, filters: ActionFilter = null, limit: Int! = 10, maxDistance: Float = null): [Action!]! @auth
+  similarActions(action: ID!, filters: ActionFilter = null, limit: Int! = 10, maxDistance: Float = null): [Action!]! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch the root tasks this client created (caller-scoped)."""
-  myTasks: [Task!]! @auth
+  myTasks: [Task!]! @auth(required_scopes: ["rekuest_read"])
 
   """
   Fetch a live (or lingering) probe by ID. Expired probes are gone — probes are never persisted.
   """
-  probe(id: ID!): Probe! @auth
+  probe(id: ID!): Probe! @auth(required_scopes: ["rekuest_read"])
 
   """
   Live probe counts: instance-wide total plus your in-flight count and cap.
   """
-  probeStats: ProbeStats! @auth
+  probeStats: ProbeStats! @auth(required_scopes: ["rekuest_read"])
 
   """
   The latest completed run of a PURE action with these exact args, or null — the replay primitive. Reuse decisions belong to the orchestrator.
   """
-  reusableTaskFor(actionHash: String!, args: Args!): Task @auth
+  reusableTaskFor(actionHash: String!, args: Args!): Task @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a specific event."""
-  event(id: ID!): TaskEvent! @auth
+  event(id: ID!): TaskEvent! @auth(required_scopes: ["rekuest_read"])
 
   """Find implementation at given interface."""
-  implementationAt(agent: ID!, interface: String = null, actionHash: String = null, demand: ActionDemandInput = null): Implementation! @auth
+  implementationAt(agent: ID!, interface: String = null, actionHash: String = null, demand: ActionDemandInput = null): Implementation! @auth(required_scopes: ["rekuest_read"])
 
   """Find your implementation at a specific interface."""
-  myImplementationAt(actionId: ID = null, interface: String = null): Implementation! @auth
+  myImplementationAt(actionId: ID = null, interface: String = null): Implementation! @auth(required_scopes: ["rekuest_read"])
 
   """Materialize the latest state for a specific agent"""
-  checkout(state: ID!, sessionId: ID = null, globalRevision: Int = null, timestamp: DateTime = null, forwardPatchCount: Int! = 0, backwardPatchCount: Int! = 0): StateValue! @auth
+  checkout(state: ID!, sessionId: ID = null, globalRevision: Int = null, timestamp: DateTime = null, forwardPatchCount: Int! = 0, backwardPatchCount: Int! = 0): StateValue! @auth(required_scopes: ["rekuest_read"])
 
   """Materialize the latest states for a specific agent"""
-  checkoutAgent(agent: ID!, sessionId: ID = null, globalRevision: Int = null, timestamp: DateTime = null, forwardPatchCount: Int! = 0, backwardPatchCount: Int! = 0): AgentWithValues! @auth
+  checkoutAgent(agent: ID!, sessionId: ID = null, globalRevision: Int = null, timestamp: DateTime = null, forwardPatchCount: Int! = 0, backwardPatchCount: Int! = 0): AgentWithValues! @auth(required_scopes: ["rekuest_read"])
 
   """
   The built-in base catalog every definition and blok is validated against before any registered UI catalog (virtual: shipped with the server, not registered).
   """
-  baseCatalog: BaseCatalog! @auth
+  baseCatalog: BaseCatalog! @auth(required_scopes: ["rekuest_read"])
 
   """
   All structures: those the org's action ports reference, and those a service of this hub hosts.
   """
-  structures(search: String = null): [Structure!]! @auth
+  structures(search: String = null): [Structure!]! @auth(required_scopes: ["rekuest_read"])
 
   """
   All structure packages referenced by the org's action ports (derived, not registered).
   """
-  structurePackages(search: String = null): [StructurePackage!]! @auth
+  structurePackages(search: String = null): [StructurePackage!]! @auth(required_scopes: ["rekuest_read"])
 
   """
   All interfaces referenced by the org's action ports (derived, not registered).
   """
-  interfaces(search: String = null): [Interface!]! @auth
+  interfaces(search: String = null): [Interface!]! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch resolved dependencies for a resolution."""
-  resolvedImplementations(resolution: ID!, dependencyKey: String = null, methodKey: String = null): [Implementation!]! @auth
+  resolvedImplementations(resolution: ID!, dependencyKey: String = null, methodKey: String = null): [Implementation!]! @auth(required_scopes: ["rekuest_read"])
 
   """
   What assigning an implementation with these overwrites would bind, level by level, and what is unmet: a dry run of the assign's dependency resolution.
   """
-  dependencyTree(input: DependencyTreeInput!): DependencyTree! @auth
+  dependencyTree(input: DependencyTreeInput!): DependencyTree! @auth(required_scopes: ["rekuest_read"])
 
   """
   The spaces that place any of these agents (e.g. the ones a dependencyTree dry run binds), those placing the most first, then the most recently changed: where to run a workflow over them.
   """
-  spacesForAgents(agents: [ID!]!): [SpaceForAgents!]! @auth
+  spacesForAgents(agents: [ID!]!): [SpaceForAgents!]! @auth(required_scopes: ["rekuest_read"])
 
   """
   The stored asset of this reference ('sha256:...') in the caller's organization, or null if no agent has uploaded it.
   """
-  asset(ref: String!): Asset @auth
+  asset(ref: String!): Asset @auth(required_scopes: ["rekuest_read"])
 
   """The limits each kind of asset is held to when it is added."""
-  assetPolicy: AssetPolicy! @auth
+  assetPolicy: AssetPolicy! @auth(required_scopes: ["rekuest_read"])
 
   """The html bloks registered to decorate the model of this reference."""
-  bloksForModel(ref: String!): [Blok!]! @auth
+  bloksForModel(ref: String!): [Blok!]! @auth(required_scopes: ["rekuest_read"])
 
   """Retrieve state for a specific context."""
-  stateFor(agent: ID!, stateHash: String = null, demand: StateDemandInput = null): State! @auth
+  stateFor(agent: ID!, stateHash: String = null, demand: StateDemandInput = null): State! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a client by ID."""
-  resolution(id: ID!): Resolution! @auth
+  resolution(id: ID!): Resolution! @auth(required_scopes: ["rekuest_read"])
 
   """Get a specific state by ID."""
-  state(id: ID!): State! @auth
+  state(id: ID!): State! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a structure package by its key (derived from port identifiers)."""
-  structurePackage(key: ID!): StructurePackage! @auth
+  structurePackage(key: ID!): StructurePackage! @auth(required_scopes: ["rekuest_read"])
 
   """
   Fetch an interface by its '@package/key' identifier (derived from port identifiers).
   """
-  interface(identifier: ID!): Interface! @auth
+  interface(identifier: ID!): Interface! @auth(required_scopes: ["rekuest_read"])
 
   """
   Fetch a structure by its '@package/key' identifier: one a port references or a service hosts.
   """
-  structure(identifier: ID!): Structure! @auth
+  structure(identifier: ID!): Structure! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a memory shelve by ID."""
-  memoryShelve(id: ID!): MemoryShelve! @auth
+  memoryShelve(id: ID!): MemoryShelve! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a memory drawer by ID."""
-  memoryDrawer(id: ID!): MemoryDrawer! @auth
+  memoryDrawer(id: ID!): MemoryDrawer! @auth(required_scopes: ["rekuest_read"])
 
   """Get a blok by ID."""
-  blok(id: ID!): Blok! @auth
+  blok(id: ID!): Blok! @auth(required_scopes: ["rekuest_read"])
 
   """Get a materialized blok by ID."""
-  materializedBlok(id: ID!): MaterializedBlok! @auth
+  materializedBlok(id: ID!): MaterializedBlok! @auth(required_scopes: ["rekuest_read"])
 
   """Get a module by ID."""
-  module(id: ID!): Module! @auth
+  module(id: ID!): Module! @auth(required_scopes: ["rekuest_read"])
 
   """Get toolbox by ID."""
-  toolbox(id: ID!): Toolbox! @auth
+  toolbox(id: ID!): Toolbox! @auth(required_scopes: ["rekuest_read"])
 
   """Retrieve shortcut by ID."""
-  shortcut(id: ID!): Shortcut! @auth
+  shortcut(id: ID!): Shortcut! @auth(required_scopes: ["rekuest_read"])
 
   """Get dashboard by ID."""
-  dashboard(id: ID!): Dashboard! @auth
+  dashboard(id: ID!): Dashboard! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a dependency by ID."""
-  dependency(id: ID!): Dependency! @auth
+  dependency(id: ID!): Dependency! @auth(required_scopes: ["rekuest_read"])
 
   """Retrieve test case by ID."""
-  testCase(id: ID!): TestCase! @auth
+  testCase(id: ID!): TestCase! @auth(required_scopes: ["rekuest_read"])
 
   """Get test result by ID."""
-  testResult(id: ID!): TestResult! @auth
+  testResult(id: ID!): TestResult! @auth(required_scopes: ["rekuest_read"])
 
   """Get implementation by ID."""
-  implementation(id: ID!): Implementation! @auth
+  implementation(id: ID!): Implementation! @auth(required_scopes: ["rekuest_read"])
 
   """
   The services of this hub: what each hosts and emits. Hub-wide; a service is not an agent.
   """
-  services(name: String = null): [Service!]! @auth
+  services(name: String = null): [Service!]! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a descriptor by ID."""
-  descriptor(id: ID!): StructureDescriptor! @auth
+  descriptor(id: ID!): StructureDescriptor! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a hosted structure by ID."""
-  hostedStructure(id: ID!): HostedStructure! @auth
+  hostedStructure(id: ID!): HostedStructure! @auth(required_scopes: ["rekuest_read"])
 
   """
   The signals this hub's services declare they emit — what triggers can wait for. Hub-wide.
@@ -5530,33 +5530,33 @@ type Query {
     Keep signals whose identifier or description contains this text, or whose description means something close to it; substring matches first, then by similarity
     """
     search: String = null
-  ): [SignalDeclaration!]! @auth
+  ): [SignalDeclaration!]! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a service of this hub by ID. Hub-wide."""
-  service(id: ID!): Service! @auth
+  service(id: ID!): Service! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a firing by ID."""
-  firing(id: ID!): Firing! @auth
+  firing(id: ID!): Firing! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a signal by ID."""
-  signal(id: ID!): Signal! @auth
+  signal(id: ID!): Signal! @auth(required_scopes: ["rekuest_read"])
 
   """
   A dry run for a trigger not written yet: the organization's stored signals of this kind and structure whose descriptors satisfy the conditions, newest first. Fires nothing.
   """
-  matchingSignals(kind: SignalKind!, identifier: String!, conditions: AnyDefault = null, limit: Int! = 20): [Signal!]! @auth
+  matchingSignals(kind: SignalKind!, identifier: String!, conditions: AnyDefault = null, limit: Int! = 20): [Signal!]! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a wiregram by ID."""
-  wiregram(id: ID!): Wiregram! @auth
+  wiregram(id: ID!): Wiregram! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a trigger by ID."""
-  trigger(id: ID!): Trigger! @auth
+  trigger(id: ID!): Trigger! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a schedule by ID."""
-  schedule(id: ID!): Schedule! @auth
+  schedule(id: ID!): Schedule! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch task by ID."""
-  task(id: ID!): Task! @auth
+  task(id: ID!): Task! @auth(required_scopes: ["rekuest_read"])
 }
 
 input RefreshUploadInput {
@@ -7075,59 +7075,59 @@ type StructurePackage {
 """Root subscription type for real-time event streams from the system."""
 type Subscription {
   """Subscribe to root tasks created by this client (caller-scoped)."""
-  mytasks: TaskChangeEvent! @auth
+  mytasks: TaskChangeEvent! @auth(required_scopes: ["rekuest_read"])
 
   """Subscribe to root task changes across the whole organization."""
-  tasks: TaskChangeEvent! @auth
+  tasks: TaskChangeEvent! @auth(required_scopes: ["rekuest_read"])
 
   """Subscribe to updates on agent connections and statuses."""
-  agents: AgentChangeEvent! @auth
+  agents: AgentChangeEvent! @auth(required_scopes: ["rekuest_read"])
 
   """
   Subscribe to the signals services send about the organization's objects: one arrived, or triggers were matched against it.
   """
-  signals: SignalChangeEvent! @auth
+  signals: SignalChangeEvent! @auth(required_scopes: ["rekuest_read"])
 
   """
   Subscribe to the organization's schedules being created, changed (by a user or by their runs) or deleted.
   """
-  schedules: RuleChangeEvent! @auth
+  schedules: RuleChangeEvent! @auth(required_scopes: ["rekuest_read"])
 
   """
   Subscribe to the organization's triggers being created, changed (by a user or by their firings) or deleted.
   """
-  triggers: RuleChangeEvent! @auth
+  triggers: RuleChangeEvent! @auth(required_scopes: ["rekuest_read"])
 
   """Subscribe to changes in implementations."""
-  implementationChange(implementation: ID!): Implementation! @auth
+  implementationChange(implementation: ID!): Implementation! @auth(required_scopes: ["rekuest_read"])
 
   """Subscribe to creation or updates of implementations."""
-  implementations(agent: ID!): ImplementationUpdate! @auth
+  implementations(agent: ID!): ImplementationUpdate! @auth(required_scopes: ["rekuest_read"])
 
   """Subscribe to updates of state values and patches."""
-  stateUpdateEvents(stateId: ID!): State! @auth
+  stateUpdateEvents(stateId: ID!): State! @auth(required_scopes: ["rekuest_read"])
 
   """Watch a state: yields the current snapshot then streams patches."""
-  watchState(stateId: ID = null, agentId: ID = null, interface: String = null): StateSnapshotEventStatePatchEvent! @auth
+  watchState(stateId: ID = null, agentId: ID = null, interface: String = null): StateSnapshotEventStatePatchEvent! @auth(required_scopes: ["rekuest_read"])
 
   """Watch an agent: yields snapshots for all states then streams patches."""
-  watchAgent(agentId: ID!): AgentSnapshotEventStatePatchEvent! @auth
+  watchAgent(agentId: ID!): AgentSnapshotEventStatePatchEvent! @auth(required_scopes: ["rekuest_read"])
 
   """Subscribe to all descendant task changes of a task."""
-  childTasks(id: ID!): ChildTaskEvent! @auth
+  childTasks(id: ID!): ChildTaskEvent! @auth(required_scopes: ["rekuest_read"])
 
   """Subscribe to task create/update for a specific agent."""
-  agentTasks(agent: ID!): AgentTaskUpdate! @auth
+  agentTasks(agent: ID!): AgentTaskUpdate! @auth(required_scopes: ["rekuest_read"])
 
   """
   The task an agent's action last ran as, whoever started it, kept current. Yields a `LatestTaskSnapshot` first, then that task's events (`TaskEventChange`: progress, results, its end) and, as a `TaskChange`, every task of the action that starts or ends: a started one with a higher id is the latest from then on. A snapshot without an implementation means the agent offers no action under that interface, and nothing follows.
   """
-  latestTask(agent: ID!, interface: String!): LatestTaskSnapshotTaskChangeTaskEventChange! @auth
+  latestTask(agent: ID!, interface: String!): LatestTaskSnapshotTaskChangeTaskEventChange! @auth(required_scopes: ["rekuest_read"])
 
   """
   Stream the events of one probe (caller-scoped, payload-carrying). Emits a state snapshot first when events already happened.
   """
-  probeEvents(probe: ID!): ProbeEvent! @auth
+  probeEvents(probe: ID!): ProbeEvent! @auth(required_scopes: ["rekuest_read"])
 }
 
 """Tracks the assignment of an implementation to a specific task."""

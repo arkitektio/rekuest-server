@@ -10,23 +10,33 @@ import os
 DATALAYER = {**DATALAYER, "allow_unscoped_fallback": True}
 
 DATABASES["default"] = {**DATABASES["default"], "NAME": "testdb", "PORT": int(os.environ.get("REKUEST_TEST_DB_PORT", 5555)), "HOST": "localhost", "USER": "test", "PASSWORD": "test"}
+#: What a test token is unless it says otherwise: rekuest's admin, through an app granted all of rekuest.
+ADMIN_WITH_EVERY_SCOPE = {"roles": ["rekuest_admin"], "scope": "openid rekuest_all"}
+
 # Django forces DEBUG=False under the test runner, and authentikate 3.0 refuses static
 # tokens when DEBUG is False. These are deliberate test fixtures, so opt in explicitly.
 AUTHENTIKATE = {
     **AUTHENTIKATE,
     "allow_static_tokens_in_production": True,
     "static_tokens": {
-        "test": {"sub": "1", "client_id": "oinsoins", "app": "test-app"},
-        # A second distinct identity (same default ``static_org``) for cross-agent tests —
-        # agent 1 (token "test") assigns to agent 2 (token "test2").
-        "test2": {"sub": "2", "client_id": "oinsoins2", "app": "test-app"},
-        # A third identity in a *different* organization for cross-tenant tests. The auth
-        # extension always derives the request's organization from the bearer token, so a
-        # second tenant can only be expressed as a second token.
-        "test-other": {"sub": "3", "client_id": "oinsoins3", "app": "test-app", "org": "other_org"},
-        # A member of the default organization without the admin role a static token otherwise
-        # carries, for the mutations only an admin may run.
-        "test-member": {"sub": "4", "client_id": "oinsoins4", "app": "test-app", "roles": []},
+        name: {**ADMIN_WITH_EVERY_SCOPE, **token}
+        for name, token in {
+            "test": {"sub": "1", "client_id": "oinsoins", "app": "test-app"},
+            # A second distinct identity (same default ``static_org``) for cross-agent tests —
+            # agent 1 (token "test") assigns to agent 2 (token "test2").
+            "test2": {"sub": "2", "client_id": "oinsoins2", "app": "test-app"},
+            # A third identity in a *different* organization for cross-tenant tests. The auth
+            # extension always derives the request's organization from the bearer token, so a
+            # second tenant can only be expressed as a second token.
+            "test-other": {"sub": "3", "client_id": "oinsoins3", "app": "test-app", "org": "other_org"},
+            # A member of the default organization holding the role every member holds, not
+            # rekuest's admin, for the mutations only an admin may run.
+            "test-member": {"sub": "4", "client_id": "oinsoins4", "app": "test-app", "roles": ["rekuest_editor"]},
+            # The user of "test" through an app granted only what it reads (tests/test_scopes.py).
+            "readertest": {"sub": "1", "client_id": "oinsoins", "app": "test-app", "scope": "openid rekuest_read"},
+            # A member's app granted what the plugin engine is: reading, and acting as an agent.
+            "agenttest": {"sub": "5", "client_id": "oinsoins5", "app": "test-app", "roles": ["rekuest_editor"], "scope": "openid rekuest_read rekuest_agent"},
+        }.items()
     },
 }
 

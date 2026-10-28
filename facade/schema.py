@@ -4,7 +4,9 @@ import kante
 import strawberry
 import strawberry_django
 from arkitekt_datalayer import mutations as datalayer_mutations
+from arkitekt_datalayer.datalayer import load_config
 from arkitekt_datalayer.scalars import SCALAR_MAP as dscalar_map
+from authentikate.catch_alls import declare_catch_alls
 from authentikate.strawberry import AuthentikateExtension, AuthExtension, AuthSubscribeExtension
 from django.db.models import Q
 from kante.types import Info
@@ -18,25 +20,46 @@ from facade import enums, models, mutations, queries, subscriptions, types
 from facade.json_types import json_value
 from facade.scalars import scalar_map as fscalar_map
 from facade.types.base import scoped_get
+from rekuest.contract import ADMIN, ALL, AUTOMATOR, EDITOR
 from rekuest.logs import QuietErrorsSchema
 from rekuest_core import scalars as rscalars
 from rekuest_core.constants import input_union_types, interface_types
 from rekuest_core.scalars import scalar_map as rscalar_map
 
 
-def field(**kwargs):  # noqa: ANN201  strawberry types a field as whatever it is assigned to
-    """A wrapper for field that attaches the auth extension."""
-    return strawberry_django.field(extensions=[AuthExtension()], **kwargs)
+def field(scope: str = "rekuest_read", **kwargs):  # noqa: ANN201  strawberry types a field as whatever it is assigned to
+    """A field an app needs ``scope`` for (``rekuest_read``, unless it says otherwise)."""
+    return strawberry_django.field(extensions=[AuthExtension(scopes=[scope])], **kwargs)
 
 
-def mutation(**kwargs):  # noqa: ANN201  as above
-    """A wrapper for mutation that attaches the auth extension."""
-    return strawberry_django.mutation(extensions=[AuthExtension()], **kwargs)
+def mutation(scope: str, roles: list[str] | None = None, **kwargs):  # noqa: ANN201  as above
+    """A write: an app needs ``scope`` for it, a member one of ``roles`` (``rekuest_editor`` unless it
+    says otherwise; ``rekuest_admin`` holds every role)."""
+    return strawberry_django.mutation(extensions=[AuthExtension(scopes=[scope], any_role_of=roles or [EDITOR])], **kwargs)
 
 
-def subscription(**kwargs):  # noqa: ANN201  as above
-    """A wrapper for subscription that attaches the auth-subscribe extension."""
-    return strawberry.subscription(extensions=[AuthSubscribeExtension()], **kwargs)
+def automation(**kwargs):  # noqa: ANN201  as above
+    """A write to what runs actions on the organization's behalf: triggers, schedules and wiregrams.
+
+    Only ``rekuest_automator`` may, not every editor: what it sets up runs without anyone there.
+    """
+    return mutation(scope="rekuest_automate", roles=[AUTOMATOR], **kwargs)
+
+
+def read_mutation(**kwargs):  # noqa: ANN201  as above
+    """A mutation that changes nothing (it hands out read credentials, or writes a document down): a read."""
+    return strawberry_django.mutation(extensions=[AuthExtension(scopes=["rekuest_read"])], **kwargs)
+
+
+def upload_mutation(**kwargs):  # noqa: ANN201  as above
+    """A datalayer upload: an app needs ``rekuest_write``, a member one of the configured ``upload_roles``
+    (``rekuest_editor`` when none are). Read once, at schema build."""
+    return mutation(scope="rekuest_write", roles=load_config().upload_roles or [EDITOR], **kwargs)
+
+
+def subscription(scope: str = "rekuest_read", **kwargs):  # noqa: ANN201  as above
+    """A subscription: what it streams is read, so an app needs ``rekuest_read`` for it."""
+    return strawberry.subscription(extensions=[AuthSubscribeExtension(scopes=[scope])], **kwargs)
 
 
 @strawberry.type(description="Root query type for fetching entities in the system.")
@@ -67,13 +90,13 @@ class Query:
     dashboards: list[types.Dashboard] = field(description="All dashboards.")
     bloks: list[types.Blok] = strawberry_django.field(
         field_cls=types.blok.ListedBloksField,
-        extensions=[AuthExtension()],
+        extensions=[AuthExtension(scopes=["rekuest_read"])],
         description="List of UI Blok. Leaves out the bloks a task made from its BSX to show: each goes with its task.",
     )
     resolutions: list[types.Resolution] = field(description="All resolutions.")
     materialized_bloks: list[types.MaterializedBlok] = strawberry_django.field(
         field_cls=types.blok.ListedMaterializationsField,
-        extensions=[AuthExtension()],
+        extensions=[AuthExtension(scopes=["rekuest_read"])],
         description="List of UI Blok. Leaves out the materializations made for a message: each is shown in its message and reached by its id.",
     )
     modules: list[types.Module] = field(description="Modules registered in the caller's organization: the components and operations UI apps can render and evaluate beyond the spec's catalogs.")
@@ -252,104 +275,104 @@ class Query:
 
 @strawberry.type(description="Root mutation type for executing write operations on the API.")
 class Mutation:
-    create_higher_order_implementation = mutation(resolver=mutations.create_higher_order_implementation, description="Deploy a higher-order implementation: a wrapper onto the agent of the implementation it wraps, linked to it.")
-    bounce = mutation(resolver=mutations.bounce, description="Bounce an agent so it reconnects.")
-    kick = mutation(resolver=mutations.kick, description="Kick an agent to force disconnect. It will fail and not reconnect.")
-    assign = mutation(resolver=mutations.assign, description="Assign a task to an agent.")
-    probe = mutation(resolver=mutations.probe, description="Fire a probe at an agent — zero persistence, redis-held state under a TTL, never appears in task history. For high-frequency interactive work (previews, live parameter tweaks).")
-    cancel_probe = mutation(resolver=mutations.cancel_probe, description="Cancel a probe. Idempotent: cancelling a finished probe is a no-op returning its terminal state.")
-    pause_probe = mutation(resolver=mutations.pause_probe, description="Pause a probe. Idempotent on finished probes; the agent's Paused report settles the state.")
-    resume_probe = mutation(resolver=mutations.resume_probe, description="Resume a paused probe. Idempotent on finished probes; the agent's Resumed report settles the state.")
-    cancel = mutation(resolver=mutations.cancel, description="Cancel an active task.")
-    pause = mutation(resolver=mutations.pause, description="Pause an ongoing task.")
-    resume = mutation(resolver=mutations.resume, description="Resume a paused task.")
-    decide = mutation(resolver=mutations.decide, description="Answer a held task. A child an agent asked for runs once approved, or ends DENIED without running; a task that holds itself carries on with the decision. Only the user the task runs for may decide, and never from the client of the agent that asked.")
-    collect = mutation(resolver=mutations.collect, description="Collect results from a task.")
-    interrupt = mutation(resolver=mutations.interrupt, description="Interrupt the execution of a task.")
-    create_trigger = mutation(resolver=mutations.create_trigger, description="Create a trigger: run an action when a service signals a matching object.")
-    update_trigger = mutation(resolver=mutations.update_trigger, description="Change a trigger.")
-    delete_trigger = mutation(resolver=mutations.delete_trigger, description="Delete a trigger; its runs are kept.")
-    fire_trigger = mutation(resolver=mutations.fire_trigger, description="Fire a trigger on a stored signal by hand (a replay). The run is created whether or not the signal satisfies the trigger, and logged as a firing of its own.")
-    import_wiregram = mutation(resolver=mutations.import_wiregram, description="Import a wiregram: one document of schedules and triggers. All or nothing; importing the same key again updates what it created and removes what it no longer lists.")
-    delete_wiregram = mutation(resolver=mutations.delete_wiregram, description="Delete a wiregram and the rules it owns.")
-    export_wiregram = mutation(resolver=mutations.export_wiregram, description="Write existing schedules and triggers down as a wiregram document, to import elsewhere. Changes nothing.")
-    create_schedule = mutation(resolver=mutations.create_schedule, description="Create a recurring assignment of an action. Its next run is planned immediately.")
-    update_schedule = mutation(resolver=mutations.update_schedule, description="Change a schedule; a waiting run is re-planned.")
-    delete_schedule = mutation(resolver=mutations.delete_schedule, description="Delete a schedule. Its waiting run is cancelled; history is kept.")
-    trigger_schedule = mutation(resolver=mutations.trigger_schedule, description="Run a schedule now: its waiting run is moved to now. Refused while a run is executing.")
-    block = mutation(resolver=mutations.block, description="Block an agent from connecting.")
-    unblock = mutation(resolver=mutations.unblock, description="Unblock a previously blocked agent.")
-    delete_implementation = mutation(resolver=mutations.delete_implementation, description="Delete a registered implementation.")
-    ensure_agent = mutation(resolver=mutations.ensure_agent, description="Ensure agent record exists or is up to date.")
-    create_test_case = mutation(resolver=mutations.create_test_case, description="Create a new test case.")
-    create_test_result = mutation(resolver=mutations.create_test_result, description="Create a test result record.")
-    shelve_in_memory_drawer = mutation(resolver=mutations.shelve_in_memory_drawer, description="Shelve data into a memory drawer.")
-    unshelve_memory_drawer = mutation(resolver=mutations.unshelve_memory_drawer, description="Unshelve data from a memory drawer.")
-    create_dashboard = mutation(resolver=mutations.create_dashboard, description="Create a dashboard layout.")
-    create_blok = mutation(resolver=mutations.create_blok, description="Create a user interface panel.")
-    materialize_blok = mutation(resolver=mutations.materialize_blok, description="Materialize a UI blok into a concrete instance on a dashboard.")
-    pin_agent = mutation(resolver=mutations.pin_agent, description="Pin an agent to the user.")
-    delete_agent = mutation(resolver=mutations.delete_agent, description="Delete an agent record.")
-    update_agent = mutation(resolver=mutations.update_agent, description="Update properties of an agent such as its name.")
-    create_shortcut = mutation(resolver=mutations.create_shortcut, description="Create a shortcut to an action.")
-    delete_shortcut = mutation(resolver=mutations.delete_shortcut, description="Delete a shortcut.")
-    cleanup_actions = mutation(resolver=mutations.cleanup_actions, description="Delete unreferenced actions from the system.")
-    auto_resolve = mutation(resolver=mutations.auto_resolve, description="Automatically resolve dependencies for an implementation.")
+    create_higher_order_implementation = mutation(scope="rekuest_agent", resolver=mutations.create_higher_order_implementation, description="Deploy a higher-order implementation: a wrapper onto the agent of the implementation it wraps, linked to it.")
+    bounce = mutation(scope="rekuest_call", resolver=mutations.bounce, description="Bounce an agent so it reconnects.")
+    kick = mutation(scope="rekuest_call", resolver=mutations.kick, description="Kick an agent to force disconnect. It will fail and not reconnect.")
+    assign = mutation(scope="rekuest_call", resolver=mutations.assign, description="Assign a task to an agent.")
+    probe = mutation(scope="rekuest_call", resolver=mutations.probe, description="Fire a probe at an agent — zero persistence, redis-held state under a TTL, never appears in task history. For high-frequency interactive work (previews, live parameter tweaks).")
+    cancel_probe = mutation(scope="rekuest_call", resolver=mutations.cancel_probe, description="Cancel a probe. Idempotent: cancelling a finished probe is a no-op returning its terminal state.")
+    pause_probe = mutation(scope="rekuest_call", resolver=mutations.pause_probe, description="Pause a probe. Idempotent on finished probes; the agent's Paused report settles the state.")
+    resume_probe = mutation(scope="rekuest_call", resolver=mutations.resume_probe, description="Resume a paused probe. Idempotent on finished probes; the agent's Resumed report settles the state.")
+    cancel = mutation(scope="rekuest_call", resolver=mutations.cancel, description="Cancel an active task.")
+    pause = mutation(scope="rekuest_call", resolver=mutations.pause, description="Pause an ongoing task.")
+    resume = mutation(scope="rekuest_call", resolver=mutations.resume, description="Resume a paused task.")
+    decide = mutation(scope="rekuest_call", resolver=mutations.decide, description="Answer a held task. A child an agent asked for runs once approved, or ends DENIED without running; a task that holds itself carries on with the decision. Only the user the task runs for may decide, and never from the client of the agent that asked.")
+    collect = mutation(scope="rekuest_call", resolver=mutations.collect, description="Collect results from a task.")
+    interrupt = mutation(scope="rekuest_call", resolver=mutations.interrupt, description="Interrupt the execution of a task.")
+    create_trigger = automation(resolver=mutations.create_trigger, description="Create a trigger: run an action when a service signals a matching object.")
+    update_trigger = automation(resolver=mutations.update_trigger, description="Change a trigger.")
+    delete_trigger = automation(resolver=mutations.delete_trigger, description="Delete a trigger; its runs are kept.")
+    fire_trigger = automation(resolver=mutations.fire_trigger, description="Fire a trigger on a stored signal by hand (a replay). The run is created whether or not the signal satisfies the trigger, and logged as a firing of its own.")
+    import_wiregram = automation(resolver=mutations.import_wiregram, description="Import a wiregram: one document of schedules and triggers. All or nothing; importing the same key again updates what it created and removes what it no longer lists.")
+    delete_wiregram = automation(resolver=mutations.delete_wiregram, description="Delete a wiregram and the rules it owns.")
+    export_wiregram = read_mutation(resolver=mutations.export_wiregram, description="Write existing schedules and triggers down as a wiregram document, to import elsewhere. Changes nothing.")
+    create_schedule = automation(resolver=mutations.create_schedule, description="Create a recurring assignment of an action. Its next run is planned immediately.")
+    update_schedule = automation(resolver=mutations.update_schedule, description="Change a schedule; a waiting run is re-planned.")
+    delete_schedule = automation(resolver=mutations.delete_schedule, description="Delete a schedule. Its waiting run is cancelled; history is kept.")
+    trigger_schedule = automation(resolver=mutations.trigger_schedule, description="Run a schedule now: its waiting run is moved to now. Refused while a run is executing.")
+    block = mutation(scope="rekuest_automate", resolver=mutations.block, description="Block an agent from connecting.")
+    unblock = mutation(scope="rekuest_automate", resolver=mutations.unblock, description="Unblock a previously blocked agent.")
+    delete_implementation = mutation(scope="rekuest_agent", resolver=mutations.delete_implementation, description="Delete a registered implementation.")
+    ensure_agent = mutation(scope="rekuest_agent", resolver=mutations.ensure_agent, description="Ensure agent record exists or is up to date.")
+    create_test_case = mutation(scope="rekuest_write", resolver=mutations.create_test_case, description="Create a new test case.")
+    create_test_result = mutation(scope="rekuest_write", resolver=mutations.create_test_result, description="Create a test result record.")
+    shelve_in_memory_drawer = mutation(scope="rekuest_agent", resolver=mutations.shelve_in_memory_drawer, description="Shelve data into a memory drawer.")
+    unshelve_memory_drawer = mutation(scope="rekuest_agent", resolver=mutations.unshelve_memory_drawer, description="Unshelve data from a memory drawer.")
+    create_dashboard = mutation(scope="rekuest_write", resolver=mutations.create_dashboard, description="Create a dashboard layout.")
+    create_blok = mutation(scope="rekuest_write", resolver=mutations.create_blok, description="Create a user interface panel.")
+    materialize_blok = mutation(scope="rekuest_write", resolver=mutations.materialize_blok, description="Materialize a UI blok into a concrete instance on a dashboard.")
+    pin_agent = mutation(scope="rekuest_agent", resolver=mutations.pin_agent, description="Pin an agent to the user.")
+    delete_agent = mutation(scope="rekuest_agent", resolver=mutations.delete_agent, description="Delete an agent record.")
+    update_agent = mutation(scope="rekuest_agent", resolver=mutations.update_agent, description="Update properties of an agent such as its name.")
+    create_shortcut = mutation(scope="rekuest_write", resolver=mutations.create_shortcut, description="Create a shortcut to an action.")
+    delete_shortcut = mutation(scope="rekuest_write", resolver=mutations.delete_shortcut, description="Delete a shortcut.")
+    cleanup_actions = mutation(scope="rekuest_agent", resolver=mutations.cleanup_actions, description="Delete unreferenced actions from the system.")
+    auto_resolve = mutation(scope="rekuest_agent", resolver=mutations.auto_resolve, description="Automatically resolve dependencies for an implementation.")
 
-    # Datalayer. These use the local ``mutation()`` wrapper, not ``kante.django_mutation``:
-    # the latter is plain ``strawberry_django.mutation`` and so skips ``AuthExtension``, which
-    # left these as the only mutations in the schema carrying no @auth directive.
-    request_media_upload = mutation(
+    # Datalayer. These use the local wrappers, not ``kante.django_mutation``: the latter is plain
+    # ``strawberry_django.mutation`` and so skips ``AuthExtension``, which left these as the only
+    # mutations in the schema carrying no @auth directive.
+    request_media_upload = upload_mutation(
         description="Upload media and return a URL for access",
         resolver=datalayer_mutations.request_media_upload,
     )
-    finish_media_upload = mutation(
+    finish_media_upload = upload_mutation(
         description="Finalize a media upload after the client has written the object",
         resolver=datalayer_mutations.finish_media_upload,
     )
-    refresh_media_upload = mutation(
+    refresh_media_upload = upload_mutation(
         description="Reissue upload credentials for a media upload still in flight, to the same key, so a write that outlives its credentials carries on. Only the uploader may, never for a finished store, and never past the upload's time limit",
         resolver=datalayer_mutations.refresh_media_upload,
     )
-    request_media_access = mutation(
+    request_media_access = read_mutation(
         description="Request temporary S3 read credentials for a media file",
         resolver=datalayer_mutations.request_media_access,
     )
 
     # Dashboard
-    delete_dashboard = mutation(resolver=mutations.delete_dashboard, description="Delete a dashboard by ID.")
-    update_dashboard = mutation(resolver=mutations.update_dashboard, description="Update properties of a dashboard such as its name, associated bloks, or organization.")
+    delete_dashboard = mutation(scope="rekuest_write", resolver=mutations.delete_dashboard, description="Delete a dashboard by ID.")
+    update_dashboard = mutation(scope="rekuest_write", resolver=mutations.update_dashboard, description="Update properties of a dashboard such as its name, associated bloks, or organization.")
 
     # Blok
-    delete_blok = mutation(resolver=mutations.delete_blok, description="Delete a blok by ID.")
-    fork_blok = mutation(resolver=mutations.fork_blok, description="Copy a blok an app provides into a custom blok, to edit it or bind other agents to it. The copy lives on whatever the providing agents do.")
-    update_blok = mutation(resolver=mutations.update_blok, description="Update properties of a blok such as its name, description, components, module, or dependencies.")
-    edit_blok = mutation(resolver=mutations.edit_blok, description="Edit a blok as one new revision on top of the head the editor read: on the blok itself (an editor of the blok), or through a materialization, with its bindings there (an assistant at a dashboard). A provided blok is forked first. With dryRun, every check runs and nothing is kept.")
-    revert_blok = mutation(resolver=mutations.revert_blok, description="Make an earlier revision's content a custom blok's head again, as a new revision.")
-    delete_materialized_blok = mutation(resolver=mutations.delete_materialized_blok, description="Delete a materialized blok by ID.")
-    update_materialized_blok = mutation(resolver=mutations.update_materialized_blok, description="Update properties of a materialized blok such as its agent mappings.")
-    pin_materialized_blok = mutation(resolver=mutations.pin_materialized_blok, description="Keep a materialization at one revision of its blok, or let it follow the head again.")
-    register_module = mutation(resolver=mutations.register_module, description="Register a module: the components and operations a UI app can render and evaluate beyond the spec's catalogs, and the catalogs it implements whole (upsert by name in the caller's organization). Bloks (`module`) and definitions (`catalogs`) that name it are validated against it.")
+    delete_blok = mutation(scope="rekuest_write", resolver=mutations.delete_blok, description="Delete a blok by ID.")
+    fork_blok = mutation(scope="rekuest_write", resolver=mutations.fork_blok, description="Copy a blok an app provides into a custom blok, to edit it or bind other agents to it. The copy lives on whatever the providing agents do.")
+    update_blok = mutation(scope="rekuest_write", resolver=mutations.update_blok, description="Update properties of a blok such as its name, description, components, module, or dependencies.")
+    edit_blok = mutation(scope="rekuest_write", resolver=mutations.edit_blok, description="Edit a blok as one new revision on top of the head the editor read: on the blok itself (an editor of the blok), or through a materialization, with its bindings there (an assistant at a dashboard). A provided blok is forked first. With dryRun, every check runs and nothing is kept.")
+    revert_blok = mutation(scope="rekuest_write", resolver=mutations.revert_blok, description="Make an earlier revision's content a custom blok's head again, as a new revision.")
+    delete_materialized_blok = mutation(scope="rekuest_write", resolver=mutations.delete_materialized_blok, description="Delete a materialized blok by ID.")
+    update_materialized_blok = mutation(scope="rekuest_write", resolver=mutations.update_materialized_blok, description="Update properties of a materialized blok such as its agent mappings.")
+    pin_materialized_blok = mutation(scope="rekuest_write", resolver=mutations.pin_materialized_blok, description="Keep a materialization at one revision of its blok, or let it follow the head again.")
+    register_module = mutation(scope="rekuest_agent", resolver=mutations.register_module, description="Register a module: the components and operations a UI app can render and evaluate beyond the spec's catalogs, and the catalogs it implements whole (upsert by name in the caller's organization). Bloks (`module`) and definitions (`catalogs`) that name it are validated against it.")
     # Implement Agent
-    implement_agent = mutation(resolver=mutations.implement_agent, description="Implement an agent with given states and implementations. This is used to set up an agent with its initial configuration and capabilities.")
+    implement_agent = mutation(scope="rekuest_agent", resolver=mutations.implement_agent, description="Implement an agent with given states and implementations. This is used to set up an agent with its initial configuration and capabilities.")
 
     # Assets
-    request_asset_upload = mutation(resolver=mutations.request_asset_upload, description="A media upload grant for one asset. Issued for a file the caller's own agent declares (it registered with it), or, to an admin, for a file an agent of the organization names a source for; and only if its size passes the policy.")
-    create_asset = mutation(resolver=mutations.create_asset, description="Verify an asset uploaded with a grant from `requestAssetUpload` (its hash and the rules of its kind) and record it. Returns the existing asset if the hash is stored already; a refusal carries its code in `extensions.code` and deletes the upload.")
+    request_asset_upload = mutation(scope="rekuest_agent", resolver=mutations.request_asset_upload, description="A media upload grant for one asset. Issued for a file the caller's own agent declares (it registered with it), or, to an admin, for a file an agent of the organization names a source for; and only if its size passes the policy.")
+    create_asset = mutation(scope="rekuest_agent", resolver=mutations.create_asset, description="Verify an asset uploaded with a grant from `requestAssetUpload` (its hash and the rules of its kind) and record it. Returns the existing asset if the hash is stored already; a refusal carries its code in `extensions.code` and deletes the upload.")
 
     # Space
 
-    create_space = mutation(resolver=mutations.create_space, description="Create a new space.")
-    update_space = mutation(resolver=mutations.update_space, description="Update an existing space.")
-    delete_space = mutation(resolver=mutations.delete_space, description="Delete a space.")
+    create_space = mutation(scope="rekuest_write", resolver=mutations.create_space, description="Create a new space.")
+    update_space = mutation(scope="rekuest_write", resolver=mutations.update_space, description="Update an existing space.")
+    delete_space = mutation(scope="rekuest_write", resolver=mutations.delete_space, description="Delete a space.")
 
-    create_placement = mutation(resolver=mutations.create_placement, description="Create a new placement for an agent in a space.")
-    update_placement = mutation(resolver=mutations.update_placement, description="Update an existing placement.")
-    delete_placement = mutation(resolver=mutations.delete_placement, description="Delete a placement.")
+    create_placement = mutation(scope="rekuest_write", resolver=mutations.create_placement, description="Create a new placement for an agent in a space.")
+    update_placement = mutation(scope="rekuest_write", resolver=mutations.update_placement, description="Update an existing placement.")
+    delete_placement = mutation(scope="rekuest_write", resolver=mutations.delete_placement, description="Delete a placement.")
 
-    create_space_placement = mutation(resolver=mutations.create_space_placement, description="Place a 3D blok (a Model or Robot over a kulisse asset) in a space at an affine transform.")
-    update_space_placement = mutation(resolver=mutations.update_space_placement, description="Move or rename a placed 3D blok.")
-    delete_space_placement = mutation(resolver=mutations.delete_space_placement, description="Remove a placed 3D blok from its space.")
+    create_space_placement = mutation(scope="rekuest_write", resolver=mutations.create_space_placement, description="Place a 3D blok (a Model or Robot over a kulisse asset) in a space at an affine transform.")
+    update_space_placement = mutation(scope="rekuest_write", resolver=mutations.update_space_placement, description="Move or rename a placed 3D blok.")
+    delete_space_placement = mutation(scope="rekuest_write", resolver=mutations.delete_space_placement, description="Remove a placed 3D blok from its space.")
 
 
 @strawberry.type(description="Root subscription type for real-time event streams from the system.")
@@ -377,6 +400,10 @@ class Subscription:
 class Schema(QuietErrorsSchema, kante.Schema):
     """kante.Schema, logging expected resolver errors as one line and bugs with a traceback (see logs.py)."""
 
+
+#: rekuest has no ``arkitekt_service`` Service to ``annotate_schema`` with, so it tells authentikate
+#: its catch-alls itself: ``rekuest_all`` passes every scope check, ``rekuest_admin`` every role check.
+declare_catch_alls(scope=ALL, role=ADMIN)
 
 schema = Schema(
     query=Query,

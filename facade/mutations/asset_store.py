@@ -15,6 +15,7 @@ from facade import asset_store, inputs, models, types
 from facade.asset_store import AssetRefused
 from facade.caller_context import CallerContext
 from facade.image_validation import IMAGE_FORMATS
+from rekuest.contract import ADMIN
 from rekuest_core.enums import AssetKind
 
 
@@ -26,7 +27,7 @@ def _refusal(error: AssetRefused) -> GraphQLError:
 def _declared(info: Info, ref: str) -> models.AgentAsset:
     """The declaration the caller may upload ``ref`` for.
 
-    The caller's own agent's, as ever. An admin of the organization may also upload a
+    The caller's own agent's, as ever. Rekuest's admin in the organization may also upload a
     file that any of its agents names a source for: that agent holds no bytes to upload.
     """
     caller = CallerContext.from_info(info)
@@ -39,7 +40,7 @@ def _declared(info: Info, ref: str) -> models.AgentAsset:
             ref=ref,
         )
     except AssetRefused as refusal:
-        if refusal.code != "not_declared" or not has_org_role(info, "admin"):
+        if refusal.code != "not_declared" or not has_org_role(info, ADMIN):
             raise
         return asset_store.sourced_asset(organization_id=organization_id, ref=ref)
 
