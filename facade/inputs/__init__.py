@@ -115,6 +115,8 @@ from .threed import (
     UpdateSpaceInputModel,
 )
 from .toolbox import (
+    BindShortcutInput,
+    BindShortcutInputModel,
     CreateShortcutInput,
     CreateShortcutInputModel,
     CreateToolboxInput,
@@ -123,6 +125,10 @@ from .toolbox import (
     DeleteShortcutInputModel,
     DeleteToolboxInput,
     DeleteToolboxInputModel,
+    ShortcutBindingsInput,
+    ShortcutBindingsInputModel,
+    UnbindShortcutInput,
+    UnbindShortcutInputModel,
 )
 
 __all__ = [
@@ -242,6 +248,8 @@ __all__ = [
     "UpdateSpaceInput",
     "UpdateSpaceInputModel",
     # toolbox
+    "BindShortcutInput",
+    "BindShortcutInputModel",
     "CreateShortcutInput",
     "CreateShortcutInputModel",
     "CreateToolboxInput",
@@ -250,4 +258,8 @@ __all__ = [
     "DeleteShortcutInputModel",
     "DeleteToolboxInput",
     "DeleteToolboxInputModel",
+    "ShortcutBindingsInput",
+    "ShortcutBindingsInputModel",
+    "UnbindShortcutInput",
+    "UnbindShortcutInputModel",
 ]

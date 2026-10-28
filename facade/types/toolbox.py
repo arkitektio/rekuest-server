@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional, cast
 
 import strawberry
@@ -10,6 +11,7 @@ from django.db.models import QuerySet
 from kante.types import Info
 
 from facade import filters, models
+from facade.filters.toolbox import pinned_for_caller
 from facade.types.base import build_prescoped_queryset
 from rekuest_core import scalars as rscalars
 from rekuest_core.objects import models as rmodels
@@ -18,6 +20,7 @@ from rekuest_core.objects import types as rtypes
 if TYPE_CHECKING:
     # Named in annotations only: strawberry resolves them when it builds the schema.
     from facade.types.action import Action
+    from facade.types.auth import User
     from facade.types.implementation import Implementation
 
 
@@ -71,6 +74,15 @@ class Shortcut:
         description="Which shortcut should be bound to this Action by default. 0 means no binding.",
     )
 
+    bindings: list["ShortcutBinding"] = strawberry_django.field(description="Who an admin pinned this shortcut for, and in which app.")
+
+    @strawberry_django.field(description="Whether an admin pinned this shortcut for the caller, in the app they signed in with or in every app. The caller cannot unpin it.")
+    def pinned(self, info: Info) -> bool:
+        annotated = getattr(self, "pinned_for_caller", None)
+        if annotated is not None:
+            return bool(annotated)
+        return models.Shortcut.objects.filter(pk=self.pk).filter(pinned_for_caller(info)).exists()
+
     @strawberry_django.field(description="Input ports for the shortcut's action.dd")
     def args(self) -> list[rtypes.ArgPort]:
         return cast("list[rtypes.ArgPort]", [rmodels.ArgPortModel(**i) for i in self.args])
@@ -81,4 +93,18 @@ class Shortcut:
 
     @classmethod
     def get_queryset(cls, queryset: QuerySet[models.Shortcut], info: Info, **kwargs: object) -> QuerySet[models.Shortcut]:
-        return build_prescoped_queryset(info, queryset, field="toolbox__organization")
+        return build_prescoped_queryset(info, queryset, field="toolbox__organization").annotate(pinned_for_caller=pinned_for_caller(info))
+
+
+@strawberry_django.type(models.ShortcutBinding, description="An admin's pin of a shortcut for a user, in one app or in every app.")
+class ShortcutBinding:
+    id: strawberry.ID = strawberry_django.field(description="Binding ID.")
+    shortcut: Shortcut = strawberry_django.field(description="The pinned shortcut.")
+    user: "User" = strawberry_django.field(description="The user it is pinned for.")
+    app: str | None = strawberry_django.field(description="The identifier of the app it is pinned in; null for every app.")
+    bound_by: "User" = strawberry_django.field(description="The admin who pinned it.")
+    created_at: datetime = strawberry_django.field(description="When it was pinned.")
+
+    @classmethod
+    def get_queryset(cls, queryset: QuerySet[models.ShortcutBinding], info: Info, **kwargs: object) -> QuerySet[models.ShortcutBinding]:
+        return build_prescoped_queryset(info, queryset, field="shortcut__toolbox__organization")

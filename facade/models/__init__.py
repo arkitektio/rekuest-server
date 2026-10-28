@@ -44,6 +44,7 @@ from .catalog import (
     Collection,
     Protocol,
     Shortcut,
+    ShortcutBinding,
     Toolbox,
     Module,
 )
@@ -86,6 +87,7 @@ __all__ = [
     "Module",
     "Toolbox",
     "Shortcut",
+    "ShortcutBinding",
     # action
     "Action",
     "ActionLivenessDirty",

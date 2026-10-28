@@ -197,3 +197,23 @@ class Shortcut(models.Model):
         help_text="Use the result of this Shortcut (e.g. use the result in the next Shortcut)",
         db_default=False,
     )
+
+
+class ShortcutBinding(models.Model):
+    """An admin's binding of a shortcut to a user: pinned for them, and they cannot unpin it.
+
+    ``app`` is the identifier of the app it is pinned in (the caller's client release); null pins
+    it in every app. A binding only pins: the shortcut stays visible to the whole organization.
+    """
+
+    shortcut = models.ForeignKey(Shortcut, on_delete=models.CASCADE, related_name="bindings")
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name="shortcut_bindings", help_text="The user this shortcut is pinned for")
+    app = models.CharField(max_length=2000, null=True, blank=True, help_text="The identifier of the app it is pinned in; null for every app")
+    bound_by = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name="bound_shortcuts", help_text="The admin who bound it")
+    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
+
+    class Meta:
+        constraints = [
+            # One every-app binding too: null counts as a value here.
+            models.UniqueConstraint(fields=["shortcut", "user", "app"], name="one_binding_per_shortcut_user_app", nulls_distinct=False),
+        ]

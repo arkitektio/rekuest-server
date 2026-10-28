@@ -8,7 +8,7 @@ from typing import Optional
 
 import strawberry
 import strawberry_django
-from django.db.models import Q, QuerySet
+from django.db.models import Exists, OuterRef, Q, QuerySet
 from django.db.models.expressions import OrderBy
 from strawberry import auto
 from strawberry.types import Info
@@ -17,6 +17,21 @@ from strawberry_django.filters import FilterLookup
 
 from facade import inputs, managers, models
 from facade.filters.action import assignable_first
+
+
+def caller_app(info: Info) -> str | None:
+    """The identifier of the app the caller signed in with (its client's release), if it has one."""
+    client = getattr(info.context.request, "client", None)
+    release = client.release if client is not None else None
+    return release.app.identifier if release is not None else None
+
+
+def pinned_for_caller(info: Info) -> Exists:
+    """Whether the outer shortcut is bound to the caller: in the app they signed in with, or in every app."""
+    app = caller_app(info)
+    in_app = Q(app__isnull=True) | Q(app=app) if app else Q(app__isnull=True)
+    bindings = models.ShortcutBinding.objects.filter(in_app, shortcut=OuterRef("pk"), user=info.context.request.user)
+    return Exists(bindings)
 
 
 @strawberry_django.order_type(models.Protocol)
@@ -33,6 +48,12 @@ class ShortcutOrder:
         if not value:
             return queryset, []
         return queryset, assignable_first(queryset, value, f"{prefix}action__assignable")
+
+    @strawberry_django.order_field(description="Pinned for the caller (an admin bound it to them in this app) first (DESC) or last (ASC). Put it before `assignable`, which adds the tie-break.")
+    def pinned(self, info: Info, queryset: QuerySet[models.Shortcut], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Shortcut], list[OrderBy | str]]:
+        if not value or prefix:
+            return queryset, []
+        return queryset.alias(pinned_order=pinned_for_caller(info)), [value.resolve("pinned_order")]
 
 
 @strawberry_django.order_type(models.Toolbox)
@@ -92,3 +113,10 @@ class ShortcutFilter:
     @filter_field
     def toolbox(self, info: Info, queryset: QuerySet[models.Shortcut], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Shortcut], Q]:
         return queryset.filter(**{f"{prefix}toolbox_id": value}), Q()
+
+    @filter_field(description="Whether an admin bound the shortcut to the caller, in the app they signed in with or in every app.")
+    def pinned(self, info: Info, queryset: QuerySet[models.Shortcut], value: bool, prefix: str) -> tuple[QuerySet[models.Shortcut], Q]:
+        if prefix:
+            raise ValueError("`pinned` filters shortcuts themselves, not a relation.")
+        bound = pinned_for_caller(info)
+        return queryset.filter(bound if value else ~bound), Q()

@@ -5,7 +5,7 @@ from .test import create_test_case, create_test_result
 from .memory_shelve import shelve_in_memory_drawer, unshelve_memory_drawer
 from .agent import ensure_agent, pin_agent, delete_agent
 from .dashboard import create_dashboard, delete_dashboard, update_dashboard
-from .shortcut import create_shortcut, delete_shortcut
+from .shortcut import bind_shortcut, create_shortcut, delete_shortcut, unbind_shortcut
 from .schedule import create_schedule, update_schedule, delete_schedule, trigger_schedule
 from .wiregram import delete_wiregram, export_wiregram, import_wiregram
 from .trigger import create_trigger, update_trigger, delete_trigger, fire_trigger
@@ -70,6 +70,8 @@ __all__ = [
     "block",
     "create_shortcut",
     "delete_shortcut",
+    "bind_shortcut",
+    "unbind_shortcut",
     "assign",
     "probe",
     "cancel_probe",

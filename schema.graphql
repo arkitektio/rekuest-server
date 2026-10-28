@@ -1317,6 +1317,20 @@ type BaseCatalog {
   components: [CatalogComponent!]!
 }
 
+"""
+Pin a shortcut for users, in one app or in every app. The users cannot unpin it.
+"""
+input BindShortcutInput {
+  """The users (their `sub`) to pin the shortcut for."""
+  users: [ID!]!
+
+  """The identifier of the app to pin it in; every app when not given."""
+  app: String = null
+
+  """The shortcut to pin."""
+  shortcut: ID!
+}
+
 """The input for bouncing an agent."""
 input BlockInput {
   """The agent ID to bounce."""
@@ -2573,6 +2587,9 @@ input CreateShortcutInput {
   The toolbox ID to create the shortcut in. If not provided, the shortcut will be created in the default toolbox.
   """
   toolbox: ID = null
+
+  """Pin the new shortcut for these users (admins only)."""
+  bindings: ShortcutBindingsInput = null
 }
 
 """The input for creating a space."""
@@ -4590,6 +4607,14 @@ type Mutation {
   """Delete a shortcut."""
   deleteShortcut(input: DeleteShortcutInput!): ID! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_editor"])
 
+  """
+  Pin a shortcut for users, in one app or in every app. They cannot unpin it.
+  """
+  bindShortcut(input: BindShortcutInput!): Shortcut! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_admin"])
+
+  """Remove a shortcut's binding to a user."""
+  unbindShortcut(input: UnbindShortcutInput!): ID! @auth(required_scopes: ["rekuest_write"], any_role_of: ["rekuest_admin"])
+
   """Delete unreferenced actions from the system."""
   cleanupActions(actionIds: [ID!] = null): Int! @auth(required_scopes: ["rekuest_agent"], any_role_of: ["rekuest_editor"])
 
@@ -6285,11 +6310,49 @@ type Shortcut {
   """
   bindNumber: Int
 
+  """Who an admin pinned this shortcut for, and in which app."""
+  bindings: [ShortcutBinding!]!
+
+  """
+  Whether an admin pinned this shortcut for the caller, in the app they signed in with or in every app. The caller cannot unpin it.
+  """
+  pinned: Boolean!
+
   """Input ports for the shortcut's action.dd"""
   args: [ArgPort!]!
 
   """Return ports from the shortcut's action."""
   returns: [ReturnPort!]!
+}
+
+"""An admin's pin of a shortcut for a user, in one app or in every app."""
+type ShortcutBinding {
+  """Binding ID."""
+  id: ID!
+
+  """The pinned shortcut."""
+  shortcut: Shortcut!
+
+  """The user it is pinned for."""
+  user: User!
+
+  """The identifier of the app it is pinned in; null for every app."""
+  app: String
+
+  """The admin who pinned it."""
+  boundBy: User!
+
+  """When it was pinned."""
+  createdAt: DateTime!
+}
+
+"""Users to pin a shortcut for, in one app or in every app."""
+input ShortcutBindingsInput {
+  """The users (their `sub`) to pin the shortcut for."""
+  users: [ID!]!
+
+  """The identifier of the app to pin it in; every app when not given."""
+  app: String = null
 }
 
 input ShortcutFilter {
@@ -6306,6 +6369,11 @@ input ShortcutFilter {
   """
   assignable: Boolean
   toolbox: ID
+
+  """
+  Whether an admin bound the shortcut to the caller, in the app they signed in with or in every app.
+  """
+  pinned: Boolean
 }
 
 input ShortcutOrder @oneOf {
@@ -6315,6 +6383,11 @@ input ShortcutOrder @oneOf {
   Runnable first (DESC) or last (ASC) by the shortcut's `Action.assignable`; the order the filters set is the tie-break.
   """
   assignable: Ordering
+
+  """
+  Pinned for the caller (an admin bound it to them in this app) first (DESC) or last (ASC). Put it before `assignable`, which adds the tie-break.
+  """
+  pinned: Ordering
 }
 
 """
@@ -7974,6 +8047,12 @@ input TriggerOrder @oneOf {
   name: Ordering
   createdAt: Ordering
   updatedAt: Ordering
+}
+
+"""Remove a shortcut's binding to a user."""
+input UnbindShortcutInput {
+  """The binding to remove."""
+  id: ID!
 }
 
 """The input for bouncing an agent."""

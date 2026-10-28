@@ -316,6 +316,8 @@ class Mutation:
     update_agent = mutation(scope="rekuest_agent", resolver=mutations.update_agent, description="Update properties of an agent such as its name.")
     create_shortcut = mutation(scope="rekuest_write", resolver=mutations.create_shortcut, description="Create a shortcut to an action.")
     delete_shortcut = mutation(scope="rekuest_write", resolver=mutations.delete_shortcut, description="Delete a shortcut.")
+    bind_shortcut = mutation(scope="rekuest_write", roles=[ADMIN], resolver=mutations.bind_shortcut, description="Pin a shortcut for users, in one app or in every app. They cannot unpin it.")
+    unbind_shortcut = mutation(scope="rekuest_write", roles=[ADMIN], resolver=mutations.unbind_shortcut, description="Remove a shortcut's binding to a user.")
     cleanup_actions = mutation(scope="rekuest_agent", resolver=mutations.cleanup_actions, description="Delete unreferenced actions from the system.")
     auto_resolve = mutation(scope="rekuest_agent", resolver=mutations.auto_resolve, description="Automatically resolve dependencies for an implementation.")
 

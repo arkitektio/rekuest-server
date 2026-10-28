@@ -28,6 +28,17 @@ class DeleteToolboxInput:
     id: strawberry.ID
 
 
+class ShortcutBindingsInputModel(BaseModel):
+    users: list[str] = Field(description="The users (their `sub`) to pin the shortcut for.")
+    app: str | None = Field(default=None, description="The identifier of the app to pin it in; every app when not given.")
+
+
+@pydantic.input(ShortcutBindingsInputModel, description="Users to pin a shortcut for, in one app or in every app.")
+class ShortcutBindingsInput:
+    users: list[strawberry.ID]
+    app: str | None = None
+
+
 class CreateShortcutInputModel(BaseModel):
     name: str = Field(description="The name of the shortcut. This is used to identify the shortcut in the system.")
     description: str | None = Field(default=None, description="The description of the shortcut.This can described the shortcut and its purpose.")
@@ -37,6 +48,7 @@ class CreateShortcutInputModel(BaseModel):
     use_returns: bool = Field(default=False, description="Whether when running the short the returns should be used further. Allows to create mini pipelines")
     bind_number: int | None = Field(default=None, description="The bind number of the shortcut. This is used to identify the shortcut in the system.")
     toolbox: str | None = Field(default=None, description="The toolbox ID to create the shortcut in. If not provided, the shortcut will be created in the default toolbox.")
+    bindings: ShortcutBindingsInputModel | None = Field(default=None, description="Pin the new shortcut for these users (admins only).")
 
 
 @pydantic.input(CreateShortcutInputModel, description="The input for creating a shortcut.")
@@ -49,6 +61,7 @@ class CreateShortcutInput:
     args: scalars.Args
     allow_quick: bool = False
     use_returns: bool = False
+    bindings: ShortcutBindingsInput | None = None
 
 
 class DeleteShortcutInputModel(BaseModel):
@@ -57,4 +70,24 @@ class DeleteShortcutInputModel(BaseModel):
 
 @pydantic.input(DeleteShortcutInputModel, description="The input for deleting a shortcut.")
 class DeleteShortcutInput:
+    id: strawberry.ID
+
+
+class BindShortcutInputModel(ShortcutBindingsInputModel):
+    shortcut: str = Field(description="The shortcut to pin.")
+
+
+@pydantic.input(BindShortcutInputModel, description="Pin a shortcut for users, in one app or in every app. The users cannot unpin it.")
+class BindShortcutInput:
+    shortcut: strawberry.ID
+    users: list[strawberry.ID]
+    app: str | None = None
+
+
+class UnbindShortcutInputModel(BaseModel):
+    id: str = Field(description="The binding to remove.")
+
+
+@pydantic.input(UnbindShortcutInputModel, description="Remove a shortcut's binding to a user.")
+class UnbindShortcutInput:
     id: strawberry.ID

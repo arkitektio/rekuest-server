@@ -91,7 +91,7 @@ from .structure import (
 from .testcase import TestCase, TestResult
 from .asset import AgentAsset, Asset, AssetPolicy, AssetUploadGrant, ImagePolicy, ModelPolicy, ModelStats
 from .threed import Placement, Space, SpaceForAgents, SpacePlacement
-from .toolbox import Collection, Protocol, Shortcut, Toolbox
+from .toolbox import Collection, Protocol, Shortcut, ShortcutBinding, Toolbox
 
 __all__ = [
     "build_prescoped_queryset",
@@ -121,6 +121,7 @@ __all__ = [
     "Protocol",
     "Toolbox",
     "Shortcut",
+    "ShortcutBinding",
     "Dependency",
     "ResolvedDependency",
     "Resolution",
