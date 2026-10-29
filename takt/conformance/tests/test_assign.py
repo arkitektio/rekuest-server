@@ -10,13 +10,13 @@ import asyncio
 import uuid
 from typing import Any
 
-from conftest import ECHO_DECLARATION, RECEIVE_TIMEOUT, session_id
+from conftest import CALLER_DECLARATION, ECHO_DECLARATION, RECEIVE_TIMEOUT, session_id
 
 
 async def caller_and_executor(agents, graphql, caller_token: str, executor_token: str):  # noqa: ANN001, ANN201
     """Both agents registered, the caller running its parent task: (caller, executor, executor id, parent)."""
     caller = await agents()
-    caller_init = await caller.register(caller_token, session_id=session_id(), **ECHO_DECLARATION)
+    caller_init = await caller.register(caller_token, session_id=session_id(), **CALLER_DECLARATION)
     executor = await agents()
     executor_init = await executor.register(executor_token, session_id=session_id(), **ECHO_DECLARATION)
     parent = await graphql(caller_token).assign(caller_init["agent"], "echo", {"x": 1})

@@ -174,6 +174,16 @@ ECHO_DECLARATION: dict[str, Any] = {
 }
 
 
+#: An agent whose echo calls actions it names directly (found at run time): a workflow
+#: declaring `dynamic_calls`, which takt refuses such a call without.
+CALLER_DECLARATION: dict[str, Any] = {
+    **ECHO_DECLARATION,
+    "implementations": [
+        {**implementation, "execution": "WORKFLOW", "dynamic_calls": True}
+        for implementation in ECHO_DECLARATION["implementations"]
+    ],
+}
+
 class GraphQL:
     """The Python server's GraphQL API, as one static token."""
 

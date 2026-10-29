@@ -52,6 +52,10 @@ def ensure_agent(info: Info, input: AgentInput) -> types.Agent:
     """
     # Only what the input gives is sent: to takt a field that is there and null means "clear".
     request = takt_api.EnsureAgentRequest(principal=Principal.of(CallerContext.from_info(info)), clear_drawers=True)
+    # What a socket agent's REGISTER says of its token, this says for one that never registers.
+    token = info.context.request.get_extension("token")
+    if token is not None:
+        request.granted_scopes = [scope for scope in token.scopes if scope]
     if input.name is not None:
         request.name = input.name
     if input.description is not None:

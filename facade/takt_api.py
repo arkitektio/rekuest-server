@@ -179,6 +179,9 @@ class EnsureAgentRequest(Request):
     hook_url: str | None = None
     hook_url_secret: str | None = None
     clear_drawers: bool | None = None
+    #: The scopes of the token that ensures it: what takt lets its calls and bloks do (an
+    #: agent that never registers over the socket, a HookAgent, has no other).
+    granted_scopes: list[str] | None = None
 
 
 class ImplementAgentRequest(Request):

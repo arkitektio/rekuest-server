@@ -345,7 +345,10 @@ async fn an_implementations_informs_are_held_beside_its_asks() {
     .await
     .unwrap();
     assert_eq!(
-        linked.iter().map(|(k, r, _)| (k.as_str(), r.as_str())).collect::<Vec<_>>(),
+        linked
+            .iter()
+            .map(|(k, r, _)| (k.as_str(), r.as_str()))
+            .collect::<Vec<_>>(),
         [("asks.pick", "ASK"), ("asks.progress", "INFORM")]
     );
     assert_ne!(linked[0].2, linked[1].2);
@@ -353,10 +356,14 @@ async fn an_implementations_informs_are_held_beside_its_asks() {
     // An inform with returns is no inform at all: the declaration does not parse.
     let mut answering = asking(json!([]));
     let mut with_returns = progress();
-    with_returns["returns"] = json!([{"key": "x", "kind": "INT", "nullable": false, "effects": []}]);
+    with_returns["returns"] =
+        json!([{"key": "x", "kind": "INT", "nullable": false, "effects": []}]);
     answering["implementations"][0]["informs"] = json!([with_returns]);
     let parsed = serde_json::from_value::<ImplementAgentInputModel>(answering);
-    assert!(parsed.unwrap_err().to_string().contains("unknown field `returns`"));
+    assert!(parsed
+        .unwrap_err()
+        .to_string()
+        .contains("unknown field `returns`"));
 
     let mut twice = asking(json!([pick()]));
     let mut same_key = progress();

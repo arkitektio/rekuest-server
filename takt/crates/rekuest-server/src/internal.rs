@@ -35,7 +35,7 @@
 //! | `collect` | `{"principal", "drawers": [id, …]}` | `{"drawers"}` |
 //! | `probe` | `{"principal", "input": ProbeInput}` | the probe's state, with `id` |
 //! | `probe/cancel`, `probe/pause`, `probe/resume` | `{"principal", "probe"}` | the probe's state, with `id` |
-//! | `agent/ensure` | `{"principal", "name"?, "description"?, "kind"?, "hook_url"?, "hook_url_secret"?, "clear_drawers"?}` (a present null clears) | `{"agent"}` |
+//! | `agent/ensure` | `{"principal", "name"?, "description"?, "kind"?, "hook_url"?, "hook_url_secret"?, "clear_drawers"?, "granted_scopes"?}` (a present null clears) | `{"agent"}` |
 //! | `agent/implement` | `{"principal", "input": ImplementAgentInput}` | `{"agent", "diagnostics"}` |
 //! | `agent/delete` | `{"principal", "agent"}` (kicks it, deletes it with everything below it) | `{"agent"}` |
 //! | `implementation/delete` | `{"principal", "implementation"}` | `{"implementation"}` |
@@ -647,6 +647,10 @@ internal!(
 #[derive(Debug, Deserialize)]
 struct EnsureAgentRequest {
     principal: Principal,
+    /// The scopes of the token that ensures the agent: what its calls and bloks may do. A
+    /// HookAgent never registers over the socket, so this is the only place they come from.
+    #[serde(default)]
+    granted_scopes: Option<Vec<String>>,
     #[serde(flatten)]
     input: facade::mutations::agent::EnsureAgentInput,
 }
@@ -656,6 +660,12 @@ internal!(ensure_agent, EnsureAgentRequest, |state, request| {
     let agent =
         facade::mutations::agent::ensure(&state.facade, client, user, organization, &request.input)
             .await?;
+    if let Some(scopes) = &request.granted_scopes {
+        let scopes: Vec<&str> = scopes.iter().map(String::as_str).collect();
+        facade::registration::set_granted_scopes(&state.facade.db, agent, &scopes)
+            .await
+            .map_err(BackendError::Database)?;
+    }
     Ok(Json(json!({"agent": agent.to_string()})))
 });
 

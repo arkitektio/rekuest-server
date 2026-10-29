@@ -257,7 +257,9 @@ use crate::mutations::implementation::{
 use crate::mutations::Refusal;
 use crate::registration_lock::lock_organization;
 use crate::signals::{OnCommit, Signal};
-use crate::unique::{hash_action_blok, hash_blok_definition, hash_interaction_blok, hash_state_definition};
+use crate::unique::{
+    hash_action_blok, hash_blok_definition, hash_interaction_blok, hash_state_definition,
+};
 
 /// What a registration did: the diagnostics to hand back on `INIT`, the signals to publish
 /// once it committed, and the hash the agent now holds.

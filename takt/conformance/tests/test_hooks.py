@@ -19,7 +19,7 @@ from typing import Any
 import httpx
 import pytest_asyncio
 
-from conftest import ECHO_DECLARATION, RECEIVE_TIMEOUT, session_id
+from conftest import CALLER_DECLARATION, ECHO_DECLARATION, RECEIVE_TIMEOUT, session_id
 
 SECRET = "conformance-hook-secret"
 
@@ -99,7 +99,7 @@ async def hook_agent(graphql, token: str, url: str) -> str:  # noqa: ANN001
         "mutation ($input: AgentInput!) { ensureAgent(input: $input) { id } }",
         input={"kind": "WEBHOOK", "hookUrl": url, "hookUrlSecret": SECRET},
     )
-    declaration = {k: v for k, v in ECHO_DECLARATION.items() if k in ("name", "implementations")}
+    declaration = {k: v for k, v in CALLER_DECLARATION.items() if k in ("name", "implementations")}
     await api(
         "mutation ($input: ImplementAgentInput!) { implementAgent(input: $input) { id } }",
         input=camel({**declaration, "hash": f"hook-{uuid.uuid4().hex}"}),
@@ -140,7 +140,7 @@ async def test_the_intake_refuses_what_is_not_the_hooks(graphql, http, target, r
 async def test_a_hook_is_assigned_to_and_reports_over_http(agents, graphql, http, target, receiver) -> None:  # noqa: ANN001
     agent = await hook_agent(graphql, "conf_28", receiver.url)
     caller = await agents()
-    caller_init = await caller.register("conf_29", session_id=session_id(), **ECHO_DECLARATION)
+    caller_init = await caller.register("conf_29", session_id=session_id(), **CALLER_DECLARATION)
     parent = await graphql("conf_29").assign(caller_init["agent"], "echo", {"x": 1})
     await caller.receive_type("ASSIGN")
 

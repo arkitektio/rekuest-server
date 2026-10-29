@@ -1312,7 +1312,6 @@ async fn an_ask_by_key_is_one_its_implementation_declares() {
     ));
 }
 
-
 /// An inform by key names one of the informs the task's own implementation declares: an ask of
 /// the same key is not one, nor is a blok the agent's app declares.
 #[tokio::test]
@@ -1354,7 +1353,10 @@ async fn an_inform_by_key_is_one_its_implementation_declares() {
     )
     .await
     .unwrap();
-    assert!(events(&ctx, task).await.iter().any(|(kind, ..)| kind == "INFORM"));
+    assert!(events(&ctx, task)
+        .await
+        .iter()
+        .any(|(kind, ..)| kind == "INFORM"));
 
     for key in ["ui.pick", "progress_panel"] {
         let task = root(&ctx, &desk, workflow, "ASK").await;
@@ -1366,11 +1368,14 @@ async fn an_inform_by_key_is_one_its_implementation_declares() {
         )
         .await
         .unwrap();
-        assert!(!events(&ctx, task).await.iter().any(|(kind, ..)| kind == "INFORM"));
+        assert!(!events(&ctx, task)
+            .await
+            .iter()
+            .any(|(kind, ..)| kind == "INFORM"));
         let refusals = of_type(queued(&ctx, holder).await, "BLOK_REFUSED");
-        assert!(refusals.iter().any(
-            |f| f["task"].as_str() == Some(task.to_string().as_str())
-                && f["reason"].as_str().unwrap().contains("declares no inform")
-        ));
+        assert!(refusals
+            .iter()
+            .any(|f| f["task"].as_str() == Some(task.to_string().as_str())
+                && f["reason"].as_str().unwrap().contains("declares no inform")));
     }
 }
