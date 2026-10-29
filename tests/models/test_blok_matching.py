@@ -24,7 +24,7 @@ def _image(**descriptors: object) -> PortDemand:
 
 
 def _bloks(demands: list[PortDemand], organization: object) -> set[str]:
-    subquery = managers.get_blok_port_demand_subquery(demands, organization_id=organization.pk)
+    subquery = managers.get_port_demand_subquery(demands, organization_id=organization.pk, owner="blok")
     return set(models.Blok.objects.filter(id__in=subquery).values_list("name", flat=True))
 
 

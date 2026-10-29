@@ -16,6 +16,7 @@ from strawberry_django.fields.filter_order import filter_field
 from strawberry_django.filters import FilterLookup
 
 from facade import inputs, liveness, managers, models
+from facade.filters.action import any_port_demands
 from rekuest_core import enums as renums
 from rekuest_core import scalars as rscalars
 from rekuest_core.inputs import types as ritypes
@@ -45,9 +46,13 @@ class ImplementationActionFilter:
         if len(value) == 0:
             return queryset, Q()
 
-        # RawSQL subquery: one round trip, no id materialization (see ActionFilter.demands).
-        subquery = managers.get_action_port_demand_subquery([managers.PortDemand.of(demand) for demand in value], organization_id=info.context.request.organization.id)
-        return queryset.filter(**{f"{prefix}id__in": subquery}), Q()
+        # RawSQL subquery, returned as the Q so OR/NOT compose (see ActionFilter.demands).
+        subquery = managers.get_port_demand_subquery([managers.PortDemand.of(demand) for demand in value], organization_id=info.context.request.organization.id)
+        return queryset, Q(**{f"{prefix}id__in": subquery})
+
+    @filter_field(description="Any of these demand sets: the rows that satisfy every demand of at least one set (each set as `demands`). One statement, so prefer it to `OR`-ing `demands`, which tests every row of the organization. An empty list is ignored; an empty set is an error.")
+    def any_demands(self, info: Info, queryset: QuerySet[models.Action], value: list[list[inputs.PortDemandInput]], prefix: str) -> tuple[QuerySet[models.Action], Q]:
+        return queryset, any_port_demands(info, value, "action", f"{prefix}id")
 
     @filter_field
     def kind(self, info: Info, queryset: QuerySet[models.Action], value: renums.ActionKind, prefix: str) -> tuple[QuerySet[models.Action], Q]:
@@ -110,4 +115,4 @@ class ImplementationFilter:
             [value.to_pydantic()],
             organization_id=info.context.request.organization.id,
         )[0]
-        return queryset.filter(**{f"{prefix}action__id__in": new_ids}), Q()
+        return queryset, Q(**{f"{prefix}action__id__in": new_ids})

@@ -16,7 +16,7 @@ from strawberry_django.fields.filter_order import filter_field
 from strawberry_django.filters import FilterLookup
 
 from facade import inputs, managers, models
-from facade.filters.action import assignable_first
+from facade.filters.action import any_port_demands, assignable_first
 
 
 def caller_app(info: Info) -> str | None:
@@ -102,9 +102,14 @@ class ShortcutFilter:
         if len(value) == 0:
             return queryset, Q()
 
-        # Shortcuts have no relational port rows; the manager falls back to the JSONB scan.
-        ids = managers.get_action_ids_by_port_demands([managers.PortDemand.of(demand) for demand in value], model="facade_shortcut")
-        return queryset.filter(**{f"{prefix}id__in": ids}), Q()
+        # Shortcuts have no relational port rows: the JSONB scan, nested as a subquery over the
+        # caller's organization and returned as the Q so OR/NOT compose (see ActionFilter.demands).
+        subquery = managers.get_port_demand_subquery([managers.PortDemand.of(demand) for demand in value], organization_id=info.context.request.organization.id, owner="shortcut")
+        return queryset, Q(**{f"{prefix}id__in": subquery})
+
+    @filter_field(description="Any of these demand sets: the rows that satisfy every demand of at least one set (each set as `demands`). One statement, so prefer it to `OR`-ing `demands`, which tests every row of the organization. An empty list is ignored; an empty set is an error.")
+    def any_demands(self, info: Info, queryset: QuerySet[models.Shortcut], value: list[list[inputs.PortDemandInput]], prefix: str) -> tuple[QuerySet[models.Shortcut], Q]:
+        return queryset, any_port_demands(info, value, "shortcut", f"{prefix}id")
 
     @filter_field(description="Whether an agent that can take the shortcut's action is connected now (`Action.assignable`).")
     def assignable(self, info: Info, queryset: QuerySet[models.Shortcut], value: bool, prefix: str) -> tuple[QuerySet[models.Shortcut], Q]:

@@ -40,9 +40,21 @@ def _filter_by_port_demands(info: Info, queryset: QuerySet[models.Action], value
         return queryset, Q()
 
     # RawSQL subquery: the matching statement runs nested inside this query — one round
-    # trip, no id materialization in Python.
-    subquery = managers.get_action_port_demand_subquery([managers.PortDemand.of(demand) for demand in value], organization_id=info.context.request.organization.id)
-    return queryset.filter(**{f"{prefix}id__in": subquery}), Q()
+    # trip, no id materialization in Python. Returned as the Q, not applied, so ``OR`` and
+    # ``NOT`` compose with it (strawberry_django applies a field's own ``.filter()`` always).
+    subquery = managers.get_port_demand_subquery([managers.PortDemand.of(demand) for demand in value], organization_id=info.context.request.organization.id)
+    return queryset, Q(**{f"{prefix}id__in": subquery})
+
+
+def any_port_demands(info: Info, value: list[list[inputs.PortDemandInput]], owner: managers.DemandOwner, column: str) -> Q:
+    """Shared body of every ``any_demands`` field: ``column`` in the ``owner`` rows meeting at least one set.
+
+    An empty list is ignored, like an empty ``demands``.
+    """
+    if len(value) == 0:
+        return Q()
+    sets = [[managers.PortDemand.of(demand) for demand in demands] for demands in value]
+    return Q(**{f"{column}__in": managers.get_any_port_demand_subquery(sets, organization_id=info.context.request.organization.id, owner=owner)})
 
 
 @strawberry_django.order_type(models.Action)
@@ -78,6 +90,10 @@ class ActionFilter:
     @filter_field
     def demands(self, info: Info, queryset: QuerySet[models.Action], value: list[inputs.PortDemandInput], prefix: str) -> tuple[QuerySet[models.Action], Q]:
         return _filter_by_port_demands(info, queryset, value, prefix)
+
+    @filter_field(description="Any of these demand sets: the rows that satisfy every demand of at least one set (each set as `demands`). One statement, so prefer it to `OR`-ing `demands`, which tests every row of the organization. An empty list is ignored; an empty set is an error.")
+    def any_demands(self, info: Info, queryset: QuerySet[models.Action], value: list[list[inputs.PortDemandInput]], prefix: str) -> tuple[QuerySet[models.Action], Q]:
+        return queryset, any_port_demands(info, value, "action", f"{prefix}id")
 
     @filter_field
     def object_demands(self, info: Info, queryset: QuerySet[models.Action], value: list[inputs.PortDemandInput], prefix: str) -> tuple[QuerySet[models.Action], Q]:

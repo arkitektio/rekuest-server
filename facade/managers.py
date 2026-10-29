@@ -248,64 +248,78 @@ def _to_positional(sql: str, params: Params) -> tuple[str, list[int | str | bool
     return _NAMED_PARAM_RE.sub("%s", sql), [params[key] for key in ordered_keys]
 
 
-def get_action_port_demand_subquery(
-    demands: t.Sequence[PortDemand],
-    organization_id: int | str | None = None,
-) -> RawSQL:
-    """The port-demand statement as a ``RawSQL`` id subquery for ``filter(id__in=...)``.
+#: Positional bind parameters, as a ``RawSQL`` embedded in an ORM query takes them.
+PositionalParams = list[int | str | bool]
+#: The rows a port-demand statement selects: actions, bloks (by their args) or shortcuts.
+DemandOwner = t.Literal["action", "blok", "shortcut"]
+
+
+def _shortcut_port_demand_sql(demands: t.Sequence[PortDemand], organization_id: int | str) -> tuple[str, PositionalParams]:
+    """The organization's shortcuts whose ports satisfy every demand.
+
+    Shortcuts have no relational port rows: each demand is a scan of the shortcut's own
+    ``args``/``returns`` JSONB, and a descriptor-bearing match is checked on its action's port
+    rows (``ACTION_COLUMN``). The scans are nested in one statement over the organization's toolboxes.
+    """
+    sql = "SELECT s.id FROM facade_shortcut s JOIN facade_toolbox t ON t.id = s.toolbox_id WHERE t.organization_id = %s"
+    params: PositionalParams = [organization_id]
+    for demand in demands:
+        scan_sql, scan_params = _json_scan_params(
+            demand.matches,
+            type=demand.kind,
+            force_length=demand.force_length,
+            force_non_nullable_length=demand.force_non_nullable_length,
+            force_structure_length=demand.force_structure_length,
+        )
+        positional_sql, positional_params = _to_positional(scan_sql, scan_params)
+        sql += f" AND s.id IN ({positional_sql})"
+        params.extend(positional_params)
+    return sql, params
+
+
+def _positional_port_demand_sql(demands: t.Sequence[PortDemand], organization_id: int | str, owner: DemandOwner) -> tuple[str, PositionalParams]:
+    """The ``owner`` rows of the organization satisfying every demand, with positional params."""
+    if owner == "shortcut":
+        return _shortcut_port_demand_sql(demands, organization_id)
+    return _to_positional(*_port_demand_sql(demands, organization_id=organization_id, owner=BLOK_PORTS if owner == "blok" else ACTION_PORTS))
+
+
+def get_port_demand_subquery(demands: t.Sequence[PortDemand], organization_id: int | str, owner: DemandOwner = "action") -> RawSQL:
+    """The port-demand statement as a ``RawSQL`` id subquery for ``Q(id__in=...)``.
 
     Embedding the matching statement as a nested subquery keeps the whole filter one
     round trip and lets Postgres drive it — instead of materializing every matching id
     in Python and shipping the list back as an ``IN`` literal (unbounded for
-    unselective demands).
+    unselective demands). For bloks, the ones whose args satisfy the demands (the bloks an
+    item opens in), with ``requires`` honoured as for actions.
     """
-    sql, params = _port_demand_sql(demands, organization_id=organization_id)
-    positional_sql, positional_params = _to_positional(sql, params)
-    return RawSQL(positional_sql, positional_params)
+    return RawSQL(*_positional_port_demand_sql(demands, organization_id, owner))
 
 
-def get_blok_port_demand_subquery(
-    demands: t.Sequence[PortDemand],
-    organization_id: int | str | None = None,
-) -> RawSQL:
-    """The bloks whose args satisfy every demand -- the bloks an item opens in -- as a ``RawSQL``
-    id subquery over ``facade_blok``. Same engine as actions, so ``requires`` is honoured."""
-    sql, params = _port_demand_sql(demands, organization_id=organization_id, owner=BLOK_PORTS)
-    positional_sql, positional_params = _to_positional(sql, params)
-    return RawSQL(positional_sql, positional_params)
+def get_any_port_demand_subquery(sets: t.Sequence[t.Sequence[PortDemand]], organization_id: int | str, owner: DemandOwner = "action") -> RawSQL:
+    """The rows satisfying every demand of at least one set, as one ``UNION`` id subquery.
+
+    The union is spelled out rather than left to ``OR``: ``id IN (A) OR id IN (B)`` cannot be
+    a semi-join, so Postgres tests every row of the organization against both sets, while
+    ``id IN (A UNION B)`` still starts from each set's port rows (``tests/models/test_demand_union_plan.py``).
+    """
+    if any(len(demands) == 0 for demands in sets):
+        raise ValueError("Every set of anyDemands needs at least one demand.")
+    statements = [_positional_port_demand_sql(demands, organization_id, owner) for demands in sets]
+    return RawSQL(" UNION ".join(sql for sql, _ in statements), [param for _, params in statements for param in params])
 
 
 def get_action_ids_by_port_demands(
     demands: t.Sequence[PortDemand],
-    model: str = "facade_action",
     organization_id: int | str | None = None,
 ) -> list[int]:
-    """Return ids of rows in ``model`` whose ports satisfy EVERY demand, in one query.
+    """Return ids of the actions whose ports satisfy EVERY demand, in one query.
 
     All demands' clauses are conjunctive, so ANDing them into a single statement is exactly
     the set intersection of per-demand results — without the N round trips.
-
-    For ``facade_action`` this uses the indexed relational port engine. Other models
-    (e.g. ``facade_shortcut``) keep their own ``args``/``returns`` JSONB and fall back to
-    the JSONB-scan matcher per demand, since only Actions own relational port rows; a
-    shortcut's descriptors are checked on its action's rows (``ACTION_COLUMN``).
-    Queryset filters should prefer ``get_action_port_demand_subquery`` (no id
+    Queryset filters should prefer ``get_port_demand_subquery`` (no id
     materialization); this id-list form serves callers that consume the ids in Python.
     """
-    if model != "facade_action":
-        ids: set[int] | None = None
-        for demand in demands:
-            new_ids = _json_scan_ids(
-                demand.matches,
-                type=demand.kind,
-                force_length=demand.force_length,
-                force_non_nullable_length=demand.force_non_nullable_length,
-                force_structure_length=demand.force_structure_length,
-                model=model,
-            )
-            ids = set(new_ids) if ids is None else ids.intersection(new_ids)
-        return list(ids or [])
-
     sql, params = _port_demand_sql(demands, organization_id=organization_id)
     return _execute_ids(sql, params)
 
@@ -575,25 +589,6 @@ def _json_scan_params(
 
     full_sql = f"SELECT id FROM {model} WHERE " + " AND ".join(individual_queries)
     return full_sql, all_params
-
-
-def _json_scan_ids(
-    demands: t.Sequence[PortMatchInputModel] | None = None,
-    type: t.Literal["args", "returns"] = "args",
-    force_length: t.Optional[int] = None,
-    force_non_nullable_length: t.Optional[int] = None,
-    force_structure_length: t.Optional[int] = None,
-    model: str = "facade_shortcut",
-) -> list[int]:
-    full_sql, all_params = _json_scan_params(
-        demands,
-        type=type,
-        force_length=force_length,
-        force_non_nullable_length=force_non_nullable_length,
-        force_structure_length=force_structure_length,
-        model=model,
-    )
-    return _execute_ids(full_sql, all_params)
 
 
 def build_state_params(

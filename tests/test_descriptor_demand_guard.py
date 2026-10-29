@@ -16,7 +16,7 @@ from rekuest_core.enums import PortKind
 
 import pytest
 
-from facade.managers import get_action_ids_by_port_demands, get_action_port_demand_subquery
+from facade.managers import get_action_ids_by_port_demands, get_port_demand_subquery
 
 
 def match(**overrides):
@@ -39,14 +39,14 @@ def test_descriptor_only_root_match_is_rejected():
 
 def test_descriptor_only_root_match_is_rejected_in_subquery_form():
     with pytest.raises(ValueError, match="narrow structurally"):
-        get_action_port_demand_subquery([demand(match(descriptors=DESCRIPTORS))])
+        get_port_demand_subquery([demand(match(descriptors=DESCRIPTORS))], organization_id=1)
 
 
 def test_root_descriptors_with_structural_narrowing_are_allowed():
     for narrowing in (dict(identifier="@mikro/image"), dict(kind=PortKind.STRUCTURE), dict(key="image"), dict(at=0), dict(dimension="length")):
-        get_action_port_demand_subquery([demand(match(descriptors=DESCRIPTORS, **narrowing))])
+        get_port_demand_subquery([demand(match(descriptors=DESCRIPTORS, **narrowing))], organization_id=1)
 
 
 def test_descriptor_only_nested_child_is_allowed():
     parent = match(identifier="@mikro/image", children=[match(descriptors=DESCRIPTORS)])
-    get_action_port_demand_subquery([demand(parent)])
+    get_port_demand_subquery([demand(parent)], organization_id=1)

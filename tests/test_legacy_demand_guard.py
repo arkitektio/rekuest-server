@@ -18,7 +18,7 @@ from rekuest_core.inputs.models import ActionDemandInputModel, DescriptorInputMo
 
 import pytest
 
-from facade.managers import build_state_params, get_action_ids_by_port_demands
+from facade.managers import build_state_params, get_port_demand_subquery
 
 
 def match(**overrides):
@@ -35,12 +35,12 @@ def test_descriptors_below_the_scanned_depth_are_rejected_for_shortcuts():
     descriptors = [DescriptorInputModel(key="axes", value="c")]
     nested = match(children=[match(children=[match(descriptors=descriptors)])])
     with pytest.raises(ValueError, match="below the first level"):
-        get_action_ids_by_port_demands([demand(nested)], model="facade_shortcut")
+        get_port_demand_subquery([demand(nested)], organization_id=1, owner="shortcut")
 
 
 def test_nullable_demand_is_rejected_for_legacy_models():
     with pytest.raises(ValueError, match="nullable"):
-        get_action_ids_by_port_demands([demand(match(nullable=False))], model="facade_shortcut")
+        get_port_demand_subquery([demand(match(nullable=False))], organization_id=1, owner="shortcut")
 
 
 def test_state_definition_matching_rejects_descriptors():

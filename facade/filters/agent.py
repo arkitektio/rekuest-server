@@ -137,28 +137,26 @@ class AgentFilter:
         # One matcher round trip for all demands. The agent must satisfy EVERY demand, but each
         # demand may be met by a different implementation — hence one Exists() per demand
         # (ANDed) rather than one merged id set or chained M2M joins (which multiply rows).
+        # Returned as the Q, so OR/NOT compose; a demand no action meets matches no agent.
         per_demand_ids = managers.get_action_ids_by_action_demands(
             [demand.to_pydantic() for demand in value],
             organization_id=info.context.request.organization.id,
         )
 
-        for ports_demand, new_ids in zip(value, per_demand_ids):
-            if len(new_ids) == 0:
-                raise ValueError(f"No actions found that match the given action demands {ports_demand}")
-
-            queryset = queryset.filter(Exists(models.Implementation.objects.filter(agent=OuterRef(f"{prefix}pk"), action_id__in=new_ids)))
-
-        return queryset, Q()
+        matched = Q()
+        for new_ids in per_demand_ids:
+            matched &= Q(Exists(models.Implementation.objects.filter(agent=OuterRef(f"{prefix}pk"), action_id__in=new_ids)))
+        return queryset, matched
 
     @filter_field
     def state_demands(self, info: Info, queryset: QuerySet[models.Agent], value: list[ritypes.StateDemandInput], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
         # The agent must satisfy EVERY state demand (one Exists() per demand, ANDed) — each
         # demand may be met by a different State of the agent, mirroring action_demands.
         # app/key match the State's identity columns; matches resolve via the port matcher.
+        matched = Q()
         for state_demand in value:
-            queryset = queryset.filter(Exists(models.State.objects.filter(agent=OuterRef(f"{prefix}pk"), **managers.state_demand_state_filters(state_demand.to_pydantic()))))
-
-        return queryset, Q()
+            matched &= Q(Exists(models.State.objects.filter(agent=OuterRef(f"{prefix}pk"), **managers.state_demand_state_filters(state_demand.to_pydantic()))))
+        return queryset, matched
 
     @filter_field(description="Filter by user ID")
     def user(self, info: Info, queryset: QuerySet[models.Agent], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Agent], Q]:

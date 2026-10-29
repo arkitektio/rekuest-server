@@ -21,7 +21,9 @@ REQUIRES_C = [{"key": "axes", "operator": "EQUALS", "value": "c"}]
 
 
 def shortcut_ids(matches, type="args"):
-    return set(managers.get_action_ids_by_port_demands([PortDemand(kind=type, matches=matches)], model="facade_shortcut"))
+    organization_id = models.Toolbox.objects.get(name="box").organization_id
+    subquery = managers.get_port_demand_subquery([PortDemand(kind=type, matches=matches)], organization_id=organization_id, owner="shortcut")
+    return set(models.Shortcut.objects.filter(id__in=subquery).values_list("id", flat=True))
 
 
 @pytest.fixture

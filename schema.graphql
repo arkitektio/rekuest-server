@@ -406,6 +406,11 @@ input ActionFilter {
   search: String
   ids: [ID!]
   demands: [PortDemandInput!]
+
+  """
+  Any of these demand sets: the rows that satisfy every demand of at least one set (each set as `demands`). One statement, so prefer it to `OR`-ing `demands`, which tests every row of the organization. An empty list is ignored; an empty set is an error.
+  """
+  anyDemands: [[PortDemandInput!]!]
   objectDemands: [PortDemandInput!]
   protocols: [String!]
   kind: ActionKind
@@ -1629,6 +1634,11 @@ input BlokFilter {
   Only bloks whose args accept these demands: the bloks an item opens in. Same matching as `ActionFilter.demands`, so a match's `descriptors` are checked against each arg's `requires`. Only `ARGS` demands; a blok without args matches none.
   """
   demands: [PortDemandInput!]
+
+  """
+  Only bloks whose args accept at least one of these demand sets (each set as `demands`). One statement, so prefer it to `OR`-ing `demands`. An empty list is ignored; an empty set is an error.
+  """
+  anyDemands: [[PortDemandInput!]!]
 }
 
 """A blok an agent declares (blok language v2)."""
@@ -3669,6 +3679,11 @@ input ImplementationActionFilter {
   name: String
   ids: [ID!]
   demands: [PortDemandInput!]
+
+  """
+  Any of these demand sets: the rows that satisfy every demand of at least one set (each set as `demands`). One statement, so prefer it to `OR`-ing `demands`, which tests every row of the organization. An empty list is ignored; an empty set is an error.
+  """
+  anyDemands: [[PortDemandInput!]!]
   kind: ActionKind
   protocols: [String!]
 }
@@ -4250,6 +4265,11 @@ input MaterializedBlokFilter {
   Only materialized bloks whose blok's args accept these demands: what an item opens in. See `BlokFilter.demands`.
   """
   demands: [PortDemandInput!]
+
+  """
+  Only materialized bloks whose blok's args accept at least one of these demand sets. See `BlokFilter.anyDemands`.
+  """
+  anyDemands: [[PortDemandInput!]!]
 }
 
 input MaterializedBlokOrder @oneOf {
@@ -6363,6 +6383,11 @@ input ShortcutFilter {
   search: String
   ids: [ID!]
   demands: [PortDemandInput!]
+
+  """
+  Any of these demand sets: the rows that satisfy every demand of at least one set (each set as `demands`). One statement, so prefer it to `OR`-ing `demands`, which tests every row of the organization. An empty list is ignored; an empty set is an error.
+  """
+  anyDemands: [[PortDemandInput!]!]
 
   """
   Whether an agent that can take the shortcut's action is connected now (`Action.assignable`).

@@ -13,12 +13,13 @@ from strawberry.types import Info
 from strawberry_django.fields.filter_order import filter_field
 
 from facade import inputs, managers, models
+from facade.filters.action import any_port_demands
 from rekuest_core import enums as renums
 
 
 def _bloks_for_demands(info: Info, value: list[inputs.PortDemandInput]) -> RawSQL:
     """The ids of the bloks whose args accept what ``value`` demands (``requires`` included)."""
-    return managers.get_blok_port_demand_subquery([managers.PortDemand.of(demand) for demand in value], organization_id=info.context.request.organization.id)
+    return managers.get_port_demand_subquery([managers.PortDemand.of(demand) for demand in value], organization_id=info.context.request.organization.id, owner="blok")
 
 
 @strawberry_django.order_type(models.MaterializedBlok)
@@ -48,7 +49,11 @@ class BlokFilter:
     def demands(self, info: Info, queryset: QuerySet[models.Blok], value: list[inputs.PortDemandInput], prefix: str) -> tuple[QuerySet[models.Blok], Q]:
         if len(value) == 0:
             return queryset, Q()
-        return queryset.filter(**{f"{prefix}id__in": _bloks_for_demands(info, value)}), Q()
+        return queryset, Q(**{f"{prefix}id__in": _bloks_for_demands(info, value)})
+
+    @filter_field(description="Only bloks whose args accept at least one of these demand sets (each set as `demands`). One statement, so prefer it to `OR`-ing `demands`. An empty list is ignored; an empty set is an error.")
+    def any_demands(self, info: Info, queryset: QuerySet[models.Blok], value: list[list[inputs.PortDemandInput]], prefix: str) -> tuple[QuerySet[models.Blok], Q]:
+        return queryset, any_port_demands(info, value, "blok", f"{prefix}id")
 
 
 @strawberry_django.filter_type(models.MaterializedBlok, description="A way to filter placements (space memberships)")
@@ -78,4 +83,8 @@ class MaterializedBlokFilter:
     def demands(self, info: Info, queryset: QuerySet[models.MaterializedBlok], value: list[inputs.PortDemandInput], prefix: str) -> tuple[QuerySet[models.MaterializedBlok], Q]:
         if len(value) == 0:
             return queryset, Q()
-        return queryset.filter(**{f"{prefix}blok_id__in": _bloks_for_demands(info, value)}), Q()
+        return queryset, Q(**{f"{prefix}blok_id__in": _bloks_for_demands(info, value)})
+
+    @filter_field(description="Only materialized bloks whose blok's args accept at least one of these demand sets. See `BlokFilter.anyDemands`.")
+    def any_demands(self, info: Info, queryset: QuerySet[models.MaterializedBlok], value: list[list[inputs.PortDemandInput]], prefix: str) -> tuple[QuerySet[models.MaterializedBlok], Q]:
+        return queryset, any_port_demands(info, value, "blok", f"{prefix}blok_id")
