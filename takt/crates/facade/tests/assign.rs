@@ -84,7 +84,8 @@ async fn agent(ctx: &Context, organization: Option<&str>) -> i64 {
     )
     .await
     .unwrap();
-    sqlx::query("UPDATE facade_agent SET connected = true, last_seen = now() WHERE id = $1")
+    // A test agent is granted everything: the run-time gates are tested on their own.
+    sqlx::query("UPDATE facade_agent SET connected = true, last_seen = now(), granted_scopes = '[\"rekuest_all\"]' WHERE id = $1")
         .bind(agent)
         .execute(&ctx.db)
         .await
@@ -115,9 +116,10 @@ async fn action(ctx: &Context, agent: i64, allow_probe: bool) -> (i64, i64) {
     let implementation: i64 = sqlx::query_scalar(
         "INSERT INTO facade_implementation (interface, higher_order_config, params, created_at,
                                             updated_at, tracks, diagnostics, needs_token, provenance_audience,
-                                            effects, execution, action_id, agent_id)
+                                            effects, execution, action_id, agent_id,
+                                            dynamic_asks, dynamic_calls, dynamic_informs)
          SELECT 'echo', '{}', '{}', now(), now(), '[]', '[]', true, '[\"mikro\"]', 'UNKNOWN', 'PLAIN',
-                $2, a.id FROM facade_agent a WHERE a.id = $1
+                $2, a.id, true, true, true FROM facade_agent a WHERE a.id = $1
          RETURNING id",
     )
     .bind(agent)
@@ -1779,4 +1781,171 @@ async fn a_root_run_keeps_the_space_it_was_started_in() {
             .to_string(),
         format!("No Space {theirs} in this organization.")
     );
+}
+
+/// An agent calls an action it names directly (found at run time, not a declared dependency)
+/// only from a task it runs itself, whose implementation declares `dynamic_calls`, with its
+/// token granting `rekuest_dynamic_call`.
+#[tokio::test]
+async fn a_call_found_at_run_time_needs_its_own_task_the_flag_and_the_scope() {
+    let Some(ctx) = context().await else { return };
+    let caller = agent(&ctx, None).await;
+    let executor = agent(&ctx, None).await;
+    let (_, parent_implementation) = action(&ctx, caller, false).await;
+    action(&ctx, executor, false).await;
+    let parent = backend::assign_with_status(
+        &ctx,
+        &principal(&ctx, caller).await,
+        &AssignInput {
+            policy: Some("AUTO".into()),
+            ..echo(parent_implementation, 1, None)
+        },
+        AssignOrigin::default(),
+    )
+    .await
+    .unwrap()
+    .task;
+    let request = |reference: &str| {
+        frame(json!({
+            "type": "ASSIGN_REQUEST", "reference": reference, "parent": parent.to_string(),
+            "agent": executor.to_string(), "interface": "echo", "args": {"x": 5},
+        }))
+    };
+    let refusal = |reply: Option<ToAgent>| match reply {
+        Some(ToAgent::AssignResponse {
+            error: Some(error),
+            task: None,
+            ..
+        }) => error,
+        other => panic!("not refused: {other:?}"),
+    };
+
+    sqlx::query("UPDATE facade_implementation SET dynamic_calls = false WHERE id = $1")
+        .bind(parent_implementation)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    let reply = route(&ctx, caller, &request("undeclared"), None)
+        .await
+        .unwrap();
+    assert!(refusal(reply).contains("dynamic_calls"));
+
+    sqlx::query("UPDATE facade_implementation SET dynamic_calls = true WHERE id = $1")
+        .bind(parent_implementation)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE facade_agent SET granted_scopes = '[\"rekuest_read\"]' WHERE id = $1")
+        .bind(caller)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    let reply = route(&ctx, caller, &request("ungranted"), None)
+        .await
+        .unwrap();
+    assert!(refusal(reply).contains("rekuest_dynamic_call"));
+
+    // Another agent cannot borrow the flagged task as its parent.
+    let reply = route(&ctx, executor, &request("borrowed"), None)
+        .await
+        .unwrap();
+    assert!(refusal(reply).contains("not one of this agent's"));
+
+    sqlx::query(
+        "UPDATE facade_agent SET granted_scopes = '[\"rekuest_dynamic_call\"]' WHERE id = $1",
+    )
+    .bind(caller)
+    .execute(&ctx.db)
+    .await
+    .unwrap();
+    let reply = route(&ctx, caller, &request("granted"), None)
+        .await
+        .unwrap();
+    assert!(
+        matches!(
+            reply,
+            Some(ToAgent::AssignResponse {
+                task: Some(_),
+                error: None,
+                ..
+            })
+        ),
+        "{reply:?}"
+    );
+}
+
+/// A call through a declared dependency needs the agent's token to grant
+/// `rekuest_dependency_call`, comes only from a task the agent runs itself, and carries no hooks
+/// that start more work unless the action declares `dynamic_calls`. (These refusals come before
+/// the dependency is resolved, so none is set up.)
+#[tokio::test]
+async fn a_dependency_call_needs_its_own_task_and_the_scope_and_no_hooks() {
+    let Some(ctx) = context().await else { return };
+    let caller = agent(&ctx, None).await;
+    let other = agent(&ctx, None).await;
+    let (_, parent_implementation) = action(&ctx, caller, false).await;
+    let parent = backend::assign_with_status(
+        &ctx,
+        &principal(&ctx, caller).await,
+        &AssignInput {
+            policy: Some("AUTO".into()),
+            ..echo(parent_implementation, 1, None)
+        },
+        AssignOrigin::default(),
+    )
+    .await
+    .unwrap()
+    .task;
+    let request = |reference: &str, hooks: Value| {
+        frame(json!({
+            "type": "ASSIGN_REQUEST", "reference": reference, "parent": parent.to_string(),
+            "dependency": "leaf", "method": "echo", "args": {"x": 5}, "hooks": hooks,
+        }))
+    };
+    let error = |reply: Option<ToAgent>| match reply {
+        Some(ToAgent::AssignResponse { error, .. }) => error.unwrap_or_default(),
+        other => panic!("no assign response: {other:?}"),
+    };
+
+    sqlx::query("UPDATE facade_agent SET granted_scopes = '[\"rekuest_read\"]' WHERE id = $1")
+        .bind(caller)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    let reply = route(&ctx, caller, &request("ungranted", json!(null)), None)
+        .await
+        .unwrap();
+    assert!(error(reply).contains("rekuest_dependency_call"));
+
+    let reply = route(&ctx, other, &request("borrowed", json!(null)), None)
+        .await
+        .unwrap();
+    assert!(error(reply).contains("not one of this agent's"));
+
+    sqlx::query(
+        "UPDATE facade_agent SET granted_scopes = '[\"rekuest_dependency_call\"]' WHERE id = $1",
+    )
+    .bind(caller)
+    .execute(&ctx.db)
+    .await
+    .unwrap();
+    let reply = route(&ctx, caller, &request("granted", json!(null)), None)
+        .await
+        .unwrap();
+    let granted = error(reply);
+    assert!(
+        !granted.contains("rekuest_dependency_call") && !granted.contains("dynamic_calls"),
+        "{granted}"
+    );
+
+    sqlx::query("UPDATE facade_implementation SET dynamic_calls = false WHERE id = $1")
+        .bind(parent_implementation)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    let hooked = json!([{"kind": "INIT", "hash": "a".repeat(64)}]);
+    let reply = route(&ctx, caller, &request("hooked", hooked), None)
+        .await
+        .unwrap();
+    assert!(error(reply).contains("hooks that start more work"));
 }

@@ -69,7 +69,7 @@ from .dependency import (
     ResolvedDependency,
     Resolution,
 )
-from .implementation import Implementation
+from .implementation import Implementation, ImplementationInteraction
 from .session import Session, SessionBoundary, TaskBoundary
 from .shelve import MemoryDrawer, MemoryShelve
 from .state import (
@@ -130,6 +130,7 @@ __all__ = [
     "DependencyTree",
     "ResolvedAgentDependency",
     "Implementation",
+    "ImplementationInteraction",
     "Lock",
     "Agent",
     "MemoryShelve",

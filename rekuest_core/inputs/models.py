@@ -995,6 +995,22 @@ class ImplementationInputModel(BaseModel):
     execution: enums.Execution = Field(default=enums.Execution.PLAIN, description="How this implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies.")
     code_hash: str | None = Field(default=None, description="A hash of the implementation's code. A workflow is only resumed by an implementation with the same hash.")
     logo: str | None = Field(default=None, description="The key of the agent's action logo blok (context ACTION_LOGO) that draws this action.")
+    asks: list["AskBlokInputModel"] | None = Field(default=None, description="The bloks this implementation asks a person through, declared up front: a task asks one by its key.")
+    informs: list["InformBlokInputModel"] | None = Field(default=None, description="The bloks this implementation shows a person while a task goes on, declared up front: a task shows one by its key.")
+    dynamic_asks: bool | None = Field(default=None, description="Whether a task may also ask through a blok made at ask time, or any blok of the organization. Refused otherwise, and without the `rekuest_dynamic_ask` scope.")
+    dynamic_calls: bool | None = Field(default=None, description="Whether a task may also call actions it found at run time, not only its declared dependencies. A WORKFLOW only; refused otherwise, and without the `rekuest_dynamic_call` scope.")
+    dynamic_informs: bool | None = Field(default=None, description="Whether a task may show a blok made at inform time, or any blok of the organization. Refused otherwise, and without the `rekuest_dynamic_inform` scope.")
+
+    @model_validator(mode="after")
+    def check_declared_interactions(self) -> Self:
+        """Each ask and inform keyed once, across both; only a workflow calls actions it found at run time."""
+        keys = [ask.key for ask in self.asks or []] + [inform.key for inform in self.informs or []]
+        twice = next((key for key in keys if keys.count(key) > 1), None)
+        if twice is not None:
+            raise ValueError(f"Implementation {self.interface!r} declares the ask or inform {twice!r} twice")
+        if self.dynamic_calls and self.execution != enums.Execution.WORKFLOW:
+            raise ValueError(f"Implementation {self.interface!r} declares dynamic_calls, which only a WORKFLOW may")
+        return self
 
     @model_validator(mode="after")
     def check_widget_targets(self) -> Self:
@@ -1659,6 +1675,92 @@ class ActionBlokInputModel(BaseModel):
         check_blok_sent_once(self.components, self.source, required=True)
         if self.context not in ACTION_BLOK_CONTEXTS:
             raise wrong_context("action", self.context)
+        return self
+
+
+class AskBlokInputModel(BaseModel):
+    """A blok an action asks a person through, declared with it: made once at registration, and
+    the only kind of ask a task may hold on unless its implementation declares `dynamic_asks`. A
+    task blok: it reads the run as `task`, its args as `args.<key>`, the agent as `self`, and
+    answers with `task.answer(values: {...})`, keyed by its returns."""
+
+    key: str = Field(description="What a task names it by: `<parameter>.<method>` of the action's interactions protocol.")
+    description: Optional[str] = Field(default=None, description="What it asks, in a sentence: the hold's message wherever the ask is listed.")
+    components: Optional[list[ComponentNodeInputModel]] = Field(default=None, description="The UI component tree, unless the blok is sent as its `source`.")
+    source: Optional[str] = Field(default=None, description="The blok as v2 BSX, parsed by the server into its component tree. Exactly one of `components` and `source` is sent.")
+    module: Optional[str] = Field(default=None, description="The module the blok renders against besides its catalogs; the Orkestrator's when absent.")
+    args: list[ArgPortInputModel] = Field(default_factory=list, description="What it is opened on, read under `args.<key>`.")
+    returns: list[ReturnPortInputModel] = Field(default_factory=list, description="What an answer holds.")
+    dependencies: list[AgentDependencyInputModel] = Field(default_factory=list, description="The agents it reads or calls besides `self`, as `deps.<key>`.")
+    vocab: Literal[2] = Field(description="The blok language version the blok speaks; 2 is the only one.")
+    catalogs: list[str] = Field(default_factory=list, description="The catalogs it needs, as name@version.")
+    locals: list[BlokLocalInputModel] = Field(default_factory=list, description="Its locals: form state that feeds a call, written only through bind.")
+    demo: Optional[BlokDemoInputModel] = Field(default=None, description="What a preview renders it with.")
+    queries: list[BlokQueryInputModel] = Field(default_factory=list, description="Its declared reads.")
+    subscriptions: list[BlokSubscriptionInputModel] = Field(default_factory=list, description="Its declared streams.")
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def check_ask_blok(self) -> Self:
+        """Sent one way; its declarations a task blok's; its args and returns each keyed once."""
+        check_blok_sent_once(self.components, self.source, required=True)
+        check_blok_declarations(
+            kind="task",
+            catalogs=self.catalogs,
+            locals=self.locals,
+            queries=self.queries,
+            subscriptions=self.subscriptions,
+            dependency_keys={dependency.key for dependency in self.dependencies} | {"self"},
+            demo=self.demo,
+        )
+        for what, ports in (("args", self.args), ("returns", self.returns)):
+            keys = [port.key for port in ports]
+            twice = next((key for key in keys if keys.count(key) > 1), None)
+            if twice is not None:
+                raise ValueError(f"Ask {self.key!r}: duplicate {what} key {twice!r}")
+        return self
+
+
+class InformBlokInputModel(BaseModel):
+    """A blok an action shows a person while its task goes on, declared with it: made once at
+    registration, and the only kind of inform a task may show unless its implementation
+    declares `dynamic_informs`. A task blok: it reads the run as `task`, its args as
+    `args.<key>` and the agent as `self`; nothing waits on it, so it has no returns."""
+
+    key: str = Field(description="What a task names it by: `<parameter>.<method>` of the action's interactions protocol.")
+    description: Optional[str] = Field(default=None, description="What it shows, in a sentence: the inform's message wherever it is listed.")
+    components: Optional[list[ComponentNodeInputModel]] = Field(default=None, description="The UI component tree, unless the blok is sent as its `source`.")
+    source: Optional[str] = Field(default=None, description="The blok as v2 BSX, parsed by the server into its component tree. Exactly one of `components` and `source` is sent.")
+    module: Optional[str] = Field(default=None, description="The module the blok renders against besides its catalogs; the Orkestrator's when absent.")
+    args: list[ArgPortInputModel] = Field(default_factory=list, description="What it is opened on, read under `args.<key>`.")
+    dependencies: list[AgentDependencyInputModel] = Field(default_factory=list, description="The agents it reads or calls besides `self`, as `deps.<key>`.")
+    vocab: Literal[2] = Field(description="The blok language version the blok speaks; 2 is the only one.")
+    catalogs: list[str] = Field(default_factory=list, description="The catalogs it needs, as name@version.")
+    locals: list[BlokLocalInputModel] = Field(default_factory=list, description="Its locals: form state that feeds a call, written only through bind.")
+    demo: Optional[BlokDemoInputModel] = Field(default=None, description="What a preview renders it with.")
+    queries: list[BlokQueryInputModel] = Field(default_factory=list, description="Its declared reads.")
+    subscriptions: list[BlokSubscriptionInputModel] = Field(default_factory=list, description="Its declared streams.")
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def check_inform_blok(self) -> Self:
+        """Sent one way; its declarations a task blok's; its args each keyed once."""
+        check_blok_sent_once(self.components, self.source, required=True)
+        check_blok_declarations(
+            kind="task",
+            catalogs=self.catalogs,
+            locals=self.locals,
+            queries=self.queries,
+            subscriptions=self.subscriptions,
+            dependency_keys={dependency.key for dependency in self.dependencies} | {"self"},
+            demo=self.demo,
+        )
+        keys = [port.key for port in self.args]
+        twice = next((key for key in keys if keys.count(key) > 1), None)
+        if twice is not None:
+            raise ValueError(f"Inform {self.key!r}: duplicate args key {twice!r}")
         return self
 
 

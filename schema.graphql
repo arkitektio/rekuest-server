@@ -1001,6 +1001,61 @@ input ArgPortInput {
 """The `Args` scalar type represents a Dictionary of arguments"""
 scalar Args
 
+"""
+A blok an action asks a person through, declared with it (blok language v2): a task blok, its args and returns ports.
+"""
+input AskBlokInput {
+  """
+  What a task names it by: `<parameter>.<method>` of the action's interactions protocol.
+  """
+  key: String!
+
+  """
+  What it asks, in a sentence: the hold's message wherever the ask is listed.
+  """
+  description: String = null
+
+  """The UI component tree, unless the blok is sent as its `source`."""
+  components: [ComponentNodeInput!] = null
+
+  """
+  The blok as v2 BSX, parsed by the server into its component tree. Exactly one of `components` and `source` is sent.
+  """
+  source: String = null
+
+  """
+  The module the blok renders against besides its catalogs; the Orkestrator's when absent.
+  """
+  module: String = null
+
+  """What it is opened on, read under `args.<key>`."""
+  args: [ArgPortInput!]! = []
+
+  """What an answer holds."""
+  returns: [ReturnPortInput!]! = []
+
+  """The agents it reads or calls besides `self`, as `deps.<key>`."""
+  dependencies: [AgentDependencyInput!]! = []
+
+  """The blok language version the blok speaks; 2 is the only one."""
+  vocab: Int!
+
+  """The catalogs it needs, as name@version."""
+  catalogs: [String!]! = []
+
+  """Its locals: form state that feeds a call, written only through bind."""
+  locals: [BlokLocalInput!]! = []
+
+  """What a preview renders it with."""
+  demo: BlokDemoInput = null
+
+  """Its declared reads."""
+  queries: [BlokQueryInput!]! = []
+
+  """Its declared streams."""
+  subscriptions: [BlokSubscriptionInput!]! = []
+}
+
 """A verified file the organization holds, stored once by its content."""
 type Asset {
   id: ID!
@@ -3662,6 +3717,26 @@ type Implementation {
   """
   logo: Blok
 
+  """
+  The bloks it declared to ask a person through or show them, asks and informs both. A task shows only these unless the implementation declares `dynamicAsks` / `dynamicInforms`.
+  """
+  interactions: [ImplementationInteraction!]!
+
+  """
+  Whether a task may also ask through a blok made at ask time, or any blok of the organization. Needs the agent's `rekuest_dynamic_ask` scope too.
+  """
+  dynamicAsks: Boolean!
+
+  """
+  Whether a task may also call actions it found at run time, not only its declared dependencies. Needs the agent's `rekuest_dynamic_call` scope too.
+  """
+  dynamicCalls: Boolean!
+
+  """
+  Whether a task may also show a blok made at inform time, or any blok of the organization. Needs the agent's `rekuest_dynamic_inform` scope too.
+  """
+  dynamicInforms: Boolean!
+
   """Constructed name for display, combining interface and agent name."""
   name: String!
 
@@ -3758,7 +3833,7 @@ input ImplementationInput {
   """
   The interface of the implementation. This is used to group implementations together in the UI
   """
-  interface: String
+  interface: String!
 
   """
   The params of the implementation. This is used to pass parameters to the implementation
@@ -3812,6 +3887,56 @@ input ImplementationInput {
   The key of the agent's action logo blok (context ACTION_LOGO) that draws this action.
   """
   logo: String = null
+
+  """
+  The bloks this implementation asks a person through, declared up front: a task asks one by its key.
+  """
+  asks: [AskBlokInput!] = null
+
+  """
+  The bloks this implementation shows a person while a task goes on, declared up front: a task shows one by its key.
+  """
+  informs: [InformBlokInput!] = null
+
+  """
+  Whether a task may also ask through a blok made at ask time, or any blok of the organization. Refused otherwise, and without the `rekuest_dynamic_ask` scope.
+  """
+  dynamicAsks: Boolean = null
+
+  """
+  Whether a task may also call actions it found at run time, not only its declared dependencies. A WORKFLOW only; refused otherwise, and without the `rekuest_dynamic_call` scope.
+  """
+  dynamicCalls: Boolean = null
+
+  """
+  Whether a task may show a blok made at inform time, or any blok of the organization. Refused otherwise, and without the `rekuest_dynamic_inform` scope.
+  """
+  dynamicInforms: Boolean = null
+}
+
+"""
+A blok an implementation declared with it (an `@ask` or `@inform` method of an interactions protocol): what its tasks hold on until a person answers (ASK) or show while they go on (INFORM). A task names it by `key`.
+"""
+type ImplementationInteraction {
+  id: ID!
+
+  """
+  What a task names it by: `<parameter>.<method>` of the action's interactions protocol.
+  """
+  key: String!
+
+  """What it asks or shows, in a sentence: the message it is listed with."""
+  description: String
+
+  """
+  What it shows: a blok held by implementations only (`heldByAction`), its args and returns ports declared.
+  """
+  blok: Blok!
+
+  """
+  ASK: a task holds on it until a person answers through it. INFORM: a task shows it and goes on.
+  """
+  role: TaskBlokRole!
 }
 
 type ImplementationMapping {
@@ -3843,6 +3968,58 @@ type ImplementationUpdate {
   create: Implementation
   update: Implementation
   delete: ID
+}
+
+"""
+A blok an action shows a person while its task goes on, declared with it (blok language v2): a task blok, its args ports, no returns.
+"""
+input InformBlokInput {
+  """
+  What a task names it by: `<parameter>.<method>` of the action's interactions protocol.
+  """
+  key: String!
+
+  """
+  What it shows, in a sentence: the inform's message wherever it is listed.
+  """
+  description: String = null
+
+  """The UI component tree, unless the blok is sent as its `source`."""
+  components: [ComponentNodeInput!] = null
+
+  """
+  The blok as v2 BSX, parsed by the server into its component tree. Exactly one of `components` and `source` is sent.
+  """
+  source: String = null
+
+  """
+  The module the blok renders against besides its catalogs; the Orkestrator's when absent.
+  """
+  module: String = null
+
+  """What it is opened on, read under `args.<key>`."""
+  args: [ArgPortInput!]! = []
+
+  """The agents it reads or calls besides `self`, as `deps.<key>`."""
+  dependencies: [AgentDependencyInput!]! = []
+
+  """The blok language version the blok speaks; 2 is the only one."""
+  vocab: Int!
+
+  """The catalogs it needs, as name@version."""
+  catalogs: [String!]! = []
+
+  """Its locals: form state that feeds a call, written only through bind."""
+  locals: [BlokLocalInput!]! = []
+
+  """What a preview renders it with."""
+  demo: BlokDemoInput = null
+
+  """Its declared reads."""
+  queries: [BlokQueryInput!]! = []
+
+  """Its declared streams."""
+  subscriptions: [BlokSubscriptionInput!]! = []
 }
 
 """
@@ -4498,53 +4675,53 @@ type Mutation {
   createHigherOrderImplementation(input: CreateHigherOrderImplementationInput!): Implementation! @auth(required_scopes: ["rekuest_agent"], any_role_of: ["rekuest_editor"])
 
   """Bounce an agent so it reconnects."""
-  bounce(input: BounceInput!): Agent! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
+  bounce(input: BounceInput!): Agent! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
 
   """Kick an agent to force disconnect. It will fail and not reconnect."""
-  kick(input: KickInput!): Agent! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
+  kick(input: KickInput!): Agent! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
 
   """Assign a task to an agent."""
-  assign(input: AssignInput!): Task! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
+  assign(input: AssignInput!): Task! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
 
   """
   Fire a probe at an agent — zero persistence, redis-held state under a TTL, never appears in task history. For high-frequency interactive work (previews, live parameter tweaks).
   """
-  probe(input: ProbeInput!): Probe! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
+  probe(input: ProbeInput!): Probe! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
 
   """
   Cancel a probe. Idempotent: cancelling a finished probe is a no-op returning its terminal state.
   """
-  cancelProbe(input: CancelProbeInput!): Probe! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
+  cancelProbe(input: CancelProbeInput!): Probe! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
 
   """
   Pause a probe. Idempotent on finished probes; the agent's Paused report settles the state.
   """
-  pauseProbe(input: PauseProbeInput!): Probe! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
+  pauseProbe(input: PauseProbeInput!): Probe! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
 
   """
   Resume a paused probe. Idempotent on finished probes; the agent's Resumed report settles the state.
   """
-  resumeProbe(input: ResumeProbeInput!): Probe! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
+  resumeProbe(input: ResumeProbeInput!): Probe! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
 
   """Cancel an active task."""
-  cancel(input: CancelInput!): Task! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
+  cancel(input: CancelInput!): Task! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
 
   """Pause an ongoing task."""
-  pause(input: PauseInput!): Task! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
+  pause(input: PauseInput!): Task! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
 
   """Resume a paused task."""
-  resume(input: ResumeInput!): Task! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
+  resume(input: ResumeInput!): Task! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
 
   """
   Answer a held task. A child an agent asked for runs once approved, or ends DENIED without running; a task that holds itself carries on with the decision. Only the user the task runs for may decide, and never from the client of the agent that asked.
   """
-  decide(input: DecideInput!): Task! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
+  decide(input: DecideInput!): Task! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
 
   """Collect results from a task."""
-  collect(input: CollectInput!): [String!]! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
+  collect(input: CollectInput!): [String!]! @auth(required_scopes: ["rekuest_agent"], any_role_of: ["rekuest_editor"])
 
   """Interrupt the execution of a task."""
-  interrupt(input: InterruptInput!): Task! @auth(required_scopes: ["rekuest_call"], any_role_of: ["rekuest_editor"])
+  interrupt(input: InterruptInput!): Task! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
 
   """
   Create a trigger: run an action when a service signals a matching object.

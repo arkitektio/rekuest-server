@@ -109,7 +109,8 @@ impl Person {
         )
         .await
         .unwrap();
-        sqlx::query("UPDATE facade_agent SET connected = true, last_seen = now() WHERE id = $1")
+        // A test agent is granted everything: the run-time gates are tested on their own.
+        sqlx::query("UPDATE facade_agent SET connected = true, last_seen = now(), granted_scopes = '[\"rekuest_all\"]' WHERE id = $1")
             .bind(agent)
             .execute(&ctx.db)
             .await
@@ -154,9 +155,10 @@ async fn action(ctx: &Context, agent: i64) -> (i64, i64) {
     let implementation: i64 = sqlx::query_scalar(
         "INSERT INTO facade_implementation (interface, higher_order_config, params, created_at,
                                             updated_at, tracks, diagnostics, needs_token, provenance_audience,
-                                            effects, execution, action_id, agent_id)
+                                            effects, execution, action_id, agent_id,
+                                            dynamic_asks, dynamic_calls, dynamic_informs)
          SELECT 'echo', '{}', '{}', now(), now(), '[]', '[]', true, '[\"mikro\"]', 'UNKNOWN', 'PLAIN',
-                $2, a.id FROM facade_agent a WHERE a.id = $1
+                $2, a.id, true, true, true FROM facade_agent a WHERE a.id = $1
          RETURNING id",
     )
     .bind(agent)
@@ -910,7 +912,7 @@ async fn a_blok_that_cannot_be_made_refuses_the_hold_and_says_why() {
 
     for (blok, why) in [
         (json!({"source": "<Box"}), "does not hold"),
-        (json!({"key": "nothing"}), "declares no blok"),
+        (json!({"key": "nothing"}), "declares no ask"),
         (
             json!({"source": "<Html><Box/></Html>", "agent_mappings": {"other": "1"}}),
             "no dependency",
@@ -1134,4 +1136,241 @@ async fn an_inform_shows_a_blok_and_goes_with_its_task() {
             .await
             .unwrap();
     assert_eq!(owned, 0);
+}
+
+/// A blok made at run time (`source`, or any blok by `id`) shows only when the task's
+/// implementation declares it may and the agent's token grants the scope: an ask needs
+/// `dynamic_asks` and `rekuest_dynamic_ask`, an inform `dynamic_informs` and
+/// `rekuest_dynamic_inform` (`rekuest_all` grants both).
+#[tokio::test]
+async fn a_blok_made_at_run_time_needs_the_flag_and_the_scope() {
+    let Some(ctx) = context().await else { return };
+    let person = Person::new();
+    let holder = person.agent(&ctx).await;
+    standard_catalog(&ctx, holder).await;
+    let (_, workflow) = action(&ctx, holder).await;
+    let desk = person.at_a_desk(&ctx).await;
+    let blok = json!({"source": "<Html><Box/></Html>"});
+
+    let refused = |task: i64| {
+        let ctx = &ctx;
+        async move {
+            let refusals = of_type(queued(ctx, holder).await, "BLOK_REFUSED");
+            refusals
+                .iter()
+                .find(|f| f["task"].as_str() == Some(task.to_string().as_str()))
+                .map(|f| f["reason"].as_str().unwrap().to_owned())
+        }
+    };
+
+    sqlx::query("UPDATE facade_implementation SET dynamic_asks = false WHERE id = $1")
+        .bind(workflow)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    let task = root(&ctx, &desk, workflow, "ASK").await;
+    route(
+        &ctx,
+        holder,
+        &frame(json!({"type": "HELD", "task": task.to_string(), "blok": blok})),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_ne!(row(&ctx, task).await.latest_event_kind, "HELD");
+    assert!(refused(task).await.unwrap().contains("dynamic_asks"));
+
+    sqlx::query("UPDATE facade_implementation SET dynamic_asks = true WHERE id = $1")
+        .bind(workflow)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE facade_agent SET granted_scopes = '[\"rekuest_read\"]' WHERE id = $1")
+        .bind(holder)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    let task = root(&ctx, &desk, workflow, "ASK").await;
+    route(
+        &ctx,
+        holder,
+        &frame(json!({"type": "HELD", "task": task.to_string(), "blok": blok})),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_ne!(row(&ctx, task).await.latest_event_kind, "HELD");
+    assert!(refused(task).await.unwrap().contains("rekuest_dynamic_ask"));
+
+    sqlx::query(
+        "UPDATE facade_agent SET granted_scopes = '[\"rekuest_dynamic_ask\"]' WHERE id = $1",
+    )
+    .bind(holder)
+    .execute(&ctx.db)
+    .await
+    .unwrap();
+    let task = root(&ctx, &desk, workflow, "ASK").await;
+    route(
+        &ctx,
+        holder,
+        &frame(json!({"type": "HELD", "task": task.to_string(), "blok": blok})),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(row(&ctx, task).await.latest_event_kind, "HELD");
+
+    // An inform has its own flag, which the ask's does not stand in for.
+    sqlx::query("UPDATE facade_implementation SET dynamic_informs = false WHERE id = $1")
+        .bind(workflow)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    let task = root(&ctx, &desk, workflow, "ASK").await;
+    route(
+        &ctx,
+        holder,
+        &frame(json!({"type": "INFORM", "task": task.to_string(), "blok": blok})),
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(refused(task).await.unwrap().contains("dynamic_informs"));
+}
+
+/// An ask by key names one of the asks the task's own implementation declares, never another
+/// implementation's.
+#[tokio::test]
+async fn an_ask_by_key_is_one_its_implementation_declares() {
+    let Some(ctx) = context().await else { return };
+    let person = Person::new();
+    let holder = person.agent(&ctx).await;
+    standard_catalog(&ctx, holder).await;
+    let (first, workflow) = action(&ctx, holder).await;
+    // A second action of the same agent: the first is moved out of the way of its names.
+    sqlx::query("UPDATE facade_implementation SET interface = 'pick' WHERE id = $1")
+        .bind(workflow)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE facade_action SET key = 'pick' WHERE id = $1")
+        .bind(first)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    let (_, other) = action(&ctx, holder).await;
+    let desk = person.at_a_desk(&ctx).await;
+
+    // Any blok will do as the declared one: one a task made is at hand.
+    let made = root(&ctx, &desk, workflow, "ASK").await;
+    route(&ctx, holder, &frame(json!({"type": "HELD", "task": made.to_string(), "blok": {"source": "<Html><Box/></Html>"}})), None)
+        .await
+        .unwrap();
+    let blok: i64 =
+        sqlx::query_scalar("SELECT blok_id FROM facade_materializedblok WHERE owner_task_id = $1")
+            .bind(made)
+            .fetch_one(&ctx.db)
+            .await
+            .unwrap();
+    sqlx::query(
+        "INSERT INTO facade_implementationinteraction (implementation_id, key, role, description, blok_id, created_at, updated_at)
+         VALUES ($1, 'asks.pick', 'ASK', 'Pick one.', $2, now(), now())",
+    )
+    .bind(workflow)
+    .bind(blok)
+    .execute(&ctx.db)
+    .await
+    .unwrap();
+
+    let task = root(&ctx, &desk, workflow, "ASK").await;
+    route(
+        &ctx,
+        holder,
+        &frame(json!({"type": "HELD", "task": task.to_string(), "blok": {"key": "asks.pick"}})),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(row(&ctx, task).await.latest_event_kind, "HELD");
+
+    let elsewhere = root(&ctx, &desk, other, "ASK").await;
+    route(
+        &ctx,
+        holder,
+        &frame(
+            json!({"type": "HELD", "task": elsewhere.to_string(), "blok": {"key": "asks.pick"}}),
+        ),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_ne!(row(&ctx, elsewhere).await.latest_event_kind, "HELD");
+    let refusals = of_type(queued(&ctx, holder).await, "BLOK_REFUSED");
+    assert!(refusals.iter().any(
+        |f| f["task"].as_str() == Some(elsewhere.to_string().as_str())
+            && f["reason"].as_str().unwrap().contains("declares no ask")
+    ));
+}
+
+
+/// An inform by key names one of the informs the task's own implementation declares: an ask of
+/// the same key is not one, nor is a blok the agent's app declares.
+#[tokio::test]
+async fn an_inform_by_key_is_one_its_implementation_declares() {
+    let Some(ctx) = context().await else { return };
+    let person = Person::new();
+    let holder = person.agent(&ctx).await;
+    standard_catalog(&ctx, holder).await;
+    let (_, workflow) = action(&ctx, holder).await;
+    let desk = person.at_a_desk(&ctx).await;
+
+    let made = root(&ctx, &desk, workflow, "ASK").await;
+    route(&ctx, holder, &frame(json!({"type": "INFORM", "task": made.to_string(), "blok": {"source": "<Html><Box/></Html>"}})), None)
+        .await
+        .unwrap();
+    let blok: i64 =
+        sqlx::query_scalar("SELECT blok_id FROM facade_materializedblok WHERE owner_task_id = $1")
+            .bind(made)
+            .fetch_one(&ctx.db)
+            .await
+            .unwrap();
+    sqlx::query(
+        "INSERT INTO facade_implementationinteraction (implementation_id, key, role, description, blok_id, created_at, updated_at)
+         VALUES ($1, 'ui.progress', 'INFORM', 'Progress.', $2, now(), now()),
+                ($1, 'ui.pick', 'ASK', 'Pick one.', $2, now(), now())",
+    )
+    .bind(workflow)
+    .bind(blok)
+    .execute(&ctx.db)
+    .await
+    .unwrap();
+
+    let task = root(&ctx, &desk, workflow, "ASK").await;
+    route(
+        &ctx,
+        holder,
+        &frame(json!({"type": "INFORM", "task": task.to_string(), "message": "Progress.", "blok": {"key": "ui.progress"}})),
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(events(&ctx, task).await.iter().any(|(kind, ..)| kind == "INFORM"));
+
+    for key in ["ui.pick", "progress_panel"] {
+        let task = root(&ctx, &desk, workflow, "ASK").await;
+        route(
+            &ctx,
+            holder,
+            &frame(json!({"type": "INFORM", "task": task.to_string(), "blok": {"key": key}})),
+            None,
+        )
+        .await
+        .unwrap();
+        assert!(!events(&ctx, task).await.iter().any(|(kind, ..)| kind == "INFORM"));
+        let refusals = of_type(queued(&ctx, holder).await, "BLOK_REFUSED");
+        assert!(refusals.iter().any(
+            |f| f["task"].as_str() == Some(task.to_string().as_str())
+                && f["reason"].as_str().unwrap().contains("declares no inform")
+        ));
+    }
 }

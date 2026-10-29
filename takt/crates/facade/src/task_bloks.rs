@@ -3,11 +3,15 @@
 //! task, never listed, gone with the task.
 //!
 //! The blok is named by exactly one of
-//! - `key`: a blok the agent's app declares (the agent's slot of that name);
+//! - `key`: one of the asks or informs the task's implementation declares
+//!   (`ImplementationInteraction` of that role, made at registration);
 //! - `id`: any blok of the organization;
 //! - `source`: BSX, parsed and checked as a declared blok is (`BlokImplementationInputModel`,
 //!   then its catalog, whose findings are stored on it and refuse nothing), and kept as a blok
 //!   the task owns. It always has the dependency `self`.
+//!
+//! The last two are made at run time: shown only when the implementation declares it may
+//! (`dynamic_asks`, `dynamic_informs`) and the agent's token grants the matching scope.
 //!
 //! Its dependencies are bound as `agent_mappings` says, and any it leaves out that the sending
 //! agent satisfies to that agent. What cannot be made is refused with the reason, for the agent
@@ -205,19 +209,31 @@ pub async fn make_task_blok(
     let Some(sender) = agent_of(conn, agent).await? else {
         return Err(refused(format!("No agent {agent}.")));
     };
+    if sent.key.is_none() {
+        allowed_at_run_time(conn, agent, task, role).await?;
+    }
     let blok = match (
         sent.key.as_deref(),
         sent.id.as_deref(),
         sent.source.as_deref(),
     ) {
+        // A key names one of the running action's declared asks or informs, of this role.
         (Some(key), None, None) => sqlx::query_scalar(
-            "SELECT blok_id FROM facade_materializedblok WHERE declared_by_id = $1 AND name = $2",
+            "SELECT ii.blok_id FROM facade_task t
+               JOIN facade_implementationinteraction ii ON ii.implementation_id = t.implementation_id
+              WHERE t.id = $1 AND ii.key = $2 AND ii.role = $3",
         )
-        .bind(agent)
+        .bind(task)
         .bind(key)
+        .bind(role)
         .fetch_optional(&mut *conn)
         .await?
-        .ok_or_else(|| refused(format!("This agent declares no blok {key:?}.")))?,
+        .ok_or_else(|| {
+            refused(format!(
+                "This action declares no {} {key:?}.",
+                role.to_lowercase()
+            ))
+        })?,
         (None, Some(id), None) => {
             let id: i64 = id
                 .parse()
@@ -281,6 +297,47 @@ pub async fn make_task_blok(
         .await?;
     }
     Ok(materialized)
+}
+
+/// A blok made at run time (`source`) or any of the organization (`id`): shown only when the
+/// task's implementation declares it may (`dynamic_asks` for an ask, `dynamic_informs` for an
+/// inform) and the agent's token grants the scope that goes with it.
+async fn allowed_at_run_time(
+    conn: &mut PgConnection,
+    agent: i64,
+    task: i64,
+    role: &str,
+) -> Result<(), TaskBlokError> {
+    let (flag, scope, what) = if role == ASK {
+        (
+            "dynamic_asks",
+            "rekuest_dynamic_ask",
+            "asks through a blok made at ask time",
+        )
+    } else {
+        (
+            "dynamic_informs",
+            "rekuest_dynamic_inform",
+            "shows a blok made at inform time",
+        )
+    };
+    let declared: Option<bool> = sqlx::query_scalar(&format!(
+        "SELECT i.{flag} FROM facade_task t JOIN facade_implementation i ON i.id = t.implementation_id WHERE t.id = $1"
+    ))
+    .bind(task)
+    .fetch_optional(&mut *conn)
+    .await?;
+    if declared != Some(true) {
+        return Err(refused(format!(
+            "This task {what}, which its action does not declare ({flag}): declare the blok with the action, or set {flag}."
+        )));
+    }
+    if !crate::registration::agent_granted(&mut *conn, agent, scope).await? {
+        return Err(refused(format!(
+            "This task {what}, which this agent's token does not grant: log the app in with the {scope} scope."
+        )));
+    }
+    Ok(())
 }
 
 /// Each dependency of `blok` with the agent it is bound to: the one `mappings` names (of the

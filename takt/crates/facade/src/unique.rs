@@ -2,8 +2,8 @@
 
 use rekuest_core::enums::{ActionScope, PortKind};
 use rekuest_core::inputs::{
-    ActionBlokInputModel, ArgPortInputModel, BlokImplementationInputModel, DefinitionInputModel,
-    ReturnPortInputModel, StateDefinitionInputModel,
+    ActionBlokInputModel, ArgPortInputModel, AskBlokInputModel, BlokImplementationInputModel,
+    DefinitionInputModel, ReturnPortInputModel, StateDefinitionInputModel,
 };
 use rekuest_core::pyjson::dumps;
 
@@ -64,6 +64,20 @@ fn hashed_dump(dump: Value) -> Value {
 pub fn hash_action_blok(blok: &ActionBlokInputModel) -> String {
     let dump = hashed_dump(serde_json::to_value(blok).expect("an action blok serializes"));
     let envelope = serde_json::json!({ "action_blok": dump });
+    hex::encode(Sha256::digest(dumps(&envelope, true).as_bytes()))
+}
+
+/// sha256 over an implementation's declared ask or inform (`role`, an inform made as an ask
+/// that answers nothing): what makes two implementations' declarations one row. The
+/// `ask_blok`/`inform_blok` envelope keeps it from ever equalling a template, an action's
+/// blok or the other role's, which share the unique constraint.
+pub fn hash_interaction_blok(role: &str, ask: &AskBlokInputModel) -> String {
+    let dump = hashed_dump(serde_json::to_value(ask).expect("an interaction serializes"));
+    let envelope = if role == crate::task_bloks::INFORM {
+        serde_json::json!({ "inform_blok": dump })
+    } else {
+        serde_json::json!({ "ask_blok": dump })
+    };
     hex::encode(Sha256::digest(dumps(&envelope, true).as_bytes()))
 }
 

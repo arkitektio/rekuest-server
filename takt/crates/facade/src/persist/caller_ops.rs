@@ -114,9 +114,69 @@ pub async fn on_caller_assign(
             "An agent may only assign dependent work: 'parent' is required. Root tasks originate from the GraphQL assign mutation, where the initiator is an accountable human.".into(),
         ));
     }
+    allowed_to_call(&ctx.db, agent, input).await?;
     let principal = caller_context(&ctx.db, agent, caller).await?;
     // A dependent task's fate follows its parent: nothing about this connection is recorded.
     backend::assign_with_status(ctx, &principal, input, AssignOrigin::default()).await
+}
+
+/// The scope a task's agent needs to call through a dependency its action declares.
+pub const DEPENDENCY_CALL_SCOPE: &str = "rekuest_dependency_call";
+/// The scope a task's agent needs to call an action found at run time (`dynamic_calls`).
+pub const DYNAMIC_CALL_SCOPE: &str = "rekuest_dynamic_call";
+
+/// An agent's child call: only from one of its own tasks. (`dynamic_calls` is a WORKFLOW's only,
+/// refused at registration otherwise; that a PLAIN one calls no dependency is the client's
+/// rule.) Through a declared
+/// dependency (`dependency`), with the agent's token granting `rekuest_dependency_call`;
+/// naming its target directly, or carrying hooks that start more work, it calls what it found
+/// at run time, which its implementation must declare (`dynamic_calls`) and the token grant
+/// (`rekuest_dynamic_call`).
+async fn allowed_to_call(db: &PgPool, agent: i64, input: &AssignInput) -> BackendResult<()> {
+    let parent = parse_id(input.parent.as_deref().unwrap_or_default())?;
+    let row: Option<(Option<i64>, bool)> = sqlx::query_as(
+        "SELECT t.agent_id, coalesce(i.dynamic_calls, false)
+           FROM facade_task t LEFT JOIN facade_implementation i ON i.id = t.implementation_id
+          WHERE t.id = $1",
+    )
+    .bind(parent)
+    .fetch_optional(db)
+    .await?;
+    let Some((owner, dynamic)) = row else {
+        return Err(BackendError::Forbidden(format!(
+            "No task {parent} to call from."
+        )));
+    };
+    if owner != Some(agent) {
+        return Err(BackendError::Forbidden(format!(
+            "Task {parent} is not one of this agent's: an agent calls only from the tasks it runs."
+        )));
+    }
+    let starts_more = input.hooks.as_ref().is_some_and(|hooks| !hooks.is_empty());
+    if input.dependency.is_some() && !starts_more {
+        if !crate::registration::agent_granted(db, agent, DEPENDENCY_CALL_SCOPE).await? {
+            return Err(BackendError::Forbidden(format!(
+                "This agent's token does not grant calling its declared dependencies: log the app in with the {DEPENDENCY_CALL_SCOPE} scope."
+            )));
+        }
+        return Ok(());
+    }
+    let what = if input.dependency.is_some() {
+        "called with hooks that start more work"
+    } else {
+        "called an action it found at run time"
+    };
+    if !dynamic {
+        return Err(BackendError::Forbidden(format!(
+            "Task {parent} {what}, which its action does not declare (dynamic_calls): call through a declared dependency, or set dynamic_calls."
+        )));
+    }
+    if !crate::registration::agent_granted(db, agent, DYNAMIC_CALL_SCOPE).await? {
+        return Err(BackendError::Forbidden(format!(
+            "This agent's token does not grant calling actions found at run time: log the app in with the {DYNAMIC_CALL_SCOPE} scope."
+        )));
+    }
+    Ok(())
 }
 
 /// Ownership-check, then run a control op (`_caller_control_sync`): a caller controls only the

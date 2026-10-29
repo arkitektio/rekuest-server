@@ -9018,6 +9018,126 @@
     }
   },
   {
+    "step": "app declared_asks",
+    "outcome": {
+      "accepted": []
+    },
+    "rows": {
+      "agent": {
+        "hash": "app-declared_asks",
+        "name": "declared-asks",
+        "description": null,
+        "name_is_client": false
+      },
+      "bloks": [],
+      "locks": [],
+      "states": [],
+      "implementations": [
+        {
+          "action": {
+            "key": "ask_twice",
+            "args": [
+              {
+                "key": "x",
+                "kind": "INT",
+                "label": null,
+                "widget": null,
+                "choices": null,
+                "default": null,
+                "effects": [],
+                "children": null,
+                "nullable": false,
+                "requires": null,
+                "dimension": null,
+                "identifier": null,
+                "validators": [],
+                "description": null,
+                "proposed_units": null,
+                "reference_unit": null
+              }
+            ],
+            "hash": "b1e54382144b15ffd7053be59b28e5a643ccb3909b276431d5406d062d55f5d0",
+            "kind": "FUNCTION",
+            "name": "Ask Twice",
+            "pure": false,
+            "ports": [
+              {
+                "key": "x",
+                "kind": "INT",
+                "side": "arg",
+                "index": 0,
+                "parent": null,
+                "key_path": "x",
+                "nullable": false,
+                "dimension": null,
+                "identifier": null,
+                "compiled_jsonpath": null
+              },
+              {
+                "key": "return0",
+                "kind": "INT",
+                "side": "return",
+                "index": 0,
+                "parent": null,
+                "key_path": "return0",
+                "nullable": false,
+                "dimension": null,
+                "identifier": null,
+                "compiled_jsonpath": null
+              }
+            ],
+            "scope": "GLOBAL",
+            "is_dev": false,
+            "returns": [
+              {
+                "key": "return0",
+                "kind": "INT",
+                "label": null,
+                "widget": null,
+                "choices": null,
+                "effects": [],
+                "children": null,
+                "nullable": false,
+                "provides": null,
+                "dimension": null,
+                "identifier": null,
+                "description": null,
+                "proposed_units": null,
+                "reference_unit": null
+              }
+            ],
+            "version": "1",
+            "same_app": true,
+            "same_org": true,
+            "stateful": false,
+            "arg_count": 1,
+            "protocols": [],
+            "idempotent": false,
+            "allow_probe": false,
+            "collections": [],
+            "description": "Ask Twice\n\nAsks through its declared asks.",
+            "is_test_for": [],
+            "port_groups": [],
+            "return_count": 1
+          },
+          "params": {},
+          "tracks": [],
+          "effects": "UNKNOWN",
+          "code_hash": "353bf48fcabc1ef39be1dc7eafc189cf8b4023b16f38a8766c261996fff0cba5",
+          "execution": "WORKFLOW",
+          "interface": "ask_twice",
+          "diagnostics": [],
+          "manipulates": [],
+          "needs_token": true,
+          "dependencies": [],
+          "higher_order": false,
+          "higher_order_config": {},
+          "provenance_audience": null
+        }
+      ]
+    }
+  },
+  {
     "step": "full",
     "outcome": {
       "accepted": [

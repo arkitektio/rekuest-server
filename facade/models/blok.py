@@ -92,7 +92,7 @@ class Blok(models.Model):
         help_text="The app whose agents provide this Blok. NULL for a custom Blok a user made.",
     )
     declaration_hash = models.CharField(max_length=64, null=True, blank=True, help_text="sha256 of the declared content of a provided Blok (not the rendering `hash` the API computes); NULL for a custom one.")
-    held_by_action = models.BooleanField(default=False, db_default=False, help_text="Whether this provided Blok is an action's own (`ActionBlok`): declared inline with the action, it has no name of its own and is never listed, materialized or edited. takt deletes it once no action holds it.")
+    held_by_action = models.BooleanField(default=False, db_default=False, help_text="Whether this provided Blok is an action's own (`ActionBlok`) or an implementation's declared ask or inform (`ImplementationInteraction`): declared inline, it is never listed or edited, and only an interaction's is materialized, for the task that shows it. takt deletes it once nothing holds or shows it.")
     origin = models.CharField(max_length=2000, null=True, blank=True, help_text="Where a custom Blok was installed from, e.g. kabinet's `github:<owner>/<repo>:<branch>#<key>`; NULL for one made here. Installing from the same origin again updates this row.")
     origin_hash = models.CharField(max_length=100, null=True, blank=True, help_text="The hash its origin gave what it draws when it was installed: an origin whose hash differs has an update.")
     head = models.ForeignKey(

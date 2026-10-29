@@ -513,7 +513,7 @@ class TrackInput:
 )
 class ImplementationInput:
     definition: DefinitionInput
-    interface: str | None = None
+    interface: str
     instance_id: str | None = None
     params: scalars.AnyDefault | None = None
     locks: list[str] | None = None
@@ -527,6 +527,11 @@ class ImplementationInput:
     code_hash: str | None = None
     logo: str | None = None
     dependencies: list[AgentDependencyInput] = strawberry.field(default_factory=list)
+    asks: Optional[List[Annotated["AskBlokInput", strawberry.lazy(__name__)]]] = None
+    informs: Optional[List[Annotated["InformBlokInput", strawberry.lazy(__name__)]]] = None
+    dynamic_asks: bool | None = None
+    dynamic_calls: bool | None = None
+    dynamic_informs: bool | None = None
 
 
 @pydantic.input(
@@ -720,6 +725,41 @@ class BlokImplementationInput:
     for_model: Optional[str] = None
     for_node: Optional[str] = None
     args: list[ArgPortInput] = strawberry.field(default_factory=list)
+    catalogs: list[str] = strawberry.field(default_factory=list)
+    locals: list[BlokLocalInput] = strawberry.field(default_factory=list)
+    demo: Optional[BlokDemoInput] = None
+    queries: list[BlokQueryInput] = strawberry.field(default_factory=list)
+    subscriptions: list[BlokSubscriptionInput] = strawberry.field(default_factory=list)
+
+
+@pydantic.input(models.AskBlokInputModel, description="A blok an action asks a person through, declared with it (blok language v2): a task blok, its args and returns ports.")
+class AskBlokInput:
+    key: str
+    vocab: int
+    description: Optional[str] = None
+    components: list[ComponentNodeInput] | None = None
+    source: str | None = None
+    module: Optional[str] = None
+    args: list[ArgPortInput] = strawberry.field(default_factory=list)
+    returns: list[ReturnPortInput] = strawberry.field(default_factory=list)
+    dependencies: list[AgentDependencyInput] = strawberry.field(default_factory=list)
+    catalogs: list[str] = strawberry.field(default_factory=list)
+    locals: list[BlokLocalInput] = strawberry.field(default_factory=list)
+    demo: Optional[BlokDemoInput] = None
+    queries: list[BlokQueryInput] = strawberry.field(default_factory=list)
+    subscriptions: list[BlokSubscriptionInput] = strawberry.field(default_factory=list)
+
+
+@pydantic.input(models.InformBlokInputModel, description="A blok an action shows a person while its task goes on, declared with it (blok language v2): a task blok, its args ports, no returns.")
+class InformBlokInput:
+    key: str
+    vocab: int
+    description: Optional[str] = None
+    components: list[ComponentNodeInput] | None = None
+    source: str | None = None
+    module: Optional[str] = None
+    args: list[ArgPortInput] = strawberry.field(default_factory=list)
+    dependencies: list[AgentDependencyInput] = strawberry.field(default_factory=list)
     catalogs: list[str] = strawberry.field(default_factory=list)
     locals: list[BlokLocalInput] = strawberry.field(default_factory=list)
     demo: Optional[BlokDemoInput] = None

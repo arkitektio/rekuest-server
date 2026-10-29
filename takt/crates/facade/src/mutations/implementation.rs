@@ -922,6 +922,30 @@ pub async fn create_implementation(
 
     sync_dependencies(conn, implementation, &input.dependencies).await?;
 
+    // What a task may do beyond what it declared: refused at run time unless set here and
+    // granted to the agent's token too.
+    sqlx::query(
+        "UPDATE facade_implementation SET dynamic_asks = $2, dynamic_calls = $3, dynamic_informs = $4
+          WHERE id = $1",
+    )
+    .bind(implementation)
+    .bind(input.dynamic_asks.unwrap_or(false))
+    .bind(input.dynamic_calls.unwrap_or(false))
+    .bind(input.dynamic_informs.unwrap_or(false))
+    .execute(&mut *conn)
+    .await?;
+    diagnostics.extend(
+        crate::registration::sync_implementation_interactions(
+            conn,
+            agent,
+            implementation,
+            &input.interface,
+            input.asks.as_deref().unwrap_or_default(),
+            input.informs.as_deref().unwrap_or_default(),
+        )
+        .await?,
+    );
+
     // The locks it takes while it runs: the agent's declared locks, by key. A key the agent does
     // not declare is not a lock the server can show; the runtime enforces them regardless.
     let keys = input.locks.clone().unwrap_or_default();

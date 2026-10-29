@@ -123,6 +123,11 @@ class Agent(models.Model):
         help_text="If this Agent is blocked, it will not be used for provision, nor will it be able to provide",
         db_default=False,
     )
+    granted_scopes = models.JSONField(
+        default=list,
+        db_default=[],
+        help_text="The scopes of the token the agent last registered with: which of its calls and bloks takt lets through (`rekuest_dependency_call`, `rekuest_dynamic_call`, `rekuest_dynamic_ask`, `rekuest_dynamic_inform`). Rewritten at every registration.",
+    )
 
     class Meta:
         permissions = [("can_provide_on", "Can provide on this Agent")]

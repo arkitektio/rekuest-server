@@ -76,6 +76,44 @@ pub async fn set_features(db: &PgPool, agent: i64, features: &[String]) -> Resul
     Ok(())
 }
 
+/// The scopes of the token the agent registers with: what it may do beyond what it declared
+/// (`dynamic_asks`/`dynamic_calls`/`dynamic_informs` are refused without theirs).
+pub async fn set_granted_scopes(
+    db: &PgPool,
+    agent: i64,
+    scopes: &[&str],
+) -> Result<(), sqlx::Error> {
+    let scopes: Vec<&str> = scopes.iter().copied().filter(|s| !s.is_empty()).collect();
+    sqlx::query(
+        "UPDATE facade_agent SET granted_scopes = $2 WHERE id = $1 AND granted_scopes IS DISTINCT FROM $2",
+    )
+    .bind(agent)
+    .bind(sqlx::types::Json(scopes))
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// The scope that stands for every other one of this service.
+pub const ALL_SCOPE: &str = "rekuest_all";
+
+/// Whether the agent's token granted `scope` (or every scope, `rekuest_all`).
+pub async fn agent_granted(
+    executor: impl sqlx::PgExecutor<'_>,
+    agent: i64,
+    scope: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT coalesce(granted_scopes ? $2 OR granted_scopes ? $3, false) FROM facade_agent WHERE id = $1",
+    )
+    .bind(agent)
+    .bind(scope)
+    .bind(ALL_SCOPE)
+    .fetch_optional(executor)
+    .await
+    .map(|granted| granted.unwrap_or(false))
+}
+
 /// Forget every drawer on the agent's shelve: a process that just started holds nothing.
 pub async fn clear_drawers(
     executor: impl sqlx::PgExecutor<'_>,
@@ -197,9 +235,9 @@ use std::collections::HashMap;
 
 use rekuest_core::blok::infer::ArgPorts;
 use rekuest_core::inputs::{
-    blok_kind, AgentDependencyInputModel, BlokDemoInputModel, BlokImplementationInputModel,
-    ComponentNodeInputModel, DefinitionInputModel, ImplementAgentInputModel,
-    StateImplementationInputModel,
+    blok_kind, AgentDependencyInputModel, AskBlokInputModel, BlokDemoInputModel,
+    BlokImplementationInputModel, ComponentNodeInputModel, DefinitionInputModel,
+    ImplementAgentInputModel, InformBlokInputModel, StateImplementationInputModel,
 };
 use sqlx::PgConnection;
 
@@ -219,7 +257,7 @@ use crate::mutations::implementation::{
 use crate::mutations::Refusal;
 use crate::registration_lock::lock_organization;
 use crate::signals::{OnCommit, Signal};
-use crate::unique::{hash_action_blok, hash_blok_definition, hash_state_definition};
+use crate::unique::{hash_action_blok, hash_blok_definition, hash_interaction_blok, hash_state_definition};
 
 /// What a registration did: the diagnostics to hand back on `INIT`, the signals to publish
 /// once it committed, and the hash the agent now holds.
@@ -530,6 +568,129 @@ pub async fn sync_action_bloks(
         .bind(&contexts)
         .execute(&mut *conn)
         .await?;
+    gc_action_bloks(conn, &held).await?;
+    Ok(diagnostics)
+}
+
+/// An implementation's declared asks and informs, as it declares them now
+/// (`ImplementationInteraction`, told apart by `role`): each made as a task blok and checked
+/// against its catalog, written as a blok of the agent's app held by implementations only
+/// (`held_by_action`: never listed), content-addressed and shared by every implementation of the
+/// app declaring the same, and bound to the implementation under its key. A key it no longer
+/// declares is let go, and a blok nothing holds or shows any more is collected. Their
+/// diagnostics.
+pub async fn sync_implementation_interactions(
+    conn: &mut PgConnection,
+    agent: &AgentIdentity,
+    implementation: i64,
+    interface: &str,
+    asks: &[AskBlokInputModel],
+    informs: &[InformBlokInputModel],
+) -> Result<Vec<Diagnostic>, Refusal> {
+    let held: Vec<i64> = sqlx::query_scalar(
+        "SELECT blok_id FROM facade_implementationinteraction WHERE implementation_id = $1",
+    )
+    .bind(implementation)
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut diagnostics = vec![];
+    let mut keys: Vec<String> = vec![];
+    // An inform is stored as an ask that answers nothing; its role tells them apart.
+    let declared = asks
+        .iter()
+        .map(|ask| (crate::task_bloks::ASK, ask.clone()))
+        .chain(
+            informs
+                .iter()
+                .map(|inform| (crate::task_bloks::INFORM, inform.as_ask())),
+        );
+    for (role, ask) in declared {
+        let what = role.to_lowercase();
+        let mut blok = ask.to_blok();
+        blok.validate_as(rekuest_core::inputs::TASK_BLOK_KIND)
+            .map_err(|e| {
+                Refusal::Invalid(format!(
+                    "The {what} {:?} of {interface:?} does not hold: {e}",
+                    ask.key
+                ))
+            })?;
+        let catalog_name = blok
+            .module
+            .as_deref()
+            .filter(|c| !c.is_empty())
+            .unwrap_or(STANDARD_CATALOG_NAME);
+        let catalog = Catalog::get_or_create(conn, catalog_name, agent.organization).await?;
+        let checked = validate_blok_against_catalog(
+            &catalog,
+            blok.components.as_deref(),
+            &blok.scope(rekuest_core::inputs::TASK_BLOK_KIND),
+        )?;
+        let mut found: Vec<Diagnostic> = module_unknown(conn, &catalog, agent.organization)
+            .await?
+            .into_iter()
+            .collect();
+        found.extend(checked.diagnostics);
+        check_blok_arg_descriptor_keys(conn, &ask.key, &ask.args).await?;
+        // Its name only says whose it is: it is looked up by its implementation and key.
+        let name = format!("{interface}:{}", ask.key);
+        let (id, inserted): (i64, bool) = sqlx::query_as(
+            "INSERT INTO facade_blok (name, description, components, diagnostics, creator_id, organization_id,
+                                      module_id, context, app_id, declaration_hash, held_by_action, args, returns,
+                                      vocab, catalogs, locals, resolved_locals, demo, queries, subscriptions)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'HTML', $8, $9, true, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+             ON CONFLICT (organization_id, app_id, name, declaration_hash) WHERE app_id IS NOT NULL DO UPDATE SET
+                 diagnostics = excluded.diagnostics, resolved_locals = excluded.resolved_locals
+             RETURNING id, (xmax = 0)",
+        )
+        .bind(&name)
+        .bind(&ask.description)
+        .bind(stored_components(blok.components.as_deref()))
+        .bind(dump_diagnostics(&found))
+        .bind(agent.user)
+        .bind(agent.organization)
+        .bind(catalog.id)
+        .bind(agent.app)
+        .bind(hash_interaction_blok(role, &ask))
+        .bind(serde_json::to_value(&ask.args).expect("interaction args serialize"))
+        .bind(serde_json::to_value(&ask.returns).expect("interaction returns serialize"))
+        .bind(ask.vocab as i16)
+        .bind(serde_json::to_value(&blok.catalogs).expect("blok catalogs serialize"))
+        .bind(stored_list(&blok.locals))
+        .bind(stored_list(&checked.scope.locals))
+        .bind(stored_demo(blok.demo.as_ref()))
+        .bind(stored_list(&blok.queries))
+        .bind(stored_list(&blok.subscriptions))
+        .fetch_one(&mut *conn)
+        .await?;
+        if inserted {
+            // The template's content is its hash, args included: its rows never change after this.
+            create_ports_level_by_level(conn, &ask.args, "blok_id", id, "facade_blokargport")
+                .await?;
+        }
+        sync_blok_dependencies(conn, id, &blok.dependencies, true).await?;
+        sqlx::query(
+            "INSERT INTO facade_implementationinteraction (implementation_id, key, role, description, blok_id, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, now(), now())
+             ON CONFLICT (implementation_id, key) DO UPDATE SET blok_id = excluded.blok_id,
+                 role = excluded.role, description = excluded.description, updated_at = now()",
+        )
+        .bind(implementation)
+        .bind(&ask.key)
+        .bind(role)
+        .bind(&ask.description)
+        .bind(id)
+        .execute(&mut *conn)
+        .await?;
+        keys.push(ask.key.clone());
+        diagnostics.extend(found);
+    }
+    sqlx::query(
+        "DELETE FROM facade_implementationinteraction WHERE implementation_id = $1 AND NOT (key = ANY($2))",
+    )
+    .bind(implementation)
+    .bind(&keys)
+    .execute(&mut *conn)
+    .await?;
     gc_action_bloks(conn, &held).await?;
     Ok(diagnostics)
 }

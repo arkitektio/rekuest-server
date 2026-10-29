@@ -18,10 +18,14 @@ TAKT = "takt"
 #: enrols. Every root field of the schema asks for one of them (`AuthExtension(scopes=...)`).
 SCOPES = [
     Scope(key="rekuest_read", description="See agents, actions, tasks, dashboards, bloks, spaces and automations."),
-    Scope(key="rekuest_call", description="Run actions on agents, and pause, resume, cancel or interrupt the tasks you started."),
+    Scope(key="rekuest_root_call", description="Start actions on agents as tasks of their own, and pause, resume, cancel or interrupt the tasks you started."),
     Scope(key="rekuest_agent", description="Act as an agent: register actions and modules and receive tasks."),
     Scope(key="rekuest_write", description="Create and change dashboards, bloks, spaces, shortcuts, test cases and assets."),
     Scope(key="rekuest_automate", description="Create and change triggers, schedules and wiregrams that run actions automatically."),
+    Scope(key="rekuest_dependency_call", description="As an agent, run the actions its actions declare they depend on, as part of their tasks."),
+    Scope(key="rekuest_dynamic_ask", description="As an agent, ask you through forms it makes while it runs, not only the ones its actions declare."),
+    Scope(key="rekuest_dynamic_call", description="As an agent, run actions it finds while it runs, as you, not only the ones its actions declare they depend on."),
+    Scope(key="rekuest_dynamic_inform", description="As an agent, show you panels it makes while it runs, not only the ones its actions declare."),
     Scope(key="rekuest_all", description="Do everything in Rekuest on your behalf.", is_all_scope=True),
 ]
 

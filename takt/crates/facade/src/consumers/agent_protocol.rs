@@ -285,6 +285,10 @@ async fn register(
     registration::set_features(&ctx.db, agent, features)
         .await
         .map_err(|e| refuse(&e))?;
+    // And what its token grants: a process may come back with a narrower one.
+    registration::set_granted_scopes(&ctx.db, agent, &decoded.scopes())
+        .await
+        .map_err(|e| refuse(&e))?;
 
     // Registering is implementing: a declaration whose hash the agent does not hold yet is
     // reconciled in one transaction before the lease is claimed, so a refused one strands no

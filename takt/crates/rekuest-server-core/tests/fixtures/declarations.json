@@ -276,7 +276,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "92c1a49328d70d4ee052feac82a050357611cf50e7980646a168cc3bf8976cd0",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -365,7 +370,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "fb7124b3b3baa33a130c194e3aab41b4a96865408e1a57c8f7b83d95516c4134",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": [],
@@ -1024,7 +1034,12 @@
      "effects": "UNKNOWN",
      "execution": "WORKFLOW",
      "code_hash": "ae7149ff33bbe8b085faa8e058a4013fb0b6f3d3af0e76f88364d1ff467a65c1",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -1236,7 +1251,12 @@
      "effects": "UNKNOWN",
      "execution": "WORKFLOW",
      "code_hash": "70b0a07505523e8fad72e39486261ca731a71b97c3c991ec64e6814d5c6ec802",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": [],
@@ -1751,7 +1771,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "241b5ebe6fe97a8be53be58fdaba7b72ffd95d170a02730c5da0cd6e97dcda98",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -1840,7 +1865,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "569d204df3d340c5302f25925a65b09d1f3c9c974b10dfbc59d84a55e08f5912",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -1911,7 +1941,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "c1b10cc8de2166015137d181b0b4503f66f58e8bad8e967db17d37da40b1fb10",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -2000,7 +2035,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "0063dd347cfe968d2ef58597299d04ff2d4e2816c82971b7772f7b8e2a368222",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -2107,7 +2147,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "3d05ed16046ab19d783e868df94097239cc39f34fda2e5d14857c6ace9cda1b7",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": [],
@@ -2766,7 +2811,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "c811675408730ad34d2751a297e77f9eba8bfce22e6498632320ac6d70db7e4b",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -2873,7 +2923,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "61b45e26786c1bbd3e731725f9125ec317dbfbd7e36b81eee6156b854f640c42",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -2962,7 +3017,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "476da6e02ee9f05ab0914b0d36e6a4011e566a49dc70a4cf62745ab78b3b24a2",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -3069,7 +3129,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "7f8fa9b1770c972921118e09a878d18f17197b2c384b4312be1c33eac442cd65",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -3176,7 +3241,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "da8471f6f941adfba8f857dc2b78b759a6259bf24f27e3207341bb75b788c75c",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -3265,7 +3335,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "e54ff9a2e594cdedb0161c3f93b083a4364e0b59893cbc2d4f682da6c8411d13",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": [],
@@ -7069,7 +7144,12 @@
      "effects": "UNKNOWN",
      "execution": "WORKFLOW",
      "code_hash": "d1f78f3a64f1b67b3d57ec20a53eec44378772452a29da4656a67b388b7707fd",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -7840,7 +7920,12 @@
      "effects": "UNKNOWN",
      "execution": "WORKFLOW",
      "code_hash": "bddd9be1a464aacea7e058146466999fec1b2cea720aeb4bb1006662c1676175",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -8555,7 +8640,12 @@
      "effects": "UNKNOWN",
      "execution": "WORKFLOW",
      "code_hash": "cd89463b004da5343608bf4d93f8f95831137e19dc03fba2b158afa52485c174",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -9306,7 +9396,12 @@
      "effects": "UNKNOWN",
      "execution": "WORKFLOW",
      "code_hash": "d2328c1fd9780f3ce7abf90a2d5ed1d5c6717db02c2b45165a17c975fb4e431b",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": [],
@@ -9535,7 +9630,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "5b2f3d68e5724f9cdfd12cc31c74cedfd81d6cdd86ad36eba688cb46b7580fbd",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": [],
@@ -9877,7 +9977,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "d16301dc7903d06358d0bcb95ce13a9317397a00b08e6d6b9a8b6ed9de2dfbe1",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": [],
@@ -10079,7 +10184,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "458b7b3e3cda62eccbcc535a5be24d572f7ecb88df08bc0b59eacf0a8b59a8a1",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": [],
@@ -10432,7 +10542,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "ec3423661780162b097b57aac4095b610574582071c5aa70bd8130e29f8767b6",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -10503,7 +10618,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "62c21bebd3a4d2d2e006402fdf53da9d981e5d19cf93fe84a011bbedeef4f96d",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -10592,7 +10712,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "3250b184157516040643227b5e5a8e6502cbb4ddf22d5c2bff13e3fa28f84631",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -10663,7 +10788,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "feda67b2293240b9fa9a8e949fb22a4d251a5497009b9d10d16109bb0e3ad04d",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": [],
@@ -11206,7 +11336,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "3f7730d24b9f14bf990629079fc46e19432041bf448ba1aa880b87fd3929efe6",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": [],
@@ -11437,7 +11572,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "d636a46dabbe4f1ed9325b47bee0dc32d7a9b3c1cf1266a2e04e26e80278a651",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -11508,7 +11648,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "a32bd0d29f05b4e74969290aa99791464c2b54d87bcff481b6d55e726d2493c7",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": [],
@@ -11783,7 +11928,12 @@
      "effects": "NONE",
      "execution": "PLAIN",
      "code_hash": "cde018bdd916f1e7b7af876d6551773436425719845bdf8af9d90ba0ea49f830",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -11871,7 +12021,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "61d0150e063e745348d39f1a6eb00ebab2ec5449337fef50c7977dad417d9aca",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": [],
@@ -12320,7 +12475,12 @@
      "effects": "IRREVERSIBLE",
      "execution": "PLAIN",
      "code_hash": "2a132dde69fd7b47052e40205540786d0f2afdf3c137433dca111f3d83840ad7",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -12411,7 +12571,12 @@
      "effects": "IRREVERSIBLE",
      "execution": "PLAIN",
      "code_hash": "ffe9af9aa7f59d87385c036dda5d8e2f77d4c277d5c26fb5e8bc3d02fe41735c",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     },
     {
      "definition": {
@@ -12482,7 +12647,12 @@
      "effects": "NONE",
      "execution": "PLAIN",
      "code_hash": "9ba1f2cce6d90850730d09d3e435bec43cd63bb4611e8ec6b36111eaef191686",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": [],
@@ -13230,7 +13400,12 @@
      "effects": "UNKNOWN",
      "execution": "WORKFLOW",
      "code_hash": "bd73a73c7599449e5bacb2980a4fd025a09229a67cfd75c14319ddbe13999ca2",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": [],
@@ -13632,7 +13807,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": "3ca3822a214a6a453802ff99b3a9f21ac1508f9b7b1e77cbe04079e823d9d154",
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": [],
@@ -13821,6 +14001,454 @@
    "3642df28f6eefc89acececd7dc7fb6c26ed420bbb878ed29f19f6ec754416659"
   ]
  },
+ "app declared_asks": {
+  "input": {
+   "name": "declared-asks",
+   "states": [],
+   "implementations": [
+    {
+     "definition": {
+      "description": "Ask Twice\n\nAsks through its declared asks.",
+      "collections": [],
+      "key": "ask_twice",
+      "version": "1",
+      "name": "Ask Twice",
+      "stateful": false,
+      "pure": false,
+      "idempotent": false,
+      "allow_probe": false,
+      "catalogs": [],
+      "port_groups": [],
+      "args": [
+       {
+        "key": "x",
+        "nullable": false,
+        "effects": [],
+        "validators": [],
+        "kind": "INT"
+       }
+      ],
+      "returns": [
+       {
+        "key": "return0",
+        "kind": "INT",
+        "nullable": false,
+        "effects": []
+       }
+      ],
+      "kind": "FUNCTION",
+      "is_test_for": [],
+      "is_dev": false
+     },
+     "dependencies": [],
+     "tracks": [],
+     "interface": "ask_twice",
+     "locks": [],
+     "optimistics": [],
+     "manipulates": [],
+     "needs_token": true,
+     "effects": "UNKNOWN",
+     "execution": "WORKFLOW",
+     "code_hash": "353bf48fcabc1ef39be1dc7eafc189cf8b4023b16f38a8766c261996fff0cba5",
+     "asks": [
+      {
+       "key": "asks.choose",
+       "description": "Keep it?",
+       "source": "<Html><Button label=\"Keep\" onClick={task.answer(values: {choice: \"keep\"})} /></Html>",
+       "args": [],
+       "returns": [
+        {
+         "key": "choice",
+         "kind": "ENUM",
+         "identifier": "@literal/keep_drop",
+         "nullable": false,
+         "effects": [],
+         "choices": [
+          {
+           "value": "keep",
+           "label": "keep"
+          },
+          {
+           "value": "drop",
+           "label": "drop"
+          }
+         ]
+        }
+       ],
+       "dependencies": [],
+       "vocab": 2,
+       "catalogs": [
+        "ui@1"
+       ],
+       "locals": [],
+       "queries": [],
+       "subscriptions": []
+      },
+      {
+       "key": "asks.pick",
+       "description": "Pick one.",
+       "source": "<Html><Card><CardTitle text={args.question} /><Button label=\"Go\" onClick={task.answer(values: {name: args.question, count: 2})} /></Card></Html>",
+       "args": [
+        {
+         "key": "question",
+         "nullable": false,
+         "effects": [],
+         "validators": [],
+         "kind": "STRING"
+        },
+        {
+         "key": "error",
+         "nullable": true,
+         "effects": [],
+         "validators": [],
+         "default": "",
+         "kind": "STRING"
+        }
+       ],
+       "returns": [
+        {
+         "key": "name",
+         "kind": "STRING",
+         "nullable": false,
+         "effects": []
+        },
+        {
+         "key": "count",
+         "kind": "INT",
+         "nullable": false,
+         "effects": []
+        }
+       ],
+       "dependencies": [],
+       "vocab": 2,
+       "catalogs": [
+        "ui@1"
+       ],
+       "locals": [],
+       "queries": [],
+       "subscriptions": []
+      }
+     ],
+     "informs": [
+      {
+       "key": "asks.progress",
+       "description": "Progress.",
+       "source": "<Html><Card><CardTitle text={args.question} /><Text text={args.count} /></Card></Html>",
+       "args": [
+        {
+         "key": "question",
+         "nullable": false,
+         "effects": [],
+         "validators": [],
+         "kind": "STRING"
+        },
+        {
+         "key": "count",
+         "nullable": false,
+         "effects": [],
+         "validators": [],
+         "kind": "INT"
+        }
+       ],
+       "dependencies": [],
+       "vocab": 2,
+       "catalogs": [
+        "ui@1"
+       ],
+       "locals": [],
+       "queries": [],
+       "subscriptions": []
+      }
+     ]
+    }
+   ],
+   "locks": [],
+   "bloks": [],
+   "hash": "h"
+  },
+  "dump": {
+   "name": "declared-asks",
+   "description": null,
+   "states": [],
+   "implementations": [
+    {
+     "definition": {
+      "key": "ask_twice",
+      "version": "1",
+      "description": "Ask Twice\n\nAsks through its declared asks.",
+      "collections": [],
+      "name": "Ask Twice",
+      "stateful": false,
+      "pure": false,
+      "idempotent": false,
+      "allow_probe": false,
+      "port_groups": [],
+      "args": [
+       {
+        "key": "x",
+        "label": null,
+        "kind": "INT",
+        "description": null,
+        "identifier": null,
+        "nullable": false,
+        "effects": [],
+        "choices": null,
+        "reference_unit": null,
+        "proposed_units": null,
+        "dimension": null,
+        "children": null,
+        "validators": [],
+        "default": null,
+        "widget": null,
+        "requires": null
+       }
+      ],
+      "returns": [
+       {
+        "key": "return0",
+        "label": null,
+        "kind": "INT",
+        "description": null,
+        "identifier": null,
+        "nullable": false,
+        "effects": [],
+        "choices": null,
+        "reference_unit": null,
+        "proposed_units": null,
+        "dimension": null,
+        "children": null,
+        "widget": null,
+        "provides": null
+       }
+      ],
+      "kind": "FUNCTION",
+      "is_test_for": [],
+      "is_dev": false,
+      "catalogs": [],
+      "protocols": []
+     },
+     "dependencies": [],
+     "tracks": [],
+     "interface": "ask_twice",
+     "params": null,
+     "instance_id": null,
+     "locks": [],
+     "optimistics": [],
+     "manipulates": [],
+     "needs_token": true,
+     "provenance_audience": null,
+     "effects": "UNKNOWN",
+     "execution": "WORKFLOW",
+     "code_hash": "353bf48fcabc1ef39be1dc7eafc189cf8b4023b16f38a8766c261996fff0cba5",
+     "logo": null,
+     "asks": [
+      {
+       "key": "asks.choose",
+       "description": "Keep it?",
+       "components": null,
+       "source": "<Html><Button label=\"Keep\" onClick={task.answer(values: {choice: \"keep\"})} /></Html>",
+       "module": null,
+       "args": [],
+       "returns": [
+        {
+         "key": "choice",
+         "label": null,
+         "kind": "ENUM",
+         "description": null,
+         "identifier": "@literal/keep_drop",
+         "nullable": false,
+         "effects": [],
+         "choices": [
+          {
+           "value": "keep",
+           "label": "keep",
+           "image": null,
+           "description": null
+          },
+          {
+           "value": "drop",
+           "label": "drop",
+           "image": null,
+           "description": null
+          }
+         ],
+         "reference_unit": null,
+         "proposed_units": null,
+         "dimension": null,
+         "children": null,
+         "widget": null,
+         "provides": null
+        }
+       ],
+       "dependencies": [],
+       "vocab": 2,
+       "catalogs": [
+        "ui@1"
+       ],
+       "locals": [],
+       "demo": null,
+       "queries": [],
+       "subscriptions": []
+      },
+      {
+       "key": "asks.pick",
+       "description": "Pick one.",
+       "components": null,
+       "source": "<Html><Card><CardTitle text={args.question} /><Button label=\"Go\" onClick={task.answer(values: {name: args.question, count: 2})} /></Card></Html>",
+       "module": null,
+       "args": [
+        {
+         "key": "question",
+         "label": null,
+         "kind": "STRING",
+         "description": null,
+         "identifier": null,
+         "nullable": false,
+         "effects": [],
+         "choices": null,
+         "reference_unit": null,
+         "proposed_units": null,
+         "dimension": null,
+         "children": null,
+         "validators": [],
+         "default": null,
+         "widget": null,
+         "requires": null
+        },
+        {
+         "key": "error",
+         "label": null,
+         "kind": "STRING",
+         "description": null,
+         "identifier": null,
+         "nullable": true,
+         "effects": [],
+         "choices": null,
+         "reference_unit": null,
+         "proposed_units": null,
+         "dimension": null,
+         "children": null,
+         "validators": [],
+         "default": "",
+         "widget": null,
+         "requires": null
+        }
+       ],
+       "returns": [
+        {
+         "key": "name",
+         "label": null,
+         "kind": "STRING",
+         "description": null,
+         "identifier": null,
+         "nullable": false,
+         "effects": [],
+         "choices": null,
+         "reference_unit": null,
+         "proposed_units": null,
+         "dimension": null,
+         "children": null,
+         "widget": null,
+         "provides": null
+        },
+        {
+         "key": "count",
+         "label": null,
+         "kind": "INT",
+         "description": null,
+         "identifier": null,
+         "nullable": false,
+         "effects": [],
+         "choices": null,
+         "reference_unit": null,
+         "proposed_units": null,
+         "dimension": null,
+         "children": null,
+         "widget": null,
+         "provides": null
+        }
+       ],
+       "dependencies": [],
+       "vocab": 2,
+       "catalogs": [
+        "ui@1"
+       ],
+       "locals": [],
+       "demo": null,
+       "queries": [],
+       "subscriptions": []
+      }
+     ],
+     "informs": [
+      {
+       "key": "asks.progress",
+       "description": "Progress.",
+       "components": null,
+       "source": "<Html><Card><CardTitle text={args.question} /><Text text={args.count} /></Card></Html>",
+       "module": null,
+       "args": [
+        {
+         "key": "question",
+         "label": null,
+         "kind": "STRING",
+         "description": null,
+         "identifier": null,
+         "nullable": false,
+         "effects": [],
+         "choices": null,
+         "reference_unit": null,
+         "proposed_units": null,
+         "dimension": null,
+         "children": null,
+         "validators": [],
+         "default": null,
+         "widget": null,
+         "requires": null
+        },
+        {
+         "key": "count",
+         "label": null,
+         "kind": "INT",
+         "description": null,
+         "identifier": null,
+         "nullable": false,
+         "effects": [],
+         "choices": null,
+         "reference_unit": null,
+         "proposed_units": null,
+         "dimension": null,
+         "children": null,
+         "validators": [],
+         "default": null,
+         "widget": null,
+         "requires": null
+        }
+       ],
+       "dependencies": [],
+       "vocab": 2,
+       "catalogs": [
+        "ui@1"
+       ],
+       "locals": [],
+       "demo": null,
+       "queries": [],
+       "subscriptions": []
+      }
+     ],
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
+    }
+   ],
+   "locks": [],
+   "bloks": [],
+   "assets": null,
+   "hash": "h"
+  },
+  "hashes": [
+   "b1e54382144b15ffd7053be59b28e5a643ccb3909b276431d5406d062d55f5d0"
+  ]
+ },
  "protocol hints": {
   "input": {
    "implementations": [
@@ -13881,7 +14509,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": null,
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": null,
@@ -13978,7 +14611,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": null,
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": null,
@@ -14412,7 +15050,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": null,
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": null,
@@ -18919,7 +19562,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": null,
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": null,
@@ -19369,7 +20017,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": null,
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": null,
@@ -19723,7 +20376,12 @@
      "effects": "UNKNOWN",
      "execution": "PLAIN",
      "code_hash": null,
-     "logo": null
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null
     }
    ],
    "locks": null,

@@ -215,6 +215,21 @@ class Implementation(models.Model):
         related_name="drawn_implementations",
         help_text="The agent's action logo blok (context ACTION_LOGO) that draws this implementation's action, if it declared one.",
     )
+    dynamic_asks = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text="Whether a task may ask through a blok made at ask time, or any blok of the organization, besides its declared asks. Also needs the agent's `rekuest_dynamic_ask` scope.",
+    )
+    dynamic_calls = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text="Whether a task may call actions it found at run time, not only its declared dependencies. Also needs the agent's `rekuest_dynamic_call` scope.",
+    )
+    dynamic_informs = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text="Whether a task may show a blok made at inform time, or any blok of the organization. Also needs the agent's `rekuest_dynamic_inform` scope.",
+    )
 
     class Meta:
         permissions = [("providable", "Can provide this implementation")]
@@ -231,3 +246,36 @@ class Implementation(models.Model):
 
     def __str__(self) -> str:
         return f"{self.action} implemented by {self.agent}"
+
+
+class InteractionRole(models.TextChoices):
+    """Whether a task holds on a declared blok until a person answers, or shows it and goes on."""
+
+    ASK = "ASK", "Ask"
+    INFORM = "INFORM", "Inform"
+
+
+class ImplementationInteraction(models.Model):
+    """A blok an implementation asks a person through or shows them, declared with it (an
+    `@ask` or `@inform` method of an interactions protocol): a task names it by `key`.
+
+    The blok is a provided template of the agent's app held by implementations only
+    (`held_by_action`), content-addressed and shared by every implementation declaring the same.
+    takt writes these at registration and deletes a template once nothing holds or shows it.
+    """
+
+    implementation = models.ForeignKey(Implementation, on_delete=models.CASCADE, related_name="interactions", help_text="The implementation that declares it.")
+    key = models.CharField(max_length=1000, help_text="What a task names it by: `<parameter>.<method>` of the action's interactions protocol.")
+    role = models.CharField(max_length=16, choices=InteractionRole.choices, default=InteractionRole.ASK, db_default=InteractionRole.ASK, help_text="Whether a task holds on it until it is answered (ASK) or shows it and goes on (INFORM).")
+    description = models.TextField(null=True, blank=True, help_text="What it asks or shows, in a sentence.")
+    blok = models.ForeignKey("Blok", on_delete=models.PROTECT, related_name="interacted_by", help_text="The blok it is shown as.")
+    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
+    updated_at = models.DateTimeField(auto_now=True, db_default=Now())
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["implementation", "key"], name="implementation_interaction_unique_key"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.key} of {self.implementation}"

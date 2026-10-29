@@ -6841,5 +6841,169 @@
     }
    }
   ]
+ },
+ "declared_asks": {
+  "name": "declared-asks",
+  "states": [],
+  "implementations": [
+   {
+    "definition": {
+     "description": "Ask Twice\n\nAsks through its declared asks.",
+     "collections": [],
+     "key": "ask_twice",
+     "version": "1",
+     "name": "Ask Twice",
+     "stateful": false,
+     "pure": false,
+     "idempotent": false,
+     "allow_probe": false,
+     "catalogs": [],
+     "port_groups": [],
+     "args": [
+      {
+       "key": "x",
+       "nullable": false,
+       "effects": [],
+       "validators": [],
+       "kind": "INT"
+      }
+     ],
+     "returns": [
+      {
+       "key": "return0",
+       "kind": "INT",
+       "nullable": false,
+       "effects": []
+      }
+     ],
+     "kind": "FUNCTION",
+     "is_test_for": [],
+     "is_dev": false
+    },
+    "dependencies": [],
+    "tracks": [],
+    "interface": "ask_twice",
+    "locks": [],
+    "optimistics": [],
+    "manipulates": [],
+    "needs_token": true,
+    "effects": "UNKNOWN",
+    "execution": "WORKFLOW",
+    "code_hash": "353bf48fcabc1ef39be1dc7eafc189cf8b4023b16f38a8766c261996fff0cba5",
+    "asks": [
+     {
+      "key": "asks.choose",
+      "description": "Keep it?",
+      "source": "<Html><Button label=\"Keep\" onClick={task.answer(values: {choice: \"keep\"})} /></Html>",
+      "args": [],
+      "returns": [
+       {
+        "key": "choice",
+        "kind": "ENUM",
+        "identifier": "@literal/keep_drop",
+        "nullable": false,
+        "effects": [],
+        "choices": [
+         {
+          "value": "keep",
+          "label": "keep"
+         },
+         {
+          "value": "drop",
+          "label": "drop"
+         }
+        ]
+       }
+      ],
+      "dependencies": [],
+      "vocab": 2,
+      "catalogs": [
+       "ui@1"
+      ],
+      "locals": [],
+      "queries": [],
+      "subscriptions": []
+     },
+     {
+      "key": "asks.pick",
+      "description": "Pick one.",
+      "source": "<Html><Card><CardTitle text={args.question} /><Button label=\"Go\" onClick={task.answer(values: {name: args.question, count: 2})} /></Card></Html>",
+      "args": [
+       {
+        "key": "question",
+        "nullable": false,
+        "effects": [],
+        "validators": [],
+        "kind": "STRING"
+       },
+       {
+        "key": "error",
+        "nullable": true,
+        "effects": [],
+        "validators": [],
+        "default": "",
+        "kind": "STRING"
+       }
+      ],
+      "returns": [
+       {
+        "key": "name",
+        "kind": "STRING",
+        "nullable": false,
+        "effects": []
+       },
+       {
+        "key": "count",
+        "kind": "INT",
+        "nullable": false,
+        "effects": []
+       }
+      ],
+      "dependencies": [],
+      "vocab": 2,
+      "catalogs": [
+       "ui@1"
+      ],
+      "locals": [],
+      "queries": [],
+      "subscriptions": []
+     }
+    ],
+    "informs": [
+     {
+      "key": "asks.progress",
+      "description": "Progress.",
+      "source": "<Html><Card><CardTitle text={args.question} /><Text text={args.count} /></Card></Html>",
+      "args": [
+       {
+        "key": "question",
+        "nullable": false,
+        "effects": [],
+        "validators": [],
+        "kind": "STRING"
+       },
+       {
+        "key": "count",
+        "nullable": false,
+        "effects": [],
+        "validators": [],
+        "kind": "INT"
+       }
+      ],
+      "dependencies": [],
+      "vocab": 2,
+      "catalogs": [
+       "ui@1"
+      ],
+      "locals": [],
+      "queries": [],
+      "subscriptions": []
+     }
+    ]
+   }
+  ],
+  "locks": [],
+  "bloks": [],
+  "hash": "h"
  }
 }

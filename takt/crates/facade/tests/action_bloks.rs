@@ -241,3 +241,127 @@ async fn only_an_actions_blok_reads_a_run() {
     let refused = lab.register(agent, overlaid).await.unwrap_err();
     assert!(refused.contains("not OVERLAY. [context.kind]"), "{refused}");
 }
+
+fn asking(asks: Value) -> Value {
+    json!({"implementations": [{
+        "interface": "process_slides", "execution": "WORKFLOW",
+        "definition": {"key": "process_slides", "name": "Process slides", "kind": "FUNCTION"},
+        "asks": asks,
+    }]})
+}
+
+fn pick() -> Value {
+    json!({"key": "asks.pick", "description": "Pick one.", "vocab": 2,
+           "source": "<Html><Button label={args.question} onClick={task.answer(values: {name: args.question})} /></Html>",
+           "args": [{"key": "question", "kind": "STRING", "nullable": false, "effects": [], "validators": []}],
+           "returns": [{"key": "name", "kind": "STRING", "nullable": false, "effects": []}]})
+}
+
+/// An implementation's declared asks: a hidden template of the app per content, its args as
+/// port rows and its returns stored, linked under its key; shared by the app's agents, let go
+/// with the key and collected once nothing holds it.
+#[tokio::test]
+async fn an_implementations_asks_are_held_by_it_shared_and_collected() {
+    let Some(lab) = lab().await else { return };
+    let first = lab.agent("first").await;
+    let second = lab.agent("second").await;
+    lab.register(first, asking(json!([pick()]))).await.unwrap();
+    lab.register(second, asking(json!([pick()]))).await.unwrap();
+
+    let linked: Vec<(String, i64, bool, serde_json::Value)> = sqlx::query_as(
+        "SELECT ia.key, b.id, b.held_by_action, b.returns
+           FROM facade_implementationinteraction ia JOIN facade_blok b ON b.id = ia.blok_id
+           JOIN facade_implementation i ON i.id = ia.implementation_id
+          WHERE i.agent_id = ANY($1) ORDER BY i.agent_id",
+    )
+    .bind(vec![first, second])
+    .fetch_all(&lab.db)
+    .await
+    .unwrap();
+    assert_eq!(linked.len(), 2);
+    assert_eq!(linked[0].1, linked[1].1, "one template for the app");
+    assert!(linked
+        .iter()
+        .all(|(key, _, held, _)| key == "asks.pick" && *held));
+    assert_eq!(linked[0].3[0]["key"], "name");
+    let ports: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM facade_blokargport WHERE blok_id = $1")
+            .bind(linked[0].1)
+            .fetch_one(&lab.db)
+            .await
+            .unwrap();
+    assert_eq!(ports, 1);
+
+    lab.register(first, asking(json!([]))).await.unwrap();
+    assert_eq!(lab.held().await, 1, "the second still holds it");
+    lab.register(second, asking(json!([]))).await.unwrap();
+    assert_eq!(lab.held().await, 0, "collected once nothing holds it");
+}
+
+/// An ask is checked as a task blok at registration, not when a task asks: one that does not
+/// parse, a key given twice, and dynamic calls on what is no workflow are refused there.
+#[tokio::test]
+async fn an_ask_that_is_no_task_blok_is_refused_at_registration() {
+    let Some(lab) = lab().await else { return };
+    let agent = lab.agent("only").await;
+    let broken = json!({"key": "asks.pick", "vocab": 2, "source": "<Html><Button"});
+    assert!(lab.register(agent, asking(json!([broken]))).await.is_err());
+
+    let twice = json!([pick(), pick()]);
+    let refused = lab.register(agent, asking(twice)).await.unwrap_err();
+    assert!(refused.contains("asks.pick"), "{refused}");
+
+    let calling = json!({"implementations": [{
+        "interface": "plain", "dynamic_calls": true,
+        "definition": {"key": "plain", "name": "Plain", "kind": "FUNCTION"},
+    }]});
+    let refused = lab.register(agent, calling).await.unwrap_err();
+    assert!(refused.contains("only a WORKFLOW"), "{refused}");
+}
+
+fn progress() -> Value {
+    json!({"key": "asks.progress", "description": "Progress.", "vocab": 2,
+           "source": "<Html><Text text={args.step} /></Html>",
+           "args": [{"key": "step", "kind": "INT", "nullable": false, "effects": [], "validators": []}]})
+}
+
+/// An implementation's declared informs are stored beside its asks, told apart by role, each
+/// its own template; an inform answers nothing (no returns), and a key is one ask or one inform.
+#[tokio::test]
+async fn an_implementations_informs_are_held_beside_its_asks() {
+    let Some(lab) = lab().await else { return };
+    let agent = lab.agent("informing").await;
+    let mut declared = asking(json!([pick()]));
+    declared["implementations"][0]["informs"] = json!([progress()]);
+    lab.register(agent, declared).await.unwrap();
+
+    let linked: Vec<(String, String, i64)> = sqlx::query_as(
+        "SELECT ii.key, ii.role, ii.blok_id FROM facade_implementationinteraction ii
+           JOIN facade_implementation i ON i.id = ii.implementation_id
+          WHERE i.agent_id = $1 ORDER BY ii.key",
+    )
+    .bind(agent)
+    .fetch_all(&lab.db)
+    .await
+    .unwrap();
+    assert_eq!(
+        linked.iter().map(|(k, r, _)| (k.as_str(), r.as_str())).collect::<Vec<_>>(),
+        [("asks.pick", "ASK"), ("asks.progress", "INFORM")]
+    );
+    assert_ne!(linked[0].2, linked[1].2);
+
+    // An inform with returns is no inform at all: the declaration does not parse.
+    let mut answering = asking(json!([]));
+    let mut with_returns = progress();
+    with_returns["returns"] = json!([{"key": "x", "kind": "INT", "nullable": false, "effects": []}]);
+    answering["implementations"][0]["informs"] = json!([with_returns]);
+    let parsed = serde_json::from_value::<ImplementAgentInputModel>(answering);
+    assert!(parsed.unwrap_err().to_string().contains("unknown field `returns`"));
+
+    let mut twice = asking(json!([pick()]));
+    let mut same_key = progress();
+    same_key["key"] = json!("asks.pick");
+    twice["implementations"][0]["informs"] = json!([same_key]);
+    let refused = lab.register(agent, twice).await.unwrap_err();
+    assert!(refused.contains("asks.pick"), "{refused}");
+}

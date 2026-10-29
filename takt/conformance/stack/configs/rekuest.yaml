@@ -793,4 +793,8 @@ rekuest:
   takt_socket: /run/takt/internal.sock
 scopes:
   rekuest_agent: Act as an agent
-  rekuest_call: Call other apps with rekuest
+  rekuest_root_call: Start other apps' actions with rekuest
+  rekuest_dependency_call: Call the actions an app's actions depend on
+  rekuest_dynamic_call: Call actions found at run time
+  rekuest_dynamic_ask: Ask through forms made at run time
+  rekuest_dynamic_inform: Show panels made at run time

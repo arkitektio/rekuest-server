@@ -82,7 +82,8 @@ async fn agent(ctx: &Context, tests_them: bool) -> i64 {
     )
     .await
     .unwrap();
-    sqlx::query("UPDATE facade_agent SET connected = true, last_seen = now() WHERE id = $1")
+    // A test agent is granted everything: the run-time gates are tested on their own.
+    sqlx::query("UPDATE facade_agent SET connected = true, last_seen = now(), granted_scopes = '[\"rekuest_all\"]' WHERE id = $1")
         .bind(agent)
         .execute(&ctx.db)
         .await
@@ -132,9 +133,10 @@ async fn implementation(ctx: &Context, agent: i64) -> i64 {
     sqlx::query_scalar(
         "INSERT INTO facade_implementation (interface, higher_order_config, params, created_at,
                                             updated_at, tracks, diagnostics, needs_token, provenance_audience,
-                                            effects, execution, action_id, agent_id)
+                                            effects, execution, action_id, agent_id,
+                                            dynamic_asks, dynamic_calls, dynamic_informs)
          SELECT 'move', '{}', '{}', now(), now(), '[]', '[]', true, '[\"mikro\"]', 'UNKNOWN', 'PLAIN',
-                $2, a.id FROM facade_agent a WHERE a.id = $1
+                $2, a.id, true, true, true FROM facade_agent a WHERE a.id = $1
          RETURNING id",
     )
     .bind(agent)

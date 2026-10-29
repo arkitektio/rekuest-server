@@ -671,11 +671,48 @@ pub struct ImplementationInputModel {
     /// The key of the agent's action logo blok (context ACTION_LOGO) that draws this action.
     #[serde(default)]
     pub logo: Option<String>,
+    /// The bloks a task asks a person through, declared up front: it names one by its key.
+    #[serde(default)]
+    pub asks: Option<Vec<AskBlokInputModel>>,
+    /// The bloks a task shows a person while it goes on, declared up front: it names one by its key.
+    #[serde(default)]
+    pub informs: Option<Vec<InformBlokInputModel>>,
+    /// Whether a task may also ask through a blok made at ask time, or any of the organization.
+    #[serde(default)]
+    pub dynamic_asks: Option<bool>,
+    /// Whether a task may also call actions it found at run time. A WORKFLOW only.
+    #[serde(default)]
+    pub dynamic_calls: Option<bool>,
+    /// Whether a task may show a blok made at inform time, or any of the organization.
+    #[serde(default)]
+    pub dynamic_informs: Option<bool>,
 }
 
 impl ImplementationInputModel {
     pub fn validate(&mut self) -> Result<(), ValidationError> {
         self.definition.validate()?;
+        if self.dynamic_calls == Some(true) && self.execution != Execution::WORKFLOW {
+            return Err(ValidationError(format!(
+                "Implementation {:?} declares dynamic_calls, which only a WORKFLOW may",
+                self.interface
+            )));
+        }
+        let asks = self.asks.as_deref().unwrap_or_default();
+        let informs = self.informs.as_deref().unwrap_or_default();
+        check_unique_keys(
+            asks.iter()
+                .map(|a| a.key.as_str())
+                .chain(informs.iter().map(|i| i.key.as_str())),
+            "Implementation asks and informs",
+        )?;
+        for ask in asks {
+            // Checked as a task's blok, as it is made at registration; the clone keeps the
+            // ask as sent, which is what its template is addressed by.
+            ask.to_blok().validate_as(TASK_BLOK_KIND)?;
+        }
+        for inform in informs {
+            inform.as_ask().to_blok().validate_as(TASK_BLOK_KIND)?;
+        }
         for optimistic in self.optimistics.iter_mut().flatten() {
             optimistic.validate()?;
         }
@@ -1119,6 +1156,140 @@ impl BlokImplementationInputModel {
         check_blok_args(self.context, &self.args)?;
         check_blok_manifest(self.components.as_deref(), &self.scope(kind))?;
         Ok(())
+    }
+}
+
+/// The kind of a task's blok in the vocabulary's root matrix: it reads `self`, `deps`, `args`
+/// and `task`, and answers with `task.answer`.
+pub const TASK_BLOK_KIND: &str = "task";
+
+/// The dependency every task blok has: the agent whose task shows it.
+pub const SELF_DEPENDENCY: &str = "self";
+
+/// A blok an action asks a person through, declared with it (`AskBlokInputModel`): made once
+/// at registration as a task blok, its args and returns ports.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AskBlokInputModel {
+    /// What a task names it by: `<parameter>.<method>` of the action's interactions protocol.
+    pub key: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub components: Option<Vec<ComponentNodeInputModel>>,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub module: Option<String>,
+    #[serde(default)]
+    pub args: Vec<ArgPortInputModel>,
+    #[serde(default)]
+    pub returns: Vec<ReturnPortInputModel>,
+    /// The agents it reads or calls besides `self`, as `deps.<key>`.
+    #[serde(default)]
+    pub dependencies: Vec<AgentDependencyInputModel>,
+    pub vocab: u32,
+    #[serde(default)]
+    pub catalogs: Vec<String>,
+    #[serde(default)]
+    pub locals: Vec<BlokLocalInputModel>,
+    #[serde(default)]
+    pub demo: Option<BlokDemoInputModel>,
+    #[serde(default)]
+    pub queries: Vec<BlokQueryInputModel>,
+    #[serde(default)]
+    pub subscriptions: Vec<BlokSubscriptionInputModel>,
+}
+
+impl AskBlokInputModel {
+    /// The ask as the html task blok it is made as: its own dependencies and `self`.
+    pub fn to_blok(&self) -> BlokImplementationInputModel {
+        let mut dependencies = self.dependencies.clone();
+        if !dependencies.iter().any(|d| d.key == SELF_DEPENDENCY) {
+            dependencies.push(
+                serde_json::from_value(serde_json::json!({
+                    "key": SELF_DEPENDENCY,
+                    "description": "The agent whose action asks.",
+                }))
+                .expect("the self dependency deserializes"),
+            );
+        }
+        BlokImplementationInputModel {
+            key: self.key.clone(),
+            dependencies,
+            components: self.components.clone(),
+            source: self.source.clone(),
+            module: self.module.clone(),
+            description: self.description.clone(),
+            context: ComponentContext::HTML,
+            default: false,
+            for_model: None,
+            for_node: None,
+            args: self.args.clone(),
+            returns: self.returns.clone(),
+            vocab: self.vocab,
+            catalogs: self.catalogs.clone(),
+            locals: self.locals.clone(),
+            demo: self.demo.clone(),
+            queries: self.queries.clone(),
+            subscriptions: self.subscriptions.clone(),
+        }
+    }
+}
+
+/// A blok an action shows a person while its task goes on, declared with it
+/// (`InformBlokInputModel`): made once at registration as a task blok, its args ports. Nothing
+/// waits on it, so it has no returns.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InformBlokInputModel {
+    /// What a task names it by: `<parameter>.<method>` of the action's interactions protocol.
+    pub key: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub components: Option<Vec<ComponentNodeInputModel>>,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub module: Option<String>,
+    #[serde(default)]
+    pub args: Vec<ArgPortInputModel>,
+    /// The agents it reads or calls besides `self`, as `deps.<key>`.
+    #[serde(default)]
+    pub dependencies: Vec<AgentDependencyInputModel>,
+    pub vocab: u32,
+    #[serde(default)]
+    pub catalogs: Vec<String>,
+    #[serde(default)]
+    pub locals: Vec<BlokLocalInputModel>,
+    #[serde(default)]
+    pub demo: Option<BlokDemoInputModel>,
+    #[serde(default)]
+    pub queries: Vec<BlokQueryInputModel>,
+    #[serde(default)]
+    pub subscriptions: Vec<BlokSubscriptionInputModel>,
+}
+
+impl InformBlokInputModel {
+    /// The inform as an ask that answers nothing: what it is made and stored as.
+    pub fn as_ask(&self) -> AskBlokInputModel {
+        AskBlokInputModel {
+            key: self.key.clone(),
+            description: self.description.clone(),
+            components: self.components.clone(),
+            source: self.source.clone(),
+            module: self.module.clone(),
+            args: self.args.clone(),
+            returns: vec![],
+            dependencies: self.dependencies.clone(),
+            vocab: self.vocab,
+            catalogs: self.catalogs.clone(),
+            locals: self.locals.clone(),
+            demo: self.demo.clone(),
+            queries: self.queries.clone(),
+            subscriptions: self.subscriptions.clone(),
+        }
     }
 }
 

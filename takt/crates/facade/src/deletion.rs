@@ -242,6 +242,20 @@ pub async fn delete_implementations(
         implementations,
     )
     .await?;
+    // Its declared asks and informs let go of their bloks, which go once nothing holds or shows them.
+    let asked = ids(
+        conn,
+        "SELECT blok_id FROM facade_implementationinteraction WHERE implementation_id = ANY($1)",
+        implementations,
+    )
+    .await?;
+    exec(
+        conn,
+        "DELETE FROM facade_implementationinteraction WHERE implementation_id = ANY($1)",
+        implementations,
+    )
+    .await?;
+    gc_action_bloks(conn, &asked).await?;
     let dependencies = ids(
         conn,
         "SELECT id FROM facade_dependency WHERE implementation_id = ANY($1)",
@@ -511,9 +525,10 @@ pub async fn gc_provided_bloks(
     Ok(())
 }
 
-/// Of `candidates`, the actions' own bloks no action holds any more (`ActionBlok.blok`): deleted.
-/// Nothing else points at one (it is never materialized, edited or a logo, and carries no
-/// dependency rows), so it goes with its arg ports, which it never has either.
+/// Of `candidates`, the bloks held by actions or implementations (`held_by_action`) that none
+/// holds any more (`ActionBlok.blok`, `ImplementationInteraction.blok`) and no task shows: deleted, with
+/// their dependencies and arg ports. An action's own blok has neither; a declared ask or inform has
+/// both, and is materialized for each task that shows it, so it stays while one shows it.
 pub async fn gc_action_bloks(
     conn: &mut PgConnection,
     candidates: &[i64],
@@ -525,10 +540,22 @@ pub async fn gc_action_bloks(
         conn,
         "SELECT b.id FROM facade_blok b
           WHERE b.id = ANY($1) AND b.held_by_action
-            AND NOT EXISTS (SELECT 1 FROM facade_actionblok ab WHERE ab.blok_id = b.id)",
+            AND NOT EXISTS (SELECT 1 FROM facade_actionblok ab WHERE ab.blok_id = b.id)
+            AND NOT EXISTS (SELECT 1 FROM facade_implementationinteraction ia WHERE ia.blok_id = b.id)
+            AND NOT EXISTS (SELECT 1 FROM facade_materializedblok m WHERE m.blok_id = b.id)",
         candidates,
     )
     .await?;
+    if orphans.is_empty() {
+        return Ok(());
+    }
+    let dependencies = ids(
+        conn,
+        "SELECT id FROM facade_blokdependency WHERE blok_id = ANY($1)",
+        &orphans,
+    )
+    .await?;
+    delete_blok_dependencies(conn, &dependencies).await?;
     for statement in [
         "DELETE FROM facade_blokargport WHERE blok_id = ANY($1)",
         "DELETE FROM facade_blok WHERE id = ANY($1)",

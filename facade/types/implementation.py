@@ -9,7 +9,7 @@ import strawberry_django
 from django.db.models import QuerySet
 from kante.types import Info
 
-from facade import filters, models
+from facade import enums, filters, models
 from facade.types.base import build_prescoped_queryset, row_of
 from rekuest_core import enums as renums
 from rekuest_core import scalars as rscalars
@@ -24,6 +24,21 @@ if TYPE_CHECKING:
     from facade.types.dependency import Dependency, Resolution
     from facade.types.state import State
     from facade.types.task import Task
+
+
+@strawberry_django.type(
+    models.ImplementationInteraction,
+    description="A blok an implementation declared with it (an `@ask` or `@inform` method of an interactions protocol): what its tasks hold on until a person answers (ASK) or show while they go on (INFORM). A task names it by `key`.",
+)
+class ImplementationInteraction:
+    id: strawberry.ID
+    key: str = strawberry_django.field(description="What a task names it by: `<parameter>.<method>` of the action's interactions protocol.")
+    description: Optional[str] = strawberry_django.field(description="What it asks or shows, in a sentence: the message it is listed with.")
+    blok: "Blok" = strawberry_django.field(description="What it shows: a blok held by implementations only (`heldByAction`), its args and returns ports declared.")
+
+    @strawberry_django.field(description="ASK: a task holds on it until a person answers through it. INFORM: a task shows it and goes on.")
+    def role(self) -> enums.TaskBlokRole:
+        return enums.TaskBlokRole(self.role)
 
 
 @strawberry_django.type(models.Implementation, filters=filters.ImplementationFilter, ordering=filters.ImplementationOrder, pagination=True, description="Represents a concrete implementation of an action.")
@@ -46,6 +61,10 @@ class Implementation:
     execution: renums.Execution = strawberry_django.field(description="How this implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies.")
     code_hash: Optional[str] = strawberry_django.field(description="A hash of the implementation's code; a workflow is only resumed by an implementation with the same hash.")
     logo: Optional["Blok"] = strawberry_django.field(description="The agent's action logo blok (context ACTION_LOGO) that draws this implementation's action, if it declared one.")
+    interactions: list[ImplementationInteraction] = strawberry_django.field(description="The bloks it declared to ask a person through or show them, asks and informs both. A task shows only these unless the implementation declares `dynamicAsks` / `dynamicInforms`.")
+    dynamic_asks: bool = strawberry_django.field(description="Whether a task may also ask through a blok made at ask time, or any blok of the organization. Needs the agent's `rekuest_dynamic_ask` scope too.")
+    dynamic_calls: bool = strawberry_django.field(description="Whether a task may also call actions it found at run time, not only its declared dependencies. Needs the agent's `rekuest_dynamic_call` scope too.")
+    dynamic_informs: bool = strawberry_django.field(description="Whether a task may also show a blok made at inform time, or any blok of the organization. Needs the agent's `rekuest_dynamic_inform` scope too.")
 
     @strawberry_django.field(description="Constructed name for display, combining interface and agent name.")
     def name(self) -> str:
