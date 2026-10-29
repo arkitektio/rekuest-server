@@ -30,17 +30,20 @@ def _user_of(sub: str, issuer: str | None) -> User:
     return user
 
 
-def _bind(info: Info, shortcut: models.Shortcut, users: list[str], app: str | None) -> None:
-    """Pin ``shortcut`` for ``users`` in ``app`` (every app when None); binding again changes nothing."""
+def _bind(info: Info, shortcut: models.Shortcut, rule: inputs.ShortcutBindingsInputModel) -> None:
+    """Pin ``shortcut`` for whoever ``rule`` matches: one binding per user (one for every user when
+    it names none), each sharing its app, client and device. Binding again changes nothing."""
     admin = info.context.request.user
-    for sub in dict.fromkeys(users):
-        models.ShortcutBinding.objects.get_or_create(shortcut=shortcut, user=_user_of(sub, admin.iss), app=app or None, defaults={"bound_by": admin})
+    where = dict(app=rule.app or None, client=rule.client or None, device=rule.device or None)
+    users = [_user_of(sub, admin.iss) for sub in dict.fromkeys(rule.users or [])] or [None]
+    for user in users:
+        models.ShortcutBinding.objects.get_or_create(shortcut=shortcut, user=user, **where, defaults={"bound_by": admin})
 
 
 def create_shortcut(info: Info, input: inputs.CreateShortcutInput) -> types.Shortcut:
     data = input.to_pydantic()
-    if data.bindings and data.bindings.users and not has_org_role(info, ADMIN):
-        raise GraphQLError("Only an admin may pin a shortcut for other users.")
+    if data.bindings is not None and not has_org_role(info, ADMIN):
+        raise GraphQLError("Only an admin may pin a shortcut for others.")
     toolbox = (
         scoped_get(models.Toolbox, info, data.toolbox)
         if data.toolbox
@@ -74,8 +77,8 @@ def create_shortcut(info: Info, input: inputs.CreateShortcutInput) -> types.Shor
             use_returns=data.use_returns,
             bind_number=data.bind_number,
         )
-        if data.bindings:
-            _bind(info, shortcut, data.bindings.users, data.bindings.app)
+        if data.bindings is not None:
+            _bind(info, shortcut, data.bindings)
 
     logger.debug("Shortcut created: %s", shortcut)
 
@@ -90,11 +93,11 @@ def delete_shortcut(info: Info, input: inputs.DeleteShortcutInput) -> strawberry
 
 
 def bind_shortcut(info: Info, input: inputs.BindShortcutInput) -> types.Shortcut:
-    """Pin a shortcut of the caller's organization for ``users`` (subs), in ``app`` or in every app."""
+    """Pin a shortcut of the caller's organization for whoever the rule matches (users, app, client, device)."""
     data = input.to_pydantic()
     shortcut = scoped_get(models.Shortcut, info, data.shortcut, field="toolbox__organization")
     with transaction.atomic():
-        _bind(info, shortcut, data.users, data.app)
+        _bind(info, shortcut, data)
     return cast("types.Shortcut", shortcut)
 
 

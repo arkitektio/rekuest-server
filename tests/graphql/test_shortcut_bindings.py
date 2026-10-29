@@ -1,8 +1,9 @@
-"""An admin pins a shortcut for users, in one app or in every app (``bindShortcut``).
+"""An admin pins a shortcut for whoever a rule matches (``bindShortcut``).
 
-The bound user sees it as ``pinned`` (and first, and under the ``pinned`` filter) only in the app
-it was bound in; everyone else still sees the shortcut, unpinned. A user rekuest never saw is made
-the way their first request would make them, so that request finds the same row.
+A binding names a user, an app, a client and a device, each optional. The caller sees the
+shortcut as ``pinned`` (and first, and under the ``pinned`` filter) when every one that is set is
+theirs; everyone else still sees the shortcut, unpinned. A user rekuest never saw is made the way
+their first request would make them, so that request finds the same row.
 """
 
 import pytest
@@ -18,9 +19,11 @@ from facade.schema import schema
 from tests.factories import create_action_for_organization
 
 # The static tokens (``rekuest/settings_test.py``): "test" is rekuest's admin (sub 1), "test2"
-# a second user in its organization (sub 2). Their app is a static token's default ``client_app``
-# (the ``app`` key there is not a claim).
+# a second user in its organization (sub 2). Their app and device are a static token's defaults
+# (``client_app``, ``client_device``; the ``app`` key there is not a claim), their clients their own.
 APP = "static_app"
+DEVICE = "static_device"
+CLIENT_OF_TEST2 = "oinsoins2"
 
 BIND = """
     mutation Bind($shortcut: ID!, $users: [ID!]!, $app: String) {
@@ -197,3 +200,66 @@ async def test_a_member_cannot_create_a_shortcut_pinned_for_others(backend_stack
 
     plain = await schema.execute(CREATE, variable_values={"action": action, "bindings": None}, context_value=_as("test-member"))
     assert plain.errors is None, plain.errors
+
+
+RULE = """
+    mutation Rule($shortcut: ID!, $users: [ID!], $app: String, $client: String, $device: String) {
+        bindShortcut(input: {shortcut: $shortcut, users: $users, app: $app, client: $client, device: $device}) {
+            bindings { user { sub } app client device }
+        }
+    }
+"""
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_rule_pins_for_whoever_matches_every_dimension_it_sets(backend_stack: Deployment) -> None:
+    """Each of user, app, client and device that a binding sets must be the caller's; unset matches anyone."""
+    assert (await schema.execute(ME, context_value=_as("test"))).errors is None
+    ids = await sync_to_async(_shortcuts)()
+    names = ["a-here", "b-elsewhere", "c-everywhere", "d-unbound"]
+    extra = await sync_to_async(lambda: models.Shortcut.objects.get(pk=ids["a-here"]).toolbox)()
+    admin = await User.objects.aget(sub="1")
+
+    async def shortcut(name: str) -> str:
+        made = await models.Shortcut.objects.acreate(name=name, toolbox=extra, creator=admin)
+        names.append(name)
+        return str(made.pk)
+
+    rules = {
+        # Matches test2 and nobody else: their own client.
+        "a-here": {"client": CLIENT_OF_TEST2},
+        # Every user, but only on a device nobody calls from.
+        "b-elsewhere": {"device": "some-other-device"},
+        # Nothing set: the whole organization.
+        "c-everywhere": {},
+        await shortcut("e-device"): {"device": DEVICE},
+        await shortcut("f-user-app-device"): {"users": ["2"], "app": APP, "device": DEVICE},
+        # Right user and app, wrong client: one dimension off is no match.
+        await shortcut("g-wrong-client"): {"users": ["2"], "app": APP, "client": "oinsoins"},
+    }
+    for name, rule in rules.items():
+        bound = await schema.execute(RULE, variable_values={"shortcut": ids.get(name, name), **rule}, context_value=_as("test"))
+        assert bound.errors is None, bound.errors
+
+    async def pinned(token: str) -> list[str]:
+        result = await schema.execute(PINNED, context_value=_as(token))
+        assert result.errors is None, result.errors
+        return sorted(s["name"] for s in result.data["shortcuts"])
+
+    assert await pinned("test2") == ["a-here", "c-everywhere", "e-device", "f-user-app-device"]
+    # The admin is another user on another client, on the same device.
+    assert await pinned("test") == ["c-everywhere", "e-device"]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_rule_without_users_is_one_binding(backend_stack: Deployment) -> None:
+    """No users is one binding for every user, kept once however often it is bound."""
+    assert (await schema.execute(ME, context_value=_as("test"))).errors is None
+    ids = await sync_to_async(_shortcuts)()
+
+    for _ in range(2):
+        bound = await schema.execute(RULE, variable_values={"shortcut": ids["c-everywhere"], "app": APP}, context_value=_as("test"))
+        assert bound.errors is None, bound.errors
+    assert bound.data["bindShortcut"]["bindings"] == [{"user": None, "app": APP, "client": None, "device": None}]

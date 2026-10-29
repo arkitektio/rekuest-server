@@ -200,20 +200,25 @@ class Shortcut(models.Model):
 
 
 class ShortcutBinding(models.Model):
-    """An admin's binding of a shortcut to a user: pinned for them, and they cannot unpin it.
+    """An admin's pin of a shortcut: pinned for whoever matches it, and they cannot unpin it.
 
-    ``app`` is the identifier of the app it is pinned in (the caller's client release); null pins
-    it in every app. A binding only pins: the shortcut stays visible to the whole organization.
+    A binding is a rule over who calls and from where: ``user``, ``app`` (the identifier of the
+    caller's client release), ``client`` (its OAuth ``client_id``) and ``device`` (its
+    ``device_id``). Each that is set must be the caller's; each left null matches anyone, so a
+    binding with none set pins the shortcut for the whole organization. A binding only pins: the
+    shortcut stays visible to the whole organization.
     """
 
     shortcut = models.ForeignKey(Shortcut, on_delete=models.CASCADE, related_name="bindings")
-    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name="shortcut_bindings", help_text="The user this shortcut is pinned for")
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=True, related_name="shortcut_bindings", help_text="The user this shortcut is pinned for; null for every user")
     app = models.CharField(max_length=2000, null=True, blank=True, help_text="The identifier of the app it is pinned in; null for every app")
+    client = models.CharField(max_length=2000, null=True, blank=True, help_text="The client_id of the client it is pinned in; null for every client")
+    device = models.CharField(max_length=2000, null=True, blank=True, help_text="The device_id of the device it is pinned on; null for every device")
     bound_by = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name="bound_shortcuts", help_text="The admin who bound it")
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
 
     class Meta:
         constraints = [
-            # One every-app binding too: null counts as a value here.
-            models.UniqueConstraint(fields=["shortcut", "user", "app"], name="one_binding_per_shortcut_user_app", nulls_distinct=False),
+            # One rule of each shape too: null ("anyone") counts as a value here.
+            models.UniqueConstraint(fields=["shortcut", "user", "app", "client", "device"], name="one_binding_per_shortcut_rule", nulls_distinct=False),
         ]

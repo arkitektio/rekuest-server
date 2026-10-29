@@ -26,12 +26,25 @@ def caller_app(info: Info) -> str | None:
     return release.app.identifier if release is not None else None
 
 
+def _anyone_or(field: str, value: object) -> Q:
+    """A binding's ``field`` left null (anyone), or set to the caller's ``value``; only null when the caller has none."""
+    anyone = Q(**{f"{field}__isnull": True})
+    return anyone | Q(**{field: value}) if value is not None else anyone
+
+
 def pinned_for_caller(info: Info) -> Exists:
-    """Whether the outer shortcut is bound to the caller: in the app they signed in with, or in every app."""
-    app = caller_app(info)
-    in_app = Q(app__isnull=True) | Q(app=app) if app else Q(app__isnull=True)
-    bindings = models.ShortcutBinding.objects.filter(in_app, shortcut=OuterRef("pk"), user=info.context.request.user)
-    return Exists(bindings)
+    """Whether a binding of the outer shortcut matches the caller: every one of its user, app,
+    client and device that is set is the caller's."""
+    request = info.context.request
+    client = getattr(request, "client", None)
+    device = client.device if client is not None else None
+    matches = (
+        _anyone_or("user", request.user)
+        & _anyone_or("app", caller_app(info))
+        & _anyone_or("client", client.client_id if client is not None else None)
+        & _anyone_or("device", device.device_id if device is not None else None)
+    )
+    return Exists(models.ShortcutBinding.objects.filter(matches, shortcut=OuterRef("pk")))
 
 
 @strawberry_django.order_type(models.Protocol)
@@ -49,7 +62,7 @@ class ShortcutOrder:
             return queryset, []
         return queryset, assignable_first(queryset, value, f"{prefix}action__assignable")
 
-    @strawberry_django.order_field(description="Pinned for the caller (an admin bound it to them in this app) first (DESC) or last (ASC). Put it before `assignable`, which adds the tie-break.")
+    @strawberry_django.order_field(description="Pinned for the caller (an admin bound it to them, or to where they call from) first (DESC) or last (ASC). Put it before `assignable`, which adds the tie-break.")
     def pinned(self, info: Info, queryset: QuerySet[models.Shortcut], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Shortcut], list[OrderBy | str]]:
         if not value or prefix:
             return queryset, []
@@ -119,7 +132,7 @@ class ShortcutFilter:
     def toolbox(self, info: Info, queryset: QuerySet[models.Shortcut], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Shortcut], Q]:
         return queryset.filter(**{f"{prefix}toolbox_id": value}), Q()
 
-    @filter_field(description="Whether an admin bound the shortcut to the caller, in the app they signed in with or in every app.")
+    @filter_field(description="Whether an admin pinned the shortcut for the caller: a binding whose user, app, client and device are each the caller's or left open.")
     def pinned(self, info: Info, queryset: QuerySet[models.Shortcut], value: bool, prefix: str) -> tuple[QuerySet[models.Shortcut], Q]:
         if prefix:
             raise ValueError("`pinned` filters shortcuts themselves, not a relation.")

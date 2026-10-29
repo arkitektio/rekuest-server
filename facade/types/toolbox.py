@@ -74,9 +74,9 @@ class Shortcut:
         description="Which shortcut should be bound to this Action by default. 0 means no binding.",
     )
 
-    bindings: list["ShortcutBinding"] = strawberry_django.field(description="Who an admin pinned this shortcut for, and in which app.")
+    bindings: list["ShortcutBinding"] = strawberry_django.field(description="Who an admin pinned this shortcut for, and where (app, client, device).")
 
-    @strawberry_django.field(description="Whether an admin pinned this shortcut for the caller, in the app they signed in with or in every app. The caller cannot unpin it.")
+    @strawberry_django.field(description="Whether an admin pinned this shortcut for the caller: one of its bindings matches who they are and where they call from. The caller cannot unpin it.")
     def pinned(self, info: Info) -> bool:
         annotated = getattr(self, "pinned_for_caller", None)
         if annotated is not None:
@@ -96,12 +96,14 @@ class Shortcut:
         return build_prescoped_queryset(info, queryset, field="toolbox__organization").annotate(pinned_for_caller=pinned_for_caller(info))
 
 
-@strawberry_django.type(models.ShortcutBinding, description="An admin's pin of a shortcut for a user, in one app or in every app.")
+@strawberry_django.type(models.ShortcutBinding, description="An admin's pin of a shortcut, for whoever matches it: each of user, app, client and device that is set must be the caller's.")
 class ShortcutBinding:
     id: strawberry.ID = strawberry_django.field(description="Binding ID.")
     shortcut: Shortcut = strawberry_django.field(description="The pinned shortcut.")
-    user: "User" = strawberry_django.field(description="The user it is pinned for.")
+    user: Optional["User"] = strawberry_django.field(description="The user it is pinned for; null for every user.")
     app: str | None = strawberry_django.field(description="The identifier of the app it is pinned in; null for every app.")
+    client: str | None = strawberry_django.field(description="The `client_id` of the client it is pinned in; null for every client.")
+    device: str | None = strawberry_django.field(description="The `device_id` of the device it is pinned on; null for every device.")
     bound_by: "User" = strawberry_django.field(description="The admin who pinned it.")
     created_at: datetime = strawberry_django.field(description="When it was pinned.")
 

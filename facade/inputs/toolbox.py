@@ -29,14 +29,18 @@ class DeleteToolboxInput:
 
 
 class ShortcutBindingsInputModel(BaseModel):
-    users: list[str] = Field(description="The users (their `sub`) to pin the shortcut for.")
+    users: list[str] | None = Field(default=None, description="The users (their `sub`) to pin the shortcut for, one binding each; every user when not given.")
     app: str | None = Field(default=None, description="The identifier of the app to pin it in; every app when not given.")
+    client: str | None = Field(default=None, description="The `client_id` of the client to pin it in; every client when not given.")
+    device: str | None = Field(default=None, description="The `device_id` of the device to pin it on; every device when not given.")
 
 
-@pydantic.input(ShortcutBindingsInputModel, description="Users to pin a shortcut for, in one app or in every app.")
+@pydantic.input(ShortcutBindingsInputModel, description="Who to pin a shortcut for, and where: each field that is given must be the caller's; nothing given pins it for the whole organization.")
 class ShortcutBindingsInput:
-    users: list[strawberry.ID]
+    users: list[strawberry.ID] | None = None
     app: str | None = None
+    client: str | None = None
+    device: str | None = None
 
 
 class CreateShortcutInputModel(BaseModel):
@@ -48,7 +52,7 @@ class CreateShortcutInputModel(BaseModel):
     use_returns: bool = Field(default=False, description="Whether when running the short the returns should be used further. Allows to create mini pipelines")
     bind_number: int | None = Field(default=None, description="The bind number of the shortcut. This is used to identify the shortcut in the system.")
     toolbox: str | None = Field(default=None, description="The toolbox ID to create the shortcut in. If not provided, the shortcut will be created in the default toolbox.")
-    bindings: ShortcutBindingsInputModel | None = Field(default=None, description="Pin the new shortcut for these users (admins only).")
+    bindings: ShortcutBindingsInputModel | None = Field(default=None, description="Pin the new shortcut for whoever these match (admins only).")
 
 
 @pydantic.input(CreateShortcutInputModel, description="The input for creating a shortcut.")
@@ -77,11 +81,13 @@ class BindShortcutInputModel(ShortcutBindingsInputModel):
     shortcut: str = Field(description="The shortcut to pin.")
 
 
-@pydantic.input(BindShortcutInputModel, description="Pin a shortcut for users, in one app or in every app. The users cannot unpin it.")
+@pydantic.input(BindShortcutInputModel, description="Pin a shortcut for whoever matches: users, an app, a client, a device, each optional. They cannot unpin it.")
 class BindShortcutInput:
     shortcut: strawberry.ID
-    users: list[strawberry.ID]
+    users: list[strawberry.ID] | None = None
     app: str | None = None
+    client: str | None = None
+    device: str | None = None
 
 
 class UnbindShortcutInputModel(BaseModel):
