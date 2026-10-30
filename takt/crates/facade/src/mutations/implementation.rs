@@ -326,6 +326,75 @@ async fn check_descriptor_keys(
     check_constrained_descriptors(conn, &definition.key, constrained).await
 }
 
+/// A formula may only read a descriptor a service declares for that argument's structure: nobody
+/// would ever send the key, and the action would never match.
+async fn check_formula_descriptors(
+    conn: &mut PgConnection,
+    input: &ImplementationInputModel,
+) -> Result<(), Refusal> {
+    let mut read: Vec<(String, String)> = input
+        .estimated_runtime
+        .iter()
+        .flat_map(|estimate| estimate.descriptors())
+        .collect();
+    for fit in input.fits.iter().flatten() {
+        read.extend(fit.keys().into_iter().map(|key| (fit.port.clone(), key)));
+    }
+    for (port, key) in read {
+        let identifier = input
+            .definition
+            .args
+            .iter()
+            .find(|argument| argument.key == port)
+            .and_then(|argument| argument.identifier.as_deref());
+        let declared: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1
+               FROM facade_descriptor d
+               JOIN facade_structuredeclaration s ON s.id = d.structure_id
+              WHERE s.identifier = $1 AND d.key = $2)",
+        )
+        .bind(identifier)
+        .bind(&key)
+        .fetch_one(&mut *conn)
+        .await?;
+        if !declared {
+            return Err(Refusal::Invalid(format!(
+                "A formula of {} reads the descriptor '{key}' of args.{port}, which no service declares for {}",
+                input.interface,
+                identifier.unwrap_or("it"),
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Replace what this implementation can handle: the rows the action query tests.
+async fn sync_fits(
+    conn: &mut PgConnection,
+    implementation: i64,
+    input: &ImplementationInputModel,
+) -> Result<(), Refusal> {
+    sqlx::query("DELETE FROM facade_implementationfit WHERE implementation_id = $1")
+        .bind(implementation)
+        .execute(&mut *conn)
+        .await?;
+    for fit in input.fits.iter().flatten() {
+        let compiled = fit.compile().map_err(|e| Refusal::Invalid(e.0))?;
+        sqlx::query(
+            "INSERT INTO facade_implementationfit (implementation_id, port_key, compiled_jsonpath, call, source)
+             VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(implementation)
+        .bind(&fit.port)
+        .bind(&compiled)
+        .bind(dump(&fit.call))
+        .bind(&fit.source)
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(())
+}
+
 /// A blok's args are held to the same: a key nobody declares would leave the blok offered on
 /// nothing, and nobody told why.
 pub(crate) async fn check_blok_arg_descriptor_keys(
@@ -698,6 +767,18 @@ pub async fn create_implementation(
     let scope = infer_action_scope(definition).value();
     let idempotent = validate_qualifiers(definition, input.effects)?;
     check_descriptor_keys(conn, definition).await?;
+    check_formula_descriptors(conn, input).await?;
+    let estimated_runtime = input.estimated_runtime.as_ref().map(dump);
+    let estimated_runtime_path = input
+        .estimated_runtime
+        .as_ref()
+        .map(|estimate| estimate.compile())
+        .transpose()
+        .map_err(|e| Refusal::Invalid(e.0))?;
+    let estimated_runtime_port = input
+        .estimated_runtime
+        .as_ref()
+        .and_then(|estimate| estimate.port());
     let mut diagnostics = collect_diagnostics(
         conn,
         definition,
@@ -839,8 +920,9 @@ pub async fn create_implementation(
                     "INSERT INTO facade_implementation
                          (id, interface, higher_order_config, params, created_at, tracks,
                           diagnostics, needs_token, provenance_audience, effects, execution,
-                          code_hash, action_id, agent_id, higher_order_for_id)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
+                          code_hash, action_id, agent_id, higher_order_for_id, estimated_runtime,
+                          estimated_runtime_path, estimated_runtime_port)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)",
                 )
                 .bind(existing.id)
                 .bind(&existing.interface)
@@ -858,13 +940,16 @@ pub async fn create_implementation(
                 .bind(agent.id)
                 // Nulled by the cascade only if it pointed at a row that went with the action.
                 .bind(existing.higher_order_for_id)
+                .bind(&estimated_runtime)
+                .bind(&estimated_runtime_path)
+                .bind(&estimated_runtime_port)
                 .execute(&mut *conn)
                 .await?;
             } else {
                 sqlx::query(
                     "UPDATE facade_implementation SET action_id = $2, params = $3, needs_token = $4,
                             provenance_audience = $5, effects = $6, execution = $7, code_hash = $8, diagnostics = $9,
-                            updated_at = now()
+                            estimated_runtime = $10, estimated_runtime_path = $11, estimated_runtime_port = $12, updated_at = now()
                       WHERE id = $1",
                 )
                 .bind(existing.id)
@@ -876,6 +961,9 @@ pub async fn create_implementation(
                 .bind(input.execution.value())
                 .bind(&input.code_hash)
                 .bind(&stored_diagnostics)
+                .bind(&estimated_runtime)
+                .bind(&estimated_runtime_path)
+                .bind(&estimated_runtime_port)
                 .execute(&mut *conn)
                 .await?;
             }
@@ -892,8 +980,9 @@ pub async fn create_implementation(
             let row: ImplementationRow = sqlx::query_as(
                 "INSERT INTO facade_implementation
                      (interface, params, diagnostics, needs_token, provenance_audience, effects,
-                      execution, code_hash, action_id, agent_id)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                      execution, code_hash, action_id, agent_id, estimated_runtime,
+                      estimated_runtime_path, estimated_runtime_port)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                  RETURNING id, interface, action_id, higher_order_config, higher_order_for_id, tracks, created_at",
             )
             .bind(&input.interface)
@@ -906,6 +995,9 @@ pub async fn create_implementation(
             .bind(&input.code_hash)
             .bind(action.id)
             .bind(agent.id)
+            .bind(&estimated_runtime)
+            .bind(&estimated_runtime_path)
+            .bind(&estimated_runtime_port)
             .fetch_one(&mut *conn)
             .await?;
             let id = row.id;
@@ -921,6 +1013,7 @@ pub async fn create_implementation(
     });
 
     sync_dependencies(conn, implementation, &input.dependencies).await?;
+    sync_fits(conn, implementation, input).await?;
 
     // What a task may do beyond what it declared: refused at run time unless set here and
     // granted to the agent's token too.

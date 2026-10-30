@@ -51,6 +51,7 @@ from .catalog import (
 from .implementation import (
     Dependency,
     Implementation,
+    ImplementationFit,
     ImplementationInteraction,
     InteractionRole,
     Resolution,
@@ -106,6 +107,7 @@ __all__ = [
     "Resolution",
     "ResolvedDependency",
     "Implementation",
+    "ImplementationFit",
     "ImplementationInteraction",
     "InteractionRole",
     # task

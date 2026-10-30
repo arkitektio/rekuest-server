@@ -207,6 +207,22 @@ class Implementation(models.Model):
         blank=True,
         help_text="A hash of the implementation's code. A workflow is only resumed by an implementation with the same hash.",
     )
+    estimated_runtime = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="A formula for how long this implementation runs, in seconds: a pure blok call and the text it was written as, and optionally a richer one for the form.",
+    )
+    estimated_runtime_path = models.TextField(
+        null=True,
+        blank=True,
+        help_text="`estimated_runtime` compiled to a PostgreSQL JSONPath over the object and $agent: what the action query filters and sorts by.",
+    )
+    estimated_runtime_port = models.CharField(
+        max_length=1000,
+        null=True,
+        blank=True,
+        help_text="The key of the one structure argument `estimated_runtime` reads, if any: it applies to objects of that argument's identifier.",
+    )
     logo = models.ForeignKey(
         "Blok",
         on_delete=models.SET_NULL,
@@ -253,6 +269,25 @@ class InteractionRole(models.TextChoices):
 
     ASK = "ASK", "Ask"
     INFORM = "INFORM", "Inform"
+
+
+class ImplementationFit(models.Model):
+    """What an implementation can handle of one structure argument: a formula over the object's
+    descriptors and its agent's hardware. takt writes these at registration."""
+
+    implementation = models.ForeignKey(Implementation, on_delete=models.CASCADE, related_name="fits", help_text="The implementation it is about.")
+    port_key = models.CharField(max_length=1000, help_text="The key of the argument.")
+    compiled_jsonpath = models.TextField(help_text="The formula compiled to a PostgreSQL JSONPath predicate over the object and $agent.")
+    call = models.JSONField(help_text="The pure blok call the frontend and the agent evaluate.")
+    source = models.TextField(null=True, blank=True, help_text="The formula as its author wrote it.")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["implementation", "port_key"], name="implementation_fit_unique_port"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.implementation_id}: {self.port_key}"
 
 
 class ImplementationInteraction(models.Model):

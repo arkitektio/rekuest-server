@@ -14,6 +14,19 @@ from facade import enums, filters, liveness, models
 from facade.types.base import build_prescoped_queryset, row_of
 from rekuest_core.enums import ComponentContext
 
+@strawberry.type(description="One GPU of an agent's machine.")
+class AgentGpu:
+    name: str = strawberry.field(description="The GPU's name.")
+    memory_mib: int | None = strawberry.field(description="Its memory in MiB, if known.")
+
+
+@strawberry.type(description="What an agent's machine has. Self-declared; unknown is null.")
+class AgentHardware:
+    cpu_count: int | None = strawberry.field(description="The CPUs its process may use: a container's limit counts.")
+    memory_mib: int | None = strawberry.field(description="The memory its process may use, in MiB: a container's limit counts.")
+    gpus: list[AgentGpu] = strawberry.field(description="Its GPUs.")
+
+
 if TYPE_CHECKING:
     # Named in annotations only: strawberry resolves them when it builds the schema.
     from facade.types.asset import AgentAsset
@@ -73,6 +86,15 @@ class Agent:
     description: str | None = strawberry_django.field(description="What this agent is, in a sentence. Client-declared at registration; null for an agent that never declared one.")
     supervisor: str | None = strawberry_django.field(description="The app this agent says controls its lifecycle (e.g. 'plugin_engine'), as stated on its last registration. Self-declared: a hint for pickers (descriptor @rekuest/supervisor), never authority.")
     states: list["State"] = strawberry_django.field(description="Current and historical states associated with the agent.")
+
+    @strawberry_django.field(only=["hardware"], description="What this agent's machine has, as stated on its last registration; null for an agent that never said.")
+    def hardware(self) -> AgentHardware | None:
+        hardware = row_of(self, models.Agent).hardware
+        if hardware is None:
+            return None
+        gpus = [AgentGpu(name=gpu["name"], memory_mib=gpu.get("memory_mib")) for gpu in hardware.get("gpus", [])]
+        return AgentHardware(cpu_count=hardware.get("cpu_count"), memory_mib=hardware.get("memory_mib"), gpus=gpus)
+
     kind: enums.AgentKind = strawberry_django.field(description="Kind of the agent.")
     hook_url: str | None = strawberry_django.field(description="Webhook URL for this Agent (only if webhook)", default=None)
     hook_url_secret: str | None = strawberry_django.field(description="Webhook URL secret for this Agent (only if webhook)", default=None)

@@ -255,6 +255,12 @@ pub async fn delete_implementations(
         implementations,
     )
     .await?;
+    exec(
+        conn,
+        "DELETE FROM facade_implementationfit WHERE implementation_id = ANY($1)",
+        implementations,
+    )
+    .await?;
     gc_action_bloks(conn, &asked).await?;
     let dependencies = ids(
         conn,

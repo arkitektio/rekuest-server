@@ -92,6 +92,7 @@ from .implementation import (
     CreateHigherOrderImplementationInputModel,
     DeleteImplementationInput,
     DeleteImplementationInputModel,
+    EstimatedRuntimeFilterInput,
     PortDemandInput,
 )
 from .asset_store import CreateAssetInput, RequestAssetUploadInput
@@ -225,6 +226,7 @@ __all__ = [
     "CreateHigherOrderImplementationInputModel",
     "DeleteImplementationInput",
     "DeleteImplementationInputModel",
+    "EstimatedRuntimeFilterInput",
     "PortDemandInput",
     # state
     # threed

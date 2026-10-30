@@ -1,4 +1,5 @@
 import hashlib
+from collections.abc import Callable
 import json
 import re
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Iterator, List, Literal, Optional, Union
@@ -145,6 +146,124 @@ def _check_pure_call(call: "UtilCallInputModel", dependencies: list[str] | None,
             walk(argument.value_dict)
 
     walk(call.arguments)
+
+
+#: What a runtime formula reads of the agent's hardware (``agent/cpu_count``).
+AGENT_HARDWARE = ("cpu_count", "memory_mib", "gpu_count", "gpu_memory_mib")
+
+
+
+FORMULA_ARITHMETIC = frozenset({"math.add", "math.sub", "math.mul", "math.div", "math.neg", "math.abs", "math.floor", "math.ceil"})
+FORMULA_COMPARISONS = frozenset({"cmp.gt", "cmp.gte", "cmp.lt", "cmp.lte"})
+FORMULA_COMBINATIONS = frozenset({"logic.all", "logic.any"})
+
+
+def _check_formula_number(argument: "ActionArgumentInputModel", owner: str, check_read: Callable[[str], None]) -> None:
+    """Hold one operand to what a database predicate can compute (the client's ``_check_formula_number``)."""
+    if argument.util_call is not None:
+        if argument.util_call.operation not in FORMULA_ARITHMETIC:
+            raise ValueError(f"{owner}: {argument.util_call.operation} cannot be computed when matching actions, which only has {', '.join(sorted(FORMULA_ARITHMETIC))}")
+        for nested in argument.util_call.arguments or []:
+            _check_formula_number(nested, owner, check_read)
+    elif argument.value_path is not None:
+        check_read(argument.value_path)
+    elif isinstance(argument.value_literal, bool) or not isinstance(argument.value_literal, (int, float)):
+        raise ValueError(f"{owner} uses {argument.value_literal!r}: it only works on numbers")
+
+
+def _check_agent_read(segments: list[str], path: str, owner: str) -> None:
+    if segments[0] != "agent" or len(segments) != 2 or segments[1] not in AGENT_HARDWARE:
+        raise ValueError(f"{owner} reads '{path}': a formula reads descriptors and agent.{{{', '.join(AGENT_HARDWARE)}}}")
+
+
+def _check_fits(call: "UtilCallInputModel", owner: str) -> None:
+    """A comparison of numbers, or several joined by and/or (the client's ``check_fits``)."""
+
+    def check_read(path: str) -> None:
+        segments = path.split("/")
+        if segments[0] == "value":
+            if len(segments) != 2 or not segments[1].startswith("@"):
+                raise ValueError(f"{owner} reads '{path}': name a descriptor of this argument")
+        else:
+            _check_agent_read(segments, path, owner)
+
+    if call.operation in FORMULA_COMPARISONS:
+        for argument in call.arguments or []:
+            _check_formula_number(argument, owner, check_read)
+    elif call.operation in FORMULA_COMBINATIONS:
+        for argument in call.arguments or []:
+            for item in argument.value_list or []:
+                if item.util_call is None:
+                    raise ValueError(f"{owner}: and/or combine comparisons")
+                _check_fits(item.util_call, owner)
+    else:
+        raise ValueError(f"{owner} must be a comparison, or several joined by and/or, not {call.operation}")
+
+
+def _check_estimated_runtime(call: "UtilCallInputModel", ports: list["ArgPortInputModel"], owner: str) -> None:
+    """A number the server can compute for one object (the client's ``check_estimated_runtime``)."""
+    if call.operation not in FORMULA_ARITHMETIC:
+        raise ValueError(f"{owner}: {call.operation} cannot be computed when matching actions")
+    by_key = {port.key: port for port in ports}
+    read: set[str] = set()
+
+    def check_read(path: str) -> None:
+        segments = path.split("/")
+        if segments[0] == "args":
+            port = by_key.get(segments[1]) if len(segments) > 1 else None
+            if len(segments) != 3 or not segments[2].startswith("@") or port is None or not port.identifier:
+                raise ValueError(f"{owner} reads '{path}': it can read the descriptors of a structure argument")
+            read.add(segments[1])
+            if len(read) > 1:
+                raise ValueError(f"{owner} reads {' and '.join(sorted(read))}: the action query has one object, so it reads one argument")
+        else:
+            _check_agent_read(segments, path, owner)
+
+    for argument in call.arguments or []:
+        _check_formula_number(argument, owner, check_read)
+
+
+def _check_estimated_runtime_ui(call: "UtilCallInputModel", ports: list["ArgPortInputModel"], owner: str) -> None:
+    """Pure functions over the form and the hardware, which only the frontend evaluates."""
+    from rekuest_core.vocabulary.vocabulary import load_vocabulary  # the package imports these models
+
+    vocabulary = load_vocabulary()
+    for each in (call, *iter_util_calls(call.arguments)):
+        function = vocabulary.function(each.operation)
+        if function is None or function.effect:
+            raise ValueError(f"{owner}: {each.operation} is not a pure function of the blok language")
+    by_key = {port.key: port for port in ports}
+
+    def walk(arguments: Optional[List["ActionArgumentInputModel"]]) -> None:
+        for argument in arguments or []:
+            if argument.agent_call is not None:
+                raise ValueError(f"{owner} must be pure: nested agent calls are not allowed")
+            if argument.value_path is not None:
+                root, *rest = argument.value_path.split("/")
+                if root == "args" and rest:
+                    if rest[0] not in by_key:
+                        raise ValueError(f"{owner} reads args.{rest[0]}, but the action has no such argument")
+                else:
+                    _check_agent_read([root, *rest], argument.value_path, owner)
+            if argument.util_call is not None:
+                walk(argument.util_call.arguments)
+            walk(argument.value_list)
+            walk(argument.value_dict)
+
+    walk(call.arguments)
+
+
+class EstimatedRuntimeInputModel(BaseModel):
+    call: "UtilCallInputModel" = Field(description="The pure blok UtilCall giving seconds, which the server compiles and the frontend evaluates: arithmetic over args/<port>/<descriptor key> of one structure argument and agent/<hardware>.")
+    source: str | None = Field(default=None, description="The formula as its author wrote it (informational; never parsed or evaluated by the server).")
+    ui_call: "UtilCallInputModel | None" = Field(default=None, description="A richer formula for the form, which only the frontend evaluates: any pure function, over args/<port>, args/<port>/<descriptor key> and agent/<hardware>.")
+    ui_source: str | None = Field(default=None, description="That formula as its author wrote it (informational).")
+
+
+class FitsInputModel(BaseModel):
+    port: str = Field(description="The key of the structure argument it is about.")
+    call: "UtilCallInputModel" = Field(description="The pure blok UtilCall: a comparison of numbers, or several joined by logic.all/any. Its value_paths read value/<descriptor key> and agent/<hardware>.")
+    source: str | None = Field(default=None, description="The formula as its author wrote it (informational).")
 
 
 class EffectInputModel(BaseModel):
@@ -1000,6 +1119,28 @@ class ImplementationInputModel(BaseModel):
     dynamic_asks: bool | None = Field(default=None, description="Whether a task may also ask through a blok made at ask time, or any blok of the organization. Refused otherwise, and without the `rekuest_dynamic_ask` scope.")
     dynamic_calls: bool | None = Field(default=None, description="Whether a task may also call actions it found at run time, not only its declared dependencies. A WORKFLOW only; refused otherwise, and without the `rekuest_dynamic_call` scope.")
     dynamic_informs: bool | None = Field(default=None, description="Whether a task may show a blok made at inform time, or any blok of the organization. Refused otherwise, and without the `rekuest_dynamic_inform` scope.")
+    estimated_runtime: EstimatedRuntimeInputModel | None = Field(default=None, description="How long this implementation runs, in seconds, given its arguments, the descriptors of the structures picked for them and the agent. The frontend evaluates it to show an estimate; the server only stores it.")
+
+    fits: list[FitsInputModel] | None = Field(default=None, description="What this implementation can handle, per argument. An action is not offered for an object no live implementation fits.")
+
+    @model_validator(mode="after")
+    def check_formulas(self) -> Self:
+        estimate = self.estimated_runtime
+        if estimate is not None:
+            _check_estimated_runtime(estimate.call, self.definition.args, f"The estimated runtime of {self.interface}")
+            if estimate.ui_call is not None:
+                _check_estimated_runtime_ui(estimate.ui_call, self.definition.args, f"The form's estimated runtime of {self.interface}")
+        seen: set[str] = set()
+        for fit in self.fits or []:
+            owner = f"The Fits of {self.interface} on {fit.port}"
+            port = next((port for port in self.definition.args if port.key == fit.port), None)
+            if port is None or port.kind != enums.PortKind.STRUCTURE:
+                raise ValueError(f"{owner}: only a single structure argument can have one")
+            if fit.port in seen:
+                raise ValueError(f"{owner}: an argument has one Fits; join conditions with and/or")
+            seen.add(fit.port)
+            _check_fits(fit.call, owner)
+        return self
 
     @model_validator(mode="after")
     def check_declared_interactions(self) -> Self:
@@ -1791,6 +1932,8 @@ class WidgetDefaultInputModel(BaseModel):
         return (self.kind.value if self.kind is not None else None, self.identifier)
 
 
+EstimatedRuntimeInputModel.model_rebuild()
+FitsInputModel.model_rebuild()
 SearchAssignWidgetInputModel.model_rebuild()
 CustomAssignWidgetInputModel.model_rebuild()
 StateChoiceAssignWidgetInputModel.model_rebuild()

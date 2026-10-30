@@ -12,8 +12,14 @@ import re
 import typing as t
 from dataclasses import dataclass
 
+from datetime import timedelta
+
 from django.db import connection
+from django.db.models import FloatField
 from django.db.models.expressions import RawSQL
+from django.utils import timezone
+
+from facade.liveness import stale_after_seconds
 
 from rekuest_core.inputs.models import ActionDemandInputModel, PortMatchInputModel, StateDemandInputModel
 
@@ -77,6 +83,58 @@ class PortOwner:
 ACTION_PORTS = PortOwner("facade_action", "action_id", PORT_TABLE, {"args": "arg_count", "returns": "return_count"})
 #: A blok's args (``facade_blokargport``): the items it is opened for. A blok has no returns.
 BLOK_PORTS = PortOwner("facade_blok", "blok_id", {"args": "facade_blokargport"})
+
+
+def _live_agent_sql(alias: str, cutoff_key: str, params: Params) -> str:
+    """Agents that can receive work now: ``liveness.agent_available_q`` as SQL."""
+    params[cutoff_key] = timezone.now() - timedelta(seconds=stale_after_seconds())
+    return f"({alias}.kind = 'WEBHOOK' OR ({alias}.connected AND {alias}.last_seen > %({cutoff_key})s))"
+
+
+def _agent_vars_sql(alias: str) -> str:
+    """A formula's ``$agent``, always bound: a path naming a missing variable raises even when silent."""
+    return f"jsonb_build_object('agent', COALESCE({alias}.hardware, '{{}}'::jsonb))"
+
+
+def _fits_condition(port_alias: str, object_key: str, cutoff_key: str, params: Params) -> str:
+    """Whether a live implementation can handle the object: hidden only when every live agent refuses.
+
+    One without a ``Fits`` on this port has stated no limit, and with no live implementation
+    nothing can be tested. Reached from the port's own ``action_id``, not the action row: a
+    reference to that keeps the planner from starting at the port rows.
+    """
+    live = _live_agent_sql("g", cutoff_key, params)
+    return (
+        f"(NOT EXISTS (SELECT 1 FROM facade_implementation i JOIN facade_agent g ON g.id = i.agent_id"
+        f" JOIN facade_implementationfit f ON f.implementation_id = i.id AND f.port_key = {port_alias}.key"
+        f" WHERE i.action_id = {port_alias}.action_id AND {live})"
+        f" OR EXISTS (SELECT 1 FROM facade_implementation i JOIN facade_agent g ON g.id = i.agent_id"
+        f" LEFT JOIN facade_implementationfit f ON f.implementation_id = i.id AND f.port_key = {port_alias}.key"
+        f" WHERE i.action_id = {port_alias}.action_id AND {live}"
+        f" AND (f.id IS NULL OR jsonb_path_match(%({object_key})s::jsonb, f.compiled_jsonpath::jsonpath, {_agent_vars_sql('g')}, true))))"
+    )
+
+
+def estimated_seconds(identifier: str, descriptors: t.Mapping[str, object]) -> RawSQL:
+    """An action's estimate for this object: its fastest live implementation that fits it.
+
+    Null when no implementation has an estimate that can be computed for this object. For a
+    query on ``facade_action`` itself: the action query annotates it.
+    """
+    params: Params = {"object": json.dumps(descriptors), "identifier": identifier}
+    live = _live_agent_sql("g", "cutoff", params)
+    sql = (
+        f"(SELECT MIN(jsonb_path_query_first(%(object)s::jsonb, i.estimated_runtime_path::jsonpath, {_agent_vars_sql('g')}, true)::float8)"
+        f" FROM facade_implementation i JOIN facade_agent g ON g.id = i.agent_id"
+        f" LEFT JOIN facade_argport p ON p.action_id = i.action_id AND p.parent_id IS NULL AND p.key = i.estimated_runtime_port"
+        f" WHERE i.action_id = facade_action.id AND {live} AND i.estimated_runtime_path IS NOT NULL"
+        f" AND (i.estimated_runtime_port IS NULL OR p.identifier = %(identifier)s)"
+        f" AND NOT EXISTS (SELECT 1 FROM facade_implementationfit f"
+        f" JOIN facade_argport fp ON fp.action_id = i.action_id AND fp.parent_id IS NULL AND fp.key = f.port_key"
+        f" WHERE f.implementation_id = i.id AND fp.identifier = %(identifier)s"
+        f" AND COALESCE(jsonb_path_match(%(object)s::jsonb, f.compiled_jsonpath::jsonpath, {_agent_vars_sql('g')}, true), false) = false))"
+    )
+    return RawSQL(*_to_positional(sql, params), output_field=FloatField())
 
 
 def _build_match_exists(
@@ -155,6 +213,8 @@ def _build_match_exists(
         candidate_object = {descriptor.key: descriptor.value for descriptor in descriptors}
         key = f"obj_{id_path}"
         params[key] = json.dumps(candidate_object)
+        if parent_alias is None and owner_column == "action_id" and table == PORT_TABLE["args"]:
+            conditions.append(_fits_condition(alias, key, f"cutoff_{id_path}", params))
         conditions.append(f"({alias}.compiled_jsonpath IS NULL OR jsonb_path_match(%({key})s::jsonb, {alias}.compiled_jsonpath::jsonpath, '{{}}'::jsonb, true))")
 
     for child_index, child in enumerate(match.children or []):

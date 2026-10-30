@@ -61,6 +61,36 @@ pub async fn set_supervisor(
     Ok(())
 }
 
+/// Hardware as the action query reads it: the GPU values are derived here, once.
+pub fn stored_hardware(hardware: &crate::messages::AgentHardware) -> serde_json::Value {
+    let mut stored = serde_json::to_value(hardware).expect("hardware serializes");
+    stored["gpu_count"] = hardware.gpus.len().into();
+    stored["gpu_memory_mib"] = hardware
+        .gpus
+        .iter()
+        .filter_map(|gpu| gpu.memory_mib)
+        .max()
+        .into();
+    stored
+}
+
+/// Record what the agent's machine has, as it said on this registration (none clears it).
+pub async fn set_hardware(
+    db: &PgPool,
+    agent: i64,
+    hardware: Option<&crate::messages::AgentHardware>,
+) -> Result<(), sqlx::Error> {
+    let stored = hardware.map(stored_hardware);
+    sqlx::query(
+        "UPDATE facade_agent SET hardware = $2 WHERE id = $1 AND hardware IS DISTINCT FROM $2",
+    )
+    .bind(agent)
+    .bind(stored)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 /// Record what the agent said on this registration it implements beyond the base protocol (none
 /// clears it): whether a task with `state_requires` may be sent to it. Written only when it
 /// changed.

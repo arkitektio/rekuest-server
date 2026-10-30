@@ -9,7 +9,7 @@ from typing import Optional
 
 import strawberry
 import strawberry_django
-from django.db.models import Max, Q, QuerySet
+from django.db.models import F, Max, Q, QuerySet
 from django.db.models.expressions import OrderBy
 from strawberry import auto
 from strawberry.types import Info
@@ -18,6 +18,7 @@ from strawberry_django.filters import FilterLookup
 
 from embeddings.search import hybrid_search
 from facade import inputs, managers, models
+from facade.filters import capabilities
 from rekuest_core import enums as renums
 
 
@@ -68,6 +69,12 @@ class ActionOrder:
         queryset = queryset.annotate(latest_task_time=Max(f"{prefix}task__created_at"))
         return queryset, [value.resolve("latest_task_time")]
 
+    @strawberry_django.order_field(description="Runnable first, then by the estimate for the object named in the `estimatedRuntime` filter, with no estimate last. Does nothing without that filter.")
+    def estimated_runtime(self, info: Info, queryset: QuerySet[models.Action], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Action], list[OrderBy]]:
+        if not value or "estimated_seconds" not in queryset.query.annotations:
+            return queryset, []
+        return queryset, [F(f"{prefix}assignable").desc(), value.resolve("estimated_seconds"), f"{prefix}pk"]
+
     @strawberry_django.order_field(description="Runnable first (DESC) or last (ASC) by `Action.assignable`. The order the filters set (a `search`'s ranking) is kept as the tie-break, so `search` with this ordering lists runnable matches first, each group still ranked by relevance.")
     def assignable(self, info: Info, queryset: QuerySet[models.Action], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Action], list[OrderBy | str]]:
         if not value:
@@ -94,6 +101,16 @@ class ActionFilter:
     @filter_field(description="Any of these demand sets: the rows that satisfy every demand of at least one set (each set as `demands`). One statement, so prefer it to `OR`-ing `demands`, which tests every row of the organization. An empty list is ignored; an empty set is an error.")
     def any_demands(self, info: Info, queryset: QuerySet[models.Action], value: list[list[inputs.PortDemandInput]], prefix: str) -> tuple[QuerySet[models.Action], Q]:
         return queryset, any_port_demands(info, value, "action", f"{prefix}id")
+
+    @filter_field(description="The estimate for one object, for `ActionOrder.estimatedRuntime` and `Action.estimatedRuntimeSeconds`. With `lte`, leaves out actions known to take longer: one with no estimate for this object stays.")
+    def estimated_runtime(self, info: Info, queryset: QuerySet[models.Action], value: inputs.EstimatedRuntimeFilterInput, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+        if prefix:
+            raise ValueError("estimatedRuntime filters actions themselves, not a relation to them.")
+        descriptors = {descriptor.key: descriptor.value for descriptor in value.descriptors}
+        queryset = queryset.annotate(estimated_seconds=managers.estimated_seconds(value.identifier, descriptors))
+        if value.lte is None:
+            return queryset, Q()
+        return queryset, Q(estimated_seconds__isnull=True) | Q(estimated_seconds__lte=value.lte)
 
     @filter_field
     def object_demands(self, info: Info, queryset: QuerySet[models.Action], value: list[inputs.PortDemandInput], prefix: str) -> tuple[QuerySet[models.Action], Q]:
@@ -138,3 +155,27 @@ class ActionFilter:
     @filter_field(description="Filter using app identifier")
     def app_identifier(self, info: Info, queryset: QuerySet[models.Action], value: str, prefix: str) -> tuple[QuerySet[models.Action], Q]:
         return queryset.filter(**{f"{prefix}app__identifier": value}), Q()
+
+    @filter_field(description=capabilities.DESCRIPTIONS["asks"][1])
+    def asks(self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+        return queryset, capabilities.action_q("asks", value, prefix)
+
+    @filter_field(description=capabilities.DESCRIPTIONS["informs"][1])
+    def informs(self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+        return queryset, capabilities.action_q("informs", value, prefix)
+
+    @filter_field(description=capabilities.DESCRIPTIONS["calls"][1])
+    def calls(self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+        return queryset, capabilities.action_q("calls", value, prefix)
+
+    @filter_field(description=capabilities.DESCRIPTIONS["dynamic_asks"][1])
+    def dynamic_asks(self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+        return queryset, capabilities.action_q("dynamic_asks", value, prefix)
+
+    @filter_field(description=capabilities.DESCRIPTIONS["dynamic_informs"][1])
+    def dynamic_informs(self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+        return queryset, capabilities.action_q("dynamic_informs", value, prefix)
+
+    @filter_field(description=capabilities.DESCRIPTIONS["dynamic_calls"][1])
+    def dynamic_calls(self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+        return queryset, capabilities.action_q("dynamic_calls", value, prefix)

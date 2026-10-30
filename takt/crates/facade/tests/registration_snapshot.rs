@@ -462,3 +462,108 @@ async fn registration_writes_the_recorded_rows() {
         failures.join("\n")
     );
 }
+
+/// Formulas reach their rows through a `REGISTER`'s declaration, are replaced by the next one, and
+/// may only read a descriptor a service declares; hardware is written beside them.
+#[tokio::test]
+async fn a_runtime_formula_and_the_hardware_are_stored() {
+    let Ok(url) = std::env::var("TAKT_TEST_DATABASE_URL") else {
+        return;
+    };
+    let db = PgPool::connect(&url).await.unwrap();
+    let identifier = format!("@estimate/{}", uuid::Uuid::new_v4().simple());
+    declare_structure(&db, &identifier, &["@estimate/size"]).await;
+    let agent = agent(&db, "estimate-org", "estimate").await;
+
+    let payload = |read: &str, source: &str| {
+        json!({"hash": source, "implementations": [{
+            "interface": "segment",
+            "fits": [{"port": "image", "source": source, "call": {"operation": "cmp.lt", "arguments": [
+                {"key": "a", "value_path": "value/@estimate~1size"},
+                {"key": "b", "value_literal": source.len()},
+            ]}}],
+            "estimated_runtime": {
+                "source": source,
+                "call": {"operation": "math.div", "arguments": [
+                    {"key": "a", "value_path": read},
+                    {"key": "b", "value_path": "agent/cpu_count"},
+                ]},
+            },
+            "definition": {"key": "segment", "name": "Segment", "kind": "FUNCTION", "returns": [], "args": [
+                {"key": "image", "kind": "STRUCTURE", "identifier": identifier, "nullable": false},
+            ]},
+        }]})
+    };
+    let stored = |db: PgPool| async move {
+        sqlx::query_scalar::<_, Value>(
+            "SELECT i.estimated_runtime FROM facade_implementation i WHERE i.agent_id = $1",
+        )
+        .bind(agent)
+        .fetch_one(&db)
+        .await
+        .unwrap()
+    };
+
+    let first = implement(&db, agent, &payload("args/image/@estimate~1size", "first")).await;
+    assert!(matches!(first, Outcome::Accepted(_)), "{first:?}");
+    let row = stored(db.clone()).await;
+    assert_eq!(row["source"], "first");
+    assert_eq!(
+        row["call"]["arguments"][0]["value_path"],
+        "args/image/@estimate~1size"
+    );
+    let (path, port): (String, String) = sqlx::query_as(
+        "SELECT estimated_runtime_path, estimated_runtime_port FROM facade_implementation WHERE agent_id = $1",
+    )
+    .bind(agent)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(path, r#"($."@estimate/size" / $agent.cpu_count)"#);
+    assert_eq!(port, "image");
+    let fit = || {
+        sqlx::query_scalar::<_, String>(
+            "SELECT f.compiled_jsonpath FROM facade_implementationfit f
+               JOIN facade_implementation i ON i.id = f.implementation_id WHERE i.agent_id = $1",
+        )
+        .bind(agent)
+        .fetch_all(&db)
+    };
+    assert_eq!(fit().await.unwrap(), [r#"$."@estimate/size" < 5"#]);
+
+    let replaced = implement(
+        &db,
+        agent,
+        &payload("args/image/@estimate~1size", "replaced"),
+    )
+    .await;
+    assert!(matches!(replaced, Outcome::Accepted(_)), "{replaced:?}");
+    assert_eq!(fit().await.unwrap(), [r#"$."@estimate/size" < 8"#]);
+
+    let undeclared = implement(
+        &db,
+        agent,
+        &payload("args/image/@estimate~1other", "second"),
+    )
+    .await;
+    assert!(
+        matches!(&undeclared, Outcome::Refused(message) if message.contains("no service declares")),
+        "{undeclared:?}"
+    );
+
+    let hardware: facade::messages::AgentHardware = serde_json::from_value(
+        json!({"cpu_count": 4, "memory_mib": 2048, "gpus": [{"name": "G"}]}),
+    )
+    .unwrap();
+    facade::registration::set_hardware(&db, agent, Some(&hardware))
+        .await
+        .unwrap();
+    let written: Value = sqlx::query_scalar("SELECT hardware FROM facade_agent WHERE id = $1")
+        .bind(agent)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!(written["cpu_count"], 4);
+    assert_eq!(written["gpus"][0]["name"], "G");
+    assert_eq!(written["gpu_count"], 1);
+}

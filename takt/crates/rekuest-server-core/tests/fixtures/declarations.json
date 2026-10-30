@@ -281,7 +281,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -375,7 +377,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": [],
@@ -1039,7 +1043,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -1256,7 +1262,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": [],
@@ -1776,7 +1784,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -1870,7 +1880,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -1946,7 +1958,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -2040,7 +2054,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -2152,7 +2168,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": [],
@@ -2816,7 +2834,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -2928,7 +2948,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -3022,7 +3044,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -3134,7 +3158,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -3246,7 +3272,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -3340,7 +3368,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": [],
@@ -7149,7 +7179,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -7925,7 +7957,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -8645,7 +8679,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -9401,7 +9437,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": [],
@@ -9635,7 +9673,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": [],
@@ -9982,7 +10022,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": [],
@@ -10189,7 +10231,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": [],
@@ -10547,7 +10591,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -10623,7 +10669,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -10717,7 +10765,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -10793,7 +10843,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": [],
@@ -11341,7 +11393,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": [],
@@ -11577,7 +11631,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -11653,7 +11709,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": [],
@@ -11933,7 +11991,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -12026,7 +12086,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": [],
@@ -12480,7 +12542,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -12576,7 +12640,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     },
     {
      "definition": {
@@ -12652,7 +12718,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": [],
@@ -13405,7 +13473,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": [],
@@ -13812,7 +13882,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": [],
@@ -14437,7 +14509,9 @@
      ],
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": [],
@@ -14514,7 +14588,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": null,
@@ -14616,7 +14692,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": null,
@@ -15055,7 +15133,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": null,
@@ -19567,7 +19647,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": null,
@@ -20022,7 +20104,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": null,
@@ -20381,7 +20465,9 @@
      "informs": null,
      "dynamic_asks": null,
      "dynamic_calls": null,
-     "dynamic_informs": null
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
     }
    ],
    "locks": null,

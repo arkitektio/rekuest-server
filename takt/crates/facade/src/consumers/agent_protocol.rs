@@ -281,6 +281,10 @@ async fn register(
     registration::set_supervisor(&ctx.db, agent, declaration.supervisor.as_deref())
         .await
         .map_err(|e| refuse(&e))?;
+    // So does its hardware: it may have come back on another machine.
+    registration::set_hardware(&ctx.db, agent, declaration.hardware.as_ref())
+        .await
+        .map_err(|e| refuse(&e))?;
     // So do its features: what it says it implements now, whatever it said before.
     registration::set_features(&ctx.db, agent, features)
         .await

@@ -200,6 +200,21 @@ class ValidatorInput:
     source: str | None = None
 
 
+@pydantic.input(models.EstimatedRuntimeInputModel, description="A formula for how long an implementation runs, in seconds, that the action query filters and sorts by.")
+class EstimatedRuntimeInput:
+    call: Annotated["UtilCallInput", strawberry.lazy(__name__)]
+    source: str | None = None
+    ui_call: Optional[Annotated["UtilCallInput", strawberry.lazy(__name__)]] = None
+    ui_source: str | None = None
+
+
+@pydantic.input(models.FitsInputModel, description="What an implementation can handle of one structure argument.")
+class FitsInput:
+    port: str
+    call: Annotated["UtilCallInput", strawberry.lazy(__name__)]
+    source: str | None = None
+
+
 @pydantic.input(
     models.OptimisticInputModel,
     description=""" An optimistic is used to optimistically set state values when the action is assigned. This is used to provide a better user experience by optimistically setting state values when the action is assigned, instead of waiting for the action to be executed and the state to be updated. This will only ever happen on the frontend.
@@ -532,6 +547,8 @@ class ImplementationInput:
     dynamic_asks: bool | None = None
     dynamic_calls: bool | None = None
     dynamic_informs: bool | None = None
+    estimated_runtime: EstimatedRuntimeInput | None = None
+    fits: list[FitsInput] | None = None
 
 
 @pydantic.input(

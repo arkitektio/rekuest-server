@@ -114,6 +114,16 @@ type Action {
   triggers(filters: TriggerFilter, ordering: [TriggerOrder!]! = [], pagination: OffsetPaginationInput): [Trigger!]!
 
   """
+  The estimate in seconds for the object named in the `estimatedRuntime` filter: its fastest live implementation that fits. Null without that filter, or when it cannot be computed for this object.
+  """
+  estimatedRuntimeSeconds: Float
+
+  """
+  Whether any implementation states a `Fits`, so which agent takes a task can matter.
+  """
+  hasFits: Boolean!
+
+  """
   This action's stored vector, as `<model id>:<floats>`. Null until it has been indexed.
   """
   embedding: Embedding
@@ -411,6 +421,11 @@ input ActionFilter {
   Any of these demand sets: the rows that satisfy every demand of at least one set (each set as `demands`). One statement, so prefer it to `OR`-ing `demands`, which tests every row of the organization. An empty list is ignored; an empty set is an error.
   """
   anyDemands: [[PortDemandInput!]!]
+
+  """
+  The estimate for one object, for `ActionOrder.estimatedRuntime` and `Action.estimatedRuntimeSeconds`. With `lte`, leaves out actions known to take longer: one with no estimate for this object stays.
+  """
+  estimatedRuntime: EstimatedRuntimeFilterInput
   objectDemands: [PortDemandInput!]
   protocols: [String!]
   kind: ActionKind
@@ -426,6 +441,30 @@ input ActionFilter {
 
   """Filter using app identifier"""
   appIdentifier: String
+
+  """
+  Whether any of its implementations may ask a person (a declared ask, or `dynamicAsks`). False: none ever asks.
+  """
+  asks: Boolean
+
+  """
+  Whether any of its implementations may show a person a blok (a declared inform, or `dynamicInforms`). False: none ever informs.
+  """
+  informs: Boolean
+
+  """
+  Whether any of its implementations may call other actions (a declared dependency, or `dynamicCalls`). False: none ever calls.
+  """
+  calls: Boolean
+
+  """Whether any of its implementations declares `dynamicAsks`."""
+  dynamicAsks: Boolean
+
+  """Whether any of its implementations declares `dynamicInforms`."""
+  dynamicInforms: Boolean
+
+  """Whether any of its implementations declares `dynamicCalls`."""
+  dynamicCalls: Boolean
 }
 
 """
@@ -442,6 +481,11 @@ enum ActionKind {
 input ActionOrder @oneOf {
   definedAt: Ordering
   usedAt: Ordering
+
+  """
+  Runnable first, then by the estimate for the object named in the `estimatedRuntime` filter, with no estimate last. Does nothing without that filter.
+  """
+  estimatedRuntime: Ordering
 
   """
   Runnable first (DESC) or last (ASC) by `Action.assignable`. The order the filters set (a `search`'s ranking) is kept as the tie-break, so `search` with this ordering lists runnable matches first, each group still ranked by relevance.
@@ -578,6 +622,11 @@ type Agent {
   Agent name: the one a user gave it (updateAgent), else the one it declares.
   """
   name: String!
+
+  """
+  What this agent's machine has, as stated on its last registration; null for an agent that never said.
+  """
+  hardware: AgentHardware
 
   """Fetch a specific implementation by interface."""
   implementation(interface: String!): Implementation
@@ -795,6 +844,27 @@ input AgentFilter {
 
   """Filter based on device"""
   deviceId: ID
+}
+
+"""One GPU of an agent's machine."""
+type AgentGpu {
+  """The GPU's name."""
+  name: String!
+
+  """Its memory in MiB, if known."""
+  memoryMib: Int
+}
+
+"""What an agent's machine has. Self-declared; unknown is null."""
+type AgentHardware {
+  """The CPUs its process may use: a container's limit counts."""
+  cpuCount: Int
+
+  """The memory its process may use, in MiB: a container's limit counts."""
+  memoryMib: Int
+
+  """Its GPUs."""
+  gpus: [AgentGpu!]!
 }
 
 input AgentInput {
@@ -3370,6 +3440,62 @@ A stored vector, as `<model id>:<comma-separated floats>` -- e.g. `potion-base-8
 scalar Embedding
 
 """
+A formula for how long an implementation runs, in seconds. The action query filters and sorts by it.
+"""
+type EstimatedRuntime {
+  """
+  The pure blok call: arithmetic over args/<port>/<descriptor key> of one structure argument and agent/<hardware>.
+  """
+  callJson: JSONSerializable!
+
+  """The formula as its author wrote it."""
+  source: String
+
+  """
+  A richer call for the form, which only the frontend evaluates: any pure function, over args/<port>, args/<port>/<descriptor key> and agent/<hardware>.
+  """
+  uiCallJson: JSONSerializable
+
+  """That formula as its author wrote it."""
+  uiSource: String
+}
+
+"""One object an action's estimate is computed for."""
+input EstimatedRuntimeFilterInput {
+  """The object's structure."""
+  identifier: String!
+
+  """What the object says of itself, as for `objectDemands`."""
+  descriptors: [DescriptorInput!]!
+
+  """Leave out actions known to take longer than this many seconds."""
+  lte: Float = null
+}
+
+"""
+A formula for how long an implementation runs, in seconds, that the action query filters and sorts by.
+"""
+input EstimatedRuntimeInput {
+  """
+  The pure blok UtilCall giving seconds, which the server compiles and the frontend evaluates: arithmetic over args/<port>/<descriptor key> of one structure argument and agent/<hardware>.
+  """
+  call: UtilCallInput!
+
+  """
+  The formula as its author wrote it (informational; never parsed or evaluated by the server).
+  """
+  source: String = null
+
+  """
+  A richer formula for the form, which only the frontend evaluates: any pure function, over args/<port>, args/<port>/<descriptor key> and agent/<hardware>.
+  """
+  uiCall: UtilCallInput = null
+
+  """That formula as its author wrote it (informational)."""
+  uiSource: String = null
+}
+
+"""
 How an implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies; a PLAIN one's task ends LOST.
 """
 enum Execution {
@@ -3461,6 +3587,20 @@ enum FiringOutcome {
   FIRED
   REJECTED
   FAILED
+}
+
+"""What an implementation can handle of one structure argument."""
+input FitsInput {
+  """The key of the structure argument it is about."""
+  port: String!
+
+  """
+  The pure blok UtilCall: a comparison of numbers, or several joined by logic.all/any. Its value_paths read value/<descriptor key> and agent/<hardware>.
+  """
+  call: UtilCallInput!
+
+  """The formula as its author wrote it (informational)."""
+  source: String = null
 }
 
 """
@@ -3737,6 +3877,16 @@ type Implementation {
   """
   dynamicInforms: Boolean!
 
+  """
+  A formula for how long it runs, in seconds. The frontend evaluates it against the form, the descriptors of the structures picked there and the agent; null when none was declared.
+  """
+  estimatedRuntime: EstimatedRuntime
+
+  """
+  What it can handle, per argument: an action is not offered for an object no live implementation fits, and the agent refuses one that reaches it anyway.
+  """
+  fits: [ImplementationFit!]!
+
   """Constructed name for display, combining interface and agent name."""
   name: String!
 
@@ -3811,6 +3961,55 @@ input ImplementationFilter {
   resolvableFor: ID
   search: String
   actionDemand: ActionDemandInput
+
+  """
+  Whether its tasks may ask a person (hold until answered): it declares an ask, or `dynamicAsks`. False: never asks.
+  """
+  asks: Boolean
+
+  """
+  Whether its tasks may show a person a blok while they go on: it declares an inform, or `dynamicInforms`. False: never informs.
+  """
+  informs: Boolean
+
+  """
+  Whether its tasks may call other actions: it declares a dependency, or `dynamicCalls`. False: never calls.
+  """
+  calls: Boolean
+
+  """
+  Whether it declares `dynamicAsks`: its tasks may ask through a blok made at run time.
+  """
+  dynamicAsks: Boolean
+
+  """
+  Whether it declares `dynamicInforms`: its tasks may show a blok made at run time.
+  """
+  dynamicInforms: Boolean
+
+  """
+  Whether it declares `dynamicCalls`: its tasks may call actions found at run time.
+  """
+  dynamicCalls: Boolean
+}
+
+"""What an implementation can handle of one structure argument."""
+type ImplementationFit {
+  """The key of the argument."""
+  port: String!
+
+  """
+  The pure blok call: a comparison over value/<descriptor key> and agent/<hardware>.
+  """
+  callJson: JSONSerializable!
+
+  """The formula as its author wrote it."""
+  source: String
+
+  """
+  The formula as the Postgres jsonpath the server tests. A picker hands it to the service that filters the objects.
+  """
+  compiledPath: String!
 }
 
 """
@@ -3912,6 +4111,16 @@ input ImplementationInput {
   Whether a task may show a blok made at inform time, or any blok of the organization. Refused otherwise, and without the `rekuest_dynamic_inform` scope.
   """
   dynamicInforms: Boolean = null
+
+  """
+  How long this implementation runs, in seconds, given its arguments, the descriptors of the structures picked for them and the agent. The frontend evaluates it to show an estimate; the server only stores it.
+  """
+  estimatedRuntime: EstimatedRuntimeInput = null
+
+  """
+  What this implementation can handle, per argument. An action is not offered for an object no live implementation fits.
+  """
+  fits: [FitsInput!] = null
 }
 
 """

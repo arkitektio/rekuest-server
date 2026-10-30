@@ -15,6 +15,7 @@ use super::calls::{
     check_pure_call, iter_component_nodes, ComponentNodeInputModel, UtilCallInputModel,
     PORT_PATH_SEPARATOR,
 };
+use super::formula::{EstimatedRuntimeInputModel, FitsInputModel};
 use super::ports::{
     check_unique_keys, ArgPortInputModel, AssignWidgetInputModel, EffectInputModel,
     ReturnPortInputModel, ReturnWidgetInputModel,
@@ -686,11 +687,25 @@ pub struct ImplementationInputModel {
     /// Whether a task may show a blok made at inform time, or any of the organization.
     #[serde(default)]
     pub dynamic_informs: Option<bool>,
+    /// How long it runs for an object and the agent: what the action query filters and sorts by.
+    #[serde(default)]
+    pub estimated_runtime: Option<EstimatedRuntimeInputModel>,
+    /// What it can handle, per structure argument.
+    #[serde(default)]
+    pub fits: Option<Vec<FitsInputModel>>,
 }
 
 impl ImplementationInputModel {
     pub fn validate(&mut self) -> Result<(), ValidationError> {
         self.definition.validate()?;
+        if let Some(estimate) = &self.estimated_runtime {
+            estimate.check(&self.definition.args, &self.interface)?;
+        }
+        super::formula::check_fits_of(
+            self.fits.as_deref().unwrap_or_default(),
+            &self.definition.args,
+            &self.interface,
+        )?;
         if self.dynamic_calls == Some(true) && self.execution != Execution::WORKFLOW {
             return Err(ValidationError(format!(
                 "Implementation {:?} declares dynamic_calls, which only a WORKFLOW may",

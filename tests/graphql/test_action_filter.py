@@ -12,7 +12,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
 
-from authentikate.models import App, Release
+from authentikate.models import App, Client, Release
 from rekuest_core.inputs.models import ImplementationInputModel
 
 from facade import models
@@ -124,3 +124,55 @@ class TestActionObjectFilter:
         assert result.errors is None, result.errors
         names = [a["name"] for a in result.data["actions"]]
         assert "Thresholder" not in names
+
+
+ESTIMATE_QUERY = """
+    query Estimated($filters: ActionFilter, $ordering: [ActionOrder!]) {
+        actions(filters: $filters, ordering: $ordering) {
+            name
+            estimatedRuntimeSeconds
+        }
+    }
+"""
+
+
+def _seed_estimates(context: HttpContext) -> None:
+    """Three actions on one structure: fast, slow, and one with no estimate."""
+    from django.utils import timezone
+
+    organization = context.request.organization
+    release = Release.objects.create(app=App.objects.create(identifier="estimate-app"), version="1.0.0")
+    for name, seconds in (("slow", 1000), ("fast", 10), ("none", None)):
+        payload = _implementation_input().model_dump()
+        payload["interface"] = name
+        payload["definition"].update(key=name, name=name)
+        payload["definition"]["args"][0].pop("requires", None)
+        # An agent per client: one client, user and organization has one agent.
+        client = Client.objects.create(client_id=f"estimate-{name}", release=release)
+        agent = models.Agent.objects.create(app=release.app, release=release, user=context.request.user, client=client, organization=organization, hash=name, name=name, connected=True, last_seen=timezone.now(), hardware={"cpu_count": 1})
+        implementation = _create_implementation(ImplementationInputModel.model_validate(payload), agent)
+        if seconds is not None:
+            models.Implementation.objects.filter(pk=implementation.pk).update(estimated_runtime_path=f"({seconds} / $agent.cpu_count)", estimated_runtime_port="image")
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_actions_filter_and_sort_by_their_estimate(authenticated_context: HttpContext):
+    await schema.execute("query { __typename }", context_value=authenticated_context)
+    await sync_to_async(_seed_estimates)(authenticated_context)
+
+    def object_filter(**extra):
+        return {"estimatedRuntime": {"identifier": "@mikro/image", "descriptors": [{"key": "axes", "value": "c"}], **extra}}
+
+    ordered = await schema.execute(ESTIMATE_QUERY, variable_values={"filters": object_filter(), "ordering": [{"estimatedRuntime": "ASC_NULLS_LAST"}]}, context_value=authenticated_context)
+    assert ordered.errors is None, ordered.errors
+    assert [(action["name"], action["estimatedRuntimeSeconds"]) for action in ordered.data["actions"]] == [("fast", 10.0), ("slow", 1000.0), ("none", None)]
+
+    limited = await schema.execute(ESTIMATE_QUERY, variable_values={"filters": object_filter(lte=60)}, context_value=authenticated_context)
+    assert limited.errors is None, limited.errors
+    assert {action["name"] for action in limited.data["actions"]} == {"fast", "none"}
+
+    # Without the filter there is nothing to order by.
+    plain = await schema.execute(ESTIMATE_QUERY, variable_values={"ordering": [{"estimatedRuntime": "ASC_NULLS_LAST"}]}, context_value=authenticated_context)
+    assert plain.errors is None, plain.errors
+    assert {action["estimatedRuntimeSeconds"] for action in plain.data["actions"]} == {None}

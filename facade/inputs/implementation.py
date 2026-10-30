@@ -72,3 +72,10 @@ class DeleteImplementationInputModel(BaseModel):
 )
 class DeleteImplementationInput:
     implementation: strawberry.ID
+
+
+@strawberry.input(description="One object an action's estimate is computed for.")
+class EstimatedRuntimeFilterInput:
+    identifier: str = strawberry.field(description="The object's structure.")
+    descriptors: list[ritypes.DescriptorInput] = strawberry.field(description="What the object says of itself, as for `objectDemands`.")
+    lte: float | None = strawberry.field(default=None, description="Leave out actions known to take longer than this many seconds.")

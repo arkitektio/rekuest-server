@@ -143,7 +143,7 @@ async fn post(
 
 fn signal(org: &str, id: &str, provenance: Option<String>) -> Value {
     // Signal ids are unique per service across organizations: scope them to this run's org.
-    json!({"id": format!("{org}-{id}"), "kind": "CREATED", "identifier": "@bank/account", "object": "17", "organization": org,
+    json!({"id": format!("{org}-{id}"), "kind": "CREATED", "identifier": "@bank/account", "object": "17", "organization": format!("signal-tests#{org}"),
            "descriptors": {"currency": "EUR"}, "provenance": provenance})
 }
 

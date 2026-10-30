@@ -8,11 +8,13 @@
 pub mod bloks;
 pub mod calls;
 pub mod definitions;
+pub mod formula;
 pub mod ports;
 
 pub use bloks::*;
 pub use calls::*;
 pub use definitions::*;
+pub use formula::*;
 pub use ports::*;
 
 /// Why a declaration is refused, worded as the Python validator words it.

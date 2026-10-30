@@ -67,6 +67,11 @@ class Agent(models.Model):
         blank=True,
         help_text="The app this agent says controls its lifecycle (e.g. 'plugin_engine'), as it stated on its last registration. A self-declared hint for narrowing pickers, never authority: a supervisor maps the agent to its own records before acting.",
     )
+    hardware = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="What this agent's machine has (cpu_count, memory_mib, gpus), as it stated on its last registration. Self-declared, for showing an estimate.",
+    )
     features = models.JSONField(
         null=True,
         blank=True,

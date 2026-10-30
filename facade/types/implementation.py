@@ -16,6 +16,31 @@ from rekuest_core import scalars as rscalars
 from rekuest_core.objects import models as rmodels
 from rekuest_core.objects import types as rtypes
 
+def _without_nulls(value: object) -> object:
+    """A stored call as the renderer reads one: takt stores every unset binding as null."""
+    if isinstance(value, dict):
+        return {key: _without_nulls(item) for key, item in value.items() if item is not None}
+    if isinstance(value, list):
+        return [_without_nulls(item) for item in value]
+    return value
+
+
+@strawberry.type(description="A formula for how long an implementation runs, in seconds. The action query filters and sorts by it.")
+class EstimatedRuntime:
+    call_json: rscalars.JSONSerializable = strawberry.field(description="The pure blok call: arithmetic over args/<port>/<descriptor key> of one structure argument and agent/<hardware>.")
+    source: Optional[str] = strawberry.field(description="The formula as its author wrote it.")
+    ui_call_json: Optional[rscalars.JSONSerializable] = strawberry.field(description="A richer call for the form, which only the frontend evaluates: any pure function, over args/<port>, args/<port>/<descriptor key> and agent/<hardware>.")
+    ui_source: Optional[str] = strawberry.field(description="That formula as its author wrote it.")
+
+
+@strawberry.type(description="What an implementation can handle of one structure argument.")
+class ImplementationFit:
+    port: str = strawberry.field(description="The key of the argument.")
+    call_json: rscalars.JSONSerializable = strawberry.field(description="The pure blok call: a comparison over value/<descriptor key> and agent/<hardware>.")
+    source: Optional[str] = strawberry.field(description="The formula as its author wrote it.")
+    compiled_path: str = strawberry.field(description="The formula as the Postgres jsonpath the server tests. A picker hands it to the service that filters the objects.")
+
+
 if TYPE_CHECKING:
     # Named in annotations only: strawberry resolves them when it builds the schema.
     from facade.types.action import Action
@@ -65,6 +90,26 @@ class Implementation:
     dynamic_asks: bool = strawberry_django.field(description="Whether a task may also ask through a blok made at ask time, or any blok of the organization. Needs the agent's `rekuest_dynamic_ask` scope too.")
     dynamic_calls: bool = strawberry_django.field(description="Whether a task may also call actions it found at run time, not only its declared dependencies. Needs the agent's `rekuest_dynamic_call` scope too.")
     dynamic_informs: bool = strawberry_django.field(description="Whether a task may also show a blok made at inform time, or any blok of the organization. Needs the agent's `rekuest_dynamic_inform` scope too.")
+
+    @strawberry_django.field(only=["estimated_runtime"], description="A formula for how long it runs, in seconds. The frontend evaluates it against the form, the descriptors of the structures picked there and the agent; null when none was declared.")
+    def estimated_runtime(self) -> Optional[EstimatedRuntime]:
+        estimate = row_of(self, models.Implementation).estimated_runtime
+        if estimate is None:
+            return None
+        ui_call = estimate.get("ui_call")
+        return EstimatedRuntime(
+            call_json=_without_nulls(estimate["call"]),
+            source=estimate.get("source"),
+            ui_call_json=_without_nulls(ui_call) if ui_call else None,
+            ui_source=estimate.get("ui_source"),
+        )
+
+    @strawberry_django.field(only=["fits"], description="What it can handle, per argument: an action is not offered for an object no live implementation fits, and the agent refuses one that reaches it anyway.")
+    def fits(self) -> list[ImplementationFit]:
+        return [
+            ImplementationFit(port=fit.port_key, call_json=_without_nulls(fit.call), source=fit.source, compiled_path=fit.compiled_jsonpath)
+            for fit in row_of(self, models.Implementation).fits.all()
+        ]
 
     @strawberry_django.field(description="Constructed name for display, combining interface and agent name.")
     def name(self) -> str:

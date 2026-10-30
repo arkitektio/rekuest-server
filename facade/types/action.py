@@ -61,6 +61,14 @@ class Action:
     live_implementations: int = strawberry_django.field(
         description="How many of its implementations sit on an agent that can take work now (connected, or a webhook agent) — one per agent. Kept by the database as agents connect and leave, a moment behind (takt recomputes it on commit); a crashed agent counts until takt's stale sweep notices (seconds)."
     )
+    @strawberry_django.field(description="The estimate in seconds for the object named in the `estimatedRuntime` filter: its fastest live implementation that fits. Null without that filter, or when it cannot be computed for this object.")
+    def estimated_runtime_seconds(self) -> float | None:
+        return getattr(row_of(self, models.Action), "estimated_seconds", None)
+
+    @strawberry_django.field(description="Whether any implementation states a `Fits`, so which agent takes a task can matter.")
+    def has_fits(self) -> bool:
+        return models.ImplementationFit.objects.filter(implementation__action=row_of(self, models.Action)).exists()
+
     assignable: bool = strawberry_django.field(description="Whether an agent that can take this action is connected (or is a webhook agent) right now: `liveImplementations > 0`.")
     test_cases: list["TestCase"] | None = strawberry_django.field(description="Test cases for this action.")
     organization: "Organization" = strawberry_django.field(description="The organization that owns this action.")

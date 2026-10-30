@@ -16,6 +16,7 @@ from strawberry_django.fields.filter_order import filter_field
 from strawberry_django.filters import FilterLookup
 
 from facade import inputs, liveness, managers, models
+from facade.filters import capabilities
 from facade.filters.action import any_port_demands
 from rekuest_core import enums as renums
 from rekuest_core import scalars as rscalars
@@ -116,3 +117,27 @@ class ImplementationFilter:
             organization_id=info.context.request.organization.id,
         )[0]
         return queryset, Q(**{f"{prefix}action__id__in": new_ids})
+
+    @filter_field(description=capabilities.DESCRIPTIONS["asks"][0])
+    def asks(self, info: Info, queryset: QuerySet[models.Implementation], value: bool, prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
+        return queryset, capabilities.implementation_q("asks", value, prefix)
+
+    @filter_field(description=capabilities.DESCRIPTIONS["informs"][0])
+    def informs(self, info: Info, queryset: QuerySet[models.Implementation], value: bool, prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
+        return queryset, capabilities.implementation_q("informs", value, prefix)
+
+    @filter_field(description=capabilities.DESCRIPTIONS["calls"][0])
+    def calls(self, info: Info, queryset: QuerySet[models.Implementation], value: bool, prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
+        return queryset, capabilities.implementation_q("calls", value, prefix)
+
+    @filter_field(description=capabilities.DESCRIPTIONS["dynamic_asks"][0])
+    def dynamic_asks(self, info: Info, queryset: QuerySet[models.Implementation], value: bool, prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
+        return queryset, capabilities.implementation_q("dynamic_asks", value, prefix)
+
+    @filter_field(description=capabilities.DESCRIPTIONS["dynamic_informs"][0])
+    def dynamic_informs(self, info: Info, queryset: QuerySet[models.Implementation], value: bool, prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
+        return queryset, capabilities.implementation_q("dynamic_informs", value, prefix)
+
+    @filter_field(description=capabilities.DESCRIPTIONS["dynamic_calls"][0])
+    def dynamic_calls(self, info: Info, queryset: QuerySet[models.Implementation], value: bool, prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
+        return queryset, capabilities.implementation_q("dynamic_calls", value, prefix)
