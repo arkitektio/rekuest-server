@@ -99,9 +99,7 @@ async def test_a_duplicate_request_is_not_created_again_and_replays_the_events(a
     await executor.receive_type("ASSIGN")
 
     await executor.send({"type": "STARTED", "task": child, "seq": 1})
-    await executor.receive_type("EVENT_ACK")
     await executor.send({"type": "COMPLETED", "task": child, "seq": 2})
-    await executor.receive_type("EVENT_ACK")
     live = await mirrors_of(caller, child, "COMPLETED_EVENT")
     assert [m["type"] for m in live] == ["STARTED_EVENT", "COMPLETED_EVENT"], live
 

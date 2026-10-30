@@ -1,7 +1,7 @@
 //! The HTTP intake of HookAgents (`facade/http_intake.py`): `POST /agi/http/{agent}`.
 //!
 //! A HookAgent POSTs the frames a socket agent would send, signed, and they go through the same
-//! [`message_router::route`]; the reply (`EVENT_ACK`, `ASSIGN_RESPONSE`, …) is the response
+//! [`message_router::route`]; the reply (`ASSIGN_RESPONSE`, …) is the response
 //! body. HTTP has no session, so every request stands alone: its signature is timestamped, and
 //! its digest is claimed once in redis, across every replica, which also makes an ordinary HTTP
 //! retry of a fire-and-forget report idempotent.
@@ -157,7 +157,7 @@ pub fn reply_for_duplicate(frame: &AgentFrame) -> Option<Answer> {
         | FromAgent::Held { .. }
         | FromAgent::Inform { .. }
         | FromAgent::Resumed { .. }
-        | FromAgent::Effect { .. } => Some((200, body_of(message_router::ack(frame)))),
+        | FromAgent::Effect { .. } => Some((200, json!({}))),
         _ => Some((200, json!({"duplicate": true}))),
     }
 }

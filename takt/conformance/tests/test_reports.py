@@ -1,10 +1,10 @@
 """Reports: what an agent says about its work is persisted once and acknowledged.
 
 The agent declares one action, is assigned a task through GraphQL, and reports on it: plain
-frames are answered with EVENT_ACK (lifecycle and terminals), numbered frames with one
-cumulative JOURNAL_ACK and never an EVENT_ACK.
+frames get no reply, numbered frames one cumulative JOURNAL_ACK and nothing else.
 """
 
+import asyncio
 import uuid
 
 from conftest import ECHO_DECLARATION, session_id
@@ -23,23 +23,29 @@ async def assigned(agents, graphql, token):  # noqa: ANN001, ANN201
     return agent, api, task
 
 
-async def test_plain_reports_are_acked_and_persisted(agents, graphql) -> None:  # noqa: ANN001
+async def finished(api, task):  # noqa: ANN001, ANN201
+    """The task's history, once its terminal report is persisted: reports get no reply."""
+    for _ in range(100):
+        history = await api.task(task)
+        if history["latestEventKind"] == "COMPLETED":
+            return history
+        await asyncio.sleep(0.05)
+    raise AssertionError(f"{task} did not finish: {history}")
+
+
+async def test_plain_reports_are_persisted(agents, graphql) -> None:  # noqa: ANN001
     agent, api, task = await assigned(agents, graphql, "conf_9")
 
     await agent.send({"type": "STARTED", "task": task, "seq": 1})
-    started = await agent.receive_type("EVENT_ACK")
-    assert started["task"] == task and started["seq"] == 1
-
     await agent.send({"type": "PROGRESS", "task": task, "progress": 50, "seq": 2})
     await agent.send({"type": "YIELD", "task": task, "returns": {"return0": 3}, "seq": 3})
     completed_id = str(uuid.uuid4())
     await agent.send({"id": completed_id, "type": "COMPLETED", "task": task, "seq": 4})
-    completed = await agent.receive_type("EVENT_ACK", timeout=TERMINAL_ACK_TIMEOUT)
-    assert completed["event"] == completed_id and completed["seq"] == 4
+    await finished(api, task)
 
-    # The agent retries a terminal it thinks was lost: acked again, recorded once.
+    # The agent retries a terminal it thinks was lost: recorded once.
     await agent.send({"id": completed_id, "type": "COMPLETED", "task": task, "seq": 4})
-    await agent.receive_type("EVENT_ACK", timeout=TERMINAL_ACK_TIMEOUT)
+    await asyncio.sleep(0.5)
 
     history = await api.task(task)
     assert history["latestEventKind"] == "COMPLETED"
@@ -60,7 +66,7 @@ async def test_numbered_reports_are_journal_acked_once(agents, graphql) -> None:
     await agent.send(numbered(3, {"type": "YIELD", "task": task, "returns": {"return0": 3}}))
     await agent.send(numbered(4, {"type": "COMPLETED", "task": task}))
 
-    # Frames up to the terminal are acknowledged together, at once after it; never EVENT_ACK.
+    # Frames up to the terminal are acknowledged together, at once after it.
     seen = []
     while True:
         frame = await agent.receive(timeout=TERMINAL_ACK_TIMEOUT)
@@ -71,7 +77,6 @@ async def test_numbered_reports_are_journal_acked_once(agents, graphql) -> None:
         if frame["type"] == "JOURNAL_ACK" and frame["pos"] == 4:
             assert frame["journal_session"] == journal
             break
-    assert "EVENT_ACK" not in seen
 
     # A resend after a reconnect (the agent held it unacked): skipped, acknowledged again.
     await agent.send(numbered(4, {"type": "COMPLETED", "task": task}))
@@ -90,6 +95,7 @@ async def test_a_report_on_a_task_that_is_not_the_agents_is_dropped(agents, grap
     stranger = await agents()
     await stranger.register("conf_12", session_id=session_id())
     await stranger.send({"type": "COMPLETED", "task": task, "seq": 1})
-    await stranger.receive_type("EVENT_ACK")  # acked (the agent must stop retaining it), not applied
+    # Dropped: nothing answers it, so give it the time it would take to apply.
+    await asyncio.sleep(0.5)
 
     assert (await api.task(task))["latestEventKind"] != "COMPLETED"

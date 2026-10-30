@@ -732,7 +732,7 @@ internal!(unshelve, UnshelveRequest, |state, request| {
     let agent = facade::registration::ensure_agent(db, client, user, organization)
         .await
         .map_err(BackendError::Database)?;
-    facade::registration::unshelve(db, agent, &request.id, true)
+    facade::registration::unshelve(db, agent, &request.id)
         .await
         .map_err(|e| match e {
             facade::registration::UnshelveError::Database(e) => {

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use authentikate::base_models::StaticToken;
 use facade::consumers::connections::Connections;
 use facade::message_router::{route, RouteError};
-use facade::messages::{AgentFrame, ToAgent};
+use facade::messages::AgentFrame;
 use facade::persist::positions::{self, Position};
 use facade::persist::transitions::{self, Claim};
 use facade::settings::Settings;
@@ -220,23 +220,21 @@ async fn concurrent_claims_have_one_winner_and_one_event() {
 }
 
 #[tokio::test]
-async fn reports_are_persisted_once_and_acked() {
+async fn reports_are_persisted_once() {
     let Some(ctx) = context().await else { return };
     let (agent, action) = agent(&ctx).await;
     let task = task(&ctx, agent, action).await;
     let t = task.to_string();
 
-    assert!(matches!(
-        route(
-            &ctx,
-            agent,
-            &frame(json!({"type": "STARTED", "task": t, "seq": 1})),
-            None
-        )
-        .await
-        .unwrap(),
-        Some(ToAgent::EventAck { .. })
-    ));
+    assert!(route(
+        &ctx,
+        agent,
+        &frame(json!({"type": "STARTED", "task": t, "seq": 1})),
+        None
+    )
+    .await
+    .unwrap()
+    .is_none());
     route(
         &ctx,
         agent,
@@ -254,15 +252,15 @@ async fn reports_are_persisted_once_and_acked() {
     .await
     .unwrap();
     let completed = frame(json!({"type": "COMPLETED", "task": t, "seq": 4}));
-    assert!(matches!(
-        route(&ctx, agent, &completed, None).await.unwrap(),
-        Some(ToAgent::EventAck { .. })
-    ));
-    // The agent retries an unacked terminal: acked again, recorded once.
-    assert!(matches!(
-        route(&ctx, agent, &completed, None).await.unwrap(),
-        Some(ToAgent::EventAck { .. })
-    ));
+    assert!(route(&ctx, agent, &completed, None)
+        .await
+        .unwrap()
+        .is_none());
+    // The agent retries a terminal: recorded once.
+    assert!(route(&ctx, agent, &completed, None)
+        .await
+        .unwrap()
+        .is_none());
 
     assert_eq!(
         kinds(&ctx, task).await,
@@ -316,7 +314,7 @@ async fn every_report_is_recorded_and_the_task_keeps_its_latest() {
 }
 
 #[tokio::test]
-async fn numbered_frames_are_projected_once_and_never_event_acked() {
+async fn numbered_frames_are_projected_once() {
     let Some(ctx) = context().await else { return };
     let (agent, action) = agent(&ctx).await;
     let task = task(&ctx, agent, action).await;

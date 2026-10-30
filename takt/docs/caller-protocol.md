@@ -197,7 +197,7 @@ behave identically, and so do
 counterpart — the intake needs an existing webhook agent to verify the signature against — so
 `ensureAgent{kind, hook_url, hook_url_secret}` and `implementAgent` remain a HookAgent's bootstrap.
 The reply
-(`AssignResponse` / `ControlResponse` / `Shelved` / …) is returned in the **HTTP response** instead of over a
+(`AssignResponse` / `ControlResponse` / …) is returned in the **HTTP response** instead of over a
 socket. Such a caller that is itself a webhook agent receives its `…Event` mirrors as signed POSTs
 to its `hook_url`.
 
@@ -215,8 +215,8 @@ X-Rekuest-Signature-V1: t=<unix seconds>,v1=<hex>
 * the timestamp bounds how long a captured request stays usable (`rekuest.hook_max_skew`,
   default 300 s, checked in both directions) and is inside the signed payload, so it cannot be edited;
 * the agent id is bound in because two HookAgents may share a secret;
-* the digest is claimed once in redis, shared by every replica. A replayed **report** gets its
-  `EventAck` without being persisted twice, a replayed **`AssignRequest`** is routed anyway (it is
+* the digest is claimed once in redis, shared by every replica. A replayed **report** gets `200 {}`
+  without being persisted twice, a replayed **`AssignRequest`** is routed anyway (it is
   idempotent on `(caller, reference)`, so it returns the same task with `created=False`), and a
   replayed **control request** gets `409` — an instruction the server did not apply must not be
   acked. Fire-and-forget events (`Yield`/`Log`/`Progress`) are simply accepted and dropped, which
@@ -231,8 +231,8 @@ Set it to `strict` once your HookAgents sign V1.
 | Send (FromAgent) | Get back (ToAgent) | Then observe (mirrors) |
 | --- | --- | --- |
 | `Register{token, session_id, name, hash, implementations, states, locks, bloks}` | `Init{agent, hash, diagnostics, inquiries}` (or `ProtocolError` + close) | — |
-| `Shelve{ref, identifier, resource_id, label?, description?}` | `Shelved{ref, drawer, error}` | `Collect{drawers}` when the server wants them dropped |
-| `Unshelve{ref, drawer}` | `Unshelved{ref, error}` | — |
+| `Shelve{ref, identifier, resource_id, label?, description?}` | nothing | `Collect{drawers}` when the server wants them dropped |
+| `Unshelve{ref, drawer}` | nothing | — |
 | `AssignRequest{reference, parent, …targeting…, args}` | `AssignResponse{task, created, error}` | `BoundEvent/Queued/Assigned/Progress/Yield/Log/…` then `CompletedEvent/Error/Critical` |
 | `CancelRequest{task, auto_interrupt?}` | `ControlResponse{accepted, error}` | `CancellingEvent` → `CancelledEvent` (or escalated → `InterruptedEvent`) |
 | `InterruptRequest{task}` | `ControlResponse` | `InterruptingEvent` → `InterruptedEvent` |

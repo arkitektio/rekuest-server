@@ -1,11 +1,11 @@
 //! Where a registered agent's frames go (`facade/message_router.py`).
 //!
-//! [`route`] performs the side effects and returns the reply (`EVENT_ACK`, `SHELVED`, …) rather
-//! than sending it, so each transport delivers it its own way.
+//! [`route`] performs the side effects and returns the reply (`ASSIGN_RESPONSE`, …) rather than
+//! sending it, so each transport delivers it its own way. A report is never replied to.
 //!
 //! A **numbered** frame (`pos` + `journal_session`) is handled once per session position: a
 //! resend at or below the watermark is skipped; anything else is claimed, projected and
-//! confirmed. It is never answered with an `EVENT_ACK`: the cumulative `JOURNAL_ACK` covers it.
+//! confirmed. The cumulative `JOURNAL_ACK` confirms it.
 //! A refusal (unknown state, another agent's task, a duplicate revision) is logged and counts as
 //! handled, or a frame refused on every delivery would hold the watermark back forever. Anything
 //! else releases the claim and fails, so the resend projects it again.
@@ -34,15 +34,6 @@ pub enum RouteError {
     Database(#[from] sqlx::Error),
     #[error("routing failed: {0}")]
     Redis(#[from] redis::RedisError),
-}
-
-/// The durable-report acknowledgement, so the agent can stop retaining it (`_ack`).
-pub fn ack(frame: &AgentFrame) -> ToAgent {
-    ToAgent::EventAck {
-        event: Some(frame.id.clone()),
-        task: frame.message.task().map(str::to_owned),
-        seq: frame.seq,
-    }
 }
 
 fn log_refusal(what: &str, e: &PersistError) {
@@ -74,7 +65,7 @@ pub async fn route(
     match project(ctx, agent, frame, session_id).await {
         Ok(reply) => {
             positions::confirm_position(&ctx.db, agent, journal_session, pos).await?;
-            Ok(reply.filter(|reply| !matches!(reply, ToAgent::EventAck { .. })))
+            Ok(reply)
         }
         Err(e) => {
             positions::release_position(&ctx.db, agent, journal_session, pos).await?;
@@ -219,9 +210,7 @@ async fn project(
         | FromAgent::SessionInit { .. }
         | FromAgent::Lock { .. }
         | FromAgent::Unlock { .. } => state::on_state(ctx, agent, frame).await.map(|_| None),
-        _ => reports::on_report(ctx, agent, frame)
-            .await
-            .map(|_| acked(frame)),
+        _ => reports::on_report(ctx, agent, frame).await.map(|_| None),
     };
     match handled {
         Ok(reply) => Ok(reply),
@@ -386,46 +375,29 @@ async fn route_probe(
             )))
         }
     }
-    Ok(Some(ack(frame)))
+    Ok(None)
 }
 
-/// Lifecycle confirmations and terminals are acked; the stream events are fire-and-forget.
-fn acked(frame: &AgentFrame) -> Option<ToAgent> {
-    matches!(
-        frame.message,
-        FromAgent::Started { .. }
-            | FromAgent::Paused { .. }
-            | FromAgent::Held { .. }
-            | FromAgent::Inform { .. }
-            | FromAgent::Resumed { .. }
-            | FromAgent::Completed { .. }
-            | FromAgent::Failed { .. }
-            | FromAgent::Critical { .. }
-            | FromAgent::Cancelled { .. }
-            | FromAgent::Interrupted { .. }
-    )
-    .then(|| ack(frame))
-}
-
-/// Shelving: numbered, the agent minted the reference and never waits for an answer; without
-/// numbering, request and reply, a failure answering with `error`.
+/// Shelving: the agent minted the reference and never waits for an answer, so a refusal is
+/// only logged.
 async fn shelving(
     ctx: &Context,
     agent: i64,
     frame: &AgentFrame,
     session_id: Option<&str>,
 ) -> Result<Option<ToAgent>, RouteError> {
-    let numbered = is_numbered(frame);
     match &frame.message {
         FromAgent::Shelve {
-            reference,
             identifier,
             resource_id,
             label,
             description,
             ..
         } => {
-            if numbered && session_id.is_some() && frame.journal_session.as_deref() != session_id {
+            if is_numbered(frame)
+                && session_id.is_some()
+                && frame.journal_session.as_deref() != session_id
+            {
                 // An earlier process's unacked SHELVE: its value died with that process.
                 tracing::info!(agent, "numbered SHELVE of an earlier session ignored");
                 return Ok(None);
@@ -437,50 +409,26 @@ async fn shelving(
                 resource_id,
                 label.as_deref(),
                 description.as_deref(),
-                numbered,
+                true,
             )
             .await
             .map_err(PersistError::from);
-            match (shelved, numbered) {
-                (Ok(_), true) => Ok(None),
-                (Ok(drawer), false) => Ok(Some(ToAgent::Shelved {
-                    reference: reference.clone().unwrap_or_default(),
-                    drawer: Some(drawer.to_string()),
-                    error: None,
-                })),
-                (Err(PersistError::Database(e)), _) => Err(RouteError::Database(e)),
-                (Err(e), true) => {
-                    log_refusal("numbered SHELVE", &e);
-                    Ok(None)
-                }
-                (Err(e), false) => {
+            match shelved {
+                Ok(_) => Ok(None),
+                Err(PersistError::Database(e)) => Err(RouteError::Database(e)),
+                Err(e) => {
                     log_refusal("SHELVE", &e);
-                    Ok(Some(ToAgent::Shelved {
-                        reference: reference.clone().unwrap_or_default(),
-                        drawer: None,
-                        error: Some(e.to_string()),
-                    }))
+                    Ok(None)
                 }
             }
         }
-        FromAgent::Unshelve { reference, drawer } => {
-            match registration::unshelve(&ctx.db, agent, drawer, numbered).await {
-                Ok(()) if numbered => Ok(None),
-                Ok(()) => Ok(Some(ToAgent::Unshelved {
-                    reference: reference.clone().unwrap_or_default(),
-                    error: None,
-                })),
+        FromAgent::Unshelve { drawer, .. } => {
+            match registration::unshelve(&ctx.db, agent, drawer).await {
+                Ok(()) => Ok(None),
                 Err(registration::UnshelveError::Database(e)) => Err(RouteError::Database(e)),
-                Err(e) if numbered => {
-                    tracing::info!(agent, "numbered UNSHELVE refused: {e}");
-                    Ok(None)
-                }
                 Err(e) => {
-                    tracing::warn!(agent, "unshelve failed: {e}");
-                    Ok(Some(ToAgent::Unshelved {
-                        reference: reference.clone().unwrap_or_default(),
-                        error: Some(e.to_string()),
-                    }))
+                    tracing::info!(agent, "UNSHELVE refused: {e}");
+                    Ok(None)
                 }
             }
         }

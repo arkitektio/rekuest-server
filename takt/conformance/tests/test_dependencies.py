@@ -144,9 +144,8 @@ ASSIGN = "mutation ($input: AssignInput!) { assign(input: $input) { id } }"
 
 
 async def started(agent, task: str) -> None:  # noqa: ANN001
-    """The agent reports the task started, and the report is acknowledged."""
+    """The agent reports the task started."""
     await agent.send({"type": "STARTED", "task": task, "seq": 1})
-    await agent.receive_type("EVENT_ACK")
 
 
 async def running_chain(agents, graphql, tokens: tuple[str, str, str]) -> tuple[Any, Any, Any, str, str, str]:  # noqa: ANN001
@@ -190,7 +189,11 @@ async def test_a_nested_workflow_runs_down_and_its_results_come_back_up(agents, 
 
     await workflow.send({"type": "YIELD", "task": root, "returns": {"return0": 2}, "seq": 2})
     await workflow.send({"type": "COMPLETED", "task": root, "seq": 3})
-    await workflow.receive_type("EVENT_ACK")
+    for _ in range(100):
+        done = await graphql("conf_48")("query ($id: ID!) { task(id: $id) { isDone } }", id=root)
+        if done["task"]["isDone"]:
+            break
+        await asyncio.sleep(0.05)
 
     # What is left behind: three finished tasks, chained by parent and by the dependency called.
     level = "id latestEventKind isDone dependency dependencyMethod parent { id } root { id }"

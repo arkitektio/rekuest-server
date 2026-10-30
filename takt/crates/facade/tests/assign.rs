@@ -1747,25 +1747,19 @@ async fn a_probe_lives_in_redis_and_mirrors_to_its_requester() {
     );
 
     let report = |kind: &str| frame(json!({"type": kind, "task": probe}));
-    assert!(matches!(
-        route(&ctx, executor, &report("STARTED"), None)
-            .await
-            .unwrap(),
-        Some(ToAgent::EventAck { .. })
-    ));
-    assert!(matches!(
-        route(&ctx, executor, &report("COMPLETED"), None)
-            .await
-            .unwrap(),
-        Some(ToAgent::EventAck { .. })
-    ));
-    // The resent terminal is acked again, and not published again.
-    assert!(matches!(
-        route(&ctx, executor, &report("COMPLETED"), None)
-            .await
-            .unwrap(),
-        Some(ToAgent::EventAck { .. })
-    ));
+    assert!(route(&ctx, executor, &report("STARTED"), None)
+        .await
+        .unwrap()
+        .is_none());
+    assert!(route(&ctx, executor, &report("COMPLETED"), None)
+        .await
+        .unwrap()
+        .is_none());
+    // The resent terminal is not published again.
+    assert!(route(&ctx, executor, &report("COMPLETED"), None)
+        .await
+        .unwrap()
+        .is_none());
     // An agent cannot control a probe.
     let reply = route(
         &ctx,

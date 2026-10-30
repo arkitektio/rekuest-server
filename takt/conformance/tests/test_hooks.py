@@ -154,13 +154,13 @@ async def test_a_hook_is_assigned_to_and_reports_over_http(agents, graphql, http
 
     hook = Hook(http, target, agent)
     started = await hook.post({"type": "STARTED", "task": child, "seq": 1})
-    assert started.status_code == 200 and started.json()["type"] == "EVENT_ACK", started.text
+    assert started.status_code == 200 and started.json() == {}, started.text
     completed = hook.signed({"type": "COMPLETED", "task": child, "seq": 2})
     first = await hook.post({}, raw=completed)
-    assert first.status_code == 200 and first.json()["type"] == "EVENT_ACK", first.text
-    # The same request again (an HTTP retry, or a replay): acked, not recorded twice.
+    assert first.status_code == 200 and first.json() == {}, first.text
+    # The same request again (an HTTP retry, or a replay): accepted, not recorded twice.
     again = await hook.post({}, raw=completed)
-    assert again.status_code == 200 and again.json()["type"] == "EVENT_ACK", again.text
+    assert again.status_code == 200 and again.json() == {}, again.text
 
     kinds = []
     while "COMPLETED_EVENT" not in kinds:

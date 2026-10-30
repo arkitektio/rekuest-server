@@ -184,17 +184,14 @@ only when the definition changed. The agent's own hash covers them, so a change 
 alone does reconcile. An agent that hints nothing sends no `protocols` field: a takt that
 predates hints refuses the field (`deny_unknown_fields`, 3003), so hints need this takt.
 
-Shelving is a request/reply pair: `Shelve{ref, identifier, resource_id, label, description}` →
-`Shelved{ref, drawer}` records a value the agent holds in memory; `Unshelve{ref, drawer}` →
-`Unshelved{ref}` drops it, correlated by the client-minted `ref` and answering with `error`
-rather than closing. `Collect{drawers}` remains the server's outbound request to drop drawers,
+Shelving is never answered. The agent mints the `resource_id` itself and keeps the value:
+`Shelve{ref, identifier, resource_id, label, description}` records it, and `Unshelve{ref, drawer}`
+drops it, by that id. A refusal is only logged. `Collect{drawers}` remains the server's outbound request to drop drawers,
 which the agent answers with `Unshelve`. Both are twins of the GraphQL `shelveInMemoryDrawer` /
 `unshelveMemoryDrawer` mutations.
 
-A journal-capable agent (journal v2, see `journal.md`) mints the id itself: a *journaled* `Shelve`
-(one carrying `pos`) upserts the drawer on `(shelve, resource_id)` with `agent_minted = true` and is
-not answered (`JOURNAL_ACK` covers it), and a journaled `Unshelve` names the drawer by that
-`resource_id` (a pk still works). `Collect` names agent-minted drawers by `resource_id` and the rest
+A `Shelve` frame upserts the drawer on `(shelve, resource_id)` with `agent_minted = true`.
+`Collect` names agent-minted drawers by `resource_id` and the rest (drawers made through GraphQL)
 by pk; the GraphQL `collect` and `unshelveMemoryDrawer` accept either form.
 
 All outbound frames go through the connection's `Sender` to one writer task, because the
@@ -378,7 +375,7 @@ Messages are split by direction (`messages.rs`, re-exporting the `rekuest-protoc
 
 **Server → agent (`ToAgent`)** — `Init`, `Assign`, the lifecycle control messages `Cancel` /
 `Interrupt` / `Pause` / `Resume`, `Collect`, `Bounce`, `Kick`, `Heartbeat`, `ProtocolError`,
-inquiries (`AssignInquiry`), and the shelving replies `Shelved` / `Unshelved`. (The caller-bound
+and inquiries (`AssignInquiry`). (The caller-bound
 `…Event` mirrors and the `AssignResponse`/`ControlResponse` replies are `ToAgent` frames too, but
 are addressed to the agent as a caller — see [caller-protocol.md](caller-protocol.md).)
 
@@ -398,8 +395,8 @@ socket and the HookAgent HTTP intake:
 | `Held` | `holds::on_self_hold` | non-terminal — the task waits for a decision (→ `HELD`); under `AUTO` the server answers `Decide` at once (→ `DECIDED`) |
 | `Failed` / `Critical` | `persist::reports::on_report` | terminal with message |
 | `StatePatch` / `StateSnapshot` / `SessionInit` / `Lock` / `Unlock` | `persist::state::on_state` | append a `Patch`, write `Snapshot`s, initialize a `Session`, record the lock report |
-| `Shelve` | `registration::shelve` | upsert a `MemoryDrawer` on the agent's shelve; replies `Shelved{ref, drawer}` / `{ref, error}` (journaled: agent-minted, no reply) |
-| `Unshelve` | `registration::unshelve` | drop the drawer if it is the agent's; replies `Unshelved{ref}` / `{ref, error}` (journaled: by `resource_id`, no reply) |
+| `Shelve` | `registration::shelve` | upsert a `MemoryDrawer` on the agent's shelve, agent-minted; no reply |
+| `Unshelve` | `registration::unshelve` | drop the drawer if it is the agent's, by `resource_id`, else by pk; no reply |
 | `Effect` | `persist::reports::on_report` | `TaskEvent(EFFECT)`: a value the task took from outside, kept for replay (see [journal.md](journal.md)) |
 
 Frames whose task is a probe (`p-…`) go to the redis-held probe handlers (`probes/`), never to
@@ -408,8 +405,8 @@ the database.
 The four lifecycle **confirmation events** are the executor's half of the two-phase controls: the
 server forwards a `Cancel` / `Interrupt` / `Pause` / `Resume`, and the executing agent reports the
 matching event above when it has acted (terminal for cancel/interrupt, non-terminal for
-pause/resume). Each terminal/confirmation report is acked with an `EventAck` so the agent can stop
-retaining it. The router also handles the sub-assignment requests (`AssignRequest`,
+pause/resume). A numbered report is confirmed by the cumulative `JournalAck`; no report gets a reply of its
+own. The router also handles the sub-assignment requests (`AssignRequest`,
 `Cancel/Interrupt/Pause/ResumeRequest`, `StateRevisionRequest`, `ProbeRequest`) through
 `persist::caller_ops` — see [caller-protocol.md](caller-protocol.md).
 

@@ -123,8 +123,7 @@ effects too.
   A frame whose projection is refused (an unknown state, another agent's task) still counts as
   projected. Otherwise the agent would resend it forever and hold the watermark back.
 - **`JOURNAL_ACK {journal_session, pos}`** (server → agent) is cumulative: "projected up to `pos`".
-  It is debounced, and sent at once after a terminal report. Once a connection has sent a numbered
-  frame, the server stops sending `EVENT_ACK` on it.
+  It is debounced, and sent at once after a terminal report. An unnumbered frame gets no ack.
 - **The agent persists what it retains.** A frame recorded but not yet acked must survive a restart.
   - The Rust agent keeps a local SQLite file with the `journal` and `journal_sync (session_id,
     acked_pos)` tables. `acked_pos` is only ever raised.

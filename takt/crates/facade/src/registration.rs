@@ -160,8 +160,8 @@ pub async fn clear_drawers(
 }
 
 /// Record that `agent` holds `resource_id` (an `identifier`) in memory (`shelve`): upsert the
-/// drawer on its shelve, keyed by `resource_id`. `agent_minted` (a numbered SHELVE) marks a
-/// drawer the agent references by that id; a later plain upsert never unsets it. The drawer's id.
+/// drawer on its shelve, keyed by `resource_id`. `agent_minted` (a SHELVE frame) marks a drawer
+/// the agent references by that id; a later plain upsert never unsets it. The drawer's id.
 pub async fn shelve(
     db: &PgPool,
     agent: i64,
@@ -210,30 +210,22 @@ pub enum UnshelveError {
     Database(#[from] sqlx::Error),
 }
 
-/// Drop the drawer `drawer` from `agent`'s shelve (`unshelve`). With `by_resource_id` (a
-/// numbered UNSHELVE) it is first looked up as a resource id on the agent's own shelve, then
-/// as a primary key.
-pub async fn unshelve(
-    db: &PgPool,
-    agent: i64,
-    drawer: &str,
-    by_resource_id: bool,
-) -> Result<(), UnshelveError> {
-    if by_resource_id {
-        let own = sqlx::query(
-            "DELETE FROM facade_memorydrawer d USING facade_memoryshelve s
-              WHERE d.shelve_id = s.id AND s.agent_id = $1 AND d.id = (
-                    SELECT d2.id FROM facade_memorydrawer d2 JOIN facade_memoryshelve s2 ON s2.id = d2.shelve_id
-                     WHERE s2.agent_id = $1 AND d2.resource_id = $2 ORDER BY d2.id LIMIT 1)",
-        )
-        .bind(agent)
-        .bind(drawer)
-        .execute(db)
-        .await?
-        .rows_affected();
-        if own > 0 {
-            return Ok(());
-        }
+/// Drop the drawer `drawer` from `agent`'s shelve (`unshelve`). It is first looked up as a
+/// resource id on the agent's own shelve, then as a primary key.
+pub async fn unshelve(db: &PgPool, agent: i64, drawer: &str) -> Result<(), UnshelveError> {
+    let own = sqlx::query(
+        "DELETE FROM facade_memorydrawer d USING facade_memoryshelve s
+          WHERE d.shelve_id = s.id AND s.agent_id = $1 AND d.id = (
+                SELECT d2.id FROM facade_memorydrawer d2 JOIN facade_memoryshelve s2 ON s2.id = d2.shelve_id
+                 WHERE s2.agent_id = $1 AND d2.resource_id = $2 ORDER BY d2.id LIMIT 1)",
+    )
+    .bind(agent)
+    .bind(drawer)
+    .execute(db)
+    .await?
+    .rows_affected();
+    if own > 0 {
+        return Ok(());
     }
     let Some(id) = drawer
         .parse::<i64>()
