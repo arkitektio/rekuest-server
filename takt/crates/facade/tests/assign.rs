@@ -212,6 +212,134 @@ async fn instructs(ctx: &Context, task: i64) -> Vec<(String, Option<i64>)> {
         .unwrap()
 }
 
+/// An action taking one lens, implemented by `agents` in that order with `fits` on each, and each
+/// agent with `memory_mib` to test it against.
+async fn fitting_action(ctx: &Context, agents: &[(i64, Option<i64>)]) -> i64 {
+    let (first, _) = agents[0];
+    let (action, implementation) = action(ctx, first, false).await;
+    sqlx::query("UPDATE facade_action SET args = $2 WHERE id = $1")
+        .bind(action)
+        .bind(
+            json!([{"key": "image", "kind": "STRUCTURE", "identifier": "@mikro/arraylens",
+                      "nullable": false, "effects": [], "validators": []}]),
+        )
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO facade_argport (action_id, index, key, key_path, kind, identifier, nullable)
+         VALUES ($1, 0, 'image', 'image', 'STRUCTURE', '@mikro/arraylens', false)",
+    )
+    .bind(action)
+    .execute(&ctx.db)
+    .await
+    .unwrap();
+    for (index, (agent, memory)) in agents.iter().enumerate() {
+        let implementation = if index == 0 {
+            implementation
+        } else {
+            sqlx::query_scalar(
+                "INSERT INTO facade_implementation (interface, higher_order_config, params, created_at,
+                                                    updated_at, tracks, diagnostics, needs_token, provenance_audience,
+                                                    effects, execution, action_id, agent_id,
+                                                    dynamic_asks, dynamic_calls, dynamic_informs)
+                 VALUES ('echo', '{}', '{}', now(), now(), '[]', '[]', true, '[]', 'UNKNOWN', 'PLAIN',
+                         $2, $1, true, true, true)
+                 RETURNING id",
+            )
+            .bind(agent)
+            .bind(action)
+            .fetch_one(&ctx.db)
+            .await
+            .unwrap()
+        };
+        if let Some(memory) = memory {
+            sqlx::query("UPDATE facade_agent SET hardware = $2 WHERE id = $1")
+                .bind(agent)
+                .bind(json!({"memory_mib": memory}))
+                .execute(&ctx.db)
+                .await
+                .unwrap();
+            sqlx::query(
+                "INSERT INTO facade_implementationfit (implementation_id, port_key, compiled_jsonpath, call, source)
+                 VALUES ($1, 'image', '$.\"@mikro/size\" < $agent.memory_mib', '{}', 'size < memory')",
+            )
+            .bind(implementation)
+            .execute(&ctx.db)
+            .await
+            .unwrap();
+        }
+    }
+    action
+}
+
+async fn describe(ctx: &Context, agent: i64, object: &str, size: i64) {
+    sqlx::query(
+        "INSERT INTO facade_objectdescriptors (organization_id, identifier, object, descriptors, updated_at)
+         SELECT a.organization_id, '@mikro/arraylens', $2, $3, now() FROM facade_agent a WHERE a.id = $1",
+    )
+    .bind(agent)
+    .bind(object)
+    .bind(json!({"@mikro/size": size}))
+    .execute(&ctx.db)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn an_action_goes_to_the_first_agent_it_fits() {
+    let Some(ctx) = context().await else { return };
+    let org = format!("o-{}", uuid::Uuid::new_v4().simple());
+    let small = agent(&ctx, Some(&org)).await;
+    let big = agent(&ctx, Some(&org)).await;
+    let action = fitting_action(&ctx, &[(small, Some(100)), (big, Some(10_000))]).await;
+    let caller = principal(&ctx, small).await;
+    let assign = |object: &str| AssignInput {
+        action: Some(action.to_string()),
+        args: json!({"image": {"__identifier": "@mikro/arraylens", "object": object}})
+            .as_object()
+            .unwrap()
+            .clone(),
+        ..AssignInput::default()
+    };
+    let agent_of = |task: i64| {
+        let db = ctx.db.clone();
+        async move {
+            sqlx::query_scalar::<_, i64>("SELECT agent_id FROM facade_task WHERE id = $1")
+                .bind(task)
+                .fetch_one(&db)
+                .await
+                .unwrap()
+        }
+    };
+
+    describe(&ctx, small, "fits-both", 50).await;
+    describe(&ctx, small, "fits-big", 5_000).await;
+    describe(&ctx, small, "fits-neither", 50_000).await;
+
+    for (object, expected) in [
+        ("fits-both", small),
+        ("fits-big", big),
+        ("undescribed", small),
+    ] {
+        let assigned =
+            backend::assign_with_status(&ctx, &caller, &assign(object), AssignOrigin::default())
+                .await
+                .unwrap();
+        assert_eq!(agent_of(assigned.task).await, expected, "{object}");
+    }
+
+    let refused = backend::assign_with_status(
+        &ctx,
+        &caller,
+        &assign("fits-neither"),
+        AssignOrigin::default(),
+    )
+    .await
+    .unwrap_err();
+    assert!(refused.to_string().contains("size < memory"), "{refused}");
+}
+
 #[tokio::test]
 async fn an_assign_is_persisted_dispatched_once_and_deduped() {
     let Some(ctx) = context().await else { return };

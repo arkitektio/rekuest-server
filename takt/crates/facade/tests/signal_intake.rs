@@ -169,6 +169,24 @@ async fn a_signal_is_stored_once_and_caused_only_within_its_organization() {
         (first["created"].clone(), first["caused_by"].clone()),
         (json!(true), json!(task.to_string()))
     );
+    // What routing a task reads, which outlives the signal.
+    let remembered = || async {
+        sqlx::query_scalar::<_, Value>(
+            "SELECT d.descriptors FROM facade_objectdescriptors d
+               JOIN authentikate_organization o ON o.id = d.organization_id
+              WHERE o.identifier = $1 AND d.identifier = '@bank/account' AND d.object = '17'",
+        )
+        .bind(format!("signal-tests#{org}"))
+        .fetch_optional(&ctx.db)
+        .await
+        .unwrap()
+    };
+    assert_eq!(remembered().await, Some(json!({"currency": "EUR"})));
+    let mut deleted = signal(&org, "gone", None);
+    deleted["kind"] = json!("DELETED");
+    post(&ctx, &key, "bank", bank, &deleted).await;
+    assert_eq!(remembered().await, None);
+
     let (descriptors, kind): (Value, String) =
         sqlx::query_as("SELECT descriptors, kind FROM facade_signal WHERE id = $1")
             .bind(first["signal"].as_str().unwrap().parse::<i64>().unwrap())

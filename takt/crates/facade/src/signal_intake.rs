@@ -149,12 +149,47 @@ async fn store(
     .await?;
     match inserted {
         Some(id) => {
+            remember_descriptors(ctx, organization, message).await?;
             crate::signals::signal_changed(ctx, id, organization, true).await;
             Ok(Some((id, true, causing_task)))
         }
         // The same signal, raced in from a concurrent resend.
         None => Ok(existing().await?.map(|(id, cause)| (id, false, cause))),
     }
+}
+
+/// Keep what the signal says of its object past the signal's own retention: routing a task to an
+/// agent that fits reads it. A signal that describes nothing changes nothing.
+async fn remember_descriptors(
+    ctx: &Context,
+    organization: i64,
+    message: &SignalMessage,
+) -> Result<(), sqlx::Error> {
+    if message.kind == "DELETED" {
+        sqlx::query(
+            "DELETE FROM facade_objectdescriptors
+              WHERE organization_id = $1 AND identifier = $2 AND object = $3",
+        )
+        .bind(organization)
+        .bind(&message.identifier)
+        .bind(&message.object)
+        .execute(&ctx.db)
+        .await?;
+    } else if !message.descriptors.is_empty() {
+        sqlx::query(
+            "INSERT INTO facade_objectdescriptors (organization_id, identifier, object, descriptors, updated_at)
+             VALUES ($1, $2, $3, $4, now())
+             ON CONFLICT (organization_id, identifier, object)
+             DO UPDATE SET descriptors = EXCLUDED.descriptors, updated_at = now()",
+        )
+        .bind(organization)
+        .bind(&message.identifier)
+        .bind(&message.object)
+        .bind(Value::Object(message.descriptors.clone()))
+        .execute(&ctx.db)
+        .await?;
+    }
+    Ok(())
 }
 
 /// Authenticate, validate and store one signal (`signal_intake`).

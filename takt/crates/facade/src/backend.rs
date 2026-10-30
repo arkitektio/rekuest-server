@@ -263,25 +263,54 @@ async fn implementation_row(db: &PgPool, id: i64) -> BackendResult<Implementatio
     )
 }
 
-/// The first implementation of `action` whose agent is available, by id.
+/// The implementation of `action` that should take `args`: the first by id whose agent is available
+/// and whose `Fits` hold, then one that cannot be tested yet because no service has described the
+/// object, which refuses it itself if it must. Refused when everyone who could be asked says no.
 async fn available_implementation(
     ctx: &Context,
     action: &ActionRow,
+    organization: i64,
+    args: &Map<String, Value>,
 ) -> BackendResult<ImplementationRow> {
-    sqlx::query_as(&format!(
-        "SELECT {IMPLEMENTATION} FROM facade_implementation i JOIN facade_agent a ON a.id = i.agent_id
-          WHERE i.action_id = $2 AND {AVAILABLE} ORDER BY i.id LIMIT 1"
+    let best: Option<(i64, i32, Option<String>)> = sqlx::query_as(&format!(
+        "SELECT i.id, COALESCE(fit.verdict, 0), fit.source
+           FROM facade_implementation i JOIN facade_agent a ON a.id = i.agent_id
+           LEFT JOIN LATERAL (
+             SELECT CASE WHEN known.descriptors IS NULL THEN 1
+                         WHEN COALESCE(jsonb_path_match(known.descriptors, f.compiled_jsonpath::jsonpath,
+                                                        jsonb_build_object('agent', COALESCE(a.hardware, '{{}}'::jsonb)),
+                                                        true), false) THEN 0
+                         ELSE 2 END AS verdict,
+                    f.source
+               FROM facade_implementationfit f
+               JOIN facade_argport p ON p.action_id = i.action_id AND p.parent_id IS NULL AND p.key = f.port_key
+               LEFT JOIN facade_objectdescriptors known
+                      ON known.organization_id = $3 AND known.identifier = p.identifier
+                     AND known.object = COALESCE($4::jsonb -> f.port_key ->> 'object', $4::jsonb ->> f.port_key)
+              WHERE f.implementation_id = i.id
+              ORDER BY verdict DESC LIMIT 1
+           ) fit ON true
+          WHERE i.action_id = $2 AND {AVAILABLE}
+          ORDER BY 2, i.id LIMIT 1"
     ))
     .bind(live_cutoff(ctx))
     .bind(action.id)
+    .bind(organization)
+    .bind(Value::Object(args.clone()))
     .fetch_optional(&ctx.db)
-    .await?
-    .ok_or_else(|| {
-        BackendError::Refused(format!(
+    .await?;
+    match best {
+        Some((id, verdict, _)) if verdict < 2 => implementation_row(&ctx.db, id).await,
+        Some((_, _, source)) => Err(BackendError::Refused(format!(
+            "No available agent can handle this for action {}: {}",
+            action.name,
+            source.unwrap_or_default()
+        ))),
+        None => Err(BackendError::Refused(format!(
             "No active implementation found for action {}",
             action.name
-        ))
-    })
+        ))),
+    }
 }
 
 const NOT_AVAILABLE: &str = "Agent is not available (not connected, and not a webhook agent)";
@@ -295,7 +324,8 @@ pub(crate) async fn resolve_direct_target(
 ) -> BackendResult<(ActionRow, ImplementationRow)> {
     if let Some(action) = input.action.as_deref().filter(|a| !a.is_empty()) {
         let action = action_row(&ctx.db, parse_id(action)?).await?;
-        let implementation = available_implementation(ctx, &action).await?;
+        let implementation =
+            available_implementation(ctx, &action, organization, &input.args).await?;
         return Ok((action, implementation));
     }
     if let Some(implementation) = input.implementation.as_deref().filter(|i| !i.is_empty()) {
@@ -320,7 +350,8 @@ pub(crate) async fn resolve_direct_target(
             .await?,
             "Action",
         )?;
-        let implementation = available_implementation(ctx, &action).await?;
+        let implementation =
+            available_implementation(ctx, &action, organization, &input.args).await?;
         return Ok((action, implementation));
     }
     if let (Some(agent), Some(interface)) = (

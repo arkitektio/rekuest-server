@@ -158,6 +158,23 @@ class Firing(models.Model):
         return f"{self.outcome}: trigger {self.trigger_id} on signal {self.signal_id}"
 
 
+class ObjectDescriptors(models.Model):
+    """What a service last said of one object, which takt reads to send a task to an agent it fits.
+
+    A signal is pruned with age and this lasts as long as the object: takt keeps it from the
+    signals it takes in, and drops it when one says the object is deleted.
+    """
+
+    organization = models.ForeignKey("authentikate.Organization", on_delete=models.CASCADE, related_name="object_descriptors", help_text="The organization the object belongs to")
+    identifier = models.CharField(max_length=1000, help_text="The object's structure identifier, e.g. @mikro/arraydataset")
+    object = models.CharField(max_length=1000, help_text="The object's id within its structure")
+    descriptors = models.JSONField(help_text="The object's descriptors (flat key → value), from its latest signal")
+    updated_at = models.DateTimeField(auto_now=True, db_default=Now())
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["organization", "identifier", "object"], name="object_descriptors_unique")]
+
+
 class SignalDeclaration(EmbeddedDescriptionMixin, models.Model):
     """A signal a service says it emits, read from its manifest by provisioning.
 

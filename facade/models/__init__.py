@@ -21,7 +21,7 @@ from .agent import (
     MemoryShelve,
 )
 from .schedule import Schedule
-from .signal import Firing, Signal, SignalDeclaration, Trigger
+from .signal import Firing, ObjectDescriptors, Signal, SignalDeclaration, Trigger
 from .wiregram import Wiregram
 from .structure import Descriptor, Service, StructureDeclaration
 from .task import (
@@ -75,6 +75,7 @@ __all__ = [
     # schedule
     "Schedule",
     # signals
+    "ObjectDescriptors",
     "Signal",
     "Descriptor",
     "Firing",
