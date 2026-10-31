@@ -1084,24 +1084,9 @@ class DependencyInputModel(BaseModel):
     viable_instances: int | None = Field(description="The number of viable instances required for this dependency.")
 
 
-class WindowInputModel(BaseModel):
-    window_function: enums.WindowFunction = Field(description="The aggregation to compute over the tracked value within the window.")
-    label: str | None = Field(default=None, description="An optional human-readable label for the window.")
-
-
-class TrackInputModel(BaseModel):
-    dependency_key: str | None = Field(default=None, description="The key of the dependency whose state is being tracked.")
-    state_key: str = Field(description="The key of the state to track.")
-    value_key: str = Field(description="The key of the value within the state to track.")
-    label: str | None = Field(default=None, description="An optional human-readable label for the track.")
-    description: str | None = Field(default=None, description="An optional description for the track.")
-    windows: list[WindowInputModel] | None = Field(default=None, description="The windows (aggregations) computed over the tracked value.")
-
-
 class ImplementationInputModel(BaseModel):
     definition: DefinitionInputModel = Field(description="The definition of the implementation. This is used to uniquely identify the implementation")
     dependencies: list[AgentDependencyInputModel] = Field(default_factory=list, description="The agent dependencies required by this implementation.")
-    tracks: list[TrackInputModel] | None = Field(default=None, description="The tracks of the definition. This is used to track values over time during the runtime of an action. This is the state of a dependency")
     interface: str = Field(description="The interface of the implementation. This is used to group implementations together in the UI")
     params: dict[str, Any] | None = Field(default=None, description="The params of the implementation. This is used to pass parameters to the implementation")
     instance_id: str | None = Field(default=None, description="The instance id of the agent this implementation is bound to.")

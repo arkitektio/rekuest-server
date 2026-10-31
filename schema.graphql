@@ -3895,9 +3895,6 @@ type Implementation {
   """
   tests: [Implementation!]!
 
-  """List of action demands"""
-  tracks: [Track!]!
-
   """
   Non-fatal registration findings, e.g. validator/effect calls naming operations that neither the base catalog nor the definition's catalog provides.
   """
@@ -4023,11 +4020,6 @@ input ImplementationInput {
 
   """The agent dependencies required by this implementation."""
   dependencies: [AgentDependencyInput!]! = []
-
-  """
-  The tracks of the definition. This is used to track values over time during the runtime of an action. This is the state of a dependency
-  """
-  tracks: [TrackInput!] = null
 
   """
   The interface of the implementation. This is used to group implementations together in the UI
@@ -8307,41 +8299,6 @@ input ToolboxOrder @oneOf {
 }
 
 """
-A value that is being tracked over time during the runtime of an action. This is the state of a dependency
-"""
-type Track {
-  dependencyKey: String
-  stateKey: String!
-  valueKey: String!
-  label: String
-  description: String
-  windows: [Window!]
-}
-
-"""
-A value that is being tracked over time during the runtime of an action. This is the state of a dependency
-"""
-input TrackInput {
-  """The key of the dependency whose state is being tracked."""
-  dependencyKey: String = null
-
-  """The key of the state to track."""
-  stateKey: String!
-
-  """The key of the value within the state to track."""
-  valueKey: String!
-
-  """An optional human-readable label for the track."""
-  label: String = null
-
-  """An optional description for the track."""
-  description: String = null
-
-  """The windows (aggregations) computed over the tracked value."""
-  windows: [WindowInput!] = null
-}
-
-"""
 A rule over signals: on a signal of this kind and structure whose descriptors match, run the action with the object in `port`.
 """
 type Trigger {
@@ -8771,33 +8728,6 @@ input WidgetDefaultInput {
   The return widget to render for matching return ports that declare no widget of their own.
   """
   returnWidget: ReturnWidgetInput = null
-}
-
-"""A window that is calculated"""
-type Window {
-  windowFunction: WindowFunction!
-  label: String
-}
-
-"""Aggregation computed over a tracked value within a window."""
-enum WindowFunction {
-  MEAN
-  MIN
-  MAX
-  SUM
-  COUNT
-  LAST
-  FIRST
-  STD
-}
-
-"""A window that is calculated"""
-input WindowInput {
-  """The aggregation to compute over the tracked value within the window."""
-  windowFunction: WindowFunction!
-
-  """An optional human-readable label for the window."""
-  label: String = null
 }
 
 """

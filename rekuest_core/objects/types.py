@@ -207,22 +207,6 @@ class Provides:
     operator: enums.DescriptorOperator = strawberry.field(description="How the constraint compares the object's value at `key` with `value`.")
 
 
-@pydantic.type(models.WindowModel, description="""A window that is calculated""")
-class Window:
-    window_function: enums.WindowFunction
-    label: str | None = None
-
-
-@pydantic.type(models.TrackModel, description="""A value that is being tracked over time during the runtime of an action. This is the state of a dependency""")
-class Track:
-    dependency_key: str | None = None
-    state_key: str
-    value_key: str
-    label: str | None = None
-    description: str | None = None
-    windows: list[Window] | None = None
-
-
 @pydantic.type(models.ArgPortModel)
 class ArgPort:
     identifier: scalars.Identifier | None = strawberry.field(

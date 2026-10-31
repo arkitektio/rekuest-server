@@ -175,7 +175,6 @@ class Implementation(models.Model):
     params = models.JSONField(default=dict, help_text="Params for this Implementation", db_default={})
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
-    tracks = models.JSONField(default=list, help_text="A log of all the tasks that have been provisioned with this implementation, as well as their status and results", db_default=[])
     diagnostics = models.JSONField(default=list, help_text="Non-fatal registration findings (rekuest_core Diagnostic), e.g. validator/effect calls naming operations that neither the base catalog nor the definition's catalog provides. Replaced on every registration.", db_default=[])
     manipulates = models.ManyToManyField("State", help_text="Which states does this implementation manipulate?", related_name="manipulated_by")
     required_locks = models.ManyToManyField("Lock", related_name="required_by", blank=True, help_text="The agent's locks this implementation takes while it runs (declared as its `locks`).")

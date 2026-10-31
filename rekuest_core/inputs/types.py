@@ -506,22 +506,6 @@ class DefinitionInput:
     )
 
 
-@pydantic.input(models.WindowInputModel, description="""A window that is calculated""")
-class WindowInput:
-    window_function: enums.WindowFunction
-    label: str | None = None
-
-
-@pydantic.input(models.TrackInputModel, description="""A value that is being tracked over time during the runtime of an action. This is the state of a dependency""")
-class TrackInput:
-    dependency_key: str | None = None
-    state_key: str
-    value_key: str
-    label: str | None = None
-    description: str | None = None
-    windows: list[WindowInput] | None = None
-
-
 @pydantic.input(
     models.ImplementationInputModel,
     description="""A implementation is a blueprint for a action. It is composed of a definition, a list of dependencies, and a list of params.""",
@@ -533,7 +517,6 @@ class ImplementationInput:
     params: scalars.AnyDefault | None = None
     locks: list[str] | None = None
     optimistics: list[OptimisticInput] | None = None
-    tracks: list[TrackInput] | None = None
     manipulates: list[str] | None = None
     needs_token: bool = True
     provenance_audience: list[str] | None = None

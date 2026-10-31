@@ -120,10 +120,6 @@ class Implementation:
         row = row_of(self, models.Implementation)
         return cast("list[Implementation]", list(models.Implementation.objects.filter(agent=row.agent, action__in=row.action.tests.all())))
 
-    @strawberry_django.field(description="List of action demands")
-    def tracks(self) -> list[rtypes.Track]:
-        return cast("list[rtypes.Track]", [rmodels.TrackModel(**i) for i in self.tracks])
-
     @strawberry_django.field(description="Non-fatal registration findings, e.g. validator/effect calls naming operations that neither the base catalog nor the definition's catalog provides.")
     def diagnostics(self) -> list[rtypes.Diagnostic]:
         return cast("list[rtypes.Diagnostic]", [rmodels.DiagnosticModel(**i) for i in self.diagnostics])

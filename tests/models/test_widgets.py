@@ -252,15 +252,6 @@ def test_optimistic_pointer_is_static_or_computed_from_args() -> None:
         imodels.OptimisticInputModel(state="stage", path_call={"operation": "sel", "arguments": [{"key": "a", "value_path": "/state/x"}]})
 
 
-def test_window_function_is_an_enum() -> None:
-    """Window function is an enum."""
-    with pytest.raises(ValidationError):
-        imodels.WindowInputModel(window_function="average")
-    window = imodels.WindowInputModel(window_function="MEAN", label="avg")
-    track = omodels.TrackModel(state_key="s", value_key="v", windows=[window.model_dump()])
-    assert track.windows[0].window_function == "MEAN"
-
-
 def test_a_search_widget_may_ask_for_the_ports_requires_but_no_filter_may_take_its_name() -> None:
     """`$requires` is filled by the frontend from the port the widget sits on, so a query may declare it freely and a filter port may not be keyed by it."""
     query = "query S($search: String, $values: [ID!], $requires: [DescriptorConstraintInput!]) { options: lenses(filters: {search: $search, ids: $values, requires: $requires}) { value: id label } }"

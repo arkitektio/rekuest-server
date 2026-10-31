@@ -129,10 +129,6 @@ wire_enum!(
     /// Severity of a registration finding: errors abort registration, so only WARNING is stored.
     DiagnosticLevel { WARNING }
 );
-wire_enum!(
-    /// Aggregation computed over a tracked value within a window.
-    WindowFunction { MEAN, MIN, MAX, SUM, COUNT, LAST, FIRST, STD }
-);
 
 #[cfg(test)]
 mod tests {

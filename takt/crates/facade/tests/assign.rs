@@ -115,10 +115,10 @@ async fn action(ctx: &Context, agent: i64, allow_probe: bool) -> (i64, i64) {
     .unwrap();
     let implementation: i64 = sqlx::query_scalar(
         "INSERT INTO facade_implementation (interface, higher_order_config, params, created_at,
-                                            updated_at, tracks, diagnostics, needs_token, provenance_audience,
+                                            updated_at, diagnostics, needs_token, provenance_audience,
                                             effects, execution, action_id, agent_id,
                                             dynamic_asks, dynamic_calls, dynamic_informs)
-         SELECT 'echo', '{}', '{}', now(), now(), '[]', '[]', true, '[\"mikro\"]', 'UNKNOWN', 'PLAIN',
+         SELECT 'echo', '{}', '{}', now(), now(), '[]', true, '[\"mikro\"]', 'UNKNOWN', 'PLAIN',
                 $2, a.id, true, true, true FROM facade_agent a WHERE a.id = $1
          RETURNING id",
     )
@@ -240,10 +240,10 @@ async fn fitting_action(ctx: &Context, agents: &[(i64, Option<i64>)]) -> i64 {
         } else {
             sqlx::query_scalar(
                 "INSERT INTO facade_implementation (interface, higher_order_config, params, created_at,
-                                                    updated_at, tracks, diagnostics, needs_token, provenance_audience,
+                                                    updated_at, diagnostics, needs_token, provenance_audience,
                                                     effects, execution, action_id, agent_id,
                                                     dynamic_asks, dynamic_calls, dynamic_informs)
-                 VALUES ('echo', '{}', '{}', now(), now(), '[]', '[]', true, '[]', 'UNKNOWN', 'PLAIN',
+                 VALUES ('echo', '{}', '{}', now(), now(), '[]', true, '[]', 'UNKNOWN', 'PLAIN',
                          $2, $1, true, true, true)
                  RETURNING id",
             )

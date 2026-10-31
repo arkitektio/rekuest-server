@@ -78,7 +78,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "stream_words",
     "params": null,
     "instance_id": null,
@@ -165,7 +164,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "count",
     "params": null,
     "instance_id": null,
@@ -385,7 +383,6 @@
       "prefered_instances": null
      }
     ],
-    "tracks": [],
     "interface": "shout_words",
     "params": null,
     "instance_id": null,
@@ -595,7 +592,6 @@
       "prefered_instances": null
      }
     ],
-    "tracks": [],
     "interface": "count_and_words",
     "params": null,
     "instance_id": null,
@@ -674,7 +670,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "to_upper",
     "params": null,
     "instance_id": null,
@@ -761,7 +756,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "shout",
     "params": null,
     "instance_id": null,
@@ -830,7 +824,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "title_case",
     "params": null,
     "instance_id": null,
@@ -917,7 +910,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "initials",
     "params": null,
     "instance_id": null,
@@ -1022,7 +1014,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "emphasize",
     "params": null,
     "instance_id": null,
@@ -1101,7 +1092,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "reverse",
     "params": null,
     "instance_id": null,
@@ -1206,7 +1196,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "repeat",
     "params": null,
     "instance_id": null,
@@ -1293,7 +1282,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "rotate",
     "params": null,
     "instance_id": null,
@@ -1398,7 +1386,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "interleave",
     "params": null,
     "instance_id": null,
@@ -1503,7 +1490,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "chunk",
     "params": null,
     "instance_id": null,
@@ -1590,7 +1576,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "slow_reverse",
     "params": null,
     "instance_id": null,
@@ -2370,7 +2355,6 @@
       "prefered_instances": null
      }
     ],
-    "tracks": [],
     "interface": "sloganize",
     "params": null,
     "instance_id": null,
@@ -3137,7 +3121,6 @@
       "prefered_instances": null
      }
     ],
-    "tracks": [],
     "interface": "compose_poster",
     "params": null,
     "instance_id": null,
@@ -3852,7 +3835,6 @@
       "prefered_instances": null
      }
     ],
-    "tracks": [],
     "interface": "parallel_variants",
     "params": null,
     "instance_id": null,
@@ -4601,7 +4583,6 @@
       "prefered_instances": null
      }
     ],
-    "tracks": [],
     "interface": "ladder",
     "params": null,
     "instance_id": null,
@@ -4710,7 +4691,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "denoise",
     "params": null,
     "instance_id": null,
@@ -4877,7 +4857,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "detect_spikes",
     "params": null,
     "instance_id": null,
@@ -4974,7 +4953,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "greet",
     "params": null,
     "instance_id": null,
@@ -5034,7 +5012,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "write_demo_tiff",
     "params": null,
     "instance_id": null,
@@ -5103,7 +5080,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "read_tiff",
     "params": null,
     "instance_id": null,
@@ -5190,7 +5166,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "segment",
     "params": null,
     "instance_id": null,
@@ -5259,7 +5234,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "count_objects",
     "params": null,
     "instance_id": null,
@@ -5403,7 +5377,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "measure_nuclei",
     "params": null,
     "instance_id": null,
@@ -5593,7 +5566,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "move_to",
     "params": null,
     "instance_id": null,
@@ -5672,7 +5644,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "list_images",
     "params": null,
     "instance_id": null,
@@ -5741,7 +5712,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "physical_size",
     "params": null,
     "instance_id": null,
@@ -5831,7 +5801,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "count_cells",
     "params": null,
     "instance_id": null,
@@ -5917,7 +5886,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "segment",
     "params": null,
     "instance_id": null,
@@ -6056,7 +6024,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "load_plate",
     "params": null,
     "instance_id": null,
@@ -6145,7 +6112,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "dispense",
     "params": null,
     "instance_id": null,
@@ -6216,7 +6182,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "read_absorbance",
     "params": null,
     "instance_id": null,
@@ -6585,7 +6550,6 @@
       "prefered_instances": null
      }
     ],
-    "tracks": [],
     "interface": "stain_and_measure",
     "params": null,
     "instance_id": null,
@@ -6701,7 +6665,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "intensity_histogram",
     "locks": [],
     "optimistics": [],
@@ -6881,7 +6844,6 @@
      "is_dev": false
     },
     "dependencies": [],
-    "tracks": [],
     "interface": "ask_twice",
     "locks": [],
     "optimistics": [],

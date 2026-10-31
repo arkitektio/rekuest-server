@@ -97,7 +97,7 @@ SELECT jsonb_build_object(
                                       'name', name) FROM ag),
   'implementations', coalesce((SELECT jsonb_agg(jsonb_build_object(
       'interface', i.interface, 'higher_order_config', i.higher_order_config,
-      'higher_order', i.higher_order_for_id IS NOT NULL, 'params', i.params, 'tracks', i.tracks,
+      'higher_order', i.higher_order_for_id IS NOT NULL, 'params', i.params,
       'diagnostics', i.diagnostics, 'needs_token', i.needs_token, 'provenance_audience', i.provenance_audience,
       'effects', i.effects, 'execution', i.execution, 'code_hash', i.code_hash,
       'action', (SELECT jsonb_build_object(
@@ -183,7 +183,6 @@ fn synthetic_steps() -> Vec<(&'static str, Value)> {
                     "provides": [{"key": "dtype", "operator": "EQUALS", "value": "uint16"}]}])),
         "dependencies": [{"key": "stage", "app": "stage-app", "version": "2", "auto_resolvable": true,
                           "min_viable_instances": 1, "action_dependencies": [{"key": "move"}]}],
-        "tracks": [{"state_key": "position", "value_key": "x"}],
         "manipulates": ["position"],
         "params": {"gpu": true},
         "effects": "REPEATABLE",

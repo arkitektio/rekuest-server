@@ -167,7 +167,7 @@ ECHO_DECLARATION: dict[str, Any] = {
                 "returns": [{"key": "return0", "kind": "INT", "nullable": False, "effects": []}],
                 "kind": "FUNCTION", "is_test_for": [], "is_dev": False,
             },
-            "dependencies": [], "tracks": [], "interface": "echo", "locks": [], "optimistics": [],
+            "dependencies": [], "interface": "echo", "locks": [], "optimistics": [],
             "manipulates": [], "needs_token": True, "effects": "UNKNOWN", "execution": "PLAIN",
         }
     ],

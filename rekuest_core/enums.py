@@ -177,15 +177,3 @@ class ComponentContext(str, Enum):
 class DiagnosticLevel(str, Enum):
     WARNING = "WARNING"
     ERROR = "ERROR"
-
-
-@strawberry.enum(description="Aggregation computed over a tracked value within a window.")
-class WindowFunction(str, Enum):
-    MEAN = "MEAN"
-    MIN = "MIN"
-    MAX = "MAX"
-    SUM = "SUM"
-    COUNT = "COUNT"
-    LAST = "LAST"
-    FIRST = "FIRST"
-    STD = "STD"

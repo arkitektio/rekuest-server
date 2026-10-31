@@ -61,7 +61,6 @@ pub struct ImplementationRow {
     pub action_id: i64,
     pub higher_order_config: Value,
     pub higher_order_for_id: Option<i64>,
-    pub tracks: Value,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -93,7 +92,7 @@ impl Prefetch {
         .fetch_all(&mut *conn)
         .await?;
         let implementations: Vec<ImplementationRow> = sqlx::query_as(
-            "SELECT id, interface, action_id, higher_order_config, higher_order_for_id, tracks, created_at
+            "SELECT id, interface, action_id, higher_order_config, higher_order_for_id, created_at
                FROM facade_implementation WHERE agent_id = $1",
         )
         .bind(agent.id)
@@ -918,18 +917,17 @@ pub async fn create_implementation(
             if recreate {
                 sqlx::query(
                     "INSERT INTO facade_implementation
-                         (id, interface, higher_order_config, params, created_at, tracks,
+                         (id, interface, higher_order_config, params, created_at,
                           diagnostics, needs_token, provenance_audience, effects, execution,
                           code_hash, action_id, agent_id, higher_order_for_id, estimated_runtime,
                           estimated_runtime_path, estimated_runtime_port)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)",
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
                 )
                 .bind(existing.id)
                 .bind(&existing.interface)
                 .bind(&existing.higher_order_config)
                 .bind(&params)
                 .bind(existing.created_at)
-                .bind(&existing.tracks)
                 .bind(&stored_diagnostics)
                 .bind(input.needs_token)
                 .bind(&audience)
@@ -983,7 +981,7 @@ pub async fn create_implementation(
                       execution, code_hash, action_id, agent_id, estimated_runtime,
                       estimated_runtime_path, estimated_runtime_port)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-                 RETURNING id, interface, action_id, higher_order_config, higher_order_for_id, tracks, created_at",
+                 RETURNING id, interface, action_id, higher_order_config, higher_order_for_id, created_at",
             )
             .bind(&input.interface)
             .bind(&params)
@@ -1082,20 +1080,6 @@ pub async fn create_implementation(
             &states,
         )
         .await?;
-    }
-
-    if let Some(tracks) = input.tracks.as_ref().filter(|t| !t.is_empty()) {
-        sqlx::query(
-            "UPDATE facade_implementation SET tracks = $2, updated_at = now() WHERE id = $1",
-        )
-        .bind(implementation)
-        .bind(dump(tracks))
-        .execute(&mut *conn)
-        .await?;
-        on_commit.push(Signal::ImplementationSaved {
-            id: implementation,
-            created: false,
-        });
     }
 
     Ok(Registered {

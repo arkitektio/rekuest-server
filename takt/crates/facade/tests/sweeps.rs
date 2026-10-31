@@ -120,9 +120,9 @@ async fn agent(ctx: &Context) -> (i64, i64) {
 async fn implementation(ctx: &Context, agent: i64, action: i64, execution: &str) -> i64 {
     sqlx::query_scalar(
         "INSERT INTO facade_implementation (interface, higher_order_config, params, created_at,
-                                            updated_at, tracks, diagnostics, needs_token, effects, execution,
+                                            updated_at, diagnostics, needs_token, effects, execution,
                                             code_hash, action_id, agent_id)
-         SELECT 'do_it', '{}', '{}', now(), now(), '[]', '[]', false, 'UNKNOWN', $3, 'h1',
+         SELECT 'do_it', '{}', '{}', now(), now(), '[]', false, 'UNKNOWN', $3, 'h1',
                 $2, a.id FROM facade_agent a WHERE a.id = $1
          RETURNING id",
     )

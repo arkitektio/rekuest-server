@@ -212,20 +212,6 @@ class ReturnPortModel(PortModel):
     provides: list[ProvidesModel] | None = None
 
 
-class WindowModel(BaseModel):
-    window_function: enums.WindowFunction
-    label: str | None = None
-
-
-class TrackModel(BaseModel):
-    dependency_key: str | None = None
-    state_key: str
-    value_key: str
-    label: str | None = None
-    description: str | None = None
-    windows: list[WindowModel] | None = None
-
-
 class DefinitionModel(BaseModel):
     id: strawberry.ID
     hash: str

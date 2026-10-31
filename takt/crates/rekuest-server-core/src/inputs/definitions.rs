@@ -25,7 +25,6 @@ use crate::blok::check::validate_blok;
 use crate::blok::{BlokScope, Finding};
 use crate::enums::{
     ActionKind, AssetKind, CatalogValueKind, ComponentContext, Effects, Execution, PortKind,
-    WindowFunction,
 };
 use crate::pyjson::{dumps, repr_str};
 
@@ -609,29 +608,6 @@ impl OptimisticInputModel {
     }
 }
 
-/// An aggregation over a tracked value (`WindowInputModel`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct WindowInputModel {
-    pub window_function: WindowFunction,
-    #[serde(default)]
-    pub label: Option<String>,
-}
-
-/// A state value tracked while an action runs (`TrackInputModel`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct TrackInputModel {
-    #[serde(default)]
-    pub dependency_key: Option<String>,
-    pub state_key: String,
-    pub value_key: String,
-    #[serde(default)]
-    pub label: Option<String>,
-    #[serde(default)]
-    pub description: Option<String>,
-    #[serde(default)]
-    pub windows: Option<Vec<WindowInputModel>>,
-}
-
 fn unknown_effects() -> Effects {
     Effects::UNKNOWN
 }
@@ -646,8 +622,6 @@ pub struct ImplementationInputModel {
     pub definition: DefinitionInputModel,
     #[serde(default)]
     pub dependencies: Vec<AgentDependencyInputModel>,
-    #[serde(default)]
-    pub tracks: Option<Vec<TrackInputModel>>,
     pub interface: String,
     #[serde(default)]
     pub params: Option<serde_json::Map<String, Value>>,
