@@ -289,6 +289,10 @@ async fn register(
     registration::set_features(&ctx.db, agent, features)
         .await
         .map_err(|e| refuse(&e))?;
+    // And the spec it runs: an upgrade may have changed nothing it declares.
+    registration::set_spec_version(&ctx.db, agent, declaration.spec_version.as_deref())
+        .await
+        .map_err(|e| refuse(&e))?;
     // And what its token grants: a process may come back with a narrower one.
     registration::set_granted_scopes(&ctx.db, agent, &decoded.scopes())
         .await

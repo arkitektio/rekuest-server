@@ -85,6 +85,7 @@ class Agent:
     declared_name: str = strawberry_django.field(field_name="name", description="The name the agent declares for itself, whatever a user calls it.")
     description: str | None = strawberry_django.field(description="What this agent is, in a sentence. Client-declared at registration; null for an agent that never declared one.")
     supervisor: str | None = strawberry_django.field(description="The app this agent says controls its lifecycle (e.g. 'plugin_engine'), as stated on its last registration. Self-declared: a hint for pickers (descriptor @rekuest/supervisor), never authority.")
+    spec_version: str | None = strawberry_django.field(description="The arkitekt-spec this agent said on its last registration it runs (e.g. '8.0.0'). Null for an agent that sends no REGISTER, such as a hook agent. What may be sent to it is decided by its features, not by this.")
     states: list["State"] = strawberry_django.field(description="Current and historical states associated with the agent.")
 
     @strawberry_django.field(only=["hardware"], description="What this agent's machine has, as stated on its last registration; null for an agent that never said.")

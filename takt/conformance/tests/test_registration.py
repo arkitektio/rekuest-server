@@ -81,6 +81,22 @@ async def test_every_register_states_the_supervisor(agents, graphql) -> None:  #
     assert (await api(query, id=agent_id))["agent"]["supervisor"] is None
 
 
+async def test_every_register_states_the_spec_it_runs(agents, graphql) -> None:  # noqa: ANN001
+    """An upgrade may declare nothing new, so a reconnect with the same declaration still says it."""
+    api = graphql("conf_67")
+    query = "query ($id: ID!) { agent(id: $id) { specVersion } }"
+
+    first = await agents()
+    agent_id = (await first.register("conf_67", session_id=session_id(), spec_version="7.1.0"))["agent"]
+    await first.close()
+    assert (await api(query, id=agent_id))["agent"]["specVersion"] == "7.1.0"
+
+    upgraded = await agents()
+    await upgraded.register("conf_67", session_id=session_id(), spec_version="8.0.0")
+    await upgraded.close()
+    assert (await api(query, id=agent_id))["agent"]["specVersion"] == "8.0.0"
+
+
 def _attach(protocols: list[str] | None) -> dict:
     """One `attach(scene: str)` implementation, hinted as `protocols` when given."""
     definition = {"key": "attach", "version": "1", "name": "Attach", "kind": "FUNCTION",

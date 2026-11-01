@@ -106,6 +106,23 @@ pub async fn set_features(db: &PgPool, agent: i64, features: &[String]) -> Resul
     Ok(())
 }
 
+/// Record the arkitekt-spec the agent said on this registration it runs (none clears it). Written
+/// only when it changed.
+pub async fn set_spec_version(
+    db: &PgPool,
+    agent: i64,
+    spec_version: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE facade_agent SET spec_version = $2 WHERE id = $1 AND spec_version IS DISTINCT FROM $2",
+    )
+    .bind(agent)
+    .bind(spec_version)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 /// The scopes of the token the agent registers with: what it may do beyond what it declared
 /// (`dynamic_asks`/`dynamic_calls`/`dynamic_informs` are refused without theirs).
 pub async fn set_granted_scopes(

@@ -55,6 +55,11 @@ pub struct RegisterDeclaration {
     /// part of the declaration (or its hash): moving machines declares nothing new.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hardware: Option<AgentHardware>,
+    /// The arkitekt-spec the agent was written against. Written on every `REGISTER`, and not part
+    /// of the declaration (or its hash): an upgrade that declares nothing new still says it. What
+    /// the server may send an agent is what `features` says, never this.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spec_version: Option<String>,
 }
 
 impl RegisterDeclaration {

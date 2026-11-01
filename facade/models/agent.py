@@ -72,6 +72,12 @@ class Agent(models.Model):
         blank=True,
         help_text="What this agent's machine has (cpu_count, memory_mib, gpus), as it stated on its last registration. Self-declared, for showing an estimate.",
     )
+    spec_version = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text="The arkitekt-spec the agent said on its last registration it runs (e.g. 8.0.0). Null for an agent that sends no REGISTER, such as a hook agent.",
+    )
     features = models.JSONField(
         null=True,
         blank=True,
