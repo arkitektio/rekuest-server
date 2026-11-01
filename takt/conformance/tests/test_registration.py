@@ -81,6 +81,17 @@ async def test_every_register_states_the_supervisor(agents, graphql) -> None:  #
     assert (await api(query, id=agent_id))["agent"]["supervisor"] is None
 
 
+async def test_an_agent_that_names_no_spec_is_refused(agents) -> None:  # noqa: ANN001
+    agent = await agents()
+
+    await agent.send({"type": "REGISTER", "token": "conf_1", "session_id": session_id()})
+
+    error = await agent.receive()
+    assert error["type"] == "PROTOCOL_ERROR"
+    assert "spec_version" in error["error"]
+    assert await agent.expect_close() == 4006
+
+
 async def test_every_register_states_the_spec_it_runs(agents, graphql) -> None:  # noqa: ANN001
     """An upgrade may declare nothing new, so a reconnect with the same declaration still says it."""
     api = graphql("conf_67")

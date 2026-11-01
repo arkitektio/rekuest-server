@@ -11,7 +11,7 @@ async def test_another_process_is_refused_while_the_first_is_live(agents) -> Non
     await incumbent.register("conf_3", session_id=session_id())
 
     intruder = await agents()
-    await intruder.send({"type": "REGISTER", "token": "conf_3", "session_id": session_id()})
+    await intruder.send({"type": "REGISTER", "token": "conf_3", "session_id": session_id(), "spec_version": "8.0.0"})
 
     error = await intruder.receive()
     assert error["type"] == "PROTOCOL_ERROR"

@@ -254,6 +254,19 @@ async fn register(
     let decoded = authentikate::authenticate_token(&ctx.verifier, token)
         .await
         .map_err(|e| refuse(&e))?;
+    // Before anything is written: an agent that names no spec is older than this server reads.
+    if declaration
+        .spec_version
+        .as_deref()
+        .is_none_or(|version| version.trim().is_empty())
+    {
+        return Err(Refused::explained(
+            codes::AGENT_REGISTRATION_REJECTED_CODE,
+            "Registration refused: this agent names no spec_version, so it is older than this \
+             server accepts. Update the arkitekt it runs."
+                .to_owned(),
+        ));
+    }
     let identity = authentikate::expand::expand_token_context(&ctx.db, &decoded)
         .await
         .map_err(|e| refuse(&e))?;

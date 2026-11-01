@@ -51,6 +51,7 @@ async def test_a_refused_declaration_is_answered_then_closed(agents) -> None:  #
             "type": "REGISTER",
             "token": "conf_23",
             "session_id": session_id(),
+            "spec_version": "8.0.0",
             "hash": f"refused-{uuid.uuid4().hex}",
             **declaration(effects="IRREVERSIBLE", definition={"pure": True}),
         }
@@ -85,7 +86,7 @@ async def test_a_declaration_the_schema_refuses_is_answered_then_closed(agents) 
     broken = declaration()
     del broken["implementations"][0]["interface"]
 
-    await agent.send({"type": "REGISTER", "token": "conf_26", "session_id": session_id(), "hash": "x", **broken})
+    await agent.send({"type": "REGISTER", "token": "conf_26", "session_id": session_id(), "spec_version": "8.0.0", "hash": "x", **broken})
 
     error = await agent.receive()
     assert error["type"] == "PROTOCOL_ERROR" and error["error"]

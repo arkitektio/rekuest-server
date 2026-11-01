@@ -120,7 +120,7 @@ class RawAgent:
             return closed.code
 
     async def register(self, token: str, *, session_id: str | None = None, force: bool = False, **declaration: Any) -> dict[str, Any]:
-        await self.send({"type": "REGISTER", "token": token, "force": force, "session_id": session_id, **declaration})
+        await self.send({"type": "REGISTER", "token": token, "force": force, "session_id": session_id, "spec_version": "8.0.0", **declaration})
         return await self.receive_type("INIT")
 
     async def close(self) -> None:
