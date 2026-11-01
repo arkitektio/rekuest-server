@@ -55,6 +55,7 @@ class ChoiceAssignWidget(AssignWidget):
 class CustomAssignWidget(AssignWidget):
     component: str = strawberry.field(description="The catalog component to render. The port value is in scope as the reserved root `value`: read it via a prop bound to `/value`, write it back via a prop that declares the value `value`.")
     props: Optional[List[Annotated["ComponentProp", strawberry.lazy(__name__)]]] = strawberry.field(default=None, description="Props of the component. value_paths may only reference `value` and the widget's `dependencies`; agent calls are not allowed.")
+    children: Optional[scalars.AnyDefault] = strawberry.field(default=None, description="The component's children as one JSON value in the blok runtime's own (snake_case) spelling, as a blok's `componentTree` is: a selection set cannot recurse.")
     dependencies: list[str] | None = strawberry.field(default=None, description="The other ports (port paths) whose values the props may reference.")
     fallback: Optional[Annotated["AssignWidget", strawberry.lazy(__name__)]] = strawberry.field(default=None, description="Widget to render when the UI has no such component in its catalog.")
 

@@ -335,15 +335,16 @@ def iter_widget_calls(widget: Widget) -> Iterator[rimodels.UtilCallInputModel]:
 
 
 def validate_widgets_against_catalogs(catalogs: Sequence[models.Module], widgets: Iterable[tuple[str, Widget]]) -> list[DiagnosticModel]:
-    """Widgets are validated like blok components: a CUSTOM widget is a one-node manifest, and every call it carries is checked."""
+    """Widgets are validated like blok components: a CUSTOM widget is a manifest rooted at its component, and every call it carries is checked."""
     diagnostics: list[DiagnosticModel] = []
     operations = resolve_operations(catalogs, diagnostics)
     component_specs = resolve_components(catalogs, diagnostics)
     catalog_label = _catalog_label(catalogs)
     for owner, widget in widgets:
         if isinstance(widget, (rimodels.CustomAssignWidgetInputModel, rimodels.CustomReturnWidgetInputModel)):
-            node = rimodels.ComponentNodeInputModel(id="widget", component=widget.component, props=widget.props)
-            diagnostics.extend(_check_component(node, component_specs, operations, catalog_label, f"widget of {owner}"))
+            root = rimodels.ComponentNodeInputModel(id="widget", component=widget.component, props=widget.props, children=getattr(widget, "children", None))
+            for node in rimodels.iter_component_nodes([root]):
+                diagnostics.extend(_check_component(node, component_specs, operations, catalog_label, f"widget of {owner}"))
         diagnostics.extend(_check_calls(iter_widget_calls(widget), operations, catalog_label, f"widget of {owner}"))
     return diagnostics
 

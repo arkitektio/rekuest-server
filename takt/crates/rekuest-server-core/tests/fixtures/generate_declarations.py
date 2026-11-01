@@ -86,6 +86,8 @@ BROKEN = {
     "search query not parsing": impl(args=[port("s", "STRUCTURE", identifier="@a/b", widget={"kind": "SEARCH", "query": "query Q(", "ward": "a"})]),
     "state choice without pointer": impl(args=[port("s", "STRING", widget={"kind": "STATE_CHOICE"})]),
     "custom widget impure prop": impl(args=[port("s", "STRING", widget={"kind": "CUSTOM", "component": "X", "props": [{"key": "p", "agent_call": {"dependency": "d", "operation": "o"}}]})]),
+    "custom widget impure child": impl(args=[port("s", "STRING", widget={"kind": "CUSTOM", "component": "Html", "children": [{"id": "Html[0]/Box[0]", "component": "Box", "props": [{"key": "p", "agent_call": {"dependency": "d", "operation": "o"}}]}]})]),
+    "custom widget child reads undeclared": impl(args=[port("s", "STRING", widget={"kind": "CUSTOM", "component": "Html", "children": [{"id": "Html[0]/Box[0]", "component": "Box", "props": [{"key": "p", "dynamic_value": {"path": "other"}}]}]})]),
     "effect impure": impl(args=[port("i", "INT", effects=[{"kind": "HIDE", "call": {"operation": "o", "arguments": [{"key": "k", "agent_call": {"dependency": "d", "operation": "o"}}]}}])]),
     "effect undeclared dependency": impl(args=[port("i", "INT", effects=[{"kind": "HIDE", "call": {"operation": "o", "arguments": [{"key": "k", "value_path": "/other"}]}}])]),
     "message effect without message": impl(args=[port("i", "INT", effects=[{"kind": "MESSAGE", "call": {"operation": "o"}}])]),
@@ -110,6 +112,17 @@ BROKEN = {
 VALID_EXTRA = {
     "protocol hints": impl(protocols=["on_scene_annotation", "on_scene_init"]),
     "quantity canonicalized": impl(args=[port("q", "QUANTITY", reference_unit="mV", proposed_units=["V", "kV"])]),
+    "custom widget tree": impl(
+        args=[
+            port("o", "STRING"),
+            port("s", "STRING", widget={"kind": "CUSTOM", "component": "Html", "dependencies": ["o"], "children": [
+                {"id": "Html[0]/foreach[0]", "component": "foreach", "props": [{"key": "items", "dynamic_value": {"path": "o"}}, {"key": "let", "static_value": "row", "declares_value": "row"}], "children": [
+                    {"id": "Html[0]/foreach[0]/Input[0]", "component": "Input", "props": [{"key": "bind", "static_value": "value"}, {"key": "disabled", "static_value": True}, {"key": "items", "static_value": [1, 2]}, {"key": "label", "dynamic_value": {"path": "row.name"}}, {"key": "hint", "util_call": {"operation": "o", "arguments": [{"key": "k", "value_literal": True}, {"key": "r", "value_path": "row.name"}]}}]},
+                ]},
+            ]}),
+            port("e", "STRING", widget={"kind": "CUSTOM", "component": "X", "children": []}),
+        ]
+    ),
     "rich widgets": impl(
         args=[
             port("f", "FLOAT", default=0.5, widget={"kind": "SLIDER", "min": 0, "max": 1, "step": 0.1}),

@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::calls::{
-    check_pure_call, check_widget_props, ComponentPropInputModel, UtilCallInputModel, ITEM_KEY,
-    PORT_PATH_SEPARATOR,
+    check_pure_call, check_widget_props, check_widget_tree, ComponentNodeInputModel,
+    ComponentPropInputModel, UtilCallInputModel, ITEM_KEY, PORT_PATH_SEPARATOR,
 };
 use super::{min_length, ValidationError};
 use crate::enums::{DescriptorOperator, EffectKind, OptionKey, PortKind};
@@ -227,10 +227,17 @@ pub struct CustomWidget {
     pub component: String,
     #[serde(default)]
     pub props: Option<Vec<ComponentPropInputModel>>,
+    /// Left out of a dump when empty: a widget without any keeps the hash it has.
+    #[serde(default, skip_serializing_if = "no_children")]
+    pub children: Option<Vec<ComponentNodeInputModel>>,
     #[serde(default = "empty_list")]
     pub dependencies: Option<Vec<String>>,
     #[serde(default)]
     pub fallback: Option<Box<AssignWidgetInputModel>>,
+}
+
+fn no_children(children: &Option<Vec<ComponentNodeInputModel>>) -> bool {
+    children.as_ref().is_none_or(Vec::is_empty)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -443,6 +450,17 @@ impl AssignWidgetInputModel {
                     w.dependencies.as_deref(),
                     "CustomAssignWidget",
                 )?;
+                for child in w.children.iter_mut().flatten() {
+                    child.validate()?;
+                }
+                let mut in_scope = w.dependencies.clone().unwrap_or_default();
+                in_scope.extend(
+                    w.props
+                        .iter()
+                        .flatten()
+                        .filter_map(|prop| prop.declares_value.clone()),
+                );
+                check_widget_tree(w.children.as_deref(), &in_scope, "CustomAssignWidget")?;
             }
             Self::StateChoice(w) => {
                 if let Some(call) = w.state_call.as_mut() {

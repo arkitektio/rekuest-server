@@ -1377,6 +1377,11 @@ input AssignWidgetInput {
   props: [ComponentPropInput!] = null
 
   """
+  (CUSTOM) The component's children: a tree of blok nodes under the same rules as its props. Left out of the definition's hash when empty, so a widget without any keeps the hash it has.
+  """
+  children: [ComponentNodeInput!] = null
+
+  """
   (CUSTOM) Widget to render when the UI has no such component in its catalog.
   """
   fallback: AssignWidgetInput = null
@@ -2842,6 +2847,7 @@ type CustomAssignWidget implements AssignWidget {
   followValue: String
   component: String!
   props: [ComponentProp!]
+  children: AnyDefault
   dependencies: [String!]
   fallback: AssignWidget
 }
@@ -2863,6 +2869,11 @@ input CustomAssignWidgetInput @unionElementOf(union: "AssignWidgetInput", discri
   Props of the component. value_paths may only reference `value` and `dependencies`; agent calls are not allowed.
   """
   props: [ComponentPropInput!] = null
+
+  """
+  The component's children: a tree of blok nodes under the same rules as its props. Left out of the definition's hash when empty, so a widget without any keeps the hash it has.
+  """
+  children: [ComponentNodeInput!] = null
 
   """
   The other ports (port paths, `..` traverses children) whose values the props may reference.

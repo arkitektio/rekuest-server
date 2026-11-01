@@ -113,6 +113,7 @@ class SearchAssignWidgetInput:
 @union_member("AssignWidgetInput", key="CUSTOM")
 @pydantic.input(models.CustomAssignWidgetInputModel, description="A catalog component rendered as the port's widget.")
 class CustomAssignWidgetInput:
+    children: Optional[List[Annotated["ComponentNodeInput", strawberry.lazy(__name__)]]] = None
     kind: enums.AssignWidgetKind
     follow_value: str | None = None
     component: str

@@ -19,6 +19,43 @@ pub fn value_path_root(value_path: &str) -> &str {
     trimmed.split('/').next().unwrap_or("")
 }
 
+/// First segment of a blok's path, which is dotted (`row.name` -> `row`).
+fn blok_path_root(path: &str) -> &str {
+    path.trim_start_matches('/')
+        .split(['/', '.'])
+        .next()
+        .unwrap_or("")
+}
+
+/// The roots a tree's call reads, as [`check_pure_call`] holds a port call's.
+fn check_pure_tree_call(
+    arguments: Option<&[ActionArgumentInputModel]>,
+    in_scope: &[String],
+    owner: &str,
+) -> Result<(), ValidationError> {
+    for argument in arguments.unwrap_or_default() {
+        if argument.agent_call.is_some() {
+            return Err(ValidationError(format!(
+                "{owner} must be pure: nested agent calls are not allowed"
+            )));
+        }
+        if let Some(path) = &argument.value_path {
+            let root = blok_path_root(path);
+            if root != "value" && !in_scope.iter().any(|name| name == root) {
+                return Err(ValidationError(format!(
+                    "{owner} references '{root}' via value_path but it is not in dependencies"
+                )));
+            }
+        }
+        if let Some(call) = &argument.util_call {
+            check_pure_tree_call(call.arguments.as_deref(), in_scope, owner)?;
+        }
+        check_pure_tree_call(argument.value_list.as_deref(), in_scope, owner)?;
+        check_pure_tree_call(argument.value_dict.as_deref(), in_scope, owner)?;
+    }
+    Ok(())
+}
+
 fn py_opt_str(value: &Option<String>) -> String {
     value
         .as_deref()
@@ -494,6 +531,49 @@ pub fn check_widget_props(
         if let Some(call) = &prop.util_call {
             check_pure_call(call, dependencies, &prop_owner, &[])?;
         }
+    }
+    Ok(())
+}
+
+/// A CUSTOM widget's tree below its root: pure, reading only `value`, the dependencies and what a
+/// node above declares. Its nodes are a blok's, so nothing in them is rewritten.
+pub fn check_widget_tree(
+    nodes: Option<&[ComponentNodeInputModel]>,
+    dependencies: &[String],
+    owner: &str,
+) -> Result<(), ValidationError> {
+    for node in nodes.unwrap_or_default() {
+        let mut in_scope = dependencies.to_vec();
+        in_scope.extend(
+            node.props
+                .iter()
+                .flatten()
+                .filter_map(|prop| prop.declares_value.clone()),
+        );
+        for prop in node.props.iter().flatten() {
+            let prop_owner = format!(
+                "{owner} node {} prop {}",
+                repr_str(&node.id),
+                repr_str(&prop.key)
+            );
+            if prop.agent_call.is_some() {
+                return Err(ValidationError(format!(
+                    "{prop_owner} must be pure: agent calls are not allowed in widgets"
+                )));
+            }
+            if let Some(path) = prop.dynamic_value.as_ref().and_then(|d| d.path.as_deref()) {
+                let root = blok_path_root(path);
+                if root != "value" && !in_scope.iter().any(|name| name == root) {
+                    return Err(ValidationError(format!(
+                        "{prop_owner} references '{root}' via dynamic_value.path but it is not in dependencies"
+                    )));
+                }
+            }
+            if let Some(call) = &prop.util_call {
+                check_pure_tree_call(call.arguments.as_deref(), &in_scope, &prop_owner)?;
+            }
+        }
+        check_widget_tree(node.children.as_deref(), &in_scope, owner)?;
     }
     Ok(())
 }

@@ -63,6 +63,11 @@ def _value_path_root(value_path: str) -> str:
     return value_path.lstrip("/").split("/", 1)[0]
 
 
+def _blok_path_root(path: str) -> str:
+    """First segment of a blok's path, which is dotted ('row.name' -> 'row', '/value/x' -> 'value')."""
+    return re.split(r"[/.]", path.lstrip("/"), maxsplit=1)[0]
+
+
 #: What follows an agent in the path of one of its assets (``self.assets.scope``, ``deps.robot.assets.arm``).
 BLOK_ASSETS_SEGMENT = "assets"
 
@@ -118,13 +123,15 @@ def iter_component_nodes(components: Optional[List["ComponentNodeInputModel"]]) 
         yield from iter_component_nodes(node.children)
 
 
-def _check_pure_call(call: "UtilCallInputModel", dependencies: list[str] | None, owner: str, *, extra_roots: tuple[str, ...] = ()) -> None:
+def _check_pure_call(call: "UtilCallInputModel", dependencies: list[str] | None, owner: str, *, extra_roots: tuple[str, ...] = (), blok: bool = False) -> None:
     """Enforce that a port call is pure and only references declared dependencies.
 
     A port call (effect, validator, widget or optimistic pointer) is evaluated client-side against
     the blok catalog. It must not trigger agent interactions, and every ``value_path`` in its
     argument tree must resolve to a name in ``dependencies``, to ``value`` (the port's own value)
     or to one of ``extra_roots`` (e.g. ``state`` for state widgets, ``args`` for optimistics).
+
+    With ``blok``, the call is a node's of a blok tree: its paths are dotted and its literals stay as written.
     """
     allowed = set(dependencies or []) | {"value"} | set(extra_roots)
 
@@ -132,12 +139,12 @@ def _check_pure_call(call: "UtilCallInputModel", dependencies: list[str] | None,
         for argument in arguments or []:
             # A port call is held to base@1, as before blok language v2: its literal bool is the
             # int it always was (pydantic's lax mode), so the definition hashes as it did.
-            if isinstance(argument.value_literal, bool):
+            if isinstance(argument.value_literal, bool) and not blok:
                 argument.value_literal = int(argument.value_literal)
             if argument.agent_call is not None:
                 raise ValueError(f"{owner} must be pure: nested agent calls are not allowed")
             if argument.value_path is not None:
-                root = _value_path_root(argument.value_path)
+                root = _blok_path_root(argument.value_path) if blok else _value_path_root(argument.value_path)
                 if root not in allowed:
                     raise ValueError(f"{owner} references '{root}' via value_path but it is not in dependencies")
             if argument.util_call is not None:
@@ -367,6 +374,27 @@ def _check_widget_props(props: Optional[List["ComponentPropInputModel"]], depend
             _check_pure_call(prop.util_call, dependencies, prop_owner)
 
 
+def _check_widget_tree(nodes: Optional[List["ComponentNodeInputModel"]], dependencies: list[str] | None, owner: str) -> None:
+    """A CUSTOM widget's tree below its root: pure, reading only `value`, the dependencies and what a node above declares.
+
+    Its nodes are a blok's, held to blok language v2, and nothing in them is rewritten: only a
+    widget that has a tree hashes them, so there is no earlier hash to keep.
+    """
+    for node in nodes or []:
+        in_scope = list(dependencies or []) + [prop.declares_value for prop in node.props or [] if prop.declares_value]
+        for prop in node.props or []:
+            prop_owner = f"{owner} node {node.id!r} prop {prop.key!r}"
+            if prop.agent_call is not None:
+                raise ValueError(f"{prop_owner} must be pure: agent calls are not allowed in widgets")
+            if prop.dynamic_value is not None and prop.dynamic_value.path is not None:
+                root = _blok_path_root(prop.dynamic_value.path)
+                if root != "value" and root not in in_scope:
+                    raise ValueError(f"{prop_owner} references '{root}' via dynamic_value.path but it is not in dependencies")
+            if prop.util_call is not None:
+                _check_pure_call(prop.util_call, in_scope, prop_owner, blok=True)
+        _check_widget_tree(node.children, in_scope, owner)
+
+
 def _as_plain(value: Any) -> Any:
     """A discriminated-union field accepts dicts (matched on `kind`) or its own member instances.
 
@@ -466,6 +494,7 @@ class CustomAssignWidgetInputModel(_AssignWidgetBase):
     kind: Literal["CUSTOM"] = Field(description="Which member of AssignWidgetInput this is.")
     component: str = Field(min_length=1, description="The catalog component to render. The port value is in scope as the reserved root `value`.")
     props: Optional[List["ComponentPropInputModel"]] = Field(default=None, description="Props of the component. value_paths may only reference `value` and `dependencies`; agent calls are not allowed.")
+    children: Optional[List["ComponentNodeInputModel"]] = Field(default=None, description="The component's children: a tree of blok nodes under the same rules as its props. Left out of the definition's hash when empty, so a widget without any keeps the hash it has.")
     dependencies: list[str] | None = Field(default_factory=list, description="The other ports (port paths, `..` traverses children) whose values the props may reference.")
     fallback: Optional["AssignWidgetInputModel"] = Field(default=None, description="Widget to render when the UI has no such component in its catalog.")
 
@@ -478,7 +507,17 @@ class CustomAssignWidgetInputModel(_AssignWidgetBase):
     def check_props(self) -> Self:
         """Props are pure and only reference declared ports."""
         _check_widget_props(self.props, self.dependencies, "CustomAssignWidget")
+        declared = [prop.declares_value for prop in self.props or [] if prop.declares_value]
+        _check_widget_tree(self.children, list(self.dependencies or []) + declared, "CustomAssignWidget")
         return self
+
+    @model_serializer(mode="wrap")
+    def _no_children_stay_out(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        """Not `exclude_if`: fluss's pydantic predates it and would ignore it, changing the dump."""
+        dumped: dict[str, object] = handler(self)
+        if not self.children:
+            dumped.pop("children", None)
+        return dumped
 
 
 class StateChoiceAssignWidgetInputModel(_AssignWidgetBase):

@@ -39,6 +39,7 @@ class CustomAssignWidgetModel(AssignWidgetModel):
     kind: Literal["CUSTOM"]
     component: str
     props: Optional[List["ComponentPropModel"]] = None
+    children: list[Any] | None = None
     dependencies: list[str] | None = None
     fallback: Optional["AssignWidgetModelUnion"] = None
 

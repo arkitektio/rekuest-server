@@ -14629,6 +14629,341 @@
    "6423b433005a51b3dd2ac9f3c50326b390b5aecdb7ba8a6ddb53695c4c3b0876"
   ]
  },
+ "custom widget tree": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "o",
+        "kind": "STRING"
+       },
+       {
+        "key": "s",
+        "kind": "STRING",
+        "widget": {
+         "kind": "CUSTOM",
+         "component": "Html",
+         "dependencies": [
+          "o"
+         ],
+         "children": [
+          {
+           "id": "Html[0]/foreach[0]",
+           "component": "foreach",
+           "props": [
+            {
+             "key": "items",
+             "dynamic_value": {
+              "path": "o"
+             }
+            },
+            {
+             "key": "let",
+             "static_value": "row",
+             "declares_value": "row"
+            }
+           ],
+           "children": [
+            {
+             "id": "Html[0]/foreach[0]/Input[0]",
+             "component": "Input",
+             "props": [
+              {
+               "key": "bind",
+               "static_value": "value"
+              },
+              {
+               "key": "disabled",
+               "static_value": true
+              },
+              {
+               "key": "items",
+               "static_value": [
+                1,
+                2
+               ]
+              },
+              {
+               "key": "label",
+               "dynamic_value": {
+                "path": "row.name"
+               }
+              },
+              {
+               "key": "hint",
+               "util_call": {
+                "operation": "o",
+                "arguments": [
+                 {
+                  "key": "k",
+                  "value_literal": true
+                 },
+                 {
+                  "key": "r",
+                  "value_path": "row.name"
+                 }
+                ]
+               }
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "key": "e",
+        "kind": "STRING",
+        "widget": {
+         "kind": "CUSTOM",
+         "component": "X",
+         "children": []
+        }
+       }
+      ],
+      "returns": []
+     }
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": [
+    {
+     "definition": {
+      "key": "act",
+      "version": "1",
+      "description": null,
+      "collections": [],
+      "name": "Act",
+      "stateful": false,
+      "pure": false,
+      "idempotent": false,
+      "allow_probe": false,
+      "port_groups": [],
+      "args": [
+       {
+        "key": "o",
+        "label": null,
+        "kind": "STRING",
+        "description": null,
+        "identifier": null,
+        "nullable": false,
+        "effects": null,
+        "choices": null,
+        "reference_unit": null,
+        "proposed_units": null,
+        "dimension": null,
+        "children": null,
+        "validators": null,
+        "default": null,
+        "widget": null,
+        "requires": null
+       },
+       {
+        "key": "s",
+        "label": null,
+        "kind": "STRING",
+        "description": null,
+        "identifier": null,
+        "nullable": false,
+        "effects": null,
+        "choices": null,
+        "reference_unit": null,
+        "proposed_units": null,
+        "dimension": null,
+        "children": null,
+        "validators": null,
+        "default": null,
+        "widget": {
+         "follow_value": null,
+         "kind": "CUSTOM",
+         "component": "Html",
+         "props": null,
+         "children": [
+          {
+           "id": "Html[0]/foreach[0]",
+           "component": "foreach",
+           "props": [
+            {
+             "key": "items",
+             "static_value": null,
+             "dynamic_value": {
+              "literal": null,
+              "path": "o"
+             },
+             "declares_value": null,
+             "agent_call": null,
+             "util_call": null
+            },
+            {
+             "key": "let",
+             "static_value": "row",
+             "dynamic_value": null,
+             "declares_value": "row",
+             "agent_call": null,
+             "util_call": null
+            }
+           ],
+           "children": [
+            {
+             "id": "Html[0]/foreach[0]/Input[0]",
+             "component": "Input",
+             "props": [
+              {
+               "key": "bind",
+               "static_value": "value",
+               "dynamic_value": null,
+               "declares_value": null,
+               "agent_call": null,
+               "util_call": null
+              },
+              {
+               "key": "disabled",
+               "static_value": true,
+               "dynamic_value": null,
+               "declares_value": null,
+               "agent_call": null,
+               "util_call": null
+              },
+              {
+               "key": "items",
+               "static_value": [
+                1,
+                2
+               ],
+               "dynamic_value": null,
+               "declares_value": null,
+               "agent_call": null,
+               "util_call": null
+              },
+              {
+               "key": "label",
+               "static_value": null,
+               "dynamic_value": {
+                "literal": null,
+                "path": "row.name"
+               },
+               "declares_value": null,
+               "agent_call": null,
+               "util_call": null
+              },
+              {
+               "key": "hint",
+               "static_value": null,
+               "dynamic_value": null,
+               "declares_value": null,
+               "agent_call": null,
+               "util_call": {
+                "operation": "o",
+                "arguments": [
+                 {
+                  "key": "k",
+                  "value_literal": true,
+                  "value_path": null,
+                  "agent_call": null,
+                  "util_call": null,
+                  "value_list": null,
+                  "value_dict": null
+                 },
+                 {
+                  "key": "r",
+                  "value_literal": null,
+                  "value_path": "row.name",
+                  "agent_call": null,
+                  "util_call": null,
+                  "value_list": null,
+                  "value_dict": null
+                 }
+                ]
+               }
+              }
+             ],
+             "children": null
+            }
+           ]
+          }
+         ],
+         "dependencies": [
+          "o"
+         ],
+         "fallback": null
+        },
+        "requires": null
+       },
+       {
+        "key": "e",
+        "label": null,
+        "kind": "STRING",
+        "description": null,
+        "identifier": null,
+        "nullable": false,
+        "effects": null,
+        "choices": null,
+        "reference_unit": null,
+        "proposed_units": null,
+        "dimension": null,
+        "children": null,
+        "validators": null,
+        "default": null,
+        "widget": {
+         "follow_value": null,
+         "kind": "CUSTOM",
+         "component": "X",
+         "props": null,
+         "dependencies": [],
+         "fallback": null
+        },
+        "requires": null
+       }
+      ],
+      "returns": [],
+      "kind": "FUNCTION",
+      "is_test_for": [],
+      "is_dev": false,
+      "catalogs": [],
+      "protocols": []
+     },
+     "dependencies": [],
+     "interface": "act",
+     "params": null,
+     "instance_id": null,
+     "locks": null,
+     "optimistics": null,
+     "manipulates": null,
+     "needs_token": true,
+     "provenance_audience": null,
+     "effects": "UNKNOWN",
+     "execution": "PLAIN",
+     "code_hash": null,
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
+    }
+   ],
+   "locks": null,
+   "bloks": null,
+   "assets": null,
+   "hash": null
+  },
+  "hashes": [
+   "5c6181e9cc1dc3a8751ed1915ef2d951e78b0a5cffce97147c94b18c62fefc22"
+  ]
+ },
  "rich widgets": {
   "input": {
    "implementations": [
@@ -15817,6 +16152,89 @@
    ]
   },
   "error": "CustomAssignWidget prop 'p' must be pure: agent calls are not allowed in widgets",
+  "error_type": "value_error"
+ },
+ "custom widget impure child": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "s",
+        "kind": "STRING",
+        "widget": {
+         "kind": "CUSTOM",
+         "component": "Html",
+         "children": [
+          {
+           "id": "Html[0]/Box[0]",
+           "component": "Box",
+           "props": [
+            {
+             "key": "p",
+             "agent_call": {
+              "dependency": "d",
+              "operation": "o"
+             }
+            }
+           ]
+          }
+         ]
+        }
+       }
+      ],
+      "returns": []
+     }
+    }
+   ]
+  },
+  "error": "CustomAssignWidget node 'Html[0]/Box[0]' prop 'p' must be pure: agent calls are not allowed in widgets",
+  "error_type": "value_error"
+ },
+ "custom widget child reads undeclared": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "s",
+        "kind": "STRING",
+        "widget": {
+         "kind": "CUSTOM",
+         "component": "Html",
+         "children": [
+          {
+           "id": "Html[0]/Box[0]",
+           "component": "Box",
+           "props": [
+            {
+             "key": "p",
+             "dynamic_value": {
+              "path": "other"
+             }
+            }
+           ]
+          }
+         ]
+        }
+       }
+      ],
+      "returns": []
+     }
+    }
+   ]
+  },
+  "error": "CustomAssignWidget node 'Html[0]/Box[0]' prop 'p' references 'other' via dynamic_value.path but it is not in dependencies",
   "error_type": "value_error"
  },
  "effect impure": {

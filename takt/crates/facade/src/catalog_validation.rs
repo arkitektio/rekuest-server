@@ -675,23 +675,36 @@ fn validate_widgets_against_catalogs(
         let owner = format!("widget of {owner}");
         let custom = match widget {
             Widget::Assign(AssignWidgetInputModel::Custom(w)) => {
-                Some((&w.component, w.props.as_deref()))
+                Some((&w.component, w.props.as_deref(), w.children.as_deref()))
             }
             Widget::Return(ReturnWidgetInputModel::Custom(w)) => {
-                Some((&w.component, w.props.as_deref()))
+                Some((&w.component, w.props.as_deref(), None))
             }
             _ => None,
         };
-        if let Some((component, props)) = custom {
+        if let Some((component, props, children)) = custom {
             diagnostics.extend(check_component(
                 component,
                 props,
-                false,
+                children.is_some_and(|children| !children.is_empty()),
                 specs.as_ref(),
                 &operations,
                 &label,
                 &owner,
             )?);
+            for node in iter_component_nodes(children) {
+                diagnostics.extend(check_component(
+                    &node.component,
+                    node.props.as_deref(),
+                    node.children
+                        .as_ref()
+                        .is_some_and(|children| !children.is_empty()),
+                    specs.as_ref(),
+                    &operations,
+                    &label,
+                    &owner,
+                )?);
+            }
         }
         // `iter_widget_calls`: a STATE_CHOICE's pointer and accessors.
         if let Widget::Assign(AssignWidgetInputModel::StateChoice(w)) = widget {
