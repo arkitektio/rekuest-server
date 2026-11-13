@@ -9121,7 +9121,7 @@
         {
           "level": "WARNING",
           "code": "catalog.unknown_component",
-          "message": "<Stack> is in no catalog in force (base@2 + ui@1 + scene@1 + logo@1 + structure@1 + html@1 + orkestrator + orkestrator).",
+          "message": "<Stack> is in no catalog in force (base@2 + ui@1 + scene@1 + logo@1 + structure@1 + html@1 + shadcn@1 + orkestrator + orkestrator).",
           "path": "root"
         },
         {
@@ -9206,7 +9206,7 @@
                 "code": "catalog.unknown_component",
                 "path": "root",
                 "level": "WARNING",
-                "message": "<Stack> is in no catalog in force (base@2 + ui@1 + scene@1 + logo@1 + structure@1 + html@1 + orkestrator + orkestrator)."
+                "message": "<Stack> is in no catalog in force (base@2 + ui@1 + scene@1 + logo@1 + structure@1 + html@1 + shadcn@1 + orkestrator + orkestrator)."
               },
               {
                 "code": "palette.raw_colour",
@@ -9675,7 +9675,7 @@
         {
           "level": "WARNING",
           "code": "catalog.unknown_component",
-          "message": "<Stack> is in no catalog in force (base@2 + ui@1 + scene@1 + logo@1 + structure@1 + html@1 + orkestrator + orkestrator).",
+          "message": "<Stack> is in no catalog in force (base@2 + ui@1 + scene@1 + logo@1 + structure@1 + html@1 + shadcn@1 + orkestrator + orkestrator).",
           "path": "root"
         },
         {
@@ -9760,7 +9760,7 @@
                 "code": "catalog.unknown_component",
                 "path": "root",
                 "level": "WARNING",
-                "message": "<Stack> is in no catalog in force (base@2 + ui@1 + scene@1 + logo@1 + structure@1 + html@1 + orkestrator + orkestrator)."
+                "message": "<Stack> is in no catalog in force (base@2 + ui@1 + scene@1 + logo@1 + structure@1 + html@1 + shadcn@1 + orkestrator + orkestrator)."
               },
               {
                 "code": "palette.raw_colour",
@@ -10214,7 +10214,7 @@
         {
           "level": "WARNING",
           "code": "catalog.unknown_component",
-          "message": "<Stack> is in no catalog in force (base@2 + ui@1 + scene@1 + logo@1 + structure@1 + html@1 + orkestrator + orkestrator).",
+          "message": "<Stack> is in no catalog in force (base@2 + ui@1 + scene@1 + logo@1 + structure@1 + html@1 + shadcn@1 + orkestrator + orkestrator).",
           "path": "root"
         },
         {
@@ -10299,7 +10299,7 @@
                 "code": "catalog.unknown_component",
                 "path": "root",
                 "level": "WARNING",
-                "message": "<Stack> is in no catalog in force (base@2 + ui@1 + scene@1 + logo@1 + structure@1 + html@1 + orkestrator + orkestrator)."
+                "message": "<Stack> is in no catalog in force (base@2 + ui@1 + scene@1 + logo@1 + structure@1 + html@1 + shadcn@1 + orkestrator + orkestrator)."
               },
               {
                 "code": "palette.raw_colour",
