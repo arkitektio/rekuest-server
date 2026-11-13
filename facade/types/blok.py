@@ -31,7 +31,6 @@ if TYPE_CHECKING:
     from facade.types.dashboard import DashboardPlacement, Module
     from facade.types.task import Task
     from facade.types.demand import ActionDependency, StateDependency
-    from facade.types.threed import Placement, SpacePlacement
 
 
 def blok_hash(row: models.Blok | models.BlokRevision) -> str:
@@ -177,7 +176,7 @@ class ActionBlok:
     action: Action = strawberry_django.field(description="The action whose runs it shows.")
     blok: Blok = strawberry_django.field(description="What it draws: a blok held by its actions only (`heldByAction`), shared by every action of the app declaring the same.")
 
-    @strawberry_django.field(description="Where a client shows a run with it: HTML in a task panel, SCENE as a 3D view of its own, OVERLAY drawn into the space that hosts the run, over the agents placed there.")
+    @strawberry_django.field(description="Where a client shows a run with it: HTML in a task panel, SCENE as a 3D view (a `Space` places the run's dependencies in a room whose layout is shared).")
     def context(self) -> renums.ComponentContext:
         return renums.ComponentContext(self.context)
 
@@ -318,10 +317,6 @@ class MaterializedBlok:
     dashboard_placements: list["DashboardPlacement"] = strawberry_django.field(
         description="Placements of this materialized blok on dashboards.",
     )
-    placements: list["Placement"] = strawberry_django.field(
-        description="Placements of this materialized blok.",
-    )
-    space_placements: list["SpacePlacement"] = strawberry_django.field(description="Where this 3D blok is placed in spaces, each at its affine transform.")
     pinned_revision: BlokRevision | None = strawberry_django.field(description="The revision this materialization stays at; null when it follows its blok's head.")
 
     @strawberry_django.field(description="Where it lives: DASHBOARD, MESSAGE when it was made for one chat message to show inline, or TASK when a task showed it.")

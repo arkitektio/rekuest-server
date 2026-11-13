@@ -73,8 +73,6 @@ from .threed import (
     PlacementOrder,
     SpaceFilter,
     SpaceOrder,
-    SpacePlacementFilter,
-    SpacePlacementOrder,
 )
 from .toolbox import (
     ProtocolFilter,
@@ -121,8 +119,6 @@ __all__ = [
     "ImplementationOrder",
     "ImplementationActionFilter",
     "ImplementationFilter",
-    "SpacePlacementOrder",
-    "SpacePlacementFilter",
     "SpaceOrder",
     "SpaceFilter",
     "PlacementOrder",

@@ -226,9 +226,9 @@ def _check_asset_prop(kind: enums.CatalogValueKind | None, prop: rimodels.Compon
 # --------------------------------------------------------------------------- blok trees (v2)
 
 
-#: The components that read a run or a dependency of one: ``Anchor`` and ``Route`` only an action's
-#: own blok holds, ``ask`` (a task's open ask) any blok that has a task.
-RUN_COMPONENTS = ("Anchor", "Route")
+#: The components that read a run or a dependency of one: ``Space``, ``Placed`` and ``Route`` only an
+#: action's own blok holds, ``ask`` (a task's open ask) any blok that has a task.
+RUN_COMPONENTS = ("Space", "Placed", "Route")
 ASK_COMPONENT = "ask"
 
 
@@ -268,7 +268,7 @@ def diagnostic_of(finding: Finding) -> DiagnosticModel:
 
 
 def check_run_components(components: list[rimodels.ComponentNodeInputModel], kind: str) -> None:
-    """``Anchor``/``Route`` read the agents a run got, so only an action's own blok holds them;
+    """``Space``/``Placed``/``Route`` read the agents a run got, so only an action's own blok holds them;
     ``ask`` a task's open ask, so only a blok that has a task."""
     for node in rimodels.iter_component_nodes(components):
         if node.component in RUN_COMPONENTS and kind != "action":

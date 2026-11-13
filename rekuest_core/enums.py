@@ -164,13 +164,12 @@ class AssetKind(str, Enum):
     IMAGE = "IMAGE"
 
 
-@strawberry.enum(description="The renderer a catalog component lives in. A component may only be placed where its context is in force. ACTION_LOGO and OVERLAY are blok contexts only: an OVERLAY blok is an action's own, drawn into the space that hosts its run.")
+@strawberry.enum(description="The renderer a catalog component lives in. A component may only be placed where its context is in force. ACTION_LOGO is a blok context only.")
 class ComponentContext(str, Enum):
     HTML = "HTML"
     SCENE = "SCENE"
     LOGO = "LOGO"
     ACTION_LOGO = "ACTION_LOGO"
-    OVERLAY = "OVERLAY"
 
 
 @strawberry.enum(description="Severity of a finding on a blok or a definition, as the blok vocabulary's diagnostic table levels it. An ERROR refuses a write, so only a blok rewritten by a migration (blok language v2) stores one; everything registered or written since stores WARNINGs.")

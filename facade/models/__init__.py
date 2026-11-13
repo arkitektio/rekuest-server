@@ -67,7 +67,7 @@ from .state import (
 )
 from .testcase import TestCase, TestResult
 from .asset import AgentAsset, Asset
-from .threed import Placement, Space, SpacePlacement
+from .threed import Placement, Space
 
 __all__ = [
     # caller
@@ -135,7 +135,6 @@ __all__ = [
     "BlokArgPort",
     "BlokRevision",
     # threed
-    "SpacePlacement",
     "Asset",
     "AgentAsset",
     "Space",

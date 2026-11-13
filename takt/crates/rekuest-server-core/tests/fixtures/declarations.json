@@ -19615,16 +19615,22 @@
       "returns": [],
       "bloks": [
        {
-        "context": "OVERLAY",
+        "context": "SCENE",
         "vocab": 2,
         "components": [
          {
           "id": "root",
-          "component": "Overlay",
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab"
+           }
+          ],
           "children": [
            {
-            "id": "anchor-robot",
-            "component": "Anchor",
+            "id": "placed-robot",
+            "component": "Placed",
             "props": [
              {
               "key": "dep",
@@ -19786,16 +19792,25 @@
       "protocols": [],
       "bloks": [
        {
-        "context": "OVERLAY",
+        "context": "SCENE",
         "components": [
          {
           "id": "root",
-          "component": "Overlay",
-          "props": null,
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab",
+            "dynamic_value": null,
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           }
+          ],
           "children": [
            {
-            "id": "anchor-robot",
-            "component": "Anchor",
+            "id": "placed-robot",
+            "component": "Placed",
             "props": [
              {
               "key": "dep",
@@ -20026,12 +20041,18 @@
       "returns": [],
       "bloks": [
        {
-        "context": "OVERLAY",
+        "context": "SCENE",
         "vocab": 2,
         "components": [
          {
           "id": "root",
-          "component": "Overlay",
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab"
+           }
+          ],
           "children": [
            {
             "id": "route",
@@ -20069,10 +20090,10 @@
     }
    ]
   },
-  "error": "Blok manifest: component 'route' names 'stitcher', which is not a dependency of the action (its dependencies: 'frame', 'robot')",
+  "error": "route: Route.through: 'stitcher' is not a dependency of the blok (its dependencies: frame, robot). Fix: add a dependency parameter `stitcher` to the action. [deps.unknown]",
   "error_type": "value_error"
  },
- "action blok anchored at an unknown key": {
+ "action blok placing an unknown key": {
   "input": {
    "implementations": [
     {
@@ -20098,16 +20119,22 @@
       "returns": [],
       "bloks": [
        {
-        "context": "OVERLAY",
+        "context": "SCENE",
         "vocab": 2,
         "components": [
          {
           "id": "root",
-          "component": "Overlay",
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab"
+           }
+          ],
           "children": [
            {
-            "id": "anchor-stitcher",
-            "component": "Anchor",
+            "id": "placed-stitcher",
+            "component": "Placed",
             "props": [
              {
               "key": "dep",
@@ -20133,10 +20160,10 @@
     }
    ]
   },
-  "error": "Blok manifest: component 'anchor-stitcher' names 'stitcher', which is not a dependency of the action (its dependencies: 'frame', 'robot')",
+  "error": "placed-stitcher: Placed.dep: 'stitcher' is not a dependency of the blok (its dependencies: frame, robot). Fix: add a dependency parameter `stitcher` to the action. [deps.unknown]",
   "error_type": "value_error"
  },
- "action blok anchored at self": {
+ "action blok placing self": {
   "input": {
    "implementations": [
     {
@@ -20162,16 +20189,22 @@
       "returns": [],
       "bloks": [
        {
-        "context": "OVERLAY",
+        "context": "SCENE",
         "vocab": 2,
         "components": [
          {
           "id": "root",
-          "component": "Overlay",
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab"
+           }
+          ],
           "children": [
            {
-            "id": "anchor-self",
-            "component": "Anchor",
+            "id": "placed-self",
+            "component": "Placed",
             "props": [
              {
               "key": "dep",
@@ -20197,10 +20230,10 @@
     }
    ]
   },
-  "error": "Blok manifest: component 'anchor-self' names 'self', which is not a dependency of the action (its dependencies: 'frame', 'robot')",
+  "error": "placed-self: Placed.dep: 'self' is not a dependency of the blok (its dependencies: frame, robot). Fix: add a dependency parameter `self` to the action. [deps.unknown]",
   "error_type": "value_error"
  },
- "action blok anchored at a dynamic key": {
+ "action blok placing a dynamic key": {
   "input": {
    "implementations": [
     {
@@ -20226,16 +20259,22 @@
       "returns": [],
       "bloks": [
        {
-        "context": "OVERLAY",
+        "context": "SCENE",
         "vocab": 2,
         "components": [
          {
           "id": "root",
-          "component": "Overlay",
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab"
+           }
+          ],
           "children": [
            {
             "id": "at",
-            "component": "Anchor",
+            "component": "Placed",
             "props": [
              {
               "key": "dep",
@@ -20334,16 +20373,25 @@
       "protocols": [],
       "bloks": [
        {
-        "context": "OVERLAY",
+        "context": "SCENE",
         "components": [
          {
           "id": "root",
-          "component": "Overlay",
-          "props": null,
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab",
+            "dynamic_value": null,
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           }
+          ],
           "children": [
            {
             "id": "at",
-            "component": "Anchor",
+            "component": "Placed",
             "props": [
              {
               "key": "dep",
@@ -20482,12 +20530,18 @@
       "returns": [],
       "bloks": [
        {
-        "context": "OVERLAY",
+        "context": "SCENE",
         "vocab": 2,
         "components": [
          {
           "id": "root",
-          "component": "Overlay",
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab"
+           }
+          ],
           "children": [
            {
             "id": "t",
@@ -20547,12 +20601,18 @@
       "returns": [],
       "bloks": [
        {
-        "context": "OVERLAY",
+        "context": "SCENE",
         "vocab": 2,
         "components": [
          {
           "id": "root",
-          "component": "Overlay",
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab"
+           }
+          ],
           "children": [
            {
             "id": "t",
@@ -20612,12 +20672,18 @@
       "returns": [],
       "bloks": [
        {
-        "context": "OVERLAY",
+        "context": "SCENE",
         "vocab": 2,
         "components": [
          {
           "id": "root",
-          "component": "Overlay",
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab"
+           }
+          ],
           "children": [
            {
             "id": "b",
@@ -20713,12 +20779,21 @@
       "protocols": [],
       "bloks": [
        {
-        "context": "OVERLAY",
+        "context": "SCENE",
         "components": [
          {
           "id": "root",
-          "component": "Overlay",
-          "props": null,
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab",
+            "dynamic_value": null,
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           }
+          ],
           "children": [
            {
             "id": "b",
@@ -20842,12 +20917,18 @@
       "returns": [],
       "bloks": [
        {
-        "context": "OVERLAY",
+        "context": "SCENE",
         "vocab": 2,
         "components": [
          {
           "id": "root",
-          "component": "Overlay",
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab"
+           }
+          ],
           "children": [
            {
             "id": "b",
@@ -20908,23 +20989,35 @@
       "returns": [],
       "bloks": [
        {
-        "context": "OVERLAY",
+        "context": "SCENE",
         "vocab": 2,
         "components": [
          {
           "id": "root",
-          "component": "Overlay",
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab"
+           }
+          ],
           "children": []
          }
         ]
        },
        {
-        "context": "OVERLAY",
+        "context": "SCENE",
         "vocab": 2,
         "components": [
          {
           "id": "root",
-          "component": "Overlay",
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab"
+           }
+          ],
           "children": []
          }
         ]
@@ -20942,7 +21035,7 @@
     }
    ]
   },
-  "error": "Definition act: the overlay blok is given twice; an action has one blok per context",
+  "error": "Definition act: the scene blok is given twice; an action has one blok per context",
   "error_type": "value_error"
  },
  "action blok in a logo context": {
@@ -20993,7 +21086,7 @@
     }
    ]
   },
-  "error": "An action blok is drawn in HTML, SCENE, OVERLAY, not LOGO. [context.kind]",
+  "error": "An action blok is drawn in HTML, SCENE, not LOGO. [context.kind]",
   "error_type": "value_error"
  },
  "action blok sent twice": {
@@ -21181,12 +21274,18 @@
       "returns": [],
       "bloks": [
        {
-        "context": "OVERLAY",
+        "context": "SCENE",
         "vocab": 2,
         "components": [
          {
           "id": "root",
-          "component": "Overlay",
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab"
+           }
+          ],
           "children": []
          }
         ],
@@ -21234,12 +21333,18 @@
       "returns": [],
       "bloks": [
        {
-        "context": "OVERLAY",
+        "context": "SCENE",
         "vocab": 2,
         "components": [
          {
           "id": "root",
-          "component": "Overlay",
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab"
+           }
+          ],
           "children": []
          }
         ],
@@ -21261,23 +21366,29 @@
   "error": "Extra inputs are not permitted",
   "error_type": "extra_forbidden"
  },
- "agent declaring an overlay blok": {
+ "agent declaring a space blok": {
   "input": {
    "bloks": [
     {
-     "key": "over",
+     "key": "lab",
      "vocab": 2,
-     "context": "OVERLAY",
+     "context": "SCENE",
      "components": [
       {
        "id": "root",
-       "component": "Overlay"
+       "component": "Space",
+       "props": [
+        {
+         "key": "room",
+         "static_value": "room:lab"
+        }
+       ]
       }
      ]
     }
    ]
   },
-  "error": "An agent blok is drawn in HTML, SCENE, LOGO, not OVERLAY. [context.kind]",
+  "error": "root: <Space> places the run's dependencies, so only an action's own blok holds it, not an agent blok. [space.kind]",
   "error_type": "value_error"
  }
 }

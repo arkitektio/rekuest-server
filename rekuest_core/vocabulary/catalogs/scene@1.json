@@ -1,29 +1,8 @@
 {
  "name": "scene",
  "version": 1,
- "description": "3D components: the Scene and Overlay roots, models, verb modifiers on a model's nodes, the HTML bridge (Popout) and run anchors.",
+ "description": "3D components: the Scene and Space roots, models, verb modifiers on a model's nodes, the HTML bridge (Popout), and the placed dependencies of a Space.",
  "components": [
-  {
-   "name": "Anchor",
-   "description": "Anchors its children at the agent the run got for a dependency, where it stands in the hosting space; Glow, Popout and OnClick inside it bind to that device's model as its scene blok loaded it. A key bound to several agents anchors at each; an agent the space does not place shows in a side tray. Was At.",
-   "context": "SCENE",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "downstream_of": [
-    "Overlay"
-   ],
-   "not_downstream_of": [],
-   "text_prop": null,
-   "props": [
-    {
-     "key": "dep",
-     "kind": "STRING",
-     "required": true,
-     "description": "The dependency key of the action whose agent this anchors at (was `dependency`)."
-    }
-   ]
-  },
   {
    "name": "Animate",
    "description": "Scrubs a named animation clip of the model to a position, for mechanisms a single move or turn cannot describe. Never loops on its own.",
@@ -72,7 +51,7 @@
   },
   {
    "name": "Attach",
-   "description": "While `when` holds, carries a node with another node, keeping its place in the world at the moment of attaching. For picked-up objects.",
+   "description": "While `on` holds, carries a node with another node, keeping its place in the world at the moment of attaching. For picked-up objects.",
    "context": "SCENE",
    "children_context": null,
    "inherits_context": false,
@@ -170,9 +149,9 @@
    "inherits_context": false,
    "accepts_children": false,
    "downstream_of": [
-    "Anchor",
     "Model",
-    "Robot"
+    "Robot",
+    "Placed"
    ],
    "not_downstream_of": [],
    "text_prop": null,
@@ -193,7 +172,7 @@
      "key": "node",
      "kind": "STRING",
      "required": false,
-     "description": "The name of the node in the enclosing model that this binds. Required under a Model or Robot; under an Anchor the anchored agent's model is meant."
+     "description": "The name of the node in the enclosing model that glows; the whole model when unset."
     },
     {
      "key": "on",
@@ -211,7 +190,8 @@
    "inherits_context": false,
    "accepts_children": true,
    "downstream_of": [
-    "Scene"
+    "Scene",
+    "Space"
    ],
    "not_downstream_of": [],
    "text_prop": null,
@@ -326,9 +306,9 @@
    "inherits_context": false,
    "accepts_children": false,
    "downstream_of": [
-    "Anchor",
     "Model",
-    "Robot"
+    "Robot",
+    "Placed"
    ],
    "not_downstream_of": [],
    "text_prop": null,
@@ -353,7 +333,7 @@
      "key": "node",
      "kind": "STRING",
      "required": false,
-     "description": "The name of the node in the enclosing model. Required under a Model or Robot; under an Anchor the anchored agent's model is meant."
+     "description": "The name of the node in the enclosing model; the whole model when unset."
     },
     {
      "key": "onClick",
@@ -388,19 +368,37 @@
    ]
   },
   {
-   "name": "Overlay",
-   "description": "Root of an action's overlay: drawn into the space that hosts a run of the action, in its world coordinates, over the agents placed there. It owns no canvas. Place Anchor and Route inside.",
-   "context": "HTML",
-   "children_context": "SCENE",
+   "name": "Placed",
+   "description": "Places the agent the run got for a dependency in the room, drawn by its own scene blok; Glow, Popout and OnClick inside it bind to that device's model. A key bound to several agents places each; while the room is being arranged a gizmo moves it, and where it is left is kept for everyone.",
+   "context": "SCENE",
+   "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "downstream_of": [],
-   "not_downstream_of": [
-    "Overlay",
-    "Scene"
+   "downstream_of": [
+    "Space"
    ],
+   "not_downstream_of": [],
    "text_prop": null,
-   "props": []
+   "props": [
+    {
+     "key": "blok",
+     "kind": "STRING",
+     "required": false,
+     "description": "The scene blok of that agent to draw it with, by name. Its default scene blok when left out."
+    },
+    {
+     "key": "dep",
+     "kind": "STRING",
+     "required": true,
+     "description": "The dependency key of the action whose agent this places."
+    },
+    {
+     "key": "matrix",
+     "kind": "ANY",
+     "required": false,
+     "description": "Where it stands until someone moves it: a 4x4 affine matrix as four rows, in meters with Y up. The room's origin when left out."
+    }
+   ]
   },
   {
    "name": "Popout",
@@ -410,9 +408,9 @@
    "inherits_context": false,
    "accepts_children": true,
    "downstream_of": [
-    "Anchor",
     "Model",
-    "Robot"
+    "Robot",
+    "Placed"
    ],
    "not_downstream_of": [],
    "text_prop": null,
@@ -427,7 +425,7 @@
      "key": "node",
      "kind": "STRING",
      "required": false,
-     "description": "The name of the node in the enclosing model. Required under a Model or Robot; under an Anchor the anchored agent's model is meant."
+     "description": "The name of the node in the enclosing model; the whole model when unset."
     },
     {
      "key": "open",
@@ -462,7 +460,8 @@
    "inherits_context": false,
    "accepts_children": true,
    "downstream_of": [
-    "Scene"
+    "Scene",
+    "Space"
    ],
    "not_downstream_of": [],
    "text_prop": null,
@@ -613,13 +612,13 @@
   },
   {
    "name": "Route",
-   "description": "Draws a line through the agents the run got for these dependencies, where they stand in the hosting space. A dependency whose agent is not placed there is skipped.",
+   "description": "Draws a line through the agents the run got for these dependencies, where they stand in the room. A dependency nothing places is skipped.",
    "context": "SCENE",
    "children_context": null,
    "inherits_context": false,
    "accepts_children": false,
    "downstream_of": [
-    "Overlay"
+    "Space"
    ],
    "not_downstream_of": [],
    "text_prop": null,
@@ -638,9 +637,9 @@
     },
     {
      "key": "through",
-     "kind": "LIST",
+     "kind": "ANY",
      "required": true,
-     "description": "The dependency keys the line runs through, in order (`through={[\"robot\", \"frame\"]}`)."
+     "description": "The dependency keys the line runs through, in order: `through={[\"robot\", \"frame\", \"robot\"]}`."
     }
    ]
   },
@@ -653,7 +652,8 @@
    "accepts_children": true,
    "downstream_of": [],
    "not_downstream_of": [
-    "Scene"
+    "Scene",
+    "Space"
    ],
    "text_prop": null,
    "props": [
@@ -685,7 +685,59 @@
      "key": "persist",
      "kind": "BOOL",
      "required": false,
-     "description": "Keep the camera on this device between openings, by the Scene's explicit id."
+     "description": "Keep where the viewer leaves the camera (and the grid) on this device, by the scene's explicit id."
+    }
+   ]
+  },
+  {
+   "name": "Space",
+   "description": "Root of a 3D view whose layout is shared: places the action's dependencies (`Placed`) in a room the organization arranges together. A device someone moved stands where they left it, for everyone; one nobody moved stands where its `Placed` says. The camera stays the viewer's.",
+   "context": "HTML",
+   "children_context": "SCENE",
+   "inherits_context": false,
+   "accepts_children": true,
+   "downstream_of": [],
+   "not_downstream_of": [
+    "Scene",
+    "Space"
+   ],
+   "text_prop": null,
+   "props": [
+    {
+     "key": "camera",
+     "kind": "STRING",
+     "required": false,
+     "description": "Where the camera starts looking from; it frames the models whatever their size. Defaults to iso.",
+     "values": [
+      "iso",
+      "front",
+      "side",
+      "top"
+     ]
+    },
+    {
+     "key": "grid",
+     "kind": "BOOL",
+     "required": false,
+     "description": "Whether the ground grid starts shown; the viewer can switch it. Defaults to true."
+    },
+    {
+     "key": "height",
+     "kind": "STRING",
+     "required": false,
+     "description": "CSS height of the view, e.g. \"24rem\". Omit to fit the element the scene is in (24rem where that has no height of its own)."
+    },
+    {
+     "key": "persist",
+     "kind": "BOOL",
+     "required": false,
+     "description": "Keep where the viewer leaves the camera (and the grid) on this device, by the scene's explicit id."
+    },
+    {
+     "key": "room",
+     "kind": "STRING",
+     "required": true,
+     "description": "The room this is, found again by it: a URI (`room:helsinki-lab`) is one room for every app of the organization, a plain key (`lab`) one for this app. Where a device stands in it is kept on the server, the same for everyone."
     }
    ]
   },
@@ -719,14 +771,14 @@
   },
   {
    "name": "Transform",
-   "description": "Places its children by an affine matrix. A gizmo moves them; with `persist` (and an explicit id) the pose stays on this device between openings, bound to a local (`bind`) a call can read it.",
+   "description": "Places its children by an affine matrix. Bound (`bind={pose}`) or persisted (`id=\"arm-pose\" persist`), a gizmo moves them and keeps the matrix.",
    "context": "SCENE",
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
    "downstream_of": [
-    "Overlay",
-    "Scene"
+    "Scene",
+    "Space"
    ],
    "not_downstream_of": [],
    "text_prop": null,
@@ -735,13 +787,13 @@
      "key": "bind",
      "kind": "ANY",
      "required": false,
-     "description": "The local (or a path below one) the gizmo writes the matrix to: bind={pose}."
+     "description": "The local holding the matrix (`bind={pose}`): read in place of `matrix`, and written by the gizmo."
     },
     {
      "key": "gizmo",
      "kind": "BOOL",
      "required": false,
-     "description": "Whether a gizmo moves the children. Defaults to true; never shown while viewing the past."
+     "description": "Whether a gizmo moves the children. Defaults to true when bound or persisted; never shown while viewing the past."
     },
     {
      "key": "matrix",
@@ -764,7 +816,7 @@
      "key": "persist",
      "kind": "BOOL",
      "required": false,
-     "description": "Keep the pose on this device between openings, by the Transform's explicit id."
+     "description": "Keep where the gizmo left the children on this device, by the explicit id (unbound: the pose is the component's own)."
     },
     {
      "key": "size",
@@ -776,7 +828,7 @@
   },
   {
    "name": "Visible",
-   "description": "Shows or hides a node of its parent model. Hiding a node hides everything beneath it. Was Show.",
+   "description": "Shows or hides a node and its whole subtree.",
    "context": "SCENE",
    "children_context": null,
    "inherits_context": false,
@@ -798,7 +850,7 @@
      "key": "on",
      "kind": "BOOL",
      "required": false,
-     "description": "Whether the node is visible."
+     "description": "Whether the node is visible. Hiding a node hides everything beneath it."
     }
    ]
   }

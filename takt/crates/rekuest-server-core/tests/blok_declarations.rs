@@ -128,10 +128,10 @@ fn an_action_logo_declares_nothing() {
 }
 
 #[test]
-fn an_action_blok_anchors_only_at_its_dependencies() {
+fn an_action_blok_places_only_its_dependencies() {
     let mut model: ActionBlokInputModel =
-        serde_json::from_value(json!({"context": "OVERLAY", "vocab": 2,
-        "source": "<Overlay><Anchor dep=\"robot\" /><Anchor dep=\"crane\" /></Overlay>"}))
+        serde_json::from_value(json!({"context": "SCENE", "vocab": 2,
+        "source": "<Space room=\"lab\"><Placed dep=\"robot\" /><Placed dep=\"crane\" /></Space>"}))
         .unwrap();
     model.validate().unwrap();
     let dependencies: Vec<rekuest_core::inputs::AgentDependencyInputModel> =

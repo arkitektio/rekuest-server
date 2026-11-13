@@ -90,7 +90,7 @@ from .structure import (
 )
 from .testcase import TestCase, TestResult
 from .asset import AgentAsset, Asset, AssetPolicy, AssetUploadGrant, ImagePolicy, ModelPolicy, ModelStats
-from .threed import Placement, Space, SpaceForAgents, SpacePlacement
+from .threed import Placement, Space
 from .toolbox import Collection, Protocol, Shortcut, ShortcutBinding, Toolbox
 
 __all__ = [
@@ -171,7 +171,6 @@ __all__ = [
     "TaskBoundary",
     "SessionBoundary",
     "Session",
-    "SpacePlacement",
     "Asset",
     "AgentAsset",
     "AssetPolicy",
@@ -180,7 +179,6 @@ __all__ = [
     "ModelPolicy",
     "ModelStats",
     "Space",
-    "SpaceForAgents",
     "ActionBlok",
     "Placement",
 ]

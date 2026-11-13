@@ -5,13 +5,16 @@
  "components": [
   {
    "name": "ActionLogo",
-   "description": "The root of an action's logo: an SVG drawing that paints only with the palette (logo pens) and reads only the task the viewer last ran.",
+   "description": "The root of an action's logo: a drawing in the viewer's pens that reads task (the viewer's last task of the action, idle until they run it). Its children are SVG shapes.",
    "context": "HTML",
    "children_context": "LOGO",
    "inherits_context": false,
    "accepts_children": true,
    "downstream_of": [],
-   "not_downstream_of": [],
+   "not_downstream_of": [
+    "AgentLogo",
+    "ActionLogo"
+   ],
    "text_prop": null,
    "props": [
     {
@@ -48,13 +51,16 @@
   },
   {
    "name": "AgentLogo",
-   "description": "The root of an agent's logo: an SVG drawing that paints only with the palette (logo pens).",
+   "description": "The root of an agent's logo: a drawing in the viewer's pens. Its children are SVG shapes.",
    "context": "HTML",
    "children_context": "LOGO",
    "inherits_context": false,
    "accepts_children": true,
    "downstream_of": [],
-   "not_downstream_of": [],
+   "not_downstream_of": [
+    "AgentLogo",
+    "ActionLogo"
+   ],
    "text_prop": null,
    "props": [
     {
@@ -145,7 +151,7 @@
      "key": "fill",
      "kind": "STRING",
      "required": false,
-     "description": "Fill paint: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "Fill paint: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "fillOpacity",
@@ -186,7 +192,7 @@
      "key": "stroke",
      "kind": "STRING",
      "required": false,
-     "description": "Stroke paint: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "Stroke paint: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "strokeDasharray",
@@ -339,7 +345,7 @@
      "key": "fill",
      "kind": "STRING",
      "required": false,
-     "description": "Fill paint: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "Fill paint: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "fillOpacity",
@@ -386,7 +392,7 @@
      "key": "stroke",
      "kind": "STRING",
      "required": false,
-     "description": "Stroke paint: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "Stroke paint: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "strokeDasharray",
@@ -486,7 +492,7 @@
      "key": "fill",
      "kind": "STRING",
      "required": false,
-     "description": "Fill paint: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "Fill paint: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "fillOpacity",
@@ -521,7 +527,7 @@
      "key": "stroke",
      "kind": "STRING",
      "required": false,
-     "description": "Stroke paint: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "Stroke paint: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "strokeDasharray",
@@ -621,7 +627,7 @@
      "key": "fill",
      "kind": "STRING",
      "required": false,
-     "description": "Fill paint: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "Fill paint: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "fillOpacity",
@@ -656,7 +662,7 @@
      "key": "stroke",
      "kind": "STRING",
      "required": false,
-     "description": "Stroke paint: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "Stroke paint: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "strokeDasharray",
@@ -760,7 +766,11 @@
      "key": "gradientUnits",
      "kind": "STRING",
      "required": false,
-     "description": "Whether the coordinates are fractions of the shape (the default) or user units."
+     "description": "Whether the coordinates are fractions of the shape (the default) or user units.",
+     "values": [
+      "objectBoundingBox",
+      "userSpaceOnUse"
+     ]
     },
     {
      "key": "x1",
@@ -838,7 +848,7 @@
      "key": "fill",
      "kind": "STRING",
      "required": false,
-     "description": "Fill paint: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "Fill paint: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "fillOpacity",
@@ -873,7 +883,7 @@
      "key": "stroke",
      "kind": "STRING",
      "required": false,
-     "description": "Stroke paint: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "Stroke paint: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "strokeDasharray",
@@ -973,7 +983,7 @@
      "key": "fill",
      "kind": "STRING",
      "required": false,
-     "description": "Fill paint: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "Fill paint: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "fillOpacity",
@@ -1014,7 +1024,7 @@
      "key": "stroke",
      "kind": "STRING",
      "required": false,
-     "description": "Stroke paint: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "Stroke paint: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "strokeDasharray",
@@ -1114,7 +1124,7 @@
      "key": "fill",
      "kind": "STRING",
      "required": false,
-     "description": "Fill paint: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "Fill paint: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "fillOpacity",
@@ -1155,7 +1165,7 @@
      "key": "stroke",
      "kind": "STRING",
      "required": false,
-     "description": "Stroke paint: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "Stroke paint: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "strokeDasharray",
@@ -1259,7 +1269,11 @@
      "key": "gradientUnits",
      "kind": "STRING",
      "required": false,
-     "description": "Whether the coordinates are fractions of the shape (the default) or user units."
+     "description": "Whether the coordinates are fractions of the shape (the default) or user units.",
+     "values": [
+      "objectBoundingBox",
+      "userSpaceOnUse"
+     ]
     },
     {
      "key": "r",
@@ -1313,7 +1327,7 @@
      "key": "fill",
      "kind": "STRING",
      "required": false,
-     "description": "Fill paint: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "Fill paint: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "fillOpacity",
@@ -1366,7 +1380,7 @@
      "key": "stroke",
      "kind": "STRING",
      "required": false,
-     "description": "Stroke paint: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "Stroke paint: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "strokeDasharray",
@@ -1464,7 +1478,7 @@
      "key": "stopColor",
      "kind": "STRING",
      "required": false,
-     "description": "The colour at this stop: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "The colour at this stop: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "stopOpacity",
@@ -1531,7 +1545,7 @@
      "key": "fill",
      "kind": "STRING",
      "required": false,
-     "description": "Fill paint: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "Fill paint: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "fillOpacity",
@@ -1584,7 +1598,7 @@
      "key": "stroke",
      "kind": "STRING",
      "required": false,
-     "description": "Stroke paint: ink, muted, brand, brand-strong, brand-soft, surface, none (the viewer's palette), url(#gradient), or under an SVG any colour."
+     "description": "Stroke paint: ink, muted, brand, brand-strong, brand-soft, surface, none, success, warning, info, spectrum-violet, spectrum-blue, spectrum-cyan, spectrum-green, spectrum-yellow, spectrum-orange, spectrum-red (the viewer's pens), or url(#gradient)."
     },
     {
      "key": "strokeDasharray",

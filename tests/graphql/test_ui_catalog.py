@@ -234,10 +234,10 @@ class TestUiCatalog:
         assert await sync_to_async(lambda: Blok.objects.get(name="catalogued").context)() == "SCENE"
 
         for roots, catalog, message in (
-            ([{"id": "root", "component": "Frame"}], "electron", "The root of a scene blok is <Scene>, not <Frame>"),
-            ([{"id": "root", "component": "Frame", "children": scene(named)}], "electron", "The root of a scene blok is <Scene>, not <Frame>"),
+            ([{"id": "root", "component": "Frame"}], "electron", "The root of a scene blok is <Scene> or <Space>, not <Frame>"),
+            ([{"id": "root", "component": "Frame", "children": scene(named)}], "electron", "The root of a scene blok is <Scene> or <Space>, not <Frame>"),
             # A catalog nothing registered in: the root is still the vocabulary's.
-            ([{"id": "root", "component": "Frame"}], "unregistered", "The root of a scene blok is <Scene>, not <Frame>"),
+            ([{"id": "root", "component": "Frame"}], "unregistered", "The root of a scene blok is <Scene> or <Space>, not <Frame>"),
             (scene(named) + [{"id": "other", "component": "Scene"}], "electron", "a blok has one root, not 2"),
             (scene({"dynamicValue": {"path": "deps.robot.assets"}}), "electron", "an asset is <agent>.assets.<name>"),
         ):
@@ -359,7 +359,7 @@ class TestUiCatalog:
         _found(await _stored(boxed), "catalog.placement", "<Frame> is a html component, not one of the scene context")
         # The context is the blok's, not something a loop at the root can stand in for.
         rooted = await _create_blok(authenticated_context, [loop({"id": "root", "component": "Scene"})], context="SCENE")
-        assert rooted.errors and "The root of a scene blok is <Scene>, not <foreach>" in rooted.errors[0].message
+        assert rooted.errors and "The root of a scene blok is <Scene> or <Space>, not <foreach>" in rooted.errors[0].message
 
         # The base catalog of port definitions (base@1) is unchanged.
         listed = await schema.execute("query { baseCatalog { components { name inheritsContext } } }", context_value=authenticated_context)

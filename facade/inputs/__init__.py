@@ -96,25 +96,7 @@ from .implementation import (
     PortDemandInput,
 )
 from .asset_store import CreateAssetInput, RequestAssetUploadInput
-from .threed import (
-    CreateSpacePlacementInput,
-    DeleteSpacePlacementInput,
-    UpdateSpacePlacementInput,
-    CreatePlacementInput,
-    CreatePlacementInputModel,
-    CreateSpaceInput,
-    CreateSpaceInputModel,
-    DeletePlacementInput,
-    DeletePlacementInputModel,
-    DeleteSpaceInput,
-    DeleteSpaceInputModel,
-    PlacementInput,
-    PlacementInputModel,
-    UpdatePlacementInput,
-    UpdatePlacementInputModel,
-    UpdateSpaceInput,
-    UpdateSpaceInputModel,
-)
+from .threed import ResetPlacementInput, ResetPlacementInputModel, SavePlacementInput, SavePlacementInputModel
 from .toolbox import (
     BindShortcutInput,
     BindShortcutInputModel,
@@ -133,6 +115,10 @@ from .toolbox import (
 )
 
 __all__ = [
+    "SavePlacementInput",
+    "SavePlacementInputModel",
+    "ResetPlacementInput",
+    "ResetPlacementInputModel",
     "CreateTriggerInput",
     "TriggerIdInput",
     "FireTriggerInput",
@@ -230,25 +216,8 @@ __all__ = [
     "PortDemandInput",
     # state
     # threed
-    "CreateSpacePlacementInput",
-    "DeleteSpacePlacementInput",
-    "UpdateSpacePlacementInput",
     "CreateAssetInput",
     "RequestAssetUploadInput",
-    "CreatePlacementInput",
-    "CreatePlacementInputModel",
-    "CreateSpaceInput",
-    "CreateSpaceInputModel",
-    "DeletePlacementInput",
-    "DeletePlacementInputModel",
-    "DeleteSpaceInput",
-    "DeleteSpaceInputModel",
-    "PlacementInput",
-    "PlacementInputModel",
-    "UpdatePlacementInput",
-    "UpdatePlacementInputModel",
-    "UpdateSpaceInput",
-    "UpdateSpaceInputModel",
     # toolbox
     "BindShortcutInput",
     "BindShortcutInputModel",

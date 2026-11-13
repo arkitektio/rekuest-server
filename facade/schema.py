@@ -120,12 +120,10 @@ class Query:
     agent: types.Agent = field(resolver=queries.agent, description="Fetch a specific agent by ID or by app, version and device_id.")
 
     spaces: list[types.Space] = field(description="List all spaces.")
-    spaces_for_agents = field(resolver=types.threed.spaces_for_agents, description="The spaces that place any of these agents (e.g. the ones a dependencyTree dry run binds), those placing the most first, then the most recently changed: where to run a workflow over them.")
+    space_by_reference = field(resolver=types.threed.space_by_reference, description="The space a blok's `room` names: where someone left each agent in it. Null until someone kept a pose there.")
     space: types.Space = field(description="Fetch a specific space by ID.")
     placements: list[types.Placement] = field(description="List all placements.")
     placement: types.Placement = field(description="Fetch a specific placement by ID.")
-    space_placements: list[types.SpacePlacement] = field(description="List the 3D bloks placed in spaces.")
-    space_placement: types.SpacePlacement = field(description="Fetch one placed 3D blok by ID.")
     asset = field(resolver=mutations.asset, description="The stored asset of this reference ('sha256:...') in the caller's organization, or null if no agent has uploaded it.")
     asset_policy = field(resolver=mutations.asset_policy, description="The limits each kind of asset is held to when it is added.")
     bloks_for_model = field(resolver=mutations.bloks_for_model, description="The html bloks registered to decorate the model of this reference.")
@@ -364,17 +362,8 @@ class Mutation:
 
     # Space
 
-    create_space = mutation(scope="rekuest_write", resolver=mutations.create_space, description="Create a new space.")
-    update_space = mutation(scope="rekuest_write", resolver=mutations.update_space, description="Update an existing space.")
-    delete_space = mutation(scope="rekuest_write", resolver=mutations.delete_space, description="Delete a space.")
-
-    create_placement = mutation(scope="rekuest_write", resolver=mutations.create_placement, description="Create a new placement for an agent in a space.")
-    update_placement = mutation(scope="rekuest_write", resolver=mutations.update_placement, description="Update an existing placement.")
-    delete_placement = mutation(scope="rekuest_write", resolver=mutations.delete_placement, description="Delete a placement.")
-
-    create_space_placement = mutation(scope="rekuest_write", resolver=mutations.create_space_placement, description="Place a 3D blok (a Model or Robot over a kulisse asset) in a space at an affine transform.")
-    update_space_placement = mutation(scope="rekuest_write", resolver=mutations.update_space_placement, description="Move or rename a placed 3D blok.")
-    delete_space_placement = mutation(scope="rekuest_write", resolver=mutations.delete_space_placement, description="Remove a placed 3D blok from its space.")
+    save_placement = mutation(scope="rekuest_write", resolver=mutations.save_placement, description="Keep where an agent stands in a space (a room), for everyone: the space a blok's `room` names, made when none has it yet.")
+    reset_placement = mutation(scope="rekuest_write", resolver=mutations.reset_placement, description="Forget where an agent was left in a space, so the blok that places it decides again.")
 
 
 @strawberry.type(description="Root subscription type for real-time event streams from the system.")

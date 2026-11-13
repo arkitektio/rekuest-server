@@ -1728,8 +1728,6 @@ class BlokImplementationInputModel(BaseModel):
 
         A blok sent as its source is checked once takt has parsed it, at registration."""
         check_blok_sent_once(self.components, self.source, required=True)
-        if self.context == enums.ComponentContext.OVERLAY:
-            raise wrong_context("agent", self.context)
         kind = blok_kind(self.context)
         dependency_keys = {dependency.key for dependency in self.dependencies}
         check_blok_declarations(kind=kind, catalogs=self.catalogs, locals=self.locals, queries=self.queries, subscriptions=self.subscriptions, dependency_keys=dependency_keys, demo=self.demo)
@@ -1751,10 +1749,13 @@ class BlokImplementationInputModel(BaseModel):
 
 
 #: The contexts an action has a blok for, one each.
-ACTION_BLOK_CONTEXTS = (enums.ComponentContext.HTML, enums.ComponentContext.SCENE, enums.ComponentContext.OVERLAY)
+ACTION_BLOK_CONTEXTS = (enums.ComponentContext.HTML, enums.ComponentContext.SCENE)
 
-#: The component that anchors its children at the agent bound to a dependency (``dep``).
-ANCHOR_COMPONENT = "Anchor"
+#: A 3D view placing the run's dependencies in a room whose layout is shared.
+SPACE_COMPONENT = "Space"
+
+#: Draws the agent bound to a dependency (``dep``) with its own scene blok, where the room keeps it.
+PLACED_COMPONENT = "Placed"
 
 #: The component that draws a line through the agents bound to dependencies (``through``).
 ROUTE_COMPONENT = "Route"
@@ -1762,36 +1763,15 @@ ROUTE_COMPONENT = "Route"
 #: The run's open ask form.
 ASK_COMPONENT = "ask"
 
-#: The components that read a run or a dependency of one: only an action's own blok (or an overlay) holds them.
-ACTION_BLOK_COMPONENTS = (ANCHOR_COMPONENT, ROUTE_COMPONENT, ASK_COMPONENT)
-
-
-def anchored_keys(components: Optional[List[ComponentNodeInputModel]]) -> list[tuple[str, str]]:
-    """Every dependency key an ``<Anchor dep>`` or ``<Route through>`` names, with the node's id."""
-    named: list[tuple[str, str]] = []
-    for node in iter_component_nodes(components):
-        for prop in node.props or []:
-            if node.component == ANCHOR_COMPONENT and prop.key == "dep" and isinstance(prop.static_value, str):
-                named.append((prop.static_value, node.id))
-            elif node.component == ROUTE_COMPONENT and prop.key == "through" and isinstance(prop.static_value, list):
-                named.extend((key, node.id) for key in prop.static_value if isinstance(key, str))
-    return named
-
-
-def check_action_blok_anchors(components: Optional[List[ComponentNodeInputModel]], dependency_keys: set[str]) -> None:
-    """Every ``<Anchor dep>`` and ``<Route through>`` names dependencies of the action. Bound
-    dynamically, they are left to the renderer."""
-    for key, node_id in anchored_keys(components):
-        if key not in dependency_keys:
-            known = ", ".join(repr(known) for known in sorted(dependency_keys)) or "none"
-            raise ValueError(f"Blok manifest: component {node_id!r} names {key!r}, which is not a dependency of the action (its dependencies: {known})")
+#: The components that read a run or a dependency of one: only an action's own blok holds them.
+ACTION_BLOK_COMPONENTS = (SPACE_COMPONENT, PLACED_COMPONENT, ROUTE_COMPONENT, ASK_COMPONENT)
 
 
 def check_action_blok(blok: "ActionBlokInputModel", dependencies: list[AgentDependencyInputModel], arg_keys: list[str] | None = None) -> list["Finding"]:
     """An action's blok against the dependencies its implementation declares (kind ``action``).
 
     It reads the run as ``task``, its args as ``args``, the agent running it as ``self`` and the
-    agents the run got as ``deps.<key>``; ``Anchor``/``Route`` name only the dependencies. A
+    agents the run got as ``deps.<key>``; ``Placed``/``Route`` name only the dependencies. A
     blok sent as its source is checked once takt has parsed it. Its warnings are returned.
 
     Raises:
@@ -1801,7 +1781,6 @@ def check_action_blok(blok: "ActionBlokInputModel", dependencies: list[AgentDepe
     check_blok_declarations(kind="action", catalogs=blok.catalogs, locals=blok.locals, queries=blok.queries, subscriptions=blok.subscriptions, dependency_keys=keys, demo=blok.demo)
     if blok.components is None:
         return []
-    check_action_blok_anchors(blok.components, keys)
     return check_blok_manifest(
         blok.components,
         kind="action",
@@ -1820,7 +1799,7 @@ class ActionBlokInputModel(BaseModel):
     """An action's own blok: how a client shows a run of it in one context. It has no name and is never listed
     on its own; its dependencies are the action's, which it names by key."""
 
-    context: enums.ComponentContext = Field(default=enums.ComponentContext.HTML, description="Where a client shows the run with it: HTML in a task panel, SCENE as a 3D view of its own, OVERLAY drawn into the space that hosts the run (its root an `Overlay`).")
+    context: enums.ComponentContext = Field(default=enums.ComponentContext.HTML, description="Where a client shows the run with it: HTML in a task panel, SCENE as a 3D view (its root a `Scene`, or a `Space` placing the run's dependencies in a room whose layout is shared).")
     components: Optional[list[ComponentNodeInputModel]] = Field(default=None, description="The UI component tree, unless the blok is sent as its `source`.")
     source: Optional[str] = Field(default=None, description="The blok as v2 BSX, parsed by the server into its component tree. Exactly one of `components` and `source` is sent.")
     module: Optional[str] = Field(default=None, description="The module the blok renders against besides its catalogs; the Orkestrator's when absent.")
@@ -2010,12 +1989,9 @@ class CatalogComponentInputModel(BaseModel):
 
     @model_validator(mode="after")
     def check_no_action_logo_context(self) -> Self:
-        """ACTION_LOGO and OVERLAY are a blok's contexts, never a component's: an action logo draws logo
-        components, an overlay scene components."""
+        """ACTION_LOGO is a blok's context, never a component's: an action logo draws logo components."""
         if enums.ComponentContext.ACTION_LOGO in (self.context, self.children_context):
             raise ValueError(f"catalog component {self.name}: ACTION_LOGO is a blok context only; its shapes are LOGO components")
-        if enums.ComponentContext.OVERLAY in (self.context, self.children_context):
-            raise ValueError(f"catalog component {self.name}: OVERLAY is a blok context only; what an overlay draws are SCENE components")
         return self
 
 

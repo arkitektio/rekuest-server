@@ -1121,9 +1121,6 @@ impl BlokImplementationInputModel {
         for local in &mut self.locals {
             local.validate()?;
         }
-        if self.context == ComponentContext::OVERLAY {
-            return Err(wrong_context("agent", self.context));
-        }
         let keys: Vec<&str> = self.dependencies.iter().map(|d| d.key.as_str()).collect();
         check_blok_declarations(
             BlokDeclarations {
@@ -1282,8 +1279,10 @@ impl InformBlokInputModel {
     }
 }
 
-/// The component anchoring its children at the agent bound to a dependency (`dep`).
-pub const ANCHOR_COMPONENT: &str = "Anchor";
+/// A 3D view placing the run's dependencies in a room whose layout is shared.
+pub const SPACE_COMPONENT: &str = "Space";
+/// Draws the agent bound to a dependency (`dep`) with its own scene blok, where the room keeps it.
+pub const PLACED_COMPONENT: &str = "Placed";
 /// The component drawing a line through the agents bound to dependencies (`through`).
 pub const ROUTE_COMPONENT: &str = "Route";
 /// The run's open ask form.
@@ -1294,7 +1293,7 @@ pub const ASK_COMPONENT: &str = "ask";
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ActionBlokInputModel {
-    /// HTML (a task panel), SCENE (a 3D view of its own) or OVERLAY (drawn into the hosting space).
+    /// HTML (a task panel) or SCENE (a 3D view: a `Scene`, or a `Space` placing the run's dependencies).
     #[serde(default = "html_")]
     pub context: ComponentContext,
     /// The tree, unless the blok is sent as its `source`; `validate` parses that into this.
@@ -1335,7 +1334,7 @@ impl ActionBlokInputModel {
         }
         if !matches!(
             self.context,
-            ComponentContext::HTML | ComponentContext::SCENE | ComponentContext::OVERLAY
+            ComponentContext::HTML | ComponentContext::SCENE
         ) {
             return Err(wrong_context("action", self.context));
         }
@@ -1363,64 +1362,9 @@ impl ActionBlokInputModel {
     }
 }
 
-/// Every dependency key an `<Anchor dep>` or `<Route through>` names, with the node's id
-/// (`anchored_keys`). Bound dynamically, they are left to the renderer.
-pub fn anchored_keys(components: Option<&[ComponentNodeInputModel]>) -> Vec<(String, String)> {
-    let mut named = vec![];
-    for node in iter_component_nodes(components) {
-        for prop in node.props.iter().flatten() {
-            match (
-                node.component.as_str(),
-                prop.key.as_str(),
-                &prop.static_value,
-            ) {
-                (ANCHOR_COMPONENT, "dep", Some(Value::String(key))) => {
-                    named.push((key.clone(), node.id.clone()))
-                }
-                (ROUTE_COMPONENT, "through", Some(Value::Array(keys))) => named.extend(
-                    keys.iter()
-                        .filter_map(Value::as_str)
-                        .map(|key| (key.to_owned(), node.id.clone())),
-                ),
-                _ => {}
-            }
-        }
-    }
-    named
-}
-
-/// Every `<Anchor dep>` and `<Route through>` names dependencies of the action
-/// (`check_action_blok_anchors`).
-pub fn check_action_blok_anchors(
-    components: Option<&[ComponentNodeInputModel]>,
-    dependency_keys: &HashSet<String>,
-) -> Result<(), ValidationError> {
-    for (key, node_id) in anchored_keys(components) {
-        if !dependency_keys.contains(&key) {
-            let mut known: Vec<&String> = dependency_keys.iter().collect();
-            known.sort_unstable();
-            let known = if known.is_empty() {
-                "none".to_owned()
-            } else {
-                known
-                    .iter()
-                    .map(|k| repr_str(k))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            };
-            return Err(ValidationError(format!(
-                "Blok manifest: component {} names {}, which is not a dependency of the action (its dependencies: {known})",
-                repr_str(&node_id),
-                repr_str(&key)
-            )));
-        }
-    }
-    Ok(())
-}
-
 /// An action's blok against the dependencies its implementation declares and the action's args
 /// (`check_action_blok`): it reads the run as `task`, its args as `args`, the agent running it
-/// as `self` and the agents the run got as `deps.<key>`; `Anchor`/`Route` name only the
+/// as `self` and the agents the run got as `deps.<key>`; `Placed`/`Route` name only the
 /// dependencies. Its warnings are returned.
 pub fn check_action_blok(
     blok: &ActionBlokInputModel,
@@ -1443,8 +1387,6 @@ pub fn check_action_blok(
     if blok.components.is_none() {
         return Ok(vec![]);
     }
-    let key_set: HashSet<String> = keys.iter().map(|k| (*k).to_owned()).collect();
-    check_action_blok_anchors(blok.components.as_deref(), &key_set)?;
     check_blok_manifest(
         blok.components.as_deref(),
         &blok.scope(dependencies, arg_keys),
@@ -1556,21 +1498,12 @@ impl CatalogComponentInputModel {
             self.props.iter().map(|p| p.key.as_str()),
             &format!("catalog component {}", self.name),
         )?;
-        // ACTION_LOGO and OVERLAY are a blok's contexts, never a component's
-        // (`check_no_action_logo_context`).
+        // ACTION_LOGO is a blok's context, never a component's (`check_no_action_logo_context`).
         if self.context == ComponentContext::ACTION_LOGO
             || self.children_context == Some(ComponentContext::ACTION_LOGO)
         {
             return Err(ValidationError(format!(
                 "catalog component {}: ACTION_LOGO is a blok context only; its shapes are LOGO components",
-                self.name
-            )));
-        }
-        if self.context == ComponentContext::OVERLAY
-            || self.children_context == Some(ComponentContext::OVERLAY)
-        {
-            return Err(ValidationError(format!(
-                "catalog component {}: OVERLAY is a blok context only; what an overlay draws are SCENE components",
                 self.name
             )));
         }

@@ -510,8 +510,11 @@ class Finding:
 class BlokError(ValueError):
     """A blok refused: its code is a row of the diagnostic table, the same in every parser.
 
-    ``line`` and ``column`` (1-based) say where in a BSX source, when the error has a place.
+    ``line`` and ``column`` (1-based) say where in a BSX source, when the error has a place;
+    ``node`` names the node it refuses (``Card[0]/Button[1]``), when it came from a finding about one.
     """
+
+    node: str | None = None
 
     def __init__(self, code: str, *, line: int | None = None, column: int | None = None, **fields: object) -> None:
         """Refuse with ``code``, its message filled with ``fields``."""
@@ -526,11 +529,16 @@ class BlokError(ValueError):
         self.message = message
 
     @classmethod
-    def from_finding(cls, finding: Finding) -> "BlokError":
-        """Raise ``finding``: its message as written, its place in front."""
+    def from_finding(cls, finding: Finding, *, node: str | None = None) -> "BlokError":
+        """Raise ``finding``: its message as written, its place in front.
+
+        ``node`` is the node it refuses when the message already names it (and ``finding.path``
+        was cleared for that); otherwise it is ``finding.path``.
+        """
         error = cls.__new__(cls)
         ValueError.__init__(error, f"{finding.path + ': ' if finding.path else ''}{finding.message} [{finding.code}]")
         error.code = finding.code
+        error.node = node if node is not None else finding.path
         error.line = finding.line
         error.column = finding.column
         error.fields = dict(finding.fields)
@@ -544,6 +552,7 @@ class BlokError(ValueError):
         where = f"line {self.line}, column {self.column}: " if self.line is not None and self.column is not None else ""
         ValueError.__init__(error, f"{owner}: {where}{self.message} [{self.code}]")
         error.code = self.code
+        error.node = self.node
         error.line = self.line
         error.column = self.column
         error.fields = self.fields

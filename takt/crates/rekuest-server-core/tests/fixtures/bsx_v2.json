@@ -6,7 +6,8 @@
   "scene": 1,
   "logo": 1,
   "structure": 1,
-  "html": 1
+  "html": 1,
+  "shadcn": 1
  },
  "text_table": {
   "Accordion": {
@@ -71,7 +72,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "AlertDialogAction": {
    "text_prop": null,
@@ -79,7 +80,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": false,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "AlertDialogCancel": {
    "text_prop": null,
@@ -87,7 +88,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": false,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "AlertDialogContent": {
    "text_prop": null,
@@ -95,7 +96,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "AlertDialogDescription": {
    "text_prop": null,
@@ -103,7 +104,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "AlertDialogFooter": {
    "text_prop": null,
@@ -111,7 +112,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "AlertDialogHeader": {
    "text_prop": null,
@@ -119,7 +120,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "AlertDialogTitle": {
    "text_prop": null,
@@ -127,7 +128,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "AlertDialogTrigger": {
    "text_prop": null,
@@ -135,15 +136,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
-  },
-  "Anchor": {
-   "text_prop": null,
-   "context": "SCENE",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "scene@1"
+   "catalog": "shadcn@1"
   },
   "Animate": {
    "text_prop": null,
@@ -159,7 +152,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Attach": {
    "text_prop": null,
@@ -175,7 +168,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": false,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Badge": {
    "text_prop": "text",
@@ -199,7 +192,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "BentoItem": {
    "text_prop": null,
@@ -207,7 +200,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Breadcrumb": {
    "text_prop": null,
@@ -215,7 +208,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "BreadcrumbItem": {
    "text_prop": null,
@@ -223,7 +216,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": false,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "BreadcrumbSeparator": {
    "text_prop": null,
@@ -231,7 +224,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": false,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Button": {
    "text_prop": "label",
@@ -247,7 +240,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Calendar": {
    "text_prop": null,
@@ -255,7 +248,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": false,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Card": {
    "text_prop": null,
@@ -311,7 +304,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "CarouselItem": {
    "text_prop": null,
@@ -319,7 +312,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Chart": {
    "text_prop": null,
@@ -327,7 +320,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": false,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Checkbox": {
    "text_prop": "label",
@@ -367,7 +360,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "CollapsibleContent": {
    "text_prop": null,
@@ -375,7 +368,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "CollapsibleTrigger": {
    "text_prop": null,
@@ -383,7 +376,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Column": {
    "text_prop": null,
@@ -399,7 +392,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "ContextMenuCheckboxItem": {
    "text_prop": null,
@@ -407,7 +400,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": false,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "ContextMenuContent": {
    "text_prop": null,
@@ -415,7 +408,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "ContextMenuItem": {
    "text_prop": null,
@@ -423,7 +416,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "ContextMenuLabel": {
    "text_prop": null,
@@ -431,7 +424,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "ContextMenuSeparator": {
    "text_prop": null,
@@ -439,7 +432,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": false,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "ContextMenuTrigger": {
    "text_prop": null,
@@ -447,7 +440,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Defs": {
    "text_prop": null,
@@ -527,7 +520,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "DrawerContent": {
    "text_prop": null,
@@ -535,7 +528,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "DrawerDescription": {
    "text_prop": null,
@@ -543,7 +536,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "DrawerFooter": {
    "text_prop": null,
@@ -551,7 +544,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "DrawerHeader": {
    "text_prop": null,
@@ -559,7 +552,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "DrawerTitle": {
    "text_prop": null,
@@ -567,7 +560,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "DrawerTrigger": {
    "text_prop": null,
@@ -575,7 +568,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "DropdownMenu": {
    "text_prop": null,
@@ -583,7 +576,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "DropdownMenuCheckboxItem": {
    "text_prop": null,
@@ -591,7 +584,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": false,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "DropdownMenuContent": {
    "text_prop": null,
@@ -599,7 +592,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "DropdownMenuItem": {
    "text_prop": null,
@@ -607,7 +600,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "DropdownMenuLabel": {
    "text_prop": null,
@@ -615,7 +608,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "DropdownMenuSeparator": {
    "text_prop": null,
@@ -623,7 +616,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": false,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "DropdownMenuTrigger": {
    "text_prop": null,
@@ -631,7 +624,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Ellipse": {
    "text_prop": null,
@@ -711,7 +704,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "HoverCardContent": {
    "text_prop": null,
@@ -719,7 +712,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "HoverCardTrigger": {
    "text_prop": null,
@@ -727,7 +720,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Html": {
    "text_prop": null,
@@ -767,7 +760,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "InputGroupAddon": {
    "text_prop": null,
@@ -775,7 +768,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "InputOTP": {
    "text_prop": null,
@@ -783,7 +776,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": false,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Item": {
    "text_prop": null,
@@ -791,7 +784,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "ItemGroup": {
    "text_prop": null,
@@ -799,7 +792,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Kbd": {
    "text_prop": null,
@@ -807,7 +800,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Label": {
    "text_prop": "text",
@@ -838,7 +831,7 @@
    "context": "HTML",
    "children_context": null,
    "inherits_context": false,
-   "accepts_children": false,
+   "accepts_children": true,
    "catalog": "ui@1"
   },
   "Markdown": {
@@ -855,7 +848,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "MenubarItem": {
    "text_prop": null,
@@ -863,7 +856,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": false,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "MenubarMenu": {
    "text_prop": null,
@@ -871,7 +864,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "MenubarSeparator": {
    "text_prop": null,
@@ -879,47 +872,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": false,
-   "catalog": "orkestrator"
-  },
-  "MikroScene": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "orkestrator"
-  },
-  "MikroSceneAnnotations": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "orkestrator"
-  },
-  "MikroSceneLayers": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "orkestrator"
-  },
-  "MikroSceneProbe": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "orkestrator"
-  },
-  "MikroSceneViewport": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Model": {
    "text_prop": null,
@@ -945,21 +898,13 @@
    "accepts_children": false,
    "catalog": "scene@1"
   },
-  "Overlay": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": "SCENE",
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "scene@1"
-  },
   "Pagination": {
    "text_prop": null,
    "context": "HTML",
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "PaginationItem": {
    "text_prop": null,
@@ -967,7 +912,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": false,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Path": {
    "text_prop": null,
@@ -976,6 +921,14 @@
    "inherits_context": false,
    "accepts_children": false,
    "catalog": "logo@1"
+  },
+  "Placed": {
+   "text_prop": null,
+   "context": "SCENE",
+   "children_context": null,
+   "inherits_context": false,
+   "accepts_children": true,
+   "catalog": "scene@1"
   },
   "Polygon": {
    "text_prop": null,
@@ -1063,7 +1016,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": false,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Rect": {
    "text_prop": null,
@@ -1079,7 +1032,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "ResizableHandle": {
    "text_prop": null,
@@ -1087,7 +1040,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": false,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "ResizablePanel": {
    "text_prop": null,
@@ -1095,7 +1048,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Robot": {
    "text_prop": null,
@@ -1207,7 +1160,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "SheetContent": {
    "text_prop": null,
@@ -1215,7 +1168,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "SheetDescription": {
    "text_prop": null,
@@ -1223,7 +1176,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "SheetFooter": {
    "text_prop": null,
@@ -1231,7 +1184,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "SheetHeader": {
    "text_prop": null,
@@ -1239,7 +1192,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "SheetTitle": {
    "text_prop": null,
@@ -1247,7 +1200,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "SheetTrigger": {
    "text_prop": null,
@@ -1255,7 +1208,7 @@
    "children_context": null,
    "inherits_context": false,
    "accepts_children": true,
-   "catalog": "orkestrator"
+   "catalog": "shadcn@1"
   },
   "Skeleton": {
    "text_prop": null,
@@ -1272,6 +1225,14 @@
    "inherits_context": false,
    "accepts_children": false,
    "catalog": "ui@1"
+  },
+  "Space": {
+   "text_prop": null,
+   "context": "HTML",
+   "children_context": "SCENE",
+   "inherits_context": false,
+   "accepts_children": true,
+   "catalog": "scene@1"
   },
   "Spacer": {
    "text_prop": null,
@@ -3506,15 +3467,21 @@
    "printed": "<Scene id=\"main\" camera=\"front\" persist>\n  <Model src={self.assets.arm} />\n</Scene>"
   },
   {
-   "name": "an overlay",
-   "source": "<Overlay><Anchor dep=\"robot\"><Glow on={task.running} /></Anchor><Route through={[\"robot\", \"ot2\"]} /></Overlay>",
+   "name": "a space",
+   "source": "<Space room=\"room:lab\"><Placed dep=\"robot\"><Glow on={task.running} /></Placed><Route through={[\"robot\", \"ot2\"]} /></Space>",
    "tree": {
-    "id": "Overlay[0]",
-    "component": "Overlay",
+    "id": "Space[0]",
+    "component": "Space",
+    "props": [
+     {
+      "key": "room",
+      "static_value": "room:lab"
+     }
+    ],
     "children": [
      {
-      "id": "Overlay[0]/Anchor[0]",
-      "component": "Anchor",
+      "id": "Space[0]/Placed[0]",
+      "component": "Placed",
       "props": [
        {
         "key": "dep",
@@ -3523,7 +3490,7 @@
       ],
       "children": [
        {
-        "id": "Overlay[0]/Anchor[0]/Glow[0]",
+        "id": "Space[0]/Placed[0]/Glow[0]",
         "component": "Glow",
         "props": [
          {
@@ -3537,7 +3504,7 @@
       ]
      },
      {
-      "id": "Overlay[0]/Route[0]",
+      "id": "Space[0]/Route[0]",
       "component": "Route",
       "props": [
        {
@@ -3551,7 +3518,7 @@
      }
     ]
    },
-   "printed": "<Overlay>\n  <Anchor dep=\"robot\">\n    <Glow on={task.running} />\n  </Anchor>\n  <Route through={[\"robot\", \"ot2\"]} />\n</Overlay>"
+   "printed": "<Space room=\"room:lab\">\n  <Placed dep=\"robot\">\n    <Glow on={task.running} />\n  </Placed>\n  <Route through={[\"robot\", \"ot2\"]} />\n</Space>"
   },
   {
    "name": "a logo",
@@ -8578,15 +8545,21 @@
    ]
   },
   {
-   "name": "an overlay is an action's",
-   "source": "<Overlay />",
+   "name": "a space is an action's",
+   "source": "<Space room=\"room:lab\" />",
    "tree": {
-    "id": "Overlay[0]",
-    "component": "Overlay"
+    "id": "Space[0]",
+    "component": "Space",
+    "props": [
+     {
+      "key": "room",
+      "static_value": "room:lab"
+     }
+    ]
    },
    "scope": {
     "kind": "agent",
-    "context": "OVERLAY",
+    "context": "SCENE",
     "dependencies": [],
     "locals": [],
     "queries": [],
@@ -8600,7 +8573,90 @@
     "locals": []
    },
    "codes": [
-    "context.kind"
+    "space.kind"
+   ]
+  },
+  {
+   "name": "a custom blok has no run to place",
+   "source": "<Space room=\"room:lab\"><Placed dep=\"robot\" /></Space>",
+   "tree": {
+    "id": "Space[0]",
+    "component": "Space",
+    "props": [
+     {
+      "key": "room",
+      "static_value": "room:lab"
+     }
+    ],
+    "children": [
+     {
+      "id": "Space[0]/Placed[0]",
+      "component": "Placed",
+      "props": [
+       {
+        "key": "dep",
+        "static_value": "robot"
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "custom",
+    "context": "SCENE",
+    "dependencies": [
+     {
+      "key": "robot",
+      "action_dependencies": [
+       {
+        "key": "move_to",
+        "demand": {
+         "arg_matches": [
+          {
+           "key": "position"
+          }
+         ],
+         "return_matches": [
+          {
+           "key": "arrived"
+          }
+         ]
+        }
+       }
+      ],
+      "state_dependencies": [
+       {
+        "key": "arm",
+        "demand": {
+         "matches": [
+          {
+           "key": "joints",
+           "kind": "LIST"
+          },
+          {
+           "key": "mode",
+           "kind": "STRING"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalogs": [],
+    "catalog": true,
+    "module": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [
+    "space.kind",
+    "space.kind"
    ]
   },
   {
@@ -8784,14 +8840,20 @@
   },
   {
    "name": "an action blok",
-   "source": "<Overlay><Anchor dep=\"robot\"><Glow on={task.running} /></Anchor></Overlay>",
+   "source": "<Space room=\"room:lab\"><Placed dep=\"robot\"><Glow on={task.running} /></Placed></Space>",
    "tree": {
-    "id": "Overlay[0]",
-    "component": "Overlay",
+    "id": "Space[0]",
+    "component": "Space",
+    "props": [
+     {
+      "key": "room",
+      "static_value": "room:lab"
+     }
+    ],
     "children": [
      {
-      "id": "Overlay[0]/Anchor[0]",
-      "component": "Anchor",
+      "id": "Space[0]/Placed[0]",
+      "component": "Placed",
       "props": [
        {
         "key": "dep",
@@ -8800,7 +8862,7 @@
       ],
       "children": [
        {
-        "id": "Overlay[0]/Anchor[0]/Glow[0]",
+        "id": "Space[0]/Placed[0]/Glow[0]",
         "component": "Glow",
         "props": [
          {
@@ -8817,7 +8879,7 @@
    },
    "scope": {
     "kind": "action",
-    "context": "OVERLAY",
+    "context": "SCENE",
     "dependencies": [
      {
       "key": "robot",
@@ -8869,6 +8931,102 @@
     "locals": []
    },
    "codes": []
+  },
+  {
+   "name": "a placed key that is no dependency",
+   "source": "<Space room=\"room:lab\"><Placed dep=\"arm\" /><Route through={[\"robot\", \"arm\"]} /></Space>",
+   "tree": {
+    "id": "Space[0]",
+    "component": "Space",
+    "props": [
+     {
+      "key": "room",
+      "static_value": "room:lab"
+     }
+    ],
+    "children": [
+     {
+      "id": "Space[0]/Placed[0]",
+      "component": "Placed",
+      "props": [
+       {
+        "key": "dep",
+        "static_value": "arm"
+       }
+      ]
+     },
+     {
+      "id": "Space[0]/Route[0]",
+      "component": "Route",
+      "props": [
+       {
+        "key": "through",
+        "static_value": [
+         "robot",
+         "arm"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "action",
+    "context": "SCENE",
+    "dependencies": [
+     {
+      "key": "robot",
+      "action_dependencies": [
+       {
+        "key": "move_to",
+        "demand": {
+         "arg_matches": [
+          {
+           "key": "position"
+          }
+         ],
+         "return_matches": [
+          {
+           "key": "arrived"
+          }
+         ]
+        }
+       }
+      ],
+      "state_dependencies": [
+       {
+        "key": "arm",
+        "demand": {
+         "matches": [
+          {
+           "key": "joints",
+           "kind": "LIST"
+          },
+          {
+           "key": "mode",
+           "kind": "STRING"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalogs": [],
+    "catalog": true,
+    "module": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [
+    "deps.unknown",
+    "deps.unknown"
+   ]
   },
   {
    "name": "task.answer in an agent blok",
@@ -9143,14 +9301,20 @@
   },
   {
    "name": "a scene colour that is no role",
-   "source": "<Overlay><Anchor dep=\"robot\"><Glow on={task.running} color=\"#ff3b30\" /></Anchor><Route through={[\"robot\"]} color=\"hotpink\" /></Overlay>",
+   "source": "<Space room=\"room:lab\"><Placed dep=\"robot\"><Glow on={task.running} color=\"#ff3b30\" /></Placed><Route through={[\"robot\"]} color=\"hotpink\" /></Space>",
    "tree": {
-    "id": "Overlay[0]",
-    "component": "Overlay",
+    "id": "Space[0]",
+    "component": "Space",
+    "props": [
+     {
+      "key": "room",
+      "static_value": "room:lab"
+     }
+    ],
     "children": [
      {
-      "id": "Overlay[0]/Anchor[0]",
-      "component": "Anchor",
+      "id": "Space[0]/Placed[0]",
+      "component": "Placed",
       "props": [
        {
         "key": "dep",
@@ -9159,7 +9323,7 @@
       ],
       "children": [
        {
-        "id": "Overlay[0]/Anchor[0]/Glow[0]",
+        "id": "Space[0]/Placed[0]/Glow[0]",
         "component": "Glow",
         "props": [
          {
@@ -9177,7 +9341,7 @@
       ]
      },
      {
-      "id": "Overlay[0]/Route[0]",
+      "id": "Space[0]/Route[0]",
       "component": "Route",
       "props": [
        {
@@ -9196,7 +9360,7 @@
    },
    "scope": {
     "kind": "action",
-    "context": "OVERLAY",
+    "context": "SCENE",
     "dependencies": [
      {
       "key": "robot",
@@ -11082,14 +11246,20 @@
   },
   {
    "name": "spectral roles are scene colours",
-   "source": "<Overlay><Anchor dep=\"robot\"><Glow on={task.running} color=\"spectrum-green\" /></Anchor><Route through={[\"robot\"]} color=\"spectrum-violet-soft\" /></Overlay>",
+   "source": "<Space room=\"room:lab\"><Placed dep=\"robot\"><Glow on={task.running} color=\"spectrum-green\" /></Placed><Route through={[\"robot\"]} color=\"spectrum-violet-soft\" /></Space>",
    "tree": {
-    "id": "Overlay[0]",
-    "component": "Overlay",
+    "id": "Space[0]",
+    "component": "Space",
+    "props": [
+     {
+      "key": "room",
+      "static_value": "room:lab"
+     }
+    ],
     "children": [
      {
-      "id": "Overlay[0]/Anchor[0]",
-      "component": "Anchor",
+      "id": "Space[0]/Placed[0]",
+      "component": "Placed",
       "props": [
        {
         "key": "dep",
@@ -11098,7 +11268,7 @@
       ],
       "children": [
        {
-        "id": "Overlay[0]/Anchor[0]/Glow[0]",
+        "id": "Space[0]/Placed[0]/Glow[0]",
         "component": "Glow",
         "props": [
          {
@@ -11116,7 +11286,7 @@
       ]
      },
      {
-      "id": "Overlay[0]/Route[0]",
+      "id": "Space[0]/Route[0]",
       "component": "Route",
       "props": [
        {
@@ -11135,7 +11305,7 @@
    },
    "scope": {
     "kind": "action",
-    "context": "OVERLAY",
+    "context": "SCENE",
     "dependencies": [
      {
       "key": "robot",
@@ -11270,14 +11440,20 @@
   },
   {
    "name": "scene colours are roles",
-   "source": "<Overlay><Anchor dep=\"robot\"><Glow on={task.running} color=\"info\" /></Anchor><Route through={[\"robot\"]} color=\"chart-2\" /></Overlay>",
+   "source": "<Space room=\"room:lab\"><Placed dep=\"robot\"><Glow on={task.running} color=\"info\" /></Placed><Route through={[\"robot\"]} color=\"chart-2\" /></Space>",
    "tree": {
-    "id": "Overlay[0]",
-    "component": "Overlay",
+    "id": "Space[0]",
+    "component": "Space",
+    "props": [
+     {
+      "key": "room",
+      "static_value": "room:lab"
+     }
+    ],
     "children": [
      {
-      "id": "Overlay[0]/Anchor[0]",
-      "component": "Anchor",
+      "id": "Space[0]/Placed[0]",
+      "component": "Placed",
       "props": [
        {
         "key": "dep",
@@ -11286,7 +11462,7 @@
       ],
       "children": [
        {
-        "id": "Overlay[0]/Anchor[0]/Glow[0]",
+        "id": "Space[0]/Placed[0]/Glow[0]",
         "component": "Glow",
         "props": [
          {
@@ -11304,7 +11480,7 @@
       ]
      },
      {
-      "id": "Overlay[0]/Route[0]",
+      "id": "Space[0]/Route[0]",
       "component": "Route",
       "props": [
        {
@@ -11323,7 +11499,7 @@
    },
    "scope": {
     "kind": "action",
-    "context": "OVERLAY",
+    "context": "SCENE",
     "dependencies": [
      {
       "key": "robot",

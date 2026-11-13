@@ -23,8 +23,8 @@ use rekuest_core::inputs::{
     blok_asset_path, iter_component_nodes, iter_util_calls, ArgPortInputModel,
     AssignWidgetInputModel, CatalogComponentInputModel, CatalogOperationInputModel,
     ComponentNodeInputModel, ComponentPropInputModel, DefinitionInputModel, OptimisticInputModel,
-    ReturnPortInputModel, ReturnWidgetInputModel, UtilCallInputModel, ANCHOR_COMPONENT,
-    ASK_COMPONENT, ROUTE_COMPONENT,
+    ReturnPortInputModel, ReturnWidgetInputModel, UtilCallInputModel, ASK_COMPONENT,
+    PLACED_COMPONENT, ROUTE_COMPONENT, SPACE_COMPONENT,
 };
 use rekuest_core::pyjson::{repr, repr_str};
 use serde::Serialize;
@@ -465,14 +465,17 @@ fn check_asset_prop(
     Ok(())
 }
 
-/// `Anchor` and `Route` read the agents a run got, so only an action's own blok holds them;
+/// `Space`, `Placed` and `Route` read the agents a run got, so only an action's own blok holds them;
 /// `ask` a task's open ask, so only a blok that has a task (`check_run_components`).
 pub fn check_run_components(
     components: &[ComponentNodeInputModel],
     kind: &str,
 ) -> Result<(), String> {
     for node in iter_component_nodes(Some(components)) {
-        let run = matches!(node.component.as_str(), ANCHOR_COMPONENT | ROUTE_COMPONENT);
+        let run = matches!(
+            node.component.as_str(),
+            SPACE_COMPONENT | PLACED_COMPONENT | ROUTE_COMPONENT
+        );
         if run && kind != "action" {
             return Err(format!(
                 "component {}: a {} reads the agents of a run, so only an action's own blok holds one",

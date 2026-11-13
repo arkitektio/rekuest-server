@@ -218,16 +218,16 @@ BLOKS = {
     "action logo declaring a local": blok(context="ACTION_LOGO", components=[{"id": "Logo[0]", "component": "ActionLogo"}], locals=[{"key": "x", "kind": "STRING"}]),
 }
 
-def anchor(key: str, *children: dict) -> dict:
-    return {"id": f"anchor-{key}", "component": "Anchor", "props": [{"key": "dep", "static_value": key}], "children": list(children) or None}
+def placed(key: str, *children: dict) -> dict:
+    return {"id": f"placed-{key}", "component": "Placed", "props": [{"key": "dep", "static_value": key}], "children": list(children) or None}
 
 
 def through(*keys: str) -> dict:
     return {"id": "route", "component": "Route", "props": [{"key": "through", "static_value": list(keys)}, {"key": "progress", "dynamic_value": {"path": "task.progress"}}]}
 
 
-def overlay(*children: dict, **fields) -> dict:
-    return {"context": "OVERLAY", "vocab": 2, "components": [{"id": "root", "component": "Overlay", "children": list(children)}], **fields}
+def space(*children: dict, **fields) -> dict:
+    return {"context": "SCENE", "vocab": 2, "components": [{"id": "root", "component": "Space", "props": [{"key": "room", "static_value": "room:lab"}], "children": list(children)}], **fields}
 
 
 def flow(*bloks: dict, dependencies: tuple[str, ...] = ("robot", "frame")) -> dict:
@@ -239,25 +239,25 @@ SHOW = [{"key": "show_path", "kind": "BOOL", "default": True, "persist": True}]
 
 ACTION_BLOKS = {
     "action bloks": flow(
-        overlay(anchor("robot", GLOW), through("robot", "frame", "robot"), locals=SHOW),
+        space(placed("robot", GLOW), through("robot", "frame", "robot"), locals=SHOW),
         {"context": "HTML", "vocab": 2, "components": html({"id": "card", "component": "Card", "props": [{"key": "value", "dynamic_value": {"path": "args.slides"}}], "children": [{"id": "ask", "component": "ask"}]}), "description": "The run"},
     ),
-    "action blok through an unknown key": flow(overlay(through("robot", "stitcher"))),
-    "action blok anchored at an unknown key": flow(overlay(anchor("stitcher"))),
-    "action blok anchored at self": flow(overlay(anchor("self"))),
-    "action blok anchored at a dynamic key": flow(overlay({"id": "at", "component": "Anchor", "props": [{"key": "dep", "dynamic_value": {"path": "show_path"}}]}, locals=SHOW)),
-    "action blok reading an unknown root": flow(overlay({"id": "t", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "stage.position"}}]})),
-    "action blok reading an undeclared arg": flow(overlay({"id": "t", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "args.nope"}}]})),
-    "action blok calling a dependency": flow(overlay({"id": "b", "component": "Button", "props": [{"key": "onClick", "agent_call": {"dependency": "robot", "operation": "home"}}]})),
-    "action blok calling an undeclared agent": flow(overlay({"id": "b", "component": "Button", "props": [{"key": "onClick", "agent_call": {"dependency": "stage", "operation": "home"}}]})),
-    "action bloks twice in one context": flow(overlay(), overlay()),
+    "action blok through an unknown key": flow(space(through("robot", "stitcher"))),
+    "action blok placing an unknown key": flow(space(placed("stitcher"))),
+    "action blok placing self": flow(space(placed("self"))),
+    "action blok placing a dynamic key": flow(space({"id": "at", "component": "Placed", "props": [{"key": "dep", "dynamic_value": {"path": "show_path"}}]}, locals=SHOW)),
+    "action blok reading an unknown root": flow(space({"id": "t", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "stage.position"}}]})),
+    "action blok reading an undeclared arg": flow(space({"id": "t", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "args.nope"}}]})),
+    "action blok calling a dependency": flow(space({"id": "b", "component": "Button", "props": [{"key": "onClick", "agent_call": {"dependency": "robot", "operation": "home"}}]})),
+    "action blok calling an undeclared agent": flow(space({"id": "b", "component": "Button", "props": [{"key": "onClick", "agent_call": {"dependency": "stage", "operation": "home"}}]})),
+    "action bloks twice in one context": flow(space(), space()),
     "action blok in a logo context": flow({"context": "LOGO", "vocab": 2, "components": [{"id": "root", "component": "AgentLogo"}]}),
     "action blok sent twice": flow({"context": "HTML", "vocab": 2, "components": html({"id": "root", "component": "Card"}), "source": "<Html><Card /></Html>"}),
     "action blok sent not at all": flow({"context": "HTML", "vocab": 2}),
     "action blok without vocab": flow({"context": "HTML", "components": html({"id": "root", "component": "Card"})}),
-    "action blok with an unknown field": flow({**overlay(), "name": "nope"}),
-    "action blok with an old field": flow({**overlay(), "demo_state": {}}),
-    "agent declaring an overlay blok": {"bloks": [{"key": "over", "vocab": 2, "context": "OVERLAY", "components": [{"id": "root", "component": "Overlay"}]}]},
+    "action blok with an unknown field": flow({**space(), "name": "nope"}),
+    "action blok with an old field": flow({**space(), "demo_state": {}}),
+    "agent declaring a space blok": {"bloks": [{"key": "lab", "vocab": 2, "context": "SCENE", "components": [{"id": "root", "component": "Space", "props": [{"key": "room", "static_value": "room:lab"}]}]}]},
 }
 
 cases = {}

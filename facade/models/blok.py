@@ -128,7 +128,7 @@ class ActionBlok(models.Model):
     blok_id: int
 
     action = models.ForeignKey("Action", on_delete=models.CASCADE, related_name="bloks", help_text="The action this blok shows runs of.")
-    context = models.CharField(max_length=16, help_text="Where a client shows a run with it (rekuest_core ComponentContext): HTML, SCENE or OVERLAY. One blok per context.")
+    context = models.CharField(max_length=16, help_text="Where a client shows a run with it (rekuest_core ComponentContext): HTML or SCENE. One blok per context.")
     blok = models.ForeignKey(Blok, on_delete=models.CASCADE, related_name="action_bloks", help_text="The blok: a provided one, held by its actions only. takt collects it once no action holds it; going with its module or creator, it takes this row along.")
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())

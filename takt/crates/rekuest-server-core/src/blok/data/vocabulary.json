@@ -51,7 +51,7 @@
    "description": "An action's own blok, declared inline with the action (ActionBlok); its dependencies are the action's.",
    "roots": ["self", "deps", "args", "task", "queries", "subscriptions", "viewer", "then"],
    "locals": true,
-   "contexts": ["HTML", "SCENE", "OVERLAY"]
+   "contexts": ["HTML", "SCENE"]
   },
   "action_logo": {
    "description": "An action's logo, drawn against the task the viewer last ran of it (null until then).",
@@ -62,13 +62,12 @@
  },
  "contexts": {
   "HTML": {"text": true, "description": "Panels, dashboards and popouts."},
-  "SCENE": {"text": false, "description": "A 3D view."},
-  "OVERLAY": {"text": false, "description": "An action's blok drawn into the space that hosts a run; its children are scene components."},
+  "SCENE": {"text": false, "description": "A 3D view: a Scene, or an action's Space, which places the run's dependencies in a room whose layout is shared."},
   "LOGO": {"text": false, "description": "An SVG drawing in the viewer's palette: an agent's logo, or an action's (an ACTION_LOGO blok is drawn in LOGO)."}
  },
  "blok_roots": {
   "description": "A blok's root component names its context: every blok starts with one of these, and nothing else declares the context.",
-  "roots": {"Html": "HTML", "Scene": "SCENE", "Overlay": "OVERLAY", "AgentLogo": "LOGO", "ActionLogo": "ACTION_LOGO"}
+  "roots": {"Html": "HTML", "Scene": "SCENE", "Space": "SCENE", "AgentLogo": "LOGO", "ActionLogo": "ACTION_LOGO"}
  },
  "records": {
   "task": {
@@ -333,7 +332,7 @@
  "catalogs": {
   "description": "Catalogs are the spec-owned, versioned sets a blok renders with: base (every renderer) and the standard catalogs (opt-in). A blok declares the catalogs it needs (catalogs: [\"ui@1\", \"scene@1\"]); a renderer lacking one renders its children or a placeholder, and reports it. A module is an app's own unversioned extras (the server's Module, registered by an app such as the Orkestrator with the catalogs it implements in full); a blok names at most one, as its module.",
   "base": 2,
-  "standard": {"ui": 1, "scene": 1, "logo": 1, "structure": 1, "html": 1}
+  "standard": {"ui": 1, "scene": 1, "logo": 1, "structure": 1, "html": 1, "shadcn": 1}
  },
  "diagnostics": {
   "description": "One table of stable codes, the same in Python, Rust and TypeScript. level: error refuses the blok, warning is reported; runtime: true marks a code no checker raises, the renderer's error code of a record (deps.unbound). Messages are str.format templates; parity compares codes, never text.",
@@ -417,6 +416,7 @@
   "context.root": {"level": "error", "message": "The root of a {context} blok is <{root}>, not <{component}>.", "hint": "Make <{root}> the root and put <{component}> inside it."},
   "context.root_unknown": {"level": "error", "message": "A blok's root names its context ({roots}), not <{component}>.", "hint": "Make the root one of {roots} and put <{component}> inside it."},
   "context.kind": {"level": "error", "message": "A{n} {kind} blok is drawn in {contexts}, not {context}."},
+  "space.kind": {"level": "error", "message": "<{component}> places the run's dependencies, so only an action's own blok holds it, not a{n} {kind} blok.", "hint": "Declare it with the action: @app.workflow(bloks=[...])."},
   "logo.complexity": {"level": "error", "message": "{detail}"},
   "catalog.unknown_component": {"level": "warning", "message": "<{component}> is in no catalog in force ({catalogs}).", "hint": "Look the component up in the catalog; names are case-sensitive."},
   "catalog.undeclared": {"level": "warning", "message": "<{component}> is from {catalog}, which the blok does not declare in its catalogs.", "hint": "Add {catalog} to the blok's catalogs."},

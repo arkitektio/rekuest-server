@@ -476,8 +476,6 @@ pub async fn delete_materialized_bloks(
     }
     for statement in [
         "DELETE FROM facade_dashboardplacement WHERE blok_id = ANY($1)",
-        "DELETE FROM facade_spaceplacement WHERE blok_id = ANY($1)",
-        "DELETE FROM facade_placement WHERE blok_id = ANY($1)",
         "DELETE FROM facade_blokagentmapping WHERE materialized_blok_id = ANY($1)",
         "DELETE FROM facade_materializedblok WHERE id = ANY($1)",
     ] {
@@ -630,10 +628,7 @@ pub async fn delete_agent(
         "DELETE FROM facade_trigger WHERE agent_id = ANY($1)",
         "DELETE FROM facade_dashboardplacement
           WHERE blok_id IN (SELECT id FROM facade_materializedblok WHERE declared_by_id = ANY($1))",
-        "DELETE FROM facade_spaceplacement
-          WHERE blok_id IN (SELECT id FROM facade_materializedblok WHERE declared_by_id = ANY($1))",
-        "DELETE FROM facade_placement WHERE agent_id = ANY($1)
-            OR blok_id IN (SELECT id FROM facade_materializedblok WHERE declared_by_id = ANY($1))",
+        "DELETE FROM facade_placement WHERE agent_id = ANY($1)",
         "DELETE FROM facade_blokagentmapping WHERE agent_id = ANY($1)
             OR materialized_blok_id IN (SELECT id FROM facade_materializedblok WHERE declared_by_id = ANY($1))",
         "DELETE FROM facade_materializedblok WHERE declared_by_id = ANY($1)",

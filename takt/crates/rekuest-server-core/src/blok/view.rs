@@ -21,7 +21,7 @@ pub const ORKESTRATOR_MODULE: &str = "orkestrator";
 /// Where the Orkestrator's module ships, relative to `arkitekt_spec/blok`.
 pub const ORKESTRATOR_MODULE_FILE: &str = "modules/orkestrator.json";
 /// The standard catalogs, in the spec's order.
-pub const STANDARD_CATALOGS: [&str; 5] = ["ui", "scene", "logo", "structure", "html"];
+pub const STANDARD_CATALOGS: [&str; 6] = ["ui", "scene", "logo", "structure", "html", "shadcn"];
 
 const BASE_2: &str = include_str!("data/catalogs/base@2.json");
 const UI_1: &str = include_str!("data/catalogs/ui@1.json");
@@ -29,6 +29,7 @@ const SCENE_1: &str = include_str!("data/catalogs/scene@1.json");
 const LOGO_1: &str = include_str!("data/catalogs/logo@1.json");
 const STRUCTURE_1: &str = include_str!("data/catalogs/structure@1.json");
 const HTML_1: &str = include_str!("data/catalogs/html@1.json");
+const SHADCN_1: &str = include_str!("data/catalogs/shadcn@1.json");
 const ORKESTRATOR: &str = include_str!("data/modules/orkestrator.json");
 
 /// One spec-owned catalog file.
@@ -73,6 +74,7 @@ pub fn catalog_text(file: &str) -> Option<&'static str> {
         "catalogs/logo@1.json" => LOGO_1,
         "catalogs/structure@1.json" => STRUCTURE_1,
         "catalogs/html@1.json" => HTML_1,
+        "catalogs/shadcn@1.json" => SHADCN_1,
         ORKESTRATOR_MODULE_FILE => ORKESTRATOR,
         _ => return None,
     })

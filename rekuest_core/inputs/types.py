@@ -482,7 +482,7 @@ class DefinitionInput:
     )
     bloks: list[Annotated["ActionBlokInput", strawberry.lazy(__name__)]] = strawberry.field(
         default_factory=list,
-        description="The action's own bloks, at most one per context: how a client shows a run of it (HTML in a task panel, OVERLAY drawn into the space that hosts the run). They name devices only by the action's dependency keys. Not part of the action's hash.",
+        description="The action's own bloks, at most one per context: how a client shows a run of it (HTML in a task panel, SCENE a 3D view, as a `Space` placing the run's dependencies). They name devices only by the action's dependency keys. Not part of the action's hash.",
     )
     port_groups: list[PortGroupInput] = strawberry.field(
         default_factory=list,

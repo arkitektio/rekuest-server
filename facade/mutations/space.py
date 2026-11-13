@@ -1,4 +1,9 @@
-"""Spaces, the agents placed in them, and the 3D bloks placed in them -- all within the caller's organization."""
+"""Keeping where agents stand in a space (a room), within the caller's organization.
+
+Nothing here makes a space or decides what it shows: an action's ``<Space room=...>`` blok
+places the run's dependencies, and the first pose someone keeps makes the space its ``room``
+names. A pose is per agent, the same for every viewer.
+"""
 
 import math
 from typing import cast
@@ -9,127 +14,53 @@ from kante.types import Info
 from facade import inputs, models, types
 
 
-def _space(info: Info, space_id: str) -> models.Space:
-    """The caller's organization's space; another organization's is not found."""
-    try:
-        return models.Space.objects.get(id=space_id, organization=info.context.request.organization)
-    except models.Space.DoesNotExist:
-        raise PermissionError(f"No space {space_id} in your organization.") from None
-
-
-def _affine(matrix: list[list[float]] | None) -> list[list[float]] | None:
-    """A placement's transform: a 4x4 matrix of finite numbers, or None for the identity."""
-    if matrix is None:
-        return None
+def _affine(matrix: list[list[float]]) -> list[list[float]]:
+    """A pose: a 4x4 matrix of finite numbers."""
     if len(matrix) != 4 or any(len(row) != 4 for row in matrix) or not all(math.isfinite(value) for row in matrix for value in row):
-        raise ValueError("An affine matrix is 4 rows of 4 finite numbers, row-major, from the blok's frame into the space's.")
+        raise ValueError("A pose is 4 rows of 4 finite numbers, row-major, in meters with Y up.")
     return matrix
 
 
-def create_space(info: Info, input: inputs.CreateSpaceInput) -> types.Space:
+def _room(room: str) -> str:
+    reference = room.strip()
+    if not reference:
+        raise ValueError("A room has a reference (a blok's `room`).")
+    return reference
+
+
+def save_placement(info: Info, input: inputs.SavePlacementInput) -> types.Placement:
+    """Keep where an agent stands in the space ``room`` names, making that space if none has it yet."""
     data = input.to_pydantic()
-    x, _ = models.Space.objects.update_or_create(
-        name=data.name,
-        organization=info.context.request.organization,
-        defaults=dict(
-            creator=info.context.request.user,
-        ),
+    organization = info.context.request.organization
+    reference = _room(data.room)
+    try:
+        agent = models.Agent.objects.get(id=data.agent, organization=organization)
+    except models.Agent.DoesNotExist:
+        raise PermissionError(f"No agent {data.agent} in your organization.") from None
+    space, _ = models.Space.objects.get_or_create(
+        organization=organization,
+        reference=reference,
+        defaults=dict(name=reference, creator=info.context.request.user),
     )
-
-    for placement_input in data.placements or []:
-        if not placement_input.agent:
-            raise ValueError("An agent placement names its agent; place a blok without one with `createSpacePlacement`.")
-
-        models.Placement.objects.update_or_create(
-            space=x,
-            agent_id=placement_input.agent,
-            blok_id=placement_input.blok,
-            defaults=dict(
-                role=placement_input.role or "just a member",
-                affine_matrix=_affine(placement_input.affine_matrix),
-            ),
-        )
-
-    return cast("types.Space", x)
-
-
-def update_space(info: Info, input: inputs.UpdateSpaceInput) -> types.Space:
-    data = input.to_pydantic()
-    x = _space(info, data.id)
-    if data.name is not None:
-        x.name = data.name
-    if data.description is not None:
-        x.description = data.description
-    x.save()
-    return cast("types.Space", x)
-
-
-def delete_space(info: Info, input: inputs.DeleteSpaceInput) -> strawberry.ID:
-    data = input.to_pydantic()
-    _space(info, data.id).delete()
-    return strawberry.ID(data.id)
-
-
-def create_placement(info: Info, input: inputs.CreatePlacementInput) -> types.Placement:
-    data = input.to_pydantic()
-    space = _space(info, data.space)
-
     placement, _ = models.Placement.objects.update_or_create(
         space=space,
-        agent_id=data.agent,
-        defaults=dict(
-            role="just a member",
-            blok_id=data.materialized_blok,
-            affine_matrix=_affine(data.affine_matrix),
-        ),
+        agent=agent,
+        defaults=dict(role=data.role, affine_matrix=_affine(data.affine_matrix)),
     )
-
+    space.save(update_fields=["updated_at"])
     return cast("types.Placement", placement)
 
 
-def update_placement(info: Info, input: inputs.UpdatePlacementInput) -> types.Placement:
+def reset_placement(info: Info, input: inputs.ResetPlacementInput) -> strawberry.ID | None:
+    """Forget where an agent was left in a space; the id of the forgotten placement, if there was one."""
     data = input.to_pydantic()
-    x = models.Placement.objects.get(id=data.id, space__organization=info.context.request.organization)
-    if data.role is not None:
-        x.role = data.role
-    if data.affine_matrix is not None:
-        x.affine_matrix = _affine(data.affine_matrix)
-    x.save()
-    return cast("types.Placement", x)
-
-
-def delete_placement(info: Info, input: inputs.DeletePlacementInput) -> strawberry.ID:
-    data = input.to_pydantic()
-    models.Placement.objects.get(id=data.id, space__organization=info.context.request.organization).delete()
-    return strawberry.ID(data.id)
-
-
-def create_space_placement(info: Info, input: inputs.CreateSpacePlacementInput) -> types.SpacePlacement:
-    """Place a 3D blok in a space at an affine transform."""
-    data = input.to_pydantic()
-    space = _space(info, data.space)
-    try:
-        blok = models.MaterializedBlok.objects.get(id=data.blok, blok__organization=info.context.request.organization)
-    except models.MaterializedBlok.DoesNotExist:
-        raise PermissionError(f"No materialized blok {data.blok} in your organization.") from None
-    placement = models.SpacePlacement.objects.create(space=space, blok=blok, name=data.name, affine_matrix=_affine(data.affine_matrix))
-    return cast("types.SpacePlacement", placement)
-
-
-def update_space_placement(info: Info, input: inputs.UpdateSpacePlacementInput) -> types.SpacePlacement:
-    """Move or rename a placed 3D blok."""
-    data = input.to_pydantic()
-    placement = models.SpacePlacement.objects.get(id=data.id, space__organization=info.context.request.organization)
-    if data.name is not None:
-        placement.name = data.name
-    if data.affine_matrix is not None:
-        placement.affine_matrix = _affine(data.affine_matrix)
-    placement.save()
-    return cast("types.SpacePlacement", placement)
-
-
-def delete_space_placement(info: Info, input: inputs.DeleteSpacePlacementInput) -> strawberry.ID:
-    """Remove a placed 3D blok from its space."""
-    data = input.to_pydantic()
-    models.SpacePlacement.objects.get(id=data.id, space__organization=info.context.request.organization).delete()
-    return strawberry.ID(data.id)
+    placement = models.Placement.objects.filter(
+        space__organization=info.context.request.organization,
+        space__reference=_room(data.room),
+        agent_id=data.agent,
+    ).first()
+    if placement is None:
+        return None
+    placement_id = placement.pk
+    placement.delete()
+    return strawberry.ID(str(placement_id))

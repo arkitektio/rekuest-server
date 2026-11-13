@@ -31,6 +31,9 @@ use crate::inputs::{
 use crate::pyjson::repr;
 
 const ITEM: &str = "...";
+/// Props whose value is the blok's dependency keys, written out (not paths): each must be a dependency.
+const DEPENDENCY_KEY_PROPS: [(&str, &str); 2] = [("Placed", "dep"), ("Route", "through")];
+
 const TOAST_COMPONENT: &str = "Toast";
 const TOAST_TASK_PROP: &str = "task";
 const CLASS_NAME: &str = "className";
@@ -84,7 +87,7 @@ pub fn query_verb(operation: &str) -> Option<&'static str> {
 pub struct BlokScope {
     /// `agent`, `custom`, `task`, `action` or `action_logo` (the root matrix).
     pub kind: String,
-    /// `HTML`, `SCENE`, `OVERLAY`, `LOGO` or `ACTION_LOGO`.
+    /// `HTML`, `SCENE`, `LOGO` or `ACTION_LOGO`.
     pub context: String,
     /// What `self` and `deps.<key>` resolve against; a `self` entry types `self`.
     pub dependencies: Vec<AgentDependencyInputModel>,
@@ -519,20 +522,20 @@ impl<'a> Checker<'a> {
             ];
             self.add("context.kind", None, &fields);
         }
-        if let Some(root) = vocabulary
+        // A context may have several roots (a SCENE blok is a <Scene> or a <Space>).
+        let roots: Vec<&str> = vocabulary
             .blok_roots
             .iter()
-            .find(|(_, context)| **context == scope.context)
+            .filter(|(_, context)| **context == scope.context)
             .map(|(root, _)| root.as_str())
-        {
-            if tree.component != root {
-                let fields = [
-                    ("context", s(scope.context.to_lowercase())),
-                    ("root", s(root)),
-                    ("component", s(tree.component.clone())),
-                ];
-                self.add("context.root", Some(&tree.id), &fields);
-            }
+            .collect();
+        if !roots.is_empty() && !roots.contains(&tree.component.as_str()) {
+            let fields = [
+                ("context", s(scope.context.to_lowercase())),
+                ("root", s(roots.join("> or <"))),
+                ("component", s(tree.component.clone())),
+            ];
+            self.add("context.root", Some(&tree.id), &fields);
         }
         if !scope.locals.is_empty() && !self.kind.locals {
             let fields = [
@@ -974,6 +977,47 @@ impl<'a> Checker<'a> {
         }
     }
 
+    fn space_kind(&mut self, node: &ComponentNodeInputModel) {
+        let fields = [
+            ("component", s(node.component.clone())),
+            ("n", s(article(&self.scope.kind))),
+            ("kind", s(self.scope.kind.clone())),
+        ];
+        self.add("space.kind", Some(&node.id), &fields);
+    }
+
+    /// A `Placed dep` or `Route through` names dependencies of the blok, written out as keys.
+    fn check_dependency_keys(
+        &mut self,
+        node: &ComponentNodeInputModel,
+        prop: &ComponentPropInputModel,
+    ) {
+        if self.scope.kind != "action" {
+            self.space_kind(node);
+            return;
+        }
+        let path = format!("{}.{}", node.component, prop.key);
+        let keys: Vec<String> = match &prop.static_value {
+            Some(Value::String(key)) => vec![key.clone()],
+            Some(Value::Array(items)) => items
+                .iter()
+                .filter_map(|item| item.as_str().map(str::to_owned))
+                .collect(),
+            _ => vec![],
+        };
+        for key in keys {
+            if !self.dependencies.contains_key(key.as_str()) {
+                let fields = [
+                    ("path", s(path.clone())),
+                    ("key", s(key.clone())),
+                    ("keys", s(self.dependency_keys())),
+                    ("hint", s(dependency_hint(&key, &self.scope.kind))),
+                ];
+                self.add("deps.unknown", Some(&node.id), &fields);
+            }
+        }
+    }
+
     fn check_prop(
         &mut self,
         node: &ComponentNodeInputModel,
@@ -1061,6 +1105,13 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
+        }
+        if DEPENDENCY_KEY_PROPS.contains(&(node.component.as_str(), prop.key.as_str())) {
+            self.check_dependency_keys(node, prop);
+        }
+        if node.component == "Space" && prop.key == "room" && self.scope.kind != "action" {
+            // A Space places the run's dependencies: only an action's own blok has a run.
+            self.space_kind(node);
         }
         if node.component == TOAST_COMPONENT && prop.key == TOAST_TASK_PROP {
             let path = prop.dynamic_value.as_ref().and_then(|d| d.path.as_deref());

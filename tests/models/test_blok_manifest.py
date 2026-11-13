@@ -119,7 +119,7 @@ def test_only_an_html_blok_takes_args_each_keyed_once() -> None:
 
 
 def test_an_action_blok_names_only_the_actions_dependencies() -> None:
-    blok = imodels.ActionBlokInputModel.model_validate({"context": "OVERLAY", "vocab": 2, "components": [
-        {"id": "root", "component": "Overlay", "children": [{"id": "a", "component": "Anchor", "props": [{"key": "dep", "static_value": "crane"}]}]}]})
-    with pytest.raises(ValueError, match="names 'crane', which is not a dependency of the action"):
+    blok = imodels.ActionBlokInputModel.model_validate({"context": "SCENE", "vocab": 2, "components": [
+        {"id": "root", "component": "Space", "props": [{"key": "room", "static_value": "lab"}], "children": [{"id": "a", "component": "Placed", "props": [{"key": "dep", "static_value": "crane"}]}]}]})
+    with pytest.raises(ValueError, match=r"Placed.dep: 'crane' is not a dependency of the blok .*\[deps.unknown\]"):
         imodels.check_action_blok(blok, [imodels.AgentDependencyInputModel(key="robot")])

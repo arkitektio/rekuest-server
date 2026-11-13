@@ -123,7 +123,7 @@ wire_enum!(
 );
 wire_enum!(
     /// The renderer a catalog component lives in; it may only be placed where its context is in force.
-    ComponentContext { HTML, SCENE, LOGO, ACTION_LOGO, OVERLAY }
+    ComponentContext { HTML, SCENE, LOGO, ACTION_LOGO }
 );
 wire_enum!(
     /// Severity of a registration finding: errors abort registration, so only WARNING is stored.

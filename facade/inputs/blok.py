@@ -91,8 +91,6 @@ class CreateBlokInputModel(BaseModel):
             demo=self.demo,
         )
         rimodels.check_blok_target(self.context, self.for_model, self.for_node)
-        if self.context == renums.ComponentContext.OVERLAY:
-            raise ValueError("An overlay blok is an action's own: it is declared with the action (its definition's `bloks`), not created on its own")
         return self
 
 

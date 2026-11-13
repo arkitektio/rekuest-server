@@ -14,11 +14,13 @@ from .catalog import register_module
 from .materialized_blok import materialize_blok, delete_materialized_blok, pin_materialized_blok, update_materialized_blok
 from .action import cleanup_actions
 from .resolution import auto_resolve
-from .space import create_space, create_placement, update_space, delete_space, update_placement, delete_placement, create_space_placement, update_space_placement, delete_space_placement
+from .space import reset_placement, save_placement
 from .asset_store import asset, asset_policy, bloks_for_model, create_asset, request_asset_upload
 from .agent import implement_agent, update_agent
 
 __all__ = [
+    "save_placement",
+    "reset_placement",
     "asset",
     "asset_policy",
     "bloks_for_model",
@@ -58,15 +60,6 @@ __all__ = [
     "create_dashboard",
     "create_blok",
     "register_module",
-    "create_space",
-    "create_placement",
-    "create_space_placement",
-    "update_space_placement",
-    "delete_space_placement",
-    "update_space",
-    "delete_space",
-    "update_placement",
-    "delete_placement",
     "block",
     "create_shortcut",
     "delete_shortcut",

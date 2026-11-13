@@ -144,7 +144,7 @@ class BlokScope:
 
     Args:
         kind: ``agent``, ``custom``, ``task``, ``action`` or ``action_logo`` (the root matrix).
-        context: The blok's context (``HTML``, ``SCENE``, ``OVERLAY``, ``LOGO``, ``ACTION_LOGO``).
+        context: The blok's context (``HTML``, ``SCENE``, ``LOGO``, ``ACTION_LOGO``).
         dependencies: What ``self`` and ``deps.<key>`` resolve against; a ``self`` entry types
             ``self``, which is open without one.
         args: The keys ``args.<key>`` may read; ``None`` reads any.
@@ -194,6 +194,10 @@ def _prop_spec(spec: CatalogComponentInputModel | None, key: str) -> CatalogProp
     return next((prop for prop in spec.props if prop.key == key), None)
 
 
+DEPENDENCY_KEY_PROPS = frozenset({("Placed", "dep"), ("Route", "through")})
+"""Props whose value is the blok's dependency keys, written out (not paths): each must be a dependency."""
+
+
 class _Checker:
     """Walks a tree with a :class:`BlokScope` and collects findings."""
 
@@ -226,9 +230,12 @@ class _Checker:
         wrong_logo = (scope.context == ACTION_LOGO) != (scope.kind == "action_logo")
         if wrong_logo or scope.drawn_in not in self.kind.contexts:
             self.add("context.kind", None, n=_article(scope.kind), kind=scope.kind, contexts=", ".join(self.kind.contexts), context=scope.context)
-        roots = {context: root for root, context in vocabulary.blok_roots.items()}
-        if scope.context in roots and tree.component != roots[scope.context]:
-            self.add("context.root", tree.id, context=scope.context.lower(), root=roots[scope.context], component=tree.component)
+        # A context may have several roots (a SCENE blok is a <Scene> or a <Space>).
+        roots: dict[str, list[str]] = {}
+        for root, context in vocabulary.blok_roots.items():
+            roots.setdefault(context, []).append(root)
+        if scope.context in roots and tree.component not in roots[scope.context]:
+            self.add("context.root", tree.id, context=scope.context.lower(), root="> or <".join(roots[scope.context]), component=tree.component)
         if scope.locals and not self.kind.locals:
             self.add("roots.not_in_kind", None, path="locals", n=_article(scope.kind), kind=scope.kind, root="locals", roots=self.roots())
         for local in scope.locals:
@@ -347,6 +354,18 @@ class _Checker:
         if self.scope.catalogs and standard and catalog not in self.scope.catalogs:
             self.add("catalog.undeclared", node.id, component=node.component, catalog=catalog)
 
+    def check_dependency_keys(self, node: ComponentNodeInputModel, prop: ComponentPropInputModel) -> None:
+        """A ``Placed dep`` or ``Route through`` names dependencies of the blok, written out as keys."""
+        if self.scope.kind != "action":
+            self.add("space.kind", node.id, component=node.component, n=_article(self.scope.kind), kind=self.scope.kind)
+            return
+        path = f"{node.component}.{prop.key}"
+        value = prop.static_value
+        keys = [value] if isinstance(value, str) else [key for key in value if isinstance(key, str)] if isinstance(value, list) else []
+        for key in keys:
+            if key not in self.dependencies:
+                self.add("deps.unknown", node.id, path=path, key=key, keys=", ".join(sorted(self.dependencies)) or "none", hint=dependency_hint(key, self.scope.kind))
+
     def check_prop(self, node: ComponentNodeInputModel, prop: ComponentPropInputModel, spec: CatalogComponentInputModel | None) -> None:
         vocabulary = self.vocabulary
         prop_spec = _prop_spec(spec, prop.key)
@@ -379,6 +398,11 @@ class _Checker:
                     self.bound_locals.add(root)
                     if prop_spec is not None:
                         self.check_bind_kind(node, prop_spec.kind.value, path)
+        if (node.component, prop.key) in DEPENDENCY_KEY_PROPS:
+            self.check_dependency_keys(node, prop)
+        if (node.component, prop.key) == ("Space", "room") and self.scope.kind != "action":
+            # A Space places the run's dependencies: only an action's own blok has a run.
+            self.add("space.kind", node.id, component=node.component, n=_article(self.scope.kind), kind=self.scope.kind)
         if node.component == TOAST_COMPONENT and prop.key == TOAST_TASK_PROP:
             path = prop.dynamic_value.path if prop.dynamic_value is not None else None
             if path is None or (path != "task" and path not in self.into):

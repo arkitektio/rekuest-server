@@ -261,7 +261,16 @@ fn the_vendored_catalogs_place_text_as_the_corpus_was_parsed_with() {
         }
     }
     let known: HashSet<&String> = table.keys().collect();
-    for name in view.components.keys().filter(|name| !known.contains(name)) {
+    // The table covers base and the global catalogs: a UI's own module (the Orkestrator's) is
+    // that UI's to ship, not every parser's.
+    for name in view
+        .components
+        .iter()
+        .filter(|(name, spec)| {
+            !known.contains(name) && spec.catalog.as_deref() != Some("orkestrator")
+        })
+        .map(|(name, _)| name)
+    {
         differences.push(format!("{name}: in takt's view, not in the corpus"));
     }
     assert!(differences.is_empty(), "{}", differences.join("\n"));
