@@ -26,15 +26,49 @@ macro_rules! wire_enum {
 
 wire_enum!(
     /// The kind of action.
-    ActionKind { FUNCTION, GENERATOR }
+    ActionKind {
+        FUNCTION,
+        GENERATOR
+    }
 );
 wire_enum!(
     /// A port's structural type: decides which of children, identifier and choices it carries.
-    PortKind { INT, STRING, STRUCTURE, LIST, BOOL, DICT, FLOAT, DATE, UNION, ENUM, MODEL, MEMORY_STRUCTURE, INTERFACE, QUANTITY }
+    PortKind {
+        INT,
+        STRING,
+        STRUCTURE,
+        LIST,
+        BOOL,
+        DICT,
+        FLOAT,
+        DATE,
+        UNION,
+        ENUM,
+        MODEL,
+        MEMORY_STRUCTURE,
+        INTERFACE,
+        QUANTITY
+    }
 );
 wire_enum!(
     /// A blok local's kind: a port kind, or ANY (an untyped value; no action port is ever ANY).
-    LocalKind { INT, STRING, STRUCTURE, LIST, BOOL, DICT, FLOAT, DATE, UNION, ENUM, MODEL, MEMORY_STRUCTURE, INTERFACE, QUANTITY, ANY }
+    LocalKind {
+        INT,
+        STRING,
+        STRUCTURE,
+        LIST,
+        BOOL,
+        DICT,
+        FLOAT,
+        DATE,
+        UNION,
+        ENUM,
+        MODEL,
+        MEMORY_STRUCTURE,
+        INTERFACE,
+        QUANTITY,
+        ANY
+    }
 );
 
 impl LocalKind {
@@ -83,7 +117,15 @@ impl From<PortKind> for LocalKind {
 
 wire_enum!(
     /// The kind of assign widget.
-    AssignWidgetKind { SEARCH, CHOICE, SLIDER, CUSTOM, STRING, STATE_CHOICE, PROXY }
+    AssignWidgetKind {
+        SEARCH,
+        CHOICE,
+        SLIDER,
+        CUSTOM,
+        STRING,
+        STATE_CHOICE,
+        PROXY
+    }
 );
 wire_enum!(
     /// The kind of return widget.
@@ -91,11 +133,20 @@ wire_enum!(
 );
 wire_enum!(
     /// The kind of a port effect.
-    EffectKind { MESSAGE, HIDE, CUSTOM }
+    EffectKind {
+        MESSAGE,
+        HIDE,
+        CUSTOM
+    }
 );
 wire_enum!(
     /// What running an implementation again would do to the world: informational only.
-    Effects { NONE, REPEATABLE, UNKNOWN, IRREVERSIBLE }
+    Effects {
+        NONE,
+        REPEATABLE,
+        UNKNOWN,
+        IRREVERSIBLE
+    }
 );
 wire_enum!(
     /// How an implementation runs: a WORKFLOW may call other actions and is resumed.
@@ -103,19 +154,49 @@ wire_enum!(
 );
 wire_enum!(
     /// The kind of action scope.
-    ActionScope { GLOBAL, LOCAL, BRIDGE_GLOBAL_TO_LOCAL, BRIDGE_LOCAL_TO_GLOBAL }
+    ActionScope {
+        GLOBAL,
+        LOCAL,
+        BRIDGE_GLOBAL_TO_LOCAL,
+        BRIDGE_LOCAL_TO_GLOBAL
+    }
 );
 wire_enum!(
     /// How a requires/provides descriptor compares the object's value at `key` with `value`.
-    DescriptorOperator { MATCHES, EXISTS, LTE, GTE, EQUALS, CONTAINS, NOT_EQUALS, IN, NOT_IN }
+    DescriptorOperator {
+        MATCHES,
+        EXISTS,
+        LTE,
+        GTE,
+        EQUALS,
+        CONTAINS,
+        NOT_EQUALS,
+        IN,
+        NOT_IN
+    }
 );
 wire_enum!(
     /// The part of a state entry a state accessor reads.
-    OptionKey { LABEL, DESCRIPTION, LOGO, VALUE }
+    OptionKey {
+        LABEL,
+        DESCRIPTION,
+        LOGO,
+        VALUE
+    }
 );
 wire_enum!(
     /// What a catalog component prop accepts, or an operation argument carries.
-    CatalogValueKind { STRING, INT, FLOAT, BOOL, DICT, LIST, ANY, CALLBACK, ASSET }
+    CatalogValueKind {
+        STRING,
+        INT,
+        FLOAT,
+        BOOL,
+        DICT,
+        LIST,
+        ANY,
+        CALLBACK,
+        ASSET
+    }
 );
 wire_enum!(
     /// What a file an agent brings with it is.
@@ -123,7 +204,12 @@ wire_enum!(
 );
 wire_enum!(
     /// The renderer a catalog component lives in; it may only be placed where its context is in force.
-    ComponentContext { HTML, SCENE, LOGO, ACTION_LOGO }
+    ComponentContext {
+        HTML,
+        SCENE,
+        LOGO,
+        ACTION_LOGO
+    }
 );
 wire_enum!(
     /// Severity of a registration finding: errors abort registration, so only WARNING is stored.
