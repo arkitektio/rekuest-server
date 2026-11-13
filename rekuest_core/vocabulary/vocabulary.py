@@ -328,7 +328,7 @@ def parse_vocabulary(raw: JSON) -> Vocabulary:
         if name == "description":
             continue
         namespace = name.split(".", 1)[0]
-        if namespace not in namespaces and name != "task.answer":
+        if namespace not in namespaces and name not in ("task.answer", "assign.start"):
             raise ValueError(f"vocabulary.json: function {name} is in no function namespace")
         functions[name] = _function(name, item)
 

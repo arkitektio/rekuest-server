@@ -19793,6 +19793,7 @@
       "bloks": [
        {
         "context": "SCENE",
+        "phase": "RUN",
         "components": [
          {
           "id": "root",
@@ -19907,6 +19908,7 @@
        },
        {
         "context": "HTML",
+        "phase": "RUN",
         "components": [
          {
           "id": "Html[0]",
@@ -20374,6 +20376,7 @@
       "bloks": [
        {
         "context": "SCENE",
+        "phase": "RUN",
         "components": [
          {
           "id": "root",
@@ -20780,6 +20783,7 @@
       "bloks": [
        {
         "context": "SCENE",
+        "phase": "RUN",
         "components": [
          {
           "id": "root",
@@ -21365,6 +21369,972 @@
   },
   "error": "Extra inputs are not permitted",
   "error_type": "extra_forbidden"
+ },
+ "assign blok": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "HTML",
+        "phase": "ASSIGN",
+        "vocab": 2,
+        "components": [
+         {
+          "id": "Html[0]",
+          "component": "Html",
+          "children": [
+           {
+            "id": "t",
+            "component": "Text",
+            "props": [
+             {
+              "key": "text",
+              "dynamic_value": {
+               "path": "args.slides"
+              }
+             }
+            ]
+           },
+           {
+            "id": "form",
+            "component": "args"
+           },
+           {
+            "id": "go",
+            "component": "Button",
+            "props": [
+             {
+              "key": "onClick",
+              "util_call": {
+               "operation": "assign.start",
+               "arguments": []
+              }
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "context": "HTML",
+        "vocab": 2,
+        "components": [
+         {
+          "id": "Html[0]",
+          "component": "Html",
+          "children": [
+           {
+            "id": "root",
+            "component": "Card"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": [
+    {
+     "definition": {
+      "key": "act",
+      "version": "1",
+      "description": null,
+      "collections": [],
+      "name": "Act",
+      "stateful": false,
+      "pure": false,
+      "idempotent": false,
+      "allow_probe": false,
+      "port_groups": [],
+      "args": [
+       {
+        "key": "slides",
+        "label": null,
+        "kind": "LIST",
+        "description": null,
+        "identifier": null,
+        "nullable": false,
+        "effects": null,
+        "choices": null,
+        "reference_unit": null,
+        "proposed_units": null,
+        "dimension": null,
+        "children": [
+         {
+          "key": "...",
+          "label": null,
+          "kind": "STRING",
+          "description": null,
+          "identifier": null,
+          "nullable": false,
+          "effects": null,
+          "choices": null,
+          "reference_unit": null,
+          "proposed_units": null,
+          "dimension": null,
+          "children": null,
+          "validators": null,
+          "default": null,
+          "widget": null,
+          "requires": null
+         }
+        ],
+        "validators": null,
+        "default": null,
+        "widget": null,
+        "requires": null
+       }
+      ],
+      "returns": [],
+      "kind": "FUNCTION",
+      "is_test_for": [],
+      "is_dev": false,
+      "catalogs": [],
+      "protocols": [],
+      "bloks": [
+       {
+        "context": "HTML",
+        "phase": "ASSIGN",
+        "components": [
+         {
+          "id": "Html[0]",
+          "component": "Html",
+          "props": null,
+          "children": [
+           {
+            "id": "t",
+            "component": "Text",
+            "props": [
+             {
+              "key": "text",
+              "static_value": null,
+              "dynamic_value": {
+               "literal": null,
+               "path": "args.slides"
+              },
+              "declares_value": null,
+              "agent_call": null,
+              "util_call": null
+             }
+            ],
+            "children": null
+           },
+           {
+            "id": "form",
+            "component": "args",
+            "props": null,
+            "children": null
+           },
+           {
+            "id": "go",
+            "component": "Button",
+            "props": [
+             {
+              "key": "onClick",
+              "static_value": null,
+              "dynamic_value": null,
+              "declares_value": null,
+              "agent_call": null,
+              "util_call": {
+               "operation": "assign.start",
+               "arguments": []
+              }
+             }
+            ],
+            "children": null
+           }
+          ]
+         }
+        ],
+        "source": null,
+        "module": null,
+        "description": null,
+        "vocab": 2,
+        "catalogs": [],
+        "locals": [],
+        "demo": null,
+        "queries": [],
+        "subscriptions": []
+       },
+       {
+        "context": "HTML",
+        "phase": "RUN",
+        "components": [
+         {
+          "id": "Html[0]",
+          "component": "Html",
+          "props": null,
+          "children": [
+           {
+            "id": "root",
+            "component": "Card",
+            "props": null,
+            "children": null
+           }
+          ]
+         }
+        ],
+        "source": null,
+        "module": null,
+        "description": null,
+        "vocab": 2,
+        "catalogs": [],
+        "locals": [],
+        "demo": null,
+        "queries": [],
+        "subscriptions": []
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": null,
+       "state_dependencies": null,
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      },
+      {
+       "key": "frame",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": null,
+       "state_dependencies": null,
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      }
+     ],
+     "interface": "act",
+     "params": null,
+     "instance_id": null,
+     "locks": null,
+     "optimistics": null,
+     "manipulates": null,
+     "needs_token": true,
+     "provenance_audience": null,
+     "effects": "UNKNOWN",
+     "execution": "PLAIN",
+     "code_hash": null,
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
+    }
+   ],
+   "locks": null,
+   "bloks": null,
+   "assets": null,
+   "hash": null
+  },
+  "hashes": [
+   "886545f7ab6379be425a13432bdfe27a6996b575bdb5e07bc8f8c4b9b1dbdefb"
+  ]
+ },
+ "assign blok placing its dependencies": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "SCENE",
+        "vocab": 2,
+        "components": [
+         {
+          "id": "root",
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab"
+           }
+          ],
+          "children": [
+           {
+            "id": "placed-robot",
+            "component": "Placed",
+            "props": [
+             {
+              "key": "dep",
+              "static_value": "robot"
+             }
+            ],
+            "children": null
+           }
+          ]
+         }
+        ],
+        "phase": "ASSIGN"
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": [
+    {
+     "definition": {
+      "key": "act",
+      "version": "1",
+      "description": null,
+      "collections": [],
+      "name": "Act",
+      "stateful": false,
+      "pure": false,
+      "idempotent": false,
+      "allow_probe": false,
+      "port_groups": [],
+      "args": [
+       {
+        "key": "slides",
+        "label": null,
+        "kind": "LIST",
+        "description": null,
+        "identifier": null,
+        "nullable": false,
+        "effects": null,
+        "choices": null,
+        "reference_unit": null,
+        "proposed_units": null,
+        "dimension": null,
+        "children": [
+         {
+          "key": "...",
+          "label": null,
+          "kind": "STRING",
+          "description": null,
+          "identifier": null,
+          "nullable": false,
+          "effects": null,
+          "choices": null,
+          "reference_unit": null,
+          "proposed_units": null,
+          "dimension": null,
+          "children": null,
+          "validators": null,
+          "default": null,
+          "widget": null,
+          "requires": null
+         }
+        ],
+        "validators": null,
+        "default": null,
+        "widget": null,
+        "requires": null
+       }
+      ],
+      "returns": [],
+      "kind": "FUNCTION",
+      "is_test_for": [],
+      "is_dev": false,
+      "catalogs": [],
+      "protocols": [],
+      "bloks": [
+       {
+        "context": "SCENE",
+        "phase": "ASSIGN",
+        "components": [
+         {
+          "id": "root",
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab",
+            "dynamic_value": null,
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           }
+          ],
+          "children": [
+           {
+            "id": "placed-robot",
+            "component": "Placed",
+            "props": [
+             {
+              "key": "dep",
+              "static_value": "robot",
+              "dynamic_value": null,
+              "declares_value": null,
+              "agent_call": null,
+              "util_call": null
+             }
+            ],
+            "children": null
+           }
+          ]
+         }
+        ],
+        "source": null,
+        "module": null,
+        "description": null,
+        "vocab": 2,
+        "catalogs": [],
+        "locals": [],
+        "demo": null,
+        "queries": [],
+        "subscriptions": []
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": null,
+       "state_dependencies": null,
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      },
+      {
+       "key": "frame",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": null,
+       "state_dependencies": null,
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      }
+     ],
+     "interface": "act",
+     "params": null,
+     "instance_id": null,
+     "locks": null,
+     "optimistics": null,
+     "manipulates": null,
+     "needs_token": true,
+     "provenance_audience": null,
+     "effects": "UNKNOWN",
+     "execution": "PLAIN",
+     "code_hash": null,
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
+    }
+   ],
+   "locks": null,
+   "bloks": null,
+   "assets": null,
+   "hash": null
+  },
+  "hashes": [
+   "886545f7ab6379be425a13432bdfe27a6996b575bdb5e07bc8f8c4b9b1dbdefb"
+  ]
+ },
+ "assign blok reading a task": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "HTML",
+        "phase": "ASSIGN",
+        "vocab": 2,
+        "components": [
+         {
+          "id": "Html[0]",
+          "component": "Html",
+          "children": [
+           {
+            "id": "t",
+            "component": "Text",
+            "props": [
+             {
+              "key": "text",
+              "dynamic_value": {
+               "path": "task.status"
+              }
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "t: task.status: an assign blok has no 'task' (it reads args, deps, queries, self, subscriptions, viewer). [roots.not_in_kind]",
+  "error_type": "value_error"
+ },
+ "assign blok asking": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "HTML",
+        "phase": "ASSIGN",
+        "vocab": 2,
+        "components": [
+         {
+          "id": "Html[0]",
+          "component": "Html",
+          "children": [
+           {
+            "id": "a",
+            "component": "ask"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": [
+    {
+     "definition": {
+      "key": "act",
+      "version": "1",
+      "description": null,
+      "collections": [],
+      "name": "Act",
+      "stateful": false,
+      "pure": false,
+      "idempotent": false,
+      "allow_probe": false,
+      "port_groups": [],
+      "args": [
+       {
+        "key": "slides",
+        "label": null,
+        "kind": "LIST",
+        "description": null,
+        "identifier": null,
+        "nullable": false,
+        "effects": null,
+        "choices": null,
+        "reference_unit": null,
+        "proposed_units": null,
+        "dimension": null,
+        "children": [
+         {
+          "key": "...",
+          "label": null,
+          "kind": "STRING",
+          "description": null,
+          "identifier": null,
+          "nullable": false,
+          "effects": null,
+          "choices": null,
+          "reference_unit": null,
+          "proposed_units": null,
+          "dimension": null,
+          "children": null,
+          "validators": null,
+          "default": null,
+          "widget": null,
+          "requires": null
+         }
+        ],
+        "validators": null,
+        "default": null,
+        "widget": null,
+        "requires": null
+       }
+      ],
+      "returns": [],
+      "kind": "FUNCTION",
+      "is_test_for": [],
+      "is_dev": false,
+      "catalogs": [],
+      "protocols": [],
+      "bloks": [
+       {
+        "context": "HTML",
+        "phase": "ASSIGN",
+        "components": [
+         {
+          "id": "Html[0]",
+          "component": "Html",
+          "props": null,
+          "children": [
+           {
+            "id": "a",
+            "component": "ask",
+            "props": null,
+            "children": null
+           }
+          ]
+         }
+        ],
+        "source": null,
+        "module": null,
+        "description": null,
+        "vocab": 2,
+        "catalogs": [],
+        "locals": [],
+        "demo": null,
+        "queries": [],
+        "subscriptions": []
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": null,
+       "state_dependencies": null,
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      },
+      {
+       "key": "frame",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": null,
+       "state_dependencies": null,
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      }
+     ],
+     "interface": "act",
+     "params": null,
+     "instance_id": null,
+     "locks": null,
+     "optimistics": null,
+     "manipulates": null,
+     "needs_token": true,
+     "provenance_audience": null,
+     "effects": "UNKNOWN",
+     "execution": "PLAIN",
+     "code_hash": null,
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
+    }
+   ],
+   "locks": null,
+   "bloks": null,
+   "assets": null,
+   "hash": null
+  },
+  "hashes": [
+   "886545f7ab6379be425a13432bdfe27a6996b575bdb5e07bc8f8c4b9b1dbdefb"
+  ]
+ },
+ "run blok placing the argument form": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "HTML",
+        "vocab": 2,
+        "components": [
+         {
+          "id": "Html[0]",
+          "component": "Html",
+          "children": [
+           {
+            "id": "a",
+            "component": "args"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "a: <args> belongs to starting a run, so only an action's assign blok holds it, not an action blok. [assign.kind]",
+  "error_type": "value_error"
+ },
+ "assign bloks twice in one context": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "SCENE",
+        "vocab": 2,
+        "components": [
+         {
+          "id": "root",
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab"
+           }
+          ],
+          "children": []
+         }
+        ],
+        "phase": "ASSIGN"
+       },
+       {
+        "context": "SCENE",
+        "vocab": 2,
+        "components": [
+         {
+          "id": "root",
+          "component": "Space",
+          "props": [
+           {
+            "key": "room",
+            "static_value": "room:lab"
+           }
+          ],
+          "children": []
+         }
+        ],
+        "phase": "ASSIGN"
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Definition act: the assign scene blok is given twice; an action has one assign blok per context",
+  "error_type": "value_error"
  },
  "agent declaring a space blok": {
   "input": {

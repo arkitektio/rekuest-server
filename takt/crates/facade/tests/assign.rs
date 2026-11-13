@@ -1113,7 +1113,8 @@ async fn an_unmet_dependency_below_refuses_the_root_and_a_dry_run_reports_it() {
         .task;
     assert_eq!(snapshot(&ctx, root).await, frozen);
 
-    // An agent of another organization cannot be pinned: it binds nothing.
+    // An agent of another organization cannot be pinned: it binds nothing, and the dry run
+    // says why; an assign pinned to it is refused, never run on whatever is left.
     let foreign = agent(&ctx, None).await;
     action(&ctx, foreign, false).await;
     let tree = backend::resolve_dependencies(
@@ -1125,6 +1126,23 @@ async fn an_unmet_dependency_below_refuses_the_root_and_a_dry_run_reports_it() {
     .await
     .unwrap();
     assert_eq!(tree["dependencies"]["relay"], json!([]));
+    assert_eq!(tree["satisfied"], json!(false));
+    let gone = AssignInput {
+        dependencies: Some(vec![pin("relay", foreign, vec![])]),
+        ..echo(workflow, 2, None)
+    };
+    match backend::assign_with_status(&ctx, &principal, &gone, AssignOrigin::default()).await {
+        Err(BackendError::Refused(reason)) => {
+            assert!(
+                reason.contains("Dependency relay is pinned to agent"),
+                "{reason}"
+            )
+        }
+        other => panic!(
+            "a pin to an agent that cannot take work is refused, got {:?}",
+            other.map(|a| a.task)
+        ),
+    }
 
     // Another organization's implementation is not theirs to look into.
     let stranger = agent(&ctx, None).await;

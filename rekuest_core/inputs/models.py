@@ -1013,11 +1013,12 @@ class DefinitionInputModel(BaseModel):
 
     @model_validator(mode="after")
     def check_bloks(self) -> Self:
-        """An action has one blok per context: the one a client picks for where it shows the run."""
-        contexts = [blok.context for blok in self.bloks]
-        twice = next((context for context in contexts if contexts.count(context) > 1), None)
+        """An action has one blok per context and phase: the one a client picks for where it shows the run, or its start."""
+        slots = [(blok.phase, blok.context) for blok in self.bloks]
+        twice = next((slot for slot in slots if slots.count(slot) > 1), None)
         if twice is not None:
-            raise ValueError(f"Definition {self.key}: the {twice.value.lower()} blok is given twice; an action has one blok per context")
+            phase = "assign " if twice[0] == enums.ActionBlokPhase.ASSIGN else ""
+            raise ValueError(f"Definition {self.key}: the {phase}{twice[1].value.lower()} blok is given twice; an action has one {phase}blok per context")
         return self
 
     @model_validator(mode="after")
@@ -1768,7 +1769,8 @@ ACTION_BLOK_COMPONENTS = (SPACE_COMPONENT, PLACED_COMPONENT, ROUTE_COMPONENT, AS
 
 
 def check_action_blok(blok: "ActionBlokInputModel", dependencies: list[AgentDependencyInputModel], arg_keys: list[str] | None = None) -> list["Finding"]:
-    """An action's blok against the dependencies its implementation declares (kind ``action``).
+    """An action's blok against the dependencies its implementation declares (kind ``action``, or
+    ``assign`` for one that starts a run: no ``task``, ``<args />`` and ``assign.start()`` allowed).
 
     It reads the run as ``task``, its args as ``args``, the agent running it as ``self`` and the
     agents the run got as ``deps.<key>``; ``Placed``/``Route`` name only the dependencies. A
@@ -1778,12 +1780,13 @@ def check_action_blok(blok: "ActionBlokInputModel", dependencies: list[AgentDepe
         BlokError: With the code of the first error finding.
     """
     keys = {dependency.key for dependency in dependencies}
-    check_blok_declarations(kind="action", catalogs=blok.catalogs, locals=blok.locals, queries=blok.queries, subscriptions=blok.subscriptions, dependency_keys=keys, demo=blok.demo)
+    kind = blok.kind
+    check_blok_declarations(kind=kind, catalogs=blok.catalogs, locals=blok.locals, queries=blok.queries, subscriptions=blok.subscriptions, dependency_keys=keys, demo=blok.demo)
     if blok.components is None:
         return []
     return check_blok_manifest(
         blok.components,
-        kind="action",
+        kind=kind,
         context=blok.context,
         dependencies=dependencies,
         locals=blok.locals,
@@ -1800,6 +1803,7 @@ class ActionBlokInputModel(BaseModel):
     on its own; its dependencies are the action's, which it names by key."""
 
     context: enums.ComponentContext = Field(default=enums.ComponentContext.HTML, description="Where a client shows the run with it: HTML in a task panel, SCENE as a 3D view (its root a `Scene`, or a `Space` placing the run's dependencies in a room whose layout is shared).")
+    phase: enums.ActionBlokPhase = Field(default=enums.ActionBlokPhase.RUN, description="When a client shows it: RUN for a run of the action, ASSIGN before one, to start it. One blok per context and phase.")
     components: Optional[list[ComponentNodeInputModel]] = Field(default=None, description="The UI component tree, unless the blok is sent as its `source`.")
     source: Optional[str] = Field(default=None, description="The blok as v2 BSX, parsed by the server into its component tree. Exactly one of `components` and `source` is sent.")
     module: Optional[str] = Field(default=None, description="The module the blok renders against besides its catalogs; the Orkestrator's when absent.")
@@ -1812,6 +1816,11 @@ class ActionBlokInputModel(BaseModel):
     subscriptions: list[BlokSubscriptionInputModel] = Field(default_factory=list, description="Its declared streams.")
 
     model_config = ConfigDict(extra="forbid")
+
+    @property
+    def kind(self) -> str:
+        """The blok kind it is checked as: ``assign`` for one that starts a run, else ``action``."""
+        return "assign" if self.phase == enums.ActionBlokPhase.ASSIGN else "action"
 
     @model_validator(mode="after")
     def check_action_blok(self) -> Self:

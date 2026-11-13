@@ -53,6 +53,12 @@
    "locals": true,
    "contexts": ["HTML", "SCENE"]
   },
+  "assign": {
+   "description": "An action's own blok for starting a run of it (assign_bloks): shown before there is a task, with the arguments being filled in as args and the agents a run would get as deps.",
+   "roots": ["self", "deps", "args", "queries", "subscriptions", "viewer"],
+   "locals": true,
+   "contexts": ["HTML", "SCENE"]
+  },
   "action_logo": {
    "description": "An action's logo, drawn against the task the viewer last ran of it (null until then).",
    "roots": ["task"],
@@ -141,7 +147,7 @@
   ]
  },
  "functions": {
-  "description": "Pure functions by namespace, snake_case. Positional arguments map onto params in order. `lazy`: arguments are read only as needed. `effect`: allowed only as a callback's one thing (ui.*, task.answer, query.*). `sees_status`: sees pending/failed instead of suspending. No function reads the wall clock. `null` says what the function does with a null argument (known absence); a missing path reads as null.",
+  "description": "Pure functions by namespace, snake_case. Positional arguments map onto params in order. `lazy`: arguments are read only as needed. `effect`: allowed only as a callback's one thing (ui.*, task.answer, assign.start, query.*). `sees_status`: sees pending/failed instead of suspending. No function reads the wall clock. `null` says what the function does with a null argument (known absence); a missing path reads as null.",
   "cmp.eq": {"params": [["a", "ANY"], ["b", "ANY"]], "returns": "BOOL", "description": "Deep JSON equality.", "null": "null equals only null"},
   "cmp.ne": {"params": [["a", "ANY"], ["b", "ANY"]], "returns": "BOOL", "description": "Not deep-equal.", "null": "null equals only null"},
   "cmp.gt": {"params": [["a", "ANY"], ["b", "ANY"]], "returns": "BOOL", "description": "a > b, numbers or strings.", "null": "false"},
@@ -251,6 +257,7 @@
   "time.diff": {"params": [["start", "STRING"], ["end", "STRING"]], "returns": "FLOAT", "description": "Seconds from start to end (ISO 8601 datetimes); negative when end is earlier. Pure: relative time to the viewed moment is the <Time> component's.", "null": "null"},
   "ui.copy": {"params": [["text", "ANY"]], "returns": "ANY", "effect": true, "description": "Copies text to the viewer's clipboard: the only non-task effect.", "null": "copies an empty string"},
   "task.answer": {"params": [["values", "DICT"]], "returns": "ANY", "effect": true, "task_operation": true, "description": "Answers the open ask of `task`. Counts as a task operation.", "null": "answers with no values"},
+  "assign.start": {"params": [], "returns": "ANY", "effect": true, "description": "Starts the run an assign blok prepares, with the arguments as they are filled in and the agents the blok was shown (deps) pinned. An assign blok only.", "null": "starts the run"},
   "query.refetch": {"params": [["query", "STRING"]], "returns": "ANY", "effect": true, "description": "Re-reads the declared query named by the literal `query`; never suspends, queries.<name>.refetching is true meanwhile. BSX writes it queries.<name>.refetch().", "null": "refused: the query is named by a literal"},
   "query.fetch_more": {"params": [["query", "STRING"], ["variables", "DICT", false]], "returns": "ANY", "effect": true, "description": "Reads the next page of the declared query named by the literal `query`, its variables overridden by `variables`, and appends the page's list at the query's `more` field to what is shown; queries.<name>.fetching_more is true meanwhile. BSX writes it queries.<name>.fetch_more(name: value, ...). Refused on a query without `more`.", "null": "refused: the query is named by a literal; null variables fetch with the query's own"}
  },
@@ -265,7 +272,7 @@
   "description": "What a prop or an argument may hold besides a literal, a path or a util call.",
   "kinds": {
    "agent_call": "A task call: self.<action>(...) or deps.<key>.<action>(...), only as a callback's one thing, optionally named with `into <name>` (stored as the prop's declares_value).",
-   "util_call": "A pure function, or an effect (ui.copy, task.answer, query.refetch, query.fetch_more) as a callback's one thing."
+   "util_call": "A pure function, or an effect (ui.copy, task.answer, assign.start, query.refetch, query.fetch_more) as a callback's one thing."
   },
   "reserved_kinds": {
    "service_call": "Reserved for mutations, should they ever exist. Renderers refuse a call kind they do not know."
@@ -370,7 +377,7 @@
   "callback.positional": {"level": "error", "message": "{call}: a task call names its arguments (name: value)."},
   "callback.into": {"level": "error", "message": "into names the record of a task call: `<call> into <name>`.", "hint": "Write `deps.<key>.<action>(name: value) into run`, then read run.running, run.returns.<port>."},
   "callback.not_callback": {"level": "error", "message": "{key} of <{component}> is not a callback prop, so it cannot hold {what}.", "hint": "Use a callback prop of <{component}> (the catalog lists them as CALLBACK), or compute {key} without a call."},
-  "callback.unbound": {"level": "error", "message": "{key} of <{component}> is a callback prop: it holds one task call or one effect (queries.<name>.refetch(), queries.<name>.fetch_more(...), ui.copy, task.answer).", "hint": "Give {key} a task call (deps.<key>.<action>(name: value)) or one effect, not a value."},
+  "callback.unbound": {"level": "error", "message": "{key} of <{component}> is a callback prop: it holds one task call or one effect (queries.<name>.refetch(), queries.<name>.fetch_more(...), ui.copy, task.answer, assign.start).", "hint": "Give {key} a task call (deps.<key>.<action>(name: value)) or one effect, not a value."},
   "callback.event_field": {"level": "error", "message": "event has no field {field!r} in {key} of <{component}> (its fields: {fields}).", "hint": "Read one of the fields listed for {key}: {fields}."},
   "roots.unknown": {"level": "error", "message": "{path} reads {root!r}, which is no root, local, loop variable or record of this blok.", "hint": "Read a root this blok has (deps.<key>, args.<key>, queries.<name>, ...), a declared local, a foreach let, or an into record."},
   "roots.not_in_kind": {"level": "error", "message": "{path}: a{n} {kind} blok has no {root!r} (it reads {roots}).", "hint": "Read one of {roots} instead."},
@@ -416,6 +423,7 @@
   "context.root": {"level": "error", "message": "The root of a {context} blok is <{root}>, not <{component}>.", "hint": "Make <{root}> the root and put <{component}> inside it."},
   "context.root_unknown": {"level": "error", "message": "A blok's root names its context ({roots}), not <{component}>.", "hint": "Make the root one of {roots} and put <{component}> inside it."},
   "context.kind": {"level": "error", "message": "A{n} {kind} blok is drawn in {contexts}, not {context}."},
+  "assign.kind": {"level": "error", "message": "{what} belongs to starting a run, so only an action's assign blok holds it, not a{n} {kind} blok.", "hint": "Declare it with the action: @app.workflow(assign_bloks=[...])."},
   "space.kind": {"level": "error", "message": "<{component}> places the run's dependencies, so only an action's own blok holds it, not a{n} {kind} blok.", "hint": "Declare it with the action: @app.workflow(bloks=[...])."},
   "logo.complexity": {"level": "error", "message": "{detail}"},
   "catalog.unknown_component": {"level": "warning", "message": "<{component}> is in no catalog in force ({catalogs}).", "hint": "Look the component up in the catalog; names are case-sensitive."},

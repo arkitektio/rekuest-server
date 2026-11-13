@@ -18,6 +18,18 @@
    "props": []
   },
   {
+   "name": "args",
+   "description": "The arguments of the run an assign blok starts, as the form the action's ports generate: filled in right here, and read as `args.<key>`. Without it the host shows the form beside the blok. An assign blok only.",
+   "context": "HTML",
+   "children_context": null,
+   "inherits_context": false,
+   "accepts_children": false,
+   "downstream_of": [],
+   "not_downstream_of": [],
+   "text_prop": null,
+   "props": []
+  },
+  {
    "name": "ask",
    "description": "The open ask of the task this blok is about (`task.ask`), as the form its ports generate: answered right here, which resumes the task. Shows nothing while no ask is open. Replaces TaskAsk.",
    "context": "HTML",

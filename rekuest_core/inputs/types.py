@@ -772,6 +772,7 @@ class InformBlokInput:
 class ActionBlokInput:
     vocab: int
     context: enums.ComponentContext = enums.ComponentContext.HTML
+    phase: enums.ActionBlokPhase = enums.ActionBlokPhase.RUN
     components: list[ComponentNodeInput] | None = None
     source: str | None = None
     module: Optional[str] = None

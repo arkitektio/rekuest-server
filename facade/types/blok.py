@@ -180,6 +180,10 @@ class ActionBlok:
     def context(self) -> renums.ComponentContext:
         return renums.ComponentContext(self.context)
 
+    @strawberry_django.field(description="When a client shows it: RUN for a run of the action, ASSIGN before one, to start it.")
+    def phase(self) -> renums.ActionBlokPhase:
+        return renums.ActionBlokPhase(self.phase)
+
 
 @strawberry.type(description="A dependency as a blok revision declares it.")
 class RevisionDependency:

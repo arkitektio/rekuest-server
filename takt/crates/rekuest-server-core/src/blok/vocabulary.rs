@@ -393,7 +393,10 @@ pub fn parse_vocabulary(raw: &Value) -> Loaded<Vocabulary> {
             continue;
         }
         let namespace = name.split('.').next().unwrap_or_default();
-        if !namespaces.iter().any(|n| n == namespace) && name != "task.answer" {
+        if !namespaces.iter().any(|n| n == namespace)
+            && name != "task.answer"
+            && name != "assign.start"
+        {
             return Err(format!(
                 "vocabulary.json: function {name} is in no function namespace"
             ));

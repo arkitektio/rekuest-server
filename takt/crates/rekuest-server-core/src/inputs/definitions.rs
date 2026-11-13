@@ -24,7 +24,8 @@ use super::{min_length, ValidationError};
 use crate::blok::check::validate_blok;
 use crate::blok::{BlokScope, Finding};
 use crate::enums::{
-    ActionKind, AssetKind, CatalogValueKind, ComponentContext, Effects, Execution, PortKind,
+    ActionBlokPhase, ActionKind, AssetKind, CatalogValueKind, ComponentContext, Effects, Execution,
+    PortKind,
 };
 use crate::pyjson::{dumps, repr_str};
 
@@ -331,13 +332,18 @@ impl DefinitionInputModel {
         self.check_dependencies()
     }
 
-    /// An action has one blok per context (`check_bloks`).
+    /// An action has one blok per context and phase (`check_bloks`).
     fn check_bloks(&self) -> Result<(), ValidationError> {
-        let mut seen: HashSet<ComponentContext> = HashSet::new();
+        let mut seen: HashSet<(ActionBlokPhase, ComponentContext)> = HashSet::new();
         for blok in &self.bloks {
-            if !seen.insert(blok.context) {
+            if !seen.insert((blok.phase, blok.context)) {
+                let phase = if blok.phase == ActionBlokPhase::ASSIGN {
+                    "assign "
+                } else {
+                    ""
+                };
                 return Err(ValidationError(format!(
-                    "Definition {}: the {} blok is given twice; an action has one blok per context",
+                    "Definition {}: the {phase}{} blok is given twice; an action has one {phase}blok per context",
                     self.key,
                     blok.context.value().to_lowercase()
                 )));
@@ -1296,6 +1302,9 @@ pub struct ActionBlokInputModel {
     /// HTML (a task panel) or SCENE (a 3D view: a `Scene`, or a `Space` placing the run's dependencies).
     #[serde(default = "html_")]
     pub context: ComponentContext,
+    /// RUN for a run of the action, ASSIGN before one, to start it. One blok per context and phase.
+    #[serde(default = "run_")]
+    pub phase: ActionBlokPhase,
     /// The tree, unless the blok is sent as its `source`; `validate` parses that into this.
     #[serde(default)]
     pub components: Option<Vec<ComponentNodeInputModel>>,
@@ -1322,6 +1331,15 @@ pub struct ActionBlokInputModel {
 }
 
 impl ActionBlokInputModel {
+    /// The blok kind it is checked as: `assign` for one that starts a run, else `action`.
+    pub fn kind(&self) -> &'static str {
+        if self.phase == ActionBlokPhase::ASSIGN {
+            "assign"
+        } else {
+            "action"
+        }
+    }
+
     /// Sent one way (its source parsed into its tree), in a context an action has a blok for.
     pub fn validate(&mut self) -> Result<(), ValidationError> {
         parse_sent(&mut self.components, &mut self.source)?;
@@ -1348,7 +1366,7 @@ impl ActionBlokInputModel {
         arg_keys: Option<Vec<String>>,
     ) -> BlokScope {
         BlokScope {
-            kind: "action".into(),
+            kind: self.kind().into(),
             context: self.context.value().to_owned(),
             dependencies: dependencies.to_vec(),
             locals: self.locals.clone(),
@@ -1381,7 +1399,7 @@ pub fn check_action_blok(
             dependency_keys: &keys,
             demo: blok.demo.as_ref(),
         },
-        "action",
+        blok.kind(),
         &reserved,
     )?;
     if blok.components.is_none() {
@@ -1486,6 +1504,10 @@ pub struct CatalogComponentInputModel {
 
 fn html_() -> ComponentContext {
     ComponentContext::HTML
+}
+
+fn run_() -> ActionBlokPhase {
+    ActionBlokPhase::RUN
 }
 
 impl CatalogComponentInputModel {

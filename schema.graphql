@@ -84,11 +84,6 @@ type Action {
   logo: Blok
 
   """
-  The action's own bloks, at most one per context (HTML for a task panel, SCENE a 3D view, as a `Space` placing the run's dependencies): declared with the action, the latest registration's. Not part of its hash.
-  """
-  bloks: [ActionBlok!]!
-
-  """
   How many of its implementations sit on an agent that can take work now (connected, or a webhook agent) — one per agent. Kept by the database as agents connect and leave, a moment behind (takt recomputes it on commit); a crashed agent counts until takt's stale sweep notices (seconds).
   """
   liveImplementations: Int!
@@ -112,6 +107,16 @@ type Action {
 
   """The triggers that run this action."""
   triggers(filters: TriggerFilter, ordering: [TriggerOrder!]! = [], pagination: OffsetPaginationInput): [Trigger!]!
+
+  """
+  The action's own bloks, at most one per context (HTML for a task panel, SCENE a 3D view, as a `Space` placing the run's dependencies): declared with the action, the latest registration's. Not part of its hash.
+  """
+  bloks: [ActionBlok!]!
+
+  """
+  The action's own bloks for starting a run of it, at most one per context (phase ASSIGN): shown before there is a task, with the arguments being filled in as `args` and the agents a run would get as `deps`.
+  """
+  assignBloks: [ActionBlok!]!
 
   """
   The estimate in seconds for the object named in the `estimatedRuntime` filter: its fastest live implementation that fits. Null without that filter, or when it cannot be computed for this object.
@@ -149,11 +154,6 @@ type Action {
   portGroups: [PortGroup!]!
 }
 
-"""A JSON-serializable argument entry for a multi-agent action trigger."""
-type ActionArgument {
-  key: String
-  valueLiteral: JSONSerializable
-  valuePath: String
 """
 An entry of a user's auto list: an action that runs under their runs without asking them. It names the action by app and key, so every version of it; optionally the action that may ask for it; and optionally the one run it holds under.
 """
@@ -190,6 +190,11 @@ type ActionAllowance {
   asker: Action
 }
 
+"""A JSON-serializable argument entry for a multi-agent action trigger."""
+type ActionArgument {
+  key: String
+  valueLiteral: JSONSerializable
+  valuePath: String
   agentCall: AgentCall
   utilCall: UtilCall
   valueList: [ActionArgument!]
@@ -244,6 +249,11 @@ type ActionBlok {
   Where a client shows a run with it: HTML in a task panel, SCENE as a 3D view (a `Space` places the run's dependencies in a room whose layout is shared).
   """
   context: ComponentContext!
+
+  """
+  When a client shows it: RUN for a run of the action, ASSIGN before one, to start it.
+  """
+  phase: ActionBlokPhase!
 }
 
 """
@@ -254,6 +264,11 @@ input ActionBlokInput {
   Where a client shows the run with it: HTML in a task panel, SCENE as a 3D view (its root a `Scene`, or a `Space` placing the run's dependencies in a room whose layout is shared).
   """
   context: ComponentContext! = HTML
+
+  """
+  When a client shows it: RUN for a run of the action, ASSIGN before one, to start it. One blok per context and phase.
+  """
+  phase: ActionBlokPhase! = RUN
 
   """The UI component tree, unless the blok is sent as its `source`."""
   components: [ComponentNodeInput!] = null
@@ -288,6 +303,14 @@ input ActionBlokInput {
 
   """Its declared streams."""
   subscriptions: [BlokSubscriptionInput!]! = []
+}
+
+"""
+When a client shows an action's own blok: RUN for a run of the action (it reads the run as `task`), ASSIGN before one, to start it (no `task`; `<args />` places the argument form, `assign.start()` starts the run).
+"""
+enum ActionBlokPhase {
+  RUN
+  ASSIGN
 }
 
 """
@@ -1003,6 +1026,19 @@ type AgentWithValues {
 }
 
 """
+Put an action on your auto list: under your runs an agent that asks for it gets it without a hold.
+"""
+input AllowActionInput {
+  """The action that runs without asking, in every version of it"""
+  action: ID!
+
+  """
+  The action that may ask for it, in every version of it; none for whoever asks
+  """
+  asker: ID = null
+}
+
+"""
 The `AnyDefault` scalar is any JSON value used as a port default or a choice value; the server checks it against the port's kind
 """
 scalar AnyDefault
@@ -1025,19 +1061,6 @@ type ArgPort {
   kind: PortKind!
   description: String
   identifier: Identifier
-"""
-Put an action on your auto list: under your runs an agent that asks for it gets it without a hold.
-"""
-input AllowActionInput {
-  """The action that runs without asking, in every version of it"""
-  action: ID!
-
-  """
-  The action that may ask for it, in every version of it; none for whoever asks
-  """
-  asker: ID = null
-}
-
   nullable: Boolean!
   effects: [Effect!]
   children: [ArgPort!]
@@ -2971,6 +2994,11 @@ input DecideInput {
   The answer through the blok a task asks with (a hold on a blok), by the blok's returns, and checked against them. Only an approved ask takes them.
   """
   values: Args = null
+
+  """
+  Keep the approval as an allowance on the user's auto list, so the action is not asked for again: for the rest of this run (RUN), whenever the same action asks (ASKER), or whoever asks (ALWAYS). Only the approval of a child an agent asked for takes it. What else of the run waits for the same answer is released.
+  """
+  remember: HoldRemember = null
 }
 
 "A definition\n\n    Definitions are the building implementation for Actions and provide the\n    information needed to create a action. They are primarly composed of a name,\n    a description, and a list of ports.\n\n    Definitions provide a protocol of input and output, and do not contain\n    any information about the actual implementation of the action ( this is handled\n    by a implementation that implements a action).\n\n    "
@@ -2994,11 +3022,6 @@ input DefinitionInput {
   The version of the definition. This is used to differentiate if the underyling algorithm has changed, i.e we would expect different results for the same input
   """
   version: String!
-
-  """
-  Keep the approval as an allowance on the user's auto list, so the action is not asked for again: for the rest of this run (RUN), whenever the same action asks (ASKER), or whoever asks (ALWAYS). Only the approval of a child an agent asked for takes it. What else of the run waits for the same answer is released.
-  """
-  remember: HoldRemember = null
 
   """
   The name of the actions. This is used to uniquely identify the definition
@@ -3631,6 +3654,15 @@ type HideEffect implements Effect {
 }
 
 """
+What an approval is remembered as: the allowance it leaves on the user's auto list. RUN: this action, whoever asks, for the rest of this run. ASKER: this action whenever the action that asked now asks again, in every run of the user. ALWAYS: this action, whoever asks, in every run of the user.
+"""
+enum HoldRemember {
+  RUN
+  ASKER
+  ALWAYS
+}
+
+"""
 A hook is a function that is called when a action has reached a specific lifecycle point. Hooks are jsut actions that take a task as input and return a value.
 """
 input HookInput {
@@ -3652,15 +3684,6 @@ A structure a service of this hub hosts, as that service declares it: a row, wit
 type HostedStructure {
   """Unique ID of the hosted structure."""
   id: ID!
-
-"""
-What an approval is remembered as: the allowance it leaves on the user's auto list. RUN: this action, whoever asks, for the rest of this run. ASKER: this action whenever the action that asked now asks again, in every run of the user. ALWAYS: this action, whoever asks, in every run of the user.
-"""
-enum HoldRemember {
-  RUN
-  ASKER
-  ALWAYS
-}
 
   """The full identifier, e.g. '@mikro/arraydataset'."""
   identifier: String!
@@ -4916,6 +4939,14 @@ type Mutation {
   """
   decide(input: DecideInput!): Task! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
 
+  """
+  Put an action on your auto list: under your runs an agent that asks for it gets it without a hold. Optionally only when one action asks. Yours alone: it changes nothing for anyone else.
+  """
+  allowAction(input: AllowActionInput!): ActionAllowance! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
+
+  """Take an allowance off your auto list: the action is asked for again."""
+  revokeAllowance(input: RevokeAllowanceInput!): ID! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
+
   """Collect results from a task."""
   collect(input: CollectInput!): [String!]! @auth(required_scopes: ["rekuest_agent"], any_role_of: ["rekuest_editor"])
 
@@ -4939,14 +4970,6 @@ type Mutation {
   fireTrigger(input: FireTriggerInput!): Firing! @auth(required_scopes: ["rekuest_automate"], any_role_of: ["rekuest_automator"])
 
   """
-  """
-  Put an action on your auto list: under your runs an agent that asks for it gets it without a hold. Optionally only when one action asks. Yours alone: it changes nothing for anyone else.
-  """
-  allowAction(input: AllowActionInput!): ActionAllowance! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
-
-  """Take an allowance off your auto list: the action is asked for again."""
-  revokeAllowance(input: RevokeAllowanceInput!): ID! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
-
   Import a wiregram: one document of schedules and triggers. All or nothing; importing the same key again updates what it created and removes what it no longer lists.
   """
   importWiregram(input: WiregramInput!): Wiregram! @auth(required_scopes: ["rekuest_automate"], any_role_of: ["rekuest_automator"])
@@ -5775,6 +5798,11 @@ type Query {
   """
   similarActions(action: ID!, filters: ActionFilter = null, limit: Int! = 10, maxDistance: Float = null): [Action!]! @auth(required_scopes: ["rekuest_read"])
 
+  """
+  Your auto list in this organization: the actions that run under your runs without asking you, newest first. With `action`, the entries for that action. An allowance of a single run is not listed.
+  """
+  myAllowances(action: ID = null): [ActionAllowance!]! @auth(required_scopes: ["rekuest_read"])
+
   """Fetch the root tasks this client created (caller-scoped)."""
   myTasks: [Task!]! @auth(required_scopes: ["rekuest_read"])
 
@@ -5798,11 +5826,6 @@ type Query {
 
   """Find implementation at given interface."""
   implementationAt(agent: ID!, interface: String = null, actionHash: String = null, demand: ActionDemandInput = null): Implementation! @auth(required_scopes: ["rekuest_read"])
-  """
-  Your auto list in this organization: the actions that run under your runs without asking you, newest first. With `action`, the entries for that action. An allowance of a single run is not listed.
-  """
-  myAllowances(action: ID = null): [ActionAllowance!]! @auth(required_scopes: ["rekuest_read"])
-
 
   """Find your implementation at a specific interface."""
   myImplementationAt(actionId: ID = null, interface: String = null): Implementation! @auth(required_scopes: ["rekuest_read"])
@@ -6355,6 +6378,12 @@ type RevisionDependency {
   version: String
 }
 
+"""Take an allowance off your auto list: the action is asked for again."""
+input RevokeAllowanceInput {
+  """The allowance to remove"""
+  id: ID!
+}
+
 """Slim snapshot of a schedule or trigger for the change feeds."""
 type RuleChange {
   id: ID!
@@ -6378,12 +6407,6 @@ type RuleChangeEvent {
 
 """Keep where an agent stands in a space, for everyone."""
 input SavePlacementInput {
-"""Take an allowance off your auto list: the action is asked for again."""
-input RevokeAllowanceInput {
-  """The allowance to remove"""
-  id: ID!
-}
-
   """
   The space's reference: a blok's `room` (a URI such as `room:helsinki-lab`, or `app/<identifier>/<key>`). The space is made when none has it yet.
   """

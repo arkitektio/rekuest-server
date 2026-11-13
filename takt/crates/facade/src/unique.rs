@@ -62,7 +62,13 @@ fn hashed_dump(dump: Value) -> Value {
 /// The `action_blok` envelope keeps it from ever equalling an agent's template
 /// ([`hash_blok_definition`]), which shares the unique constraint.
 pub fn hash_action_blok(blok: &ActionBlokInputModel) -> String {
-    let dump = hashed_dump(serde_json::to_value(blok).expect("an action blok serializes"));
+    let mut dump = hashed_dump(serde_json::to_value(blok).expect("an action blok serializes"));
+    // A run's blok hashes as it did before there were phases: only an assign blok's phase counts.
+    if let Some(fields) = dump.as_object_mut() {
+        if fields.get("phase").and_then(serde_json::Value::as_str) == Some("RUN") {
+            fields.remove("phase");
+        }
+    }
     let envelope = serde_json::json!({ "action_blok": dump });
     hex::encode(Sha256::digest(dumps(&envelope, true).as_bytes()))
 }

@@ -271,7 +271,7 @@ def check_run_components(components: list[rimodels.ComponentNodeInputModel], kin
     """``Space``/``Placed``/``Route`` read the agents a run got, so only an action's own blok holds them;
     ``ask`` a task's open ask, so only a blok that has a task."""
     for node in rimodels.iter_component_nodes(components):
-        if node.component in RUN_COMPONENTS and kind != "action":
+        if node.component in RUN_COMPONENTS and kind not in ("action", "assign"):
             raise ValueError(f"component {node.id!r}: a {node.component!r} reads the agents of a run, so only an action's own blok holds one")
         if node.component == ASK_COMPONENT and kind not in ("action", "task"):
             raise ValueError(f"component {node.id!r}: an 'ask' shows a task's open ask, so only a task's or an action's blok holds one")

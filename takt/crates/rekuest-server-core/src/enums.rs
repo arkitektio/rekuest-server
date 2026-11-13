@@ -203,6 +203,10 @@ wire_enum!(
     AssetKind { MODEL_3D, IMAGE }
 );
 wire_enum!(
+    /// When a client shows an action's own blok: for a run of the action, or before one, to start it.
+    ActionBlokPhase { RUN, ASSIGN }
+);
+wire_enum!(
     /// The renderer a catalog component lives in; it may only be placed where its context is in force.
     ComponentContext {
         HTML,

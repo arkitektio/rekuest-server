@@ -222,6 +222,63 @@ async fn an_actions_bloks_name_only_its_dependencies() {
 }
 
 #[tokio::test]
+async fn an_action_holds_a_blok_for_starting_a_run_beside_the_one_for_the_run() {
+    let Some(lab) = lab().await else { return };
+    let agent = lab.agent("first").await;
+
+    let prepare = json!({"context": "HTML", "phase": "ASSIGN", "vocab": 2,
+        "source": "<Html><Card><args /><Button onClick={assign.start()}>Start</Button></Card></Html>"});
+    lab.register(agent, workflow(json!([panel(), prepare.clone()])))
+        .await
+        .unwrap();
+    let (action, _) = lab.action().await;
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT phase, context FROM facade_actionblok WHERE action_id = $1 ORDER BY phase, context",
+    )
+    .bind(action)
+    .fetch_all(&lab.db)
+    .await
+    .unwrap();
+    assert_eq!(
+        rows,
+        vec![
+            ("ASSIGN".to_owned(), "HTML".to_owned()),
+            ("RUN".to_owned(), "HTML".to_owned())
+        ],
+        "one html blok per phase"
+    );
+
+    // Registered again without it, the assign blok goes and the run's stays.
+    lab.register(agent, workflow(json!([panel()])))
+        .await
+        .unwrap();
+    let left: Vec<String> =
+        sqlx::query_scalar("SELECT phase FROM facade_actionblok WHERE action_id = $1")
+            .bind(action)
+            .fetch_all(&lab.db)
+            .await
+            .unwrap();
+    assert_eq!(left, vec!["RUN".to_owned()]);
+
+    // What belongs to a run stays out of it, and the other way round.
+    let watching = json!({"context": "HTML", "phase": "ASSIGN", "vocab": 2, "source": "<Html><Text>{task.status}</Text></Html>"});
+    let refused = lab
+        .register(agent, workflow(json!([watching])))
+        .await
+        .unwrap_err();
+    assert!(
+        refused.contains("an assign blok has no 'task'"),
+        "{refused}"
+    );
+    let starting = json!({"context": "HTML", "vocab": 2, "source": "<Html><args /></Html>"});
+    let refused = lab
+        .register(agent, workflow(json!([starting])))
+        .await
+        .unwrap_err();
+    assert!(refused.contains("[assign.kind]"), "{refused}");
+}
+
+#[tokio::test]
 async fn only_an_actions_blok_reads_a_run() {
     let Some(lab) = lab().await else { return };
     let agent = lab.agent("first").await;

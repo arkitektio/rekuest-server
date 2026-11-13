@@ -582,7 +582,7 @@ async fn resolve_dependency_agents(
                 .map(|mapped| parse_id(&mapped.agent))
                 .collect::<BackendResult<Vec<i64>>>()?;
             // The caller's own organization's agents: an id from elsewhere binds nothing.
-            Ok(sqlx::query_scalar(&format!(
+            let available: Vec<i64> = sqlx::query_scalar(&format!(
                 "SELECT a.id FROM facade_agent a
                   WHERE a.id = ANY($2) AND a.organization_id = $3 AND {AVAILABLE} ORDER BY a.id"
             ))
@@ -590,7 +590,22 @@ async fn resolve_dependency_agents(
             .bind(&ids)
             .bind(caller.organization)
             .fetch_all(&ctx.db)
-            .await?)
+            .await?;
+            // A pin is a promise: whoever pinned an agent (having prepared it, or seen it in a
+            // dry run) gets that agent or a refusal, never a run on whatever is left.
+            let gone: Vec<String> = ids
+                .iter()
+                .filter(|id| !available.contains(id))
+                .map(i64::to_string)
+                .collect();
+            if !gone.is_empty() {
+                return Err(BackendError::Refused(format!(
+                    "Dependency {} is pinned to agent {}, which cannot take work right now (offline, or not of your organization). Pin an available agent, or let the dependency resolve itself.",
+                    dependency.key,
+                    gone.join(", ")
+                )));
+            }
+            Ok(available)
         }
         None if dependency.auto_resolvable => by_app().await,
         // An optional dependency may be left unbound: the call runs without it.

@@ -257,6 +257,19 @@ ACTION_BLOKS = {
     "action blok without vocab": flow({"context": "HTML", "components": html({"id": "root", "component": "Card"})}),
     "action blok with an unknown field": flow({**space(), "name": "nope"}),
     "action blok with an old field": flow({**space(), "demo_state": {}}),
+    "assign blok": flow(
+        {"context": "HTML", "phase": "ASSIGN", "vocab": 2, "components": html(
+            {"id": "t", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "args.slides"}}]},
+            {"id": "form", "component": "args"},
+            {"id": "go", "component": "Button", "props": [{"key": "onClick", "util_call": {"operation": "assign.start", "arguments": []}}]},
+        )},
+        {"context": "HTML", "vocab": 2, "components": html({"id": "root", "component": "Card"})},
+    ),
+    "assign blok placing its dependencies": flow({**space(placed("robot")), "phase": "ASSIGN"}),
+    "assign blok reading a task": flow({"context": "HTML", "phase": "ASSIGN", "vocab": 2, "components": html({"id": "t", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "task.status"}}]})}),
+    "assign blok asking": flow({"context": "HTML", "phase": "ASSIGN", "vocab": 2, "components": html({"id": "a", "component": "ask"})}),
+    "run blok placing the argument form": flow({"context": "HTML", "vocab": 2, "components": html({"id": "a", "component": "args"})}),
+    "assign bloks twice in one context": flow({**space(), "phase": "ASSIGN"}, {**space(), "phase": "ASSIGN"}),
     "agent declaring a space blok": {"bloks": [{"key": "lab", "vocab": 2, "context": "SCENE", "components": [{"id": "root", "component": "Space", "props": [{"key": "room", "static_value": "room:lab"}]}]}]},
 }
 

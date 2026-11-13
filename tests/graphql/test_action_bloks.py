@@ -160,3 +160,29 @@ class TestActionBloks:
         # It goes, and the run stays without one.
         await lab.adelete()
         assert (await _run(authenticated_context, TASK, {"id": task}))["task"]["space"] is None
+
+    async def test_an_actions_assign_bloks_are_read_apart_from_its_runs(self, authenticated_context: HttpContext) -> None:
+        """A client that draws a run never picks up the blok for starting one."""
+        env = await sync_to_async(_seed)(authenticated_context)
+
+        def prepare() -> models.Blok:
+            org, user = authenticated_context.request.organization, authenticated_context.request.user
+            blok = models.Blok.objects.create(
+                name="workflow:assign:html",
+                creator=user,
+                organization=org,
+                module=models.Module.objects.get(name="orkestrator", organization=org),
+                app=env["flow_agent"].app,
+                declaration_hash="c" * 64,
+                context="HTML",
+                components=[{"id": "root", "component": "Html", "children": [{"id": "form", "component": "args"}]}],
+                held_by_action=True,
+            )
+            models.ActionBlok.objects.create(action=env["workflow"].action, context="HTML", phase="ASSIGN", blok=blok)
+            return blok
+
+        prepared = await sync_to_async(prepare)()
+        query = "query($id: ID!) { action(id: $id) { bloks { phase context blok { id } } assignBloks { phase context blok { id } } } }"
+        action = (await _run(authenticated_context, query, {"id": str(env["workflow"].action_id)}))["action"]
+        assert action["bloks"] == [{"phase": "RUN", "context": "SCENE", "blok": {"id": str(env["blok"].id)}}]
+        assert action["assignBloks"] == [{"phase": "ASSIGN", "context": "HTML", "blok": {"id": str(prepared.id)}}]

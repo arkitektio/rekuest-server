@@ -57,7 +57,14 @@ class Action:
         field_name="latest_logo",
         description="The action logo that draws this action: that of the implementation most recently registered with one (`Action.latest_logo`, kept by takt). Each implementation has its own (`Implementation.logo`); an action without one is drawn by its agent's default logo.",
     )
-    bloks: list["ActionBlok"] = strawberry_django.field(description="The action's own bloks, at most one per context (HTML for a task panel, SCENE a 3D view, as a `Space` placing the run's dependencies): declared with the action, the latest registration's. Not part of its hash.")
+    @strawberry_django.field(description="The action's own bloks, at most one per context (HTML for a task panel, SCENE a 3D view, as a `Space` placing the run's dependencies): declared with the action, the latest registration's. Not part of its hash.")
+    def bloks(self) -> list["ActionBlok"]:
+        return cast("list[ActionBlok]", list(models.ActionBlok.objects.filter(action_id=row_of(self, models.Action).pk, phase="RUN").order_by("context")))
+
+    @strawberry_django.field(description="The action's own bloks for starting a run of it, at most one per context (phase ASSIGN): shown before there is a task, with the arguments being filled in as `args` and the agents a run would get as `deps`.")
+    def assign_bloks(self) -> list["ActionBlok"]:
+        return cast("list[ActionBlok]", list(models.ActionBlok.objects.filter(action_id=row_of(self, models.Action).pk, phase="ASSIGN").order_by("context")))
+
     live_implementations: int = strawberry_django.field(
         description="How many of its implementations sit on an agent that can take work now (connected, or a webhook agent) — one per agent. Kept by the database as agents connect and leave, a moment behind (takt recomputes it on commit); a crashed agent counts until takt's stale sweep notices (seconds)."
     )

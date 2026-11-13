@@ -164,6 +164,12 @@ class AssetKind(str, Enum):
     IMAGE = "IMAGE"
 
 
+@strawberry.enum(description="When a client shows an action's own blok: RUN for a run of the action (it reads the run as `task`), ASSIGN before one, to start it (no `task`; `<args />` places the argument form, `assign.start()` starts the run).")
+class ActionBlokPhase(str, Enum):
+    RUN = "RUN"
+    ASSIGN = "ASSIGN"
+
+
 @strawberry.enum(description="The renderer a catalog component lives in. A component may only be placed where its context is in force. ACTION_LOGO is a blok context only.")
 class ComponentContext(str, Enum):
     HTML = "HTML"

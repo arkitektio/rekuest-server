@@ -1490,6 +1490,14 @@
    "accepts_children": false,
    "catalog": "scene@1"
   },
+  "args": {
+   "text_prop": null,
+   "context": "HTML",
+   "children_context": null,
+   "inherits_context": false,
+   "accepts_children": false,
+   "catalog": "base@2"
+  },
   "ask": {
    "text_prop": null,
    "context": "HTML",
@@ -8657,6 +8665,285 @@
    "codes": [
     "space.kind",
     "space.kind"
+   ]
+  },
+  {
+   "name": "an assign blok",
+   "source": "<Html><Card><Text>{args.slides}</Text><args /><Button onClick={assign.start()}>Start</Button></Card></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/Card[0]",
+      "component": "Card",
+      "children": [
+       {
+        "id": "Html[0]/Card[0]/Text[0]",
+        "component": "Text",
+        "props": [
+         {
+          "key": "text",
+          "dynamic_value": {
+           "path": "args.slides"
+          }
+         }
+        ]
+       },
+       {
+        "id": "Html[0]/Card[0]/args[0]",
+        "component": "args"
+       },
+       {
+        "id": "Html[0]/Card[0]/Button[0]",
+        "component": "Button",
+        "props": [
+         {
+          "key": "onClick",
+          "util_call": {
+           "operation": "assign.start"
+          }
+         },
+         {
+          "key": "label",
+          "static_value": "Start"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "assign",
+    "context": "HTML",
+    "dependencies": [
+     {
+      "key": "robot",
+      "action_dependencies": [
+       {
+        "key": "move_to",
+        "demand": {
+         "arg_matches": [
+          {
+           "key": "position"
+          }
+         ],
+         "return_matches": [
+          {
+           "key": "arrived"
+          }
+         ]
+        }
+       }
+      ],
+      "state_dependencies": [
+       {
+        "key": "arm",
+        "demand": {
+         "matches": [
+          {
+           "key": "joints",
+           "kind": "LIST"
+          },
+          {
+           "key": "mode",
+           "kind": "STRING"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": [
+     "slides"
+    ],
+    "catalogs": [],
+    "catalog": true,
+    "module": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": []
+  },
+  {
+   "name": "an assign blok places the run's dependencies",
+   "source": "<Html><Space room=\"room:lab\"><Placed dep=\"robot\" /></Space></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/Space[0]",
+      "component": "Space",
+      "props": [
+       {
+        "key": "room",
+        "static_value": "room:lab"
+       }
+      ],
+      "children": [
+       {
+        "id": "Html[0]/Space[0]/Placed[0]",
+        "component": "Placed",
+        "props": [
+         {
+          "key": "dep",
+          "static_value": "robot"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "assign",
+    "context": "HTML",
+    "dependencies": [
+     {
+      "key": "robot",
+      "action_dependencies": [
+       {
+        "key": "move_to",
+        "demand": {
+         "arg_matches": [
+          {
+           "key": "position"
+          }
+         ],
+         "return_matches": [
+          {
+           "key": "arrived"
+          }
+         ]
+        }
+       }
+      ],
+      "state_dependencies": [
+       {
+        "key": "arm",
+        "demand": {
+         "matches": [
+          {
+           "key": "joints",
+           "kind": "LIST"
+          },
+          {
+           "key": "mode",
+           "kind": "STRING"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalogs": [],
+    "catalog": true,
+    "module": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": []
+  },
+  {
+   "name": "an assign blok has no task",
+   "source": "<Html><Text>{task.status}</Text></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/Text[0]",
+      "component": "Text",
+      "props": [
+       {
+        "key": "text",
+        "dynamic_value": {
+         "path": "task.status"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "assign",
+    "context": "HTML",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalogs": [],
+    "catalog": true,
+    "module": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [
+    "roots.not_in_kind"
+   ]
+  },
+  {
+   "name": "starting a run is an assign blok's",
+   "source": "<Html><args /><Button onClick={assign.start()}>Start</Button></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/args[0]",
+      "component": "args"
+     },
+     {
+      "id": "Html[0]/Button[0]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "onClick",
+        "util_call": {
+         "operation": "assign.start"
+        }
+       },
+       {
+        "key": "label",
+        "static_value": "Start"
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "action",
+    "context": "HTML",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalogs": [],
+    "catalog": true,
+    "module": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [
+    "assign.kind",
+    "assign.kind"
    ]
   },
   {

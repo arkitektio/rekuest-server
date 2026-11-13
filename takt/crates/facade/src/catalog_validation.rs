@@ -476,7 +476,7 @@ pub fn check_run_components(
             node.component.as_str(),
             SPACE_COMPONENT | PLACED_COMPONENT | ROUTE_COMPONENT
         );
-        if run && kind != "action" {
+        if run && kind != "action" && kind != "assign" {
             return Err(format!(
                 "component {}: a {} reads the agents of a run, so only an action's own blok holds one",
                 repr_str(&node.id),

@@ -544,7 +544,7 @@ pub async fn sync_action_bloks(
             .fetch_all(&mut *conn)
             .await?;
     let mut diagnostics = vec![];
-    let mut contexts: Vec<&str> = vec![];
+    let mut slots: Vec<String> = vec![];
     for blok in &definition.bloks {
         let catalog_name = blok
             .module
@@ -563,7 +563,13 @@ pub async fn sync_action_bloks(
             .collect();
         found.extend(checked.diagnostics);
         // Its name only says whose it is: an action's blok is never listed or looked up by it.
-        let name = format!("{}:{}", definition.key, blok.context.value().to_lowercase());
+        let assign = blok.phase == rekuest_core::enums::ActionBlokPhase::ASSIGN;
+        let name = format!(
+            "{}:{}{}",
+            definition.key,
+            if assign { "assign:" } else { "" },
+            blok.context.value().to_lowercase()
+        );
         let id: i64 = sqlx::query_scalar(
             "INSERT INTO facade_blok (name, description, components, diagnostics, creator_id, organization_id,
                                       module_id, context, app_id, declaration_hash, held_by_action,
@@ -593,20 +599,23 @@ pub async fn sync_action_bloks(
         .fetch_one(&mut *conn)
         .await?;
         sqlx::query(
-            "INSERT INTO facade_actionblok (action_id, context, blok_id) VALUES ($1, $2, $3)
-             ON CONFLICT (action_id, context) DO UPDATE SET blok_id = excluded.blok_id, updated_at = now()",
+            "INSERT INTO facade_actionblok (action_id, context, phase, blok_id) VALUES ($1, $2, $3, $4)
+             ON CONFLICT (action_id, context, phase) DO UPDATE SET blok_id = excluded.blok_id, updated_at = now()",
         )
         .bind(action)
         .bind(blok.context.value())
+        .bind(blok.phase.value())
         .bind(id)
         .execute(&mut *conn)
         .await?;
-        contexts.push(blok.context.value());
+        slots.push(format!("{}:{}", blok.phase.value(), blok.context.value()));
         diagnostics.extend(found);
     }
-    sqlx::query("DELETE FROM facade_actionblok WHERE action_id = $1 AND NOT (context = ANY($2))")
+    sqlx::query(
+        "DELETE FROM facade_actionblok WHERE action_id = $1 AND NOT ((phase || ':' || context) = ANY($2))",
+    )
         .bind(action)
-        .bind(&contexts)
+        .bind(&slots)
         .execute(&mut *conn)
         .await?;
     gc_action_bloks(conn, &held).await?;

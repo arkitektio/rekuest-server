@@ -33,6 +33,13 @@ use crate::pyjson::repr;
 const ITEM: &str = "...";
 /// Props whose value is the blok's dependency keys, written out (not paths): each must be a dependency.
 const DEPENDENCY_KEY_PROPS: [(&str, &str); 2] = [("Placed", "dep"), ("Route", "through")];
+/// The kinds that have a run's dependencies: an action's own bloks, for a run and for starting one.
+const RUN_KINDS: [&str; 2] = ["action", "assign"];
+const ASSIGN_KIND: &str = "assign";
+/// The form of the run's arguments, placed by an assign blok.
+const ARGS_COMPONENT: &str = "args";
+/// Starts the run an assign blok prepares.
+const START_EFFECT: &str = "assign.start";
 
 const TOAST_COMPONENT: &str = "Toast";
 const TOAST_TASK_PROP: &str = "task";
@@ -845,9 +852,21 @@ impl<'a> Checker<'a> {
                 self.add("catalog.shadow", Some(&node.id), &fields);
             }
         }
+        if node.component == ARGS_COMPONENT && self.scope.kind != ASSIGN_KIND {
+            self.assign_kind(node, "<args>");
+        }
         for prop in node.props.iter().flatten() {
             self.check_prop(node, prop, spec);
         }
+    }
+
+    fn assign_kind(&mut self, node: &ComponentNodeInputModel, what: &str) {
+        let fields = [
+            ("what", s(what)),
+            ("n", s(article(&self.scope.kind))),
+            ("kind", s(self.scope.kind.clone())),
+        ];
+        self.add("assign.kind", Some(&node.id), &fields);
     }
 
     fn check_catalog(
@@ -992,7 +1011,7 @@ impl<'a> Checker<'a> {
         node: &ComponentNodeInputModel,
         prop: &ComponentPropInputModel,
     ) {
-        if self.scope.kind != "action" {
+        if !RUN_KINDS.contains(&self.scope.kind.as_str()) {
             self.space_kind(node);
             return;
         }
@@ -1106,11 +1125,23 @@ impl<'a> Checker<'a> {
                 }
             }
         }
+        if prop
+            .util_call
+            .as_ref()
+            .is_some_and(|call| call.operation == START_EFFECT)
+            && self.scope.kind != ASSIGN_KIND
+        {
+            self.assign_kind(node, "assign.start()");
+        }
         if DEPENDENCY_KEY_PROPS.contains(&(node.component.as_str(), prop.key.as_str())) {
             self.check_dependency_keys(node, prop);
         }
-        if node.component == "Space" && prop.key == "room" && self.scope.kind != "action" {
-            // A Space places the run's dependencies: only an action's own blok has a run.
+        if node.component == "Space"
+            && prop.key == "room"
+            && !RUN_KINDS.contains(&self.scope.kind.as_str())
+        {
+            // A Space places the run's dependencies: only an action's own blok (for a run, or
+            // for starting one) has them.
             self.space_kind(node);
         }
         if node.component == TOAST_COMPONENT && prop.key == TOAST_TASK_PROP {
@@ -2146,7 +2177,9 @@ pub fn check_blok_tree(
 /// - an agent blok has none: ``agent bloks read only `self` ``.
 pub fn dependency_hint(key: &str, kind: &str) -> String {
     match kind {
-        "action" | "action_logo" => format!("add a dependency parameter `{key}` to the action"),
+        "action" | "assign" | "action_logo" => {
+            format!("add a dependency parameter `{key}` to the action")
+        }
         "agent" => "agent bloks read only `self`".to_string(),
         _ => format!("dependencies=[AgentDependencyInput(key=\"{key}\")]"),
     }
