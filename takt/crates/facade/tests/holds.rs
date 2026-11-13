@@ -1379,3 +1379,178 @@ async fn an_inform_by_key_is_one_its_implementation_declares() {
                 && f["reason"].as_str().unwrap().contains("declares no inform")));
     }
 }
+
+/// The `DECIDED` an allowance wrote on `task`, if nobody was asked for it.
+async fn allowed_by(ctx: &Context, task: i64) -> Option<Value> {
+    events(ctx, task)
+        .await
+        .into_iter()
+        .filter(|(kind, ..)| kind == "DECIDED")
+        .filter_map(|(_, _, value)| value)
+        .find(|value| value["auto"] == true && !value["allowance"].is_null())
+}
+
+#[tokio::test]
+async fn an_approval_remembered_for_the_run_lets_the_rest_of_it_through() {
+    let Some(ctx) = context().await else { return };
+    let person = Person::new();
+    let (asker, runner) = (person.agent(&ctx).await, person.agent(&ctx).await);
+    let (_, workflow) = action(&ctx, asker).await;
+    let (_, echoing) = action(&ctx, runner).await;
+    let desk = person.at_a_desk(&ctx).await;
+
+    let parent = root(&ctx, &desk, workflow, "ASK").await;
+    let first = ask(&ctx, asker, parent, echoing).await;
+    let waiting = ask(&ctx, asker, parent, echoing).await;
+    assert_eq!(row(&ctx, waiting).await.latest_event_kind, "HELD");
+
+    holds::decide_remembering(
+        &ctx,
+        &desk,
+        &first.to_string(),
+        true,
+        None,
+        None,
+        Some(holds::Remember::Run),
+    )
+    .await
+    .unwrap();
+
+    // What already waited for the same answer is released with it.
+    let released = row(&ctx, waiting).await;
+    assert_eq!(
+        (
+            released.latest_event_kind.as_str(),
+            released.dispatch_attempts
+        ),
+        ("QUEUED", 1)
+    );
+    let why = allowed_by(&ctx, waiting)
+        .await
+        .expect("released by the rule");
+    assert_eq!(why["allowance"]["scope"], "run");
+    assert!(why["user"].is_null(), "nobody answered for it");
+
+    // What is asked for from now on is never held.
+    let later = ask(&ctx, asker, parent, echoing).await;
+    let unasked = row(&ctx, later).await;
+    assert_ne!(unasked.latest_event_kind, "HELD");
+    assert_eq!(unasked.dispatch_attempts, 1);
+    assert!(unasked.dispatched_at.is_some());
+    assert_eq!(
+        allowed_by(&ctx, later).await.expect("it says why")["action"]["name"],
+        "Echo"
+    );
+    assert!(
+        events(&ctx, parent)
+            .await
+            .iter()
+            .any(|(kind, _, value)| kind == "DECIDED"
+                && value
+                    .as_ref()
+                    .is_some_and(|v| v["held"] == json!(later.to_string()))),
+        "the run is told too"
+    );
+
+    // The rule is the run's: the next run asks again.
+    let next = root(&ctx, &desk, workflow, "ASK").await;
+    let asked_again = ask(&ctx, asker, next, echoing).await;
+    assert_eq!(row(&ctx, asked_again).await.latest_event_kind, "HELD");
+}
+
+#[tokio::test]
+async fn an_action_always_allowed_for_its_asker_still_asks_for_anyone_else() {
+    let Some(ctx) = context().await else { return };
+    let person = Person::new();
+    let (asker, other_asker, runner) = (
+        person.agent(&ctx).await,
+        person.agent(&ctx).await,
+        person.agent(&ctx).await,
+    );
+    let (_, workflow) = action(&ctx, asker).await;
+    let (_, other_workflow) = action(&ctx, other_asker).await;
+    let (_, echoing) = action(&ctx, runner).await;
+    let desk = person.at_a_desk(&ctx).await;
+
+    let parent = root(&ctx, &desk, workflow, "ASK").await;
+    let child = ask(&ctx, asker, parent, echoing).await;
+    holds::decide_remembering(
+        &ctx,
+        &desk,
+        &child.to_string(),
+        true,
+        None,
+        None,
+        Some(holds::Remember::Asker),
+    )
+    .await
+    .unwrap();
+
+    // Every later run of theirs: the same asker gets it unasked.
+    let next = root(&ctx, &desk, workflow, "ASK").await;
+    let unasked = ask(&ctx, asker, next, echoing).await;
+    assert_ne!(row(&ctx, unasked).await.latest_event_kind, "HELD");
+    assert_eq!(
+        allowed_by(&ctx, unasked).await.unwrap()["allowance"]["scope"],
+        "always"
+    );
+
+    // Another action asking for it is still held.
+    let elsewhere = root(&ctx, &desk, other_workflow, "ASK").await;
+    let held = ask(&ctx, other_asker, elsewhere, echoing).await;
+    assert_eq!(row(&ctx, held).await.latest_event_kind, "HELD");
+
+    // And it is theirs alone: a colleague's run asks.
+    let colleague = person.colleague().at_a_desk(&ctx).await;
+    let theirs = root(&ctx, &colleague, workflow, "ASK").await;
+    let asked = ask(&ctx, asker, theirs, echoing).await;
+    assert_eq!(row(&ctx, asked).await.latest_event_kind, "HELD");
+
+    // Whoever asks: one rule covers the other asker as well.
+    holds::decide_remembering(
+        &ctx,
+        &desk,
+        &held.to_string(),
+        true,
+        None,
+        None,
+        Some(holds::Remember::Always),
+    )
+    .await
+    .unwrap();
+    let again = ask(&ctx, other_asker, elsewhere, echoing).await;
+    assert_ne!(row(&ctx, again).await.latest_event_kind, "HELD");
+}
+
+#[tokio::test]
+async fn only_an_approval_of_a_child_is_remembered() {
+    let Some(ctx) = context().await else { return };
+    let person = Person::new();
+    let (asker, runner) = (person.agent(&ctx).await, person.agent(&ctx).await);
+    let (_, workflow) = action(&ctx, asker).await;
+    let (_, echoing) = action(&ctx, runner).await;
+    let desk = person.at_a_desk(&ctx).await;
+
+    let parent = root(&ctx, &desk, workflow, "ASK").await;
+    let child = ask(&ctx, asker, parent, echoing).await;
+    assert!(matches!(
+        holds::decide_remembering(
+            &ctx,
+            &desk,
+            &child.to_string(),
+            false,
+            None,
+            None,
+            Some(holds::Remember::Always),
+        )
+        .await,
+        Err(BackendError::Refused(_))
+    ));
+    assert_eq!(
+        row(&ctx, child).await.latest_event_kind,
+        "HELD",
+        "a refused decision decides nothing"
+    );
+    assert!(holds::Remember::parse(Some("FOREVER")).is_err());
+    assert_eq!(holds::Remember::parse(None).unwrap(), None);
+}

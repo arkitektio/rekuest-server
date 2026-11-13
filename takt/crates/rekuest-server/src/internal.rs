@@ -29,7 +29,7 @@
 //! | `resolve` | `{"principal", "input": {"implementation", "dependencies"?}}` (a dry run of an assign's dependency tree) | `{"dependencies", "meta", "satisfied"}` |
 //! | `cancel`, `interrupt`, `pause` | `{"principal"?, "task"}` | `{"task"}` |
 //! | `resume` | `{"principal"?, "task", "step"?}` | `{"task"}` |
-//! | `decide` | `{"principal", "task", "approved", "answer"?}` (a person answers a held task; see `facade::holds`) | `{"task"}` |
+//! | `decide` | `{"principal", "task", "approved", "answer"?, "values"?, "remember"?}` (a person answers a held task; see `facade::holds`) | `{"task"}` |
 //! | `bounce`, `unblock` | `{"principal", "agent"}` | `{"agent"}` |
 //! | `kick`, `block` | `{"principal", "agent", "reason"?}` (the reason goes to the agent in its Kick frame) | `{"agent"}` |
 //! | `collect` | `{"principal", "drawers": [id, …]}` | `{"drawers"}` |
@@ -359,17 +359,21 @@ struct DecideRequest {
     /// The answer through the hold's blok, checked against its returns.
     #[serde(default)]
     values: Option<serde_json::Map<String, serde_json::Value>>,
+    /// Keep the approval as an allowance: `RUN`, `ASKER` or `ALWAYS`.
+    #[serde(default)]
+    remember: Option<String>,
 }
 
 internal!(decide, DecideRequest, |state, request| {
     let principal = request.principal.context(&state).await?;
-    let task = facade::holds::decide(
+    let task = facade::holds::decide_remembering(
         &state.facade,
         &principal,
         &request.task.text(),
         request.approved,
         request.answer.clone(),
         request.values.clone(),
+        facade::holds::Remember::parse(request.remember.as_deref())?,
     )
     .await?;
     Ok(Json(json!({"task": task.to_string()})))

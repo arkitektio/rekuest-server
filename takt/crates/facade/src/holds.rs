@@ -30,6 +30,14 @@
 //! `{"approved", "answer", "auto", "user"}` on the held task and on whoever got its `HELD`;
 //! `DENIED` is `{"answer", "user"}`.
 //!
+//! **The auto list.** A person may let an action through for good: an allowance
+//! (`facade_actionallowance`) names an action by its app and key, optionally the action that asks
+//! for it, and optionally the one run it holds under. A child an allowance covers is not held: it
+//! is dispatched at once, with a `DECIDED` (`"auto": true, "allowance": {"id", "scope"}`) saying
+//! why nobody was asked. An allowance is written with a decision (`decide`'s `remember`), by the
+//! user the run is for, and it releases what else of that run already waits for the same answer.
+//! It never answers a task's own hold.
+//!
 //! A task may hold on a blok (`HELD` with `blok`, an ask): the blok is made for the task
 //! (`task_bloks`) and its materialization named in the hold (`"blok": "<id>"`). The person
 //! answers through it, so `DECIDED` and `DECIDE` carry `values`, checked against the blok's
@@ -66,6 +74,118 @@ pub fn root_policy(given: Option<&str>) -> BackendResult<&'static str> {
     }
 }
 
+/// What an approval is remembered as (`decide`'s `remember`): the allowance it leaves behind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Remember {
+    /// This action, whoever asks, for the rest of this run.
+    Run,
+    /// This action whenever the action that asked now asks again, in every run of the user.
+    Asker,
+    /// This action, whoever asks, in every run of the user.
+    Always,
+}
+
+impl Remember {
+    /// As the decision gives it: none, or `RUN`, `ASKER` or `ALWAYS`.
+    pub fn parse(given: Option<&str>) -> BackendResult<Option<Self>> {
+        match given.filter(|r| !r.is_empty()) {
+            None => Ok(None),
+            Some("RUN") => Ok(Some(Self::Run)),
+            Some("ASKER") => Ok(Some(Self::Asker)),
+            Some("ALWAYS") => Ok(Some(Self::Always)),
+            Some(other) => Err(BackendError::Refused(format!(
+                "Unknown remember {other:?}: it is RUN, ASKER or ALWAYS."
+            ))),
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Run => "RUN",
+            Self::Asker => "ASKER",
+            Self::Always => "ALWAYS",
+        }
+    }
+}
+
+/// The rule that lets a child through unasked.
+#[derive(Debug, Clone, Copy, sqlx::FromRow)]
+pub(crate) struct Allowance {
+    id: i64,
+    run_id: Option<i64>,
+}
+
+impl Allowance {
+    fn value(self) -> Value {
+        json!({
+            "id": self.id.to_string(),
+            "scope": if self.run_id.is_some() { "run" } else { "always" },
+        })
+    }
+}
+
+/// The allowance of the user the run is for that covers `action` asked for by `parent`: the
+/// run's own first, else a standing one. Matched by app and key, so any version of either.
+pub(crate) async fn allowance_for(
+    executor: impl sqlx::PgExecutor<'_>,
+    root: i64,
+    action: i64,
+    parent: i64,
+) -> Result<Option<Allowance>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT al.id, al.run_id
+           FROM facade_task r
+           JOIN facade_caller rc ON rc.id = r.caller_id
+           JOIN facade_action a ON a.id = $2
+           JOIN facade_task p ON p.id = $3
+           JOIN facade_action pa ON pa.id = p.action_id
+           JOIN facade_actionallowance al
+             ON al.user_id = rc.user_id AND al.organization_id = rc.organization_id
+            AND al.app_id = a.app_id AND al.key = a.key
+          WHERE r.id = $1
+            AND (al.run_id IS NULL OR al.run_id = r.id)
+            AND (al.asker_app_id IS NULL
+                 OR (al.asker_app_id = pa.app_id AND al.asker_key = pa.key))
+          ORDER BY al.run_id NULLS LAST, al.id
+          LIMIT 1",
+    )
+    .bind(root)
+    .bind(action)
+    .bind(parent)
+    .fetch_optional(executor)
+    .await
+}
+
+/// Write the allowance an approval of `task` is remembered as, for the user its run is for.
+/// One that is already there stays as it is.
+async fn remember_allowance(
+    conn: &mut PgConnection,
+    task: i64,
+    remember: Remember,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO facade_actionallowance
+                (user_id, organization_id, app_id, key, asker_app_id, asker_key, run_id, created_at)
+         SELECT rc.user_id, rc.organization_id, a.app_id, a.key,
+                CASE WHEN $2 THEN pa.app_id END, CASE WHEN $2 THEN pa.key END,
+                CASE WHEN $3 THEN r.id END, now()
+           FROM facade_task t
+           JOIN facade_action a ON a.id = t.action_id
+           JOIN facade_task r ON r.id = COALESCE(t.root_id, t.id)
+           JOIN facade_caller rc ON rc.id = r.caller_id
+           JOIN facade_task p ON p.id = t.parent_id
+           JOIN facade_action pa ON pa.id = p.action_id
+          WHERE t.id = $1
+         ON CONFLICT DO NOTHING",
+    )
+    .bind(task)
+    .bind(remember == Remember::Asker)
+    .bind(remember == Remember::Run)
+    .execute(conn)
+    .await?;
+    Ok(())
+}
+
 /// An agent's name as people see it: the one a user gave it, else the one it declares.
 async fn agent_name(conn: &mut PgConnection, agent: i64) -> Result<String, sqlx::Error> {
     sqlx::query_scalar(
@@ -99,6 +219,7 @@ pub(crate) async fn record_held_child(
         .await?;
     let caller_name = agent_name(tx, caller_agent).await?;
     let target_name = agent_name(tx, child.agent).await?;
+    let (caller_action, caller_action_name) = asking_action(tx, child.parent).await?;
     let message = child
         .prompt
         .map(|prompt| prompt.title.clone())
@@ -112,6 +233,7 @@ pub(crate) async fn record_held_child(
         "args": child.args,
         "caller_task": child.parent.to_string(),
         "caller_agent": {"id": caller_agent.to_string(), "name": caller_name},
+        "caller_action": {"id": caller_action.to_string(), "name": caller_action_name},
     });
     let event = |value: Value| NewEvent {
         message: Some(message.clone()),
@@ -124,6 +246,59 @@ pub(crate) async fn record_held_child(
     upstream["held"] = json!(child.task.to_string());
     for watcher in watchers(child.parent, child.root) {
         events.push(insert_event(&mut **tx, watcher, "HELD", &event(upstream.clone())).await?);
+    }
+    Ok(events)
+}
+
+/// The action of the task that asks for a child: what an allowance can be bound to.
+async fn asking_action(conn: &mut PgConnection, parent: i64) -> Result<(i64, String), sqlx::Error> {
+    sqlx::query_as(
+        "SELECT a.id, a.name FROM facade_task t JOIN facade_action a ON a.id = t.action_id
+          WHERE t.id = $1",
+    )
+    .bind(parent)
+    .fetch_one(conn)
+    .await
+}
+
+/// What a new child an agent asked for writes in its creation's transaction: the `HELD` events
+/// of one that waits, or, for one an allowance lets through, the `DECIDED` that says so.
+pub(crate) async fn record_asked_child(
+    allowance: Option<Allowance>,
+    tx: &mut Transaction<'_, Postgres>,
+    child: &HeldChild<'_>,
+) -> Result<Vec<i64>, sqlx::Error> {
+    match allowance {
+        Some(allowance) => record_allowed_child(tx, child, allowance).await,
+        None => record_held_child(tx, child).await,
+    }
+}
+
+/// Write the `DECIDED` of a child an allowance let through: on the child, its parent and (when
+/// it is another task) its root, as a person's approval would be. Nothing waited, so it names
+/// the action itself.
+async fn record_allowed_child(
+    tx: &mut Transaction<'_, Postgres>,
+    child: &HeldChild<'_>,
+    allowance: Allowance,
+) -> Result<Vec<i64>, sqlx::Error> {
+    let mut value = decision(true, None, true, None);
+    value["allowance"] = allowance.value();
+    value["action"] = json!({"id": child.action.id.to_string(), "name": child.action.name});
+    let event = |value: Value| NewEvent {
+        message: Some(format!(
+            "{} ran without asking: it is allowed.",
+            child.action.name
+        )),
+        value: Some(value),
+        ..NewEvent::default()
+    };
+    let mut events =
+        vec![insert_event(&mut **tx, child.task, "DECIDED", &event(value.clone())).await?];
+    let mut upstream = value;
+    upstream["held"] = json!(child.task.to_string());
+    for watcher in watchers(child.parent, child.root) {
+        events.push(insert_event(&mut **tx, watcher, "DECIDED", &event(upstream.clone())).await?);
     }
     Ok(events)
 }
@@ -279,6 +454,20 @@ pub async fn decide(
     answer: Option<String>,
     values: Option<Map<String, Value>>,
 ) -> BackendResult<i64> {
+    decide_remembering(ctx, principal, task, approved, answer, values, None).await
+}
+
+/// [`decide`], and the approval kept as an allowance (`remember`): the action is on the user's
+/// auto list from then on, and what else of the run waits for the same answer is released.
+pub async fn decide_remembering(
+    ctx: &Context,
+    principal: &CallerContext,
+    task: &str,
+    approved: bool,
+    answer: Option<String>,
+    values: Option<Map<String, Value>>,
+    remember: Option<Remember>,
+) -> BackendResult<i64> {
     let task_id = parse_id(task)?;
     let row: Option<HeldRow> = sqlx::query_as(
         "SELECT t.is_done, t.latest_event_kind, t.agent_id, t.parent_id, t.root_id,
@@ -332,6 +521,14 @@ pub async fn decide(
         ));
     }
 
+    if remember.is_some()
+        && (!approved || row.held_kind.as_deref() == Some("self") || row.parent_id.is_none())
+    {
+        return Err(BackendError::Refused(
+            "Only the approval of a call an agent asked for can be remembered.".into(),
+        ));
+    }
+
     let values = match (
         row.held_blok.as_deref().and_then(|b| b.parse::<i64>().ok()),
         values,
@@ -359,7 +556,7 @@ pub async fn decide(
             )))
         }
     };
-    let decided = decision_with(
+    let mut decided = decision_with(
         decision(
             approved,
             answer.as_deref(),
@@ -368,6 +565,9 @@ pub async fn decide(
         ),
         values.as_ref(),
     );
+    if let Some(remember) = remember {
+        decided["remember"] = json!(remember.name());
+    }
     if row.held_kind.as_deref() == Some("self") {
         decide_self(
             ctx,
@@ -384,9 +584,50 @@ pub async fn decide(
             .parent_id
             .map(|parent| watchers(parent, row.root_id.unwrap_or(parent)))
             .unwrap_or_default();
-        decide_child(ctx, task_id, &watchers, approved, answer, decided).await?;
+        decide_child(ctx, task_id, &watchers, approved, answer, decided, remember).await?;
+        if let (Some(_), Some(parent)) = (remember, row.parent_id) {
+            release_allowed(ctx, row.root_id.unwrap_or(parent)).await?;
+        }
     }
     Ok(task_id)
+}
+
+/// Approve what else of a run waits and is covered by an allowance by now: written with a
+/// decision, a rule answers the calls that were already asking too.
+async fn release_allowed(ctx: &Context, root: i64) -> BackendResult<()> {
+    let waiting: Vec<(i64, i64, i64)> = sqlx::query_as(
+        "SELECT id, action_id, parent_id FROM facade_task
+          WHERE root_id = $1 AND latest_event_kind = 'HELD' AND is_done = false
+            AND dispatch_attempts = 0 AND picked_up_at IS NULL
+            AND parent_id IS NOT NULL AND is_higher_order_child = false
+          ORDER BY id",
+    )
+    .bind(root)
+    .fetch_all(&ctx.db)
+    .await?;
+    for (task, action, parent) in waiting {
+        let Some(allowance) = allowance_for(&ctx.db, root, action, parent).await? else {
+            continue;
+        };
+        let mut decided = decision(true, None, true, None);
+        decided["allowance"] = allowance.value();
+        match decide_child(
+            ctx,
+            task,
+            &watchers(parent, root),
+            true,
+            None,
+            decided,
+            None,
+        )
+        .await
+        {
+            // Someone decided it in the meantime: theirs stands.
+            Ok(()) | Err(BackendError::Refused(_)) => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(())
 }
 
 /// The answer to a task's own hold: `DECIDED`, and the `DECIDE` its agent waits for.
@@ -447,7 +688,9 @@ async fn runner_of(conn: &mut PgConnection, task: i64) -> Result<i64, sqlx::Erro
 }
 
 /// The answer to a held child: approved, it is dispatched as any assign is; denied, it ends
-/// `DENIED`, never having run. Its parent and root get the `DECIDED` too.
+/// `DENIED`, never having run. Its parent and root get the `DECIDED` too. `remember` writes the
+/// allowance in the same transaction as the approval.
+#[allow(clippy::too_many_arguments)]
 async fn decide_child(
     ctx: &Context,
     task: i64,
@@ -455,6 +698,7 @@ async fn decide_child(
     approved: bool,
     answer: Option<String>,
     decided: Value,
+    remember: Option<Remember>,
 ) -> BackendResult<()> {
     let mut tx = ctx.db.begin().await?;
     let kind: Option<(String, bool)> = sqlx::query_as(
@@ -468,8 +712,15 @@ async fn decide_child(
             "The task is no longer held: someone decided it first.".into(),
         ));
     }
+    if let Some(remember) = remember {
+        remember_allowance(&mut tx, task, remember).await?;
+    }
     let runner = runner_of(&mut tx, task).await?;
-    let message = if approved { "Approved." } else { "Denied." };
+    let message = match (approved, decided["auto"] == json!(true)) {
+        (true, true) => "Allowed without asking.",
+        (true, false) => "Approved.",
+        (false, _) => "Denied.",
+    };
     let decided_event = NewEvent {
         message: Some(message.into()),
         value: Some(decided.clone()),

@@ -1,4 +1,5 @@
 from .implementation import create_higher_order_implementation, delete_implementation
+from .allowance import allow_action, revoke_allowance
 from .postman import assign, pause, resume, decide, cancel, interrupt, collect, bounce, kick, block, unblock
 from .probe import probe, cancel_probe, pause_probe, resume_probe
 from .test import create_test_case, create_test_result
@@ -73,6 +74,8 @@ __all__ = [
     "pause",
     "resume",
     "decide",
+    "allow_action",
+    "revoke_allowance",
     "cancel",
     "interrupt",
     "collect",

@@ -261,6 +261,7 @@ class DecideInputModel(BaseModel):
     approved: bool = Field(description="Approve (the child runs; a task's own hold carries on approved) or deny (the child ends DENIED without running; a task's own hold carries on denied)")
     answer: str | None = Field(default=None, description="What the person says with the decision. A child gets it as its Assign's message; a task's own hold gets it back.")
     values: dict[str, JSON] | None = Field(default=None, description="The answer through the blok a task asks with (a hold on a blok), by the blok's returns, and checked against them. Only an approved ask takes them.")
+    remember: enums.HoldRemember | None = Field(default=None, description="Keep the approval as an allowance on the user's auto list, so the action is not asked for again: for the rest of this run (RUN), whenever the same action asks (ASKER), or whoever asks (ALWAYS). Only the approval of a child an agent asked for takes it. What else of the run waits for the same answer is released.")
 
 
 @pydantic.input(DecideInputModel, description="The input for deciding a held task.")
@@ -269,6 +270,31 @@ class DecideInput:
     approved: bool
     answer: str | None = None
     values: scalars.Args | None = None
+    remember: enums.HoldRemember | None = None
+
+
+class AllowActionInputModel(BaseModel):
+    """Base model for putting an action on the caller's auto list."""
+
+    action: str = Field(description="The action that runs without asking, in every version of it")
+    asker: str | None = Field(default=None, description="The action that may ask for it, in every version of it; none for whoever asks")
+
+
+@pydantic.input(AllowActionInputModel, description="Put an action on your auto list: under your runs an agent that asks for it gets it without a hold.")
+class AllowActionInput:
+    action: strawberry.ID
+    asker: strawberry.ID | None = None
+
+
+class RevokeAllowanceInputModel(BaseModel):
+    """Base model for taking an allowance off the caller's auto list."""
+
+    id: str = Field(description="The allowance to remove")
+
+
+@pydantic.input(RevokeAllowanceInputModel, description="Take an allowance off your auto list: the action is asked for again.")
+class RevokeAllowanceInput:
+    id: strawberry.ID
 
 
 class InterruptInputModel(BaseModel):

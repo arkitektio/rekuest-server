@@ -117,3 +117,65 @@ def test_a_new_task_or_rule_asks() -> None:
     assert _build_task("policy-after").policy == "ASK"
     after = _build_task("policy-after-db")
     assert models.Task.objects.get(pk=after.pk).policy == "ASK"
+
+
+ALLOWANCES = "query Mine($action: ID) { myAllowances(action: $action) { id key askerKey action { id name } asker { id name } run { id } } }"
+ALLOW = "mutation Allow($input: AllowActionInput!) { allowAction(input: $input) { id key asker { id } } }"
+REVOKE = "mutation Revoke($input: RevokeAllowanceInput!) { revokeAllowance(input: $input) }"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_remembered_approval_is_on_the_auto_list_until_revoked(authenticated_context: HttpContext, takt: str) -> None:
+    await schema.execute("query { __typename }", context_value=authenticated_context)
+    asker = await sync_to_async(_app_agent)(authenticated_context, "allow-asker")
+    runner = await sync_to_async(_app_agent)(authenticated_context, "allow-runner")
+    workflow = await models.Implementation.objects.aget(agent=asker, interface="work")
+    work = await models.Implementation.objects.aget(agent=runner, interface="work")
+    as_the_asker = takt_api.Principal(user=asker.user_id, client=asker.client_id, organization=asker.organization_id)
+
+    async def asked_under_a_new_run() -> tuple[str, str]:
+        """The child the asker asks for under a fresh ASK run, and what became of it: (latest event kind, id)."""
+        root = (await _execute(authenticated_context, ASSIGN, {"input": {"implementation": str(workflow.pk), "args": {}}}))["assign"]["id"]
+        answer = await sync_to_async(takt_client.call)(
+            takt_api.ASSIGN,
+            takt_api.AssignRequest(principal=as_the_asker, input=AssignInputModel(implementation=str(work.pk), args={}, parent=root)),
+        )
+        return (await _execute(authenticated_context, TASK, {"id": answer.task}))["task"]["latestEventKind"], answer.task
+
+    kind, child = await asked_under_a_new_run()
+    assert kind == "HELD"
+    held = (await _execute(authenticated_context, TASK, {"id": child}))["task"]["events"][0]["value"]
+    assert held["caller_action"] == {"id": str(workflow.action_id), "name": "allow-asker work"}
+
+    decided = (await _execute(authenticated_context, DECIDE, {"input": {"task": child, "approved": True, "remember": "ASKER"}}))["decide"]
+    assert decided["events"][1]["value"]["remember"] == "ASKER"
+
+    (allowance,) = (await _execute(authenticated_context, ALLOWANCES, {"action": str(work.action_id)}))["myAllowances"]
+    assert (allowance["key"], allowance["askerKey"], allowance["run"]) == ("work", "work", None)
+    assert (allowance["action"]["id"], allowance["asker"]["id"]) == (str(work.action_id), str(workflow.action_id))
+
+    # The next run does not ask, and says why.
+    kind, child = await asked_under_a_new_run()
+    assert kind != "HELD"
+    unasked = (await _execute(authenticated_context, TASK, {"id": child}))["task"]["events"]
+    assert [(e["kind"], e["value"]["auto"], e["value"]["allowance"]["scope"]) for e in unasked if e["kind"] == "DECIDED"] == [("DECIDED", True, "always")]
+
+    # Revoked, it asks again; allowed by hand, it does not.
+    assert (await _execute(authenticated_context, REVOKE, {"input": {"id": allowance["id"]}}))["revokeAllowance"] == allowance["id"]
+    assert (await _execute(authenticated_context, ALLOWANCES, {"action": None}))["myAllowances"] == []
+    assert (await asked_under_a_new_run())[0] == "HELD"
+
+    by_hand = (await _execute(authenticated_context, ALLOW, {"input": {"action": str(work.action_id)}}))["allowAction"]
+    assert (by_hand["key"], by_hand["asker"]) == ("work", None)
+    again = (await _execute(authenticated_context, ALLOW, {"input": {"action": str(work.action_id)}}))["allowAction"]
+    assert again["id"] == by_hand["id"], "allowing it twice is one rule"
+    assert (await asked_under_a_new_run())[0] != "HELD"
+
+    # A run's own rule is not on the list.
+    await models.ActionAllowance.objects.all().adelete()
+    kind, child = await asked_under_a_new_run()
+    assert kind == "HELD"
+    await _execute(authenticated_context, DECIDE, {"input": {"task": child, "approved": True, "remember": "RUN"}})
+    assert await models.ActionAllowance.objects.filter(run__isnull=False).acount() == 1
+    assert (await _execute(authenticated_context, ALLOWANCES, {"action": None}))["myAllowances"] == []

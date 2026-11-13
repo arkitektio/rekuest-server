@@ -41,6 +41,7 @@ from .schedule import Schedule
 from .wiregram import Wiregram
 from .trigger import Firing, Signal, SignalDeclaration, Trigger
 from .task import (
+    ActionAllowance,
     Task,
     TaskEvent,
     TaskInstruct,
@@ -143,6 +144,7 @@ __all__ = [
     "task_stats",
     "TaskEvent",
     "TaskInstruct",
+    "ActionAllowance",
     "TestCase",
     "TestResult",
     "Dashboard",

@@ -25,6 +25,7 @@ from .signal import Firing, ObjectDescriptors, Signal, SignalDeclaration, Trigge
 from .wiregram import Wiregram
 from .structure import Descriptor, Service, StructureDeclaration
 from .task import (
+    ActionAllowance,
     Task,
     TaskEvent,
     TaskInstruct,
@@ -115,6 +116,7 @@ __all__ = [
     "Task",
     "TaskEvent",
     "TaskInstruct",
+    "ActionAllowance",
     # testcase
     "TestCase",
     "TestResult",

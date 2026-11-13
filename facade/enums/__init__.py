@@ -15,6 +15,7 @@ from .task import (
     TaskEventKind,
     TaskInstructChoices,
     TaskInstructKind,
+    HoldRemember,
     TaskPolicy,
     TaskPolicyChoices,
 )
@@ -51,6 +52,7 @@ __all__ = [
     "TaskEventKind",
     "TaskInstructChoices",
     "TaskInstructKind",
+    "HoldRemember",
     "TaskPolicy",
     "TaskPolicyChoices",
     # log

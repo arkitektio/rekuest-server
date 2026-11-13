@@ -126,3 +126,10 @@ class TaskPolicyChoices(TextChoices):
 class TaskPolicy(str, Enum):
     ASK = "ASK"
     AUTO = "AUTO"
+
+
+@strawberry.enum(description="What an approval is remembered as: the allowance it leaves on the user's auto list. RUN: this action, whoever asks, for the rest of this run. ASKER: this action whenever the action that asked now asks again, in every run of the user. ALWAYS: this action, whoever asks, in every run of the user.")
+class HoldRemember(str, Enum):
+    RUN = "RUN"
+    ASKER = "ASKER"
+    ALWAYS = "ALWAYS"

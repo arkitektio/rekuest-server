@@ -106,6 +106,7 @@ class DecideRequest(Request):
     approved: bool
     answer: str | None = None
     values: dict[str, Any] | None = None
+    remember: str | None = None
 
 
 class CollectRequest(Request):

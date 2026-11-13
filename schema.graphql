@@ -154,6 +154,42 @@ type ActionArgument {
   key: String
   valueLiteral: JSONSerializable
   valuePath: String
+"""
+An entry of a user's auto list: an action that runs under their runs without asking them. It names the action by app and key, so every version of it; optionally the action that may ask for it; and optionally the one run it holds under.
+"""
+type ActionAllowance {
+  """Allowance ID."""
+  id: ID!
+
+  """The app of the action that runs without asking."""
+  app: App!
+
+  """The key of the action that runs without asking, in its app."""
+  key: String!
+
+  """The app of the action that may ask for it; null for whoever asks."""
+  askerApp: App
+
+  """The key of the action that may ask for it; null for whoever asks."""
+  askerKey: String
+
+  """When it was allowed."""
+  createdAt: DateTime!
+
+  """The root task it holds under; null for every run of the user."""
+  run: Task
+
+  """
+  The action that runs without asking: its newest version. Null once no version of it is registered.
+  """
+  action: Action
+
+  """
+  The action that may ask for it: its newest version. Null for whoever asks.
+  """
+  asker: Action
+}
+
   agentCall: AgentCall
   utilCall: UtilCall
   valueList: [ActionArgument!]
@@ -989,6 +1025,19 @@ type ArgPort {
   kind: PortKind!
   description: String
   identifier: Identifier
+"""
+Put an action on your auto list: under your runs an agent that asks for it gets it without a hold.
+"""
+input AllowActionInput {
+  """The action that runs without asking, in every version of it"""
+  action: ID!
+
+  """
+  The action that may ask for it, in every version of it; none for whoever asks
+  """
+  asker: ID = null
+}
+
   nullable: Boolean!
   effects: [Effect!]
   children: [ArgPort!]
@@ -2947,6 +2996,11 @@ input DefinitionInput {
   version: String!
 
   """
+  Keep the approval as an allowance on the user's auto list, so the action is not asked for again: for the rest of this run (RUN), whenever the same action asks (ASKER), or whoever asks (ALWAYS). Only the approval of a child an agent asked for takes it. What else of the run waits for the same answer is released.
+  """
+  remember: HoldRemember = null
+
+  """
   The name of the actions. This is used to uniquely identify the definition
   """
   name: String!
@@ -3598,6 +3652,15 @@ A structure a service of this hub hosts, as that service declares it: a row, wit
 type HostedStructure {
   """Unique ID of the hosted structure."""
   id: ID!
+
+"""
+What an approval is remembered as: the allowance it leaves on the user's auto list. RUN: this action, whoever asks, for the rest of this run. ASKER: this action whenever the action that asked now asks again, in every run of the user. ALWAYS: this action, whoever asks, in every run of the user.
+"""
+enum HoldRemember {
+  RUN
+  ASKER
+  ALWAYS
+}
 
   """The full identifier, e.g. '@mikro/arraydataset'."""
   identifier: String!
@@ -4849,7 +4912,7 @@ type Mutation {
   resume(input: ResumeInput!): Task! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
 
   """
-  Answer a held task. A child an agent asked for runs once approved, or ends DENIED without running; a task that holds itself carries on with the decision. Only the user the task runs for may decide, and never from the client of the agent that asked.
+  Answer a held task. A child an agent asked for runs once approved, or ends DENIED without running; a task that holds itself carries on with the decision. Only the user the task runs for may decide, and never from the client of the agent that asked. With `remember`, the approval of a child is kept as an allowance on their auto list.
   """
   decide(input: DecideInput!): Task! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
 
@@ -4876,6 +4939,14 @@ type Mutation {
   fireTrigger(input: FireTriggerInput!): Firing! @auth(required_scopes: ["rekuest_automate"], any_role_of: ["rekuest_automator"])
 
   """
+  """
+  Put an action on your auto list: under your runs an agent that asks for it gets it without a hold. Optionally only when one action asks. Yours alone: it changes nothing for anyone else.
+  """
+  allowAction(input: AllowActionInput!): ActionAllowance! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
+
+  """Take an allowance off your auto list: the action is asked for again."""
+  revokeAllowance(input: RevokeAllowanceInput!): ID! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
+
   Import a wiregram: one document of schedules and triggers. All or nothing; importing the same key again updates what it created and removes what it no longer lists.
   """
   importWiregram(input: WiregramInput!): Wiregram! @auth(required_scopes: ["rekuest_automate"], any_role_of: ["rekuest_automator"])
@@ -5727,6 +5798,11 @@ type Query {
 
   """Find implementation at given interface."""
   implementationAt(agent: ID!, interface: String = null, actionHash: String = null, demand: ActionDemandInput = null): Implementation! @auth(required_scopes: ["rekuest_read"])
+  """
+  Your auto list in this organization: the actions that run under your runs without asking you, newest first. With `action`, the entries for that action. An allowance of a single run is not listed.
+  """
+  myAllowances(action: ID = null): [ActionAllowance!]! @auth(required_scopes: ["rekuest_read"])
+
 
   """Find your implementation at a specific interface."""
   myImplementationAt(actionId: ID = null, interface: String = null): Implementation! @auth(required_scopes: ["rekuest_read"])
@@ -6302,6 +6378,12 @@ type RuleChangeEvent {
 
 """Keep where an agent stands in a space, for everyone."""
 input SavePlacementInput {
+"""Take an allowance off your auto list: the action is asked for again."""
+input RevokeAllowanceInput {
+  """The allowance to remove"""
+  id: ID!
+}
+
   """
   The space's reference: a blok's `room` (a URI such as `room:helsinki-lab`, or `app/<identifier>/<key>`). The space is made when none has it yet.
   """

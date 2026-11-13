@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     # Named in annotations only: strawberry resolves them when it builds the schema.
     from facade.types.action import Action
     from facade.types.agent import Agent, Lock
-    from facade.types.auth import Caller
+    from facade.types.auth import App, Caller
     from facade.types.blok import ActionBlok, MaterializedBlok
     from facade.types.dependency import Resolution
     from facade.types.implementation import Implementation
@@ -132,7 +132,7 @@ class Task:
 
     @strawberry_django.field(description="Its action's own bloks (`Action.bloks`), at most one per context: how a client shows this run, with each dependency key bound by `dependencyAgents`.")
     def action_bloks(self) -> list["ActionBlok"]:
-        return cast("list[ActionBlok]", list(models.ActionBlok.objects.filter(action_id=row_of(self, models.Task).action_id).order_by("context")))
+        return cast("list[ActionBlok]", list(models.ActionBlok.objects.filter(action_id=row_of(self, models.Task).action_id, phase="RUN").order_by("context")))
 
     @strawberry_django.field(description="The agents this run got for its action's dependencies, by key: the top level of the tree resolved when it was assigned. What an action blok's `<At dependency>` anchors at.")
     def dependency_agents(self) -> list[TaskDependencyAgent]:
@@ -205,3 +205,32 @@ class TaskInstruct:
     task: "Task" = strawberry_django.field(description="Task the instruction relates to.")
     kind: enums.TaskInstructKind = strawberry_django.field(description="Type of instruction.")
     created_at: strawberry.auto = strawberry_django.field(description="Time when instruction was issued.")
+
+
+def _latest_action(info: Info, app_id: int | None, key: str | None) -> models.Action | None:
+    """The newest version of the action an allowance names by app and key, in the caller's organization."""
+    if app_id is None or key is None:
+        return None
+    return models.Action.objects.filter(organization=info.context.request.organization, app_id=app_id, key=key).order_by("-id").first()
+
+
+@strawberry_django.type(models.ActionAllowance, description="An entry of a user's auto list: an action that runs under their runs without asking them. It names the action by app and key, so every version of it; optionally the action that may ask for it; and optionally the one run it holds under.")
+class ActionAllowance:
+    id: strawberry.ID = strawberry_django.field(description="Allowance ID.")
+    app: "App" = strawberry_django.field(description="The app of the action that runs without asking.")
+    key: str = strawberry_django.field(description="The key of the action that runs without asking, in its app.")
+    asker_app: Optional["App"] = strawberry_django.field(description="The app of the action that may ask for it; null for whoever asks.")
+    asker_key: str | None = strawberry_django.field(description="The key of the action that may ask for it; null for whoever asks.")
+    created_at: datetime.datetime = strawberry_django.field(description="When it was allowed.")
+
+    @strawberry_django.field(description="The action that runs without asking: its newest version. Null once no version of it is registered.")
+    def action(self, info: Info) -> Optional["Action"]:
+        row = cast("models.ActionAllowance", self)
+        return cast("Action | None", _latest_action(info, row.app_id, row.key))
+
+    @strawberry_django.field(description="The action that may ask for it: its newest version. Null for whoever asks.")
+    def asker(self, info: Info) -> Optional["Action"]:
+        row = cast("models.ActionAllowance", self)
+        return cast("Action | None", _latest_action(info, row.asker_app_id, row.asker_key))
+
+    run: Optional["Task"] = strawberry_django.field(description="The root task it holds under; null for every run of the user.")

@@ -48,6 +48,10 @@ from .task import (
     ResumeInput,
     ResumeInputModel,
     DecideInput,
+    AllowActionInput,
+    AllowActionInputModel,
+    RevokeAllowanceInput,
+    RevokeAllowanceInputModel,
     DecideInputModel,
 )
 from .blok import (
@@ -155,6 +159,10 @@ __all__ = [
     "UpdateAgentInputModel",
     "ImplementAgentInputModel",
     # task
+    "AllowActionInput",
+    "AllowActionInputModel",
+    "RevokeAllowanceInput",
+    "RevokeAllowanceInputModel",
     "AssignInput",
     "AssignInputModel",
     "CancelInput",

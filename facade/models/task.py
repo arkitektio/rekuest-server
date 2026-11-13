@@ -1,5 +1,7 @@
 import uuid
 
+from authentikate.models import App, Organization
+from django.contrib.auth import get_user_model
 from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
@@ -484,3 +486,39 @@ class TaskInstruct(models.Model):
         choices_enum=enums.TaskInstructChoices,  # pyright: ignore[reportCallIssue]  django-choices-field's stub predates db_default
         help_text="The event kind",
     )
+
+
+class ActionAllowance(models.Model):
+    """A user's rule that an action runs without asking them: their auto list.
+
+    Under an ``ASK`` run a child an agent assigns is held until the user approves it. An
+    allowance lets it through unasked. It names the action by ``app`` and ``key``, so a new
+    version of the action is still allowed. ``asker_app`` / ``asker_key`` name the action that
+    asks (the parent task's); both null is whoever asks. ``run`` set, it holds only under that
+    root task and goes with it; null, it holds for every run that is for the user.
+
+    Only the user writes one, with a decision or by hand: never the agent that asks.
+    """
+
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name="action_allowances", help_text="The user whose runs it is for")
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="action_allowances", help_text="The organization it holds in")
+    app = models.ForeignKey(App, on_delete=models.CASCADE, related_name="action_allowances", help_text="The app of the action that runs without asking")
+    key = models.CharField(max_length=2000, help_text="The key of the action that runs without asking, in its app (every version)")
+    asker_app = models.ForeignKey(App, on_delete=models.CASCADE, null=True, blank=True, related_name="asker_allowances", help_text="The app of the action that may ask for it; null for whoever asks")
+    asker_key = models.CharField(max_length=2000, null=True, blank=True, help_text="The key of the action that may ask for it; null for whoever asks")
+    # Deleted with its run in the database too (0013): takt deletes tasks with its own SQL.
+    run = models.ForeignKey(Task, on_delete=models.CASCADE, null=True, blank=True, related_name="allowances", help_text="The root task it holds under; null for every run of the user")
+    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
+
+    class Meta:
+        constraints = [
+            # One rule of each shape: null ("whoever asks", "every run") counts as a value here.
+            models.UniqueConstraint(
+                fields=["user", "organization", "app", "key", "asker_app", "asker_key", "run"],
+                name="one_allowance_per_rule",
+                nulls_distinct=False,
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id} allows {self.app_id}:{self.key}"

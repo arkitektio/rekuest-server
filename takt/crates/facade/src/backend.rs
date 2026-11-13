@@ -1369,7 +1369,14 @@ pub async fn assign_with_status(
         }
         None => (None, holds::root_policy(input.policy.as_deref())?),
     };
-    let held = parent.is_some() && policy == holds::ASK && !input.unheld;
+    // Under ASK a child an agent asks for waits, unless the user's auto list lets it through.
+    let allowance = match (parent, root) {
+        (Some(parent), Some(root)) if policy == holds::ASK && !input.unheld => {
+            holds::allowance_for(&ctx.db, root, action.id, parent).await?
+        }
+        _ => None,
+    };
+    let held = parent.is_some() && policy == holds::ASK && !input.unheld && allowance.is_none();
     let space = hinted_space(ctx, organization, input, parent).await?;
 
     let not_before = input.not_before;
@@ -1400,7 +1407,7 @@ pub async fn assign_with_status(
             caller,
             root,
             parent,
-            (policy, held, space),
+            (policy, held, allowance, space),
         )
         .await;
     }
@@ -1489,9 +1496,10 @@ pub async fn assign_with_status(
     )
     .await?;
     let assigner = assigner(&mut tx, parent, &principal.user_sub).await?;
-    let held_events = match (held, parent, root) {
+    let held_events = match (held || allowance.is_some(), parent, root) {
         (true, Some(parent), Some(root)) => {
-            holds::record_held_child(
+            holds::record_asked_child(
+                allowance,
                 &mut tx,
                 &HeldChild {
                     task,
@@ -1617,7 +1625,7 @@ async fn assign_higher_order(
     caller: i64,
     root: Option<i64>,
     parent: Option<i64>,
-    (policy, held, space): (&'static str, bool, Option<i64>),
+    (policy, held, allowance, space): (&'static str, bool, Option<holds::Allowance>, Option<i64>),
 ) -> BackendResult<Assigned> {
     let config = &higher.higher_order_config;
     let lower = implementation_row(
@@ -1721,9 +1729,10 @@ async fn assign_higher_order(
     )
     .await?;
     let assigner = assigner(&mut tx, Some(higher_task), &principal.user_sub).await?;
-    let held_events = match (held, parent, root) {
+    let held_events = match (held || allowance.is_some(), parent, root) {
         (true, Some(parent), Some(root)) => {
-            holds::record_held_child(
+            holds::record_asked_child(
+                allowance,
                 &mut tx,
                 &HeldChild {
                     task: higher_task,

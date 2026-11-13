@@ -78,6 +78,7 @@ class Query:
         resolver=queries.similar_actions,
         description="Actions whose name and description mean roughly what this action's do, nearest first: the org's other actions ranked by cosine distance between their embeddings. `filters` narrows the candidates like `actions` does; `maxDistance` (0 identical, 1 unrelated) cuts the tail, otherwise the nearest `limit` come back. Empty while the action has no vector yet or embeddings are off.",
     )
+    my_allowances = field(resolver=queries.my_allowances, description="Your auto list in this organization: the actions that run under your runs without asking you, newest first. With `action`, the entries for that action. An allowance of a single run is not listed.")
     my_tasks = field(resolver=queries.my_tasks, description="Fetch the root tasks this client created (caller-scoped).")
     probe = field(resolver=queries.probe, description="Fetch a live (or lingering) probe by ID. Expired probes are gone — probes are never persisted.")
     probe_stats = field(resolver=queries.probe_stats, description="Live probe counts: instance-wide total plus your in-flight count and cap.")
@@ -284,7 +285,9 @@ class Mutation:
     cancel = mutation(scope="rekuest_root_call", resolver=mutations.cancel, description="Cancel an active task.")
     pause = mutation(scope="rekuest_root_call", resolver=mutations.pause, description="Pause an ongoing task.")
     resume = mutation(scope="rekuest_root_call", resolver=mutations.resume, description="Resume a paused task.")
-    decide = mutation(scope="rekuest_root_call", resolver=mutations.decide, description="Answer a held task. A child an agent asked for runs once approved, or ends DENIED without running; a task that holds itself carries on with the decision. Only the user the task runs for may decide, and never from the client of the agent that asked.")
+    decide = mutation(scope="rekuest_root_call", resolver=mutations.decide, description="Answer a held task. A child an agent asked for runs once approved, or ends DENIED without running; a task that holds itself carries on with the decision. Only the user the task runs for may decide, and never from the client of the agent that asked. With `remember`, the approval of a child is kept as an allowance on their auto list.")
+    allow_action = mutation(scope="rekuest_root_call", resolver=mutations.allow_action, description="Put an action on your auto list: under your runs an agent that asks for it gets it without a hold. Optionally only when one action asks. Yours alone: it changes nothing for anyone else.")
+    revoke_allowance = mutation(scope="rekuest_root_call", resolver=mutations.revoke_allowance, description="Take an allowance off your auto list: the action is asked for again.")
     collect = mutation(scope="rekuest_agent", resolver=mutations.collect, description="Collect results from a task.")
     interrupt = mutation(scope="rekuest_root_call", resolver=mutations.interrupt, description="Interrupt the execution of a task.")
     create_trigger = automation(resolver=mutations.create_trigger, description="Create a trigger: run an action when a service signals a matching object.")
