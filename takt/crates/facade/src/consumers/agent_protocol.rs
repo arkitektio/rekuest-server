@@ -433,7 +433,7 @@ async fn implement(
 }
 
 /// A connection's turn: held by the worker while it handles a frame and sends the reply, and
-/// by the mirror while it forwards one event.
+/// by the mirror and the drain while they forward one event.
 type Turn = Arc<tokio::sync::Mutex<()>>;
 
 /// The pending heartbeat: resolved by the read loop when the answer arrives.
@@ -451,11 +451,17 @@ async fn run_session(
     ctx.connections.join(agent, connection_id, control_tx);
 
     let waiter: HeartbeatWaiter = Arc::default();
+    // One turn per connection, as a Channels consumer handles one message at a time: what a
+    // request publishes (the QUEUED of the child it created, the CANCELLING of the task it
+    // cancelled) reaches this caller only after the request's own response, whether it comes
+    // through the agent's queue (a child's events) or the caller group (everything else).
+    let turn = Turn::default();
     let drain = tokio::spawn(drain(
         ctx.clone(),
         agent,
         connection_id.to_owned(),
         sender.clone(),
+        turn.clone(),
     ));
     let heartbeat = tokio::spawn(heartbeat(
         ctx.clone(),
@@ -465,10 +471,6 @@ async fn run_session(
         waiter.clone(),
         drain.abort_handle(),
     ));
-    // One turn per connection, as a Channels consumer handles one message at a time: what a
-    // request publishes (the QUEUED of the child it created, the CANCELLING of the task it
-    // cancelled) reaches this caller's mirror only after the request's own response.
-    let turn = Turn::default();
     let mirror_channel = registered.mirror.channel.clone();
     let mirror = tokio::spawn(mirror(
         ctx.clone(),
@@ -816,10 +818,22 @@ async fn is_stale_assign(ctx: &Context, frame: &str) -> bool {
     !reports::is_task_open(ctx, &task).await
 }
 
+/// Whether a queued frame mirrors an event of work this agent asked for (`…_EVENT`).
+fn is_caller_event(frame: &str) -> bool {
+    serde_json::from_str::<Value>(frame)
+        .ok()
+        .and_then(|raw| {
+            raw.get("type")
+                .and_then(Value::as_str)
+                .map(|kind| kind.ends_with("_EVENT"))
+        })
+        .unwrap_or(false)
+}
+
 /// Deliver the agent's queue (`listen_for_tasks`): recover what a previous holder popped but
 /// never acked, then pop, check the lease, drop stale Assigns, send, ack. A queue failure is
 /// survived with a backoff; a socket that cannot be written closes so the agent reconnects.
-async fn drain(ctx: Context, agent: i64, connection_id: String, sender: Sender) {
+async fn drain(ctx: Context, agent: i64, connection_id: String, sender: Sender, turn: Turn) {
     let mut backoff = Duration::from_millis(500);
     loop {
         let mut queue = match AgentQueue::open(&ctx.redis_client, &ctx.settings, agent).await {
@@ -831,7 +845,7 @@ async fn drain(ctx: Context, agent: i64, connection_id: String, sender: Sender) 
                 continue;
             }
         };
-        match drain_once(&ctx, agent, &connection_id, &sender, &mut queue).await {
+        match drain_once(&ctx, agent, &connection_id, &sender, &mut queue, &turn).await {
             Ok(()) => return,
             Err(e) => {
                 tracing::error!(agent, "task queue failed: {e}; retrying");
@@ -848,6 +862,7 @@ async fn drain_once(
     connection_id: &str,
     sender: &Sender,
     queue: &mut AgentQueue,
+    turn: &Turn,
 ) -> Result<(), anyhow::Error> {
     let recovered = queue.recover().await?;
     if recovered > 0 {
@@ -877,6 +892,12 @@ async fn drain_once(
             queue.ack(&frame).await?;
             continue;
         }
+        // The event of a child waits for the turn, like one off the caller group: never ahead
+        // of the response to the request that caused it. The agent's own work does not wait.
+        let _turn = match is_caller_event(&frame) {
+            true => Some(turn.lock().await),
+            false => None,
+        };
         if !sender.send_text(frame.clone()) {
             sender.close(codes::AGENT_TRANSPORT_FAILED_CODE);
             return Ok(());
