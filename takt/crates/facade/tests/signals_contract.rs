@@ -47,7 +47,29 @@ print("SEED " + json.dumps({
 }))
 "#;
 
+/// A workflow that runs (`root`, on `agent`) and the child it asked for, with what the child reports.
+const CALLING_SEED: &str = r#"
+import json, uuid
+from facade import models
+from tests.factories import _seed_throwaway_agent_graph, _build_task_for_agent_caller
+prefix = "calling-" + uuid.uuid4().hex[:8]
+agent = _seed_throwaway_agent_graph(prefix)
+root = _build_task_for_agent_caller(agent.pk, prefix + "-root")
+child = _build_task_for_agent_caller(agent.pk, prefix + "-child", parent=root, root=root)
+event = lambda kind, **more: models.TaskEvent.objects.create(task=child, kind=kind, **more).id
+print("SEED " + json.dumps({
+    "agent": agent.pk, "root": root.id, "child": child.id, "caller": child.caller_id,
+    "progress_away": event("PROGRESS", progress=10), "yield": event("YIELD", returns={"return0": 7}),
+    "progress_here": event("PROGRESS", progress=60), "completed": event("COMPLETED"),
+    "late": event("LOG", message="after the caller ended"), "late_end": event("CANCELLED"),
+}))
+"#;
+
 async fn seed() -> Option<Value> {
+    seeded(SEED).await
+}
+
+async fn seeded(script: &str) -> Option<Value> {
     let output = tokio::process::Command::new("docker")
         .args([
             "exec",
@@ -57,7 +79,7 @@ async fn seed() -> Option<Value> {
             "manage.py",
             "shell",
             "-c",
-            SEED,
+            script,
         ])
         .output()
         .await
@@ -220,4 +242,100 @@ async fn the_rust_fan_out_is_the_python_fan_out() {
     assert_eq!(got["message"], seed["schedule_changed"]);
     facade::signals::rule_changed(&ctx, facade::signals::Rule::Trigger(9), id("org")).await;
     assert_eq!(next(&mut rules).await["message"], seed["trigger_changed"]);
+}
+
+/// The frames waiting in an agent's own queue, oldest first.
+async fn queued(ctx: &facade::Context, agent: i64) -> Vec<Value> {
+    let key = facade::consumers::agent_queue::queue_key(&ctx.settings, agent);
+    let frames: Vec<String> = redis::cmd("LRANGE")
+        .arg(key)
+        .arg(0)
+        .arg(-1)
+        .query_async(&mut ctx.redis.clone())
+        .await
+        .unwrap();
+    frames
+        .iter()
+        .rev()
+        .map(|frame| serde_json::from_str(frame).unwrap())
+        .collect()
+}
+
+#[tokio::test]
+async fn what_a_child_reports_is_kept_for_the_agent_that_asked_for_it() {
+    let (Ok(db), Ok(redis_url)) = (
+        std::env::var("TAKT_TEST_DATABASE_URL"),
+        std::env::var("TAKT_TEST_REDIS_URL"),
+    ) else {
+        return;
+    };
+    let Some(seed) = seeded(CALLING_SEED).await else {
+        return;
+    };
+    let ctx = context(&db, &redis_url).await;
+    let id = |key: &str| seed[key].as_i64().unwrap();
+    let agent = id("agent");
+    let child = id("child").to_string();
+    let mut group = listen(&ctx, &[format!("task_caller_{}", id("caller"))]).await;
+    let kinds = |frames: &[Value]| -> Vec<String> {
+        frames
+            .iter()
+            .map(|frame| frame["type"].as_str().unwrap().to_owned())
+            .collect()
+    };
+
+    // The agent is away. Chatter is not kept for it; it goes the best-effort way.
+    sqlx::query("UPDATE facade_agent SET connected = false WHERE id = $1")
+        .bind(agent)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    facade::signals::task_event_created(&ctx, id("progress_away")).await;
+    assert_eq!(
+        next(&mut group).await["message"]["event"]["kind"],
+        "PROGRESS"
+    );
+    assert!(queued(&ctx, agent).await.is_empty());
+
+    // What it cannot do without waits in its queue, and nothing of it is on the group.
+    facade::signals::task_event_created(&ctx, id("yield")).await;
+    let frames = queued(&ctx, agent).await;
+    assert_eq!(kinds(&frames), ["YIELD_EVENT"]);
+    assert_eq!(frames[0]["task"], child.as_str());
+    assert_eq!(frames[0]["seq"], id("yield"));
+    assert_eq!(frames[0]["returns"]["return0"], 7);
+
+    // Back again, it gets everything through the queue, in the order it was reported.
+    sqlx::query("UPDATE facade_agent SET connected = true WHERE id = $1")
+        .bind(agent)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    facade::signals::task_event_created(&ctx, id("progress_here")).await;
+    facade::signals::task_event_created(&ctx, id("completed")).await;
+    assert_eq!(
+        kinds(&queued(&ctx, agent).await),
+        ["YIELD_EVENT", "PROGRESS_EVENT", "COMPLETED_EVENT"]
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_millis(300), group.recv())
+            .await
+            .is_err(),
+        "what the queue carries is not sent twice"
+    );
+
+    // Once the task that asked has ended nobody waits: nothing more is kept for its agent.
+    sqlx::query("UPDATE facade_task SET is_done = true WHERE id = $1")
+        .bind(id("root"))
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    facade::signals::task_event_created(&ctx, id("late")).await;
+    facade::signals::task_event_created(&ctx, id("late_end")).await;
+    assert_eq!(next(&mut group).await["message"]["event"]["kind"], "LOG");
+    assert_eq!(
+        next(&mut group).await["message"]["event"]["kind"],
+        "CANCELLED"
+    );
+    assert_eq!(queued(&ctx, agent).await.len(), 3);
 }

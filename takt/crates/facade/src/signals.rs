@@ -234,6 +234,15 @@ struct EventRow {
     caller_id: Option<i64>,
     root_id: Option<i64>,
     implementation_id: Option<i64>,
+    calling_agent: Option<i64>,
+    calling_agent_connected: Option<bool>,
+}
+
+/// The agent whose running task asked for a child, as the child's events find it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CallingAgent {
+    pub id: i64,
+    pub connected: bool,
 }
 
 /// Where a persisted task event goes: the task's caller and root, and its implementation.
@@ -241,6 +250,9 @@ pub struct EventRouting {
     pub caller: Option<i64>,
     pub root: Option<i64>,
     pub implementation: Option<i64>,
+    /// For a child: the socket agent that runs its parent and is its caller, while the parent
+    /// still runs. Its events go to that agent's own queue instead of the caller group.
+    pub calling_agent: Option<CallingAgent>,
 }
 
 /// The payload of a persisted task event (`TaskEventPayload.from_event`).
@@ -250,8 +262,14 @@ pub async fn task_event_payload(
 ) -> Result<(TaskEventPayload, EventRouting), sqlx::Error> {
     let event: EventRow = sqlx::query_as(
         "SELECT e.id, e.task_id, e.kind, e.message, e.progress, e.returns, e.level, e.value, e.created_at,
-                t.caller_id, t.root_id, t.implementation_id
+                t.caller_id, t.root_id, t.implementation_id,
+                pa.id AS calling_agent, pa.connected AS calling_agent_connected
            FROM facade_taskevent e JOIN facade_task t ON t.id = e.task_id
+           LEFT JOIN facade_task p ON p.id = t.parent_id AND p.is_done = false
+           LEFT JOIN facade_caller c ON c.id = t.caller_id
+           LEFT JOIN facade_agent pa ON pa.id = p.agent_id AND pa.kind <> 'WEBHOOK'
+                AND pa.client_id = c.client_id AND pa.user_id = c.user_id
+                AND pa.organization_id = c.organization_id
           WHERE e.id = $1",
     )
     .bind(event_id)
@@ -273,12 +291,53 @@ pub async fn task_event_payload(
             caller: event.caller_id,
             root: event.root_id,
             implementation: event.implementation_id,
+            calling_agent: event.calling_agent.map(|id| CallingAgent {
+                id,
+                connected: event.calling_agent_connected.unwrap_or(false),
+            }),
         },
     ))
 }
 
+/// What a caller cannot do without: everything but the chatter of a running task. It is kept
+/// for an agent that is away; progress and logs are only worth sending to one that listens.
+fn is_kept_for_its_caller(kind: &str) -> bool {
+    kind != "PROGRESS" && kind != "LOG"
+}
+
+/// Hand a child's event to the agent that asked for it through that agent's own queue: kept
+/// while the agent is away, delivered in order, acknowledged (`consumers/agent_queue.rs`). The
+/// caller group is best effort, and whoever waits for a child that ended must hear of it.
+/// Whether the queue took it; if not, the event goes the group's way.
+async fn queue_for_calling_agent(
+    ctx: &Context,
+    agent: CallingAgent,
+    payload: &TaskEventPayload,
+) -> bool {
+    if !agent.connected && !is_kept_for_its_caller(&payload.kind) {
+        return false;
+    }
+    let Some(mirror) = crate::caller_events::build_execution_event(
+        &crate::caller_events::EventLike::from(payload),
+    ) else {
+        return true; // a kind no caller is told of: the group would drop it too
+    };
+    let mut redis = ctx.redis.clone();
+    let frame = crate::transport::frame_text(mirror);
+    match crate::consumers::agent_queue::push(&mut redis, &ctx.settings, agent.id, &frame, false)
+        .await
+    {
+        Ok(()) => true,
+        Err(e) => {
+            tracing::error!(agent = agent.id, event = %payload.id, "queueing a child's event for its caller failed: {e}");
+            false
+        }
+    }
+}
+
 /// A task event was recorded (`task_event_post_save` → `publish_task_event`): it reaches its
-/// task's caller (`task_caller_{caller}`: the agent sockets and the GraphQL feeds), and, for a
+/// task's caller (a child's reach the agent that asked for it through that agent's own queue;
+/// anything else goes to `task_caller_{caller}`, which the caller's sockets joined), and, for a
 /// root task, the caller's and the organization's root-task feeds. What a task's record is made
 /// of also reaches its implementation's feed, whoever called it and even if nobody did.
 pub async fn task_event_created(ctx: &Context, event_id: i64) {
@@ -320,7 +379,14 @@ async fn task_event_created_inner(ctx: &Context, event_id: i64) -> Result<(), sq
         return Ok(());
     };
     tracing::debug!(event_id, caller, "task event fan-out");
-    let mut groups = vec![format!("task_caller_{caller}")];
+    let queued = match routing.calling_agent {
+        Some(agent) => queue_for_calling_agent(ctx, agent, &payload).await,
+        None => false,
+    };
+    let mut groups = Vec::new();
+    if !queued {
+        groups.push(format!("task_caller_{caller}"));
+    }
     if root.is_none() {
         let organization = caller_organization(ctx, caller).await?;
         groups.push(format!("root_tasks_caller_{caller}"));

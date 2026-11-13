@@ -683,14 +683,18 @@ async fn cancelling_the_root_ends_its_held_child_at_once_and_tells_its_caller() 
         "QUEUED",
         "the root waits for its agent"
     );
-    assert!(cancelled(&mirrors, child), "{mirrors:?}");
     assert!(queued(&ctx, runner).await.is_empty(), "nothing is sent");
+    // Its caller still runs the task that asked: the end waits in that agent's own queue,
+    // behind the root's cancel, and is not sent the best-effort way as well.
     let sent = queued(&ctx, asker).await;
+    let kinds: Vec<&str> = sent.iter().filter_map(|f| f["type"].as_str()).collect();
     assert_eq!(
-        sent.last().unwrap()["type"],
-        "CANCEL",
-        "the root's agent is told"
+        kinds,
+        ["ASSIGN", "HELD_EVENT", "CANCEL", "CANCELLED_EVENT"],
+        "what its child goes through reaches it in order, with its own work"
     );
+    assert_eq!(sent[3]["task"], child.to_string());
+    assert!(!cancelled(&mirrors, child), "{mirrors:?}");
 }
 
 #[tokio::test]

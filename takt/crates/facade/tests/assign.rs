@@ -9,7 +9,6 @@ use authentikate::base_models::StaticToken;
 use chrono::{DateTime, Utc};
 use facade::backend::{self, AssignInput, AssignOrigin, BackendError, Control};
 use facade::caller_context::CallerContext;
-use facade::caller_events::mirror_of_channel_message;
 use facade::consumers::agent_protocol::child_mirrors;
 use facade::consumers::connections::Connections;
 use facade::message_router::route;
@@ -1352,16 +1351,6 @@ async fn only_the_caller_controls_and_the_deadlines_are_columns() {
         })
     );
 
-    // The caller's socket sits in its caller group: subscribe as it does.
-    let caller_id = facade::persist::caller_ops::get_or_create_caller_id(&ctx.db, caller)
-        .await
-        .unwrap();
-    let (channel, mut inbox) = ctx.channel_layer.subscribe("specific").await.unwrap();
-    ctx.channel_layer
-        .group_add(&format!("task_caller_{caller_id}"), &channel)
-        .await
-        .unwrap();
-
     // Its caller: CANCELLING, the instruct row, a deadline of auto_interrupt, the frame sent.
     let before = Utc::now();
     let reply = route(
@@ -1388,26 +1377,23 @@ async fn only_the_caller_controls_and_the_deadlines_are_columns() {
         events(&ctx, child_id).await,
         vec![("CANCELLING".into(), None)]
     );
-    // ... and mirrored to the caller as CANCELLING_EVENT, `seq` the event's id.
+    // ... and mirrored to the caller as CANCELLING_EVENT, `seq` the event's id: through the
+    // caller's own queue, since it is the agent whose running task asked for the child.
     let event_id: i64 = sqlx::query_scalar("SELECT id FROM facade_taskevent WHERE task_id = $1")
         .bind(child_id)
         .fetch_one(&ctx.db)
         .await
         .unwrap();
-    let mirror = loop {
-        let message = tokio::time::timeout(std::time::Duration::from_secs(5), inbox.recv())
-            .await
-            .expect("the event reaches the caller group")
-            .unwrap();
-        if let Some(mirror) = mirror_of_channel_message(&message) {
-            break mirror;
-        }
-    };
+    let mut mirror = queued(&ctx, caller)
+        .await
+        .into_iter()
+        .find(|frame| frame["type"] == "CANCELLING_EVENT")
+        .expect("the event waits in its caller's queue");
+    mirror.as_object_mut().unwrap().remove("id");
     assert_eq!(
-        serde_json::to_value(&mirror).unwrap(),
+        mirror,
         json!({"type": "CANCELLING_EVENT", "task": child, "event": event_id.to_string(), "seq": event_id})
     );
-    ctx.channel_layer.unsubscribe(&channel);
     let caller_row: i64 = sqlx::query_scalar("SELECT caller_id FROM facade_task WHERE id = $1")
         .bind(child_id)
         .fetch_one(&ctx.db)
