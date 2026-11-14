@@ -13,7 +13,8 @@ async def test_a_register_is_answered_with_init(agents) -> None:  # noqa: ANN001
 
     assert init["type"] == "INIT"
     assert init["agent"], "INIT names the agent"
-    assert isinstance(init.get("inquiries", []), list)
+    assert "inquiries" not in init, "a returning agent is asked about its tasks one by one (INQUIRE)"
+    assert init.get("nonce") and init.get("positions") == {}, init
 
 
 async def test_the_same_token_is_the_same_agent(agents) -> None:  # noqa: ANN001

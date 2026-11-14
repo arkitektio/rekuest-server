@@ -16,6 +16,8 @@ from .task import (
     TaskInstructChoices,
     TaskInstructKind,
     HoldRemember,
+    TaskStatus,
+    OnLost,
     TaskPolicy,
     TaskPolicyChoices,
 )
@@ -53,6 +55,8 @@ __all__ = [
     "TaskInstructChoices",
     "TaskInstructKind",
     "HoldRemember",
+    "TaskStatus",
+    "OnLost",
     "TaskPolicy",
     "TaskPolicyChoices",
     # log

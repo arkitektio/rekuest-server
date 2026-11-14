@@ -109,7 +109,7 @@ async fn agent(ctx: &Context) -> (i64, i64) {
     // Agent ids come back after the test database is reset: so could a queue left behind.
     let mut redis = ctx.redis.clone();
     let _: () = redis::cmd("DEL")
-        .arg(agent_queue::queue_key(&ctx.settings, agent))
+        .arg(&agent_queue::keys(&ctx.settings, agent)[..])
         .query_async(&mut redis)
         .await
         .unwrap();
@@ -248,16 +248,11 @@ async fn state(ctx: &Context, task: i64) -> (String, bool) {
 /// The frames waiting in the agent's queue, oldest first.
 async fn queued(ctx: &Context, agent: i64) -> Vec<Value> {
     let mut redis = ctx.redis.clone();
-    let frames: Vec<String> = redis::cmd("LRANGE")
-        .arg(agent_queue::queue_key(&ctx.settings, agent))
-        .arg(0)
-        .arg(-1)
-        .query_async(&mut redis)
+    let frames = agent_queue::pending(&mut redis, &ctx.settings, agent)
         .await
         .unwrap();
     frames
         .iter()
-        .rev()
         .map(|frame| serde_json::from_str(frame).unwrap())
         .collect()
 }
@@ -515,7 +510,10 @@ async fn a_revoked_connection_cannot_renew_or_release() {
 // -- the pickup watchdog (test_pickup_watchdog.py) ---------------------------------------------
 
 #[tokio::test]
-async fn a_silent_live_agent_gets_one_redelivery_then_the_task_is_lost_unstarted() {
+async fn a_socket_agents_assign_is_never_sent_a_second_time() {
+    // Its assign is kept until the agent acknowledges it, and the acknowledgement is the
+    // pickup: a live agent that has said nothing yet is not sent the task again, and the task
+    // is not ended for it. What became of it is the agent's to report and the caller's to ask.
     let _serial = serial().await;
     let Some(ctx) = context(settings()).await else {
         return;
@@ -530,47 +528,8 @@ async fn a_silent_live_agent_gets_one_redelivery_then_the_task_is_lost_unstarted
         .await
         .unwrap();
 
-    let (attempts, dispatched): (i16, bool) = sqlx::query_as(
-        "SELECT dispatch_attempts, dispatched_at > now() - interval '5 seconds' FROM facade_task WHERE id = $1",
-    )
-    .bind(task)
-    .fetch_one(&ctx.db)
-    .await
-    .unwrap();
-    assert_eq!((attempts, dispatched), (2, true));
-    assert_eq!(
-        event(&ctx, task, "QUEUED").await.0.as_deref(),
-        Some("No report from the agent within the pickup deadline — Assign redelivered.")
-    );
-    let frames = queued(&ctx, agent).await;
-    let assign = frames.last().expect("the Assign was redelivered");
-    assert_eq!(assign["type"], "ASSIGN");
-    assert_eq!(assign["task"], task.to_string());
-    assert_eq!(assign["implementation"], implementation.to_string());
-    assert_eq!(assign["interface"], "do_it");
-    assert_eq!(assign["args"], json!({"x": 1}));
-    assert_eq!(assign["step"], Value::Null, "a false step is sent as none");
-    assert!(
-        assign.get("resume").is_none(),
-        "a plain task has no journal"
-    );
-    assert!(
-        assign.get("token").is_none(),
-        "no token until provenance is wired"
-    );
-
-    // Silent again: the budget is spent.
-    backdate(&ctx, task, 10).await;
-    reconcile::reconcile_unpicked_tasks(&ctx, LIMIT)
-        .await
-        .unwrap();
-    assert_eq!(state(&ctx, task).await, ("LOST".into(), true));
-    let (message, value) = event(&ctx, task, "LOST").await;
-    assert_eq!(
-        message.as_deref(),
-        Some("Never picked up: the agent did not report on this task after it was redelivered.")
-    );
-    assert_eq!(value.unwrap()["started"], json!(false));
+    assert_eq!(kinds(&ctx, task).await, Vec::<String>::new());
+    assert!(queued(&ctx, agent).await.is_empty(), "nothing was sent");
 }
 
 #[tokio::test]
@@ -618,71 +577,6 @@ async fn the_watchdog_leaves_picked_up_offline_and_undue_work_alone() {
         0
     );
     assert_eq!(state(&ctx, silent).await, ("QUEUED".into(), false));
-}
-
-#[tokio::test]
-async fn a_control_on_unpicked_work_is_honoured_and_a_task_without_a_caller_ends_lost() {
-    let _serial = serial().await;
-    let Some(ctx) = context(settings()).await else {
-        return;
-    };
-    let (agent, action) = agent(&ctx).await;
-    seen(&ctx, agent, true, 1).await;
-    let cancelled = task(&ctx, agent, action).await;
-    let interrupted = task(&ctx, agent, action).await;
-    let orphan = task(&ctx, agent, action).await;
-    for (task, instruct) in [(cancelled, "CANCEL"), (interrupted, "INTERRUPT")] {
-        sqlx::query("UPDATE facade_task SET latest_instruct_kind = $2 WHERE id = $1")
-            .bind(task)
-            .bind(instruct)
-            .execute(&ctx.db)
-            .await
-            .unwrap();
-    }
-    for task in [cancelled, interrupted, orphan] {
-        backdate(&ctx, task, 10).await;
-    }
-
-    reconcile::reconcile_unpicked_tasks(&ctx, LIMIT)
-        .await
-        .unwrap();
-
-    assert_eq!(state(&ctx, cancelled).await, ("CANCELLED".into(), true));
-    assert_eq!(
-        event(&ctx, cancelled, "CANCELLED").await.0.as_deref(),
-        Some("Cancelled before any agent picked the task up.")
-    );
-    assert_eq!(state(&ctx, interrupted).await, ("INTERRUPTED".into(), true));
-    assert_eq!(state(&ctx, orphan).await, ("LOST".into(), true));
-    assert_eq!(
-        event(&ctx, orphan, "LOST").await.0.as_deref(),
-        Some("Never picked up, and the Assign could not be rebuilt for redelivery.")
-    );
-    assert!(queued(&ctx, agent).await.is_empty(), "nothing was sent");
-}
-
-#[tokio::test]
-async fn concurrent_watchdogs_redeliver_once() {
-    let _serial = serial().await;
-    let Some(ctx) = context(settings()).await else {
-        return;
-    };
-    let (agent, action) = agent(&ctx).await;
-    seen(&ctx, agent, true, 1).await;
-    let implementation = implementation(&ctx, agent, action, "PLAIN").await;
-    let task = assignable(&ctx, agent, action, implementation).await;
-    backdate(&ctx, task, 10).await;
-
-    let sweeps = (0..4).map(|_| {
-        let ctx = ctx.clone();
-        tokio::spawn(async move { reconcile::reconcile_unpicked_tasks(&ctx, LIMIT).await })
-    });
-    for sweep in sweeps {
-        sweep.await.unwrap().unwrap();
-    }
-
-    assert_eq!(kinds(&ctx, task).await, vec!["QUEUED".to_owned()]);
-    assert_eq!(queued(&ctx, agent).await.len(), 1);
 }
 
 #[tokio::test]
@@ -955,7 +849,7 @@ async fn a_workflow_is_not_resumed_onto_changed_code_nor_too_often() {
     take_over(&ctx, agent).await;
     assert_eq!(
         event(&ctx, tired, "LOST").await.0.as_deref(),
-        Some("Resumed 3 times, and its agent died each time.")
+        Some("Sent again 3 times, and its agent died each time.")
     );
     assert!(queued(&ctx, agent).await.is_empty());
 }
@@ -965,6 +859,8 @@ async fn a_workflow_is_not_resumed_onto_changed_code_nor_too_often() {
 /// A running task with an unconfirmed `instruct` whose deadline passed `seconds_ago`.
 async fn instructed(ctx: &Context, instruct: &str, seconds_ago: i64) -> (i64, i64) {
     let (agent, action) = agent(ctx).await;
+    // Live: a deadline measures an agent that has the command, not one that is away.
+    seen(ctx, agent, true, 1).await;
     let task = task(ctx, agent, action).await;
     start(ctx, task).await;
     sqlx::query(
@@ -1283,16 +1179,13 @@ async fn an_escalated_cancel_of_unpicked_work_is_settled_by_the_watchdog() {
         "still undelivered"
     );
 
-    // Nobody ever picked it up: the watchdog honours the interrupt instead of redelivering.
+    // A socket agent has no pickup watchdog: its assign and the interrupt behind it are kept
+    // until the agent acknowledges them, and it is the agent that then ends the task.
     backdate(&ctx, task, 10).await;
     reconcile::reconcile_unpicked_tasks(&ctx, LIMIT)
         .await
         .unwrap();
-    assert_eq!(state(&ctx, task).await, ("INTERRUPTED".into(), true));
-    assert_eq!(
-        event(&ctx, task, "INTERRUPTED").await.0.as_deref(),
-        Some("Interrupted before any agent picked the task up.")
-    );
+    assert_eq!(state(&ctx, task).await, ("QUEUED".into(), false));
 }
 
 async fn live_implementations(ctx: &Context, action: i64) -> (i32, bool) {

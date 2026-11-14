@@ -3,7 +3,7 @@
 //! rows, their cascade and the feeds are here.
 
 use crate::backend::{parse_id, BackendError, BackendResult};
-use crate::consumers::agent_queue::{processing_key, queue_key};
+use crate::consumers::agent_queue;
 use crate::context::Context;
 use crate::deletion::{self, DeleteError};
 use crate::messages::ToAgent;
@@ -66,8 +66,7 @@ pub async fn delete_agent(ctx: &Context, organization: i64, agent: &str) -> Back
     if !connected {
         let mut redis = ctx.redis.clone();
         let dropped: Result<i64, _> = redis::cmd("DEL")
-            .arg(queue_key(&ctx.settings, id))
-            .arg(processing_key(&ctx.settings, id))
+            .arg(&agent_queue::keys(&ctx.settings, id)[..])
             .query_async(&mut redis)
             .await;
         if let Err(e) = dropped {

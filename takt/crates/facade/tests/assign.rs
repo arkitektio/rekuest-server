@@ -148,13 +148,11 @@ fn frame(value: Value) -> AgentFrame {
 /// The frames queued for an agent, oldest first.
 async fn queued(ctx: &Context, agent: i64) -> Vec<Value> {
     let mut redis = ctx.redis.clone();
-    let frames: Vec<String> = redis
-        .lrange(format!("rekuest:agent:{agent}:queue"), 0, -1)
+    let frames = facade::consumers::agent_queue::waiting(&mut redis, &ctx.settings, agent)
         .await
         .unwrap();
     frames
         .iter()
-        .rev()
         .map(|f| serde_json::from_str(f).unwrap())
         .collect()
 }
@@ -1288,8 +1286,8 @@ async fn an_assign_request_answers_and_a_resend_is_not_created_again() {
     assert_eq!(
         replayed,
         vec![
-            json!({"type": "STARTED_EVENT", "task": task, "event": ids[0].to_string(), "seq": ids[0]}),
-            json!({"type": "COMPLETED_EVENT", "task": task, "event": ids[1].to_string(), "seq": ids[1]}),
+            json!({"type": "STARTED_EVENT", "task": task, "event": ids[0].to_string()}),
+            json!({"type": "COMPLETED_EVENT", "task": task, "event": ids[1].to_string()}),
         ]
     );
 }
@@ -1392,7 +1390,7 @@ async fn only_the_caller_controls_and_the_deadlines_are_columns() {
     mirror.as_object_mut().unwrap().remove("id");
     assert_eq!(
         mirror,
-        json!({"type": "CANCELLING_EVENT", "task": child, "event": event_id.to_string(), "seq": event_id})
+        json!({"type": "CANCELLING_EVENT", "task": child, "event": event_id.to_string()})
     );
     let caller_row: i64 = sqlx::query_scalar("SELECT caller_id FROM facade_task WHERE id = $1")
         .bind(child_id)

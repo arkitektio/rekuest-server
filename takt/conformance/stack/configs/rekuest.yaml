@@ -693,6 +693,46 @@ authentikate:
       client_id: conf_67
       roles: [rekuest_admin]
       scope: openid rekuest_all
+    conf_68:
+      sub: 168
+      iss: lok
+      active_org: conformance
+      client_device: conf_68_device
+      client_app: conf_68
+      client_release: v0.0.1
+      client_id: conf_68
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
+    conf_69:
+      sub: 169
+      iss: lok
+      active_org: conformance
+      client_device: conf_69_device
+      client_app: conf_69
+      client_release: v0.0.1
+      client_id: conf_69
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
+    conf_70:
+      sub: 170
+      iss: lok
+      active_org: conformance
+      client_device: conf_70_device
+      client_app: conf_70
+      client_release: v0.0.1
+      client_id: conf_70
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
+    conf_71:
+      sub: 171
+      iss: lok
+      active_org: conformance
+      client_device: conf_71_device
+      client_app: conf_71
+      client_release: v0.0.1
+      client_id: conf_71
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
     test:
       sub: 1
       iss: lok

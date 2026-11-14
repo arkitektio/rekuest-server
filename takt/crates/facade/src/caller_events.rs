@@ -109,7 +109,6 @@ pub fn build_execution_event(event: &EventLike) -> Option<ToAgent> {
     let base = ExecutionEvent {
         task: event.task.clone(),
         event: event.id.to_string(),
-        seq: event.id,
     };
     Some(match event.kind.as_str() {
         "PROGRESS" => ToAgent::ProgressEvent {
@@ -238,7 +237,7 @@ mod tests {
         let mirror = serde_json::to_value(build_execution_event(&event).unwrap()).unwrap();
         assert_eq!(
             mirror,
-            json!({"type": "LOG_EVENT", "task": "7", "event": "42", "seq": 42, "message": "hi", "level": "INFO"})
+            json!({"type": "LOG_EVENT", "task": "7", "event": "42", "message": "hi", "level": "INFO"})
         );
         let unassign = EventLike {
             kind: "UNASSIGN".into(),
@@ -262,7 +261,7 @@ mod tests {
         }}});
         assert_eq!(
             serde_json::to_value(mirror_of_channel_message(&event).unwrap()).unwrap(),
-            json!({"type": "STARTED_EVENT", "task": "4", "event": "9", "seq": 9})
+            json!({"type": "STARTED_EVENT", "task": "4", "event": "9"})
         );
         let create = json!({"type": "channel.TaskEventCreatedEvent", "message": {"event": null, "create": {"id": "4"}}});
         assert!(mirror_of_channel_message(&create).is_none());
@@ -271,7 +270,7 @@ mod tests {
         }});
         assert_eq!(
             serde_json::to_value(mirror_of_channel_message(&probe).unwrap()).unwrap(),
-            json!({"type": "PROGRESS_EVENT", "task": "p-1", "event": "2", "seq": 2, "progress": 50})
+            json!({"type": "PROGRESS_EVENT", "task": "p-1", "event": "2", "progress": 50})
         );
         let other = json!({"type": "channel.child_task_feed", "message": {}});
         assert!(mirror_of_channel_message(&other).is_none());

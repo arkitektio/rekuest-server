@@ -45,8 +45,10 @@ These frames carry the numbering fields next to `id` (and `seq`, where it exists
 | `task_step` | Only on frames of a task (`STATE_PATCH`: the changing task; `UNLOCK`: the holder; `SHELVE`: the task that shelved, if any). The value is 1, 2, 3, … per task. It isn't called `step` because `ASSIGN` already has a `step` flag. |
 
 **Not numbered:**
-- `REGISTER`, `HEARTBEAT_ANSWER`, and the request/reply frames (`ASSIGN_REQUEST`, `PROBE_REQUEST`, the
-  control requests). Each has its own reply.
+- `REGISTER`, `HEARTBEAT_ANSWER`, the agent's own acknowledgements (`COMMAND_ACK`, `JOURNAL_SKIP`), and
+  the two requests that are safe to lose: `PROBE_REQUEST` (a probe is ephemeral) and
+  `STATE_REVISION_REQUEST` (a read). Everything else a task sends is numbered, the requests it makes
+  included (`ASSIGN_REQUEST`, the control requests) and what it asks a person (`HELD`, `INFORM`).
 - A **probe's task reports**: frames whose `task` has the id prefix `p-` (an `ASSIGN` with
   `probe: true`). Probes are ephemeral by design: the server keeps them in redis and never in the
   database, so they have no durable key and are never retained or resent.
@@ -56,8 +58,11 @@ These frames carry the numbering fields next to `id` (and `seq`, where it exists
 
 **Task steps also number child calls.** A task that calls another action takes the next
 `task_step` for it and sends it on `ASSIGN_REQUEST` as `parent_step`, next to `parent`. (It isn't
-called `task_step` because that name is the numbered frames' own stamp.) The request
-stays unnumbered (no `pos`): it has its own reply. The server stores the step as the child's
+called `task_step` because that name is the numbered frames' own stamp.) The request is
+numbered in the session like a report, and carries no `task_step` of its own: it belongs to no task
+of this agent. Its answer comes back as a command (below), queued before the request's position is
+confirmed, so a request the server took is never left without its answer and a resend of it is
+skipped. The server stores the step as the child's
 `parent_step` and makes the request idempotent on `(parent, parent_step)`, so a call re-issued after
 a restart returns the same child whatever its `reference`. `reference` stays the caller's own
 idempotency key, idempotent on `(caller, reference)`, and is optional. That step has no
@@ -118,12 +123,60 @@ effects too.
   |---|---|
   | `≤ projected_pos` | Already handled. Skip it, and ack again. |
   | `= projected_pos + 1` | **Claim, project, confirm** (`persist/positions.rs`). The claim is a conditional update of `claimed_pos` that succeeds only while no other replica has one in flight. So when two replicas get the same frame, one projects it and the other waits for the confirm, then skips it. A claim left unconfirmed for 30 s (its replica died mid-projection) is taken over. A projection that fails gives its claim back, so the resend projects it. |
-  | `> projected_pos + 1` | The agent no longer holds the frames in between, because it always sends from its lowest unacked position, in order. The gap is logged, and the frame is handled as the next one. |
+  | `> projected_pos + 1` | A gap. The frame is **not taken**: the server answers `JOURNAL_NACK {journal_session, expected}` (once per gap) and the agent sends again from `expected`, in order. |
+
+  Only the agent passes a position over: if it no longer holds `expected` (its journal file is gone)
+  it says `JOURNAL_SKIP {session, first, last}`, the server logs the loss as an error and goes on
+  after `last`. (Over the HookAgent HTTP intake there is nobody to ask again: a gap is passed over
+  there, with a warning, as before.)
 
   A frame whose projection is refused (an unknown state, another agent's task) still counts as
   projected. Otherwise the agent would resend it forever and hold the watermark back.
-- **`JOURNAL_ACK {journal_session, pos}`** (server → agent) is cumulative: "projected up to `pos`".
-  It is debounced, and sent at once after a terminal report. An unnumbered frame gets no ack.
+- **`JOURNAL_ACK {journal_session, through}`** (server → agent) is cumulative: "projected through
+  this position". It is debounced, and sent at once after a terminal report. An unnumbered frame gets
+  no ack. (`through`, not `pos`: a frame's own `pos` is where it stands in its sender's stream.)
+- **The handshake says where both sides stand.** `REGISTER` lists the `sessions` the agent still holds
+  frames of, and `INIT` answers with `positions {session: projected_pos}`: the agent drops what is at
+  or below and sends the rest. `REGISTER` also carries a `nonce`, new per connection attempt, which
+  `INIT` says again: an `INIT` that names another connection (one gone since) is ignored.
+- **A report is one event.** A `TaskEvent` records the report's `(agent_session, agent_pos)` under a
+  unique constraint: a report sent again after its projection was written but never confirmed finds
+  its event there and writes nothing.
+
+## Commands: the other direction
+
+What the server sends an agent and must not lose is numbered the same way, in a stream of its own:
+
+- A **command** carries `pos`: 1, 2, 3, … per agent, no gaps. Commands are `ASSIGN`, `CANCEL`,
+  `INTERRUPT`, `PAUSE`, `RESUME`, `DECIDE`, `COLLECT`, `BLOK_REFUSED`, the answers to numbered requests
+  (`ASSIGN_RESPONSE`, `CONTROL_RESPONSE`) and every `…_EVENT` mirror of a task the agent assigned.
+- The server keeps a command (`consumers/agent_queue.rs`, a redis stream whose entry ids are the
+  positions) until the agent's cumulative **`COMMAND_ACK {through}`** covers it. Sending forgets
+  nothing.
+- `REGISTER` carries `commands_seen`, the highest position the process has handled (0 for a fresh
+  process): the server sends from the one after. So a command written into a connection that died is
+  sent again, and the agent, which hands a position on once, does not carry it out twice.
+- Not commands: `INIT`, `HEARTBEAT`, `JOURNAL_ACK`, `JOURNAL_NACK`, `PROTOCOL_ERROR`, `KICK`, `BOUNCE`,
+  the answers to unnumbered requests, and every frame of a probe, which travels on a lane of its own
+  ahead of the commands and at most once.
+- A child's mirror names its `event` (the `TaskEvent` id); a mirror seen twice (a replay for a child
+  found again, overlapping what arrived live) is the same event. There is no `seq` any more, on
+  mirrors or on reports.
+
+**Delivered once, handled once, never tried again.** Sending a frame again is how "once" is kept
+over a connection that can drop: the receiver knows it by its position and does nothing. It is not
+a retry. Whatever handling a frame leads to is its outcome, a failure included: it is reported once,
+and trying again belongs to whoever called (see "Pickup, and asking" in
+[agent-protocol.md](agent-protocol.md)).
+
+- A command the agent cannot handle fails its task (`CRITICAL`) and is acknowledged like any other.
+- A request whose parent task has ended is answered with an error.
+- A database or redis failure on the server is not the frame's fault: the connection is closed with
+  a code the agent reconnects on, and the frame, never handled, is delivered again. A frame the
+  server cannot read at all is schema drift, and closes for good.
+
+An agent says it speaks this with `protocol_2` in `REGISTER`'s `features`. The server refuses one
+that does not.
 - **The agent persists what it retains.** A frame recorded but not yet acked must survive a restart.
   - The Rust agent keeps a local SQLite file with the `journal` and `journal_sync (session_id,
     acked_pos)` tables. `acked_pos` is only ever raised.

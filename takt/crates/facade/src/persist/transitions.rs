@@ -72,6 +72,7 @@ pub struct NewEvent {
     pub progress: Option<i64>,
     pub level: Option<String>,
     pub agent_pos: Option<i64>,
+    pub agent_session: Option<String>,
     pub agent_ts: Option<DateTime<Utc>>,
     pub step: Option<i64>,
     pub effect: Option<String>,
@@ -84,6 +85,7 @@ impl NewEvent {
     pub fn stamped(stamp: crate::persist::positions::Stamp) -> Self {
         Self {
             agent_pos: stamp.agent_pos,
+            agent_session: stamp.agent_session,
             agent_ts: stamp.agent_ts,
             step: stamp.step,
             ..Self::default()
@@ -102,6 +104,9 @@ impl NewEvent {
 /// `latest_returns`), so a client following a task reads three columns instead of its whole
 /// event history. Every event is written here, so nothing else has to keep them. They summarise
 /// the events, so `revision` does not move.
+///
+/// A report is one event: the event of a report sent again (same task, journal session and
+/// position) is the one already there, and its id is what comes back. Nothing is written then.
 pub async fn insert_event(
     executor: impl sqlx::PgExecutor<'_>,
     task: i64,
@@ -112,8 +117,10 @@ pub async fn insert_event(
         "WITH event AS (
             INSERT INTO facade_taskevent
                 (task_id, kind, message, returns, progress, level, agent_pos, agent_ts, step, effect,
-                 key, value, delegated_to_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                 key, value, delegated_to_id, agent_session)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+             ON CONFLICT (task_id, agent_session, agent_pos)
+                WHERE agent_session IS NOT NULL AND agent_pos IS NOT NULL DO NOTHING
              RETURNING id, task_id, kind, message, returns, progress
          ), kept AS (
             UPDATE facade_task t
@@ -124,7 +131,11 @@ pub async fn insert_event(
               FROM event
              WHERE t.id = event.task_id
          )
-         SELECT id FROM event",
+         SELECT id FROM event
+         UNION ALL
+         SELECT id FROM facade_taskevent
+          WHERE task_id = $1 AND agent_session = $14 AND agent_pos = $7
+          LIMIT 1",
     )
     .bind(task)
     .bind(kind)
@@ -144,6 +155,7 @@ pub async fn insert_event(
     .bind(&event.key)
     .bind(event.value.as_ref().map(sqlx::types::Json))
     .bind(event.delegated_to)
+    .bind(&event.agent_session)
     .fetch_one(executor)
     .await
 }

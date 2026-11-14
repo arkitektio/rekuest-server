@@ -89,6 +89,7 @@ pub fn routes() -> Router<Shared> {
         .route("/internal/pause", post(pause))
         .route("/internal/resume", post(resume))
         .route("/internal/decide", post(decide))
+        .route("/internal/inquire", post(inquire))
         .route("/internal/bounce", post(bounce))
         .route("/internal/kick", post(kick))
         .route("/internal/block", post(block))
@@ -325,6 +326,28 @@ async fn control(state: &Shared, request: &ControlRequest, control: backend::Con
         backend::request_control(&state.facade, &request.task.text(), control, caller).await?;
     Ok(Json(json!({"task": task.to_string()})))
 }
+
+#[derive(Debug, Deserialize)]
+struct InquireRequest {
+    #[serde(default)]
+    principal: Option<Principal>,
+    task: Id,
+}
+
+// Ask a task's agent whether it is still on it (`facade::inquiry`). Whoever assigned the
+// task may ask; a trusted caller (no principal) may ask about any.
+internal!(inquire, InquireRequest, |state, request| {
+    let task = request.task.text();
+    if let Some(principal) = &request.principal {
+        let principal = principal.context(&state).await?;
+        let caller = backend::get_caller_for_context(&state.facade.db, &principal).await?;
+        if facade::inquiry::caller_of(&state.facade, &task).await? != Some(caller) {
+            return Err(BackendError::Forbidden("Not a task you assigned.".into()).into());
+        }
+    }
+    let inquiry = facade::inquiry::inquire(&state.facade, &task).await?;
+    Ok(Json(json!(inquiry)))
+});
 
 internal!(cancel, ControlRequest, |state, request| control(
     &state,

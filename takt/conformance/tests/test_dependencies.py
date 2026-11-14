@@ -145,7 +145,7 @@ ASSIGN = "mutation ($input: AssignInput!) { assign(input: $input) { id } }"
 
 async def started(agent, task: str) -> None:  # noqa: ANN001
     """The agent reports the task started."""
-    await agent.send({"type": "STARTED", "task": task, "seq": 1})
+    await agent.send({"type": "STARTED", "task": task})
 
 
 async def running_chain(agents, graphql, tokens: tuple[str, str, str]) -> tuple[Any, Any, Any, str, str, str]:  # noqa: ANN001
@@ -174,21 +174,21 @@ async def test_a_nested_workflow_runs_down_and_its_results_come_back_up(agents, 
     leaf, relay, workflow, root, child, grandchild = await running_chain(agents, graphql, ("conf_46", "conf_47", "conf_48"))
 
     # The leaf answers; the relay, its caller, sees every event of the call it made.
-    await leaf.send({"type": "YIELD", "task": grandchild, "returns": {"return0": 2}, "seq": 2})
-    await leaf.send({"type": "COMPLETED", "task": grandchild, "seq": 3})
+    await leaf.send({"type": "YIELD", "task": grandchild, "returns": {"return0": 2}})
+    await leaf.send({"type": "COMPLETED", "task": grandchild})
     seen = await mirrors_of(relay, grandchild, "COMPLETED_EVENT")
     assert [m["type"] for m in seen] == ["STARTED_EVENT", "YIELD_EVENT", "COMPLETED_EVENT"], seen
     assert seen[1]["returns"] == {"return0": 2}, seen[1]
 
     # The relay passes the result on; the workflow sees its own call, not the relay's.
-    await relay.send({"type": "YIELD", "task": child, "returns": {"return0": 2}, "seq": 2})
-    await relay.send({"type": "COMPLETED", "task": child, "seq": 3})
+    await relay.send({"type": "YIELD", "task": child, "returns": {"return0": 2}})
+    await relay.send({"type": "COMPLETED", "task": child})
     seen = await mirrors_of(workflow, child, "COMPLETED_EVENT")
     assert [m["type"] for m in seen] == ["STARTED_EVENT", "YIELD_EVENT", "COMPLETED_EVENT"], seen
     assert seen[1]["returns"] == {"return0": 2}, seen[1]
 
-    await workflow.send({"type": "YIELD", "task": root, "returns": {"return0": 2}, "seq": 2})
-    await workflow.send({"type": "COMPLETED", "task": root, "seq": 3})
+    await workflow.send({"type": "YIELD", "task": root, "returns": {"return0": 2}})
+    await workflow.send({"type": "COMPLETED", "task": root})
     for _ in range(100):
         done = await graphql("conf_48")("query ($id: ID!) { task(id: $id) { isDone } }", id=root)
         if done["task"]["isDone"]:

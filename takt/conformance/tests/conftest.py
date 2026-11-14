@@ -90,13 +90,20 @@ class RawAgent:
 
     def __init__(self, ws: ClientConnection) -> None:
         self.ws = ws
+        #: Acknowledge every command as it is read, as an agent does once it has handled
+        #: one. Off for a scenario about what the server does without the acknowledgement.
+        self.auto_ack = True
 
     async def send(self, frame: dict[str, Any] | str) -> None:
         await self.ws.send(frame if isinstance(frame, str) else json.dumps({"id": str(uuid.uuid4()), **frame}))
 
     async def receive(self, timeout: float = RECEIVE_TIMEOUT) -> dict[str, Any]:
         try:
-            return json.loads(await asyncio.wait_for(self.ws.recv(), timeout))
+            frame = json.loads(await asyncio.wait_for(self.ws.recv(), timeout))
+            if self.auto_ack and isinstance(frame.get("pos"), int) and frame.get("type") != "JOURNAL_ACK":
+                # A command: the server keeps it until this says it arrived.
+                await self.send({"type": "COMMAND_ACK", "through": frame["pos"]})
+            return frame
         except websockets.ConnectionClosed as e:
             raise Closed(e.rcvd.code if e.rcvd else None, e.rcvd.reason if e.rcvd else "") from None
 
@@ -119,8 +126,24 @@ class RawAgent:
         except Closed as closed:
             return closed.code
 
-    async def register(self, token: str, *, session_id: str | None = None, force: bool = False, **declaration: Any) -> dict[str, Any]:
-        await self.send({"type": "REGISTER", "token": token, "force": force, "session_id": session_id, "spec_version": "8.0.0", **declaration})
+    async def receive_where(self, wanted: Any, timeout: float = RECEIVE_TIMEOUT) -> dict[str, Any]:  # noqa: ANN401
+        """The next frame ``wanted`` says yes to, answering heartbeats and skipping the rest:
+        an agent that registers anew is first sent whatever its last connection never
+        acknowledged."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        while True:
+            frame = await self.receive(max(0.01, deadline - loop.time()))
+            if wanted(frame):
+                return frame
+            if frame["type"] == "HEARTBEAT":
+                await self.send({"type": "HEARTBEAT_ANSWER"})
+
+    async def register(self, token: str, *, session_id: str | None = None, force: bool = False, commands_seen: int = 0, sessions: list[str] | None = None, **declaration: Any) -> dict[str, Any]:
+        # Protocol 2: the agent says so (a server refuses one that does not), names this
+        # connection, and says where it stands (no command handled, no session owed).
+        handshake = {"features": ["protocol_2"], "nonce": uuid.uuid4().hex, "commands_seen": commands_seen, "sessions": sessions or []}
+        await self.send({"type": "REGISTER", "token": token, "force": force, "session_id": session_id, "spec_version": "9.1.0", **handshake, **declaration})
         return await self.receive_type("INIT")
 
     async def close(self) -> None:

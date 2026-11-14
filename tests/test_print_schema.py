@@ -19,10 +19,13 @@ def test_no_phantom_column_ordering_keys():
 
     ``strawberry_django.order_type`` never validates its annotations against the model, so an
     ordering key naming a nonexistent column builds a perfectly valid SDL and only raises
-    ``FieldError`` at query time. ``TaskStatus`` had no backing column and no consumer at all.
+    ``FieldError`` at query time. A ``status`` ordering key (with an enum of its own) had no
+    backing column and no consumer at all.
+
+    The guard is the ordering inputs, not the name: ``TaskStatus`` is now what an agent says
+    of a task it is asked about (the ``inquire`` mutation), which nothing sorts or filters by.
     """
     sdl = str(schema)
-    assert "TaskStatus" not in sdl
 
     # ``Session`` genuinely has started_at/ended_at — SessionOrder is the legitimate original
     # these two were copy-pasted from, so scope the assertion to the offending inputs.

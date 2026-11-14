@@ -80,9 +80,9 @@ class Measured:
                         self.heartbeats.append(now - last_heartbeat)
                     last_heartbeat = now
                 elif frame["type"] == "JOURNAL_ACK":
-                    for pos in [p for p in self.sent_at if p <= frame["pos"]]:
+                    for pos in [p for p in self.sent_at if p <= frame["through"]]:
                         self.lags.append(now - self.sent_at.pop(pos))
-                    self.acked = max(self.acked, frame["pos"])
+                    self.acked = max(self.acked, frame["through"])
                 elif frame["type"] == "ASSIGN":
                     await self.assigns.put((frame["task"], now))
         except Closed as closed:

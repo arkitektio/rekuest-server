@@ -36,7 +36,6 @@ pub async fn on_agent_state_patch(
     op: &str,
     path: &str,
     value: &Value,
-    old_value: &Value,
     task_id: Option<&str>,
 ) -> PersistResult<()> {
     let state = state_id(ctx, agent, state_name).await?;
@@ -70,7 +69,8 @@ pub async fn on_agent_state_patch(
     .bind(op)
     .bind(path)
     .bind(sqlx::types::Json(value))
-    .bind((!old_value.is_null()).then_some(sqlx::types::Json(old_value)))
+    // No agent ever said what a value was before: the column stays, empty.
+    .bind(None::<sqlx::types::Json<Value>>)
     .bind(task)
     .bind(global_rev as i32)
     .bind(stamp.agent_pos)
@@ -188,7 +188,6 @@ pub async fn on_state(ctx: &Context, agent: i64, frame: &AgentFrame) -> PersistR
             op,
             path,
             value,
-            old_value,
             task_id,
             ..
         } => {
@@ -202,7 +201,6 @@ pub async fn on_state(ctx: &Context, agent: i64, frame: &AgentFrame) -> PersistR
                 op,
                 path,
                 value,
-                old_value,
                 task_id.as_deref(),
             )
             .await?

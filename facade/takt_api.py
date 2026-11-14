@@ -98,6 +98,26 @@ class TaskAnswer(Answer):
     task: str
 
 
+class InquireRequest(Request):
+    """Ask about a task. With a principal, only a task they assigned."""
+
+    task: str
+    principal: Principal | None = None
+
+
+class InquireAnswer(Answer):
+    """What is known of a task that was asked about (``facade::inquiry::Inquiry``)."""
+
+    task: str
+    status: str | None = None
+    asked: bool = False
+    detail: str | None = None
+    step: int | None = None
+    reported_at: float | None = None
+    progress: int | None = None
+    message: str | None = None
+
+
 class DecideRequest(Request):
     """A person's answer to a held task. Always with a principal: only a person decides."""
 
@@ -339,6 +359,7 @@ INTERRUPT = Route("interrupt", TaskAnswer, ControlRequest)
 PAUSE = Route("pause", TaskAnswer, ControlRequest)
 RESUME = Route("resume", TaskAnswer, ControlRequest)
 DECIDE = Route("decide", TaskAnswer, DecideRequest)
+INQUIRE = Route("inquire", InquireAnswer, InquireRequest)
 BOUNCE = Route("bounce", AgentAnswer, AgentRequest)
 KICK = Route("kick", AgentAnswer, AgentRequest)
 BLOCK = Route("block", AgentAnswer, AgentRequest)

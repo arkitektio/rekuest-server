@@ -1,9 +1,11 @@
+import datetime
 import logging
 from typing import cast
 
+import strawberry
 from kante.types import Info
 
-from facade import inputs, models, takt, types
+from facade import enums, inputs, models, takt, types
 from facade.caller_context import CallerContext
 
 logger = logging.getLogger(__name__)
@@ -28,6 +30,20 @@ def resume(info: Info, input: inputs.ResumeInput) -> types.Task:
 
 def decide(info: Info, input: inputs.DecideInput) -> types.Task:
     return cast("types.Task", takt.decide(CallerContext.from_info(info), input.to_pydantic()))
+
+
+def inquire(info: Info, input: inputs.InquireInput) -> types.TaskInquiry:
+    answer = takt.inquire(input.to_pydantic(), caller=_caller(info))
+    return types.TaskInquiry(
+        task=strawberry.ID(answer.task),
+        status=enums.TaskStatus(answer.status) if answer.status else None,
+        asked=answer.asked,
+        detail=answer.detail,
+        step=answer.step,
+        reported_at=datetime.datetime.fromtimestamp(answer.reported_at, datetime.UTC) if answer.reported_at is not None else None,
+        progress=answer.progress,
+        message=answer.message,
+    )
 
 
 def cancel(info: Info, input: inputs.CancelInput) -> types.Task:

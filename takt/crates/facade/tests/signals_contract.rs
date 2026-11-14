@@ -246,17 +246,12 @@ async fn the_rust_fan_out_is_the_python_fan_out() {
 
 /// The frames waiting in an agent's own queue, oldest first.
 async fn queued(ctx: &facade::Context, agent: i64) -> Vec<Value> {
-    let key = facade::consumers::agent_queue::queue_key(&ctx.settings, agent);
-    let frames: Vec<String> = redis::cmd("LRANGE")
-        .arg(key)
-        .arg(0)
-        .arg(-1)
-        .query_async(&mut ctx.redis.clone())
-        .await
-        .unwrap();
+    let frames =
+        facade::consumers::agent_queue::pending(&mut ctx.redis.clone(), &ctx.settings, agent)
+            .await
+            .unwrap();
     frames
         .iter()
-        .rev()
         .map(|frame| serde_json::from_str(frame).unwrap())
         .collect()
 }
@@ -302,7 +297,7 @@ async fn what_a_child_reports_is_kept_for_the_agent_that_asked_for_it() {
     let frames = queued(&ctx, agent).await;
     assert_eq!(kinds(&frames), ["YIELD_EVENT"]);
     assert_eq!(frames[0]["task"], child.as_str());
-    assert_eq!(frames[0]["seq"], id("yield"));
+    assert_eq!(frames[0]["event"], id("yield").to_string());
     assert_eq!(frames[0]["returns"]["return0"], 7);
 
     // Back again, it gets everything through the queue, in the order it was reported.

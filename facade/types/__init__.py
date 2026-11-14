@@ -46,7 +46,7 @@ from .task import (
     TaskEvent,
     TaskInstruct,
 )
-from .probe import Probe, ProbeEvent, ProbeStats
+from .probe import Probe, ProbeEvent, ProbeStats, TaskInquiry
 from .auth import App, Caller, Client, Device, Organization, Release, User
 from .base import build_prescoped_queryset
 from .blok import ActionBlok, Blok, BlokAgentMapping, BlokDependency, BlokEdit, BlokRevision, MaterializedBlok, RevisionDependency
@@ -140,6 +140,7 @@ __all__ = [
     "Probe",
     "ProbeEvent",
     "ProbeStats",
+    "TaskInquiry",
     "TaskStats",
     "task_stats",
     "TaskEvent",

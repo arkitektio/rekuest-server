@@ -18,14 +18,13 @@ use sqlx::types::Json;
 use crate::caller_context::CallerContext;
 use crate::context::Context;
 use crate::liveness::agent_is_live;
-use crate::messages::{Assign, Journal, RecordedEffect, StateRequirement, ToAgent};
+use crate::messages::{Assign, Journal, RecordedEffect, StateRequirement};
 use crate::persist::leases::{self, IN_FLIGHT};
 use crate::persist::transitions::{
     self, insert_event, update_task_kind, Claim, Guard, NewEvent, TaskRow, TASK_ROW,
 };
 use crate::provenance::{assigner, mint_token_for_task, MintTask};
 use crate::signals;
-use crate::transport;
 
 /// The pickup watchdog's budget: the original dispatch plus ONE redelivery. Failed handoffs
 /// (redis down, a webhook that is not delivered) count, or a broken transport never fails.
@@ -248,24 +247,10 @@ pub async fn journal(ctx: &Context, task: i64) -> Result<Journal, sqlx::Error> {
     })
 }
 
-/// Hand an Assign to the agent's transport; on failure, record that it never left (`_dispatch`).
-///
-/// `dispatched_at` means "successfully handed over at". A failed handoff resets it to NULL so
-/// the pickup watchdog retries it, and NULL proves the agent cannot have the task.
+/// Hand an Assign to the agent's transport, as an assign's own dispatch does
+/// ([`crate::backend::dispatch`]): once, with what a failure means decided there.
 async fn dispatch(ctx: &Context, task: i64, agent: i64, assign: Assign) -> bool {
-    if transport::broadcast(ctx, agent, ToAgent::Assign(Box::new(assign)), false).await {
-        return true;
-    }
-    tracing::error!(task, agent, "dispatching the task failed");
-    if let Err(e) =
-        sqlx::query("UPDATE facade_task SET dispatched_at = NULL WHERE id = $1 AND is_done = false")
-            .bind(task)
-            .execute(&ctx.db)
-            .await
-    {
-        tracing::error!(task, "recording the failed dispatch failed: {e}");
-    }
-    false
+    crate::backend::dispatch(ctx, task, agent, assign).await
 }
 
 /// Fail an agent's in-flight work after a confirmed loss (`reconcile_orphaned_executor_work`).
@@ -301,23 +286,33 @@ pub async fn reconcile_orphaned_executor_work(
 /// merely undelivered). Each task is claimed, so concurrent sweeps write one LOST per task.
 pub async fn fail_and_cascade_inflight(ctx: &Context, tasks: &[i64]) -> Result<(), sqlx::Error> {
     for &task in tasks {
-        let row: Option<(String, Option<DateTime<Utc>>, bool)> = sqlx::query_as(
+        let row: Option<Orphan> = sqlx::query_as(
             "SELECT t.latest_event_kind, t.picked_up_at,
-                    COALESCE(i.execution = 'WORKFLOW', false)
+                    COALESCE(i.execution = 'WORKFLOW', false), t.on_lost
                FROM facade_task t LEFT JOIN facade_implementation i ON i.id = t.implementation_id
               WHERE t.id = $1",
         )
         .bind(task)
         .fetch_optional(&ctx.db)
         .await?;
-        let Some((kind, picked_up_at, workflow)) = row else {
+        let Some((kind, picked_up_at, workflow, on_lost)) = row else {
             continue;
         };
         if (kind == "QUEUED" || kind == "HELD") && picked_up_at.is_none() {
             continue; // undelivered (or held, never sent), not orphaned
         }
-        if workflow && resume_workflow(ctx, task).await? {
-            continue;
+        // What the assign asked for; unasked, a workflow goes on and anything else ends
+        // (`backend::lost_policy`, which checked the ask against the implementation).
+        let again = match on_lost.as_deref() {
+            Some(crate::backend::ON_LOST_FAIL) => None,
+            Some(crate::backend::ON_LOST_RESTART) => Some(Again::Restart),
+            Some(crate::backend::ON_LOST_RESUME) => workflow.then_some(Again::Resume),
+            _ => workflow.then_some(Again::Resume),
+        };
+        if let Some(again) = again {
+            if send_again(ctx, task, again).await? {
+                continue;
+            }
         }
         transitions::finalize_lost(
             ctx,
@@ -332,27 +327,48 @@ pub async fn fail_and_cascade_inflight(ctx: &Context, tasks: &[i64]) -> Result<(
     Ok(())
 }
 
-/// Send a workflow whose agent died again, with its journal, to be resumed (`_aresume_workflow`).
+/// An orphaned task as the loss path reads it: its latest event, when it was picked up, whether
+/// it is a workflow, and what its assign asked for should its agent be lost.
+type Orphan = (String, Option<DateTime<Utc>>, bool, Option<String>);
+
+/// How a task whose agent was lost is sent again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Again {
+    /// A workflow, with its journal: it goes on from what it recorded.
+    Resume,
+    /// From the start, as its caller asked for an action declared safe to run twice.
+    Restart,
+}
+
+/// Send a task whose agent died again (`_aresume_workflow`): a workflow with its journal, to go
+/// on; a task its caller asked to be restarted, as it was first sent.
 ///
-/// Resumed only by the code it ran: replaying the journal onto changed code could take another
-/// path, so it ends LOST instead, as it does after [`MAX_RESUMES`]. Returns whether it was
-/// handled (resumed, or lost for one of those reasons); `false` leaves it to the plain LOST.
-async fn resume_workflow(ctx: &Context, task: i64) -> Result<bool, sqlx::Error> {
-    let (pinned, current, resumes, agent): (Option<String>, Option<String>, i32, i64) =
-        sqlx::query_as(
-            "SELECT t.code_hash, i.code_hash, t.resumes, t.agent_id
+/// A workflow is resumed only by the code it ran: replaying the journal onto changed code could
+/// take another path, so it ends LOST instead. Either ends LOST after [`MAX_RESUMES`]. Returns
+/// whether it was handled (sent again, or lost for one of those reasons); `false` leaves it to
+/// the plain LOST.
+async fn send_again(ctx: &Context, task: i64, again: Again) -> Result<bool, sqlx::Error> {
+    let (pinned, current, resumes, agent, limit): (
+        Option<String>,
+        Option<String>,
+        i32,
+        i64,
+        Option<i32>,
+    ) = sqlx::query_as(
+        "SELECT t.code_hash, i.code_hash, t.resumes, t.agent_id, t.max_resumes
                FROM facade_task t LEFT JOIN facade_implementation i ON i.id = t.implementation_id
               WHERE t.id = $1",
-        )
-        .bind(task)
-        .fetch_one(&ctx.db)
-        .await?;
-    if resumes >= MAX_RESUMES {
-        let reason = format!("Resumed {resumes} times, and its agent died each time.");
+    )
+    .bind(task)
+    .fetch_one(&ctx.db)
+    .await?;
+    // What the assign allowed; unasked, the server's own limit.
+    if resumes >= limit.unwrap_or(MAX_RESUMES) {
+        let reason = format!("Sent again {resumes} times, and its agent died each time.");
         transitions::finalize_lost(ctx, task, &reason, true, None, false).await?;
         return Ok(true);
     }
-    if pinned != current {
+    if again == Again::Resume && pinned != current {
         transitions::finalize_lost(
             ctx,
             task,
@@ -377,8 +393,11 @@ async fn resume_workflow(ctx: &Context, task: i64) -> Result<bool, sqlx::Error> 
             ),
             event: Some(NewEvent {
                 message: Some(
-                    "Its agent died: the workflow is sent again, to resume from what it recorded."
-                        .into(),
+                    match again {
+                        Again::Resume => "Its agent died: the workflow is sent again, to resume from what it recorded.",
+                        Again::Restart => "Its agent died: the task is run again from the start, as its caller asked.",
+                    }
+                    .into(),
                 ),
                 ..NewEvent::default()
             }),
@@ -445,13 +464,24 @@ pub async fn reconcile_stale_agents(ctx: &Context) -> Result<usize, sqlx::Error>
 ///
 /// The claim is a compare-and-set on the deadline itself: whichever backend clears
 /// `interrupt_at` owns the escalation, so N sweeping backends interrupt once. Returns the count.
+///
+/// A deadline measures an agent that has the command and does not act on it. While a socket
+/// agent is away the command only waits for it (it is kept until acknowledged), so its tasks
+/// are left alone here: the agent gets the command when it is back, and one that never comes
+/// back is the disconnect path's.
 pub async fn escalate_due_controls(ctx: &Context, limit: i64) -> Result<usize, sqlx::Error> {
-    let due: Vec<(i64, DateTime<Utc>, String)> = sqlx::query_as(
-        "SELECT id, interrupt_at, latest_instruct_kind FROM facade_task
-          WHERE is_done = false AND interrupt_at < $1 ORDER BY interrupt_at LIMIT $2",
-    )
-    .bind(Utc::now())
+    let now = Utc::now();
+    let due: Vec<(i64, DateTime<Utc>, String)> = sqlx::query_as(&format!(
+        "SELECT t.id, t.interrupt_at, t.latest_instruct_kind
+           FROM facade_task t LEFT JOIN facade_agent a ON a.id = t.agent_id
+          WHERE t.is_done = false AND t.interrupt_at < $1
+            AND (a.id IS NULL OR a.kind = 'WEBHOOK' OR {live})
+          ORDER BY t.interrupt_at LIMIT $2",
+        live = live_agent("$3"),
+    ))
+    .bind(now)
     .bind(limit)
+    .bind(stale_cutoff(ctx, now))
     .fetch_all(&ctx.db)
     .await?;
     let mut handled = 0;
@@ -657,11 +687,14 @@ async fn decide_unpicked(
 /// The pickup watchdog: no task waits forever for an agent that looks alive
 /// (`reconcile_unpicked_tasks`).
 ///
-/// Every other safety net keys on the agent looking dead. This one covers the rest: the Assign
-/// was lost, or the agent dropped it without a word. A dispatched task whose live agent (or
-/// webhook endpoint) reported nothing within the pickup deadline is redelivered once; silent
-/// again, it ends LOST. Tasks of agents that are not live are left to the disconnect path.
-/// Keyed on `picked_up_at` (any report), never on the kind alone. Returns the number acted on.
+/// The pickup watchdog, for agents that take work over HTTP only. A hook's response is the only
+/// acknowledgement there is, so a task its endpoint reported nothing on within the pickup
+/// deadline is sent once more; silent again, it ends LOST.
+///
+/// A socket agent has none: its assign is kept until the agent acknowledges it, the
+/// acknowledgement is the pickup (`picked_up_at`), and nothing is ever sent a second time as a
+/// new command. What became of an acknowledged task is its agent's to report and its caller's
+/// to ask ([`crate::inquiry`]). Returns the number acted on.
 pub async fn reconcile_unpicked_tasks(ctx: &Context, limit: i64) -> Result<usize, sqlx::Error> {
     if ctx.settings.pickup_deadline.is_zero() {
         return Ok(0);
@@ -672,13 +705,11 @@ pub async fn reconcile_unpicked_tasks(ctx: &Context, limit: i64) -> Result<usize
         "SELECT t.id FROM facade_task t JOIN facade_agent a ON a.id = t.agent_id
           WHERE t.is_done = false AND t.picked_up_at IS NULL AND t.latest_event_kind = 'QUEUED'
             AND (t.dispatched_at < $1 OR (t.dispatched_at IS NULL AND t.created_at < $1))
-            AND (a.kind = 'WEBHOOK' OR {live})
+            AND a.kind = 'WEBHOOK'
             AND NOT {HIGHER_ORDER} AND NOT {WAITING}
-          ORDER BY t.created_at LIMIT $3",
-        live = live_agent("$2"),
+          ORDER BY t.created_at LIMIT $2",
     ))
     .bind(cutoff)
-    .bind(stale_cutoff(ctx, now))
     .bind(limit)
     .fetch_all(&ctx.db)
     .await?;

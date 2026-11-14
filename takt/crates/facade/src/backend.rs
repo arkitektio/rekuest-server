@@ -18,12 +18,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use sqlx::{PgConnection, PgPool};
 
-use rekuest_core::inputs::ArgPortInputModel;
+use rekuest_core::inputs::{ActionDemandInputModel, ArgPortInputModel, StateDemandInputModel};
 use rekuest_core::pyjson;
 use rekuest_core::values::validate_assignment_args;
 
 use crate::caller_context::CallerContext;
 use crate::context::Context;
+use crate::demands::{unmet_action_demand, unmet_state_demand};
 use crate::higher_order::{build_lower_args, build_lower_dependencies};
 use crate::holds::{self, HeldChild};
 use crate::messages::{Assign, AssignPrompt, StateRequirement, ToAgent};
@@ -147,6 +148,13 @@ pub struct AssignInput {
     /// Read on a root only; a child takes its parent's.
     #[serde(default)]
     pub policy: Option<String>,
+    /// What to do with the task should its agent be lost while it runs (see [`lost_policy`]).
+    #[serde(default)]
+    pub on_lost: Option<String>,
+    /// How often the task may be sent again (resumed or restarted) before it ends LOST after
+    /// all. Unset, the server's own limit applies.
+    #[serde(default)]
+    pub max_resumes: Option<i32>,
     /// Why the agent asking for this child wants it run: shown to whoever decides a held child.
     #[serde(default)]
     pub prompt: Option<AssignPrompt>,
@@ -517,6 +525,7 @@ struct DependencyRow {
     id: i64,
     key: String,
     action_demands: Value,
+    state_demands: Value,
     auto_resolvable: bool,
     optional: bool,
     app_filter: Option<String>,
@@ -696,7 +705,7 @@ impl<'a> Resolve<'a> {
         overwrites: &[ResolvedDependencyInput],
     ) -> BackendResult<Level> {
         let dependencies: Vec<DependencyRow> = sqlx::query_as(
-            "SELECT id, key, action_demands, auto_resolvable, optional, app_filter, version_filter,
+            "SELECT id, key, action_demands, state_demands, auto_resolvable, optional, app_filter, version_filter,
                     min_viable_instances, max_viable_instances
                FROM facade_dependency WHERE implementation_id = $1 ORDER BY id",
         )
@@ -750,7 +759,61 @@ impl<'a> Resolve<'a> {
         if let Some(max) = dependency.max_viable_instances {
             agents.truncate(max.max(0) as usize);
         }
+        self.states_met(dependency, &agents).await?;
         self.entries(dependency, &agents, overwrite).await
+    }
+
+    /// Refuse an agent bound to `dependency` that lacks a state it demands, or has it with
+    /// other fields: the call would read a state that is not there.
+    async fn states_met(&self, dependency: &DependencyRow, agents: &[i64]) -> BackendResult<()> {
+        for slot in dependency.state_demands.as_array().into_iter().flatten() {
+            let demand: StateDemandInputModel = slot
+                .get("demand")
+                .filter(|demand| !demand.is_null())
+                .and_then(|demand| serde_json::from_value(demand.clone()).ok())
+                .unwrap_or_default();
+            let optional = slot
+                .get("optional")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let key = demand
+                .key
+                .as_deref()
+                .filter(|key| !key.is_empty())
+                .or_else(|| slot.get("key").and_then(Value::as_str))
+                .unwrap_or_default();
+            // The state by its key, else by its interface: as a guard finds it.
+            let states: Vec<(i64, Option<Value>)> = sqlx::query_as(
+                "SELECT DISTINCT ON (s.agent_id) s.agent_id, d.ports
+                   FROM facade_state s JOIN facade_statedefinition d ON d.id = s.definition_id
+                  WHERE s.agent_id = ANY($1) AND (s.key = $2 OR s.interface = $2)
+                  ORDER BY s.agent_id, (s.key = $2) DESC, s.id",
+            )
+            .bind(agents)
+            .bind(key)
+            .fetch_all(&self.ctx.db)
+            .await?;
+            for agent in agents {
+                let Some((_, fields)) = states.iter().find(|(owner, _)| owner == agent) else {
+                    if optional {
+                        continue;
+                    }
+                    return Err(BackendError::Refused(format!(
+                        "Dependency {}: agent {agent} has no state {key}",
+                        dependency.key
+                    )));
+                };
+                if let Some(reason) =
+                    unmet_state_demand(&demand, fields.as_ref().unwrap_or(&Value::Null))
+                {
+                    return Err(BackendError::Refused(format!(
+                        "Dependency {}: the state {key} of agent {agent} is not what is demanded: {reason}",
+                        dependency.key
+                    )));
+                }
+            }
+        }
+        Ok(())
     }
 
     /// The per-agent implementation maps of one dependency (`_build_dependency_entries`): each
@@ -766,6 +829,8 @@ impl<'a> Resolve<'a> {
         // Slot → action key: the demand's key names the action; the slot key stands in for it
         // when the demand pins none. A later slot for the same action wins, as in the dict.
         let mut action_keys: Vec<(String, String)> = vec![];
+        // What each slot demands of the action bound to it: (action key, slot, demand).
+        let mut demanded: Vec<(String, String, ActionDemandInputModel)> = vec![];
         for demand in dependency.action_demands.as_array().into_iter().flatten() {
             let slot = demand
                 .get("key")
@@ -779,20 +844,38 @@ impl<'a> Resolve<'a> {
                 .filter(|k| !k.is_empty())
                 .map(str::to_owned)
                 .unwrap_or_else(|| slot.clone());
+            if let Some(model) = demand
+                .get("demand")
+                .filter(|demand| !demand.is_null())
+                .and_then(|demand| serde_json::from_value(demand.clone()).ok())
+            {
+                demanded.push((action_key.clone(), slot.clone(), model));
+            }
             match action_keys.iter_mut().find(|(key, _)| *key == action_key) {
                 Some(entry) => entry.1 = slot,
                 None => action_keys.push((action_key, slot)),
             }
         }
 
-        // (agent, action key, implementation, has dependencies of its own, is a wrapper)
-        let mut found: Vec<(i64, String, i64, bool, bool)> = vec![];
+        // (agent, action key, implementation, has dependencies of its own, is a wrapper,
+        //  the action's name, args and returns)
+        #[allow(clippy::type_complexity)]
+        let mut found: Vec<(
+            i64,
+            String,
+            i64,
+            bool,
+            bool,
+            String,
+            Option<Value>,
+            Option<Value>,
+        )> = vec![];
         if !agents.is_empty() && !action_keys.is_empty() {
             let keys: Vec<&str> = action_keys.iter().map(|(key, _)| key.as_str()).collect();
             found = sqlx::query_as(
                 "SELECT i.agent_id, ac.key, i.id,
                         EXISTS (SELECT 1 FROM facade_dependency d WHERE d.implementation_id = i.id),
-                        i.higher_order_for_id IS NOT NULL
+                        i.higher_order_for_id IS NOT NULL, ac.name, ac.args, ac.returns
                    FROM facade_implementation i JOIN facade_action ac ON ac.id = i.action_id
                   WHERE i.agent_id = ANY($1) AND ac.key = ANY($2)
                   ORDER BY i.id",
@@ -819,15 +902,31 @@ impl<'a> Resolve<'a> {
                 .unwrap_or_default();
             let mut actions = Map::new();
             for (action_key, slot) in &action_keys {
-                let Some((_, _, implementation, nested, wrapper)) = found
+                let Some((_, _, implementation, nested, wrapper, name, args, returns)) = found
                     .iter()
                     .rev()
-                    .find(|(a, key, _, _, _)| a == agent && key == action_key)
+                    .find(|(a, key, ..)| a == agent && key == action_key)
                 else {
                     return Err(BackendError::Refused(format!(
                         "No implementation found for dependency demand {slot} on agent {agent}"
                     )));
                 };
+                // The action is there by its key; it also has to take and return what is
+                // demanded, or the call made through this binding fails inside the agent.
+                for (_, demanding, demand) in demanded.iter().filter(|(key, ..)| key == action_key)
+                {
+                    if let Some(reason) = unmet_action_demand(
+                        demand,
+                        name,
+                        args.as_ref().unwrap_or(&Value::Null),
+                        returns.as_ref().unwrap_or(&Value::Null),
+                    ) {
+                        return Err(BackendError::Refused(format!(
+                            "Dependency {}: {action_key} on agent {agent} is not what {demanding} demands: {reason}",
+                            dependency.key
+                        )));
+                    }
+                }
                 let mut bound =
                     json!({"implementation": implementation.to_string(), "dependencies": {}});
                 if *nested {
@@ -1114,6 +1213,10 @@ struct NewTask {
     trigger: Option<i64>,
     trigger_depth: i16,
     policy: &'static str,
+    /// What the caller asked for should the agent be lost; None is the implementation's default.
+    on_lost: Option<&'static str>,
+    /// How often the caller lets it be sent again; None is the server's limit.
+    max_resumes: Option<i32>,
     /// Created `HELD`: an agent's child waiting for a person, never dispatched until approved.
     held: bool,
     /// What the agent's state must hold for it to run; stored NULL when there is none.
@@ -1154,6 +1257,8 @@ impl NewTask {
             trigger: None,
             trigger_depth: 0,
             policy: holds::ASK,
+            on_lost: None,
+            max_resumes: None,
             held: false,
             state_requires: vec![],
             space: None,
@@ -1168,10 +1273,10 @@ impl NewTask {
                  dependency_method, resolution_id, is_higher_order_child, latest_event_kind,
                  latest_instruct_kind, dependencies, caller_id, dispatched_at, dispatch_attempts,
                  not_before, schedule_id, ephemeral, signal_id, trigger_id, trigger_depth, revision,
-                 policy, state_requires, space_id)
+                 policy, state_requires, space_id, on_lost, max_resumes)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
                      $18, CASE WHEN $30 THEN 'HELD' ELSE 'QUEUED' END, 'ASSIGN', $19, $20, $21,
-                     $22, $23, $24, $25, $26, $27, $28, 1, $29, $31, $32)
+                     $22, $23, $24, $25, $26, $27, $28, 1, $29, $31, $32, $33, $34)
              RETURNING id",
         )
         .bind(self.action)
@@ -1206,8 +1311,70 @@ impl NewTask {
         .bind(self.held)
         .bind((!self.state_requires.is_empty()).then_some(sqlx::types::Json(&self.state_requires)))
         .bind(self.space)
+        .bind(self.on_lost)
+        .bind(self.max_resumes)
         .fetch_one(conn)
         .await
+    }
+}
+
+/// A lost task ends LOST, and that is all.
+pub const ON_LOST_FAIL: &str = "FAIL";
+/// A lost workflow is sent again with what it recorded, and goes on from there.
+pub const ON_LOST_RESUME: &str = "RESUME";
+/// A lost task is run again from the start.
+pub const ON_LOST_RESTART: &str = "RESTART";
+
+/// What an assign asks for should its task's agent be lost while it runs (`on_lost`), checked
+/// against what the implementation declared it can honour.
+///
+/// Nothing asked is the implementation's default: a workflow goes on from what it recorded
+/// (nothing is done twice: what it did is read back, not repeated), anything else ends LOST.
+/// A caller that wants no part of that says `FAIL`. Running again from the start is never a
+/// default: it is asked for (`RESTART`), and only an action declared idempotent or pure takes it.
+async fn lost_policy(
+    ctx: &Context,
+    asked: Option<&str>,
+    action: i64,
+    implementation: i64,
+) -> BackendResult<Option<&'static str>> {
+    match asked {
+        None => Ok(None),
+        Some(ON_LOST_FAIL) => Ok(Some(ON_LOST_FAIL)),
+        Some(ON_LOST_RESUME) => {
+            let workflow: bool = sqlx::query_scalar(
+                "SELECT execution = 'WORKFLOW' FROM facade_implementation WHERE id = $1",
+            )
+            .bind(implementation)
+            .fetch_one(&ctx.db)
+            .await?;
+            if !workflow {
+                return Err(BackendError::Refused(
+                    "on_lost RESUME needs a workflow: only what recorded its steps can go on \
+                     from them. An idempotent action can be asked to RESTART."
+                        .into(),
+                ));
+            }
+            Ok(Some(ON_LOST_RESUME))
+        }
+        Some(ON_LOST_RESTART) => {
+            let repeatable: bool =
+                sqlx::query_scalar("SELECT idempotent OR pure FROM facade_action WHERE id = $1")
+                    .bind(action)
+                    .fetch_one(&ctx.db)
+                    .await?;
+            if !repeatable {
+                return Err(BackendError::Refused(
+                    "on_lost RESTART needs an action declared idempotent (or pure): nothing else \
+                     says running it twice does no harm."
+                        .into(),
+                ));
+            }
+            Ok(Some(ON_LOST_RESTART))
+        }
+        Some(other) => Err(BackendError::Refused(format!(
+            "on_lost is FAIL, RESUME or RESTART, not {other:?}."
+        ))),
     }
 }
 
@@ -1215,27 +1382,40 @@ fn is_unique_violation(e: &sqlx::Error) -> bool {
     matches!(e, sqlx::Error::Database(db) if db.is_unique_violation())
 }
 
-/// Hand a committed task's `ASSIGN` to its agent (`_dispatch`). Never fails: a transport failure
-/// is recorded as `dispatched_at = NULL` ("never left"), which the pickup watchdog retries.
+/// Hand a committed task's `ASSIGN` to its agent (`_dispatch`). Never fails, and never tries
+/// again: an assign is queued for its agent once.
+///
+/// * A socket agent's assign that could not be queued (redis failed) ends the task LOST, there
+///   and then: whoever assigned it hears so and decides what to do.
+/// * A hook that refused the POST leaves `dispatched_at = NULL` ("never left"), which its
+///   pickup watchdog still acts on: over HTTP the response is the only acknowledgement there is.
 pub(crate) async fn dispatch(ctx: &Context, task: i64, agent: i64, assign: Assign) -> bool {
-    let delivered = match transport::deliver_to_agent(
-        ctx,
-        agent,
-        ToAgent::Assign(Box::new(assign)),
-        false,
-    )
-    .await
-    {
-        Ok(delivered) => delivered,
-        Err(e) => {
-            tracing::error!(
-                task,
-                agent,
-                "dispatching task {task} to agent {agent} failed; the pickup watchdog will retry it: {e}"
-            );
-            false
-        }
-    };
+    let delivered =
+        match transport::deliver_to_agent(ctx, agent, ToAgent::Assign(Box::new(assign)), false)
+            .await
+        {
+            Ok(delivered) => delivered,
+            Err(e) => {
+                tracing::error!(
+                    task,
+                    agent,
+                    "task {task} could not be handed to agent {agent}: {e}"
+                );
+                if let Err(e) = crate::persist::transitions::finalize_lost(
+                    ctx,
+                    task,
+                    "It could not be handed to its agent.",
+                    false,
+                    None,
+                    false,
+                )
+                .await
+                {
+                    tracing::error!(task, "ending an undeliverable task failed: {e}");
+                }
+                return false;
+            }
+        };
     if !delivered {
         if let Err(e) = sqlx::query(
             "UPDATE facade_task SET dispatched_at = NULL WHERE id = $1 AND is_done = false",
@@ -1452,7 +1632,15 @@ pub async fn assign_with_status(
         None => false,
     };
 
+    let on_lost = lost_policy(ctx, input.on_lost.as_deref(), action.id, implementation.id).await?;
+    if input.max_resumes.is_some_and(|limit| limit < 0) {
+        return Err(BackendError::Refused(
+            "max_resumes cannot be negative.".into(),
+        ));
+    }
     let row = NewTask {
+        on_lost,
+        max_resumes: input.max_resumes,
         args: input.args.clone(),
         parent,
         parent_step: parent.and(input.parent_step),
@@ -1877,10 +2065,15 @@ impl Control {
     }
 }
 
-/// `control_deadline_seconds`, as the deadline a cancel or interrupt arms.
+/// `control_deadline_seconds`, as the deadline an interrupt arms: an interrupt nobody confirmed
+/// is finalized by the server, which then stops waiting.
+///
+/// A cancel arms none. Turning an unconfirmed cancel into an interrupt is a decision, and it is
+/// the caller's: it asks for it with the cancel (`CANCEL_REQUEST`'s `auto_interrupt`, a
+/// postman's `escalate_to_interrupt`), or it does not happen.
 fn control_deadline(ctx: &Context, control: Control) -> Option<DateTime<Utc>> {
     let deadline = ctx.settings.control_deadline;
-    (deadline > Duration::ZERO && matches!(control, Control::Cancel | Control::Interrupt))
+    (deadline > Duration::ZERO && matches!(control, Control::Interrupt))
         .then(|| Utc::now() + chrono::Duration::from_std(deadline).unwrap_or(chrono::Duration::MAX))
 }
 

@@ -110,6 +110,13 @@ def resume(input: inputs.ResumeInputModel, caller: models.Caller | None = None) 
     return _control(takt_api.RESUME, input.task, caller, step=input.step)
 
 
+def inquire(input: inputs.InquireInputModel, caller: models.Caller | None = None) -> takt_api.InquireAnswer:
+    """Ask a task's agent whether it is still on it. A read, with one consequence: an agent
+    that says it does not know a task it was given has lost it, and the task ends LOST."""
+    principal = Principal.of_caller(caller) if caller is not None else None
+    return call(takt_api.INQUIRE, takt_api.InquireRequest(task=input.task, principal=principal))
+
+
 def decide(context: CallerContext, input: inputs.DecideInputModel) -> models.Task:
     """Answer a held task: a child an agent asked for runs or ends DENIED; a task's own hold carries on."""
     answer = call(takt_api.DECIDE, takt_api.DecideRequest(principal=Principal.of(context), task=input.task, approved=input.approved, answer=input.answer, values=input.values, remember=input.remember.value if input.remember else None))

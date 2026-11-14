@@ -33,6 +33,9 @@ pub enum Position {
     Project,
     /// At or below the watermark: already handled. Skip it; ack again.
     Duplicate,
+    /// Ahead of the next position: not taken. The agent is told to send again from `expected`
+    /// (`JOURNAL_NACK`); only its own `JOURNAL_SKIP` passes a position over.
+    Gap { expected: i64 },
 }
 
 /// Whether a frame carries a session position (and is not a probe's).
@@ -53,9 +56,11 @@ pub fn agent_time(frame: &AgentFrame) -> Option<DateTime<Utc>> {
 
 /// The `agent_pos` / `agent_ts` / `step` a projected row carries: empty without numbering
 /// (`position_stamp`).
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Stamp {
     pub agent_pos: Option<i64>,
+    /// The journal session `agent_pos` counts in: together, the report's durable key.
+    pub agent_session: Option<String>,
     pub agent_ts: Option<DateTime<Utc>>,
     pub step: Option<i64>,
 }
@@ -66,6 +71,7 @@ pub fn position_stamp(frame: &AgentFrame) -> Stamp {
     }
     Stamp {
         agent_pos: frame.pos.map(|p| p as i64),
+        agent_session: frame.journal_session.clone(),
         agent_ts: agent_time(frame),
         step: frame.task_step.map(|s| s as i64),
     }
@@ -120,13 +126,9 @@ pub async fn claim_position(
             continue;
         }
         if pos > projected + 1 {
-            tracing::warn!(
-                agent,
-                journal_session,
-                "positions {}..{} never arrived (the agent no longer holds them); continuing at {pos}",
-                projected + 1,
-                pos - 1
-            );
+            return Ok(Position::Gap {
+                expected: projected + 1,
+            });
         }
         // Conditional on exactly what we read: a concurrent claim or confirm changes one of them.
         let won = sqlx::query(
@@ -147,6 +149,58 @@ pub async fn claim_position(
             return Ok(Position::Project);
         }
     }
+}
+
+/// The agent no longer holds `from..=to` (`JOURNAL_SKIP`): move the watermark past them, when
+/// they cover the next position (what of them is already projected stays so); whether it did.
+/// A skip that starts beyond the next position would pass over frames nobody declared gone.
+pub async fn skip_positions(
+    db: &PgPool,
+    agent: i64,
+    journal_session: &str,
+    from: i64,
+    to: i64,
+) -> Result<bool, sqlx::Error> {
+    if to < from {
+        return Ok(false);
+    }
+    let session = get_or_create_session(db, agent, journal_session).await?;
+    let moved = sqlx::query(
+        "UPDATE facade_session SET projected_pos = $3, claimed_pos = $3, claimed_at = NULL
+          WHERE id = $1 AND projected_pos >= $2 AND projected_pos < $3",
+    )
+    .bind(session)
+    .bind(from - 1)
+    .bind(to)
+    .execute(db)
+    .await?
+    .rows_affected();
+    Ok(moved == 1)
+}
+
+/// How far each of these sessions of `agent` is projected (`INIT`'s `positions`); a session the
+/// server never saw is at 0.
+pub async fn projected_positions(
+    db: &PgPool,
+    agent: i64,
+    sessions: &[String],
+) -> Result<std::collections::BTreeMap<String, u64>, sqlx::Error> {
+    let known: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT session_id, projected_pos FROM facade_session
+          WHERE agent_id = $1 AND session_id = ANY($2)",
+    )
+    .bind(agent)
+    .bind(sessions)
+    .fetch_all(db)
+    .await?;
+    let mut positions: std::collections::BTreeMap<String, u64> = sessions
+        .iter()
+        .map(|session| (session.clone(), 0))
+        .collect();
+    for (session, projected) in known {
+        positions.insert(session, projected.max(0) as u64);
+    }
+    Ok(positions)
 }
 
 /// The claimed frame is projected: move the watermark onto it.

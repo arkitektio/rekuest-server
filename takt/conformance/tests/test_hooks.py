@@ -153,9 +153,9 @@ async def test_a_hook_is_assigned_to_and_reports_over_http(agents, graphql, http
     assert verify_v1(agent, body, headers["x-rekuest-signature-v1"]), "the delivery is signed for this hook"
 
     hook = Hook(http, target, agent)
-    started = await hook.post({"type": "STARTED", "task": child, "seq": 1})
+    started = await hook.post({"type": "STARTED", "task": child})
     assert started.status_code == 200 and started.json() == {}, started.text
-    completed = hook.signed({"type": "COMPLETED", "task": child, "seq": 2})
+    completed = hook.signed({"type": "COMPLETED", "task": child})
     first = await hook.post({}, raw=completed)
     assert first.status_code == 200 and first.json() == {}, first.text
     # The same request again (an HTTP retry, or a replay): accepted, not recorded twice.
@@ -185,9 +185,9 @@ async def test_a_hook_assigns_over_http_and_gets_the_mirrors_posted(agents, grap
     assert response.status_code == 200 and response.json()["type"] == "ASSIGN_RESPONSE", response.text
     child = response.json()["task"]
 
-    assert (await executor.receive_type("ASSIGN"))["task"] == child
-    await executor.send({"type": "STARTED", "task": child, "seq": 1})
-    await executor.send({"type": "COMPLETED", "task": child, "seq": 2})
+    await executor.receive_where(lambda frame: frame["type"] == "ASSIGN" and frame["task"] == child)
+    await executor.send({"type": "STARTED", "task": child})
+    await executor.send({"type": "COMPLETED", "task": child})
 
     headers, mirror, body = await receiver.frame("COMPLETED_EVENT")
     assert mirror["task"] == child

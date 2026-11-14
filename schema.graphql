@@ -1379,6 +1379,16 @@ input AssignInput {
   stateRequires: [StateRequirementInput!] = null
 
   """
+  What to do with the task should its agent be lost while it runs: FAIL, RESUME (workflows) or RESTART (idempotent actions). Not set, a workflow resumes from what it recorded and anything else ends LOST.
+  """
+  onLost: OnLost = null
+
+  """
+  How often the task may be sent again (resumed or restarted) after its agent was lost, before it ends LOST after all. Not set, the server's own limit applies; 0 is never.
+  """
+  maxResumes: Int = null
+
+  """
   The space (in the caller's organization) the run is started in: where a client draws the action's overlay over the placed agents (`Task.space`). Only a UI reads it; nothing runs differently. Honoured on a root only.
   """
   space: ID = null
@@ -4250,6 +4260,12 @@ input InformBlokInput {
   subscriptions: [BlokSubscriptionInput!]! = []
 }
 
+"""The input for asking about a task."""
+input InquireInput {
+  """The task to ask about: one the caller assigned"""
+  task: ID!
+}
+
 """
 An interface referenced by an action's port, derived from the relational port rows.
 """
@@ -4935,6 +4951,11 @@ type Mutation {
   resume(input: ResumeInput!): Task! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
 
   """
+  Ask the agent of a task you assigned whether it is still on it. It answers at once, from memory; nothing is done to the task and nothing is tried again. One answer has a consequence: an agent that does not know a task it was given has lost it, and the task ends LOST. While the agent is away, or has not acknowledged the assign yet, the server answers with what it knows.
+  """
+  inquire(input: InquireInput!): TaskInquiry! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
+
+  """
   Answer a held task. A child an agent asked for runs once approved, or ends DENIED without running; a task that holds itself carries on with the decision. Only the user the task runs for may decide, and never from the client of the agent that asked. With `remember`, the approval of a child is kept as an allowance on their auto list.
   """
   decide(input: DecideInput!): Task! @auth(required_scopes: ["rekuest_root_call"], any_role_of: ["rekuest_editor"])
@@ -5150,6 +5171,15 @@ type Mutation {
 input OffsetPaginationInput {
   offset: Int! = 0
   limit: Int
+}
+
+"""
+What an assign asks for should its task's agent be lost while it runs. FAIL: it ends LOST. RESUME: a workflow is sent again with what it recorded and goes on (refused for anything else). RESTART: it is run again from the start (refused unless the action is declared idempotent or pure). Not set, a workflow resumes and anything else ends LOST.
+"""
+enum OnLost {
+  FAIL
+  RESUME
+  RESTART
 }
 
 " An optimistic is used to optimistically set state values when the action is assigned. This is used to provide a better user experience by optimistically setting state values when the action is assigned, instead of waiting for the action to be executed and the state to be updated. This will only ever happen on the frontend.\n\n"
@@ -8084,6 +8114,36 @@ input TaskFilter {
   createdAfter: DateTime
 }
 
+"""
+What is known of a task someone asked about: what its agent said of it, or, where the agent was not asked (it is away, or has not acknowledged the assign yet), what the server knows.
+"""
+type TaskInquiry {
+  task: ID!
+
+  """
+  What the agent said; ENDED for a task the server already closed. Null where the agent was not asked or did not answer: `detail` says why.
+  """
+  status: TaskStatus
+
+  """Whether the agent was asked."""
+  asked: Boolean!
+
+  """Why the agent was not asked, or why there is no answer."""
+  detail: String
+
+  """The last step the task reported, as the agent has it."""
+  step: Int
+
+  """When the task last reported anything, as the agent has it."""
+  reportedAt: DateTime
+
+  """What the task last said of its progress, as the agent has it."""
+  progress: Int
+
+  """The message of its last progress or log, as the agent has it."""
+  message: String
+}
+
 """An instruct event for a specific task."""
 type TaskInstruct {
   """Unique ID of the instruct event."""
@@ -8143,6 +8203,18 @@ type TaskStats {
 
   """Time-bucketed stats over a datetime field."""
   series(field: TaskField!, timestampField: TaskTimestampField!, by: Granularity!): [TimeBucket!]!
+}
+
+"""
+What an agent says of a task it is asked about, from memory and at once. UNKNOWN: it has no such task (from the agent the task was given to, that ends the task LOST). WAITING: taken, not started yet. RUNNING: started, and at work. PAUSED: stopped at a pause point until it is resumed. HELD: waiting for a person's decision. ENDED: its end was reported. Not a column of a task: nothing sorts or filters by it.
+"""
+enum TaskStatus {
+  UNKNOWN
+  WAITING
+  RUNNING
+  PAUSED
+  HELD
+  ENDED
 }
 
 """Datetime fields of Task for bucketing"""

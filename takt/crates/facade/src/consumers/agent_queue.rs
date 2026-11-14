@@ -1,32 +1,89 @@
-//! The per-agent message queue (`facade/consumers/agent_queue.py`).
+//! What the server has for a socket agent: its commands, kept until the agent acknowledges them.
 //!
-//! A redis list rather than the channel layer, on purpose: a message pushed while the agent is
-//! offline persists and survives the reconnect. Producers `LPUSH` onto `{prefix}:agent:{id}:queue`
-//! (priority frames `RPUSH`); the connection holding the lease `BLMOVE`s one frame at a time into
-//! `…:processing`, delivers it, then acks it: at-least-once.
+//! Redis rather than the channel layer, on purpose: a command pushed while the agent is away
+//! persists and survives the reconnect. Two streams per agent:
+//!
+//! - `{prefix}:agent:{id}:commands`: the agent's **commands**, each at its position `pos` (1, 2,
+//!   3, … per agent, no gaps; the entry's id is `{pos}-0`). The connection holding the lease reads
+//!   from the position after the last one it sent, stamps `pos` on the frame and sends it. Nothing
+//!   is removed by sending: a `COMMAND_ACK {through}` from the agent trims the stream, and a
+//!   connection made anew starts after the `commands_seen` its `REGISTER` named. At-least-once on
+//!   the wire, exactly-once for the agent, which skips a position it has handled.
+//! - `{prefix}:agent:{id}:priority`: a **probe's** frames. A probe is ephemeral and jumps the
+//!   backlog: its frames carry no position, are sent before any command, in the order they were
+//!   pushed, and are forgotten once sent (at most once).
+//!
+//! `{prefix}:agent:{id}:command_pos` is the last position given out.
 
-use redis::aio::MultiplexedConnection;
+use redis::aio::{ConnectionManager, MultiplexedConnection};
+use redis::streams::{StreamReadOptions, StreamReadReply};
 use redis::AsyncCommands;
 
 use crate::redis_keys;
 use crate::settings::Settings;
 
-/// How long a pop blocks before it returns nothing (and the drain loop checks in).
-pub const POP_BLOCK_SECONDS: f64 = 5.0;
+/// How long a read blocks before it returns nothing (and the drain loop checks in).
+pub const READ_BLOCK_MILLIS: usize = 5000;
+/// How many entries one read returns at most.
+const READ_COUNT: usize = 100;
+/// The field of a stream entry holding the serialized frame.
+const FRAME: &str = "f";
 
-pub fn queue_key(settings: &Settings, agent: i64) -> String {
-    redis_keys::key(settings, &[&"agent", &agent, &"queue"])
+pub fn commands_key(settings: &Settings, agent: i64) -> String {
+    redis_keys::key(settings, &[&"agent", &agent, &"commands"])
 }
 
-pub fn processing_key(settings: &Settings, agent: i64) -> String {
-    redis_keys::key(settings, &[&"agent", &agent, &"processing"])
+pub fn position_key(settings: &Settings, agent: i64) -> String {
+    redis_keys::key(settings, &[&"agent", &agent, &"command_pos"])
 }
 
-/// One connection's view of its agent's queue, on a redis connection of its own.
+pub fn priority_key(settings: &Settings, agent: i64) -> String {
+    redis_keys::key(settings, &[&"agent", &agent, &"priority"])
+}
+
+/// Every key an agent has here: what goes when the agent goes.
+pub fn keys(settings: &Settings, agent: i64) -> [String; 3] {
+    [
+        commands_key(settings, agent),
+        position_key(settings, agent),
+        priority_key(settings, agent),
+    ]
+}
+
+/// Take the next position and append the frame at it, as one step: positions are given out in
+/// the order the frames are appended.
+const PUSH: &str = "local pos = redis.call('INCR', KEYS[2]) \
+                    redis.call('XADD', KEYS[1], pos .. '-0', ARGV[1], ARGV[2]) \
+                    return pos";
+
+/// Never number a command at or below what the agent has seen: it would be skipped as handled.
+/// (A redis that lost its data starts counting at 1 while a living agent remembers more.)
+const RESUME: &str = "local at = tonumber(redis.call('GET', KEYS[1]) or '0') \
+                      local seen = tonumber(ARGV[1]) \
+                      if at < seen then redis.call('SET', KEYS[1], seen) return seen end \
+                      return at";
+
+/// One thing read off an agent's streams.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Queued {
+    /// A command at its position.
+    Command { pos: u64, frame: String },
+    /// A probe's frame, with the id to forget it by.
+    Probe { id: String, frame: String },
+}
+
+/// The position of a command entry's id (`{pos}-0`).
+fn position_of(id: &str) -> Option<u64> {
+    id.split('-').next()?.parse().ok()
+}
+
+/// One connection's view of its agent's streams, on a redis connection of its own (a read
+/// blocks).
 pub struct AgentQueue {
     connection: MultiplexedConnection,
-    queue: String,
-    processing: String,
+    commands: String,
+    position: String,
+    priority: String,
 }
 
 impl AgentQueue {
@@ -35,80 +92,161 @@ impl AgentQueue {
         settings: &Settings,
         agent: i64,
     ) -> redis::RedisResult<Self> {
-        let config = redis::AsyncConnectionConfig::new()
-            .set_response_timeout(std::time::Duration::from_secs_f64(POP_BLOCK_SECONDS + 5.0));
+        let config = redis::AsyncConnectionConfig::new().set_response_timeout(
+            std::time::Duration::from_millis(READ_BLOCK_MILLIS as u64 + 5000),
+        );
         Ok(Self {
             connection: client
                 .get_multiplexed_async_connection_with_config(&config)
                 .await?,
-            queue: queue_key(settings, agent),
-            processing: processing_key(settings, agent),
+            commands: commands_key(settings, agent),
+            position: position_key(settings, agent),
+            priority: priority_key(settings, agent),
         })
     }
 
-    /// Block until a frame is queued (or `POP_BLOCK_SECONDS` pass), moving it to in-flight.
-    pub async fn pop(&mut self) -> redis::RedisResult<Option<String>> {
-        redis::cmd("BLMOVE")
-            .arg(&self.queue)
-            .arg(&self.processing)
-            .arg("RIGHT")
-            .arg("LEFT")
-            .arg(POP_BLOCK_SECONDS)
-            .query_async(&mut self.connection)
+    /// The agent has handled every command through `seen`: numbering goes on after it, whatever
+    /// redis remembers. Returns the last position given out.
+    pub async fn resume(&mut self, seen: u64) -> redis::RedisResult<u64> {
+        redis::Script::new(RESUME)
+            .key(&self.position)
+            .arg(seen)
+            .invoke_async(&mut self.connection)
             .await
     }
 
-    /// A popped frame was delivered: remove it from in-flight.
-    pub async fn ack(&mut self, frame: &str) -> redis::RedisResult<()> {
-        self.connection.lrem(&self.processing, 0, frame).await
-    }
-
-    /// Return popped-but-never-acked frames to the head of the queue, oldest first. Only the
-    /// lease holder does this, before it starts popping. Returns how many.
-    pub async fn recover(&mut self) -> redis::RedisResult<u64> {
-        let mut recovered = 0;
-        loop {
-            let moved: Option<String> = redis::cmd("LMOVE")
-                .arg(&self.processing)
-                .arg(&self.queue)
-                .arg("LEFT")
-                .arg("RIGHT")
-                .query_async(&mut self.connection)
-                .await?;
-            if moved.is_none() {
-                return Ok(recovered);
+    /// What is there after `sent` (commands) and `probes_after` (a probe id, `0` for all), probes
+    /// first. Blocks until something is, or `READ_BLOCK_MILLIS` pass.
+    pub async fn read(&mut self, sent: u64, probes_after: &str) -> redis::RedisResult<Vec<Queued>> {
+        let options = StreamReadOptions::default()
+            .count(READ_COUNT)
+            .block(READ_BLOCK_MILLIS);
+        let reply: Option<StreamReadReply> = self
+            .connection
+            .xread_options(
+                &[&self.priority, &self.commands],
+                &[probes_after.to_owned(), format!("{sent}-0")],
+                &options,
+            )
+            .await?;
+        let mut probes = vec![];
+        let mut commands = vec![];
+        for stream in reply.map(|reply| reply.keys).unwrap_or_default() {
+            let urgent = stream.key == self.priority;
+            for entry in stream.ids {
+                let Some(frame) = entry.get::<String>(FRAME) else {
+                    continue;
+                };
+                if urgent {
+                    probes.push(Queued::Probe {
+                        id: entry.id,
+                        frame,
+                    });
+                } else if let Some(pos) = position_of(&entry.id) {
+                    commands.push(Queued::Command { pos, frame });
+                }
             }
-            recovered += 1;
         }
+        probes.append(&mut commands);
+        Ok(probes)
     }
 
-    /// Hand a popped, undelivered frame back, to be popped next: this connection lost the lease
-    /// and the frame belongs to the new holder. Atomic, so a concurrent `recover` never doubles it.
-    pub async fn requeue(&mut self, frame: &str) -> redis::RedisResult<()> {
-        redis::Script::new(
-            "if redis.call('LREM', KEYS[1], 1, ARGV[1]) > 0 then redis.call('RPUSH', KEYS[2], ARGV[1]) return 1 end return 0",
-        )
-        .key(&self.processing)
-        .key(&self.queue)
-        .arg(frame)
-        .invoke_async::<i64>(&mut self.connection)
-        .await
-        .map(|_| ())
+    /// A probe's frame was sent (or is not worth sending): forget it.
+    pub async fn forget_probe(&mut self, id: &str) -> redis::RedisResult<()> {
+        self.connection.xdel(&self.priority, &[id]).await
     }
 }
 
-/// Queue a serialized frame for an agent; `priority` jumps the backlog (`push`).
+/// Queue a serialized frame for an agent: a command at the next position, or (`priority`) a
+/// probe's frame on the lane of its own.
 pub async fn push(
-    redis: &mut redis::aio::ConnectionManager,
+    redis: &mut ConnectionManager,
     settings: &Settings,
     agent: i64,
     frame: &str,
     priority: bool,
 ) -> redis::RedisResult<()> {
-    let key = queue_key(settings, agent);
     if priority {
-        redis.rpush(key, frame).await
-    } else {
-        redis.lpush(key, frame).await
+        return redis
+            .xadd(priority_key(settings, agent), "*", &[(FRAME, frame)])
+            .await;
+    }
+    redis::Script::new(PUSH)
+        .key(commands_key(settings, agent))
+        .key(position_key(settings, agent))
+        .arg(FRAME)
+        .arg(frame)
+        .invoke_async::<u64>(redis)
+        .await
+        .map(|_| ())
+}
+
+/// The agent handled every command through `through` (`COMMAND_ACK`): forget them. Returns
+/// what was forgotten, oldest first, for whoever acts on a command having arrived.
+pub async fn ack(
+    redis: &mut ConnectionManager,
+    settings: &Settings,
+    agent: i64,
+    through: u64,
+) -> redis::RedisResult<Vec<String>> {
+    let key = commands_key(settings, agent);
+    let covered: redis::streams::StreamRangeReply =
+        redis.xrange(&key, "-", format!("{through}-0")).await?;
+    redis::cmd("XTRIM")
+        .arg(&key)
+        .arg("MINID")
+        .arg(format!("{}-0", through.saturating_add(1)))
+        .query_async::<u64>(redis)
+        .await?;
+    Ok(covered
+        .ids
+        .into_iter()
+        .filter_map(|entry| entry.get::<String>(FRAME))
+        .collect())
+}
+
+/// The commands an agent has not acknowledged, oldest first, as they were pushed (without their
+/// position). For whoever needs to look: the tests, and a person asking what an agent is owed.
+pub async fn pending(
+    redis: &mut ConnectionManager,
+    settings: &Settings,
+    agent: i64,
+) -> redis::RedisResult<Vec<String>> {
+    let reply: redis::streams::StreamRangeReply =
+        redis.xrange_all(commands_key(settings, agent)).await?;
+    Ok(reply
+        .ids
+        .into_iter()
+        .filter_map(|entry| entry.get::<String>(FRAME))
+        .collect())
+}
+
+/// Everything waiting for an agent, as it would be sent: a probe's frames, then the commands it
+/// has not acknowledged, each oldest first (without positions).
+pub async fn waiting(
+    redis: &mut ConnectionManager,
+    settings: &Settings,
+    agent: i64,
+) -> redis::RedisResult<Vec<String>> {
+    let probes: redis::streams::StreamRangeReply =
+        redis.xrange_all(priority_key(settings, agent)).await?;
+    let mut frames: Vec<String> = probes
+        .ids
+        .into_iter()
+        .filter_map(|entry| entry.get::<String>(FRAME))
+        .collect();
+    frames.extend(pending(redis, settings, agent).await?);
+    Ok(frames)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_command_entry_names_its_position() {
+        assert_eq!(position_of("7-0"), Some(7));
+        assert_eq!(position_of("1731600000000-3"), Some(1731600000000));
+        assert_eq!(position_of("nonsense"), None);
     }
 }

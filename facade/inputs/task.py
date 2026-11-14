@@ -153,6 +153,15 @@ class AssignInputModel(BaseModel):
         default=None,
         description="What the agent's state must hold for the task to run. Refused unless the agent says it tests them, and for a state or path its declaration does not have.",
     )
+    on_lost: enums.OnLost | None = Field(
+        default=None,
+        description="What to do with the task should its agent be lost while it runs: FAIL, RESUME (workflows) or RESTART (idempotent actions). Not set, a workflow resumes from what it recorded and anything else ends LOST.",
+    )
+    max_resumes: int | None = Field(
+        default=None,
+        ge=0,
+        description="How often the task may be sent again (resumed or restarted) after its agent was lost, before it ends LOST after all. Not set, the server's own limit applies; 0 is never.",
+    )
     space: str | None = Field(
         default=None,
         description="The space (in the caller's organization) the run is started in: where a client draws the action's overlay over the placed agents (`Task.space`). Only a UI reads it; nothing runs differently. Honoured on a root only.",
@@ -179,6 +188,8 @@ class AssignInput:
     not_before: datetime.datetime | None = None
     policy: enums.TaskPolicy | None = None
     state_requires: list[StateRequirementInput] | None = None
+    on_lost: enums.OnLost | None = None
+    max_resumes: int | None = None
     space: strawberry.ID | None = None
 
 
@@ -246,6 +257,21 @@ class ResumeInputModel(BaseModel):
 class ResumeInput:
     task: strawberry.ID
     step: bool = False
+
+
+class InquireInputModel(BaseModel):
+    """Base model for asking about a task.
+
+    Attributes:
+        task: ID of the task to ask about
+    """
+
+    task: str = Field(description="The task to ask about: one the caller assigned")
+
+
+@pydantic.input(InquireInputModel, description="The input for asking about a task.")
+class InquireInput:
+    task: strawberry.ID
 
 
 class DecideInputModel(BaseModel):

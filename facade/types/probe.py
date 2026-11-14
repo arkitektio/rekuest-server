@@ -75,6 +75,18 @@ class ProbeEvent:
         )
 
 
+@strawberry.type(description="What is known of a task someone asked about: what its agent said of it, or, where the agent was not asked (it is away, or has not acknowledged the assign yet), what the server knows.")
+class TaskInquiry:
+    task: strawberry.ID
+    status: Optional[enums.TaskStatus] = strawberry.field(description="What the agent said; ENDED for a task the server already closed. Null where the agent was not asked or did not answer: `detail` says why.")
+    asked: bool = strawberry.field(description="Whether the agent was asked.")
+    detail: Optional[str] = strawberry.field(description="Why the agent was not asked, or why there is no answer.")
+    step: Optional[int] = strawberry.field(description="The last step the task reported, as the agent has it.")
+    reported_at: Optional[datetime.datetime] = strawberry.field(description="When the task last reported anything, as the agent has it.")
+    progress: Optional[int] = strawberry.field(description="What the task last said of its progress, as the agent has it.")
+    message: Optional[str] = strawberry.field(description="The message of its last progress or log, as the agent has it.")
+
+
 @strawberry.type(description="Live probe counts from redis — probes have no rows, so stats come from the TTL keyspace.")
 class ProbeStats:
     total_live: int = strawberry.field(description="Live (non-expired) probes across the whole instance — a bare count, not scoped.")

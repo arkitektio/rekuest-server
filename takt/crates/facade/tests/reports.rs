@@ -149,7 +149,19 @@ async fn positions_claim_once_skip_resends_and_release_on_failure() {
         Position::Duplicate
     );
 
-    // A gap: 2 never arrives, 3 is projected and the watermark moves past it.
+    // A gap: 3 arrives before 2 and is not taken. Only the agent saying 2 is gone passes it over.
+    assert_eq!(
+        positions::claim_position(&ctx.db, agent, &session, 3)
+            .await
+            .unwrap(),
+        Position::Gap { expected: 2 }
+    );
+    assert!(!positions::skip_positions(&ctx.db, agent, &session, 3, 3)
+        .await
+        .unwrap());
+    assert!(positions::skip_positions(&ctx.db, agent, &session, 2, 2)
+        .await
+        .unwrap());
     assert_eq!(
         positions::claim_position(&ctx.db, agent, &session, 3)
             .await

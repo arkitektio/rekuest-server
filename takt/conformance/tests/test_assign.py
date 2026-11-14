@@ -98,8 +98,8 @@ async def test_a_duplicate_request_is_not_created_again_and_replays_the_events(a
     child = (await caller.receive_type("ASSIGN_RESPONSE"))["task"]
     await executor.receive_type("ASSIGN")
 
-    await executor.send({"type": "STARTED", "task": child, "seq": 1})
-    await executor.send({"type": "COMPLETED", "task": child, "seq": 2})
+    await executor.send({"type": "STARTED", "task": child})
+    await executor.send({"type": "COMPLETED", "task": child})
     live = await mirrors_of(caller, child, "COMPLETED_EVENT")
     assert [m["type"] for m in live] == ["STARTED_EVENT", "COMPLETED_EVENT"], live
 
@@ -110,4 +110,4 @@ async def test_a_duplicate_request_is_not_created_again_and_replays_the_events(a
     assert response["request"] == again["id"], response
     assert (response["task"], response["created"]) == (child, False), response
     replayed = await mirrors_of(caller, child, "COMPLETED_EVENT")
-    assert [(m["type"], m["seq"], m["event"]) for m in replayed] == [(m["type"], m["seq"], m["event"]) for m in live], (live, replayed)
+    assert [(m["type"], m["event"]) for m in replayed] == [(m["type"], m["event"]) for m in live], (live, replayed)

@@ -9,7 +9,7 @@ use serde::{Deserialize, Deserializer};
 
 use super::Refusal;
 use crate::catalog_validation::Diagnostic;
-use crate::consumers::agent_queue::{processing_key, queue_key};
+use crate::consumers::agent_queue;
 use crate::context::Context;
 use crate::registration::{clear_drawers, ensure_agent, implement_agent};
 use crate::signals::{OnCommit, Signal};
@@ -123,8 +123,7 @@ pub async fn ensure(
 async fn abandon_socket_queue(ctx: &Context, agent: i64) -> Result<(), Refusal> {
     let mut redis = ctx.redis.clone();
     let dropped: Result<i64, _> = redis::cmd("DEL")
-        .arg(queue_key(&ctx.settings, agent))
-        .arg(processing_key(&ctx.settings, agent))
+        .arg(&agent_queue::keys(&ctx.settings, agent)[..])
         .query_async(&mut redis)
         .await;
     match dropped {

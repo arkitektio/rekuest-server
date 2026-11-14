@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use authentikate::base_models::StaticToken;
 use facade::backend::BackendError;
-use facade::consumers::agent_queue::queue_key;
+use facade::consumers::agent_queue::commands_key;
 use facade::consumers::connections::Connections;
 use facade::removal::{cleanup_actions, delete_agent, delete_implementation};
 use facade::settings::Settings;
@@ -179,10 +179,7 @@ async fn an_agent_goes_with_everything_below_it_and_only_within_its_organization
     let kept = work(&ctx, neighbour).await;
     // Away, with work queued for a socket that will never drain it.
     let mut redis = ctx.redis.clone();
-    let _: i64 = redis::cmd("RPUSH")
-        .arg(queue_key(&ctx.settings, agent))
-        .arg("{}")
-        .query_async(&mut redis)
+    facade::consumers::agent_queue::push(&mut redis, &ctx.settings, agent, "{}", false)
         .await
         .unwrap();
     assert!(
@@ -212,7 +209,7 @@ async fn an_agent_goes_with_everything_below_it_and_only_within_its_organization
         "nothing of the agent is left"
     );
     let queued: i64 = redis::cmd("EXISTS")
-        .arg(queue_key(&ctx.settings, agent))
+        .arg(commands_key(&ctx.settings, agent))
         .query_async(&mut redis)
         .await
         .unwrap();

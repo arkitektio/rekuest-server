@@ -53,6 +53,22 @@ the node and its count. The server is idempotent on `(parent, call_key)`, checke
 
 ## Resume
 
+What becomes of a task whose agent is lost is asked for with the assign (`on_lost`), and checked
+there against what the implementation declared:
+
+| `on_lost` | |
+|---|---|
+| not set | A workflow resumes; anything else ends `LOST`. |
+| `FAIL` | It ends `LOST`, whatever it is: the caller decides what comes next. |
+| `RESUME` | A workflow is sent again with its journal. Refused for anything else. |
+| `RESTART` | It is run again from the start. Refused unless the action is declared idempotent or pure. |
+
+How often a task may be sent again is the assign's too (`max_resumes`); unasked, the server's
+own limit (`MAX_RESUMES`) applies.
+
+Resuming is not a retry: what the workflow did is read back from its journal, not done again.
+Restarting is one, which is why it is never a default.
+
 When a workflow's agent dies, the server claims the task back to `QUEUED` and sends its `Assign`
 again with `resume`:
 

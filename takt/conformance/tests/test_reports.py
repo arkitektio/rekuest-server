@@ -36,15 +36,15 @@ async def finished(api, task):  # noqa: ANN001, ANN201
 async def test_plain_reports_are_persisted(agents, graphql) -> None:  # noqa: ANN001
     agent, api, task = await assigned(agents, graphql, "conf_9")
 
-    await agent.send({"type": "STARTED", "task": task, "seq": 1})
-    await agent.send({"type": "PROGRESS", "task": task, "progress": 50, "seq": 2})
-    await agent.send({"type": "YIELD", "task": task, "returns": {"return0": 3}, "seq": 3})
+    await agent.send({"type": "STARTED", "task": task})
+    await agent.send({"type": "PROGRESS", "task": task, "progress": 50})
+    await agent.send({"type": "YIELD", "task": task, "returns": {"return0": 3}})
     completed_id = str(uuid.uuid4())
-    await agent.send({"id": completed_id, "type": "COMPLETED", "task": task, "seq": 4})
+    await agent.send({"id": completed_id, "type": "COMPLETED", "task": task})
     await finished(api, task)
 
     # The agent retries a terminal it thinks was lost: recorded once.
-    await agent.send({"id": completed_id, "type": "COMPLETED", "task": task, "seq": 4})
+    await agent.send({"id": completed_id, "type": "COMPLETED", "task": task})
     await asyncio.sleep(0.5)
 
     history = await api.task(task)
@@ -74,14 +74,14 @@ async def test_numbered_reports_are_journal_acked_once(agents, graphql) -> None:
             await agent.send({"type": "HEARTBEAT_ANSWER"})
             continue
         seen.append(frame["type"])
-        if frame["type"] == "JOURNAL_ACK" and frame["pos"] == 4:
+        if frame["type"] == "JOURNAL_ACK" and frame["through"] == 4:
             assert frame["journal_session"] == journal
             break
 
     # A resend after a reconnect (the agent held it unacked): skipped, acknowledged again.
     await agent.send(numbered(4, {"type": "COMPLETED", "task": task}))
     ack = await agent.receive_type("JOURNAL_ACK", timeout=TERMINAL_ACK_TIMEOUT)
-    assert ack["pos"] == 4
+    assert ack["through"] == 4
 
     history = await api.task(task)
     assert history["latestEventKind"] == "COMPLETED"
@@ -94,7 +94,7 @@ async def test_a_report_on_a_task_that_is_not_the_agents_is_dropped(agents, grap
 
     stranger = await agents()
     await stranger.register("conf_12", session_id=session_id())
-    await stranger.send({"type": "COMPLETED", "task": task, "seq": 1})
+    await stranger.send({"type": "COMPLETED", "task": task})
     # Dropped: nothing answers it, so give it the time it would take to apply.
     await asyncio.sleep(0.5)
 

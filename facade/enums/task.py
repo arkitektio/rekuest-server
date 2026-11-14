@@ -128,6 +128,23 @@ class TaskPolicy(str, Enum):
     AUTO = "AUTO"
 
 
+@strawberry.enum(description="What an assign asks for should its task's agent be lost while it runs. FAIL: it ends LOST. RESUME: a workflow is sent again with what it recorded and goes on (refused for anything else). RESTART: it is run again from the start (refused unless the action is declared idempotent or pure). Not set, a workflow resumes and anything else ends LOST.")
+class OnLost(str, Enum):
+    FAIL = "FAIL"
+    RESUME = "RESUME"
+    RESTART = "RESTART"
+
+
+@strawberry.enum(description="What an agent says of a task it is asked about, from memory and at once. UNKNOWN: it has no such task (from the agent the task was given to, that ends the task LOST). WAITING: taken, not started yet. RUNNING: started, and at work. PAUSED: stopped at a pause point until it is resumed. HELD: waiting for a person's decision. ENDED: its end was reported. Not a column of a task: nothing sorts or filters by it.")
+class TaskStatus(str, Enum):
+    UNKNOWN = "UNKNOWN"
+    WAITING = "WAITING"
+    RUNNING = "RUNNING"
+    PAUSED = "PAUSED"
+    HELD = "HELD"
+    ENDED = "ENDED"
+
+
 @strawberry.enum(description="What an approval is remembered as: the allowance it leaves on the user's auto list. RUN: this action, whoever asks, for the rest of this run. ASKER: this action whenever the action that asked now asks again, in every run of the user. ALWAYS: this action, whoever asks, in every run of the user.")
 class HoldRemember(str, Enum):
     RUN = "RUN"

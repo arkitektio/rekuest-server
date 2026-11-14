@@ -57,6 +57,17 @@ class Task(models.Model):
         default=uuid.uuid4,
         help_text="The Unique identifier of this Task considering its parent",
     )
+    on_lost = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        help_text="What its assign asked for should the agent be lost while it runs: FAIL (ends LOST), RESUME (a workflow goes on from what it recorded) or RESTART (an idempotent action is run again from the start). NULL is the implementation's default: a workflow resumes, anything else ends LOST.",
+    )
+    max_resumes = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="How often its assign lets it be sent again (resumed or restarted) after its agent was lost, before it ends LOST after all. NULL is the server's own limit.",
+    )
     parent_step = models.PositiveBigIntegerField(
         null=True,
         blank=True,
@@ -424,6 +435,12 @@ class TaskEvent(models.Model):
         blank=True,
         help_text="The session position (pos) of the report that wrote this event. NULL for server-written events and for agents without numbering.",
     )
+    agent_session = models.CharField(
+        max_length=1000,
+        null=True,
+        blank=True,
+        help_text="The journal session of the report that wrote this event: with agent_pos, the report's durable key. NULL for server-written events and for agents without numbering.",
+    )
     agent_ts = models.DateTimeField(
         null=True,
         blank=True,
@@ -460,6 +477,13 @@ class TaskEvent(models.Model):
                 fields=["task", "key"],
                 condition=models.Q(kind="EFFECT", key__isnull=False),
                 name="task_event_one_effect_per_key",
+            ),
+            # One event per report: a report sent again (its projection was written, its
+            # position never confirmed) must not be stored a second time.
+            models.UniqueConstraint(
+                fields=["task", "agent_session", "agent_pos"],
+                condition=models.Q(agent_session__isnull=False, agent_pos__isnull=False),
+                name="task_event_one_per_report",
             ),
         ]
 

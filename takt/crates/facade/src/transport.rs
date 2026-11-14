@@ -42,6 +42,8 @@ pub fn frame_text(message: ToAgent) -> String {
     };
     serde_json::to_string(&ToAgentFrame {
         id: Some(uuid::Uuid::new_v4().to_string()),
+        // A command's position is the drain's to stamp, when it sends it.
+        pos: None,
         message,
     })
     .expect("a ToAgent frame serializes")

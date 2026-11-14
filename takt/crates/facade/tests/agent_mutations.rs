@@ -5,7 +5,6 @@
 use std::sync::Arc;
 
 use authentikate::base_models::StaticToken;
-use facade::consumers::agent_queue::queue_key;
 use facade::consumers::connections::Connections;
 use facade::mutations::agent::{ensure, EnsureAgentInput};
 use facade::settings::Settings;
@@ -89,10 +88,7 @@ async fn an_agent_is_ensured_configured_and_turned_into_a_hook() {
 
     // Work queued for its socket, one task not picked up yet.
     let mut redis = ctx.redis.clone();
-    let _: i64 = redis::cmd("RPUSH")
-        .arg(queue_key(&ctx.settings, agent))
-        .arg("{}")
-        .query_async(&mut redis)
+    facade::consumers::agent_queue::push(&mut redis, &ctx.settings, agent, "{}", false)
         .await
         .unwrap();
     facade::registration::shelve(&ctx.db, agent, "@x/y", "r1", None, None, false)
@@ -125,12 +121,10 @@ async fn an_agent_is_ensured_configured_and_turned_into_a_hook() {
         ),
         ("WEBHOOK", Some("http://hook"), None, Some("a hook"))
     );
-    let queued: i64 = redis::cmd("LLEN")
-        .arg(queue_key(&ctx.settings, agent))
-        .query_async(&mut redis)
+    let queued = facade::consumers::agent_queue::pending(&mut redis, &ctx.settings, agent)
         .await
         .unwrap();
-    assert_eq!(queued, 0, "no socket will drain it any more");
+    assert!(queued.is_empty(), "no socket will drain it any more");
     let drawers: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM facade_memorydrawer d JOIN facade_memoryshelve s ON s.id = d.shelve_id WHERE s.agent_id = $1",
     )

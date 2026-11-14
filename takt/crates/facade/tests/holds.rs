@@ -17,7 +17,6 @@ use facade::messages::{AgentFrame, ToAgent};
 use facade::provenance::keys::InstanceKey;
 use facade::settings::Settings;
 use facade::Context;
-use redis::AsyncCommands;
 use serde_json::{json, Value};
 
 /// The conformance stack's instance key.
@@ -182,13 +181,11 @@ fn frame(value: Value) -> AgentFrame {
 /// The frames queued for an agent, oldest first.
 async fn queued(ctx: &Context, agent: i64) -> Vec<Value> {
     let mut redis = ctx.redis.clone();
-    let frames: Vec<String> = redis
-        .lrange(format!("rekuest:agent:{agent}:queue"), 0, -1)
+    let frames = facade::consumers::agent_queue::waiting(&mut redis, &ctx.settings, agent)
         .await
         .unwrap();
     frames
         .iter()
-        .rev()
         .map(|f| serde_json::from_str(f).unwrap())
         .collect()
 }

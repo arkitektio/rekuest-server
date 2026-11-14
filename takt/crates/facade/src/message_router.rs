@@ -4,8 +4,13 @@
 //! sending it, so each transport delivers it its own way. A report is never replied to.
 //!
 //! A **numbered** frame (`pos` + `journal_session`) is handled once per session position: a
-//! resend at or below the watermark is skipped; anything else is claimed, projected and
-//! confirmed. The cumulative `JOURNAL_ACK` confirms it.
+//! resend at or below the watermark is skipped; the next position is claimed, projected and
+//! confirmed; one ahead of it is not taken, and the reply is a `JOURNAL_NACK` naming the position
+//! expected. The cumulative `JOURNAL_ACK` confirms what was projected.
+//!
+//! The answer to a numbered request of a socket agent ([`route_socket`]) is a command: it is
+//! queued for the agent before the request's position is confirmed, so a request that was
+//! projected is never left without its answer, and a resend of it is skipped.
 //! A refusal (unknown state, another agent's task, a duplicate revision) is logged and counts as
 //! handled, or a frame refused on every delivery would hold the watermark back forever. Anything
 //! else releases the claim and fails, so the resend projects it again.
@@ -50,6 +55,27 @@ pub async fn route(
     frame: &AgentFrame,
     session_id: Option<&str>,
 ) -> Result<Option<ToAgent>, RouteError> {
+    route_with(ctx, agent, frame, session_id, false).await
+}
+
+/// [`route`] for a socket agent: the answer to a numbered request is queued for it as a command
+/// (and, for a child found again, the child's events so far behind it) rather than returned.
+pub async fn route_socket(
+    ctx: &Context,
+    agent: i64,
+    frame: &AgentFrame,
+    session_id: Option<&str>,
+) -> Result<Option<ToAgent>, RouteError> {
+    route_with(ctx, agent, frame, session_id, true).await
+}
+
+async fn route_with(
+    ctx: &Context,
+    agent: i64,
+    frame: &AgentFrame,
+    session_id: Option<&str>,
+    answers_are_commands: bool,
+) -> Result<Option<ToAgent>, RouteError> {
     let (Some(pos), Some(journal_session)) = (frame.pos, frame.journal_session.as_deref()) else {
         return project(ctx, agent, frame, session_id).await;
     };
@@ -57,12 +83,57 @@ pub async fn route(
         return project(ctx, agent, frame, session_id).await;
     }
     let pos = pos as i64;
-    if positions::claim_position(&ctx.db, agent, journal_session, pos).await? == Position::Duplicate
-    {
-        tracing::debug!(journal_session, pos, "resend skipped");
-        return Ok(None);
+    loop {
+        match positions::claim_position(&ctx.db, agent, journal_session, pos).await? {
+            Position::Project => break,
+            Position::Duplicate => {
+                tracing::debug!(journal_session, pos, "resend skipped");
+                return Ok(None);
+            }
+            Position::Gap { expected } if answers_are_commands => {
+                tracing::warn!(
+                    agent,
+                    journal_session,
+                    pos,
+                    expected,
+                    "a frame arrived ahead of its turn: not taken"
+                );
+                return Ok(Some(ToAgent::JournalNack {
+                    journal_session: journal_session.to_owned(),
+                    expected: expected as u64,
+                }));
+            }
+            Position::Gap { expected } => {
+                // Over HTTP there is no one to ask again: each report is its own request, and
+                // what did not arrive will not. Passed over, as it always was there.
+                tracing::warn!(
+                    agent,
+                    journal_session,
+                    "positions {expected}..{} never arrived; continuing at {pos}",
+                    pos - 1
+                );
+                positions::skip_positions(&ctx.db, agent, journal_session, expected, pos - 1)
+                    .await?;
+            }
+        }
     }
-    match project(ctx, agent, frame, session_id).await {
+    let projected = match project(ctx, agent, frame, session_id).await {
+        // Nobody reads the answer to a control request over the socket: the request is kept
+        // until acknowledged, and what became of the task arrives as its events.
+        Ok(Some(ToAgent::ControlResponse {
+            accepted, error, ..
+        })) if answers_are_commands => {
+            if !accepted {
+                tracing::info!(agent, "a control request was refused: {error:?}");
+            }
+            Ok(None)
+        }
+        Ok(Some(answer)) if answers_are_commands && answer.is_command() => {
+            answer_as_command(ctx, agent, answer).await.map(|_| None)
+        }
+        other => other,
+    };
+    match projected {
         Ok(reply) => {
             positions::confirm_position(&ctx.db, agent, journal_session, pos).await?;
             Ok(reply)
@@ -72,6 +143,31 @@ pub async fn route(
             Err(e)
         }
     }
+}
+
+/// Queue the answer to a numbered request for its agent. A child found again
+/// (`created = false`) made its events for an earlier process: they follow the answer, as the
+/// same mirrors, and the caller drops the ones it has.
+async fn answer_as_command(ctx: &Context, agent: i64, answer: ToAgent) -> Result<(), RouteError> {
+    let found_again = match &answer {
+        ToAgent::AssignResponse {
+            created: false,
+            task: Some(task),
+            ..
+        } => Some(task.clone()),
+        _ => None,
+    };
+    let mut redis = ctx.redis.clone();
+    let mut frames = vec![crate::transport::frame_text(answer)];
+    if let Some(task) = found_again {
+        let mirrors = crate::consumers::agent_protocol::child_mirrors(ctx, &task).await?;
+        frames.extend(mirrors.into_iter().map(crate::transport::frame_text));
+    }
+    for frame in frames {
+        crate::consumers::agent_queue::push(&mut redis, &ctx.settings, agent, &frame, false)
+            .await?;
+    }
+    Ok(())
 }
 
 /// The task a frame names as Python reads it (`getattr(message, "task")`): a `STATE_PATCH`'s
@@ -251,6 +347,15 @@ async fn assign_request(ctx: &Context, agent: i64, frame: &AgentFrame) -> ToAgen
     if parent.as_deref().is_some_and(is_probe_task) {
         return refused("A probe cannot parent dependent work — assign a task instead.".into());
     }
+    // A request is kept until acknowledged, so it can arrive after its reason is gone: sent
+    // again by the process that replaced the one whose task asked. Nobody waits for that child.
+    if let Some(parent) = parent.as_deref() {
+        if !reports::is_task_open(ctx, parent).await {
+            return refused(format!(
+                "The parent task {parent} has ended: it can no longer assign dependent work."
+            ));
+        }
+    }
     let assigned = match caller_ops::assign_input(&frame.message).expect("an ASSIGN_REQUEST") {
         Ok(input) => caller_ops::on_caller_assign(ctx, agent, &input).await,
         Err(e) => Err(e),
@@ -369,6 +474,13 @@ async fn route_probe(
             return Ok(None);
         }
         FromAgent::Effect { .. } => return Ok(None),
+        // Nothing is kept for a probe, so these have nothing to change. They are not refused:
+        // a refusal closes the socket, and an agent whose probed action holds a lock or
+        // shelves a value sends them.
+        FromAgent::Unlock { .. }
+        | FromAgent::Shelve { .. }
+        | FromAgent::Held { .. }
+        | FromAgent::Inform { .. } => return Ok(None),
         _ => {
             return Err(RouteError::Refused(format!(
                 "{kind}: not a message a probe sends"

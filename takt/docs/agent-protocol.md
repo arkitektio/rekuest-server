@@ -310,64 +310,80 @@ The stale sweep is the first of the sweeps a tick runs. The others (disconnected
 schedules, triggers, due tasks, unpicked tasks, due controls, expired tasks, retention) are
 listed in [task-lifecycle.md](task-lifecycle.md).
 
-## Task delivery — the agent queue (at-least-once)
+## Task delivery — the agent's commands (kept until acknowledged)
 
-The path to a socket agent is a Redis list per agent (`consumers/agent_queue.rs`), **not** the
-channel layer, on purpose: a message pushed while the agent is briefly offline persists in Redis
-and survives the reconnect, whereas a group send to an empty group would be dropped.
+The path to a socket agent is redis (`consumers/agent_queue.rs`), **not** the channel layer, on
+purpose: a command pushed while the agent is away persists and survives the reconnect, whereas a
+group send to an empty group would be dropped. The contract is in [journal.md](journal.md)
+("Commands: the other direction"); this is how the server keeps it.
 
 - **Producer:** `transport::deliver_to_agent` (`transport.rs`) is the one place that knows how to
-  reach an agent. For a WEBSOCKET agent it pushes the serialized frame onto
-  `{prefix}:agent:{agent_id}:queue` (`agent_queue::push`: `LPUSH`; priority frames `RPUSH`). A
-  WEBHOOK agent gets a signed POST instead (`hooks.rs`). Every key is built by `redis_keys.rs`
-  under `redis.key_prefix` (default `rekuest`): Redis is shared infrastructure, and a bare
-  `42_my_queue` is one integer away from another deployment's agent 42 receiving this one's
-  Assigns.
-- **Consumer:** `drain` calls `queue.pop`, which uses `BLMOVE` to atomically move the frame into
-  a per-agent processing list `{prefix}:agent:{agent_id}:processing` (it stays there), then
-  **delivers first, then `ack`s** (`LREM` from the processing list).
+  reach an agent. For a WEBSOCKET agent it appends the serialized frame to the stream
+  `{prefix}:agent:{agent_id}:commands` at the next position (`agent_queue::push`: one script takes the
+  position from `…:command_pos` and appends at it, so positions are given out in the order frames are
+  appended). A probe's frame goes to `…:priority` instead, without a position. A WEBHOOK agent gets a
+  signed POST (`hooks.rs`). Every key is built by `redis_keys.rs` under `redis.key_prefix`.
+- **Consumer:** `drain` reads both streams from where the connection stands (the `commands_seen` of
+  its `REGISTER`, then the last position it sent), a probe's frames first, stamps each command's `pos`
+  and writes it to the socket. Sending removes nothing: the agent's `COMMAND_ACK {through}` trims the
+  stream (`work` → `agent_queue::ack`). A probe's frame is forgotten once sent.
 
-The send-then-ack ordering gives **at-least-once** semantics: a crash between `pop` and `ack` leaves
-the frame in the processing list, and the next connection that wins the agent's lease **recovers
-it** — `queue.recover` moves everything still in `{prefix}:agent:{agent_id}:processing` back to the
-head of the queue (oldest first) before it starts popping.
+So a command is delivered **at least once on the wire and handled once by the agent**, which skips a
+position it has seen. What the old list-and-processing-list pair could not do: a frame written into a
+half-dead connection is still there, because only the agent's word removes it.
 
-The drain loop is the *only* way work reaches an agent, while liveness is decided by the heartbeat
-loop next to it — so it must never stop on its own, or the agent keeps looking alive, keeps being
-selected, and receives nothing:
+The drain is the *only* way work reaches an agent, while liveness is decided by the heartbeat loop
+next to it, so it must never stop on its own:
 
-- a **queue failure** (redis restart, a half-dead connection — pops block for a finite
-  `POP_BLOCK_SECONDS`, never forever) is survived: reopen the queue, back off, recover, continue;
-- a **socket write failure** closes the connection (`AGENT_TRANSPORT_FAILED_CODE`, 3005) with the
-  frame left in the processing list, so the agent reconnects and the frame is recovered;
-- a **displaced** connection stops draining the moment it is told (`Control::Displace`), not at
-  its next heartbeat — until then it would compete for the new connection's Assigns;
-- an Assign whose task the server has **already finalized** (the *delivery-time fence*,
-  `is_stale_assign` → `reports::is_task_open`) is acked and dropped instead of delivered.
+- a **redis failure** is survived: reopen, back off, continue from the same position (and make sure
+  numbering has not fallen behind what the agent has seen, should redis have lost its data);
+- a **socket write failure** closes the connection (`AGENT_TRANSPORT_FAILED_CODE`, 3005); nothing was
+  forgotten, so the next connection sends it again;
+- a **displaced** connection stops draining the moment it is told (`Control::Displace`), and asks
+  `holds_lease(agent, connection_id)` before every send: what it has not sent is the new holder's;
+- an Assign whose task the server has **already finalized** (`is_stale_assign` →
+  `reports::is_task_open`) is not sent; the next acknowledgement trims it with the rest.
 
-At-least-once means an agent can see the same task id twice; agents dedupe an Assign by task id.
+A process that registers anew (`commands_seen` 0) is sent every command its predecessor never
+acknowledged, behind the same fences.
 
-Two connections can briefly contend for one agent's queue, because the displacement hint
-reaches only connections in the same process. So ownership is not taken on trust: the drain asks
-`holds_lease(agent, connection_id)` — one primary-key lookup — immediately before every send. A
-connection that has been fenced hands the frame back with `queue.requeue` (atomic: `LREM` from
-in-flight, `RPUSH` to the head, so a concurrent `recover` by the new holder cannot duplicate it)
-and closes itself. That narrows the window from one heartbeat interval to a single frame; it
-cannot be closed entirely, because a socket write is not transactional with the lease. A lease
-holder also calls `recover()` whenever a pop comes back empty, which rescues frames stranded by a
-holder that died between its own pop and requeue.
+### Pickup, and asking
 
-### The pickup watchdog
+For a socket agent the **acknowledgement is the pickup**: when a `COMMAND_ACK` covers an `ASSIGN`,
+the task's `picked_up_at` is set (`agent_protocol.rs`, `picked_up`). Nothing is ever sent a second
+time as a new command, and there is no deadline on a socket agent's pickup: the assign waits in
+the stream until the agent has it. An assign that cannot be queued at all (redis failed) ends the
+task `LOST` there and then (`backend::dispatch`). Trying again is the caller's to decide, never the
+server's.
 
-Everything above still cannot prove an Assign *arrived*. The server therefore tracks, per task,
-`dispatched_at` / `dispatch_attempts` (handed to the transport) and `picked_up_at` (the first report
-of **any** kind from the agent — `latest_event_kind` cannot serve, because `Progress`/`Log`/`Yield`
-never move it off `QUEUED`). `reconcile_unpicked_tasks` redelivers, once, a task whose *live* agent
-(or webhook endpoint) has reported nothing within `pickup_deadline`; silent again → `LOST`
-(`started: false`). Tasks of agents that are not live
-are left to the disconnect path. A reconnecting agent is not *inquired* about work it never picked
-up (it would answer "unknown → Critical" for a task it is about to receive); that work's clock is
-restarted instead.
+What became of an acknowledged task is the agent's to report and the caller's to **ask**
+(`inquiry.rs`):
+
+- Whoever assigned a task asks about it: an agent with `INQUIRE_REQUEST` over its socket, anyone
+  else with the GraphQL `inquire` mutation (`/internal/inquire`). The Python postmans ask by
+  themselves after a task has been silent for `inquire_after` seconds (30 by default, 0 never).
+- The server asks the task's agent with `INQUIRE {task, request}`, on the lane that jumps the
+  backlog and keeps nothing. The agent answers at once, from memory, with
+  `INQUIRY_ANSWER {task, status, request, step, reported_at, progress, message}`. `status` is
+  `UNKNOWN`, `WAITING`, `RUNNING`, `PAUSED`, `HELD` or `ENDED`; the rest is what the task last
+  said of itself (its last step, when it last reported, its last progress and message).
+- The agent is asked only when its word settles something. While it is away, or has not
+  acknowledged the assign yet, the server answers with what it knows (`asked: false` and why).
+  An agent that does not answer within `ANSWER_TIMEOUT` is reported as silent.
+- One answer is acted on: **`UNKNOWN` from the agent the task was given to ends the task `LOST`.**
+  Everything else goes back to whoever asked, untouched.
+- An agent that comes back with the session it had is asked about what it had under way, the same
+  way (`ask_about`). `INIT` carries no list of inquiries any more.
+
+**Cancel does not escalate by itself.** A cancel arms no deadline: turning an unconfirmed cancel
+into an interrupt is the caller's decision, asked for with the cancel (`CANCEL_REQUEST`'s
+`auto_interrupt`, a postman's `escalate_to_interrupt`). An interrupt nobody confirmed is still
+finalized by the server after `control_deadline`. Neither clock runs while a socket agent is
+away: the command is only waiting for it.
+
+HookAgents keep a pickup watchdog (`reconcile_unpicked_tasks`, now for `WEBHOOK` agents only): over
+HTTP the response is the only acknowledgement there is, so a task its endpoint reported nothing on
+within `pickup_deadline` is posted once more, and ends `LOST` if it stays silent.
 
 ## Message catalogue
 
@@ -375,7 +391,7 @@ Messages are split by direction (`messages.rs`, re-exporting the `rekuest-protoc
 
 **Server → agent (`ToAgent`)** — `Init`, `Assign`, the lifecycle control messages `Cancel` /
 `Interrupt` / `Pause` / `Resume`, `Collect`, `Bounce`, `Kick`, `Heartbeat`, `ProtocolError`,
-and inquiries (`AssignInquiry`). (The caller-bound
+`JournalAck` / `JournalNack`, and inquiries (`AssignInquiry`). (The caller-bound
 `…Event` mirrors and the `AssignResponse`/`ControlResponse` replies are `ToAgent` frames too, but
 are addressed to the agent as a caller — see [caller-protocol.md](caller-protocol.md).)
 
