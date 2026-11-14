@@ -10,8 +10,7 @@ repository = "https://github.com/jhnnsrs/rekuest-server-next"
 
 [workspace.dependencies]
 # The wire types, shared with the agents (arkirust).
-# Until arkirust 0.20 is on crates.io (its release waits for this server): the commit that is protocol 2.
-rekuest-protocol = { git = "https://github.com/arkitektio/arkirust", rev = "11c231454753f9dd2c6d7781149571a89f148be5" }
+rekuest-protocol = "0.20"
 facade = { path = "crates/facade", package = "rekuest-server-facade" }
 authentikate = { path = "crates/authentikate" }
 rekuest-core = { path = "crates/rekuest-server-core", package = "rekuest-server-core" }
