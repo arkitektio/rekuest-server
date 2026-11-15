@@ -71,7 +71,7 @@ def test_what_a_blok_declares_beside_its_tree_is_well_formed() -> None:
         _blok(_text("args.x"), locals=[{"key": "zoom", "kind": "INT"}, {"key": "zoom", "kind": "INT"}])
     with pytest.raises(ValidationError, match=r"is a mutation.*\[query\.read_only\]"):
         _blok(_text("args.x"), queries=[{"key": "q", "service": "mikro", "document": "mutation { a }"}])
-    with pytest.raises(ValidationError, match=r"not name@version.*\[manifest\.catalog\]"):
+    with pytest.raises(ValidationError, match=r"neither the address.*\[manifest\.catalog\]"):
         _blok(_text("args.x"), catalogs=["ui"])
     with pytest.raises(ValidationError, match=r"is not a field path.*\[query\.more\]"):
         _blok(_text("args.x"), queries=[{"key": "q", "service": "mikro", "document": "query { a }", "more": "a b"}])

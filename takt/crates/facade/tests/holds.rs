@@ -947,10 +947,10 @@ async fn a_blok_that_cannot_be_made_refuses_the_hold_and_says_why() {
     }
 }
 
-/// What the UI catalog lacks is the UI's to draw (as an inline error): the task still holds,
-/// and the blok carries it as a finding.
+/// What the UI catalog lacks is the UI's to draw (as an inline error) and to tell: the task
+/// still holds, and the server, which reads no catalog, stores no finding for it.
 #[tokio::test]
-async fn a_blok_the_catalog_does_not_know_still_holds_and_says_so() {
+async fn a_blok_the_catalog_does_not_know_still_holds() {
     let Some(ctx) = context().await else { return };
     let person = Person::new();
     let holder = person.agent(&ctx).await;
@@ -976,11 +976,7 @@ async fn a_blok_the_catalog_does_not_know_still_holds_and_says_so() {
     .fetch_one(&ctx.db)
     .await
     .unwrap();
-    assert_eq!(
-        findings[0]["code"], "catalog.unknown_component",
-        "{findings}"
-    );
-    assert!(findings[0]["message"].as_str().unwrap().contains("<Knob>"));
+    assert_eq!(findings, json!([]), "{findings}");
 }
 
 /// A `source` blok sent with a task keeps every v2 field it declares beside its tree, as a

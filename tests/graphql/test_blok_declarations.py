@@ -109,7 +109,7 @@ class TestBlokDeclarations:
             ({"locals": [{"key": "task", "kind": "STRING"}]}, "'task' is reserved: no local, let or into may use it. [roots.reserved]"),
             ({"queries": [{**POSITIONS, "document": "mutation { delete }"}]}, "is a mutation: a blok reads, and writes only through a task [query.read_only]"),
             ({"subscriptions": [{**EVENTS, "history": "nope"}]}, "replays from 'nope', which is no declared query. [query.history]"),
-            ({"catalogs": ["ui"]}, "is not name@version (ui@1). [manifest.catalog]"),
+            ({"catalogs": ["ui"]}, "nor the name of one registered in the organization. [manifest.catalog]"),
             ({"queries": [{**POSITIONS, "more": "positions[0]"}]}, "is not a field path into its data (positions, images.items). [query.more]"),
             ({"vocab": 1}, "2"),
         ):

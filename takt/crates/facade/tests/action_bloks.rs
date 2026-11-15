@@ -270,12 +270,12 @@ async fn an_action_holds_a_blok_for_starting_a_run_beside_the_one_for_the_run() 
         refused.contains("an assign blok has no 'task'"),
         "{refused}"
     );
+    // Which phase draws a part (the args form is an assign blok's) is the catalog's to say,
+    // and so the frontend's to tell: the server registers it.
     let starting = json!({"context": "HTML", "vocab": 2, "source": "<Html><args /></Html>"});
-    let refused = lab
-        .register(agent, workflow(json!([starting])))
+    lab.register(agent, workflow(json!([starting])))
         .await
-        .unwrap_err();
-    assert!(refused.contains("[assign.kind]"), "{refused}");
+        .unwrap();
 }
 
 #[tokio::test]
@@ -283,21 +283,22 @@ async fn only_an_actions_blok_reads_a_run() {
     let Some(lab) = lab().await else { return };
     let agent = lab.agent("first").await;
 
-    // An agent's own blok holding a Placed or an ask is refused: it has no run to read.
-    let asking = json!({"bloks": [{"key": "panel", "vocab": 2, "source": "<Html><Card><ask /></Card></Html>"}]});
-    let refused = lab.register(agent, asking).await.unwrap_err();
-    assert!(
-        refused.contains("an 'ask' shows a task's open ask"),
-        "{refused}"
-    );
-    let anchored = json!({"bloks": [{"key": "panel", "vocab": 2, "source": "<Scene><Placed dep=\"robot\" /></Scene>", "context": "SCENE"}]});
-    let refused = lab.register(agent, anchored).await.unwrap_err();
-    assert!(refused.contains("[space.kind]"), "{refused}");
+    // An agent's own blok has no run to read: `task` is no root of it (the language's).
+    let reading = json!({"bloks": [{"key": "panel", "vocab": 2, "source": "<Html><Text>{task.status}</Text></Html>"}]});
+    let refused = lab.register(agent, reading).await.unwrap_err();
+    assert!(refused.contains("[roots.not_in_kind]"), "{refused}");
 
-    // Nor does an agent declare a space: a space places an action's dependencies.
-    let spaced = json!({"bloks": [{"key": "lab", "vocab": 2, "context": "SCENE", "source": "<Space room=\"lab\" />"}]});
-    let refused = lab.register(agent, spaced).await.unwrap_err();
-    assert!(refused.contains("[space.kind]"), "{refused}");
+    // Which kind of blok a component belongs to (an ask, a Placed, a Space are an action's)
+    // is its catalog's to say: the frontend that draws the blok tells it, the server does not.
+    for (context, source) in [
+        ("HTML", "<Html><Card><ask /></Card></Html>"),
+        ("SCENE", "<Scene><Placed dep=\"robot\" /></Scene>"),
+        ("SCENE", "<Space room=\"lab\" />"),
+    ] {
+        let held =
+            json!({"bloks": [{"key": "panel", "vocab": 2, "context": context, "source": source}]});
+        lab.register(agent, held).await.unwrap();
+    }
 }
 
 fn asking(asks: Value) -> Value {

@@ -193,14 +193,15 @@ class TestBlokRevisions:
 
     async def test_a_dry_run_shows_the_kinds_it_infers(self, authenticated_context: HttpContext) -> None:
         """An editor shows inferred kinds before saving: the dry run answers the resolved locals,
-        and the locals it would store stay as written."""
+        and the locals it would store stay as written. What a control writes into the local bound
+        to it is its catalog's to say, which the server does not read: that local stays ANY."""
         env = await _blok_with_two_materializations(authenticated_context)
         components = [{"id": "Html[0]", "component": "Html", "children": [{"id": "Html[0]/Switch[0]", "component": "Switch", "props": [{"key": "bind", "dynamicValue": {"path": "on"}}]}]}]
         written = [{"key": "zoom", "default": 2}, {"key": "on"}]
 
         checked = (await _run(authenticated_context, EDIT_BLOK, {"input": {"blok": env["blok"], "base": env["head"], "components": components, "locals": written, "dryRun": True}}))["editBlok"]
         assert checked["applied"] is False
-        assert checked["resolvedLocals"] == [{"key": "zoom", "kind": "INT", "default": 2}, {"key": "on", "kind": "BOOL", "default": None}]
+        assert checked["resolvedLocals"] == [{"key": "zoom", "kind": "INT", "default": 2}, {"key": "on", "kind": "ANY", "default": None}]
 
         saved = (await _run(authenticated_context, EDIT_BLOK, {"input": {"blok": env["blok"], "base": env["head"], "components": components, "locals": written}}))["editBlok"]
         assert saved["resolvedLocals"] == checked["resolvedLocals"]

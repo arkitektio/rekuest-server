@@ -58,4 +58,5 @@ class TestRegisteredLocals:
         assert written["level"] == [{"key": "level", "persist": True}]
         resolved = await sync_to_async(lambda: {blok.name: blok.resolved_locals for blok in Blok.objects.all()})()
         assert resolved["picker"] == [{"key": "picked", "kind": "STRUCTURE", "identifier": "@mikro/image", "nullable": True, "persist": False}]
-        assert resolved["level"] == [{"key": "level", "kind": "FLOAT", "nullable": False, "persist": True}]
+        # What a Slider writes is its catalog's to say: the server reads none, so the local stays ANY.
+        assert resolved["level"] == [{"key": "level", "kind": "ANY", "nullable": False, "persist": True}]

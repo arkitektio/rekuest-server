@@ -155,16 +155,17 @@ class TestUiCatalog:
             authenticated_context,
             [{"id": "root", "component": "Dial", "props": [{"key": "value", "utilCall": {"operation": "fmt.fizz", "arguments": [{"key": "v", "valuePath": "exposure"}]}}]}],
         )
+        # A catalog may add functions, so one the language does not know is the frontend's to tell.
         assert not unknown_function.errors, unknown_function.errors
-        assert [d["code"] for d in await _blok_diagnostics()] == ["expr.unknown_function"]
+        assert [d["code"] for d in await _blok_diagnostics()] == []
 
-        # A function of the language called wrongly, or a callback holding a plain value, refuses the blok.
-        for props, message in (
-            ([{"key": "value", "utilCall": {"operation": "cmp.gt", "arguments": [{"key": "a", "valuePath": "exposure"}]}}], "cmp.gt: needs b"),
-            ([{"key": "value", "staticValue": 1}, {"key": "onChange", "utilCall": {"operation": "fmt.dial", "arguments": [{"key": "v", "valuePath": "exposure"}]}}], "onChange of <Dial> is a callback prop"),
-        ):
-            refused = await _create_blok(authenticated_context, [{"id": "root", "component": "Dial", "props": props}])
-            assert refused.errors and message in refused.errors[0].message, refused.errors
+        # A function of the language called wrongly refuses the blok.
+        refused = await _create_blok(authenticated_context, [{"id": "root", "component": "Dial", "props": [{"key": "value", "utilCall": {"operation": "cmp.gt", "arguments": [{"key": "a", "valuePath": "exposure"}]}}]}])
+        assert refused.errors and "cmp.gt: needs b" in refused.errors[0].message, refused.errors
+
+        # Which props of a component are callbacks is its catalog's to say: a value in one is the frontend's to tell.
+        in_callback = await _create_blok(authenticated_context, [{"id": "root", "component": "Dial", "props": [{"key": "value", "staticValue": 1}, {"key": "onChange", "utilCall": {"operation": "fmt.dial", "arguments": [{"key": "v", "valuePath": "exposure"}]}}]}])
+        assert not in_callback.errors, in_callback.errors
 
         accepted = await _create_blok(
             authenticated_context,
@@ -562,12 +563,12 @@ class TestResolvedBloks:
         message = result.errors[0].message
         assert "'robot' is not a dependency of the blok" in message and 'Fix: dependencies=[AgentDependencyInput(key="robot")]' in message
 
-    async def test_changing_the_bound_control_re_infers_the_kind(self, authenticated_context: HttpContext) -> None:
-        """An edit that leaves the locals out keeps them as written and resolves them against the new tree: a Slider's FLOAT becomes an Input's STRING."""
+    async def test_a_bound_control_types_no_local_on_the_server(self, authenticated_context: HttpContext) -> None:
+        """An edit that leaves the locals out keeps them as written and resolves them against the new tree. What a control writes is its catalog's to say, which the server does not read: bound to a Slider or to an Input, the local is ANY."""
         slider = {"id": "c", "component": "Slider", "props": [{"key": "bind", "dynamicValue": {"path": "level"}}]}
         field = {"id": "c", "component": "Input", "props": [{"key": "bind", "dynamicValue": {"path": "level"}}]}
         blok = await self._create(authenticated_context, components=[slider], locals=[{"key": "level"}])
-        assert [local["kind"] for local in blok["resolvedLocals"]] == ["FLOAT"]
+        assert [local["kind"] for local in blok["resolvedLocals"]] == ["ANY"]
         head = (await schema.execute(HEAD, context_value=authenticated_context, variable_values={"id": blok["id"]})).data["blok"]["head"]["id"]
 
         result = await schema.execute(EDIT_RESOLVED_BLOK, context_value=authenticated_context, variable_values={"input": {"blok": blok["id"], "base": head, "components": _html(field)}})
@@ -575,7 +576,7 @@ class TestResolvedBloks:
         edited = result.data["editBlok"]
         assert edited["applied"]
         assert edited["blok"]["locals"] == edited["revision"]["locals"] == [{"key": "level", "kind": None}]
-        assert edited["blok"]["resolvedLocals"] == edited["revision"]["resolvedLocals"] == [{"key": "level", "kind": "STRING"}]
+        assert edited["blok"]["resolvedLocals"] == edited["revision"]["resolvedLocals"] == [{"key": "level", "kind": "ANY"}]
 
     async def test_an_explicit_kind_is_never_overwritten(self, authenticated_context: HttpContext) -> None:
         slider = {"id": "c", "component": "Slider", "props": [{"key": "bind", "dynamicValue": {"path": "level"}}]}
@@ -586,16 +587,16 @@ class TestResolvedBloks:
         ]
 
     async def test_the_hash_covers_the_locals_as_written_only(self, authenticated_context: HttpContext) -> None:
-        """A module registered after the blok changes what its Slider writes: the next write re-resolves the local, but the content (and its hash) is the same, so no revision is made."""
+        """A module registered after the blok says what its Slider writes: the server reads no catalog, so the local resolves as before, and the same content (and hash) makes no revision."""
         slider = {"id": "s", "component": "Slider", "props": [{"key": "bind", "dynamicValue": {"path": "label"}}]}
         blok = await self._create(authenticated_context, module="later", components=[slider], locals=[{"key": "label"}])
-        assert [local["kind"] for local in blok["resolvedLocals"]] == ["FLOAT"]
+        assert [local["kind"] for local in blok["resolvedLocals"]] == ["ANY"]
 
         await _register(authenticated_context, {"name": "later", "components": [{"name": "Slider", "props": [{"key": "bind", "kind": "STRING"}], "acceptsChildren": False}]})
         result = await schema.execute(UPDATE_RESOLVED_BLOK, context_value=authenticated_context, variable_values={"input": {"id": blok["id"], "components": _html(slider)}})
         assert not result.errors, result.errors
         updated = result.data["updateBlok"]
-        assert [local["kind"] for local in updated["resolvedLocals"]] == ["STRING"]
+        assert [local["kind"] for local in updated["resolvedLocals"]] == ["ANY"]
         assert updated["locals"] == [{"key": "label", "kind": None}]
         assert updated["hash"] == blok["hash"]
         assert [revision["number"] for revision in updated["revisions"]] == [1]
