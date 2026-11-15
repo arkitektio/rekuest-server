@@ -305,7 +305,8 @@ stuck-connected agent is what makes its work visible to the task sweeps of the s
 | schedules | `schedules::refill_schedules` | gives every enabled schedule that is due one its next run, as a delayed task |
 | triggers | `triggers::fire_triggers` | claims unprocessed signals, assigns every applying trigger's action and logs what became of each listening trigger |
 | due tasks | `reconcile::dispatch_due_tasks` | dispatches tasks whose `not_before` has passed |
-| unpicked tasks | `reconcile::reconcile_unpicked_tasks` | redelivers once, then ends `LOST`, a task its live agent never reported on |
+| unpicked tasks | `reconcile::reconcile_unpicked_tasks` | for HookAgents: redelivers once, then ends `LOST`, a task its endpoint never reported on |
+| unreachable assigns | `reconcile::reconcile_unreachable_assigns` | ends `LOST` a socket agent's task whose assign is neither acknowledged nor in its command stream |
 | due controls | `reconcile::escalate_due_controls` | escalates an unconfirmed cancel to an interrupt, finalizes an unconfirmed interrupt |
 | expired tasks | `reconcile::expire_disconnected_tasks` | ends `LOST` the undelivered work of an agent that never came back |
 

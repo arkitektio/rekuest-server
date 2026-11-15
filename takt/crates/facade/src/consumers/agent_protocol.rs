@@ -293,9 +293,19 @@ async fn register(
         tracing::warn!("registration refused: {e}");
         Refused::close(codes::FROM_AGENT_MESSAGE_DOES_NOT_MATCH_SCHEMA_CODE)
     };
+    // The server's own trouble (its database, its redis, the issuer's keys out of reach) is not
+    // a refusal: the agent is told to come back, never that it was turned away.
+    let fail = |e: &dyn std::fmt::Display| {
+        tracing::error!("registration failed on the server's side: {e}");
+        Refused::close(codes::AGENT_TRANSPORT_FAILED_CODE)
+    };
+    let denied = |e: &authentikate::AuthentikateError| match e.is_permission_denied() {
+        true => refuse(e),
+        false => fail(e),
+    };
     let decoded = authentikate::authenticate_token(&ctx.verifier, token)
         .await
-        .map_err(|e| refuse(&e))?;
+        .map_err(|e| denied(&e))?;
     // Before anything is written: an agent that names no spec is older than this server reads.
     if declaration
         .spec_version
@@ -321,7 +331,7 @@ async fn register(
     }
     let identity = authentikate::expand::expand_token_context(&ctx.db, &decoded)
         .await
-        .map_err(|e| refuse(&e))?;
+        .map_err(|e| denied(&e))?;
     let agent = registration::ensure_agent(
         &ctx.db,
         identity.client,
@@ -329,14 +339,14 @@ async fn register(
         identity.organization,
     )
     .await
-    .map_err(|e| refuse(&e))?;
+    .map_err(|e| fail(&e))?;
 
     let (blocked, hash): (bool, String) =
         sqlx::query_as("SELECT blocked, hash FROM facade_agent WHERE id = $1")
             .bind(agent)
             .fetch_one(&ctx.db)
             .await
-            .map_err(|e| refuse(&e))?;
+            .map_err(|e| fail(&e))?;
     if blocked {
         return Err(Refused::close(codes::AGENT_IS_BLOCKED_CODE));
     }
@@ -345,23 +355,23 @@ async fn register(
     // skips the reconciliation below, and must still say who supervises it now.
     registration::set_supervisor(&ctx.db, agent, declaration.supervisor.as_deref())
         .await
-        .map_err(|e| refuse(&e))?;
+        .map_err(|e| fail(&e))?;
     // So does its hardware: it may have come back on another machine.
     registration::set_hardware(&ctx.db, agent, declaration.hardware.as_ref())
         .await
-        .map_err(|e| refuse(&e))?;
+        .map_err(|e| fail(&e))?;
     // So do its features: what it says it implements now, whatever it said before.
     registration::set_features(&ctx.db, agent, features)
         .await
-        .map_err(|e| refuse(&e))?;
+        .map_err(|e| fail(&e))?;
     // And the spec it runs: an upgrade may have changed nothing it declares.
     registration::set_spec_version(&ctx.db, agent, declaration.spec_version.as_deref())
         .await
-        .map_err(|e| refuse(&e))?;
+        .map_err(|e| fail(&e))?;
     // And what its token grants: a process may come back with a narrower one.
     registration::set_granted_scopes(&ctx.db, agent, &decoded.scopes())
         .await
-        .map_err(|e| refuse(&e))?;
+        .map_err(|e| fail(&e))?;
 
     // Registering is implementing: a declaration whose hash the agent does not hold yet is
     // reconciled in one transaction before the lease is claimed, so a refused one strands no
@@ -386,7 +396,7 @@ async fn register(
 
     let caller = caller_ops::get_or_create_caller_id(&ctx.db, agent)
         .await
-        .map_err(|e| refuse(&e))?;
+        .map_err(|e| fail(&e))?;
 
     let claim = leases::on_agent_connected(
         &ctx.db,
@@ -397,7 +407,7 @@ async fn register(
         force,
     )
     .await
-    .map_err(|e| refuse(&e))?;
+    .map_err(|e| fail(&e))?;
     if !claim.claimed {
         return Err(Refused::explained(
             codes::AGENT_ALREADY_CONNECTED_CODE,
@@ -423,16 +433,23 @@ async fn register(
             if let Err(e) = leases::release_lease(&ctx.db, agent, connection_id).await {
                 tracing::error!(agent, "releasing the lease failed: {e}");
             }
-            return Err(refuse(&e));
+            return Err(fail(&e));
         }
     };
 
     // `connected` changed: the agents feed shows it without waiting for anything else to.
     crate::signals::agent_saved(ctx, agent, false).await;
 
-    let positions = positions::projected_positions(&ctx.db, agent, &handshake.sessions)
-        .await
-        .map_err(|e| refuse(&e))?;
+    let positions = match positions::projected_positions(&ctx.db, agent, &handshake.sessions).await
+    {
+        Ok(positions) => positions,
+        Err(e) => {
+            if let Err(e) = leases::release_lease(&ctx.db, agent, connection_id).await {
+                tracing::error!(agent, "releasing the lease failed: {e}");
+            }
+            return Err(fail(&e));
+        }
+    };
     sender.send(ToAgent::Init {
         nonce: handshake.nonce,
         positions,
@@ -476,11 +493,16 @@ async fn implement(
             format!("Registration refused: {e}"),
         )
     };
-    let mut tx = ctx.db.begin().await.map_err(|e| rejected(&e))?;
+    // Not the declaration's fault: the agent comes back with it.
+    let failed = |e: &sqlx::Error| {
+        tracing::error!(agent, "registration failed on the server's side: {e}");
+        Refused::close(codes::AGENT_TRANSPORT_FAILED_CODE)
+    };
+    let mut tx = ctx.db.begin().await.map_err(|e| failed(&e))?;
     let implemented = registration::implement_agent(&mut tx, agent, &payload)
         .await
         .map_err(|e| rejected(&e))?;
-    tx.commit().await.map_err(|e| rejected(&e))?;
+    tx.commit().await.map_err(|e| failed(&e))?;
     Ok(implemented)
 }
 
@@ -538,6 +560,7 @@ async fn run_session(
         agent,
         registered.caller,
         registered.session_id.clone(),
+        connection_id.to_owned(),
         sender.clone(),
         work_rx,
         turn,
@@ -609,11 +632,13 @@ pub const JOURNAL_ACK_DELAY: Duration = Duration::from_millis(200);
 /// Route the agent's frames in order, send their replies, and acknowledge the numbered ones
 /// (`dispatch`, `on_numbered_handled`). A frame the router fails on closes the connection, as
 /// the Python consumer does.
+#[allow(clippy::too_many_arguments)]
 async fn work(
     ctx: Context,
     agent: i64,
     caller: i64,
     session_id: Option<String>,
+    connection_id: String,
     sender: Sender,
     mut frames: mpsc::UnboundedReceiver<AgentFrame>,
     turn: Turn,
@@ -641,13 +666,28 @@ async fn work(
         };
         match &frame.message {
             FromAgent::CommandAck { through } => {
+                // An acknowledgement still waiting here when another connection took the
+                // agent over is not acted on: what it covers was given out anew since.
+                if !leases::holds_lease(&ctx.db, agent, &connection_id)
+                    .await
+                    .unwrap_or(false)
+                {
+                    continue;
+                }
                 let mut redis = ctx.redis.clone();
-                match agent_queue::ack(&mut redis, &ctx.settings, agent, *through).await {
-                    Ok(acknowledged) => picked_up(&ctx, agent, &acknowledged).await,
-                    // Kept a little longer: the next ack covers them too.
-                    Err(e) => {
-                        tracing::error!(agent, "forgetting acknowledged commands failed: {e}")
-                    }
+                // The pickup is recorded before the command is forgotten: an assign that is
+                // neither in the stream nor picked up never arrived (the sweep ends it lost).
+                let forgotten =
+                    match agent_queue::covered(&mut redis, &ctx.settings, agent, *through).await {
+                        Ok(acknowledged) => {
+                            picked_up(&ctx, agent, &acknowledged).await;
+                            agent_queue::forget(&mut redis, &ctx.settings, agent, *through).await
+                        }
+                        Err(e) => Err(e),
+                    };
+                // Kept a little longer: the next ack covers them too.
+                if let Err(e) = forgotten {
+                    tracing::error!(agent, "forgetting acknowledged commands failed: {e}")
                 }
                 continue;
             }
@@ -1094,6 +1134,7 @@ async fn drain(
     let mut cursor = Cursor {
         sent: commands_seen,
         probes_after: "0".to_owned(),
+        since: None,
     };
     loop {
         let mut queue = match AgentQueue::open(&ctx.redis_client, &ctx.settings, agent).await {
@@ -1130,6 +1171,9 @@ async fn drain(
 struct Cursor {
     sent: u64,
     probes_after: String,
+    /// When this connection began to drain, on redis's clock: an order to leave given before
+    /// it was for the connection there was then.
+    since: Option<u64>,
 }
 
 async fn drain_once(
@@ -1143,6 +1187,10 @@ async fn drain_once(
 ) -> Result<(), anyhow::Error> {
     // Numbering never falls behind what the agent has handled, whatever redis remembers.
     queue.resume(cursor.sent).await?;
+    let since = match cursor.since {
+        Some(since) => since,
+        None => *cursor.since.insert(queue.now_millis().await?),
+    };
     loop {
         for queued in queue.read(cursor.sent, &cursor.probes_after).await? {
             if !leases::holds_lease(&ctx.db, agent, connection_id).await? {
@@ -1158,7 +1206,16 @@ async fn drain_once(
                 Queued::Probe { id, frame } => {
                     // At most once: forgotten whether or not the socket took it.
                     queue.forget_probe(&id).await?;
+                    let stale = agent_queue::is_connection_order(&frame)
+                        && agent_queue::pushed_at(&id).is_some_and(|at| at < since);
                     cursor.probes_after = id;
+                    if stale {
+                        tracing::info!(
+                            agent,
+                            "not sending an order to leave given before this connection"
+                        );
+                        continue;
+                    }
                     if !sender.send_text(frame).await {
                         sender.close(codes::AGENT_TRANSPORT_FAILED_CODE);
                         return Ok(());

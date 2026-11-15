@@ -147,7 +147,9 @@ effects too.
 
 What the server sends an agent and must not lose is numbered the same way, in a stream of its own:
 
-- A **command** carries `pos`: 1, 2, 3, … per agent, no gaps. Commands are `ASSIGN`, `CANCEL`,
+- A **command** carries `pos`: 1, 2, 3, … per agent, in order. (What an agent is sent may skip a
+  position: an `ASSIGN` whose task has ended meanwhile is not sent, and one withdrawn because its
+  task was assigned anew is gone.) Commands are `ASSIGN`, `CANCEL`,
   `INTERRUPT`, `PAUSE`, `RESUME`, `DECIDE`, `COLLECT`, `BLOK_REFUSED`, the answers to numbered requests
   (`ASSIGN_RESPONSE`, `CONTROL_RESPONSE`) and every `…_EVENT` mirror of a task the agent assigned.
 - The server keeps a command (`consumers/agent_queue.rs`, a redis stream whose entry ids are the
@@ -159,6 +161,15 @@ What the server sends an agent and must not lose is numbered the same way, in a 
 - Not commands: `INIT`, `HEARTBEAT`, `JOURNAL_ACK`, `JOURNAL_NACK`, `PROTOCOL_ERROR`, `KICK`, `BOUNCE`,
   the answers to unnumbered requests, and every frame of a probe, which travels on a lane of its own
   ahead of the commands and at most once.
+- `KICK` and `BOUNCE` are **orders to a connection**, not to the agent: leaving is all an agent does
+  with one, so nothing would ever acknowledge it. They travel on the probes' lane, and one given
+  before a connection began is not sent to it (`agent_queue::is_connection_order`). An agent that
+  meets one at a position (a server from before this) counts the position as seen.
+- **A command that never reached the stream is an outcome too.** The push follows the task's commit,
+  and redis may lose what it held. A `COMMAND_ACK` records the pickup before it trims the stream,
+  so an assign that is neither picked up nor in the stream never arrived: its task ends `LOST`
+  (`reconcile::reconcile_unreachable_assigns`). When redis lost its data, what was pushed since is
+  moved behind the position the agent has seen, so it is not taken for handled.
 - A child's mirror names its `event` (the `TaskEvent` id); a mirror seen twice (a replay for a child
   found again, overlapping what arrived live) is the same event. There is no `seq` any more, on
   mirrors or on reports.
@@ -170,10 +181,15 @@ and trying again belongs to whoever called (see "Pickup, and asking" in
 [agent-protocol.md](agent-protocol.md)).
 
 - A command the agent cannot handle fails its task (`CRITICAL`) and is acknowledged like any other.
+- A control for a task the agent does not have is acknowledged and answered with nothing: an agent
+  ends no task it knows nothing of. What became of such a task is learned by asking.
+- A task sent again (`on_lost`: `RESUME`, `RESTART`) has the assign it was first given withdrawn
+  from the stream: a process that never saw it is given only the new one.
 - A request whose parent task has ended is answered with an error.
 - A database or redis failure on the server is not the frame's fault: the connection is closed with
-  a code the agent reconnects on, and the frame, never handled, is delivered again. A frame the
-  server cannot read at all is schema drift, and closes for good.
+  a code the agent reconnects on (3005), and the frame, never handled, is delivered again. That
+  holds for the handshake as well: a `REGISTER` the server could not serve is not a refused one.
+  A frame the server cannot read at all is schema drift, and closes for good.
 
 An agent says it speaks this with `protocol_2` in `REGISTER`'s `features`. The server refuses one
 that does not.

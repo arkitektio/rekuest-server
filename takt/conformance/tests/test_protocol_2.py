@@ -110,3 +110,25 @@ async def test_an_agent_asked_about_a_task_it_does_not_know_has_lost_it(agents, 
     asked, _ = await asyncio.gather(ask(), answer("UNKNOWN"))
     assert asked["status"] == "UNKNOWN"
     assert (await api.task(task))["latestEventKind"] == "LOST", "the one agent that could have it does not"
+
+
+async def test_a_bounce_is_an_order_to_the_connection_and_is_given_once(agents, graphql) -> None:  # noqa: ANN001
+    session = session_id()
+    first = await agents()
+    first.auto_ack = False
+    init = await first.register("conf_72", session_id=session, **ECHO_DECLARATION)
+    api = graphql("conf_72")
+
+    await api("mutation ($agent: ID!) { bounce(input: {agent: $agent}) { id } }", agent=init["agent"])
+    bounce = await first.receive_type("BOUNCE")
+    assert bounce.get("pos") is None, "an order to leave has no position: nothing would acknowledge it"
+    await first.close()
+
+    # Back, having acknowledged nothing: the order was for the connection that is gone.
+    second = await agents()
+    await second.register("conf_72", session_id=session, force=True, **ECHO_DECLARATION)
+    try:
+        again = await second.receive_type("BOUNCE", timeout=1.5)
+    except TimeoutError:
+        again = None
+    assert again is None, "a bounce is not given again to the next connection"

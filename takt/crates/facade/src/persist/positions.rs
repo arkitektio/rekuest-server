@@ -12,8 +12,9 @@
 //! * **project**: the router routes the frame.
 //! * **confirm**: `projected_pos = pos`. A projection that failed releases the claim instead.
 //!
-//! A frame beyond `projected_pos + 1` means the agent no longer holds the frames in between: the
-//! gap is logged and the watermark moves past it.
+//! A frame beyond `projected_pos + 1` is a gap: it is not taken, and the agent is told which
+//! position is expected (`JOURNAL_NACK`). Only the agent's `JOURNAL_SKIP` moves the watermark
+//! past positions it no longer holds.
 
 use std::time::Duration;
 

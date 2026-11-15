@@ -533,6 +533,43 @@ async fn a_socket_agents_assign_is_never_sent_a_second_time() {
 }
 
 #[tokio::test]
+async fn an_assign_that_never_reached_the_agents_stream_ends_lost() {
+    // The push follows the task's commit, and redis may lose what it held: a task whose assign
+    // is not in its agent's stream would wait for ever. One that is there waits as long as it takes.
+    let _serial = serial().await;
+    let Some(ctx) = context(settings()).await else {
+        return;
+    };
+    let (agent, action) = agent(&ctx).await;
+    seen(&ctx, agent, true, 1).await;
+    let implementation = implementation(&ctx, agent, action, "PLAIN").await;
+    let never_pushed = assignable(&ctx, agent, action, implementation).await;
+    let waiting = assignable(&ctx, agent, action, implementation).await;
+    let mut redis = ctx.redis.clone();
+    facade::consumers::agent_queue::push(
+        &mut redis,
+        &ctx.settings,
+        agent,
+        &serde_json::json!({"type": "ASSIGN", "task": waiting.to_string()}).to_string(),
+        false,
+    )
+    .await
+    .unwrap();
+    backdate(&ctx, never_pushed, 10).await;
+    backdate(&ctx, waiting, 10).await;
+
+    assert_eq!(
+        reconcile::reconcile_unreachable_assigns(&ctx, LIMIT)
+            .await
+            .unwrap(),
+        1
+    );
+
+    assert_eq!(state(&ctx, never_pushed).await, ("LOST".to_owned(), true));
+    assert_eq!(kinds(&ctx, waiting).await, Vec::<String>::new());
+}
+
+#[tokio::test]
 async fn the_watchdog_leaves_picked_up_offline_and_undue_work_alone() {
     let _serial = serial().await;
     let Some(ctx) = context(settings()).await else {

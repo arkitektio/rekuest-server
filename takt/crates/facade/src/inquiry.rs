@@ -89,12 +89,12 @@ pub async fn caller_of(ctx: &Context, task: &str) -> BackendResult<Option<i64>> 
     caller.ok_or_else(|| BackendError::Refused(format!("Task {task} does not exist.")))
 }
 
-/// What the server knows of a task before it asks: its agent, whether it is done, whether the
+/// What the server knows of a task before it asks: its agent, whether it is done, when the
 /// assign was acknowledged, its latest event, the agent's kind, and whether the agent is live.
 type Asked = (
     Option<i64>,
     bool,
-    bool,
+    Option<chrono::DateTime<Utc>>,
     String,
     Option<String>,
     Option<bool>,
@@ -108,7 +108,7 @@ pub async fn inquire(ctx: &Context, task: &str) -> BackendResult<Inquiry> {
         - chrono::Duration::from_std(ctx.settings.agent_stale_after)
             .unwrap_or(chrono::Duration::MAX);
     let row: Option<Asked> = sqlx::query_as(
-        "SELECT t.agent_id, t.is_done, t.picked_up_at IS NOT NULL, t.latest_event_kind, a.kind,
+        "SELECT t.agent_id, t.is_done, t.picked_up_at, t.latest_event_kind, a.kind,
                     (a.connected AND a.last_seen IS NOT NULL AND a.last_seen > $2)
                FROM facade_task t LEFT JOIN facade_agent a ON a.id = t.agent_id
               WHERE t.id = $1",
@@ -117,11 +117,12 @@ pub async fn inquire(ctx: &Context, task: &str) -> BackendResult<Inquiry> {
     .bind(cutoff)
     .fetch_optional(&ctx.db)
     .await?;
-    let Some((agent, done, acknowledged, kind, agent_kind, live)) = row else {
+    let Some((agent, done, picked_up_at, kind, agent_kind, live)) = row else {
         return Err(BackendError::Refused(format!(
             "Task {task} does not exist."
         )));
     };
+    let acknowledged = picked_up_at.is_some();
     if done {
         return Ok(Inquiry::known(
             task,
@@ -181,13 +182,18 @@ pub async fn inquire(ctx: &Context, task: &str) -> BackendResult<Inquiry> {
         });
     };
     if answer.status == TaskStatus::Unknown {
-        // The one agent that could have it says it does not. That is how it ended.
+        // The one agent that could have it says it does not. That is how it ended, unless the
+        // task was given anew while the question was out (another agent, or the same one sent
+        // it again): then the answer is about an assign that no longer counts.
+        let as_asked = move |row: &transitions::TaskRow| {
+            row.agent_id == agent && row.picked_up_at == picked_up_at
+        };
         transitions::finalize_lost(
             ctx,
             id,
             "Its agent, asked about it, does not know this task.",
             true,
-            None,
+            Some(&as_asked),
             false,
         )
         .await?;

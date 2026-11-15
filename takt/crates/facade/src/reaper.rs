@@ -12,6 +12,7 @@
 //! | `fire_triggers`                   | an unprocessed signal | `trigger_max_depth`  |
 //! | `dispatch_due_tasks`              | `Task.not_before`    | (the task's own)      |
 //! | `reconcile_unpicked_tasks`        | `Task.dispatched_at` | `pickup_deadline`     |
+//! | `reconcile_unreachable_assigns`   | `Task.dispatched_at` | `pickup_deadline`     |
 //! | `escalate_due_controls`           | `Task.interrupt_at`  | `control_deadline`    |
 //! | `expire_disconnected_tasks`       | `Task.dispatched_at` | `disconnected_expiry` |
 //! | `retention::sweep` (every 60th tick) | `Task.finished_at`, `Signal.processed_at` | `task_retention`, `ephemeral_task_retention`, `signal_retention` |
@@ -40,7 +41,7 @@ const PLAN_LIMIT: i64 = 100;
 
 /// The ordered sweeps (`_sweeps`). Agents before tasks: healing a stuck-connected agent is what
 /// makes its work visible to the task sweeps of the same tick.
-pub const SWEEPS: [&str; 9] = [
+pub const SWEEPS: [&str; 10] = [
     "stale agents",
     "disconnected agents",
     // After the agent sweeps, whose revokes it counts; normally a notice drained it already.
@@ -51,6 +52,7 @@ pub const SWEEPS: [&str; 9] = [
     "triggers",
     "due tasks",
     "unpicked tasks",
+    "unreachable assigns",
     "due controls",
     "expired tasks",
 ];
@@ -69,6 +71,7 @@ pub async fn run_sweep(ctx: &Context, name: &str) -> Result<usize, sqlx::Error> 
         "triggers" => triggers::fire_triggers(ctx, PLAN_LIMIT).await,
         "due tasks" => reconcile::dispatch_due_tasks(ctx, SWEEP_LIMIT).await,
         "unpicked tasks" => reconcile::reconcile_unpicked_tasks(ctx, SWEEP_LIMIT).await,
+        "unreachable assigns" => reconcile::reconcile_unreachable_assigns(ctx, SWEEP_LIMIT).await,
         "due controls" => reconcile::escalate_due_controls(ctx, SWEEP_LIMIT).await,
         "expired tasks" => reconcile::expire_disconnected_tasks(ctx, SWEEP_LIMIT).await,
         other => unreachable!("no sweep named {other:?}"),

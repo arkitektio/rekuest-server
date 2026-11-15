@@ -44,13 +44,12 @@ pub async fn delete_agent(ctx: &Context, organization: i64, agent: &str) -> Back
     };
     if connected {
         // While the row still says how to reach it.
-        transport::broadcast(
+        transport::order_connection(
             ctx,
             id,
             ToAgent::Kick {
                 reason: Some("The agent was deleted".into()),
             },
-            false,
         )
         .await;
     }

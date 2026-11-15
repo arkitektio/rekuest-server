@@ -57,11 +57,21 @@ const PUSH: &str = "local pos = redis.call('INCR', KEYS[2]) \
                     return pos";
 
 /// Never number a command at or below what the agent has seen: it would be skipped as handled.
-/// (A redis that lost its data starts counting at 1 while a living agent remembers more.)
+/// (A redis that lost its data starts counting at 1 while a living agent remembers more.) What
+/// was pushed since the loss sits at such positions: it moves behind what the agent has seen,
+/// in the order it was pushed.
 const RESUME: &str = "local at = tonumber(redis.call('GET', KEYS[1]) or '0') \
                       local seen = tonumber(ARGV[1]) \
-                      if at < seen then redis.call('SET', KEYS[1], seen) return seen end \
-                      return at";
+                      if at >= seen then return at end \
+                      local entries = redis.call('XRANGE', KEYS[2], '-', '+') \
+                      redis.call('DEL', KEYS[2]) \
+                      local pos = seen \
+                      for _, entry in ipairs(entries) do \
+                        pos = pos + 1 \
+                        redis.call('XADD', KEYS[2], pos .. '-0', unpack(entry[2])) \
+                      end \
+                      redis.call('SET', KEYS[1], pos) \
+                      return pos";
 
 /// One thing read off an agent's streams.
 #[derive(Debug, Clone, PartialEq)]
@@ -75,6 +85,25 @@ pub enum Queued {
 /// The position of a command entry's id (`{pos}-0`).
 fn position_of(id: &str) -> Option<u64> {
     id.split('-').next()?.parse().ok()
+}
+
+/// When an entry of the priority stream was pushed, in redis's milliseconds (its id is
+/// `{millis}-{n}`).
+pub fn pushed_at(id: &str) -> Option<u64> {
+    position_of(id)
+}
+
+/// Whether a frame orders a connection to leave (`BOUNCE`, `KICK`): meant for the connection
+/// there was when it was given, never for one made later.
+pub fn is_connection_order(frame: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(frame)
+        .ok()
+        .and_then(|raw| {
+            raw.get("type")
+                .and_then(serde_json::Value::as_str)
+                .map(|kind| matches!(kind, "BOUNCE" | "KICK"))
+        })
+        .unwrap_or(false)
 }
 
 /// One connection's view of its agent's streams, on a redis connection of its own (a read
@@ -110,9 +139,17 @@ impl AgentQueue {
     pub async fn resume(&mut self, seen: u64) -> redis::RedisResult<u64> {
         redis::Script::new(RESUME)
             .key(&self.position)
+            .key(&self.commands)
             .arg(seen)
             .invoke_async(&mut self.connection)
             .await
+    }
+
+    /// Redis's clock, in milliseconds: what the ids of the priority stream count in.
+    pub async fn now_millis(&mut self) -> redis::RedisResult<u64> {
+        let (seconds, micros): (u64, u64) =
+            redis::cmd("TIME").query_async(&mut self.connection).await?;
+        Ok(seconds * 1000 + micros / 1000)
     }
 
     /// What is there after `sent` (commands) and `probes_after` (a probe id, `0` for all), probes
@@ -181,28 +218,87 @@ pub async fn push(
         .map(|_| ())
 }
 
-/// The agent handled every command through `through` (`COMMAND_ACK`): forget them. Returns
-/// what was forgotten, oldest first, for whoever acts on a command having arrived.
-pub async fn ack(
+/// What a `COMMAND_ACK {through}` covers, oldest first, for whoever acts on a command having
+/// arrived. Read before [`forget`]: what the acknowledgement means is recorded first, so a
+/// command gone from here is one whose arrival is on record.
+pub async fn covered(
     redis: &mut ConnectionManager,
     settings: &Settings,
     agent: i64,
     through: u64,
 ) -> redis::RedisResult<Vec<String>> {
-    let key = commands_key(settings, agent);
-    let covered: redis::streams::StreamRangeReply =
-        redis.xrange(&key, "-", format!("{through}-0")).await?;
-    redis::cmd("XTRIM")
-        .arg(&key)
-        .arg("MINID")
-        .arg(format!("{}-0", through.saturating_add(1)))
-        .query_async::<u64>(redis)
+    let covered: redis::streams::StreamRangeReply = redis
+        .xrange(commands_key(settings, agent), "-", format!("{through}-0"))
         .await?;
     Ok(covered
         .ids
         .into_iter()
         .filter_map(|entry| entry.get::<String>(FRAME))
         .collect())
+}
+
+/// The agent handled every command through `through` (`COMMAND_ACK`): forget them.
+pub async fn forget(
+    redis: &mut ConnectionManager,
+    settings: &Settings,
+    agent: i64,
+    through: u64,
+) -> redis::RedisResult<()> {
+    redis::cmd("XTRIM")
+        .arg(commands_key(settings, agent))
+        .arg("MINID")
+        .arg(format!("{}-0", through.saturating_add(1)))
+        .query_async::<u64>(redis)
+        .await
+        .map(|_| ())
+}
+
+/// [`covered`], then [`forget`].
+pub async fn ack(
+    redis: &mut ConnectionManager,
+    settings: &Settings,
+    agent: i64,
+    through: u64,
+) -> redis::RedisResult<Vec<String>> {
+    let acknowledged = covered(redis, settings, agent, through).await?;
+    forget(redis, settings, agent, through).await?;
+    Ok(acknowledged)
+}
+
+/// Take a task's `ASSIGN` out of an agent's stream: the task is about to be assigned anew, and
+/// the assign it was first given must not reach a process that never saw it (it would start the
+/// task from nothing, ahead of the assign that says how to go on). Returns how many were taken.
+pub async fn withdraw_assigns(
+    redis: &mut ConnectionManager,
+    settings: &Settings,
+    agent: i64,
+    task: i64,
+) -> redis::RedisResult<usize> {
+    let key = commands_key(settings, agent);
+    let entries: redis::streams::StreamRangeReply = redis.xrange_all(&key).await?;
+    let wanted = task.to_string();
+    let ids: Vec<String> = entries
+        .ids
+        .into_iter()
+        .filter(|entry| {
+            entry
+                .get::<String>(FRAME)
+                .and_then(|frame| serde_json::from_str::<serde_json::Value>(&frame).ok())
+                .is_some_and(|raw| {
+                    raw.get("type").and_then(serde_json::Value::as_str) == Some("ASSIGN")
+                        && match raw.get("task") {
+                            Some(serde_json::Value::String(task)) => *task == wanted,
+                            Some(serde_json::Value::Number(task)) => task.to_string() == wanted,
+                            _ => false,
+                        }
+                })
+        })
+        .map(|entry| entry.id)
+        .collect();
+    if ids.is_empty() {
+        return Ok(0);
+    }
+    redis.xdel(&key, &ids).await
 }
 
 /// The commands an agent has not acknowledged, oldest first, as they were pushed (without their
@@ -248,5 +344,13 @@ mod tests {
         assert_eq!(position_of("7-0"), Some(7));
         assert_eq!(position_of("1731600000000-3"), Some(1731600000000));
         assert_eq!(position_of("nonsense"), None);
+    }
+
+    #[test]
+    fn an_order_to_leave_is_told_from_a_command() {
+        assert!(is_connection_order(r#"{"type":"BOUNCE","duration":null}"#));
+        assert!(is_connection_order(r#"{"type":"KICK","reason":"gone"}"#));
+        assert!(!is_connection_order(r#"{"type":"ASSIGN","task":"1"}"#));
+        assert!(!is_connection_order("nonsense"));
     }
 }

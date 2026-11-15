@@ -74,14 +74,14 @@ sequenceDiagram
         PB-->>P: LeaseClaim{claimed=false}
         P-->>AG: ProtocolError + close(AGENT_ALREADY_CONNECTED)
     else claimed
-        PB-->>P: LeaseClaim{inquiries, orphaned, displaced_incumbent}
+        PB-->>P: LeaseClaim{orphaned, displaced_incumbent}
     end
     opt displaced_incumbent
         P->>P: connections.kick_others() (best-effort; the new connection id already fenced them)
     end
-    P-->>AG: Init{agent, hash, diagnostics, inquiries=[AssignInquiry...]}
+    P-->>AG: Init{agent, hash, diagnostics, nonce, positions}
     par session tasks
-        P->>Q: drain: pop → send → ack
+        P->>Q: drain: read after commands_seen → send at pos (COMMAND_ACK trims)
         P-->>AG: heartbeat: periodic Heartbeat
     end
     loop while connected
@@ -133,14 +133,16 @@ precedes it (covered by `conformance/tests/test_registration.py`). The `ensureAg
 (`agent/ensure`, `agent/implement`), which runs the same functions (`mutations/agent.rs`).
 
 A token that does not authenticate closes the socket with 3003. A `blocked` agent is closed
-immediately after authentication (`AGENT_IS_BLOCKED`, 4003).
+immediately after authentication (`AGENT_IS_BLOCKED`, 4003). A handshake the server could not
+serve (its database, its redis, the issuer's keys out of reach) is not a refusal: it closes with
+3005, on which an agent comes back.
 
 ### Init + background loops
 
 On successful register the protocol sends an `Init` carrying the agent id, the definition `hash`
 the backend now holds for it (`null` when it was never implemented), the `diagnostics` of the
-registration the `Register` carried, and an `AssignInquiry` per in-flight task the same process
-may still hold (returned by `on_agent_connected`). `run_session` then spawns the session's tasks:
+registration the `Register` carried, the `nonce` of that `Register` and the `positions` the server
+has projected of each journal session it named. `run_session` then spawns the session's tasks:
 
 - **`drain`** — relays queued work to the agent (see delivery below).
 - **`heartbeat`** — liveness (see below).
@@ -152,7 +154,7 @@ may still hold (returned by `on_agent_connected`). `run_session` then spawns the
 Register{token, force, session_id, supervisor, name, hash, implementations, states, locks, bloks}
   → (declaration carried, hash differs) one atomic registration
       ↳ refused: ProtocolError{error} + close(AGENT_REGISTRATION_REJECTED)
-  → Init{agent, hash, diagnostics, inquiries}
+  → Init{agent, hash, diagnostics, nonce, positions}
   → SessionInit{session_id, states} → StatePatch / StateSnapshot / Lock / Unlock / … as before
 ```
 
@@ -185,7 +187,7 @@ alone does reconcile. An agent that hints nothing sends no `protocols` field: a 
 predates hints refuses the field (`deny_unknown_fields`, 3003), so hints need this takt.
 
 Shelving is never answered. The agent mints the `resource_id` itself and keeps the value:
-`Shelve{ref, identifier, resource_id, label, description}` records it, and `Unshelve{ref, drawer}`
+`Shelve{identifier, resource_id, label, description}` records it, and `Unshelve{drawer}`
 drops it, by that id. A refusal is only logged. `Collect{drawers}` remains the server's outbound request to drop drawers,
 which the agent answers with `Unshelve`. Both are twins of the GraphQL `shelveInMemoryDrawer` /
 `unshelveMemoryDrawer` mutations.
@@ -234,8 +236,8 @@ keep matching. It is also client-supplied and optional.
 Only one connection may own an agent at a time. The gate and the claim happen **together**, inside
 one `SELECT … FOR UPDATE` transaction in `on_agent_connected` (`persist/leases.rs`) — with the
 two split (gate on a row read during authentication, write afterwards), two concurrent
-registrations could both observe the same stale incumbent, both pass, and both be handed the
-in-flight work as `Init` inquiries.
+registrations could both observe the same stale incumbent, both pass, and both be taken for the
+process the in-flight work belongs to.
 
 1. The new connection calls `on_agent_connected(…, force)`, which returns a `LeaseClaim`.
 2. The claim is refused (`claimed = false` → `AGENT_ALREADY_CONNECTED`, 4004) only when the
@@ -345,7 +347,17 @@ next to it, so it must never stop on its own:
   `reports::is_task_open`) is not sent; the next acknowledgement trims it with the rest.
 
 A process that registers anew (`commands_seen` 0) is sent every command its predecessor never
-acknowledged, behind the same fences.
+acknowledged, behind the same fences. A task sent again has the assign it was first given
+withdrawn (`agent_queue::withdraw_assigns`), so only the one that says how to go on arrives.
+
+`BOUNCE` and `KICK` are not commands: they are orders to the connection there is now
+(`transport::order_connection`), sent on the probes' lane without a position, and dropped by a
+drain that began after they were given.
+
+An acknowledgement is acted on only by the connection that holds the lease, and the pickup it
+means is recorded before the stream is trimmed. So an assign that is neither picked up nor in the
+stream never arrived (the push was lost, or redis's data was), and its task ends `LOST`
+(`reconcile_unreachable_assigns`): it would wait for ever otherwise.
 
 ### Pickup, and asking
 
@@ -370,8 +382,9 @@ What became of an acknowledged task is the agent's to report and the caller's to
 - The agent is asked only when its word settles something. While it is away, or has not
   acknowledged the assign yet, the server answers with what it knows (`asked: false` and why).
   An agent that does not answer within `ANSWER_TIMEOUT` is reported as silent.
-- One answer is acted on: **`UNKNOWN` from the agent the task was given to ends the task `LOST`.**
-  Everything else goes back to whoever asked, untouched.
+- One answer is acted on: **`UNKNOWN` from the agent the task was given to ends the task `LOST`**,
+  unless the task was given anew while the question was out. Everything else goes back to whoever
+  asked, untouched.
 - An agent that comes back with the session it had is asked about what it had under way, the same
   way (`ask_about`). `INIT` carries no list of inquiries any more.
 
@@ -390,8 +403,8 @@ within `pickup_deadline` is posted once more, and ends `LOST` if it stays silent
 Messages are split by direction (`messages.rs`, re-exporting the `rekuest-protocol` types):
 
 **Server → agent (`ToAgent`)** — `Init`, `Assign`, the lifecycle control messages `Cancel` /
-`Interrupt` / `Pause` / `Resume`, `Collect`, `Bounce`, `Kick`, `Heartbeat`, `ProtocolError`,
-`JournalAck` / `JournalNack`, and inquiries (`AssignInquiry`). (The caller-bound
+`Interrupt` / `Pause` / `Resume`, `Decide`, `BlokRefused`, `Collect`, `Bounce`, `Kick`, `Heartbeat`,
+`ProtocolError`, `JournalAck` / `JournalNack`, `Inquire` and `InquireResponse`. (The caller-bound
 `…Event` mirrors and the `AssignResponse`/`ControlResponse` replies are `ToAgent` frames too, but
 are addressed to the agent as a caller — see [caller-protocol.md](caller-protocol.md).)
 
@@ -414,6 +427,11 @@ socket and the HookAgent HTTP intake:
 | `Shelve` | `registration::shelve` | upsert a `MemoryDrawer` on the agent's shelve, agent-minted; no reply |
 | `Unshelve` | `registration::unshelve` | drop the drawer if it is the agent's, by `resource_id`, else by pk; no reply |
 | `Effect` | `persist::reports::on_report` | `TaskEvent(EFFECT)`: a value the task took from outside, kept for replay (see [journal.md](journal.md)) |
+| `Inform` | `holds` | a blok shown to a person while the task goes on |
+| `CommandAck` | the worker (`agent_queue`) | records the pickup of the assigns it covers, then trims the command stream |
+| `JournalSkip` | `persist::positions` | passes over positions the agent no longer holds |
+| `InquiryAnswer` | `inquiry` | resolves the question it answers; `UNKNOWN` ends the task `LOST` |
+| `InquireRequest` | `inquiry` | asks about a task this agent assigned; answered with `InquireResponse` |
 
 Frames whose task is a probe (`p-…`) go to the redis-held probe handlers (`probes/`), never to
 the database.

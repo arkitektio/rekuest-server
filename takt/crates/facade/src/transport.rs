@@ -159,6 +159,15 @@ pub async fn broadcast(ctx: &Context, agent: i64, message: ToAgent, priority: bo
     }
 }
 
+/// Tell the connection an agent has now to leave (`BOUNCE`, `KICK`). An order to a connection,
+/// not a command to the agent: it has no position, is not kept until acknowledged, and one
+/// given before a connection was made is not for it (the drain drops it,
+/// `agent_queue::is_connection_order`). On the command stream it would be sent again on every
+/// reconnect, as leaving is all an agent does with it.
+pub async fn order_connection(ctx: &Context, agent: i64, order: ToAgent) -> bool {
+    broadcast(ctx, agent, order, true).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

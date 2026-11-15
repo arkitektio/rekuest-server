@@ -2290,7 +2290,7 @@ async fn agent_in_org(ctx: &Context, organization: i64, agent: &str) -> BackendR
 /// Tell the agent to reconnect (`bounce`).
 pub async fn bounce(ctx: &Context, organization: i64, agent: &str) -> BackendResult<i64> {
     let agent = agent_in_org(ctx, organization, agent).await?;
-    transport::broadcast(ctx, agent, ToAgent::Bounce { duration: None }, false).await;
+    transport::order_connection(ctx, agent, ToAgent::Bounce { duration: None }).await;
     Ok(agent)
 }
 
@@ -2303,7 +2303,7 @@ pub async fn block(
 ) -> BackendResult<i64> {
     let agent = agent_in_org(ctx, organization, agent).await?;
     set_blocked(ctx, agent, true).await?;
-    transport::broadcast(ctx, agent, ToAgent::Kick { reason }, false).await;
+    transport::order_connection(ctx, agent, ToAgent::Kick { reason }).await;
     Ok(agent)
 }
 
@@ -2336,7 +2336,7 @@ pub async fn kick(
         "Agent {agent} is kicked: {}",
         reason.as_deref().unwrap_or("no reason given")
     );
-    transport::broadcast(ctx, agent, ToAgent::Kick { reason }, false).await;
+    transport::order_connection(ctx, agent, ToAgent::Kick { reason }).await;
     Ok(agent)
 }
 
