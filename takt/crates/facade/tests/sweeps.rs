@@ -558,12 +558,10 @@ async fn an_assign_that_never_reached_the_agents_stream_ends_lost() {
     backdate(&ctx, never_pushed, 10).await;
     backdate(&ctx, waiting, 10).await;
 
-    assert_eq!(
-        reconcile::reconcile_unreachable_assigns(&ctx, LIMIT)
-            .await
-            .unwrap(),
-        1
-    );
+    // Not counted: the sweep also ends what other tests left unpicked in the shared database.
+    reconcile::reconcile_unreachable_assigns(&ctx, LIMIT)
+        .await
+        .unwrap();
 
     assert_eq!(state(&ctx, never_pushed).await, ("LOST".to_owned(), true));
     assert_eq!(kinds(&ctx, waiting).await, Vec::<String>::new());
