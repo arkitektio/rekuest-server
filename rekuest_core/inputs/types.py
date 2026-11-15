@@ -720,6 +720,8 @@ class BlokImplementationInput:
     components: list[ComponentNodeInput] | None = None
     source: str | None = None
     module: Optional[str] = None
+    catalog: Optional[str] = None
+    catalog_minor: Optional[int] = None
     description: Optional[str] = None
     context: enums.ComponentContext = enums.ComponentContext.HTML
     default: bool = False
@@ -741,6 +743,8 @@ class AskBlokInput:
     components: list[ComponentNodeInput] | None = None
     source: str | None = None
     module: Optional[str] = None
+    catalog: Optional[str] = None
+    catalog_minor: Optional[int] = None
     args: list[ArgPortInput] = strawberry.field(default_factory=list)
     returns: list[ReturnPortInput] = strawberry.field(default_factory=list)
     dependencies: list[AgentDependencyInput] = strawberry.field(default_factory=list)
@@ -759,6 +763,8 @@ class InformBlokInput:
     components: list[ComponentNodeInput] | None = None
     source: str | None = None
     module: Optional[str] = None
+    catalog: Optional[str] = None
+    catalog_minor: Optional[int] = None
     args: list[ArgPortInput] = strawberry.field(default_factory=list)
     dependencies: list[AgentDependencyInput] = strawberry.field(default_factory=list)
     catalogs: list[str] = strawberry.field(default_factory=list)
@@ -776,6 +782,8 @@ class ActionBlokInput:
     components: list[ComponentNodeInput] | None = None
     source: str | None = None
     module: Optional[str] = None
+    catalog: Optional[str] = None
+    catalog_minor: Optional[int] = None
     description: Optional[str] = None
     catalogs: list[str] = strawberry.field(default_factory=list)
     locals: list[BlokLocalInput] = strawberry.field(default_factory=list)

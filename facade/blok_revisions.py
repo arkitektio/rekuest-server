@@ -135,7 +135,6 @@ class BlokContent:
             queries=tuple(self.queries),
             subscriptions=tuple(self.subscriptions),
             args=tuple(arg.key for arg in self.args) if self.args else None,
-            catalogs=tuple(self.catalogs),
             demo=self.demo,
         )
 

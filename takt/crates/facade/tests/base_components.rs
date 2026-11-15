@@ -1,8 +1,7 @@
-//! A v2 blok is checked against the spec's catalogs plus what its UI catalog registered beyond
-//! them: the language (`foreach`, `if`, ...) and the standard modules are always in force; the
-//! Orkestrator's registered module only adds what the spec lacks, another module's definition
-//! of a standard component is drawn (`catalog.shadow`), and what the catalog lacks is a
-//! warning, never a refusal.
+//! A v2 blok is held to the language alone. The server reads no catalog: whatever a module
+//! registered, a component nobody draws, a prop a component does not take or a control whose
+//! `bind` would type a local is the frontend's to check, the one that draws the blok. What the
+//! language says (a root the kind does not read, an undeclared dependency) still refuses it.
 
 use facade::catalog_validation::{validate_blok_against_catalog, Catalog};
 use rekuest_core::blok::BlokScope;
@@ -48,8 +47,9 @@ fn the_orkestrators_registration_never_replaces_the_spec() {
 }
 
 #[test]
-fn a_module_shadows_a_standard_component() {
+fn what_a_module_registered_is_not_read() {
     let tree = vec![parse_bsx_default(PICKER).unwrap()];
+    // Its Button takes no label: that is the catalog's to say, to whoever draws the blok.
     let mine = catalog(
         "mine",
         json!([{"name": "Button", "props": [{"key": "tone", "kind": "STRING"}]}]),
@@ -57,33 +57,22 @@ fn a_module_shadows_a_standard_component() {
     let found = validate_blok_against_catalog(&mine, Some(&tree), &BlokScope::default())
         .unwrap()
         .diagnostics;
-    let codes: Vec<&str> = found.iter().map(|d| d.code.as_str()).collect();
-    // Its Button is drawn: one that takes no label prop (the text child fills `label`).
-    assert_eq!(codes, ["catalog.props", "catalog.shadow"], "{found:?}");
-    assert!(
-        found[1].message.contains("mine's definition is used"),
-        "{found:?}"
-    );
+    assert_eq!(found, vec![]);
 }
 
 #[test]
-fn what_no_catalog_draws_is_a_warning() {
+fn what_no_catalog_draws_is_not_the_servers_to_judge() {
     let tree = vec![parse_bsx_default("<Html><Column><Knob /></Column></Html>").unwrap()];
-    let found = validate_blok_against_catalog(
-        &catalog("orkestrator", json!([])),
-        Some(&tree),
-        &BlokScope::default(),
-    )
-    .unwrap()
-    .diagnostics;
-    assert_eq!(found.len(), 1, "{found:?}");
-    assert_eq!(found[0].code, "catalog.unknown_component");
-    let knob = catalog("orkestrator", json!([{"name": "Knob"}]));
-    assert_eq!(
-        validate_blok_against_catalog(&knob, Some(&tree), &BlokScope::default())
-            .map(|c| c.diagnostics),
-        Ok(vec![])
-    );
+    for components in [json!([]), json!([{"name": "Knob"}])] {
+        let found = validate_blok_against_catalog(
+            &catalog("orkestrator", components),
+            Some(&tree),
+            &BlokScope::default(),
+        )
+        .unwrap()
+        .diagnostics;
+        assert_eq!(found, vec![]);
+    }
 }
 
 #[test]
@@ -108,6 +97,19 @@ fn a_checked_blok_carries_its_resolved_scope() {
     assert_eq!(scope.locals[0].kind, None);
     let checked =
         validate_blok_against_catalog(&catalog("orkestrator", json!([])), Some(&tree), &scope)
+            .unwrap();
+    // What a Switch writes through its `bind` is its catalog's to say: with nothing else to
+    // tell its kind the local stays ANY here, and the renderer types it.
+    assert_eq!(
+        checked.scope.locals[0].kind,
+        Some(rekuest_core::enums::LocalKind::ANY)
+    );
+    let typed = BlokScope {
+        locals: vec![serde_json::from_value(json!({"key": "on", "default": false})).unwrap()],
+        ..BlokScope::default()
+    };
+    let checked =
+        validate_blok_against_catalog(&catalog("orkestrator", json!([])), Some(&tree), &typed)
             .unwrap();
     assert_eq!(
         checked.scope.locals[0].kind,

@@ -126,11 +126,25 @@ mod tests {
     }
 
     /// The digest is pinned: a template keeps its row across server versions as long as its
-    /// declaration does not change.
+    /// declaration does not change. It is taken over the tree, and text is stored as `#text`
+    /// nodes since the parser stopped reading a catalog: a blok sent as source with text
+    /// between its tags has another tree, and so another digest, than it had before that.
     #[test]
     fn a_v2_blok_has_a_pinned_hash() {
         let panel = blok(
             serde_json::json!({"key": "panel", "vocab": 2, "source": "<Html><Card><Button>Go</Button></Card></Html>"}),
+        );
+        assert_eq!(
+            hash_blok_definition(&panel),
+            "a0e45c775dd19dd6ce75e627d97b9f674f473c171fd061242988c394b8d26583"
+        );
+    }
+
+    /// A blok without text between its tags keeps the digest it always had.
+    #[test]
+    fn a_blok_without_text_keeps_its_digest() {
+        let panel = blok(
+            serde_json::json!({"key": "panel", "vocab": 2, "source": "<Html><Card><Button label=\"Go\" /></Card></Html>"}),
         );
         assert_eq!(
             hash_blok_definition(&panel),

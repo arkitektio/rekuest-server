@@ -3,16 +3,18 @@
 //!
 //! - `attr="..."` is always a literal string, `attr={...}` an expression
 //!   ([`crate::blok::expr`]), a bare `attr` is `true`.
-//! - Text children fill the component's `text_prop`; mixed with elements they become implicit
-//!   `Text` nodes. Several parts desugar to `str.template`. Whitespace follows JSX.
+//! - Text is a child like any other: each run of text between elements is stored as a `#text`
+//!   node holding its `value`. What a component does with it (a `Button` makes it its label) is
+//!   its renderer's to say. Several parts of one run desugar to `str.template`. Whitespace
+//!   follows JSX.
 //! - `className={[...]}` and `className={{...}}` desugar to `str.classes` (clsx).
 //! - Operators desugar to `cmp.*` / `logic.*` calls; a callback holds one task call (`into
 //!   name` names its record) or one effect. `queries.<name>.refetch()` and
 //!   `queries.<name>.fetch_more(name: value, ...)` desugar to the effects `query.refetch` and
 //!   `query.fetch_more`, the query named by a literal.
 //!
-//! Only the parser needs a catalog: which prop text fills, and where text cannot be drawn
-//! ([`BlokView`]). Everything else a catalog says is the checker's ([`crate::blok::check`]).
+//! Parsing needs no catalog: no component is looked up. What a catalog says of a tree is
+//! checked by whoever draws it, never here.
 //! Offsets, lines and columns count Unicode code points, as the spec does.
 
 use std::collections::HashSet;
@@ -22,7 +24,6 @@ use serde_json::{Map, Value};
 
 use crate::blok::check::{FETCH_MORE_FUNCTION, QUERY_SUGAR, REFETCH_FUNCTION};
 use crate::blok::expr::{parse_attribute, parse_expression, s, CallExpr, Expr, Locator};
-use crate::blok::view::{default_view, BlokView, BASE_NAME};
 use crate::blok::vocabulary::vocabulary;
 use crate::inputs::{
     ActionArgumentInputModel, AgentProbeInputModel, ComponentNodeInputModel,
@@ -35,11 +36,10 @@ pub use crate::blok::expr::BsxError;
 /// The largest source a blok may be, in bytes.
 pub const MAX_SOURCE_BYTES: usize = 256 * 1024;
 
-/// The component a run of text becomes when it sits among elements.
-pub const IMPLICIT_TEXT: &str = "Text";
-/// Loose text inside an `html@` component becomes a `span`, so an html-only blok stays
-/// inside the catalogs it declares; everywhere else it becomes a `Text`.
-pub const IMPLICIT_HTML_TEXT: &str = "span";
+/// The node a run of text is stored as: no element can be called this, so only text makes one.
+pub const TEXT_NODE: &str = "#text";
+/// The prop of a text node that holds its text: a literal, or an expression.
+pub const TEXT_VALUE: &str = "value";
 const CLASS_NAME: &str = "className";
 const CLASSES_FUNCTION: &str = "str.classes";
 const TEMPLATE_FUNCTION: &str = "str.template";
@@ -557,7 +557,6 @@ fn is_agent_call(call: &CallExpr) -> bool {
 }
 
 struct Lowering<'a> {
-    view: &'a BlokView,
     locate: &'a Locator,
     markup: &'a Markup<'a>,
     ids: HashSet<String>,
@@ -572,9 +571,7 @@ impl Lowering<'_> {
         &mut self,
         element: &Element,
         node_id: &str,
-        context: &str,
         parent: Option<&str>,
-        loose_text: &'static str,
     ) -> Parsed<ComponentNodeInputModel> {
         let vocabulary = vocabulary();
         if element.name == ELSE && parent != Some(IF) {
@@ -603,57 +600,7 @@ impl Lowering<'_> {
             self.check_foreach(element)?;
         }
 
-        let spec = self.view.component(&element.name);
-        // the component loose text becomes here, from the nearest non-language ancestor
-        let loose_text = match spec.and_then(|spec| spec.catalog.as_deref()) {
-            Some(catalog) if catalog.starts_with("html@") => IMPLICIT_HTML_TEXT,
-            Some(catalog) if catalog.starts_with(&format!("{BASE_NAME}@")) => loose_text,
-            _ if spec.is_some() => IMPLICIT_TEXT,
-            _ => loose_text,
-        };
-        let inner = match spec {
-            Some(spec) if !spec.inherits_context => spec
-                .children_context
-                .unwrap_or(spec.context)
-                .value()
-                .to_owned(),
-            _ => context.to_owned(),
-        };
-
         let runs = self.runs(element)?;
-        let has_elements = element
-            .children
-            .iter()
-            .any(|c| matches!(c, Child::Element(_)));
-        let text_runs: Vec<&Vec<Part>> = runs
-            .iter()
-            .filter_map(|run| match run {
-                Run::Text(parts) => Some(parts),
-                Run::Element(_) => None,
-            })
-            .collect();
-        let mut implicit_text = false;
-        if !text_runs.is_empty() {
-            let text_prop = self.text_target(element, &inner, &text_runs, has_elements)?;
-            implicit_text = text_prop.is_none();
-            if let Some(text_prop) = text_prop {
-                if props
-                    .iter()
-                    .any(|p: &ComponentPropInputModel| p.key == text_prop)
-                {
-                    return Err(self.fail(
-                        "bsx.text_and_prop",
-                        element.offset,
-                        &[
-                            ("component", s(element.name.clone())),
-                            ("key", s(text_prop)),
-                        ],
-                    ));
-                }
-                let filled = self.text_prop(&text_prop, text_runs[0], element.offset)?;
-                props.push(filled);
-            }
-        }
 
         let mut children = vec![];
         let mut implicit = 0;
@@ -662,16 +609,13 @@ impl Lowering<'_> {
         for run in &runs {
             match run {
                 Run::Text(parts) => {
-                    if !implicit_text {
-                        continue;
-                    }
                     if seen_else {
                         return Err(self.fail("bsx.else_order", element.offset, &[]));
                     }
-                    let text = self.text_prop("text", parts, element.offset)?;
+                    let text = self.text_prop(TEXT_VALUE, parts, element.offset)?;
                     children.push(ComponentNodeInputModel {
                         id: format!("{node_id}/#{implicit}"),
-                        component: loose_text.to_owned(),
+                        component: TEXT_NODE.to_owned(),
                         props: Some(vec![text]),
                         children: None,
                     });
@@ -688,13 +632,7 @@ impl Lowering<'_> {
                     let index = counts.entry(child.name.clone()).or_insert(0);
                     let child_id = format!("{node_id}/{}[{index}]", child.name);
                     *index += 1;
-                    children.push(self.node(
-                        child,
-                        &child_id,
-                        &inner,
-                        Some(&element.name),
-                        loose_text,
-                    )?);
+                    children.push(self.node(child, &child_id, Some(&element.name))?);
                 }
             }
         }
@@ -803,75 +741,6 @@ impl Lowering<'_> {
         }
         flush(&mut current, &mut runs);
         Ok(runs)
-    }
-
-    fn sample(parts: &[Part]) -> String {
-        parts
-            .iter()
-            .map(|p| match p {
-                Part::Text(text) => text.as_str(),
-                Part::Expression(_) => "{...}",
-            })
-            .collect::<String>()
-            .chars()
-            .take(60)
-            .collect()
-    }
-
-    /// Where text goes: the text_prop (returned), implicit Text nodes (none), or refused.
-    fn text_target(
-        &self,
-        element: &Element,
-        context: &str,
-        runs: &[&Vec<Part>],
-        has_elements: bool,
-    ) -> Parsed<Option<String>> {
-        let sample = Self::sample(runs[0]);
-        let fields = |extra: Vec<(&'static str, Value)>| {
-            let mut all = vec![
-                ("component", s(element.name.clone())),
-                ("text", s(sample.clone())),
-            ];
-            all.extend(extra);
-            all
-        };
-        let Some(component) = self.view.component(&element.name) else {
-            return Err(self.fail(
-                "bsx.text_unknown_component",
-                element.offset,
-                &fields(vec![]),
-            ));
-        };
-        if vocabulary().contexts.get(context).is_some_and(|c| !c.text) {
-            return Err(self.fail(
-                "bsx.text_in_context",
-                element.offset,
-                &fields(vec![("context", s(context))]),
-            ));
-        }
-        let language = component
-            .catalog
-            .as_deref()
-            .is_some_and(|m| m.starts_with(&format!("{BASE_NAME}@")))
-            && component.inherits_context
-            && component.accepts_children;
-        let text_prop = component.text_prop.clone().filter(|p| !p.is_empty());
-        if let Some(text_prop) = &text_prop {
-            if !has_elements {
-                if runs.len() > 1 {
-                    return Err(self.fail(
-                        "bsx.text_not_accepted",
-                        element.offset,
-                        &fields(vec![]),
-                    ));
-                }
-                return Ok(Some(text_prop.clone()));
-            }
-        }
-        if text_prop.is_some() || language {
-            return Ok(None);
-        }
-        Err(self.fail("bsx.text_not_accepted", element.offset, &fields(vec![])))
     }
 
     fn text_prop(
@@ -1117,7 +986,7 @@ impl Lowering<'_> {
     fn util_call(&self, call: &CallExpr, effect_allowed: bool) -> Parsed<UtilCallInputModel> {
         let name = call.name();
         let vocabulary = vocabulary();
-        let function = self.view.function(&name);
+        let function = vocabulary.functions.get(&name);
         let named_fields =
             |detail: String| vec![("function", s(name.clone())), ("detail", s(detail))];
         match function {
@@ -1362,7 +1231,10 @@ impl Lowering<'_> {
     fn check_pure(&self, expression: &Expr, offset: usize, text: bool) -> Parsed<()> {
         match expression {
             Expr::Call(call) => {
-                let effect = self.view.function(&call.name()).is_some_and(|f| f.effect);
+                let effect = vocabulary()
+                    .functions
+                    .get(&call.name())
+                    .is_some_and(|f| f.effect);
                 let sugar = call.callee.len() == 3
                     && (call.callee[0] == "queries" || call.callee[0] == "subscriptions")
                     && is_query_verb(&call.callee[2]);
@@ -1417,8 +1289,9 @@ fn literal(expression: &Expr) -> Option<Value> {
     }
 }
 
-/// Parse a v2 BSX source into the tree a blok stores, its text placed by `view`.
-pub fn parse_bsx(source: &str, view: &BlokView) -> Result<ComponentNodeInputModel, BsxError> {
+/// Parse a v2 BSX source into the tree a blok stores. No catalog is read: text is stored as
+/// `#text` nodes, and what a component does with it is its renderer's to say.
+pub fn parse_bsx(source: &str) -> Result<ComponentNodeInputModel, BsxError> {
     if source.len() > MAX_SOURCE_BYTES {
         return Err(BsxError::new(
             "bsx.syntax",
@@ -1440,31 +1313,20 @@ pub fn parse_bsx(source: &str, view: &BlokView) -> Result<ComponentNodeInputMode
     };
     let root = markup.document()?;
     let mut lowering = Lowering {
-        view,
         locate: &locate,
         markup: &markup,
         ids: HashSet::new(),
     };
-    lowering.node(
-        &root,
-        &format!("{}[0]", root.name),
-        "HTML",
-        None,
-        IMPLICIT_TEXT,
-    )
+    lowering.node(&root, &format!("{}[0]", root.name), None)
 }
 
-/// [`parse_bsx`] against the Orkestrator's view (base, the standard modules and its extras).
+/// [`parse_bsx`], under the name it had while a catalog placed the text.
 pub fn parse_bsx_default(source: &str) -> Result<ComponentNodeInputModel, BsxError> {
-    parse_bsx(source, default_view())
+    parse_bsx(source)
 }
 
 /// An expression (`args.slide.id`) as a call argument is stored: a query's variable.
-pub fn parse_argument(
-    key: Option<&str>,
-    text: &str,
-    view: &BlokView,
-) -> Result<ActionArgumentInputModel, BsxError> {
+pub fn parse_argument(key: Option<&str>, text: &str) -> Result<ActionArgumentInputModel, BsxError> {
     let chars: Vec<char> = text.chars().collect();
     let locate = Locator::new(&chars);
     let expression = parse_expression(&chars, 0, &locate)?;
@@ -1474,7 +1336,6 @@ pub fn parse_argument(
         index: 0,
     };
     let lowering = Lowering {
-        view,
         locate: &locate,
         markup: &markup,
         ids: HashSet::new(),

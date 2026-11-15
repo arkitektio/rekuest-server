@@ -1,6 +1,7 @@
 {
  "vocab": 2,
- "description": "The blok language, version 2: what a blok may read, call and store. The spec's parser, the server (rekuest_core, takt) and the renderer (orkestrator) load this file or are generated from it. The design is the blok-vocab-v2 proposal of 2026-10-25.",
+ "minor": 1,
+ "description": "The blok language, version 2: what a blok may read, call and store. The spec's parser, the server (rekuest_core, takt) and the renderer (orkestrator) load this file or are generated from it. The design is the blok-vocab-v2 proposal of 2026-10-25. Three layers, each versioned on its own: this language (vocab, and minor for what it gained since); the base catalog, everything every renderer draws; and the app catalogs that extend it with what one frontend draws beyond (see catalogs). A server holds a blok to the language alone, never to a catalog: whoever draws a blok checks it against the catalog it has, and an author's tooling checks it when asked.",
  "roots": {
   "data": {
    "self": "The agent the blok belongs to: the declaring agent (agent blok), the sending agent (task blok), the executing agent (action blok). Shorthand for deps.self.",
@@ -9,6 +10,7 @@
    "subscriptions": "subscriptions.<name>: a declared subscription's record (status, value, error); value is the latest payload, or the last `keep` payloads.",
    "args": "args.<key>: what the blok is opened on: the item for an agent or custom blok, the task's args for a task or action blok.",
    "task": "The task this blok is about: the sending task, or the run. A task record.",
+   "assign": "The run an assign blok prepares: assign.given.<key> (true for an argument the caller decided, which is locked), assign.missing (the keys of required arguments still empty) and assign.ready (nothing is missing).",
    "event": "The payload a component hands its callback. Only inside a callback.",
    "viewer": "{user, org, roles} of whoever is looking.",
    "then": "The moment being viewed while time-travelling (an ISO 8601 datetime), null while live. A blok never reads the wall clock: a query passes then as an ordinary variable (variables={at: \"then\"}), <Time> measures relative time from it, and while it is set subscriptions pause (their history query, or the value at travel start, stale)."
@@ -20,13 +22,13 @@
   "functions": ["cmp", "logic", "math", "str", "list", "obj", "val", "fmt", "time", "ui", "query"],
   "future": ["mutations"]
  },
- "reserved": ["self", "deps", "queries", "subscriptions", "args", "task", "event", "viewer", "then", "error", "cmp", "logic", "math", "str", "list", "obj", "val", "fmt", "time", "ui", "query", "mutations"],
+ "reserved": ["self", "deps", "queries", "subscriptions", "args", "task", "assign", "event", "viewer", "then", "error", "cmp", "logic", "math", "str", "list", "obj", "val", "fmt", "time", "ui", "query", "mutations"],
  "agent_segments": {
   "description": "What follows an agent (self or deps.<key>): .<state>.<field> is state, .tasks.<action> the latest task of that action, .assets.<name> one of the agent's assets; deps.<key>.<action>(...) calls it.",
   "tasks": "tasks",
   "assets": "assets",
-  "fields": {"id": "The agent's id (a query variable: deps.robot.id).", "name": "The agent's name."},
-  "reserved_state_names": ["tasks", "assets", "id", "name"]
+  "fields": {"id": "The agent's id (a query variable: deps.robot.id).", "name": "The agent's name.", "connected": "Whether the agent is connected right now (true or false)."},
+  "reserved_state_names": ["tasks", "assets", "id", "name", "connected"]
  },
  "kinds": {
   "agent": {
@@ -55,7 +57,7 @@
   },
   "assign": {
    "description": "An action's own blok for starting a run of it (assign_bloks): shown before there is a task, with the arguments being filled in as args and the agents a run would get as deps.",
-   "roots": ["self", "deps", "args", "queries", "subscriptions", "viewer"],
+   "roots": ["self", "deps", "args", "assign", "queries", "subscriptions", "viewer"],
    "locals": true,
    "contexts": ["HTML", "SCENE"]
   },
@@ -80,8 +82,9 @@
    "description": "One shape for task, deps.<key>.tasks.<action>, self.tasks.<action> and every into name.",
    "fields": [
     {"key": "id", "kind": "STRING", "nullable": true, "description": "The task's id; null before it was started."},
-    {"key": "status", "kind": "STRING", "choices": ["idle", "queued", "running", "asking", "done", "failed", "cancelled"], "description": "Lowercase."},
-    {"key": "running", "kind": "BOOL", "description": "queued, running or asking."},
+    {"key": "status", "kind": "STRING", "choices": ["idle", "queued", "running", "asking", "paused", "done", "failed", "cancelled"], "description": "Lowercase."},
+    {"key": "running", "kind": "BOOL", "description": "Started and not ended: queued, running, asking or paused."},
+    {"key": "paused", "kind": "BOOL", "description": "Waiting for someone to resume it."},
     {"key": "done", "kind": "BOOL"},
     {"key": "failed", "kind": "BOOL"},
     {"key": "progress", "kind": "INT", "description": "0 to 100."},
@@ -90,9 +93,14 @@
     {"key": "args", "kind": "DICT", "description": "What it was called with, filled in by the renderer at dispatch."},
     {"key": "ask", "kind": "DICT", "nullable": true, "children": [{"key": "question", "kind": "STRING"}, {"key": "form", "kind": "DICT"}], "description": "The open ask, or null."},
     {"key": "answer", "kind": "DICT", "nullable": true, "description": "The values returned for the ask."},
-    {"key": "returns", "kind": "DICT", "description": "The latest yield, by return port key."}
+    {"key": "returns", "kind": "DICT", "description": "The latest yield, by return port key."},
+    {"key": "started_at", "kind": "STRING", "nullable": true, "description": "When it was started (an ISO 8601 datetime); null before."},
+    {"key": "ended_at", "kind": "STRING", "nullable": true, "description": "When it ended; null while it has not."},
+    {"key": "duration", "kind": "FLOAT", "nullable": true, "description": "Seconds from start to end; null while it has not ended (a blok never reads the wall clock: <Time> measures a running task)."},
+    {"key": "log", "kind": "LIST", "children": [{"key": "...", "kind": "DICT", "children": [{"key": "at", "kind": "STRING", "nullable": true}, {"key": "kind", "kind": "STRING"}, {"key": "message", "kind": "STRING", "nullable": true}]}], "description": "What it reported, oldest first: {at, kind, message} per entry, the latest hundred."},
+    {"key": "can", "kind": "DICT", "children": [{"key": "cancel", "kind": "BOOL"}, {"key": "pause", "kind": "BOOL"}, {"key": "resume", "kind": "BOOL"}, {"key": "step", "kind": "BOOL"}, {"key": "interrupt", "kind": "BOOL"}], "description": "What the viewer may do to the task right now: can.cancel says whether task.cancel() would be taken, and so on. All false for a record the blok started itself (an into name)."}
    ],
-   "idle": {"id": null, "status": "idle", "running": false, "done": false, "failed": false, "progress": 0, "message": null, "error": null, "args": {}, "ask": null, "answer": null, "returns": {}}
+   "idle": {"id": null, "status": "idle", "running": false, "done": false, "paused": false, "failed": false, "progress": 0, "message": null, "error": null, "args": {}, "ask": null, "answer": null, "returns": {}, "started_at": null, "ended_at": null, "duration": null, "log": [], "can": {"cancel": false, "pause": false, "resume": false, "step": false, "interrupt": false}}
   },
   "query": {
    "description": "A declared query's record.",
@@ -110,6 +118,16 @@
     {"key": "status", "kind": "STRING", "choices": ["pending", "ready", "stale", "failed"]},
     {"key": "value", "kind": "ANY", "nullable": true, "description": "The latest payload, or the list of the last `keep` payloads."},
     {"key": "error", "kind": "STRING", "nullable": true}
+   ]
+  },
+  "assign": {
+   "description": "What an assign blok knows of the run it prepares, besides args and deps.",
+   "fields": [
+    {"key": "given", "kind": "DICT", "description": "given.<key>: true for an argument the caller decided before the blok opened (a preset from a menu); it is locked, and <args /> leaves it out."},
+    {"key": "missing", "kind": "LIST", "children": [{"key": "...", "kind": "STRING"}], "description": "The keys of the required arguments that are still empty."},
+    {"key": "ready", "kind": "BOOL", "description": "True when no required argument is missing."},
+    {"key": "starting", "kind": "BOOL", "description": "True while assign.start() is being taken."},
+    {"key": "blocked", "kind": "STRING", "nullable": true, "description": "Why the run cannot start now, as a sentence (a dependency is not met, no agent fits); null when it can."}
    ]
   },
   "viewer": {
@@ -147,7 +165,7 @@
   ]
  },
  "functions": {
-  "description": "Pure functions by namespace, snake_case. Positional arguments map onto params in order. `lazy`: arguments are read only as needed. `effect`: allowed only as a callback's one thing (ui.*, task.answer, assign.start, query.*). `sees_status`: sees pending/failed instead of suspending. No function reads the wall clock. `null` says what the function does with a null argument (known absence); a missing path reads as null.",
+  "description": "Pure functions by namespace, snake_case. Positional arguments map onto params in order. `lazy`: arguments are read only as needed. `effect`: allowed only as a callback's one thing (ui.*, task.*, assign.start, query.*). `command`: an effect that changes the world (it acts on a task or starts one, and is recorded with it); an effect without it only changes what the viewer sees. A blok does nothing else: every other function is pure. `sees_status`: sees pending/failed instead of suspending. No function reads the wall clock. `null` says what the function does with a null argument (known absence); a missing path reads as null.",
   "cmp.eq": {"params": [["a", "ANY"], ["b", "ANY"]], "returns": "BOOL", "description": "Deep JSON equality.", "null": "null equals only null"},
   "cmp.ne": {"params": [["a", "ANY"], ["b", "ANY"]], "returns": "BOOL", "description": "Not deep-equal.", "null": "null equals only null"},
   "cmp.gt": {"params": [["a", "ANY"], ["b", "ANY"]], "returns": "BOOL", "description": "a > b, numbers or strings.", "null": "false"},
@@ -230,11 +248,18 @@
   "list.pluck": {"params": [["value", "LIST"], ["key", "STRING"]], "returns": "LIST", "null": "[]"},
   "list.sort": {"params": [["value", "LIST"], ["key", "STRING", false], ["descending", "BOOL", false]], "returns": "LIST", "null": "[]; null entries sort last"},
   "list.range": {"params": [["start", "INT"], ["end", "INT"], ["step", "INT", false]], "returns": "LIST", "null": "[]"},
+  "list.where": {"params": [["value", "LIST"], ["key", "STRING"], ["equals", "ANY", false]], "returns": "LIST", "description": "The items whose `key` (a dotted path) deep-equals `equals`; with `equals` left out, the items whose `key` is truthy.", "null": "[]"},
+  "list.find": {"params": [["value", "LIST"], ["key", "STRING"], ["equals", "ANY", false]], "returns": "ANY", "description": "The first item list.where would keep, or null.", "null": "null"},
+  "list.count": {"params": [["value", "LIST"], ["key", "STRING"], ["equals", "ANY", false]], "returns": "INT", "description": "How many items list.where would keep.", "null": "0"},
+  "list.concat": {"params": [["value", "LIST"], ["other", "LIST"]], "returns": "LIST", "description": "Both lists, one after the other.", "null": "a null list reads as empty"},
   "obj.get": {"params": [["value", "DICT"], ["key", "STRING"], ["default", "ANY", false]], "returns": "ANY", "description": "A dotted key reads a nested field.", "null": "default"},
   "obj.has": {"params": [["value", "DICT"], ["key", "STRING"]], "returns": "BOOL", "null": "false"},
   "obj.keys": {"params": [["value", "DICT"]], "returns": "LIST", "null": "[]"},
   "obj.values": {"params": [["value", "DICT"]], "returns": "LIST", "null": "[]"},
   "obj.entries": {"params": [["value", "DICT"]], "returns": "LIST", "description": "[{key, value}, ...].", "null": "[]"},
+  "obj.merge": {"params": [["value", "DICT"], ["other", "DICT"]], "returns": "DICT", "description": "Both dicts as one; `other` wins where both have a key. Not deep.", "null": "a null dict reads as empty"},
+  "obj.pick": {"params": [["value", "DICT"], ["keys", "LIST"]], "returns": "DICT", "description": "Only these keys.", "null": "{}"},
+  "obj.omit": {"params": [["value", "DICT"], ["keys", "LIST"]], "returns": "DICT", "description": "All but these keys.", "null": "{}"},
   "val.is_null": {"params": [["value", "ANY"]], "returns": "BOOL", "null": "true"},
   "val.is_set": {"params": [["value", "ANY"]], "returns": "BOOL", "null": "false"},
   "val.is_empty": {"params": [["value", "ANY"]], "returns": "BOOL", "description": "null, an empty string, list or object.", "null": "true"},
@@ -255,9 +280,17 @@
   "fmt.quantity": {"params": [["value", "ANY"], ["unit", "STRING", false]], "returns": "STRING", "description": "A quantity ({magnitude, unit} or a number in `unit`), in its unit.", "null": "empty string"},
   "fmt.duration": {"params": [["seconds", "FLOAT"]], "returns": "STRING", "description": "90 -> 1m 30s; negative durations keep their sign.", "null": "empty string"},
   "time.diff": {"params": [["start", "STRING"], ["end", "STRING"]], "returns": "FLOAT", "description": "Seconds from start to end (ISO 8601 datetimes); negative when end is earlier. Pure: relative time to the viewed moment is the <Time> component's.", "null": "null"},
+  "time.add": {"params": [["value", "STRING"], ["seconds", "FLOAT"]], "returns": "STRING", "description": "The moment `seconds` after `value` (before, when negative), as an ISO 8601 datetime in UTC.", "null": "null"},
+  "time.before": {"params": [["a", "STRING"], ["b", "STRING"]], "returns": "BOOL", "description": "Whether moment a is earlier than b.", "null": "false"},
+  "time.after": {"params": [["a", "STRING"], ["b", "STRING"]], "returns": "BOOL", "description": "Whether moment a is later than b.", "null": "false"},
   "ui.copy": {"params": [["text", "ANY"]], "returns": "ANY", "effect": true, "description": "Copies text to the viewer's clipboard: the only non-task effect.", "null": "copies an empty string"},
-  "task.answer": {"params": [["values", "DICT"]], "returns": "ANY", "effect": true, "task_operation": true, "description": "Answers the open ask of `task`. Counts as a task operation.", "null": "answers with no values"},
-  "assign.start": {"params": [], "returns": "ANY", "effect": true, "description": "Starts the run an assign blok prepares, with the arguments as they are filled in and the agents the blok was shown (deps) pinned. An assign blok only.", "null": "starts the run"},
+  "task.answer": {"params": [["values", "DICT"]], "returns": "ANY", "effect": true, "command": true, "task_operation": true, "description": "Answers the open ask of `task`. Counts as a task operation.", "null": "answers with no values"},
+  "task.cancel": {"params": [], "returns": "ANY", "effect": true, "command": true, "task_operation": true, "description": "Cancels the run `task` is about. Refused while `task.can.cancel` is false, and while the blok shows the past. Counts as a task operation.", "null": "takes no arguments"},
+  "task.pause": {"params": [], "returns": "ANY", "effect": true, "command": true, "task_operation": true, "description": "Pauses the run `task` is about: it waits until someone resumes it. Refused while `task.can.pause` is false, and while the blok shows the past. Counts as a task operation.", "null": "takes no arguments"},
+  "task.resume": {"params": [], "returns": "ANY", "effect": true, "command": true, "task_operation": true, "description": "Resumes the run `task` is about, after a pause. Refused while `task.can.resume` is false, and while the blok shows the past. Counts as a task operation.", "null": "takes no arguments"},
+  "task.step": {"params": [], "returns": "ANY", "effect": true, "command": true, "task_operation": true, "description": "Resumes the run `task` is about until its next breakpoint. Refused while `task.can.step` is false, and while the blok shows the past. Counts as a task operation.", "null": "takes no arguments"},
+  "task.interrupt": {"params": [], "returns": "ANY", "effect": true, "command": true, "task_operation": true, "description": "Interrupts the run `task` is about: stopped at once, without waiting for it to wind down. Refused while `task.can.interrupt` is false, and while the blok shows the past. Counts as a task operation.", "null": "takes no arguments"},
+  "assign.start": {"params": [], "returns": "ANY", "effect": true, "command": true, "description": "Starts the run an assign blok prepares, with the arguments as they are filled in and the agents the blok was shown (deps) pinned. An assign blok only.", "null": "starts the run"},
   "query.refetch": {"params": [["query", "STRING"]], "returns": "ANY", "effect": true, "description": "Re-reads the declared query named by the literal `query`; never suspends, queries.<name>.refetching is true meanwhile. BSX writes it queries.<name>.refetch().", "null": "refused: the query is named by a literal"},
   "query.fetch_more": {"params": [["query", "STRING"], ["variables", "DICT", false]], "returns": "ANY", "effect": true, "description": "Reads the next page of the declared query named by the literal `query`, its variables overridden by `variables`, and appends the page's list at the query's `more` field to what is shown; queries.<name>.fetching_more is true meanwhile. BSX writes it queries.<name>.fetch_more(name: value, ...). Refused on a query without `more`.", "null": "refused: the query is named by a literal; null variables fetch with the query's own"}
  },
@@ -283,12 +316,12 @@
  },
  "stored_tree": {
   "description": "How a v2 blok is stored: ComponentNodeInput {id, component, props?, children?}; ComponentPropInput {key, static_value? | dynamic_value {path} | util_call | agent_call (+ declares_value)}; ActionArgumentInput {key?, value_literal? | value_path? | util_call? | value_list? | value_dict?}. A prop or argument with no value field is null.",
-  "ids": "An explicit id matches explicit_id; a derived id is the parent's id plus /<Component>[<n>] (n: occurrence among same-named siblings), the root's <Component>[0]. A derived id always ends in ']'. An implicit Text node is <parent>/#<n> (n: text-run index) and nothing may target it.",
+  "ids": "An explicit id matches explicit_id; a derived id is the parent's id plus /<Component>[<n>] (n: occurrence among same-named siblings), the root's <Component>[0]. A derived id always ends in ']'. A text node is <parent>/#<n> (n: text-run index) and nothing may target it.",
   "explicit_id": "^[A-Za-z_][A-Za-z0-9_.:-]*$",
   "foreach": "foreach props: items (expression), let (static_value and declares_value the name), key (expression, optional). With a key each item's subtree takes its runtime ids from it: <id>@<key>; without one, from its position: <id>@#<n> (n: the 0-based index). A foreach without key is stored with no key prop at all; the validator warns foreach.position_key when its items are known not to be scalars.",
   "if": "if props: when; children: the then-branch, then the else nodes (component else, an else-if with a when prop; only the last else may lack when).",
   "into": "agent_call prop with declares_value <name>: a task record only that call writes. Allowed inside foreach; one name is written by one call site.",
-  "text": "Text children fill the component's text_prop; mixed with elements they become implicit Text nodes. Several parts desugar to str.template(template, values)."
+  "text": "Text is a child like any other: each run of text between elements is stored as a node {id: <parent>/#<n>, component: \"#text\", props: [value]}, its value a literal or an expression; several parts of one run desugar to str.template(template, values). No element can be called #text, so only text makes one. Parsing needs no catalog. What a component does with its text is its renderer's: one with a text_prop makes its text children that prop (a Button its label), any other that takes children draws them in place; a component that sets its text_prop as an attribute too, or takes neither text nor children, is a catalog finding (catalog.text). A tree stored before text was a node holds the text_prop itself, and implicit Text or span nodes under the same ids: a renderer draws both."
  },
  "locals": {
   "description": "Blok-level form state that feeds a call: a local is an arg port (key, kind, identifier, nullable, default, children, choices, validators, description, ...) plus persist, written only through `bind` on controls, read bare. persist remembers the last input on this device. Its kind is a port kind or ANY; left out on the wire it is inferred (kind_inference) and the stored local always carries one.",
@@ -337,9 +370,22 @@
   "logo_path_data_props": ["d", "points"]
  },
  "catalogs": {
-  "description": "Catalogs are the spec-owned, versioned sets a blok renders with: base (every renderer) and the standard catalogs (opt-in). A blok declares the catalogs it needs (catalogs: [\"ui@1\", \"scene@1\"]); a renderer lacking one renders its children or a placeholder, and reports it. A module is an app's own unversioned extras (the server's Module, registered by an app such as the Orkestrator with the catalogs it implements in full); a blok names at most one, as its module.",
-  "base": 2,
-  "standard": {"ui": 1, "scene": 1, "logo": 1, "structure": 1, "html": 1, "shadcn": 1}
+  "description": "A catalog is a versioned set of components. The base catalog is what every renderer draws, whole, in the contexts it draws (HTML, SCENE, LOGO): a blok written for it runs everywhere. An app catalog extends another (in the end the base) with what one frontend draws beyond it; it is that frontend's to publish. A catalog is named by the address it is published at (its id); a blok names the one catalog it is written for (catalog), the base when it names none, and may record the minor it needs (catalog_minor). A version only ever gains components and props: each says the minor that added it (since), so a blok valid at v1.2 stays valid. A renderer reports the catalogs and minors it speaks; what it lacks it draws as a placeholder, and reports. A catalog never redefines a component of the one it extends. Nobody's server fetches a catalog: it holds what a frontend registered under the id, and an author's tooling resolves an id from what ships with it, from its cache, or by fetching it.",
+  "base": "https://arkitekt.live/catalogs/base/v3",
+  "bundled": {"https://arkitekt.live/catalogs/base/v3": "catalogs/base@3.json", "https://arkitekt.live/catalogs/orkestrator/v1": "catalogs/orkestrator@1.json"},
+  "id": "^https://[^\\s/]+(/[^\\s/]+)*/v[0-9]+$",
+  "name": "^[A-Za-z_][A-Za-z0-9_.-]*$",
+  "host_parts": {
+   "description": "Parts of the host's own interface a blok may place itself: placing one anywhere in the tree claims it, and the host then draws none of its own. The claim is read off the stored tree, so a part inside an inactive <if> still claims it (part.conditional). What a blok does not place, the host still draws, unless its root says chrome=\"none\".",
+   "parts": ["args", "arg", "deps", "dep", "ask", "returns", "status", "timeline"]
+  }
+ },
+ "classes": {
+  "description": "The classes a blok may rely on in every renderer: the portable subset. A renderer without CSS (React Native) draws these and may ignore the rest, so a class outside the subset is a warning (class.not_portable), never an error. Listed is what is NOT portable: what changes the layout or the content when it is ignored. Every other utility and variant is portable, those a small touch renderer simply has no use for included (hover:, focus-visible:, cursor-*, the breakpoints sm: md: lg:): nothing is lost without them. Laying out in a grid is the Grid component's; space-x-* and space-y-* are drawn as the gap they come to.",
+  "variants": ["before", "after", "first-letter", "first-line", "marker", "selection", "file", "backdrop", "has", "group-has", "peer-has", "supports", "print", "target"],
+  "utilities": ["grid-cols", "grid-rows", "grid-flow", "col-span", "col-start", "col-end", "row-span", "row-start", "row-end", "auto-cols", "auto-rows", "divide-x", "divide-y", "float", "clear", "columns", "break-before", "break-after", "break-inside", "box-decoration", "table", "caption", "border-collapse", "border-separate", "border-spacing", "list", "snap", "mix-blend", "bg-blend", "backdrop", "filter", "blur", "brightness", "contrast", "grayscale", "hue-rotate", "invert", "saturate", "sepia", "drop-shadow", "mask"],
+  "arbitrary": "A value in brackets is portable on the utilities arbitrary_values lists (w-[12rem], gap-[6px], bg-[#1e293b]): a size, a spacing, a radius, a border, a font size, a colour, an opacity or a stacking order, written as a length (px, rem, %), a number or a colour (#hex, rgb(), hsl()). A renderer that compiles its classes ahead of time translates these itself. Nothing else in brackets is portable: an arbitrary property ([mask-type:luminance]), an arbitrary variant ([&>*]:p-2), or a value on any other utility (translate-x-[3px], grid-cols-[1fr_2fr]).",
+  "arbitrary_values": ["w", "h", "size", "min-w", "max-w", "min-h", "max-h", "basis", "p", "px", "py", "pt", "pr", "pb", "pl", "m", "mx", "my", "mt", "mr", "mb", "ml", "gap", "gap-x", "gap-y", "inset", "inset-x", "inset-y", "top", "right", "bottom", "left", "space-x", "space-y", "rounded", "rounded-t", "rounded-r", "rounded-b", "rounded-l", "rounded-tl", "rounded-tr", "rounded-br", "rounded-bl", "border", "border-t", "border-r", "border-b", "border-l", "border-x", "border-y", "text", "bg", "leading", "tracking", "opacity", "z", "flex", "grow", "shrink", "aspect"]
  },
  "diagnostics": {
   "description": "One table of stable codes, the same in Python, Rust and TypeScript. level: error refuses the blok, warning is reported; runtime: true marks a code no checker raises, the renderer's error code of a record (deps.unbound). Messages are str.format templates; parity compares codes, never text.",
@@ -351,10 +397,6 @@
   "bsx.duplicate_attribute": {"level": "error", "message": "<{component}> sets {key} twice.", "hint": "Keep one {key}; to choose between values, write one expression (c ? a : b)."},
   "bsx.id": {"level": "error", "message": "id {id!r} is not an explicit id: letters, digits and _ . : -, starting with a letter or _."},
   "bsx.duplicate_id": {"level": "error", "message": "Two components have the id {id!r}.", "hint": "Give each component its own id, or drop id= and let the structure name it."},
-  "bsx.text_not_accepted": {"level": "error", "message": "<{component}> takes no text (it declares no text_prop): {text!r}. Wrap the text in a component that does, such as <p>, <span> or <Text>."},
-  "bsx.text_unknown_component": {"level": "error", "message": "<{component}> is in no catalog the parser knows, so its text has nowhere to go: {text!r}. Pass it as a prop."},
-  "bsx.text_in_context": {"level": "error", "message": "Text in <{component}> is in the {context} context, which draws no text: {text!r}."},
-  "bsx.text_and_prop": {"level": "error", "message": "<{component}> sets {key} as an attribute and as its text.", "hint": "Set {key} once: either as the attribute or as the text between the tags."},
   "bsx.text_callback": {"level": "error", "message": "Text holds a call or an effect; only a callback prop may.", "hint": "Put the call in a callback prop (onClick={{...}}), never between tags."},
   "bsx.else_outside_if": {"level": "error", "message": "<else> is a child of <if>, after its then-branch.", "hint": "Move the <else> inside its <if>, after the then-branch children."},
   "bsx.else_order": {"level": "error", "message": "<else> comes after the then-branch, and only the last <else> may lack when.", "hint": "Put the <else> branches last in the <if>; only the final one may leave out when."},
@@ -424,20 +466,24 @@
   "context.root_unknown": {"level": "error", "message": "A blok's root names its context ({roots}), not <{component}>.", "hint": "Make the root one of {roots} and put <{component}> inside it."},
   "context.kind": {"level": "error", "message": "A{n} {kind} blok is drawn in {contexts}, not {context}."},
   "assign.kind": {"level": "error", "message": "{what} belongs to starting a run, so only an action's assign blok holds it, not a{n} {kind} blok.", "hint": "Declare it with the action: @app.workflow(assign_bloks=[...])."},
-  "space.kind": {"level": "error", "message": "<{component}> places the run's dependencies, so only an action's own blok holds it, not a{n} {kind} blok.", "hint": "Declare it with the action: @app.workflow(bloks=[...])."},
   "logo.complexity": {"level": "error", "message": "{detail}"},
-  "catalog.unknown_component": {"level": "warning", "message": "<{component}> is in no catalog in force ({catalogs}).", "hint": "Look the component up in the catalog; names are case-sensitive."},
-  "catalog.undeclared": {"level": "warning", "message": "<{component}> is from {catalog}, which the blok does not declare in its catalogs.", "hint": "Add {catalog} to the blok's catalogs."},
+  "catalog.unknown_component": {"level": "warning", "message": "<{component}> is not in the catalog the blok is written for ({catalogs}).", "hint": "Look the component up in the catalog; names are case-sensitive."},
   "catalog.children": {"level": "warning", "message": "<{component}> takes no children.", "hint": "Close <{component}> without children (<{component} ... />), or put them beside it."},
+  "catalog.text": {"level": "warning", "message": "<{component}> {detail}", "hint": "Put the text in a component that draws it (<Text>, <p>, <span>), or set it once."},
   "catalog.props": {"level": "warning", "message": "<{component}> {detail}", "hint": "Use the props the catalog lists for <{component}>, exactly as named."},
   "catalog.placement": {"level": "warning", "message": "<{component}> {detail}", "hint": "Move <{component}> where the catalog places it (its inside / never inside rules)."},
   "catalog.value": {"level": "warning", "message": "{key}=\"{value}\" is not a value <{component}> draws: one of {values}.", "hint": "Write one of {values}."},
   "catalog.asset": {"level": "warning", "message": "{key} of <{component}> names an asset as <agent>.assets.<name>.", "hint": "Write {key}={{self.assets.<name>}} with an asset the app registered."},
-  "catalog.shadow": {"level": "warning", "message": "<{component}> is defined by {catalog} and by {module}; {winner}'s definition is used."},
-  "module.unknown": {"level": "warning", "message": "module {module!r} is neither declared by the app nor registered in the organization ({modules}), so its components are not checked."},
+  "catalog.target": {"level": "error", "message": "<{component}> is of {catalog}, and this blok is written for {target}.", "hint": "Name the catalog it is written for (catalog=\"{catalog}\"), or use what {target} draws."},
+  "catalog.unknown": {"level": "warning", "message": "The catalog {catalog!r} is not known here ({catalogs}), so what it adds to the base catalog is not checked.", "hint": "Register the catalog with the tooling, or check the address."},
+  "catalog.kind": {"level": "error", "message": "<{component}> belongs to {kinds} bloks, not to a{n} {kind} blok.", "hint": "Declare it with the action: @app.workflow(bloks=[...]) for a run, assign_bloks=[...] for starting one."},
+  "catalog.context": {"level": "warning", "message": "<{component}> needs the {service} service where it is drawn; without it a notice shows in its place."},
+  "part.conditional": {"level": "warning", "message": "<{component}> is inside <{inside}>: placing it anywhere claims it, so the host draws none of its own even while this one does not show.", "hint": "Place <{component}> outside <{inside}>, or hide what is around it instead."},
+  "chrome.no_ask": {"level": "warning", "message": "chrome=\"none\" leaves the run's asks to the blok, and it places no <ask />: an ask can then only be answered elsewhere.", "hint": "Place <ask /> where the run's questions should show, or answer task.ask with task.answer(values: ...)."},
+  "class.not_portable": {"level": "warning", "message": "{token}: {what} is not in the portable subset, so a renderer without CSS ignores it.", "hint": "Keep what the class does optional, or use a component for it."},
   "deps.unbound": {"level": "error", "runtime": true, "message": "deps.{key} is bound to no agent, so it reads as failed."},
   "manifest.sent": {"level": "error", "message": "A blok is sent as its components or as its BSX source, {problem}."},
-  "manifest.catalog": {"level": "error", "message": "Catalog {catalog!r} is not name@version (ui@1)."},
+  "manifest.catalog": {"level": "error", "message": "Catalog {catalog!r} is neither the address a catalog is published at (https://arkitekt.live/catalogs/orkestrator/v1) nor the name of one registered in the organization."},
   "manifest.duplicate": {"level": "error", "message": "{what}: {key!r} is declared twice."},
   "manifest.name": {"level": "error", "message": "{what}: {key!r} is not a name."},
   "manifest.action_logo": {"level": "error", "message": "An action logo reads only the task it is drawn against: no locals, queries, subscriptions or dependencies."},

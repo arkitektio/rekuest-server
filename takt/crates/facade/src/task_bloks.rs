@@ -24,7 +24,7 @@ use rekuest_core::inputs::{ArgPortInputModel, BlokImplementationInputModel, Retu
 use rekuest_core::values::validate_assignment_args;
 
 use crate::catalog_validation::{
-    dump_diagnostics, module_unknown, validate_blok_against_catalog, Catalog, Diagnostic,
+    dump_diagnostics, validate_blok_against_catalog, Catalog, Diagnostic,
 };
 use crate::messages::TaskBlok;
 use crate::mutations::blok::sync_blok_dependencies;
@@ -161,11 +161,7 @@ async fn blok_from_source(
         ))
     })?;
     // Stored as sent, its locals as resolved beside (`resolved_locals`).
-    let mut diagnostics: Vec<Diagnostic> = module_unknown(conn, &catalog, sender.organization_id)
-        .await?
-        .into_iter()
-        .collect();
-    diagnostics.extend(checked.diagnostics);
+    let diagnostics: Vec<Diagnostic> = checked.diagnostics;
 
     let id: i64 = sqlx::query_scalar(
         "INSERT INTO facade_blok (name, components, diagnostics, creator_id, organization_id, module_id,

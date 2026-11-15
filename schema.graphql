@@ -283,6 +283,16 @@ input ActionBlokInput {
   """
   module: String = null
 
+  """
+  The catalog the blok is written for: the address it is published at (`https://arkitekt.live/catalogs/orkestrator/v1`), or the name of one registered in the organization. The base catalog, which every renderer draws, when absent. It is what `module` named before: one of the two is sent, and `module` is kept for an agent on an older spec.
+  """
+  catalog: String = null
+
+  """
+  The minor of its catalog the blok needs: the newest `since` among the components and props it uses.
+  """
+  catalogMinor: Int = null
+
   """What the blok shows of a run."""
   description: String = null
 
@@ -1175,6 +1185,16 @@ input AskBlokInput {
   """
   module: String = null
 
+  """
+  The catalog the blok is written for: the address it is published at (`https://arkitekt.live/catalogs/orkestrator/v1`), or the name of one registered in the organization. The base catalog, which every renderer draws, when absent. It is what `module` named before: one of the two is sent, and `module` is kept for an agent on an older spec.
+  """
+  catalog: String = null
+
+  """
+  The minor of its catalog the blok needs: the newest `since` among the components and props it uses.
+  """
+  catalogMinor: Int = null
+
   """What it is opened on, read under `args.<key>`."""
   args: [ArgPortInput!]! = []
 
@@ -1894,6 +1914,16 @@ input BlokImplementationInput {
   The module (an app's own unversioned extras, registered by a UI app such as the Orkestrator) the blok renders against besides its catalogs; the Orkestrator's when absent.
   """
   module: String = null
+
+  """
+  The catalog the blok is written for: the address it is published at (`https://arkitekt.live/catalogs/orkestrator/v1`), or the name of one registered in the organization. The base catalog, which every renderer draws, when absent. It is what `module` named before: one of the two is sent, and `module` is kept for an agent on an older spec.
+  """
+  catalog: String = null
+
+  """
+  The minor of its catalog the blok needs: the newest `since` among the components and props it uses.
+  """
+  catalogMinor: Int = null
 
   """
   A human-readable description about this Blok's purpose and functionality.
@@ -4234,6 +4264,16 @@ input InformBlokInput {
   The module the blok renders against besides its catalogs; the Orkestrator's when absent.
   """
   module: String = null
+
+  """
+  The catalog the blok is written for: the address it is published at (`https://arkitekt.live/catalogs/orkestrator/v1`), or the name of one registered in the organization. The base catalog, which every renderer draws, when absent. It is what `module` named before: one of the two is sent, and `module` is kept for an agent on an older spec.
+  """
+  catalog: String = null
+
+  """
+  The minor of its catalog the blok needs: the newest `since` among the components and props it uses.
+  """
+  catalogMinor: Int = null
 
   """What it is opened on, read under `args.<key>`."""
   args: [ArgPortInput!]! = []

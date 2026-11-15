@@ -55,6 +55,12 @@ async def _stored(result: object, name: str = "catalogued") -> list[dict]:
     return await _blok_diagnostics(name)
 
 
+def _unchecked(findings: list[dict]) -> None:
+    """The server holds a blok to the language alone: what a catalog says of it (an unknown
+    component, a prop, a placement) is checked by the frontend that draws it, never here."""
+    assert not [finding for finding in findings if finding["code"].startswith(("catalog.", "module."))], findings
+
+
 def _found(findings: list[dict], code: str, text: str) -> None:
     assert any(finding["code"] == code and text in finding["message"] for finding in findings), findings
 
@@ -130,20 +136,20 @@ class TestUiCatalog:
         assert foreign.errors, "org A read org B's catalog"
 
     async def test_blok_against_registered_catalog_is_validated(self, authenticated_context: HttpContext) -> None:
-        """What the catalog says of a blok is a warning recorded with it (its vocabulary code); a language error refuses it."""
+        """What a catalog says of a blok is not checked here (the frontend that draws it does); a language error refuses it."""
         await _register(authenticated_context)
 
         unknown_component = await _create_blok(authenticated_context, [{"id": "root", "component": "Knob"}])
-        _found(await _stored(unknown_component), "catalog.unknown_component", "<Knob> is in no catalog in force")
+        _unchecked(await _stored(unknown_component))
 
         unknown_prop = await _create_blok(authenticated_context, [{"id": "root", "component": "Dial", "props": [{"key": "value", "staticValue": 1}, {"key": "colour", "staticValue": "red"}]}])
-        _found(await _stored(unknown_prop), "catalog.props", "has no props ['colour']")
+        _unchecked(await _stored(unknown_prop))
 
         missing_required = await _create_blok(authenticated_context, [{"id": "root", "component": "Dial"}])
-        _found(await _stored(missing_required), "catalog.props", "requires props ['value']")
+        _unchecked(await _stored(missing_required))
 
         children_refused = await _create_blok(authenticated_context, [{"id": "root", "component": "Dial", "props": [{"key": "value", "staticValue": 1}], "children": [{"id": "c", "component": "Frame"}]}])
-        _found(await _stored(children_refused), "catalog.children", "<Dial> takes no children")
+        _unchecked(await _stored(children_refused))
 
         unknown_function = await _create_blok(
             authenticated_context,
@@ -188,7 +194,7 @@ class TestUiCatalog:
         unnamed = {"name": "catalogued", "vocab": 2}
 
         unknown = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**unnamed, "components": _html({"id": "root", "component": "Knob"})}})
-        _found(await _stored(unknown), "catalog.unknown_component", "<Knob> is in no catalog in force")
+        _unchecked(await _stored(unknown))
 
         for component in ("Frame", "Card"):
             accepted = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**unnamed, "components": _html({"id": "root", "component": component})}})
@@ -214,7 +220,7 @@ class TestUiCatalog:
             (node("Scene", node("Move", props=moved)), "<Move> must be inside one of ['Model', 'Robot']"),
         ):
             misplaced = await _create_blok(authenticated_context, [tree])
-            _found(await _stored(misplaced), "catalog.placement", message)
+            _unchecked(await _stored(misplaced))
 
     async def test_a_scene_blok_opens_a_scene_and_names_its_models_properly(self, authenticated_context: HttpContext) -> None:
         """The root of a scene blok is a Scene; a model names an asset of a declared dependency."""
@@ -248,7 +254,7 @@ class TestUiCatalog:
         assert of_nobody.errors and "a custom blok has no 'self'" in of_nobody.errors[0].message, of_nobody.errors
         # A model named by a hash, not an asset, is the catalog's finding.
         by_hash = await _create_blok(authenticated_context, scene({"staticValue": ref}), context="SCENE")
-        _found(await _stored(by_hash), "catalog.asset", "src of <Model>")
+        _unchecked(await _stored(by_hash))
 
         decorating_scene = await _create_blok(authenticated_context, scene(named), context="SCENE", dependencies=robot, forModel=ref)
         assert decorating_scene.errors and "only an html blok can decorate a model" in decorating_scene.errors[0].message
@@ -272,7 +278,7 @@ class TestUiCatalog:
         assert await _stored(embedded) == []
         # Where the catalog places a shape is a finding.
         loose = await _create_blok(authenticated_context, [{"id": "root", "component": "Frame", "children": [{"id": "p", "component": "Path"}]}])
-        _found(await _stored(loose), "catalog.placement", "<Path> is a logo component, not one of the html context")
+        _unchecked(await _stored(loose))
         # No component lives in the action logo context: its shapes are logo components.
         placed = await schema.execute(
             REGISTER_UI_CATALOG,
@@ -308,7 +314,7 @@ class TestUiCatalog:
         assert broken.errors and "line 3" in broken.errors[0].message, broken.errors
         # What a parsed source draws is held to the catalog like any tree.
         unknown = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**source, "source": "<Html><Frame><Knob /></Frame></Html>"}})
-        _found(await _stored(unknown), "catalog.unknown_component", "<Knob> is in no catalog in force")
+        _unchecked(await _stored(unknown))
 
     async def test_a_blok_hash_follows_what_it_renders(self, authenticated_context: HttpContext) -> None:
         """The hash moves with the tree, the context and what it declares beside it, and with nothing else."""
@@ -356,7 +362,7 @@ class TestUiCatalog:
 
         # What the loop holds is still checked in the context it passes on.
         boxed = await _create_blok(authenticated_context, [{"id": "root", "component": "Scene", "children": [loop({"id": "b", "component": "Frame"})]}], context="SCENE")
-        _found(await _stored(boxed), "catalog.placement", "<Frame> is a html component, not one of the scene context")
+        _unchecked(await _stored(boxed))
         # The context is the blok's, not something a loop at the root can stand in for.
         rooted = await _create_blok(authenticated_context, [loop({"id": "root", "component": "Scene"})], context="SCENE")
         assert rooted.errors and "The root of a scene blok is <Scene> or <Space>, not <foreach>" in rooted.errors[0].message
@@ -376,7 +382,8 @@ class TestUiCatalog:
         """A catalog that only exists because a blok named it checks no components, but the language still applies."""
         result = await _create_blok(authenticated_context, [{"id": "root", "component": "Whatever", "props": [{"key": "x", "utilCall": {"operation": "fmt.anything"}}]}], catalog="fresh")
         assert not result.errors, result.errors
-        assert [d["code"] for d in await _blok_diagnostics()] == ["module.unknown", "expr.unknown_function"]
+        # Neither the module nobody registered nor a function of a namespace it may add is the server's to judge.
+        assert [d["code"] for d in await _blok_diagnostics()] == []
 
         wrong_keys = await _create_blok(authenticated_context, [{"id": "root", "component": "Whatever", "props": [{"key": "x", "utilCall": {"operation": "cmp.gt", "arguments": [{"key": "left", "valueLiteral": 1}]}}]}], catalog="fresh")
         assert wrong_keys.errors and "has no argument 'left'" in wrong_keys.errors[0].message, wrong_keys.errors
@@ -594,12 +601,12 @@ class TestResolvedBloks:
         assert [revision["number"] for revision in updated["revisions"]] == [1]
 
     async def test_a_module_shadows_a_standard_component(self, authenticated_context: HttpContext) -> None:
-        """The module's Slider writes a STRING, so a STRING local binds to it, with a catalog.shadow warning."""
+        """What a module registers is stored for the frontends; the server checks no blok against it."""
         await _register(authenticated_context, {"name": "mine", "components": [{"name": "Slider", "props": [{"key": "bind", "kind": "STRING"}], "acceptsChildren": False}]})
         slider = {"id": "s", "component": "Slider", "props": [{"key": "bind", "dynamicValue": {"path": "label"}}]}
         blok = await self._create(authenticated_context, module="mine", components=[slider], locals=[{"key": "label", "kind": "STRING"}])
-        assert [diagnostic["code"] for diagnostic in blok["diagnostics"]] == ["catalog.shadow"]
+        assert [diagnostic["code"] for diagnostic in blok["diagnostics"]] == []
 
-    async def test_a_module_nobody_registered_is_a_warning(self, authenticated_context: HttpContext) -> None:
+    async def test_a_module_nobody_registered_is_not_the_servers_to_judge(self, authenticated_context: HttpContext) -> None:
         blok = await self._create(authenticated_context, module="nowhere", components=[{"id": "root", "component": "Card"}])
-        assert [diagnostic["code"] for diagnostic in blok["diagnostics"]] == ["module.unknown"]
+        assert [diagnostic["code"] for diagnostic in blok["diagnostics"]] == []

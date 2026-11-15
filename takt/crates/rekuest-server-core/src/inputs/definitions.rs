@@ -929,6 +929,31 @@ pub fn blok_kind(context: ComponentContext) -> &'static str {
     }
 }
 
+/// A blok names the one catalog it is written for (`catalog`); the server keeps it as the
+/// blok's module, which is what an agent on an older spec names. Sent both ways they agree.
+fn written_for(module: &mut Option<String>, catalog: Option<&str>) -> Result<(), ValidationError> {
+    let Some(catalog) = catalog else {
+        return Ok(());
+    };
+    if !crate::blok::vocabulary().is_catalog_target(catalog) {
+        let finding = crate::blok::Finding::of(
+            "manifest.catalog",
+            None,
+            &[("catalog", serde_json::Value::from(catalog))],
+        );
+        return Err(ValidationError(finding.to_string()));
+    }
+    match module {
+        Some(named) if named != catalog => Err(ValidationError(format!(
+            "a blok is written for one catalog: `catalog` says {catalog:?} and `module` {named:?}"
+        ))),
+        _ => {
+            *module = Some(catalog.to_owned());
+            Ok(())
+        }
+    }
+}
+
 /// Sent one way: the tree, or the source, which is parsed (v2 BSX) into it.
 fn parse_sent(
     components: &mut Option<Vec<ComponentNodeInputModel>>,
@@ -982,7 +1007,7 @@ pub fn check_blok_manifest(
             return Err(ValidationError(finding.to_string()));
         }
     }
-    validate_blok(tree, scope, None).map_err(|finding| ValidationError(finding.to_string()))
+    validate_blok(tree, scope).map_err(|finding| ValidationError(finding.to_string()))
 }
 
 /// A blok's args are the items it is opened for: an html blok's, keyed once (`check_blok_args`).
@@ -1018,6 +1043,14 @@ pub struct BlokImplementationInputModel {
     /// the Orkestrator's when absent.
     #[serde(default)]
     pub module: Option<String>,
+    /// The catalog the blok is written for: the address it is published at, or the name of
+    /// one registered in the organization; the base catalog when absent. It is what `module`
+    /// named before: one of the two is sent, `module` by an agent on an older spec.
+    #[serde(default)]
+    pub catalog: Option<String>,
+    /// The minor of its catalog the blok needs.
+    #[serde(default, alias = "catalogMinor")]
+    pub catalog_minor: Option<u32>,
     #[serde(default)]
     pub description: Option<String>,
     /// The renderer for the blok's root: HTML, SCENE, LOGO or ACTION_LOGO.
@@ -1098,7 +1131,6 @@ impl BlokImplementationInputModel {
             subscriptions: self.subscriptions.clone(),
             args: (!self.args.is_empty())
                 .then(|| self.args.iter().map(|a| a.key.clone()).collect()),
-            catalogs: self.catalogs.clone(),
             demo: self.demo.clone(),
             assets: None,
         }
@@ -1113,6 +1145,7 @@ impl BlokImplementationInputModel {
     /// coherent with that and with its kind's roots (the language rules; the catalog rules are
     /// the catalog check's).
     pub fn validate_as(&mut self, kind: &str) -> Result<(), ValidationError> {
+        written_for(&mut self.module, self.catalog.as_deref())?;
         parse_sent(&mut self.components, &mut self.source)?;
         check_vocab(self.vocab)?;
         for component in self.components.iter_mut().flatten() {
@@ -1173,6 +1206,14 @@ pub struct AskBlokInputModel {
     pub source: Option<String>,
     #[serde(default)]
     pub module: Option<String>,
+    /// The catalog the blok is written for: the address it is published at, or the name of
+    /// one registered in the organization; the base catalog when absent. It is what `module`
+    /// named before: one of the two is sent, `module` by an agent on an older spec.
+    #[serde(default)]
+    pub catalog: Option<String>,
+    /// The minor of its catalog the blok needs.
+    #[serde(default, alias = "catalogMinor")]
+    pub catalog_minor: Option<u32>,
     #[serde(default)]
     pub args: Vec<ArgPortInputModel>,
     #[serde(default)]
@@ -1212,6 +1253,8 @@ impl AskBlokInputModel {
             components: self.components.clone(),
             source: self.source.clone(),
             module: self.module.clone(),
+            catalog: self.catalog.clone(),
+            catalog_minor: self.catalog_minor,
             description: self.description.clone(),
             context: ComponentContext::HTML,
             default: false,
@@ -1245,6 +1288,14 @@ pub struct InformBlokInputModel {
     pub source: Option<String>,
     #[serde(default)]
     pub module: Option<String>,
+    /// The catalog the blok is written for: the address it is published at, or the name of
+    /// one registered in the organization; the base catalog when absent. It is what `module`
+    /// named before: one of the two is sent, `module` by an agent on an older spec.
+    #[serde(default)]
+    pub catalog: Option<String>,
+    /// The minor of its catalog the blok needs.
+    #[serde(default, alias = "catalogMinor")]
+    pub catalog_minor: Option<u32>,
     #[serde(default)]
     pub args: Vec<ArgPortInputModel>,
     /// The agents it reads or calls besides `self`, as `deps.<key>`.
@@ -1272,6 +1323,8 @@ impl InformBlokInputModel {
             components: self.components.clone(),
             source: self.source.clone(),
             module: self.module.clone(),
+            catalog: self.catalog.clone(),
+            catalog_minor: self.catalog_minor,
             args: self.args.clone(),
             returns: vec![],
             dependencies: self.dependencies.clone(),
@@ -1314,6 +1367,14 @@ pub struct ActionBlokInputModel {
     /// The module it renders against besides its catalogs; the Orkestrator's when absent.
     #[serde(default)]
     pub module: Option<String>,
+    /// The catalog the blok is written for: the address it is published at, or the name of
+    /// one registered in the organization; the base catalog when absent. It is what `module`
+    /// named before: one of the two is sent, `module` by an agent on an older spec.
+    #[serde(default)]
+    pub catalog: Option<String>,
+    /// The minor of its catalog the blok needs.
+    #[serde(default, alias = "catalogMinor")]
+    pub catalog_minor: Option<u32>,
     #[serde(default)]
     pub description: Option<String>,
     pub vocab: u32,
@@ -1342,6 +1403,7 @@ impl ActionBlokInputModel {
 
     /// Sent one way (its source parsed into its tree), in a context an action has a blok for.
     pub fn validate(&mut self) -> Result<(), ValidationError> {
+        written_for(&mut self.module, self.catalog.as_deref())?;
         parse_sent(&mut self.components, &mut self.source)?;
         check_vocab(self.vocab)?;
         for component in self.components.iter_mut().flatten() {
@@ -1373,7 +1435,6 @@ impl ActionBlokInputModel {
             queries: self.queries.clone(),
             subscriptions: self.subscriptions.clone(),
             args: arg_keys,
-            catalogs: self.catalogs.clone(),
             demo: self.demo.clone(),
             assets: None,
         }

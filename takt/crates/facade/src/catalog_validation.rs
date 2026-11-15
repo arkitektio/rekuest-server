@@ -13,8 +13,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use rekuest_core::blok::infer::{resolve_scope, ArgPorts};
-use rekuest_core::blok::view::ORKESTRATOR_MODULE;
-use rekuest_core::blok::{blok_view, check_blok_tree, BlokScope, BlokView, Finding};
+use rekuest_core::blok::{check_blok_tree, BlokScope, Finding};
 use rekuest_core::catalogs::{
     base_components, base_operations, base_version_named, BASE_CATALOG_ID, BASE_CATALOG_VERSION,
 };
@@ -23,8 +22,7 @@ use rekuest_core::inputs::{
     blok_asset_path, iter_component_nodes, iter_util_calls, ArgPortInputModel,
     AssignWidgetInputModel, CatalogComponentInputModel, CatalogOperationInputModel,
     ComponentNodeInputModel, ComponentPropInputModel, DefinitionInputModel, OptimisticInputModel,
-    ReturnPortInputModel, ReturnWidgetInputModel, UtilCallInputModel, ASK_COMPONENT,
-    PLACED_COMPONENT, ROUTE_COMPONENT, SPACE_COMPONENT,
+    ReturnPortInputModel, ReturnWidgetInputModel, UtilCallInputModel,
 };
 use rekuest_core::pyjson::{repr, repr_str};
 use serde::Serialize;
@@ -465,92 +463,7 @@ fn check_asset_prop(
     Ok(())
 }
 
-/// `Space`, `Placed` and `Route` read the agents a run got, so only an action's own blok holds them;
-/// `ask` a task's open ask, so only a blok that has a task (`check_run_components`).
-pub fn check_run_components(
-    components: &[ComponentNodeInputModel],
-    kind: &str,
-) -> Result<(), String> {
-    for node in iter_component_nodes(Some(components)) {
-        let run = matches!(
-            node.component.as_str(),
-            SPACE_COMPONENT | PLACED_COMPONENT | ROUTE_COMPONENT
-        );
-        if run && kind != "action" && kind != "assign" {
-            return Err(format!(
-                "component {}: a {} reads the agents of a run, so only an action's own blok holds one",
-                repr_str(&node.id),
-                repr_str(&node.component)
-            ));
-        }
-        if node.component == ASK_COMPONENT && kind != "action" && kind != "task" {
-            return Err(format!(
-                "component {}: an 'ask' shows a task's open ask, so only a task's or an action's blok holds one",
-                repr_str(&node.id)
-            ));
-        }
-    }
-    Ok(())
-}
-
-/// What a blok of `catalog` is checked against (`blok_view_for`): the spec's catalogs plus what
-/// `catalog` registered beyond them (a component it defines differently from a standard catalog
-/// is drawn as it defines it, `catalog.shadow` where a tree uses it). Unknown components are
-/// findings once the catalog has registered any (the Orkestrator's always).
-pub fn blok_view_for(catalog: &Catalog) -> BlokView {
-    let complete = catalog.name == ORKESTRATOR_MODULE || !catalog.components.is_empty();
-    // A registered component says which catalog it came from, unless it names its module.
-    let components: Vec<CatalogComponentInputModel> = catalog
-        .components
-        .iter()
-        .cloned()
-        .map(|mut component| {
-            component
-                .catalog
-                .get_or_insert_with(|| catalog.name.clone());
-            component
-        })
-        .collect();
-    blok_view(
-        Some((&catalog.name, &components)),
-        &catalog.operations,
-        complete,
-    )
-}
-
-/// `module.unknown` (a warning): the blok names a module that is not the Orkestrator's and that
-/// nothing registered in the organization, so its own components are not checked. `None` for a
-/// known module.
-pub async fn module_unknown(
-    conn: &mut PgConnection,
-    catalog: &Catalog,
-    organization: i64,
-) -> Result<Option<Diagnostic>, sqlx::Error> {
-    if catalog.name == ORKESTRATOR_MODULE || catalog.is_registered() {
-        return Ok(None);
-    }
-    let mut modules: Vec<String> = sqlx::query_scalar(
-        "SELECT name FROM facade_module
-          WHERE organization_id = $1 AND (components <> '[]'::jsonb OR operations <> '[]'::jsonb)",
-    )
-    .bind(organization)
-    .fetch_all(conn)
-    .await?;
-    modules.push(ORKESTRATOR_MODULE.to_owned());
-    modules.sort();
-    modules.dedup();
-    let fields = [
-        ("module", Value::String(catalog.name.clone())),
-        ("modules", Value::String(modules.join(", "))),
-    ];
-    Ok(Some(diagnostic_of(&Finding::of(
-        "module.unknown",
-        None,
-        &fields,
-    ))))
-}
-
-/// A blok checked against its catalog: its warnings, and its scope resolved (its locals'
+/// A blok checked against the language: its warnings, and its scope resolved (its locals'
 /// kinds), whose locals are stored as the blok's `resolved_locals`.
 #[derive(Debug, Clone)]
 pub struct CheckedBlok {
@@ -572,9 +485,11 @@ pub fn diagnostic_of(finding: &Finding) -> Diagnostic {
     }
 }
 
-/// A v2 blok tree against what its blok declares (`scope`) and its catalog's view
-/// (`validate_blok_against_catalog`): its scope resolved first (`resolve_scope`), then refused
-/// on its first error (the finding, with its code); its warnings and resolved scope returned.
+/// A v2 blok tree against what its blok declares (`scope`): the language alone
+/// (`validate_blok_against_catalog`). Its scope is resolved first (`resolve_scope`), then it is
+/// refused on its first error (the finding, with its code); its warnings and resolved scope
+/// are returned. `catalog` is not read: the server holds a blok to no catalog, and what a
+/// component takes or where it may sit is checked by the frontend that draws the blok.
 pub fn validate_blok_against_catalog(
     catalog: &Catalog,
     components: Option<&[ComponentNodeInputModel]>,
@@ -586,7 +501,7 @@ pub fn validate_blok_against_catalog(
 /// [`validate_blok_against_catalog`], its locals resolved with `arg_ports` too: the full arg
 /// ports of the actions the blok's agent registers (`self`), as the SDK resolves them.
 pub fn validate_blok_with_arg_ports(
-    catalog: &Catalog,
+    _catalog: &Catalog,
     components: Option<&[ComponentNodeInputModel]>,
     scope: &BlokScope,
     arg_ports: &ArgPorts,
@@ -595,10 +510,8 @@ pub fn validate_blok_with_arg_ports(
     let [tree] = roots else {
         return Err(format!("a blok has exactly one root, not {}", roots.len()));
     };
-    check_run_components(roots, &scope.kind)?;
-    let view = blok_view_for(catalog);
-    let resolved = resolve_scope(tree, scope, Some(&view), arg_ports);
-    let findings = check_blok_tree(tree, &resolved, Some(&view));
+    let resolved = resolve_scope(tree, scope, arg_ports);
+    let findings = check_blok_tree(tree, &resolved);
     if let Some(error) = findings.iter().find(|f| f.is_error()) {
         return Err(error.to_string());
     }

@@ -18,10 +18,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use serde_json::{Map, Value};
 
-use super::check::{
-    action_key_for, foreach_let, into_sites, BlokScope, BIND_PROP, FOREACH_ITEMS_PROP,
-};
-use super::view::BlokView;
+use super::check::{action_key_for, foreach_let, into_sites, BlokScope, FOREACH_ITEMS_PROP};
 use crate::inputs::{
     ActionArgumentInputModel, AgentDependencyInputModel, AgentProbeInputModel, ArgPortInputModel,
     BlokLocalInputModel, ComponentNodeInputModel, ComponentPropInputModel, PortMatchInputModel,
@@ -130,7 +127,6 @@ pub fn port_type(port: &ArgPortInputModel) -> Typed {
 struct Uses<'a> {
     locals: HashSet<&'a str>,
     dependencies: HashMap<&'a str, &'a AgentDependencyInputModel>,
-    view: Option<&'a BlokView>,
     arg_ports: &'a ArgPorts,
     arguments: HashMap<String, Vec<Typed>>,
     binds: HashMap<String, Vec<String>>,
@@ -139,27 +135,9 @@ struct Uses<'a> {
 type Names = HashSet<String>;
 
 impl Uses<'_> {
-    fn visit_component(&mut self, node: &ComponentNodeInputModel, scope: &Names) {
-        let bind = self
-            .view
-            .and_then(|view| view.component(&node.component))
-            .and_then(|spec| spec.props.iter().find(|p| p.key == BIND_PROP));
-        let Some(bind) = bind else { return };
-        for prop in node.props.iter().flatten() {
-            if prop.key != BIND_PROP {
-                continue;
-            }
-            let Some(path) = prop.dynamic_value.as_ref().and_then(|d| d.path.as_deref()) else {
-                continue;
-            };
-            if self.locals.contains(path) && !scope.contains(path) {
-                self.binds
-                    .entry(path.to_owned())
-                    .or_default()
-                    .push(bind.kind.value().to_owned());
-            }
-        }
-    }
+    /// What a control writes through its `bind` is its catalog's to say, and a server reads
+    /// none: a local only a bind would type stays ANY here, and the renderer types it.
+    fn visit_component(&mut self, _node: &ComponentNodeInputModel, _scope: &Names) {}
 
     fn visit_agent_call(&mut self, call: &AgentProbeInputModel, scope: &Names) {
         let action = action_key_for(call);
@@ -295,7 +273,6 @@ pub fn resolve_local(
 pub fn resolve_scope(
     tree: &ComponentNodeInputModel,
     scope: &BlokScope,
-    view: Option<&BlokView>,
     arg_ports: &ArgPorts,
 ) -> BlokScope {
     let mut uses = Uses {
@@ -305,7 +282,6 @@ pub fn resolve_scope(
             .iter()
             .map(|d| (d.key.as_str(), d))
             .collect(),
-        view,
         arg_ports,
         arguments: HashMap::new(),
         binds: HashMap::new(),

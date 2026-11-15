@@ -1665,10 +1665,9 @@ def check_blok_manifest(
         queries=tuple(queries),
         subscriptions=tuple(subscriptions),
         args=tuple(args) if args is not None else None,
-        catalogs=tuple(catalogs),
         demo=demo,
     )
-    findings = check_blok_tree(components[0], scope, None)
+    findings = check_blok_tree(components[0], scope)
     for finding in findings:
         if finding.level == "error":
             raise BlokError.from_finding(finding)
@@ -1702,6 +1701,25 @@ def check_blok_args(context: enums.ComponentContext, args: list["ArgPortInputMod
     _check_unique(args, "key", "Blok manifest args")
 
 
+def _catalog_names_the_module(cls: type, data: object) -> object:
+    """A blok names the one catalog it is written for (``catalog``); the server keeps it as the
+    blok's module, which is what an agent on an older spec names. Sent both ways they agree."""
+    if not isinstance(data, dict):
+        return data
+    catalog = data.get("catalog")
+    if catalog is None:
+        return data
+    from rekuest_core.vocabulary import BlokError, load_vocabulary
+
+    vocabulary = load_vocabulary()
+    if not isinstance(catalog, str) or not (vocabulary.catalog_id.fullmatch(catalog) or vocabulary.catalog_name.fullmatch(catalog)):
+        raise BlokError("manifest.catalog", catalog=catalog)
+    module = data.get("module")
+    if module is not None and module != catalog:
+        raise ValueError(f"a blok is written for one catalog: `catalog` says {catalog!r} and `module` {module!r}")
+    return {**data, "module": catalog}
+
+
 class BlokImplementationInputModel(BaseModel):
     "A blok an agent declares (blok language v2): its tree (or BSX source) and what it declares beside it."
 
@@ -1710,6 +1728,9 @@ class BlokImplementationInputModel(BaseModel):
     components: Optional[list[ComponentNodeInputModel]] = Field(default=None, description="The UI component tree blueprint for this Blok (one root), unless it is sent as its `source`.")
     source: Optional[str] = Field(default=None, description="The Blok as v2 BSX, parsed by the server into its component tree. Exactly one of `components` and `source` is sent.")
     module: Optional[str] = Field(default=None, description="The module (an app's own unversioned extras, registered by a UI app such as the Orkestrator) the blok renders against besides its catalogs; the Orkestrator's when absent.")
+    catalog: Optional[str] = Field(default=None, description="The catalog the blok is written for: the address it is published at (`https://arkitekt.live/catalogs/orkestrator/v1`), or the name of one registered in the organization. The base catalog, which every renderer draws, when absent. It is what `module` named before: one of the two is sent, and `module` is kept for an agent on an older spec.")
+    catalog_minor: Optional[int] = Field(default=None, ge=0, description="The minor of its catalog the blok needs: the newest `since` among the components and props it uses.")
+    _written_for = model_validator(mode="before")(_catalog_names_the_module)
     description: Optional[str] = Field(default=None, description="A human-readable description about this Blok's purpose and functionality.")
     context: enums.ComponentContext = Field(default=enums.ComponentContext.HTML, description="The renderer for this Blok's root: HTML for panels and dashboards, SCENE for a full 3D view whose root is a Scene, LOGO an agent's logo, ACTION_LOGO an action's.")
     default: bool = Field(default=False, description="Whether this Blok is its agent's default for its context. A newly declared default replaces the previous one.")
@@ -1807,6 +1828,9 @@ class ActionBlokInputModel(BaseModel):
     components: Optional[list[ComponentNodeInputModel]] = Field(default=None, description="The UI component tree, unless the blok is sent as its `source`.")
     source: Optional[str] = Field(default=None, description="The blok as v2 BSX, parsed by the server into its component tree. Exactly one of `components` and `source` is sent.")
     module: Optional[str] = Field(default=None, description="The module the blok renders against besides its catalogs; the Orkestrator's when absent.")
+    catalog: Optional[str] = Field(default=None, description="The catalog the blok is written for: the address it is published at (`https://arkitekt.live/catalogs/orkestrator/v1`), or the name of one registered in the organization. The base catalog, which every renderer draws, when absent. It is what `module` named before: one of the two is sent, and `module` is kept for an agent on an older spec.")
+    catalog_minor: Optional[int] = Field(default=None, ge=0, description="The minor of its catalog the blok needs: the newest `since` among the components and props it uses.")
+    _written_for = model_validator(mode="before")(_catalog_names_the_module)
     description: Optional[str] = Field(default=None, description="What the blok shows of a run.")
     vocab: Literal[2] = Field(description="The blok language version the blok speaks; 2 is the only one.")
     catalogs: list[str] = Field(default_factory=list, description="The catalogs it needs, as name@version.")
@@ -1842,6 +1866,9 @@ class AskBlokInputModel(BaseModel):
     components: Optional[list[ComponentNodeInputModel]] = Field(default=None, description="The UI component tree, unless the blok is sent as its `source`.")
     source: Optional[str] = Field(default=None, description="The blok as v2 BSX, parsed by the server into its component tree. Exactly one of `components` and `source` is sent.")
     module: Optional[str] = Field(default=None, description="The module the blok renders against besides its catalogs; the Orkestrator's when absent.")
+    catalog: Optional[str] = Field(default=None, description="The catalog the blok is written for: the address it is published at (`https://arkitekt.live/catalogs/orkestrator/v1`), or the name of one registered in the organization. The base catalog, which every renderer draws, when absent. It is what `module` named before: one of the two is sent, and `module` is kept for an agent on an older spec.")
+    catalog_minor: Optional[int] = Field(default=None, ge=0, description="The minor of its catalog the blok needs: the newest `since` among the components and props it uses.")
+    _written_for = model_validator(mode="before")(_catalog_names_the_module)
     args: list[ArgPortInputModel] = Field(default_factory=list, description="What it is opened on, read under `args.<key>`.")
     returns: list[ReturnPortInputModel] = Field(default_factory=list, description="What an answer holds.")
     dependencies: list[AgentDependencyInputModel] = Field(default_factory=list, description="The agents it reads or calls besides `self`, as `deps.<key>`.")
@@ -1886,6 +1913,9 @@ class InformBlokInputModel(BaseModel):
     components: Optional[list[ComponentNodeInputModel]] = Field(default=None, description="The UI component tree, unless the blok is sent as its `source`.")
     source: Optional[str] = Field(default=None, description="The blok as v2 BSX, parsed by the server into its component tree. Exactly one of `components` and `source` is sent.")
     module: Optional[str] = Field(default=None, description="The module the blok renders against besides its catalogs; the Orkestrator's when absent.")
+    catalog: Optional[str] = Field(default=None, description="The catalog the blok is written for: the address it is published at (`https://arkitekt.live/catalogs/orkestrator/v1`), or the name of one registered in the organization. The base catalog, which every renderer draws, when absent. It is what `module` named before: one of the two is sent, and `module` is kept for an agent on an older spec.")
+    catalog_minor: Optional[int] = Field(default=None, ge=0, description="The minor of its catalog the blok needs: the newest `since` among the components and props it uses.")
+    _written_for = model_validator(mode="before")(_catalog_names_the_module)
     args: list[ArgPortInputModel] = Field(default_factory=list, description="What it is opened on, read under `args.<key>`.")
     dependencies: list[AgentDependencyInputModel] = Field(default_factory=list, description="The agents it reads or calls besides `self`, as `deps.<key>`.")
     vocab: Literal[2] = Field(description="The blok language version the blok speaks; 2 is the only one.")

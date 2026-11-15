@@ -1,1638 +1,11 @@
 {
  "vocab": 2,
+ "minor": 1,
  "catalogs": {
-  "base": 2,
-  "ui": 1,
-  "scene": 1,
-  "logo": 1,
-  "structure": 1,
-  "html": 1,
-  "shadcn": 1
- },
- "text_table": {
-  "Accordion": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "AccordionContent": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "AccordionItem": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "AccordionTrigger": {
-   "text_prop": "label",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "ActionLogo": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": "LOGO",
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "logo@1"
-  },
-  "AgentLogo": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": "LOGO",
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "logo@1"
-  },
-  "Alert": {
-   "text_prop": "description",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "AlertDialog": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "AlertDialogAction": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "shadcn@1"
-  },
-  "AlertDialogCancel": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "shadcn@1"
-  },
-  "AlertDialogContent": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "AlertDialogDescription": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "AlertDialogFooter": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "AlertDialogHeader": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "AlertDialogTitle": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "AlertDialogTrigger": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "Animate": {
-   "text_prop": null,
-   "context": "SCENE",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "scene@1"
-  },
-  "AspectRatio": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "Attach": {
-   "text_prop": null,
-   "context": "SCENE",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "scene@1"
-  },
-  "Avatar": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "shadcn@1"
-  },
-  "Badge": {
-   "text_prop": "text",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "Beam": {
-   "text_prop": null,
-   "context": "SCENE",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "scene@1"
-  },
-  "BentoGrid": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "BentoItem": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "Breadcrumb": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "BreadcrumbItem": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "shadcn@1"
-  },
-  "BreadcrumbSeparator": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "shadcn@1"
-  },
-  "Button": {
-   "text_prop": "label",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "ButtonGroup": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "Calendar": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "shadcn@1"
-  },
-  "Card": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "CardContent": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "CardDescription": {
-   "text_prop": "text",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "CardFooter": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "CardHeader": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "CardTitle": {
-   "text_prop": "text",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "Carousel": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "CarouselItem": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "Chart": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "shadcn@1"
-  },
-  "Checkbox": {
-   "text_prop": "label",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "Circle": {
-   "text_prop": null,
-   "context": "LOGO",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "logo@1"
-  },
-  "ClipPath": {
-   "text_prop": null,
-   "context": "LOGO",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "logo@1"
-  },
-  "Code": {
-   "text_prop": "text",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "Collapsible": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "CollapsibleContent": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "CollapsibleTrigger": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "Column": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "ContextMenu": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "ContextMenuCheckboxItem": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "shadcn@1"
-  },
-  "ContextMenuContent": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "ContextMenuItem": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "ContextMenuLabel": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "ContextMenuSeparator": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "shadcn@1"
-  },
-  "ContextMenuTrigger": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "Defs": {
-   "text_prop": null,
-   "context": "LOGO",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "logo@1"
-  },
-  "Dialog": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "DialogClose": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "DialogContent": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "DialogDescription": {
-   "text_prop": "text",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "DialogFooter": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "DialogHeader": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "DialogTitle": {
-   "text_prop": "text",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "DialogTrigger": {
-   "text_prop": "label",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "Drawer": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "DrawerContent": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "DrawerDescription": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "DrawerFooter": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "DrawerHeader": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "DrawerTitle": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "DrawerTrigger": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "DropdownMenu": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "DropdownMenuCheckboxItem": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "shadcn@1"
-  },
-  "DropdownMenuContent": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "DropdownMenuItem": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "DropdownMenuLabel": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "DropdownMenuSeparator": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "shadcn@1"
-  },
-  "DropdownMenuTrigger": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "Ellipse": {
-   "text_prop": null,
-   "context": "LOGO",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "logo@1"
-  },
-  "Empty": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "Field": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "FieldSet": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "Flex": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "G": {
-   "text_prop": null,
-   "context": "LOGO",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "logo@1"
-  },
-  "Glow": {
-   "text_prop": null,
-   "context": "SCENE",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "scene@1"
-  },
-  "Grid": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "Heading": {
-   "text_prop": "text",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "HoverCard": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "HoverCardContent": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "HoverCardTrigger": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "Html": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "base@2"
-  },
-  "Icon": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "Image": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "Input": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "InputGroup": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "InputGroupAddon": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "InputOTP": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "shadcn@1"
-  },
-  "Item": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "ItemGroup": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "Kbd": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "Label": {
-   "text_prop": "text",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "Line": {
-   "text_prop": null,
-   "context": "LOGO",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "logo@1"
-  },
-  "LinearGradient": {
-   "text_prop": null,
-   "context": "LOGO",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "logo@1"
-  },
-  "Link": {
-   "text_prop": "text",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "Markdown": {
-   "text_prop": "content",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "Menubar": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "MenubarItem": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "shadcn@1"
-  },
-  "MenubarMenu": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "MenubarSeparator": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "shadcn@1"
-  },
-  "Model": {
-   "text_prop": null,
-   "context": "SCENE",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "scene@1"
-  },
-  "Move": {
-   "text_prop": null,
-   "context": "SCENE",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "scene@1"
-  },
-  "OnClick": {
-   "text_prop": null,
-   "context": "SCENE",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "scene@1"
-  },
-  "Pagination": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "PaginationItem": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "shadcn@1"
-  },
-  "Path": {
-   "text_prop": null,
-   "context": "LOGO",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "logo@1"
-  },
-  "Placed": {
-   "text_prop": null,
-   "context": "SCENE",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "scene@1"
-  },
-  "Polygon": {
-   "text_prop": null,
-   "context": "LOGO",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "logo@1"
-  },
-  "Polyline": {
-   "text_prop": null,
-   "context": "LOGO",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "logo@1"
-  },
-  "Popout": {
-   "text_prop": null,
-   "context": "SCENE",
-   "children_context": "HTML",
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "scene@1"
-  },
-  "Popover": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "PopoverContent": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "PopoverTrigger": {
-   "text_prop": "label",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "Progress": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "RadialGradient": {
-   "text_prop": null,
-   "context": "LOGO",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "logo@1"
-  },
-  "RadioGroup": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "RadioGroupItem": {
-   "text_prop": "label",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "RawInspector": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "shadcn@1"
-  },
-  "Rect": {
-   "text_prop": null,
-   "context": "LOGO",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "logo@1"
-  },
-  "Resizable": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "ResizableHandle": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "shadcn@1"
-  },
-  "ResizablePanel": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "Robot": {
-   "text_prop": null,
-   "context": "SCENE",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "scene@1"
-  },
-  "Rotate": {
-   "text_prop": null,
-   "context": "SCENE",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "scene@1"
-  },
-  "Route": {
-   "text_prop": null,
-   "context": "SCENE",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "scene@1"
-  },
-  "Row": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "Scene": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": "SCENE",
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "scene@1"
-  },
-  "ScrollArea": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "Select": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "SelectContent": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "SelectGroup": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "SelectItem": {
-   "text_prop": "label",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "SelectLabel": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "SelectTrigger": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "Separator": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "Sheet": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "SheetContent": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "SheetDescription": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "SheetFooter": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "SheetHeader": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "SheetTitle": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "SheetTrigger": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "shadcn@1"
-  },
-  "Skeleton": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "Slider": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "Space": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": "SCENE",
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "scene@1"
-  },
-  "Spacer": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "Spinner": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "Stop": {
-   "text_prop": null,
-   "context": "LOGO",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "logo@1"
-  },
-  "StructureDisplay": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "structure@1"
-  },
-  "StructurePicker": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "structure@1"
-  },
-  "StructureViewer": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "structure@1"
-  },
-  "SvgText": {
-   "text_prop": null,
-   "context": "LOGO",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "logo@1"
-  },
-  "Switch": {
-   "text_prop": "label",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "Table": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "TableBody": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "TableCell": {
-   "text_prop": "text",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "TableFooter": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "TableHead": {
-   "text_prop": "text",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "TableHeader": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "TableRow": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "Tabs": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "TabsContent": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "TabsList": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "TabsTrigger": {
-   "text_prop": "label",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "Text": {
-   "text_prop": "text",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "Textarea": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "Time": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "Tint": {
-   "text_prop": null,
-   "context": "SCENE",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "scene@1"
-  },
-  "Toast": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "Toggle": {
-   "text_prop": "label",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "ToggleGroup": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "ToggleGroupItem": {
-   "text_prop": "label",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "ui@1"
-  },
-  "Tooltip": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "TooltipContent": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "TooltipTrigger": {
-   "text_prop": "label",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "Transform": {
-   "text_prop": null,
-   "context": "SCENE",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "scene@1"
-  },
-  "Visible": {
-   "text_prop": null,
-   "context": "SCENE",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "scene@1"
-  },
-  "args": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "base@2"
-  },
-  "ask": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": false,
-   "catalog": "base@2"
-  },
-  "cancelled": {
-   "text_prop": "text",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "case": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": true,
-   "accepts_children": true,
-   "catalog": "base@2"
-  },
-  "default": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": true,
-   "accepts_children": true,
-   "catalog": "base@2"
-  },
-  "div": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "html@1"
-  },
-  "done": {
-   "text_prop": "text",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "else": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": true,
-   "accepts_children": true,
-   "catalog": "base@2"
-  },
-  "error": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": true,
-   "accepts_children": true,
-   "catalog": "base@2"
-  },
-  "failed": {
-   "text_prop": "text",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "ui@1"
-  },
-  "fallback": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": true,
-   "accepts_children": true,
-   "catalog": "base@2"
-  },
-  "foreach": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": true,
-   "accepts_children": true,
-   "catalog": "base@2"
-  },
-  "fragment": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": true,
-   "accepts_children": true,
-   "catalog": "base@2"
-  },
-  "if": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": true,
-   "accepts_children": true,
-   "catalog": "base@2"
-  },
-  "match": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": true,
-   "accepts_children": true,
-   "catalog": "base@2"
-  },
-  "p": {
-   "text_prop": "text",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "html@1"
-  },
-  "span": {
-   "text_prop": "text",
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": false,
-   "accepts_children": true,
-   "catalog": "html@1"
-  },
-  "suspense": {
-   "text_prop": null,
-   "context": "HTML",
-   "children_context": null,
-   "inherits_context": true,
-   "accepts_children": true,
-   "catalog": "base@2"
+  "base": "https://arkitekt.live/catalogs/base/v3",
+  "bundled": {
+   "https://arkitekt.live/catalogs/base/v3": "catalogs/base@3.json",
+   "https://arkitekt.live/catalogs/orkestrator/v1": "catalogs/orkestrator@1.json"
   }
  },
  "cases": [
@@ -1708,7 +81,7 @@
      }
     ]
    },
-   "printed": "<Card className=\"p-4\">\n  <Text>@fff</Text>\n</Card>"
+   "printed": "<Card className=\"p-4\">\n  <Text text=\"@fff\" />\n</Card>"
   },
   {
    "name": "a structure identifier",
@@ -1753,7 +126,7 @@
      }
     ]
    },
-   "printed": "<Text>{\"<b> & A \\\"q\\\"\"}</Text>"
+   "printed": "<Text text='&lt;b> &amp; A \"q\"' />"
   },
   {
    "name": "a path",
@@ -1770,7 +143,7 @@
      }
     ]
    },
-   "printed": "<Text>{deps.robot.arm.mode}</Text>"
+   "printed": "<Text text={deps.robot.arm.mode} />"
   },
   {
    "name": "self",
@@ -1787,7 +160,7 @@
      }
     ]
    },
-   "printed": "<Text>{self.arm.joints}</Text>"
+   "printed": "<Text text={self.arm.joints} />"
   },
   {
    "name": "a latest task",
@@ -1894,7 +267,7 @@
      }
     ]
    },
-   "printed": "<Text>{\"it's \\\"q\\\" \\n é\"}</Text>"
+   "printed": "<Text text=\"it's &quot;q&quot; \n é\" />"
   },
   {
    "name": "a function, positional",
@@ -1917,7 +290,7 @@
      }
     ]
    },
-   "printed": "<Text>{str.upper(deps.robot.name)}</Text>"
+   "printed": "<Text text={str.upper(deps.robot.name)} />"
   },
   {
    "name": "a function, named",
@@ -1944,7 +317,7 @@
      }
     ]
    },
-   "printed": "<Text>{str.truncate(task.message, 20)}</Text>"
+   "printed": "<Text text={str.truncate(task.message, 20)} />"
   },
   {
    "name": "a function's optional argument left out",
@@ -1967,7 +340,7 @@
      }
     ]
    },
-   "printed": "<Text>{list.join(args.tags)}</Text>"
+   "printed": "<Text text={list.join(args.tags)} />"
   },
   {
    "name": "variadic values",
@@ -2000,7 +373,7 @@
      }
     ]
    },
-   "printed": "<Text>{math.max(1, 2, deps.robot.x)}</Text>"
+   "printed": "<Text text={math.max(1, 2, deps.robot.x)} />"
   },
   {
    "name": "comparisons",
@@ -2275,7 +648,7 @@
      }
     ]
    },
-   "printed": "<Badge>{a ? \"x\" : b ? \"y\" : \"z\"}</Badge>"
+   "printed": "<Badge text={a ? \"x\" : b ? \"y\" : \"z\"} />"
   },
   {
    "name": "a task call",
@@ -2556,7 +929,7 @@
      }
     ]
    },
-   "printed": "<Text>{then}</Text>"
+   "printed": "<Text text={then} />"
   },
   {
    "name": "a time",
@@ -2692,10 +1065,16 @@
    "tree": {
     "id": "Button[0]",
     "component": "Button",
-    "props": [
+    "children": [
      {
-      "key": "label",
-      "static_value": "Grip"
+      "id": "Button[0]/#0",
+      "component": "#text",
+      "props": [
+       {
+        "key": "value",
+        "static_value": "Grip"
+       }
+      ]
      }
     ]
    },
@@ -2707,12 +1086,18 @@
    "tree": {
     "id": "Badge[0]",
     "component": "Badge",
-    "props": [
+    "children": [
      {
-      "key": "text",
-      "dynamic_value": {
-       "path": "task.status"
-      }
+      "id": "Badge[0]/#0",
+      "component": "#text",
+      "props": [
+       {
+        "key": "value",
+        "dynamic_value": {
+         "path": "task.status"
+        }
+       }
+      ]
      }
     ]
    },
@@ -2724,26 +1109,32 @@
    "tree": {
     "id": "Text[0]",
     "component": "Text",
-    "props": [
+    "children": [
      {
-      "key": "text",
-      "util_call": {
-       "operation": "str.template",
-       "arguments": [
-        {
-         "key": "template",
-         "value_literal": "Arrived at {0}"
-        },
-        {
-         "key": "values",
-         "value_list": [
+      "id": "Text[0]/#0",
+      "component": "#text",
+      "props": [
+       {
+        "key": "value",
+        "util_call": {
+         "operation": "str.template",
+         "arguments": [
           {
-           "value_path": "move.args.position"
+           "key": "template",
+           "value_literal": "Arrived at {0}"
+          },
+          {
+           "key": "values",
+           "value_list": [
+            {
+             "value_path": "move.args.position"
+            }
+           ]
           }
          ]
         }
-       ]
-      }
+       }
+      ]
      }
     ]
    },
@@ -2755,10 +1146,16 @@
    "tree": {
     "id": "Text[0]",
     "component": "Text",
-    "props": [
+    "children": [
      {
-      "key": "text",
-      "static_value": "a { b"
+      "id": "Text[0]/#0",
+      "component": "#text",
+      "props": [
+       {
+        "key": "value",
+        "static_value": "a { b"
+       }
+      ]
      }
     ]
    },
@@ -2770,26 +1167,32 @@
    "tree": {
     "id": "Text[0]",
     "component": "Text",
-    "props": [
+    "children": [
      {
-      "key": "text",
-      "util_call": {
-       "operation": "str.template",
-       "arguments": [
-        {
-         "key": "template",
-         "value_literal": "Arrived at{0}"
-        },
-        {
-         "key": "values",
-         "value_list": [
+      "id": "Text[0]/#0",
+      "component": "#text",
+      "props": [
+       {
+        "key": "value",
+        "util_call": {
+         "operation": "str.template",
+         "arguments": [
           {
-           "value_path": "move.args.position"
+           "key": "template",
+           "value_literal": "Arrived at{0}"
+          },
+          {
+           "key": "values",
+           "value_list": [
+            {
+             "value_path": "move.args.position"
+            }
+           ]
           }
          ]
         }
-       ]
-      }
+       }
+      ]
      }
     ]
    },
@@ -2801,29 +1204,35 @@
    "tree": {
     "id": "Text[0]",
     "component": "Text",
-    "props": [
+    "children": [
      {
-      "key": "text",
-      "util_call": {
-       "operation": "str.template",
-       "arguments": [
-        {
-         "key": "template",
-         "value_literal": "{0} {1}"
-        },
-        {
-         "key": "values",
-         "value_list": [
+      "id": "Text[0]/#0",
+      "component": "#text",
+      "props": [
+       {
+        "key": "value",
+        "util_call": {
+         "operation": "str.template",
+         "arguments": [
           {
-           "value_path": "a"
+           "key": "template",
+           "value_literal": "{0} {1}"
           },
           {
-           "value_path": "b"
+           "key": "values",
+           "value_list": [
+            {
+             "value_path": "a"
+            },
+            {
+             "value_path": "b"
+            }
+           ]
           }
          ]
         }
-       ]
-      }
+       }
+      ]
      }
     ]
    },
@@ -2838,10 +1247,10 @@
     "children": [
      {
       "id": "p[0]/#0",
-      "component": "span",
+      "component": "#text",
       "props": [
        {
-        "key": "text",
+        "key": "value",
         "static_value": "Hello "
        }
       ]
@@ -2849,19 +1258,25 @@
      {
       "id": "p[0]/span[0]",
       "component": "span",
-      "props": [
+      "children": [
        {
-        "key": "text",
-        "static_value": "world"
+        "id": "p[0]/span[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "world"
+         }
+        ]
        }
       ]
      },
      {
       "id": "p[0]/#1",
-      "component": "span",
+      "component": "#text",
       "props": [
        {
-        "key": "text",
+        "key": "value",
         "util_call": {
          "operation": "str.template",
          "arguments": [
@@ -2903,10 +1318,10 @@
     "children": [
      {
       "id": "if[0]/#0",
-      "component": "Text",
+      "component": "#text",
       "props": [
        {
-        "key": "text",
+        "key": "value",
         "static_value": "Yes"
        }
       ]
@@ -2917,10 +1332,10 @@
       "children": [
        {
         "id": "if[0]/else[0]/#0",
-        "component": "Text",
+        "component": "#text",
         "props": [
          {
-          "key": "text",
+          "key": "value",
           "static_value": "No"
          }
         ]
@@ -2929,7 +1344,7 @@
      }
     ]
    },
-   "printed": "<if when={x}>\n  Yes\n  <else>\n    No\n  </else>\n</if>"
+   "printed": "<if when={x}>\n  Yes\n  <else>No</else>\n</if>"
   },
   {
    "name": "loose text in html is a span",
@@ -2952,10 +1367,10 @@
       "children": [
        {
         "id": "div[0]/if[0]/#0",
-        "component": "span",
+        "component": "#text",
         "props": [
          {
-          "key": "text",
+          "key": "value",
           "static_value": "Hi "
          }
         ]
@@ -2963,10 +1378,16 @@
        {
         "id": "div[0]/if[0]/p[0]",
         "component": "p",
-        "props": [
+        "children": [
          {
-          "key": "text",
-          "static_value": "there"
+          "id": "div[0]/if[0]/p[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "static_value": "there"
+           }
+          ]
          }
         ]
        }
@@ -2985,10 +1406,10 @@
     "children": [
      {
       "id": "Alert[0]/#0",
-      "component": "Text",
+      "component": "#text",
       "props": [
        {
-        "key": "text",
+        "key": "value",
         "static_value": "Failed "
        }
       ]
@@ -2996,12 +1417,18 @@
      {
       "id": "Alert[0]/Badge[0]",
       "component": "Badge",
-      "props": [
+      "children": [
        {
-        "key": "text",
-        "dynamic_value": {
-         "path": "task.status"
-        }
+        "id": "Alert[0]/Badge[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "task.status"
+          }
+         }
+        ]
        }
       ]
      }
@@ -3027,10 +1454,16 @@
      {
       "id": "if[0]/Alert[0]",
       "component": "Alert",
-      "props": [
+      "children": [
        {
-        "key": "description",
-        "static_value": "Failed"
+        "id": "if[0]/Alert[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "Failed"
+         }
+        ]
        }
       ]
      },
@@ -3049,10 +1482,16 @@
        {
         "id": "if[0]/else[0]/Text[0]",
         "component": "Text",
-        "props": [
+        "children": [
          {
-          "key": "text",
-          "static_value": "Done"
+          "id": "if[0]/else[0]/Text[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "static_value": "Done"
+           }
+          ]
          }
         ]
        }
@@ -3101,12 +1540,18 @@
      {
       "id": "foreach[0]/Text[0]",
       "component": "Text",
-      "props": [
+      "children": [
        {
-        "key": "text",
-        "dynamic_value": {
-         "path": "p.name"
-        }
+        "id": "foreach[0]/Text[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "p.name"
+          }
+         }
+        ]
        }
       ]
      }
@@ -3142,10 +1587,16 @@
        {
         "id": "match[0]/case[0]/Badge[0]",
         "component": "Badge",
-        "props": [
+        "children": [
          {
-          "key": "text",
-          "static_value": "ok"
+          "id": "match[0]/case[0]/Badge[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "static_value": "ok"
+           }
+          ]
          }
         ]
        }
@@ -3189,26 +1640,32 @@
        {
         "id": "suspense[0]/error[0]/Alert[0]",
         "component": "Alert",
-        "props": [
+        "children": [
          {
-          "key": "description",
-          "util_call": {
-           "operation": "str.template",
-           "arguments": [
-            {
-             "key": "template",
-             "value_literal": "Could not load: {0}"
-            },
-            {
-             "key": "values",
-             "value_list": [
+          "id": "suspense[0]/error[0]/Alert[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "util_call": {
+             "operation": "str.template",
+             "arguments": [
               {
-               "value_path": "error.message"
+               "key": "template",
+               "value_literal": "Could not load: {0}"
+              },
+              {
+               "key": "values",
+               "value_list": [
+                {
+                 "value_path": "error.message"
+                }
+               ]
               }
              ]
             }
-           ]
-          }
+           }
+          ]
          }
         ]
        }
@@ -3217,12 +1674,18 @@
      {
       "id": "suspense[0]/Badge[0]",
       "component": "Badge",
-      "props": [
+      "children": [
        {
-        "key": "text",
-        "dynamic_value": {
-         "path": "deps.robot.arm.mode"
-        }
+        "id": "suspense[0]/Badge[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "deps.robot.arm.mode"
+          }
+         }
+        ]
        }
       ]
      }
@@ -3242,26 +1705,34 @@
       "dynamic_value": {
        "path": "move.failed"
       }
-     },
+     }
+    ],
+    "children": [
      {
-      "key": "description",
-      "util_call": {
-       "operation": "str.template",
-       "arguments": [
-        {
-         "key": "template",
-         "value_literal": "Move failed: {0}"
-        },
-        {
-         "key": "values",
-         "value_list": [
+      "id": "Alert[0]/#0",
+      "component": "#text",
+      "props": [
+       {
+        "key": "value",
+        "util_call": {
+         "operation": "str.template",
+         "arguments": [
           {
-           "value_path": "move.error"
+           "key": "template",
+           "value_literal": "Move failed: {0}"
+          },
+          {
+           "key": "values",
+           "value_list": [
+            {
+             "value_path": "move.error"
+            }
+           ]
           }
          ]
         }
-       ]
-      }
+       }
+      ]
      }
     ]
    },
@@ -3388,52 +1859,64 @@
      {
       "id": "Toast[0]/done[0]",
       "component": "done",
-      "props": [
+      "children": [
        {
-        "key": "text",
-        "util_call": {
-         "operation": "str.template",
-         "arguments": [
-          {
-           "key": "template",
-           "value_literal": "Arrived at {0}"
-          },
-          {
-           "key": "values",
-           "value_list": [
+        "id": "Toast[0]/done[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "util_call": {
+           "operation": "str.template",
+           "arguments": [
             {
-             "value_path": "move.args.position"
+             "key": "template",
+             "value_literal": "Arrived at {0}"
+            },
+            {
+             "key": "values",
+             "value_list": [
+              {
+               "value_path": "move.args.position"
+              }
+             ]
             }
            ]
           }
-         ]
-        }
+         }
+        ]
        }
       ]
      },
      {
       "id": "Toast[0]/failed[0]",
       "component": "failed",
-      "props": [
+      "children": [
        {
-        "key": "text",
-        "util_call": {
-         "operation": "str.template",
-         "arguments": [
-          {
-           "key": "template",
-           "value_literal": "Move failed: {0}"
-          },
-          {
-           "key": "values",
-           "value_list": [
+        "id": "Toast[0]/failed[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "util_call": {
+           "operation": "str.template",
+           "arguments": [
             {
-             "value_path": "move.error"
+             "key": "template",
+             "value_literal": "Move failed: {0}"
+            },
+            {
+             "key": "values",
+             "value_list": [
+              {
+               "value_path": "move.error"
+              }
+             ]
             }
            ]
           }
-         ]
-        }
+         }
+        ]
        }
       ]
      }
@@ -3613,7 +2096,7 @@
      }
     ]
    },
-   "printed": "<Card>\n  <Button>{\"multi\\n line\"}</Button>\n</Card>"
+   "printed": "<Card>\n  <Button label=\"multi\n line\" />\n</Card>"
   },
   {
    "name": "a trailing comma",
@@ -3643,7 +2126,7 @@
      }
     ]
    },
-   "printed": "<Text>{str.concat(a, b)}</Text>"
+   "printed": "<Text text={str.concat(a, b)} />"
   },
   {
    "name": "a null argument",
@@ -3691,12 +2174,18 @@
      {
       "id": "foreach[0]/Text[0]",
       "component": "Text",
-      "props": [
+      "children": [
        {
-        "key": "text",
-        "dynamic_value": {
-         "path": "n"
-        }
+        "id": "foreach[0]/Text[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "n"
+          }
+         }
+        ]
        }
       ]
      }
@@ -3732,7 +2221,7 @@
      }
     ]
    },
-   "printed": "<Text>{a ?? b}</Text>"
+   "printed": "<Text text={a ?? b} />"
   },
   {
    "name": "a coalesce chain is one call",
@@ -3765,7 +2254,7 @@
      }
     ]
    },
-   "printed": "<Text>{a ?? b ?? c}</Text>"
+   "printed": "<Text text={a ?? b ?? c} />"
   },
   {
    "name": "parentheses keep a coalesce group",
@@ -3810,7 +2299,7 @@
      }
     ]
    },
-   "printed": "<Text>{(a ?? b) ?? c}</Text>"
+   "printed": "<Text text={(a ?? b) ?? c} />"
   },
   {
    "name": "coalesce binds looser than or",
@@ -3855,7 +2344,7 @@
      }
     ]
    },
-   "printed": "<Text>{a || b ?? c}</Text>"
+   "printed": "<Text text={a || b ?? c} />"
   },
   {
    "name": "coalesce binds tighter than a ternary",
@@ -3901,7 +2390,7 @@
      }
     ]
    },
-   "printed": "<Badge>{a ?? b ? \"x\" : \"y\"}</Badge>"
+   "printed": "<Badge text={a ?? b ? \"x\" : \"y\"} />"
   },
   {
    "name": "coalesce inside and",
@@ -3976,7 +2465,7 @@
      }
     ]
    },
-   "printed": "<Text>{a ?? b}</Text>"
+   "printed": "<Text text={a ?? b} />"
   },
   {
    "name": "spectral pens",
@@ -4077,60 +2566,6 @@
     "code": "bsx.id",
     "line": 1,
     "column": 7
-   }
-  },
-  {
-   "name": "text where no text goes",
-   "source": "<Card>hi</Card>",
-   "error": {
-    "code": "bsx.text_not_accepted",
-    "line": 1,
-    "column": 1
-   }
-  },
-  {
-   "name": "text in a div",
-   "source": "<div>hi</div>",
-   "error": {
-    "code": "bsx.text_not_accepted",
-    "line": 1,
-    "column": 1
-   }
-  },
-  {
-   "name": "text in a scene",
-   "source": "<Scene><Model>x</Model></Scene>",
-   "error": {
-    "code": "bsx.text_in_context",
-    "line": 1,
-    "column": 8
-   }
-  },
-  {
-   "name": "text in a logo",
-   "source": "<AgentLogo><G>x</G></AgentLogo>",
-   "error": {
-    "code": "bsx.text_in_context",
-    "line": 1,
-    "column": 12
-   }
-  },
-  {
-   "name": "text in an unknown component",
-   "source": "<Foo>x</Foo>",
-   "error": {
-    "code": "bsx.text_unknown_component",
-    "line": 1,
-    "column": 1
-   }
-  },
-  {
-   "name": "text and its prop",
-   "source": "<Button label=\"a\">b</Button>",
-   "error": {
-    "code": "bsx.text_and_prop",
-    "line": 1,
-    "column": 1
    }
   },
   {
@@ -4561,12 +2996,18 @@
        {
         "id": "Html[0]/Card[0]/Text[0]",
         "component": "Text",
-        "props": [
+        "children": [
          {
-          "key": "text",
-          "dynamic_value": {
-           "path": "self.arm.mode"
-          }
+          "id": "Html[0]/Card[0]/Text[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "dynamic_value": {
+             "path": "self.arm.mode"
+            }
+           }
+          ]
          }
         ]
        },
@@ -4587,10 +3028,18 @@
             }
            ]
           }
-         },
+         }
+        ],
+        "children": [
          {
-          "key": "label",
-          "static_value": "Go"
+          "id": "Html[0]/Card[0]/Button[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "static_value": "Go"
+           }
+          ]
          }
         ]
        },
@@ -4656,14 +3105,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "deps in an agent blok",
@@ -4732,16 +3186,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "roots.not_in_kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "roots.not_in_kind"
+    ]
+   }
   },
   {
    "name": "self in a custom blok",
@@ -4810,16 +3271,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "roots.not_in_kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "roots.not_in_kind"
+    ]
+   }
   },
   {
    "name": "task in an agent blok",
@@ -4850,16 +3318,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "roots.not_in_kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "roots.not_in_kind"
+    ]
+   }
   },
   {
    "name": "an action logo reads only task",
@@ -4914,16 +3389,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "roots.not_in_kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "roots.not_in_kind"
+    ]
+   }
   },
   {
    "name": "an unknown root",
@@ -4954,16 +3436,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "roots.unknown"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "roots.unknown"
+    ]
+   }
   },
   {
    "name": "a function namespace is no value",
@@ -4994,16 +3483,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "roots.unknown"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "roots.unknown"
+    ]
+   }
   },
   {
    "name": "event outside a callback",
@@ -5034,16 +3530,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "roots.event_outside_callback"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "roots.event_outside_callback"
+    ]
+   }
   },
   {
    "name": "error outside its slot",
@@ -5074,16 +3577,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "roots.error_outside_boundary"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "roots.error_outside_boundary"
+    ]
+   }
   },
   {
    "name": "a reserved local",
@@ -5111,9 +3621,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -5127,7 +3636,22 @@
    },
    "codes": [
     "roots.reserved"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "task",
+       "nullable": false,
+       "kind": "STRING",
+       "persist": false
+      }
+     ]
+    },
+    "codes": [
+     "roots.reserved"
+    ]
+   }
   },
   {
    "name": "then is reserved",
@@ -5155,9 +3679,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -5171,7 +3694,22 @@
    },
    "codes": [
     "roots.reserved"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "then",
+       "nullable": false,
+       "kind": "STRING",
+       "persist": false
+      }
+     ]
+    },
+    "codes": [
+     "roots.reserved"
+    ]
+   }
   },
   {
    "name": "query is reserved",
@@ -5199,9 +3737,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -5215,7 +3752,22 @@
    },
    "codes": [
     "roots.reserved"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "query",
+       "nullable": false,
+       "kind": "STRING",
+       "persist": false
+      }
+     ]
+    },
+    "codes": [
+     "roots.reserved"
+    ]
+   }
   },
   {
    "name": "a let shadowing a local",
@@ -5268,9 +3820,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -5284,7 +3835,22 @@
    },
    "codes": [
     "roots.shadow"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "x",
+       "nullable": false,
+       "kind": "STRING",
+       "persist": false
+      }
+     ]
+    },
+    "codes": [
+     "roots.shadow"
+    ]
+   }
   },
   {
    "name": "one record, two calls",
@@ -5387,16 +3953,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "into.twice"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "into.twice"
+    ]
+   }
   },
   {
    "name": "an unknown dependency",
@@ -5465,16 +4038,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "deps.unknown"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "deps.unknown"
+    ]
+   }
   },
   {
    "name": "a custom blok reading an undeclared dependency",
@@ -5530,9 +4110,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
@@ -5540,7 +4119,16 @@
    "codes": [
     "deps.unknown",
     "deps.unknown"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "deps.unknown",
+     "deps.unknown"
+    ]
+   }
   },
   {
    "name": "an undeclared dependency beside a declared one",
@@ -5627,16 +4215,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "deps.unknown"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "deps.unknown"
+    ]
+   }
   },
   {
    "name": "a query variable reading an undeclared dependency",
@@ -5679,16 +4274,23 @@
     ],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "deps.unknown"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "deps.unknown"
+    ]
+   }
   },
   {
    "name": "an unknown state",
@@ -5757,16 +4359,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "deps.unknown_state"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "deps.unknown_state"
+    ]
+   }
   },
   {
    "name": "an unknown action",
@@ -5836,16 +4445,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "deps.unknown_action"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "deps.unknown_action"
+    ]
+   }
   },
   {
    "name": "an unknown field",
@@ -5914,16 +4530,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "path.unknown"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "path.unknown"
+    ]
+   }
   },
   {
    "name": "a task record field",
@@ -5992,14 +4615,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "an unknown record field",
@@ -6094,16 +4722,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "path.unknown"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "path.unknown"
+    ]
+   }
   },
   {
    "name": "an undeclared arg",
@@ -6136,16 +4771,23 @@
     "args": [
      "dataset"
     ],
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "args.unknown"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "args.unknown"
+    ]
+   }
   },
   {
    "name": "an args read whole",
@@ -6176,16 +4818,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "roots.whole"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "roots.whole"
+    ]
+   }
   },
   {
    "name": "an undeclared query",
@@ -6216,16 +4865,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "query.unknown"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "query.unknown"
+    ]
+   }
   },
   {
    "name": "a declared query",
@@ -6286,14 +4942,19 @@
     ],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "refetch of an undeclared query",
@@ -6330,16 +4991,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "query.unknown"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "query.unknown"
+    ]
+   }
   },
   {
    "name": "fetch_more of a paged query",
@@ -6392,14 +5060,19 @@
     ],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "fetch_more of a query without more",
@@ -6442,16 +5115,23 @@
     ],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "query.fetch_more"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "query.fetch_more"
+    ]
+   }
   },
   {
    "name": "fetch_more of an undeclared query",
@@ -6488,16 +5168,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "query.unknown"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "query.unknown"
+    ]
+   }
   },
   {
    "name": "a query effect named by a path",
@@ -6534,16 +5221,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "query.effect_target"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "query.effect_target"
+    ]
+   }
   },
   {
    "name": "fetching_more is a field of the record",
@@ -6581,14 +5275,19 @@
     ],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "then is the viewed moment",
@@ -6619,14 +5318,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "then has no fields",
@@ -6657,16 +5361,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "path.unknown"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "path.unknown"
+    ]
+   }
   },
   {
    "name": "then in an action logo",
@@ -6715,16 +5426,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "roots.not_in_kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "roots.not_in_kind"
+    ]
+   }
   },
   {
    "name": "now is no root",
@@ -6755,16 +5473,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "roots.unknown"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "roots.unknown"
+    ]
+   }
   },
   {
    "name": "time.since is gone",
@@ -6801,9 +5526,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
@@ -6811,7 +5535,15 @@
    "codes": [
     "expr.unknown_function",
     "roots.not_in_kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "roots.not_in_kind"
+    ]
+   }
   },
   {
    "name": "time.diff is pure",
@@ -6860,14 +5592,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "a time component",
@@ -6902,14 +5639,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "a callback holding a value",
@@ -6938,16 +5680,21 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "callback.unbound"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "a task call in a value prop",
@@ -7023,16 +5770,21 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "callback.not_callback"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "an unknown event field",
@@ -7108,16 +5860,21 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "callback.event_field"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "bind to no local",
@@ -7186,16 +5943,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "local.unknown"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "local.unknown"
+    ]
+   }
   },
   {
    "name": "a bind that is a literal",
@@ -7230,9 +5994,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -7247,7 +6010,23 @@
    },
    "codes": [
     "local.bind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "iterations",
+       "nullable": false,
+       "default": 15,
+       "kind": "INT",
+       "persist": false
+      }
+     ]
+    },
+    "codes": [
+     "local.bind"
+    ]
+   }
   },
   {
    "name": "a default that does not fit its kind",
@@ -7284,9 +6063,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -7301,7 +6079,23 @@
    },
    "codes": [
     "local.default"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "iterations",
+       "nullable": false,
+       "default": "15",
+       "kind": "INT",
+       "persist": false
+      }
+     ]
+    },
+    "codes": [
+     "local.default"
+    ]
+   }
   },
   {
    "name": "a persisted local nothing binds",
@@ -7331,9 +6125,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -7348,7 +6141,23 @@
    },
    "codes": [
     "local.unused_persist"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "iterations",
+       "nullable": false,
+       "default": 15,
+       "kind": "INT",
+       "persist": true
+      }
+     ]
+    },
+    "codes": [
+     "local.unused_persist"
+    ]
+   }
   },
   {
    "name": "a slider binds an int local",
@@ -7385,9 +6194,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -7400,7 +6208,21 @@
      }
     ]
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "iterations",
+       "nullable": false,
+       "default": 15,
+       "kind": "INT",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "an input binds a string local",
@@ -7437,9 +6259,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -7452,7 +6273,21 @@
      }
     ]
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "name",
+       "nullable": false,
+       "default": "",
+       "kind": "STRING",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "a switch bound to an int local",
@@ -7489,9 +6324,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -7506,7 +6340,21 @@
    },
    "codes": [
     "local.bind_kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "iterations",
+       "nullable": false,
+       "default": 15,
+       "kind": "INT",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "an input bound to an int local",
@@ -7543,9 +6391,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -7560,7 +6407,21 @@
    },
    "codes": [
     "local.bind_kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "iterations",
+       "nullable": false,
+       "default": 15,
+       "kind": "INT",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "a slider bound to a string local",
@@ -7597,9 +6458,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -7614,7 +6474,21 @@
    },
    "codes": [
     "local.bind_kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "name",
+       "nullable": false,
+       "default": "",
+       "kind": "STRING",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "a bind checks the field it writes",
@@ -7678,9 +6552,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -7706,7 +6579,32 @@
    },
    "codes": [
     "local.bind_kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "form",
+       "nullable": false,
+       "children": [
+        {
+         "key": "name",
+         "nullable": false,
+         "kind": "STRING"
+        },
+        {
+         "key": "count",
+         "nullable": false,
+         "kind": "INT"
+        }
+       ],
+       "kind": "DICT",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "an ANY control binds any local",
@@ -7743,9 +6641,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -7758,7 +6655,21 @@
      }
     ]
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "iterations",
+       "nullable": false,
+       "default": 15,
+       "kind": "INT",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "a local passed to its port's kind",
@@ -7832,9 +6743,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -7847,7 +6757,21 @@
      }
     ]
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "iterations",
+       "nullable": false,
+       "default": 15,
+       "kind": "INT",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "a local passed to a port of another kind",
@@ -7917,9 +6841,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -7934,7 +6857,23 @@
    },
    "codes": [
     "local.arg_kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "name",
+       "nullable": false,
+       "default": "",
+       "kind": "STRING",
+       "persist": false
+      }
+     ]
+    },
+    "codes": [
+     "local.arg_kind"
+    ]
+   }
   },
   {
    "name": "a structure local of another identifier",
@@ -8004,9 +6943,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -8021,7 +6959,23 @@
    },
    "codes": [
     "local.arg_kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "picked",
+       "identifier": "@mikro/table",
+       "nullable": false,
+       "kind": "STRUCTURE",
+       "persist": false
+      }
+     ]
+    },
+    "codes": [
+     "local.arg_kind"
+    ]
+   }
   },
   {
    "name": "a structure local of the port's identifier",
@@ -8091,9 +7045,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -8106,7 +7059,21 @@
      }
     ]
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "picked",
+       "identifier": "@mikro/image",
+       "nullable": false,
+       "kind": "STRUCTURE",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "a toast on someone else's task",
@@ -8130,10 +7097,16 @@
        {
         "id": "Html[0]/Toast[0]/done[0]",
         "component": "done",
-        "props": [
+        "children": [
          {
-          "key": "text",
-          "static_value": "ok"
+          "id": "Html[0]/Toast[0]/done[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "static_value": "ok"
+           }
+          ]
          }
         ]
        }
@@ -8187,16 +7160,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "toast.task"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "toast.task"
+    ]
+   }
   },
   {
    "name": "persist is an ordinary prop",
@@ -8219,14 +7199,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "persist where a component offers no such prop",
@@ -8255,16 +7240,21 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "catalog.props"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "a raw palette colour",
@@ -8293,9 +7283,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
@@ -8304,7 +7293,17 @@
     "palette.raw_colour",
     "palette.raw_colour",
     "palette.raw_colour"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "palette.raw_colour",
+     "palette.raw_colour",
+     "palette.raw_colour"
+    ]
+   }
   },
   {
    "name": "an arbitrary colour",
@@ -8363,9 +7362,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
@@ -8374,7 +7372,17 @@
     "palette.raw_colour",
     "palette.raw_colour",
     "roots.not_in_kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "palette.raw_colour",
+     "palette.raw_colour",
+     "roots.not_in_kind"
+    ]
+   }
   },
   {
    "name": "roles are fine",
@@ -8403,14 +7411,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "a logo paints with pens",
@@ -8447,16 +7460,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "palette.logo_paint"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "palette.logo_paint"
+    ]
+   }
   },
   {
    "name": "a scene blok's root",
@@ -8473,16 +7493,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "context.root"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "context.root"
+    ]
+   }
   },
   {
    "name": "an html blok's root",
@@ -8499,16 +7526,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "context.root"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "context.root"
+    ]
+   }
   },
   {
    "name": "an action logo's root",
@@ -8541,16 +7575,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "context.root"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "context.root"
+    ]
+   }
   },
   {
    "name": "a space is an action's",
@@ -8573,16 +7614,21 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
-    "space.kind"
-   ]
+    "catalog.kind"
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "a custom blok has no run to place",
@@ -8655,17 +7701,57 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
-    "space.kind",
-    "space.kind"
-   ]
+    "catalog.kind",
+    "catalog.kind"
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "the language alone knows no kind of a component",
+   "source": "<Space room=\"room:lab\" />",
+   "tree": {
+    "id": "Space[0]",
+    "component": "Space",
+    "props": [
+     {
+      "key": "room",
+      "static_value": "room:lab"
+     }
+    ]
+   },
+   "scope": {
+    "kind": "agent",
+    "context": "SCENE",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalog": false,
+    "target": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "an assign blok",
@@ -8681,12 +7767,18 @@
        {
         "id": "Html[0]/Card[0]/Text[0]",
         "component": "Text",
-        "props": [
+        "children": [
          {
-          "key": "text",
-          "dynamic_value": {
-           "path": "args.slides"
-          }
+          "id": "Html[0]/Card[0]/Text[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "dynamic_value": {
+             "path": "args.slides"
+            }
+           }
+          ]
          }
         ]
        },
@@ -8703,10 +7795,18 @@
           "util_call": {
            "operation": "assign.start"
           }
-         },
+         }
+        ],
+        "children": [
          {
-          "key": "label",
-          "static_value": "Start"
+          "id": "Html[0]/Card[0]/Button[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "static_value": "Start"
+           }
+          ]
          }
         ]
        }
@@ -8762,14 +7862,19 @@
     "args": [
      "slides"
     ],
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "an assign blok places the run's dependencies",
@@ -8848,14 +7953,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "an assign blok has no task",
@@ -8867,12 +7977,18 @@
      {
       "id": "Html[0]/Text[0]",
       "component": "Text",
-      "props": [
+      "children": [
        {
-        "key": "text",
-        "dynamic_value": {
-         "path": "task.status"
-        }
+        "id": "Html[0]/Text[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "task.status"
+          }
+         }
+        ]
        }
       ]
      }
@@ -8886,16 +8002,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "roots.not_in_kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "roots.not_in_kind"
+    ]
+   }
   },
   {
    "name": "starting a run is an assign blok's",
@@ -8917,10 +8040,18 @@
         "util_call": {
          "operation": "assign.start"
         }
-       },
+       }
+      ],
+      "children": [
        {
-        "key": "label",
-        "static_value": "Start"
+        "id": "Html[0]/Button[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "Start"
+         }
+        ]
        }
       ]
      }
@@ -8934,17 +8065,24 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
-    "assign.kind",
+    "catalog.kind",
     "assign.kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "assign.kind"
+    ]
+   }
   },
   {
    "name": "an unknown component",
@@ -8967,16 +8105,21 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "catalog.unknown_component"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "an unknown prop",
@@ -9005,16 +8148,21 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "catalog.props"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "a component outside its context",
@@ -9037,9 +8185,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
@@ -9048,14 +8195,239 @@
     "catalog.props",
     "catalog.placement",
     "catalog.placement"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
-   "name": "a catalog the blok does not declare",
-   "source": "<Scene />",
+   "name": "text is a child of whatever takes children",
+   "source": "<Html><Card>hi <Badge>new</Badge> there</Card><div>plain</div></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/Card[0]",
+      "component": "Card",
+      "children": [
+       {
+        "id": "Html[0]/Card[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "hi "
+         }
+        ]
+       },
+       {
+        "id": "Html[0]/Card[0]/Badge[0]",
+        "component": "Badge",
+        "children": [
+         {
+          "id": "Html[0]/Card[0]/Badge[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "static_value": "new"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "Html[0]/Card[0]/#1",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": " there"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Html[0]/div[0]",
+      "component": "div",
+      "children": [
+       {
+        "id": "Html[0]/div[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "plain"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "agent",
+    "context": "HTML",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalog": true,
+    "target": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "text where neither text nor children go",
+   "source": "<Html><Separator>x</Separator></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/Separator[0]",
+      "component": "Separator",
+      "children": [
+       {
+        "id": "Html[0]/Separator[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "x"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "agent",
+    "context": "HTML",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalog": true,
+    "target": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [
+    "catalog.text"
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "text and its prop",
+   "source": "<Html><Button label=\"a\">b</Button></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/Button[0]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "label",
+        "static_value": "a"
+       }
+      ],
+      "children": [
+       {
+        "id": "Html[0]/Button[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "b"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "agent",
+    "context": "HTML",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalog": true,
+    "target": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [
+    "catalog.text"
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "text in a scene",
+   "source": "<Scene><Model src={self.assets.scope}>x</Model></Scene>",
    "tree": {
     "id": "Scene[0]",
-    "component": "Scene"
+    "component": "Scene",
+    "children": [
+     {
+      "id": "Scene[0]/Model[0]",
+      "component": "Model",
+      "props": [
+       {
+        "key": "src",
+        "dynamic_value": {
+         "path": "self.assets.scope"
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Scene[0]/Model[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "x"
+         }
+        ]
+       }
+      ]
+     }
+    ]
    },
    "scope": {
     "kind": "agent",
@@ -9065,18 +8437,1067 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [
-     "ui@1"
-    ],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
-    "catalog.undeclared"
-   ]
+    "catalog.placement"
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "text in a logo",
+   "source": "<AgentLogo><G>x</G></AgentLogo>",
+   "tree": {
+    "id": "AgentLogo[0]",
+    "component": "AgentLogo",
+    "children": [
+     {
+      "id": "AgentLogo[0]/G[0]",
+      "component": "G",
+      "children": [
+       {
+        "id": "AgentLogo[0]/G[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "x"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "agent",
+    "context": "LOGO",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalog": true,
+    "target": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [
+    "catalog.placement"
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "the language alone takes text anywhere",
+   "source": "<Scene><Model>x</Model><Foo>y</Foo></Scene>",
+   "tree": {
+    "id": "Scene[0]",
+    "component": "Scene",
+    "children": [
+     {
+      "id": "Scene[0]/Model[0]",
+      "component": "Model",
+      "children": [
+       {
+        "id": "Scene[0]/Model[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "x"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Scene[0]/Foo[0]",
+      "component": "Foo",
+      "children": [
+       {
+        "id": "Scene[0]/Foo[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "y"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "agent",
+    "context": "SCENE",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalog": false,
+    "target": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "a component of a catalog the blok is not written for",
+   "source": "<Html><MikroSceneProbe /></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/MikroSceneProbe[0]",
+      "component": "MikroSceneProbe"
+     }
+    ]
+   },
+   "scope": {
+    "kind": "agent",
+    "context": "HTML",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalog": true,
+    "target": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [
+    "catalog.target"
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "a blok written for the Orkestrator's catalog",
+   "source": "<Html><MikroScene value={args.scene}><MikroSceneViewport /></MikroScene></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/MikroScene[0]",
+      "component": "MikroScene",
+      "props": [
+       {
+        "key": "value",
+        "dynamic_value": {
+         "path": "args.scene"
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Html[0]/MikroScene[0]/MikroSceneViewport[0]",
+        "component": "MikroSceneViewport"
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "agent",
+    "context": "HTML",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalog": true,
+    "target": "https://arkitekt.live/catalogs/orkestrator/v1"
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "the base catalog is under every other",
+   "source": "<Html><Card><MikroSceneProbe /></Card></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/Card[0]",
+      "component": "Card",
+      "children": [
+       {
+        "id": "Html[0]/Card[0]/MikroSceneProbe[0]",
+        "component": "MikroSceneProbe"
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "agent",
+    "context": "HTML",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalog": true,
+    "target": "https://arkitekt.live/catalogs/orkestrator/v1"
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [
+    "catalog.placement"
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "an assign blok reads the run it prepares",
+   "source": "<Html><arg key=\"slides\" /><args omit={[\"slides\"]} given=\"show\" /><deps /><Button disabled={!assign.ready} onClick={assign.start()}>{assign.blocked ?? \"Start\"}</Button></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/arg[0]",
+      "component": "arg",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "slides"
+       }
+      ]
+     },
+     {
+      "id": "Html[0]/args[0]",
+      "component": "args",
+      "props": [
+       {
+        "key": "omit",
+        "static_value": [
+         "slides"
+        ]
+       },
+       {
+        "key": "given",
+        "static_value": "show"
+       }
+      ]
+     },
+     {
+      "id": "Html[0]/deps[0]",
+      "component": "deps"
+     },
+     {
+      "id": "Html[0]/Button[0]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "disabled",
+        "util_call": {
+         "operation": "logic.negate",
+         "arguments": [
+          {
+           "key": "a",
+           "value_path": "assign.ready"
+          }
+         ]
+        }
+       },
+       {
+        "key": "onClick",
+        "util_call": {
+         "operation": "assign.start"
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Html[0]/Button[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "util_call": {
+           "operation": "logic.coalesce",
+           "arguments": [
+            {
+             "key": "values",
+             "value_list": [
+              {
+               "value_path": "assign.blocked"
+              },
+              {
+               "value_literal": "Start"
+              }
+             ]
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "assign",
+    "context": "HTML",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": [
+     "slides"
+    ],
+    "catalog": true,
+    "target": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "what the caller gave is told per argument",
+   "source": "<Html><if when={assign.given.slides}><Text>{args.slides}</Text></if><Text>{assign.given.nope}</Text><Text>{assign.nope}</Text></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/if[0]",
+      "component": "if",
+      "props": [
+       {
+        "key": "when",
+        "dynamic_value": {
+         "path": "assign.given.slides"
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Html[0]/if[0]/Text[0]",
+        "component": "Text",
+        "children": [
+         {
+          "id": "Html[0]/if[0]/Text[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "dynamic_value": {
+             "path": "args.slides"
+            }
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Html[0]/Text[0]",
+      "component": "Text",
+      "children": [
+       {
+        "id": "Html[0]/Text[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "assign.given.nope"
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Html[0]/Text[1]",
+      "component": "Text",
+      "children": [
+       {
+        "id": "Html[0]/Text[1]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "assign.nope"
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "assign",
+    "context": "HTML",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": [
+     "slides"
+    ],
+    "catalog": true,
+    "target": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [
+    "args.unknown",
+    "path.unknown"
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "args.unknown",
+     "path.unknown"
+    ]
+   }
+  },
+  {
+   "name": "assign is an assign blok's",
+   "source": "<Html><Text>{assign.ready}</Text></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/Text[0]",
+      "component": "Text",
+      "children": [
+       {
+        "id": "Html[0]/Text[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "assign.ready"
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "action",
+    "context": "HTML",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalog": true,
+    "target": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [
+    "roots.not_in_kind"
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "roots.not_in_kind"
+    ]
+   }
+  },
+  {
+   "name": "assign is reserved",
+   "source": "<Html><Text /></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/Text[0]",
+      "component": "Text"
+     }
+    ]
+   },
+   "scope": {
+    "kind": "agent",
+    "context": "HTML",
+    "dependencies": [],
+    "locals": [
+     {
+      "key": "assign",
+      "kind": "STRING"
+     }
+    ],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalog": true,
+    "target": null
+   },
+   "resolved": {
+    "locals": [
+     {
+      "key": "assign",
+      "nullable": false,
+      "kind": "STRING",
+      "persist": false
+     }
+    ]
+   },
+   "codes": [
+    "roots.reserved"
+   ],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "assign",
+       "nullable": false,
+       "kind": "STRING",
+       "persist": false
+      }
+     ]
+    },
+    "codes": [
+     "roots.reserved"
+    ]
+   }
+  },
+  {
+   "name": "a run's blok places the host's parts",
+   "source": "<Html chrome=\"none\"><status /><ask /><returns only={[\"image\"]} /><timeline /><Button disabled={!task.can.cancel} onClick={task.cancel()}>Stop</Button><Text>{task.paused ? \"Paused\" : fmt.duration(task.duration)}</Text></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "props": [
+     {
+      "key": "chrome",
+      "static_value": "none"
+     }
+    ],
+    "children": [
+     {
+      "id": "Html[0]/status[0]",
+      "component": "status"
+     },
+     {
+      "id": "Html[0]/ask[0]",
+      "component": "ask"
+     },
+     {
+      "id": "Html[0]/returns[0]",
+      "component": "returns",
+      "props": [
+       {
+        "key": "only",
+        "static_value": [
+         "image"
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Html[0]/timeline[0]",
+      "component": "timeline"
+     },
+     {
+      "id": "Html[0]/Button[0]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "disabled",
+        "util_call": {
+         "operation": "logic.negate",
+         "arguments": [
+          {
+           "key": "a",
+           "value_path": "task.can.cancel"
+          }
+         ]
+        }
+       },
+       {
+        "key": "onClick",
+        "util_call": {
+         "operation": "task.cancel"
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Html[0]/Button[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "Stop"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Html[0]/Text[0]",
+      "component": "Text",
+      "children": [
+       {
+        "id": "Html[0]/Text[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "util_call": {
+           "operation": "logic.choose",
+           "arguments": [
+            {
+             "key": "cond",
+             "value_path": "task.paused"
+            },
+            {
+             "key": "then",
+             "value_literal": "Paused"
+            },
+            {
+             "key": "otherwise",
+             "util_call": {
+              "operation": "fmt.duration",
+              "arguments": [
+               {
+                "key": "seconds",
+                "value_path": "task.duration"
+               }
+              ]
+             }
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "action",
+    "context": "HTML",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalog": true,
+    "target": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "a task operation needs a task",
+   "source": "<Html><Button onClick={task.pause()} /></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/Button[0]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "onClick",
+        "util_call": {
+         "operation": "task.pause"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "agent",
+    "context": "HTML",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalog": true,
+    "target": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [
+    "roots.not_in_kind"
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "roots.not_in_kind"
+    ]
+   }
+  },
+  {
+   "name": "no chrome and no ask",
+   "source": "<Html chrome=\"none\"><status /></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "props": [
+     {
+      "key": "chrome",
+      "static_value": "none"
+     }
+    ],
+    "children": [
+     {
+      "id": "Html[0]/status[0]",
+      "component": "status"
+     }
+    ]
+   },
+   "scope": {
+    "kind": "action",
+    "context": "HTML",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalog": true,
+    "target": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [
+    "chrome.no_ask"
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "chrome.no_ask"
+    ]
+   }
+  },
+  {
+   "name": "a host part claims its slot even where it does not show",
+   "source": "<Html><if when={task.running}><timeline /></if></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/if[0]",
+      "component": "if",
+      "props": [
+       {
+        "key": "when",
+        "dynamic_value": {
+         "path": "task.running"
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Html[0]/if[0]/timeline[0]",
+        "component": "timeline"
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "action",
+    "context": "HTML",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalog": true,
+    "target": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [
+    "part.conditional"
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "part.conditional"
+    ]
+   }
+  },
+  {
+   "name": "a host part outside its kind",
+   "source": "<Html><returns /></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/returns[0]",
+      "component": "returns"
+     }
+    ]
+   },
+   "scope": {
+    "kind": "agent",
+    "context": "HTML",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalog": true,
+    "target": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [
+    "catalog.kind"
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "an agent says whether it is connected",
+   "source": "<Html><Text>{deps.robot.connected ? \"Online\" : \"Offline\"}</Text></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/Text[0]",
+      "component": "Text",
+      "children": [
+       {
+        "id": "Html[0]/Text[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "util_call": {
+           "operation": "logic.choose",
+           "arguments": [
+            {
+             "key": "cond",
+             "value_path": "deps.robot.connected"
+            },
+            {
+             "key": "then",
+             "value_literal": "Online"
+            },
+            {
+             "key": "otherwise",
+             "value_literal": "Offline"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "custom",
+    "context": "HTML",
+    "dependencies": [
+     {
+      "key": "robot",
+      "action_dependencies": [
+       {
+        "key": "move_to",
+        "demand": {
+         "arg_matches": [
+          {
+           "key": "position"
+          }
+         ],
+         "return_matches": [
+          {
+           "key": "arrived"
+          }
+         ]
+        }
+       }
+      ],
+      "state_dependencies": [
+       {
+        "key": "arm",
+        "demand": {
+         "matches": [
+          {
+           "key": "joints",
+           "kind": "LIST"
+          },
+          {
+           "key": "mode",
+           "kind": "STRING"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalog": true,
+    "target": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "classes outside the portable subset",
+   "source": "<Html><Card className=\"before:block float-left [&>*]:p-2 grid-cols-3 translate-x-[3px] w-[12rem] -mt-[4px] space-y-2 hover:bg-muted md:flex-row dark:bg-card cursor-pointer w-48 gap-2\" /></Html>",
+   "tree": {
+    "id": "Html[0]",
+    "component": "Html",
+    "children": [
+     {
+      "id": "Html[0]/Card[0]",
+      "component": "Card",
+      "props": [
+       {
+        "key": "className",
+        "static_value": "before:block float-left [&>*]:p-2 grid-cols-3 translate-x-[3px] w-[12rem] -mt-[4px] space-y-2 hover:bg-muted md:flex-row dark:bg-card cursor-pointer w-48 gap-2"
+       }
+      ]
+     }
+    ]
+   },
+   "scope": {
+    "kind": "agent",
+    "context": "HTML",
+    "dependencies": [],
+    "locals": [],
+    "queries": [],
+    "subscriptions": [],
+    "args": null,
+    "catalog": true,
+    "target": null
+   },
+   "resolved": {
+    "locals": []
+   },
+   "codes": [
+    "class.not_portable",
+    "class.not_portable",
+    "class.not_portable",
+    "class.not_portable",
+    "class.not_portable"
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "class.not_portable",
+     "class.not_portable",
+     "class.not_portable",
+     "class.not_portable",
+     "class.not_portable"
+    ]
+   }
   },
   {
    "name": "an unknown function in a namespace",
@@ -9113,9 +9534,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
@@ -9123,7 +9543,15 @@
    "codes": [
     "expr.unknown_function",
     "roots.unknown"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "roots.unknown"
+    ]
+   }
   },
   {
    "name": "an action blok",
@@ -9210,14 +9638,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "a placed key that is no dependency",
@@ -9303,9 +9736,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
@@ -9313,7 +9745,16 @@
    "codes": [
     "deps.unknown",
     "deps.unknown"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "deps.unknown",
+     "deps.unknown"
+    ]
+   }
   },
   {
    "name": "task.answer in an agent blok",
@@ -9350,16 +9791,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "roots.not_in_kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "roots.not_in_kind"
+    ]
+   }
   },
   {
    "name": "a task blok answers",
@@ -9401,14 +9849,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "a \"@...\" string is a literal",
@@ -9437,14 +9890,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "a string on a bool prop",
@@ -9473,16 +9931,21 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "props.literal_type"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "a string on a number prop",
@@ -9515,16 +9978,21 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "props.literal_type"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "typed literals",
@@ -9577,14 +10045,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "a scene colour that is no role",
@@ -9691,9 +10164,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
@@ -9701,7 +10173,13 @@
    "codes": [
     "palette.scene_colour",
     "palette.scene_colour"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "an uninferrable local is ANY",
@@ -9736,9 +10214,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -9750,7 +10227,20 @@
      }
     ]
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "x",
+       "nullable": false,
+       "kind": "ANY",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "a local takes its kind from its default",
@@ -9786,9 +10276,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -9801,7 +10290,21 @@
      }
     ]
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "n",
+       "nullable": false,
+       "default": 3,
+       "kind": "INT",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "a local takes its task argument's port",
@@ -9869,9 +10372,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -9883,7 +10385,20 @@
      }
     ]
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "p",
+       "nullable": false,
+       "kind": "INT",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "a structure local takes its argument's identifier",
@@ -9951,9 +10466,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -9966,7 +10480,21 @@
      }
     ]
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "picked",
+       "identifier": "@mikro/image",
+       "nullable": false,
+       "kind": "STRUCTURE",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "a local takes its control's bind kind",
@@ -10001,9 +10529,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -10015,7 +10542,20 @@
      }
     ]
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "on",
+       "nullable": false,
+       "kind": "ANY",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "what a local says wins over what it infers",
@@ -10052,9 +10592,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -10067,7 +10606,21 @@
      }
     ]
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "on",
+       "description": "Lights",
+       "nullable": true,
+       "kind": "ANY",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "an inferred port keeps the local's choices",
@@ -10145,9 +10698,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -10169,7 +10721,30 @@
      }
     ]
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "p",
+       "nullable": false,
+       "choices": [
+        {
+         "value": 1,
+         "label": "one"
+        },
+        {
+         "value": 2,
+         "label": "two"
+        }
+       ],
+       "kind": "INT",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "a task argument beats a bind",
@@ -10255,9 +10830,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -10271,7 +10845,20 @@
    },
    "codes": [
     "local.bind_kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "p",
+       "nullable": false,
+       "kind": "INT",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "the first task argument wins",
@@ -10364,9 +10951,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -10380,7 +10966,22 @@
    },
    "codes": [
     "local.arg_kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "p",
+       "nullable": false,
+       "kind": "FLOAT",
+       "persist": false
+      }
+     ]
+    },
+    "codes": [
+     "local.arg_kind"
+    ]
+   }
   },
   {
    "name": "a default beats a use",
@@ -10416,9 +11017,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -10433,7 +11033,21 @@
    },
    "codes": [
     "local.bind_kind"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "name",
+       "nullable": false,
+       "default": "a",
+       "kind": "STRING",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "a list control tells too little",
@@ -10468,9 +11082,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -10482,7 +11095,20 @@
      }
     ]
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "x",
+       "nullable": false,
+       "kind": "ANY",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "an untyped argument tells nothing",
@@ -10562,9 +11188,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -10576,7 +11201,20 @@
      }
     ]
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "p",
+       "nullable": false,
+       "kind": "ANY",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "a given ANY is kept",
@@ -10612,9 +11250,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -10626,7 +11263,20 @@
      }
     ]
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "x",
+       "nullable": false,
+       "kind": "ANY",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "an ANY local skips the argument check",
@@ -10695,9 +11345,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -10709,7 +11358,20 @@
      }
     ]
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "x",
+       "nullable": false,
+       "kind": "ANY",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "a path below an ANY local is taken as written",
@@ -10745,9 +11407,8 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": [
@@ -10759,7 +11420,20 @@
      }
     ]
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": [
+      {
+       "key": "x",
+       "nullable": false,
+       "kind": "ANY",
+       "persist": false
+      }
+     ]
+    },
+    "codes": []
+   }
   },
   {
    "name": "a foreach of objects without key",
@@ -10788,12 +11462,18 @@
        {
         "id": "Html[0]/foreach[0]/Text[0]",
         "component": "Text",
-        "props": [
+        "children": [
          {
-          "key": "text",
-          "dynamic_value": {
-           "path": "s.id"
-          }
+          "id": "Html[0]/foreach[0]/Text[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "dynamic_value": {
+             "path": "s.id"
+            }
+           }
+          ]
          }
         ]
        }
@@ -10848,16 +11528,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "foreach.position_key"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "foreach.position_key"
+    ]
+   }
   },
   {
    "name": "a keyed foreach of objects",
@@ -10892,12 +11579,18 @@
        {
         "id": "Html[0]/foreach[0]/Text[0]",
         "component": "Text",
-        "props": [
+        "children": [
          {
-          "key": "text",
-          "dynamic_value": {
-           "path": "s.id"
-          }
+          "id": "Html[0]/foreach[0]/Text[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "dynamic_value": {
+             "path": "s.id"
+            }
+           }
+          ]
          }
         ]
        }
@@ -10952,14 +11645,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "a foreach of scalars without key",
@@ -10988,12 +11686,18 @@
        {
         "id": "Html[0]/foreach[0]/Text[0]",
         "component": "Text",
-        "props": [
+        "children": [
          {
-          "key": "text",
-          "dynamic_value": {
-           "path": "n"
-          }
+          "id": "Html[0]/foreach[0]/Text[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "dynamic_value": {
+             "path": "n"
+            }
+           }
+          ]
          }
         ]
        }
@@ -11048,14 +11752,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "a foreach of literal objects without key",
@@ -11102,16 +11811,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "foreach.position_key"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "foreach.position_key"
+    ]
+   }
   },
   {
    "name": "a foreach of unknown items without key",
@@ -11153,14 +11869,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "an unnamed return of a record",
@@ -11228,16 +11949,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "returns.unnamed"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "returns.unnamed"
+    ]
+   }
   },
   {
    "name": "an unnamed return of a latest task",
@@ -11285,16 +12013,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "returns.unnamed"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "returns.unnamed"
+    ]
+   }
   },
   {
    "name": "an unnamed return of the task",
@@ -11325,16 +12060,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "returns.unnamed"
-   ]
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "returns.unnamed"
+    ]
+   }
   },
   {
    "name": "a named return",
@@ -11403,14 +12145,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "coalesce reads its operands",
@@ -11454,82 +12201,23 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
    "codes": [
     "roots.unknown"
-   ]
-  },
-  {
-   "name": "a module shadows a standard component",
-   "source": "<Html><Slider bind={label} /></Html>",
-   "tree": {
-    "id": "Html[0]",
-    "component": "Html",
-    "children": [
-     {
-      "id": "Html[0]/Slider[0]",
-      "component": "Slider",
-      "props": [
-       {
-        "key": "bind",
-        "dynamic_value": {
-         "path": "label"
-        }
-       }
-      ]
-     }
+   ],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": [
+     "roots.unknown"
     ]
-   },
-   "scope": {
-    "kind": "agent",
-    "context": "HTML",
-    "dependencies": [],
-    "locals": [
-     {
-      "key": "label",
-      "kind": "STRING"
-     }
-    ],
-    "queries": [],
-    "subscriptions": [],
-    "args": null,
-    "catalogs": [],
-    "catalog": true,
-    "module": {
-     "name": "mine",
-     "components": [
-      {
-       "name": "Slider",
-       "context": "HTML",
-       "props": [
-        {
-         "key": "bind",
-         "kind": "STRING"
-        }
-       ]
-      }
-     ]
-    }
-   },
-   "resolved": {
-    "locals": [
-     {
-      "key": "label",
-      "nullable": false,
-      "kind": "STRING",
-      "persist": false
-     }
-    ]
-   },
-   "codes": [
-    "catalog.shadow"
-   ]
+   }
   },
   {
    "name": "spectral roles are scene colours",
@@ -11636,14 +12324,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "spectral roles are classes",
@@ -11672,14 +12365,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "spectral pens paint a logo",
@@ -11716,14 +12414,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   },
   {
    "name": "scene colours are roles",
@@ -11830,14 +12533,19 @@
     "queries": [],
     "subscriptions": [],
     "args": null,
-    "catalogs": [],
     "catalog": true,
-    "module": null
+    "target": null
    },
    "resolved": {
     "locals": []
    },
-   "codes": []
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": []
+    },
+    "codes": []
+   }
   }
  ]
 }

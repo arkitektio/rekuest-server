@@ -167,9 +167,20 @@ pub struct Vocabulary {
     pub explicit_id: Regex,
     pub theme: Theme,
     pub limits: Limits,
-    pub base_version: i64,
-    /// The standard catalogs and their versions, in the file's order.
-    pub catalogs: Vec<(String, i64)>,
+    /// How far the language has grown within `vocab`: it only ever gains.
+    pub minor: i64,
+    /// What a published catalog's id looks like: the https address it is published at.
+    pub catalog_id: Regex,
+    /// What the name of a catalog registered in an organization looks like.
+    pub catalog_name: Regex,
+    /// The components that place a part of the host's own interface (`args`, `timeline`).
+    pub host_parts: Vec<String>,
+    /// Class variants outside the portable subset (`class.not_portable`).
+    pub unportable_variants: HashSet<String>,
+    /// Utility prefixes outside the portable subset.
+    pub unportable_utilities: Vec<String>,
+    /// The utilities whose value may be written in brackets (`w-[12rem]`) and stay portable.
+    pub arbitrary_values: HashSet<String>,
     /// Per catalog kind of a `bind` prop, the port kinds of the locals it writes.
     pub bind_kinds: BTreeMap<String, HashSet<String>>,
     /// Per port kind of a local, the kinds of an action's arg port that take it whole.
@@ -198,13 +209,18 @@ impl Vocabulary {
         self.reserved.contains(name)
     }
 
-    /// The version a standard catalog is at, or none.
-    pub fn catalog_version(&self, name: &str) -> Option<i64> {
-        self.catalogs
-            .iter()
-            .find(|(m, _)| m == name)
-            .map(|(_, v)| *v)
+    /// Whether `target` can name a catalog at all: a published one's address, or the name of
+    /// one registered in an organization.
+    pub fn is_catalog_target(&self, target: &str) -> bool {
+        full_match(&self.catalog_id, target) || full_match(&self.catalog_name, target)
     }
+}
+
+/// Whether `pattern` matches the whole of `text` (the spec's patterns are anchored, as Python's `fullmatch` reads them).
+fn full_match(pattern: &Regex, text: &str) -> bool {
+    pattern
+        .find(text)
+        .is_some_and(|found| found.start() == 0 && found.end() == text.len())
 }
 
 type Loaded<T> = Result<T, String>;
@@ -393,15 +409,16 @@ pub fn parse_vocabulary(raw: &Value) -> Loaded<Vocabulary> {
             continue;
         }
         let namespace = name.split('.').next().unwrap_or_default();
-        if !namespaces.iter().any(|n| n == namespace)
-            && name != "task.answer"
-            && name != "assign.start"
-        {
+        let parsed = function(name, item)?;
+        // A root's own operations (task.answer, assign.start) are effects named after the root.
+        let in_namespace = namespaces.iter().any(|n| n == namespace);
+        let of_a_root = parsed.effect && data_roots.iter().any(|root| root == namespace);
+        if !in_namespace && !of_a_root {
             return Err(format!(
                 "vocabulary.json: function {name} is in no function namespace"
             ));
         }
-        functions.insert(name.clone(), function(name, item)?);
+        functions.insert(name.clone(), parsed);
     }
 
     let operators = object(top.get("operators"), "operators")?
@@ -418,7 +435,12 @@ pub fn parse_vocabulary(raw: &Value) -> Loaded<Vocabulary> {
     let hints = object(theme.get("palette_role_hints"), "theme.palette_role_hints")?;
     let limits = object(top.get("limits"), "limits")?;
     let catalogs = object(top.get("catalogs"), "catalogs")?;
-    let standard = object(catalogs.get("standard"), "catalogs.standard")?;
+    let host_parts = object(catalogs.get("host_parts"), "catalogs.host_parts")?;
+    let classes = object(top.get("classes"), "classes")?;
+    let pattern = |key: &str| -> Loaded<Regex> {
+        Regex::new(&string(catalogs.get(key), &format!("catalogs.{key}"))?)
+            .map_err(|e| format!("vocabulary.json: catalogs.{key}: {e}"))
+    };
     let local_rules = object(top.get("locals"), "locals")?;
     let kind_table = |name: &str| -> Loaded<BTreeMap<String, HashSet<String>>> {
         object(local_rules.get(name), &format!("locals.{name}"))?
@@ -512,16 +534,20 @@ pub fn parse_vocabulary(raw: &Value) -> Loaded<Vocabulary> {
                 "limits.logo_path_data_props",
             )?,
         },
-        base_version: integer(catalogs.get("base"), "catalogs.base")?,
-        catalogs: standard
-            .iter()
-            .map(|(name, version)| {
-                Ok((
-                    name.clone(),
-                    integer(Some(version), &format!("catalogs.standard.{name}"))?,
-                ))
-            })
-            .collect::<Loaded<_>>()?,
+        minor: match top.get("minor") {
+            Some(minor) => integer(Some(minor), "minor")?,
+            None => 0,
+        },
+        catalog_id: pattern("id")?,
+        catalog_name: pattern("name")?,
+        host_parts: strings(host_parts.get("parts"), "catalogs.host_parts.parts")?,
+        unportable_variants: strings(classes.get("variants"), "classes.variants")?
+            .into_iter()
+            .collect(),
+        unportable_utilities: strings(classes.get("utilities"), "classes.utilities")?,
+        arbitrary_values: strings(classes.get("arbitrary_values"), "classes.arbitrary_values")?
+            .into_iter()
+            .collect(),
         bind_kinds: kind_table("bind_kinds")?,
         arg_kinds: kind_table("arg_kinds")?,
         diagnostics,

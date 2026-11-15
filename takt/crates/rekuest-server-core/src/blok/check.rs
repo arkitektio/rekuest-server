@@ -19,14 +19,13 @@ use serde_json::Value;
 
 use super::expr::s;
 use super::infer::{resolve_scope, ArgPorts};
-use super::view::BlokView;
-use super::vocabulary::{vocabulary, Finding, Function, Kind, RecordField, Vocabulary};
-use crate::enums::{CatalogValueKind, ComponentContext, PortKind};
+use super::vocabulary::{vocabulary, Finding, Kind, RecordField, Vocabulary};
+use crate::enums::PortKind;
 use crate::inputs::{
     ActionArgumentInputModel, AgentDependencyInputModel, AgentProbeInputModel, ArgPortInputModel,
     BlokDemoInputModel, BlokLocalInputModel, BlokQueryInputModel, BlokSubscriptionInputModel,
-    CatalogComponentInputModel, ComponentNodeInputModel, ComponentPropInputModel,
-    PortMatchInputModel, StateDependencyInputModel, UtilCallInputModel,
+    ComponentNodeInputModel, ComponentPropInputModel, PortMatchInputModel,
+    StateDependencyInputModel, UtilCallInputModel,
 };
 use crate::pyjson::repr;
 
@@ -36,8 +35,17 @@ const DEPENDENCY_KEY_PROPS: [(&str, &str); 2] = [("Placed", "dep"), ("Route", "t
 /// The kinds that have a run's dependencies: an action's own bloks, for a run and for starting one.
 const RUN_KINDS: [&str; 2] = ["action", "assign"];
 const ASSIGN_KIND: &str = "assign";
-/// The form of the run's arguments, placed by an assign blok.
-const ARGS_COMPONENT: &str = "args";
+/// The field of `assign` that holds one flag per argument the caller decided.
+const GIVEN_FIELD: &str = "given";
+/// The one field of an agent that is no string: whether it is connected right now.
+const CONNECTED_FIELD: &str = "connected";
+const ASK_COMPONENT: &str = "ask";
+const CHROME_PROP: &str = "chrome";
+const CHROME_NONE: &str = "none";
+/// The language's elements whose children do not always show: a host part inside one still claims its slot.
+const CONDITIONAL_COMPONENTS: [&str; 9] = [
+    "if", "else", "match", "case", "default", "foreach", "suspense", "fallback", "error",
+];
 /// Starts the run an assign blok prepares.
 const START_EFFECT: &str = "assign.start";
 
@@ -103,9 +111,6 @@ pub struct BlokScope {
     pub subscriptions: Vec<BlokSubscriptionInputModel>,
     /// The keys `args.<key>` may read; none reads any.
     pub args: Option<Vec<String>>,
-    /// The catalogs it declares (`ui@1`); a component of a standard catalog it does not
-    /// declare is a finding. None declared: not checked.
-    pub catalogs: Vec<String>,
     pub demo: Option<BlokDemoInputModel>,
     /// The assets `self.assets.<name>` may name; none names any.
     pub assets: Option<HashSet<String>>,
@@ -121,7 +126,6 @@ impl Default for BlokScope {
             queries: vec![],
             subscriptions: vec![],
             args: None,
-            catalogs: vec![],
             demo: None,
             assets: None,
         }
@@ -485,7 +489,6 @@ type Scope = HashMap<String, Shape>;
 
 struct Checker<'a> {
     scope: &'a BlokScope,
-    view: Option<&'a BlokView>,
     vocabulary: &'static Vocabulary,
     kind: Kind,
     findings: Vec<Finding>,
@@ -494,8 +497,11 @@ struct Checker<'a> {
     queries: HashMap<&'a str, &'a BlokQueryInputModel>,
     subscriptions: HashSet<&'a str>,
     bound_locals: HashSet<String>,
-    shadowed: HashSet<String>,
     into: HashSet<String>,
+    /// Whether the tree places an `<ask>`.
+    asks: bool,
+    /// The id of the root that says `chrome="none"`, when it does.
+    chromeless: Option<String>,
 }
 
 impl<'a> Checker<'a> {
@@ -704,6 +710,11 @@ impl<'a> Checker<'a> {
                 );
             }
         }
+        if let Some(root) = self.chromeless.clone() {
+            if self.kind.roots.contains("task") && !self.asks {
+                self.add("chrome.no_ask", Some(&root), &[]);
+            }
+        }
     }
 
     // -- the walk
@@ -828,35 +839,43 @@ impl<'a> Checker<'a> {
         node: &ComponentNodeInputModel,
         ancestors: &[&ComponentNodeInputModel],
     ) {
-        let spec = self.view.and_then(|view| view.component(&node.component));
-        if let Some(view) = self.view {
-            if spec.is_none() && view.complete {
-                let fields = [
-                    ("component", s(node.component.clone())),
-                    ("catalogs", s(view.label.clone())),
-                ];
-                self.add("catalog.unknown_component", Some(&node.id), &fields);
-            }
-        }
-        if let Some(spec) = spec {
-            self.check_catalog(node, spec, ancestors);
-        }
-        if let Some(shadow) = self.view.and_then(|view| view.shadows.get(&node.component)) {
-            if self.shadowed.insert(node.component.clone()) {
-                let fields = [
-                    ("component", s(node.component.clone())),
-                    ("catalog", s(shadow.catalog.clone())),
-                    ("module", s(shadow.module.clone())),
-                    ("winner", s(shadow.winner.clone())),
-                ];
-                self.add("catalog.shadow", Some(&node.id), &fields);
-            }
-        }
-        if node.component == ARGS_COMPONENT && self.scope.kind != ASSIGN_KIND {
-            self.assign_kind(node, "<args>");
-        }
+        self.check_host_part(node, ancestors);
         for prop in node.props.iter().flatten() {
-            self.check_prop(node, prop, spec);
+            self.check_prop(node, prop);
+        }
+    }
+
+    /// What the language itself says of the host's parts, whatever catalog draws them: a part
+    /// placed anywhere claims its slot, and a root without chrome leaves the asks to the blok.
+    fn check_host_part(
+        &mut self,
+        node: &ComponentNodeInputModel,
+        ancestors: &[&ComponentNodeInputModel],
+    ) {
+        if node.component == ASK_COMPONENT {
+            self.asks = true;
+        }
+        if ancestors.is_empty()
+            && node.props.iter().flatten().any(|prop| {
+                prop.key == CHROME_PROP
+                    && prop.static_value.as_ref().and_then(Value::as_str) == Some(CHROME_NONE)
+            })
+        {
+            self.chromeless = Some(node.id.clone());
+        }
+        if self.vocabulary.host_parts.contains(&node.component) {
+            let inside = ancestors
+                .iter()
+                .rev()
+                .find(|ancestor| CONDITIONAL_COMPONENTS.contains(&ancestor.component.as_str()))
+                .map(|ancestor| ancestor.component.clone());
+            if let Some(inside) = inside {
+                let fields = [
+                    ("component", s(node.component.clone())),
+                    ("inside", s(inside)),
+                ];
+                self.add("part.conditional", Some(&node.id), &fields);
+            }
         }
     }
 
@@ -869,150 +888,14 @@ impl<'a> Checker<'a> {
         self.add("assign.kind", Some(&node.id), &fields);
     }
 
-    fn check_catalog(
-        &mut self,
-        node: &ComponentNodeInputModel,
-        spec: &CatalogComponentInputModel,
-        ancestors: &[&ComponentNodeInputModel],
-    ) {
-        let Some(view) = self.view else { return };
-        let component = || s(node.component.clone());
-        if node.children.as_ref().is_some_and(|c| !c.is_empty()) && !spec.accepts_children {
-            self.add(
-                "catalog.children",
-                Some(&node.id),
-                &[("component", component())],
-            );
-        }
-        let present: HashSet<&str> = node
-            .props
-            .iter()
-            .flatten()
-            .map(|p| p.key.as_str())
-            .collect();
-        let mut unknown: Vec<&str> = present
-            .iter()
-            .copied()
-            .filter(|key| *key != WHEN_PROP && !spec.props.iter().any(|p| p.key == *key))
-            .collect();
-        unknown.sort_unstable();
-        if !unknown.is_empty() {
-            let detail = format!("has no props {}", repr(&Value::from(unknown)));
-            self.add(
-                "catalog.props",
-                Some(&node.id),
-                &[("component", component()), ("detail", s(detail))],
-            );
-        }
-        let mut missing: Vec<&str> = spec
-            .props
-            .iter()
-            .filter(|p| p.required && !present.contains(p.key.as_str()))
-            .map(|p| p.key.as_str())
-            .collect();
-        missing.sort_unstable();
-        if !missing.is_empty() {
-            let detail = format!("requires props {}", repr(&Value::from(missing)));
-            self.add(
-                "catalog.props",
-                Some(&node.id),
-                &[("component", component()), ("detail", s(detail))],
-            );
-        }
-        let mut context = "HTML".to_owned();
-        for ancestor in ancestors {
-            if let Some(above) = view.component(&ancestor.component) {
-                if !above.inherits_context {
-                    context = above
-                        .children_context
-                        .unwrap_or(above.context)
-                        .value()
-                        .to_owned();
-                }
-            }
-        }
-        if !spec.inherits_context && spec.context.value() != context {
-            let detail = format!(
-                "is a {} component, not one of the {} context",
-                spec.context.value().to_lowercase(),
-                context.to_lowercase()
-            );
-            self.add(
-                "catalog.placement",
-                Some(&node.id),
-                &[("component", component()), ("detail", s(detail))],
-            );
-        }
-        let names: HashSet<&str> = ancestors.iter().map(|a| a.component.as_str()).collect();
-        if !spec.downstream_of.is_empty()
-            && !spec
-                .downstream_of
-                .iter()
-                .any(|d| names.contains(d.as_str()))
-        {
-            let mut required: Vec<&str> = spec.downstream_of.iter().map(String::as_str).collect();
-            required.sort_unstable();
-            let detail = format!("must be inside one of {}", repr(&Value::from(required)));
-            self.add(
-                "catalog.placement",
-                Some(&node.id),
-                &[("component", component()), ("detail", s(detail))],
-            );
-        }
-        let mut forbidden: Vec<&str> = spec
-            .not_downstream_of
-            .iter()
-            .map(String::as_str)
-            .filter(|d| names.contains(d))
-            .collect();
-        forbidden.sort_unstable();
-        forbidden.dedup();
-        if !forbidden.is_empty() {
-            let detail = format!("must not be inside {}", repr(&Value::from(forbidden)));
-            self.add(
-                "catalog.placement",
-                Some(&node.id),
-                &[("component", component()), ("detail", s(detail))],
-            );
-        }
-        // Only the versioned standard catalogs are declared; a module (the Orkestrator's, an
-        // app's) is what the blok's `module` names.
-        if let Some(catalog) = spec.catalog.as_deref() {
-            let standard = catalog.contains('@')
-                && self
-                    .vocabulary
-                    .catalog_version(catalog.split('@').next().unwrap_or_default())
-                    .is_some();
-            if !self.scope.catalogs.is_empty()
-                && standard
-                && !self.scope.catalogs.iter().any(|c| c == catalog)
-            {
-                self.add(
-                    "catalog.undeclared",
-                    Some(&node.id),
-                    &[("component", component()), ("catalog", s(catalog))],
-                );
-            }
-        }
-    }
-
-    fn space_kind(&mut self, node: &ComponentNodeInputModel) {
-        let fields = [
-            ("component", s(node.component.clone())),
-            ("n", s(article(&self.scope.kind))),
-            ("kind", s(self.scope.kind.clone())),
-        ];
-        self.add("space.kind", Some(&node.id), &fields);
-    }
-
     /// A `Placed dep` or `Route through` names dependencies of the blok, written out as keys.
     fn check_dependency_keys(
         &mut self,
         node: &ComponentNodeInputModel,
         prop: &ComponentPropInputModel,
     ) {
+        // Which kinds a Space and its parts belong to is their catalog's to say.
         if !RUN_KINDS.contains(&self.scope.kind.as_str()) {
-            self.space_kind(node);
             return;
         }
         let path = format!("{}.{}", node.component, prop.key);
@@ -1037,77 +920,20 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn check_prop(
-        &mut self,
-        node: &ComponentNodeInputModel,
-        prop: &ComponentPropInputModel,
-        spec: Option<&CatalogComponentInputModel>,
-    ) {
+    fn check_prop(&mut self, node: &ComponentNodeInputModel, prop: &ComponentPropInputModel) {
         let vocabulary = self.vocabulary;
-        let prop_spec = spec.and_then(|spec| spec.props.iter().find(|p| p.key == prop.key));
-        let holds = is_callback_value(prop);
-        let has_value = prop.static_value.is_some()
-            || prop.dynamic_value.is_some()
-            || prop.util_call.is_some()
-            || prop.agent_call.is_some();
         let at = Some(node.id.as_str());
-        let key_and_component = || {
-            vec![
-                ("key", s(prop.key.clone())),
-                ("component", s(node.component.clone())),
-            ]
-        };
-        if let Some(prop_spec) = prop_spec {
-            if prop_spec.kind == CatalogValueKind::CALLBACK && has_value && !holds {
-                self.add("callback.unbound", at, &key_and_component());
-            } else if prop_spec.kind != CatalogValueKind::CALLBACK && holds {
-                let mut fields = key_and_component();
-                fields.push(("what", s(what(prop))));
-                self.add("callback.not_callback", at, &fields);
-            }
-            if matches!(
-                prop_spec.kind,
-                CatalogValueKind::BOOL | CatalogValueKind::INT | CatalogValueKind::FLOAT
-            ) && prop.key != BIND_PROP
-            {
-                if let Some(Value::String(value)) = &prop.static_value {
-                    let fields = [
-                        ("component", s(node.component.clone())),
-                        ("key", s(prop.key.clone())),
-                        ("value", s(value.clone())),
-                        ("kind", s(prop_spec.kind.value())),
-                        (
-                            "hint",
-                            s(literal_hint(&prop.key, value, prop_spec.kind.value())),
-                        ),
-                    ];
-                    self.add("props.literal_type", at, &fields);
-                }
-            }
-            if prop_spec.kind == CatalogValueKind::ASSET {
-                let path = prop
-                    .dynamic_value
-                    .as_ref()
-                    .and_then(|d| d.path.clone())
-                    .unwrap_or_default();
-                let parts: Vec<&str> = path.split('.').collect();
-                let agent: &[&str] = match parts[0] {
-                    "self" => &parts[1..],
-                    "deps" if parts.len() >= 2 => &parts[2..],
-                    _ => &[],
-                };
-                if agent.len() != 2 || agent[0] != vocabulary.assets_segment {
-                    self.add("catalog.asset", at, &key_and_component());
-                }
-            }
-        }
-        if prop
+        // `task.answer(...)`, `task.cancel()` and their kin act on the task the blok is about.
+        let operation = prop
             .util_call
             .as_ref()
-            .is_some_and(|c| c.operation == "task.answer")
-            && !self.kind.roots.contains("task")
-        {
-            self.not_in_kind(&node.id, "task.answer", "task");
+            .and_then(|call| vocabulary.functions.get(&call.operation))
+            .filter(|function| function.task_operation)
+            .map(|function| function.name.clone());
+        if let Some(operation) = operation {
+            if !self.kind.roots.contains("task") {
+                self.not_in_kind(&node.id, &operation, "task");
+            }
         }
         if prop.key == BIND_PROP {
             match prop.dynamic_value.as_ref().and_then(|d| d.path.as_deref()) {
@@ -1116,9 +942,6 @@ impl<'a> Checker<'a> {
                     let root = path.split('.').next().unwrap_or_default();
                     if self.locals.contains_key(root) {
                         self.bound_locals.insert(root.to_owned());
-                        if let Some(prop_spec) = prop_spec {
-                            self.check_bind_kind(node, prop_spec.kind.value(), path);
-                        }
                     } else {
                         self.add("local.unknown", at, &[("path", s(path)), ("root", s(root))]);
                     }
@@ -1136,14 +959,6 @@ impl<'a> Checker<'a> {
         if DEPENDENCY_KEY_PROPS.contains(&(node.component.as_str(), prop.key.as_str())) {
             self.check_dependency_keys(node, prop);
         }
-        if node.component == "Space"
-            && prop.key == "room"
-            && !RUN_KINDS.contains(&self.scope.kind.as_str())
-        {
-            // A Space places the run's dependencies: only an action's own blok (for a run, or
-            // for starting one) has them.
-            self.space_kind(node);
-        }
         if node.component == TOAST_COMPONENT && prop.key == TOAST_TASK_PROP {
             let path = prop.dynamic_value.as_ref().and_then(|d| d.path.as_deref());
             if path.is_none_or(|p| p != "task" && !self.into.contains(p)) {
@@ -1160,11 +975,6 @@ impl<'a> Checker<'a> {
             {
                 self.check_paint(node, &prop.key, value);
             }
-            if spec.is_some_and(|spec| spec.context == ComponentContext::SCENE)
-                && vocabulary.theme.scene_paint_props.contains(&prop.key)
-            {
-                self.check_scene_colour(node, &prop.key, value);
-            }
         }
         if prop.key == CLASS_NAME {
             if let Some(call) = &prop.util_call {
@@ -1172,30 +982,6 @@ impl<'a> Checker<'a> {
                     self.check_classes(&literal, &node.id);
                 }
             }
-        }
-    }
-
-    /// The local a control writes is of a kind the control writes (`Slider`: FLOAT or INT).
-    fn check_bind_kind(&mut self, node: &ComponentNodeInputModel, prop_kind: &str, path: &str) {
-        let Some(allowed) = self.vocabulary.bind_kinds.get(prop_kind) else {
-            return;
-        };
-        let Some(port) = self.local_port(path) else {
-            return;
-        };
-        let kind = port.kind.value();
-        if !allowed.contains(kind) {
-            let mut kinds: Vec<&str> = allowed.iter().map(String::as_str).collect();
-            kinds.sort_unstable();
-            let fields = [
-                ("key", s(BIND_PROP)),
-                ("component", s(node.component.clone())),
-                ("prop_kind", s(prop_kind)),
-                ("path", s(path)),
-                ("kind", s(kind)),
-                ("kinds", s(kinds.join(", "))),
-            ];
-            self.add("local.bind_kind", Some(&node.id), &fields);
         }
     }
 
@@ -1234,6 +1020,15 @@ impl<'a> Checker<'a> {
                     Some(owner),
                     &[("token", s(token)), ("suggestion", s(suggestion))],
                 );
+                continue;
+            }
+            // A colour that is no role is told as that; anything else outside the portable subset as this.
+            if let Some(what) = unportable_class(token, self.vocabulary) {
+                self.add(
+                    "class.not_portable",
+                    Some(owner),
+                    &[("token", s(token)), ("what", s(what))],
+                );
             }
         }
     }
@@ -1255,20 +1050,6 @@ impl<'a> Checker<'a> {
 
     /// A scene paints with the theme's colour roles, resolved by the renderer against the
     /// viewer's brand.
-    fn check_scene_colour(&mut self, node: &ComponentNodeInputModel, key: &str, value: &str) {
-        let roles = &self.vocabulary.theme.colour_roles;
-        if roles.iter().any(|r| r == value.trim()) {
-            return;
-        }
-        let fields = [
-            ("component", s(node.component.clone())),
-            ("prop", s(key)),
-            ("value", s(value)),
-            ("roles", s(roles.join(", "))),
-        ];
-        self.add("palette.scene_colour", Some(&node.id), &fields);
-    }
-
     fn visit_agent_call(&mut self, call: &AgentProbeInputModel, where_: &Where<'_>, scope: &Scope) {
         let owner = where_.text();
         let action = action_key_for(call).to_owned();
@@ -1409,11 +1190,7 @@ impl<'a> Checker<'a> {
     }
 
     fn visit_util_call(&mut self, call: &UtilCallInputModel, where_: &Where<'_>, top: bool) {
-        let function: Option<&Function> = match self.view {
-            Some(view) => view.function(&call.operation),
-            None => self.vocabulary.function(&call.operation),
-        };
-        let Some(function) = function.cloned() else {
+        let Some(function) = self.vocabulary.function(&call.operation).cloned() else {
             let namespace = call.operation.split('.').next().unwrap_or_default();
             if !self
                 .vocabulary
@@ -1427,13 +1204,8 @@ impl<'a> Checker<'a> {
                     Some(&where_.node.id),
                     &[("callee", s(call.operation.clone()))],
                 );
-            } else if self.view.is_some() {
-                self.add(
-                    "expr.unknown_function",
-                    Some(&where_.node.id),
-                    &[("function", s(call.operation.clone()))],
-                );
             }
+            // A function of a namespace this vocabulary does not list may be a catalog's: not the server's to say.
             return;
         };
         if function.effect && !top {
@@ -1772,6 +1544,26 @@ impl<'a> Checker<'a> {
                 self.check_returns(path, rest, &node_id);
                 self.descend(Some(task_record_shape("task", None)), rest, path, &node_id)
             }
+            "assign" => {
+                // `assign.given.<key>` is open below `given`: one flag per argument of the action.
+                if let [GIVEN_FIELD, key, ..] = rest {
+                    if let Some(args) = &self.scope.args {
+                        if !args.iter().any(|a| a == key) {
+                            let keys = if args.is_empty() {
+                                "none".to_owned()
+                            } else {
+                                args.join(", ")
+                            };
+                            let fields = [("path", s(path)), ("key", s(*key)), ("keys", s(keys))];
+                            self.add("args.unknown", Some(&node_id), &fields);
+                            return None;
+                        }
+                    }
+                    return Some(Shape::typed(key, Some(PortKind::BOOL)));
+                }
+                let shape = record_shape("assign", &vocabulary.records["assign"].fields, &[]);
+                self.descend(Some(shape), rest, path, &node_id)
+            }
             "viewer" => {
                 let shape = record_shape("viewer", &vocabulary.records["viewer"].fields, &[]);
                 self.descend(Some(shape), rest, path, &node_id)
@@ -1812,35 +1604,9 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn event_field(&mut self, rest: &[&str], where_: &Where<'_>) -> Resolved {
-        let prop = self
-            .view
-            .and_then(|view| view.component(&where_.node.component))
-            .and_then(|spec| spec.props.iter().find(|p| p.key == where_.key));
-        let (Some(fields), Some(first)) = (prop.and_then(|p| p.event.as_ref()), rest.first())
-        else {
-            return Some(Shape::open(Some("event")));
-        };
-        if !fields.iter().any(|f| f.key == *first) {
-            let names = if fields.is_empty() {
-                "none".to_owned()
-            } else {
-                fields
-                    .iter()
-                    .map(|f| f.key.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            };
-            let reported = [
-                ("field", s(*first)),
-                ("key", s(where_.key.clone())),
-                ("component", s(where_.node.component.clone())),
-                ("fields", s(names)),
-            ];
-            self.add("callback.event_field", Some(&where_.node.id), &reported);
-            return None;
-        }
-        Some(Shape::open(Some(first)))
+    /// What a callback is called with is its component's to say: any field is taken as written.
+    fn event_field(&mut self, rest: &[&str], _where: &Where<'_>) -> Resolved {
+        Some(Shape::open(Some(rest.first().copied().unwrap_or("event"))))
     }
 
     /// What a path below an agent (`self`, `deps.<key>`) holds.
@@ -1878,7 +1644,12 @@ impl<'a> Checker<'a> {
                 ];
                 self.add("path.unknown", Some(node_id), &fields);
             }
-            return Some(Shape::typed(head, Some(PortKind::STRING)));
+            let kind = if *head == CONNECTED_FIELD {
+                PortKind::BOOL
+            } else {
+                PortKind::STRING
+            };
+            return Some(Shape::typed(head, Some(kind)));
         }
         if *head == vocabulary.tasks_segment {
             let Some((action, below)) = tail.split_first() else {
@@ -2118,15 +1889,11 @@ fn demo_items(prop: &ComponentPropInputModel, demo: Option<&BlokDemoInputModel>)
     value.and_then(Value::as_array).map_or(0, Vec::len)
 }
 
-/// Every finding of `tree` against `scope` and `view`: errors and warnings, in tree order
-/// (`check_blok_tree`). Without a view every catalog rule is skipped (component names, props,
-/// placement, callback props, event fields, unknown functions).
-pub fn check_blok_tree(
-    tree: &ComponentNodeInputModel,
-    scope: &BlokScope,
-    view: Option<&BlokView>,
-) -> Vec<Finding> {
-    let resolved = resolve_scope(tree, scope, view, &ArgPorts::new());
+/// Every finding of `tree` against `scope`: errors and warnings, in tree order
+/// (`check_blok_tree`). The language alone: no catalog is read, so what a component takes,
+/// where it may sit and which catalog it is of is left to whoever draws the blok.
+pub fn check_blok_tree(tree: &ComponentNodeInputModel, scope: &BlokScope) -> Vec<Finding> {
+    let resolved = resolve_scope(tree, scope, &ArgPorts::new());
     let scope = &resolved;
     let vocabulary = vocabulary();
     let Some(kind) = vocabulary.kind(&scope.kind).cloned() else {
@@ -2140,7 +1907,6 @@ pub fn check_blok_tree(
     };
     let mut checker = Checker {
         scope,
-        view,
         vocabulary,
         kind,
         findings: vec![],
@@ -2153,8 +1919,9 @@ pub fn check_blok_tree(
         queries: scope.queries.iter().map(|q| (q.key.as_str(), q)).collect(),
         subscriptions: scope.subscriptions.iter().map(|q| q.key.as_str()).collect(),
         bound_locals: HashSet::new(),
-        shadowed: HashSet::new(),
         into: HashSet::new(),
+        asks: false,
+        chromeless: None,
     };
     checker.check_declarations(tree);
     let mut root_scope = Scope::new();
@@ -2242,11 +2009,63 @@ fn float_repr(number: f64) -> String {
 pub fn validate_blok(
     tree: &ComponentNodeInputModel,
     scope: &BlokScope,
-    view: Option<&BlokView>,
 ) -> Result<Vec<Finding>, Finding> {
-    let findings = check_blok_tree(tree, scope, view);
+    let findings = check_blok_tree(tree, scope);
     match findings.iter().find(|f| f.is_error()) {
         Some(error) => Err(error.clone()),
         None => Ok(findings),
     }
+}
+
+/// A class at its variant colons, those inside brackets left alone (`[&>*]:p-2`).
+fn split_class(token: &str) -> Vec<String> {
+    let mut parts = vec![];
+    let mut depth = 0usize;
+    let mut current = String::new();
+    for character in token.chars() {
+        match character {
+            '[' => depth += 1,
+            ']' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+        if character == ':' && depth == 0 {
+            parts.push(std::mem::take(&mut current));
+        } else {
+            current.push(character);
+        }
+    }
+    parts.push(current);
+    parts
+}
+
+/// What of the class `token` is outside the portable subset (`the before variant`), or none.
+pub fn unportable_class(token: &str, vocabulary: &Vocabulary) -> Option<String> {
+    let mut parts = split_class(token);
+    let utility = parts.pop().unwrap_or_default();
+    for variant in &parts {
+        if variant.starts_with('[') {
+            return Some("an arbitrary variant".to_owned());
+        }
+        let name = variant.split('/').next().unwrap_or_default();
+        let stem = name.split("-[").next().unwrap_or_default();
+        if vocabulary.unportable_variants.contains(name)
+            || vocabulary.unportable_variants.contains(stem)
+        {
+            return Some(format!("the {name} variant"));
+        }
+    }
+    let utility = utility.trim_start_matches(['!', '-']);
+    if utility.starts_with('[') {
+        return Some("an arbitrary property".to_owned());
+    }
+    if utility.contains('[') {
+        let prefix = utility.split("-[").next().unwrap_or_default();
+        return (!vocabulary.arbitrary_values.contains(prefix))
+            .then(|| format!("an arbitrary value of {prefix}"));
+    }
+    vocabulary
+        .unportable_utilities
+        .iter()
+        .find(|prefix| utility == prefix.as_str() || utility.starts_with(&format!("{prefix}-")))
+        .map(|prefix| format!("the {prefix} utility"))
 }

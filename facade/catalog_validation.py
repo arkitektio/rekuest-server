@@ -1,16 +1,15 @@
-"""Validate blok trees against the v2 catalogs, and port calls and port widgets against base@1.
+"""Check blok trees against the blok language, and port calls and port widgets against base@1.
 
-**Blok trees** (blok language v2) are checked by ``rekuest_core.vocabulary``'s checker against a
-*view*: the spec's own catalogs (base@2, the standard catalogs ``ui@1`` ``scene@1`` ``logo@1``
-``structure@1`` ``html@1``) and the Orkestrator's module, vendored with the vocabulary, plus what
-the blok's ``Module`` registered beyond them. A module's component that a standard catalog defines
-differently is drawn as the module defines it, with a ``catalog.shadow`` warning where a tree
-uses it; a blok naming a module nobody registered in the organization gets ``module.unknown``,
-before its tree's findings. The scope is resolved first (``rekuest_core.vocabulary.infer``):
-the tree is checked against its locals resolved (every local kinded), which are stored beside the
-locals as written (``resolved_locals``); dependencies are never inferred. Every finding
-carries its vocabulary code (``catalog.props``, ``palette.raw_colour``, ...): an error refuses the
-blok (``BlokError``), a warning is stored with it (``Blok.diagnostics``) and shown by the UI.
+**Blok trees** (blok language v2) are held to the language alone, by ``rekuest_core.vocabulary``'s
+checker: what a tree reads and calls resolves against what its blok declares and its kind. The
+server reads no catalog. What a component takes, where it may sit, which catalog it is of and
+whether a frontend draws it is checked by the frontend that draws the blok, and by an author's
+tooling. The scope is resolved first (``rekuest_core.vocabulary.infer``): the tree is checked
+against its locals resolved, which are stored beside the locals as written
+(``resolved_locals``); a local only a control's ``bind`` would type stays ``ANY``, and
+dependencies are never inferred. Every finding carries its vocabulary code (``roots.unknown``,
+``palette.raw_colour``, ...): an error refuses the blok (``BlokError``), a warning is stored
+with it (``Blok.diagnostics``) and shown by the UI.
 
 **Port calls and widgets** (effects, validators, CUSTOM widgets) feed an action's definition hash,
 so they stay on the base@1 catalog (``rekuest_core.catalogs``): a ``Module`` a UI app has
@@ -19,7 +18,8 @@ redefine base names. Those findings are warnings with the codes below; nothing t
 definition except two catalogs defining one operation differently where no findings are collected.
 
 The same rules run in takt (``crates/facade/src/catalog_validation.rs``), which registers agents'
-bloks; the spec corpus (``bsx_v2.json``) holds both blok checkers to the same codes.
+bloks; the spec corpus (``bsx_v2.json``) holds both blok checkers to what it says the language
+alone finds.
 """
 
 from typing import Iterable, Iterator, Sequence
@@ -30,8 +30,7 @@ from rekuest_core.catalogs import BASE_CATALOG_ID, base_component_names, base_co
 from rekuest_core.inputs import models as rimodels
 from rekuest_core.inputs.models import iter_util_calls
 from rekuest_core.objects.models import DiagnosticModel
-from rekuest_core.vocabulary import BlokError, BlokScope, BlokView, Finding, blok_view, check_blok_tree, resolve_scope
-from rekuest_core.vocabulary.view import ORKESTRATOR_MODULE
+from rekuest_core.vocabulary import BlokError, BlokScope, Finding, check_blok_tree, resolve_scope
 
 UNKNOWN_OPERATION = "unknown_operation"
 OPERATION_ARGUMENTS = "operation_arguments"
@@ -226,39 +225,13 @@ def _check_asset_prop(kind: enums.CatalogValueKind | None, prop: rimodels.Compon
 # --------------------------------------------------------------------------- blok trees (v2)
 
 
-#: The components that read a run or a dependency of one: ``Space``, ``Placed`` and ``Route`` only an
-#: action's own blok holds, ``ask`` (a task's open ask) any blok that has a task.
-RUN_COMPONENTS = ("Space", "Placed", "Route")
-ASK_COMPONENT = "ask"
-
-
-def blok_view_for(module: models.Module | None) -> BlokView:
-    """What a blok of ``module`` is checked against: the spec's catalogs plus what ``module``
-    registered beyond them. Unknown components are findings once the module has registered any
-    (the Orkestrator's always: the spec writes it)."""
-    if module is None:
-        return blok_view()
-    complete = module.name == ORKESTRATOR_MODULE or bool(module.components)
-    return blok_view([(module.name, module.get_components(), module.get_operations())], complete=complete)
-
-
-def module_findings(module: models.Module | None) -> list[Finding]:
-    """``module.unknown`` when ``module`` is neither the Orkestrator's nor registered in its
-    organization: nothing then checks the components the blok takes from it."""
-    if module is None or module.name == ORKESTRATOR_MODULE or module.is_registered:
-        return []
-    registered = [other.name for other in models.Module.objects.filter(organization=module.organization) if other.is_registered]
-    modules = ", ".join(sorted({ORKESTRATOR_MODULE, *registered}))
-    return [Finding.of("module.unknown", None, module=module.name, modules=modules)]
-
-
 def resolved_scope(module: models.Module | None, components: list[rimodels.ComponentNodeInputModel] | None, scope: BlokScope) -> BlokScope:
-    """``scope`` resolved against its one-root tree and its module's view: each local's left-out
-    kind (stored as the blok's ``resolved_locals``). Unchanged without one root."""
+    """``scope`` resolved against its one-root tree: each local's left-out kind (stored as the
+    blok's ``resolved_locals``). Unchanged without one root. ``module`` is not read: no catalog is."""
     roots = components or []
     if len(roots) != 1:
         return scope
-    return resolve_scope(roots[0], scope, blok_view_for(module))
+    return resolve_scope(roots[0], scope)
 
 
 def diagnostic_of(finding: Finding) -> DiagnosticModel:
@@ -267,29 +240,18 @@ def diagnostic_of(finding: Finding) -> DiagnosticModel:
     return DiagnosticModel(level=level, code=finding.code, message=finding.message, path=finding.path)
 
 
-def check_run_components(components: list[rimodels.ComponentNodeInputModel], kind: str) -> None:
-    """``Space``/``Placed``/``Route`` read the agents a run got, so only an action's own blok holds them;
-    ``ask`` a task's open ask, so only a blok that has a task."""
-    for node in rimodels.iter_component_nodes(components):
-        if node.component in RUN_COMPONENTS and kind not in ("action", "assign"):
-            raise ValueError(f"component {node.id!r}: a {node.component!r} reads the agents of a run, so only an action's own blok holds one")
-        if node.component == ASK_COMPONENT and kind not in ("action", "task"):
-            raise ValueError(f"component {node.id!r}: an 'ask' shows a task's open ask, so only a task's or an action's blok holds one")
-
-
 def blok_findings_against_module(
     module: models.Module | None,
     components: list[rimodels.ComponentNodeInputModel] | None,
     scope: BlokScope,
 ) -> list[DiagnosticModel]:
-    """Every finding of a v2 tree against ``scope`` and its module's view, errors included and
-    nothing refused: what an editor's dry run shows. ``module.unknown`` comes first."""
+    """Every finding of a v2 tree against ``scope``, errors included and nothing refused: what an
+    editor's dry run shows of the language. ``module`` is not read: the frontend that draws the
+    blok checks it against its catalog."""
     roots = components or []
     if len(roots) != 1:
         raise ValueError(f"a blok has exactly one root, not {len(roots)}")
-    check_run_components(roots, scope.kind)
-    view = blok_view_for(module)
-    return [diagnostic_of(finding) for finding in (*module_findings(module), *check_blok_tree(roots[0], scope, view))]
+    return [diagnostic_of(finding) for finding in check_blok_tree(roots[0], scope)]
 
 
 def validate_blok_against_module(
@@ -297,21 +259,19 @@ def validate_blok_against_module(
     components: list[rimodels.ComponentNodeInputModel] | None,
     scope: BlokScope,
 ) -> list[DiagnosticModel]:
-    """A v2 blok tree against what its blok declares (``scope``) and its module's view.
+    """A v2 blok tree against what its blok declares (``scope``): the language alone.
 
-    Refused (``BlokError``, with the vocabulary code) on its first error; its warnings returned,
-    ``module.unknown`` first.
+    Refused (``BlokError``, with the vocabulary code) on its first error; its warnings returned.
+    ``module`` is not read: no catalog is.
     """
     roots = components or []
     if len(roots) != 1:
         raise ValueError(f"a blok has exactly one root, not {len(roots)}")
-    check_run_components(roots, scope.kind)
-    view = blok_view_for(module)
-    findings = check_blok_tree(roots[0], scope, view)
+    findings = check_blok_tree(roots[0], scope)
     for finding in findings:
         if finding.level == "error":
             raise BlokError.from_finding(finding)
-    return [diagnostic_of(finding) for finding in (*module_findings(module), *findings)]
+    return [diagnostic_of(finding) for finding in findings]
 
 
 def _prop_calls(prop: rimodels.ComponentPropInputModel) -> Iterator[rimodels.UtilCallInputModel]:

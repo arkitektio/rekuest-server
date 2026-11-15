@@ -132,13 +132,15 @@ class TestActionBloks:
         assert await models.Blok.objects.filter(held_by_action=False, app__isnull=True).acount() == 0, "nothing was forked"
         assert await models.Blok.objects.filter(id=env["blok"].id).aexists()
 
-    async def test_a_space_and_a_run_reading_component_are_an_actions_only(self, authenticated_context: HttpContext, takt: str) -> None:
-        spaced = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "mine", "vocab": 2, "context": "SCENE", "source": '<Space room="lab" />'}})
-        assert spaced.errors and "only an action's own blok holds it" in spaced.errors[0].message
-        asking = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "mine", "vocab": 2, "source": "<Html><Card><ask /></Card></Html>"}})
-        assert asking.errors and "shows a task's open ask" in asking.errors[0].message
-        anchored = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "mine", "vocab": 2, "context": "SCENE", "source": '<Scene><Placed dep="relay" /></Scene>'}})
-        assert anchored.errors and "only an action's own blok holds it" in anchored.errors[0].message
+    async def test_which_kind_a_component_belongs_to_is_its_catalogs_to_say(self, authenticated_context: HttpContext, takt: str) -> None:
+        """A `Space`, a `Placed` and an `ask` belong to an action's own blok: the base catalog says so
+        (`kinds`), and the frontend that draws a blok checks it. The server reads no catalog."""
+        for name, context, source in (
+            ("spaced", "SCENE", '<Space room="lab" />'),
+            ("asking", "HTML", "<Html><Card><ask /></Card></Html>"),
+        ):
+            result = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": name, "vocab": 2, "context": context, "source": source}})
+            assert not result.errors, result.errors
 
     async def test_a_run_knows_its_agents_its_bloks_and_its_space(self, authenticated_context: HttpContext, takt: str) -> None:
         await schema.execute("query { __typename }", context_value=authenticated_context)

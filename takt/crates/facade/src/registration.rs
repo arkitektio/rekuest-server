@@ -281,8 +281,8 @@ use rekuest_core::inputs::{
 use sqlx::PgConnection;
 
 use crate::catalog_validation::{
-    dump_diagnostics, module_unknown, validate_blok_against_catalog, validate_blok_with_arg_ports,
-    Catalog, Diagnostic,
+    dump_diagnostics, validate_blok_against_catalog, validate_blok_with_arg_ports, Catalog,
+    Diagnostic,
 };
 use crate::deletion::{
     delete_implementations, delete_materialized_bloks, delete_states, gc_action_bloks,
@@ -422,11 +422,7 @@ async fn register_blok(
     )?;
     // What is hashed and stored is the blok as sent; its locals as resolved are stored beside
     // (`resolved_locals`), recomputed on every registration.
-    let mut diagnostics: Vec<Diagnostic> = module_unknown(conn, &catalog, agent.organization)
-        .await?
-        .into_iter()
-        .collect();
-    diagnostics.extend(checked.diagnostics);
+    let diagnostics: Vec<Diagnostic> = checked.diagnostics;
     check_blok_arg_descriptor_keys(conn, &blok.key, &blok.args).await?;
 
     // Same content, same row: only the findings (which depend on the catalog as it is now) are
@@ -557,11 +553,7 @@ pub async fn sync_action_bloks(
             blok.components.as_deref(),
             &blok.scope(dependencies, Some(arg_keys.clone())),
         )?;
-        let mut found: Vec<Diagnostic> = module_unknown(conn, &catalog, agent.organization)
-            .await?
-            .into_iter()
-            .collect();
-        found.extend(checked.diagnostics);
+        let found: Vec<Diagnostic> = checked.diagnostics;
         // Its name only says whose it is: an action's blok is never listed or looked up by it.
         let assign = blok.phase == rekuest_core::enums::ActionBlokPhase::ASSIGN;
         let name = format!(
@@ -675,11 +667,7 @@ pub async fn sync_implementation_interactions(
             blok.components.as_deref(),
             &blok.scope(rekuest_core::inputs::TASK_BLOK_KIND),
         )?;
-        let mut found: Vec<Diagnostic> = module_unknown(conn, &catalog, agent.organization)
-            .await?
-            .into_iter()
-            .collect();
-        found.extend(checked.diagnostics);
+        let found: Vec<Diagnostic> = checked.diagnostics;
         check_blok_arg_descriptor_keys(conn, &ask.key, &ask.args).await?;
         // Its name only says whose it is: it is looked up by its implementation and key.
         let name = format!("{interface}:{}", ask.key);

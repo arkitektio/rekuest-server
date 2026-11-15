@@ -1,9 +1,10 @@
 """The blok language v2 checker (``rekuest_core.vocabulary``) against the spec's corpus.
 
 ``bsx_v2.json`` is written by arkitekt-spec (``python -m arkitekt_spec.blok.corpus``); its
-``checked`` cases are trees with the scope they were checked against and the codes the spec's
-validator found. The server finds the same codes, in the same order. takt is held to the same
-corpus (``takt/crates/rekuest-server-core/tests/bsx.rs``).
+checked cases are trees with the scope they were checked against. The server holds a blok to
+the language alone and reads no catalog, so it is held to each case's ``language``: the codes
+the spec's validator finds, in order, and the locals it resolves, with no catalog read. takt
+is held to the same (``takt/crates/rekuest-server-core/tests/bsx.rs``).
 """
 
 import json
@@ -12,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from rekuest_core.inputs import models as rimodels
-from rekuest_core.vocabulary import BlokScope, BlokView, blok_view, check_blok_tree, default_view, load_vocabulary, resolve_scope
+from rekuest_core.vocabulary import BlokScope, check_blok_tree, load_vocabulary, resolve_scope
 from rekuest_core.vocabulary.check import dependency_hint
 from rekuest_core.vocabulary.vocabulary import JSON
 
@@ -30,7 +31,6 @@ def _scope(raw: dict[str, JSON]) -> BlokScope:
         return [entry for entry in value if isinstance(entry, dict)] if isinstance(value, list) else []
 
     args = raw.get("args")
-    catalogs = raw.get("catalogs")
     return BlokScope(
         kind=str(raw["kind"]),
         context=str(raw["context"]),
@@ -39,44 +39,31 @@ def _scope(raw: dict[str, JSON]) -> BlokScope:
         queries=tuple(rimodels.BlokQueryInputModel.model_validate(entry) for entry in entries("queries")),
         subscriptions=tuple(rimodels.BlokSubscriptionInputModel.model_validate(entry) for entry in entries("subscriptions")),
         args=tuple(str(arg) for arg in args) if isinstance(args, list) else None,
-        catalogs=tuple(str(catalog) for catalog in catalogs) if isinstance(catalogs, list) else (),
     )
 
 
-def _view(raw: JSON) -> BlokView | None:
-    """``blok_view([orkestrator, module])`` when the case is checked with a catalog: the scope's
-    module, in the catalog-file format, registered beside the Orkestrator's."""
-    if not isinstance(raw, dict) or not raw.get("catalog"):
-        return None
-    module = raw.get("module")
-    if not isinstance(module, dict):
-        return default_view()
-    components = module.get("components")
-    operations = module.get("operations")
-    return blok_view(
-        [
-            (
-                str(module["name"]),
-                [rimodels.CatalogComponentInputModel.model_validate(entry) for entry in components] if isinstance(components, list) else [],
-                [rimodels.CatalogOperationInputModel.model_validate(entry) for entry in operations] if isinstance(operations, list) else [],
-            )
-        ]
-    )
+def _language(case: dict[str, JSON]) -> dict[str, JSON]:
+    """What the spec says the language alone makes of a checked case."""
+    language = case["language"]
+    assert isinstance(language, dict)
+    return language
 
 
 @pytest.mark.parametrize("case", _cases("scope"), ids=lambda case: str(case["name"]))
 def test_a_checked_tree_finds_what_the_spec_finds(case: dict[str, JSON]) -> None:
     tree = rimodels.ComponentNodeInputModel.model_validate(case["tree"])
     scope = _scope(case["scope"]) if isinstance(case["scope"], dict) else BlokScope()
-    assert [finding.code for finding in check_blok_tree(tree, scope, _view(case["scope"]))] == case["codes"]
+    codes = [finding.code for finding in check_blok_tree(tree, scope)]
+    assert codes == _language(case)["codes"]
+    assert not [code for code in codes if code.startswith("catalog.")], "the server reads no catalog"
 
 
 @pytest.mark.parametrize("case", _cases("resolved"), ids=lambda case: str(case["name"]))
 def test_a_checked_tree_resolves_its_scope_as_the_spec_does(case: dict[str, JSON]) -> None:
     tree = rimodels.ComponentNodeInputModel.model_validate(case["tree"])
     assert isinstance(case["scope"], dict)
-    resolved = resolve_scope(tree, _scope(case["scope"]), _view(case["scope"]))
-    assert {"locals": [local.model_dump(mode="json", exclude_none=True) for local in resolved.locals]} == case["resolved"]
+    resolved = resolve_scope(tree, _scope(case["scope"]))
+    assert {"locals": [local.model_dump(mode="json", exclude_none=True) for local in resolved.locals]} == _language(case)["resolved"]
 
 
 def test_an_enum_local_needs_its_choices() -> None:
@@ -123,19 +110,3 @@ def test_the_vocabulary_is_the_version_the_corpus_speaks() -> None:
     assert load_vocabulary().vocab == corpus["vocab"] == 2
 
 
-def test_the_view_places_text_as_the_corpus_was_parsed() -> None:
-    corpus = json.loads((FIXTURES / "bsx_v2.json").read_text())
-    view = default_view()
-    table = corpus["text_table"]
-    assert isinstance(table, dict)
-    for name, entry in table.items():
-        component = view.component(name)
-        assert component is not None, name
-        assert entry == {
-            "text_prop": component.text_prop,
-            "context": component.context.value,
-            "children_context": component.children_context.value if component.children_context is not None else None,
-            "inherits_context": component.inherits_context,
-            "accepts_children": component.accepts_children,
-            "catalog": component.catalog,
-        }, name

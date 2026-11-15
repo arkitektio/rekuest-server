@@ -1,16 +1,15 @@
 //! takt parses BSX v2 into exactly the tree arkitekt-spec's parser makes, refuses what it
-//! refuses (same code, line and column, in code points), and its checker finds the codes the
-//! spec's validator finds. The corpus is written by the spec (`arkitekt_spec.blok.corpus`, see
-//! `tests/fixtures/generate_bsx.py`).
-use std::collections::HashSet;
+//! refuses (same code, line and column, in code points), and its checker finds what the spec
+//! says the language alone finds: the server reads no catalog, so it is held to each checked
+//! case's `language` (its codes and its resolved locals with no catalog read). The corpus is
+//! written by the spec (`arkitekt_spec.blok.corpus`, see `tests/fixtures/generate_bsx.py`).
 
 use rekuest_core::blok::infer::{resolve_scope, ArgPorts};
-use rekuest_core::blok::{blok_view, check_blok_tree, default_view, BlokScope, BlokView};
+use rekuest_core::blok::{check_blok_tree, BlokScope};
 use rekuest_core::bsx::{parse_bsx, parse_bsx_default, MAX_SOURCE_BYTES};
 use rekuest_core::inputs::{
     AgentDependencyInputModel, BlokLocalInputModel, BlokQueryInputModel,
-    BlokSubscriptionInputModel, CatalogComponentInputModel, CatalogOperationInputModel,
-    ComponentNodeInputModel,
+    BlokSubscriptionInputModel, ComponentNodeInputModel,
 };
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -135,33 +134,9 @@ fn scope_of(scope: &Value) -> BlokScope {
                 .map(|a| a.as_str().expect("an arg key").to_owned())
                 .collect()
         }),
-        catalogs: list("catalogs")
-            .iter()
-            .map(|c| c.as_str().expect("a catalog").to_owned())
-            .collect(),
         demo: None,
         assets: None,
     }
-}
-
-/// The view a case is checked against: none without `catalog`, else base, the standard
-/// catalogs, the Orkestrator's module and the case's `module` (`blok_view([orkestrator, module])`).
-fn view_of(scope: &Value) -> Option<BlokView> {
-    if scope["catalog"] != Value::Bool(true) {
-        return None;
-    }
-    let module = &scope["module"];
-    if module.is_null() {
-        return Some(default_view().clone());
-    }
-    let name = module["name"].as_str().expect("a module name");
-    let components: Vec<CatalogComponentInputModel> = typed(&module["components"]);
-    let operations: Vec<CatalogOperationInputModel> = if module["operations"].is_null() {
-        vec![]
-    } else {
-        typed(&module["operations"])
-    };
-    Some(blok_view(Some((name, &components)), &operations, true))
 }
 
 /// A list of models as the spec dumps them (`exclude_none`): read and written again, so the
@@ -179,13 +154,12 @@ fn every_checked_source_resolves_its_scope_as_the_spec_does() {
         count += 1;
         let tree: ComponentNodeInputModel = typed(&case["tree"]);
         let scope = scope_of(&case["scope"]);
-        let view = view_of(&case["scope"]);
-        let resolved = resolve_scope(&tree, &scope, view.as_ref(), &ArgPorts::new());
+        let resolved = resolve_scope(&tree, &scope, &ArgPorts::new());
         let got = serde_json::json!({
             "locals": without_nulls(serde_json::to_value(&resolved.locals).expect("locals")),
         });
         let expected = serde_json::json!({
-            "locals": normalized::<BlokLocalInputModel>(&case["resolved"]["locals"]),
+            "locals": normalized::<BlokLocalInputModel>(&case["language"]["resolved"]["locals"]),
         });
         if got != expected {
             differences.push(format!(
@@ -193,7 +167,7 @@ fn every_checked_source_resolves_its_scope_as_the_spec_does() {
                 case["name"], case["source"]
             ));
         }
-        let again = resolve_scope(&tree, &resolved, view.as_ref(), &ArgPorts::new());
+        let again = resolve_scope(&tree, &resolved, &ArgPorts::new());
         if serde_json::to_value(&again.locals).ok() != serde_json::to_value(&resolved.locals).ok() {
             differences.push(format!("{}: resolving twice changes it", case["name"]));
         }
@@ -215,12 +189,16 @@ fn every_checked_source_finds_the_codes_the_spec_finds() {
         count += 1;
         let tree: ComponentNodeInputModel = typed(&case["tree"]);
         let scope = scope_of(&case["scope"]);
-        let view = view_of(&case["scope"]);
-        let codes: Vec<String> = check_blok_tree(&tree, &scope, view.as_ref())
+        let codes: Vec<String> = check_blok_tree(&tree, &scope)
             .into_iter()
             .map(|f| f.code)
             .collect();
-        let expected: Vec<String> = typed(&case["codes"]);
+        let expected: Vec<String> = typed(&case["language"]["codes"]);
+        assert!(
+            !codes.iter().any(|code| code.starts_with("catalog.")),
+            "{}: the server reads no catalog, and found {codes:?}",
+            case["name"]
+        );
         if codes != expected {
             differences.push(format!(
                 "{}: {}\n  takt: {codes:?}\n  spec: {expected:?}",
@@ -238,43 +216,15 @@ fn every_checked_source_finds_the_codes_the_spec_finds() {
 }
 
 #[test]
-fn the_vendored_catalogs_place_text_as_the_corpus_was_parsed_with() {
-    let corpus = corpus();
-    let table = corpus["text_table"].as_object().expect("a text table");
-    let view = default_view();
-    let mut differences = vec![];
-    for (name, expected) in table {
-        let Some(spec) = view.component(name) else {
-            differences.push(format!("{name}: not in takt's view"));
-            continue;
-        };
-        let got = serde_json::json!({
-            "text_prop": spec.text_prop,
-            "context": spec.context,
-            "children_context": spec.children_context,
-            "inherits_context": spec.inherits_context,
-            "accepts_children": spec.accepts_children,
-            "catalog": spec.catalog,
-        });
-        if &got != expected {
-            differences.push(format!("{name}\n  takt: {got}\n  spec: {expected}"));
-        }
-    }
-    let known: HashSet<&String> = table.keys().collect();
-    // The table covers base and the global catalogs: a UI's own module (the Orkestrator's) is
-    // that UI's to ship, not every parser's.
-    for name in view
-        .components
-        .iter()
-        .filter(|(name, spec)| {
-            !known.contains(name) && spec.catalog.as_deref() != Some("orkestrator")
-        })
-        .map(|(name, _)| name)
-    {
-        differences.push(format!("{name}: in takt's view, not in the corpus"));
-    }
-    assert!(differences.is_empty(), "{}", differences.join("\n"));
-    assert_eq!(corpus["vocab"], 2);
+fn text_is_stored_as_nodes_and_no_component_is_looked_up() {
+    let tree = parse_bsx("<Frob>of a catalog <Unknown>nobody here</Unknown> knows</Frob>")
+        .expect("parses");
+    let children = tree.children.expect("children");
+    let names: Vec<&str> = children.iter().map(|c| c.component.as_str()).collect();
+    assert_eq!(names, ["#text", "Unknown", "#text"]);
+    assert_eq!(children[0].id, "Frob[0]/#0");
+    assert_eq!(corpus()["vocab"], 2);
+    assert!(corpus().get("text_table").is_none());
 }
 
 #[test]
@@ -294,7 +244,7 @@ fn a_parse_error_says_where_in_code_points() {
 #[test]
 fn a_source_larger_than_a_blok_is_refused_unread() {
     let source = format!("<Text text=\"{}\" />", "x".repeat(MAX_SOURCE_BYTES));
-    let error = parse_bsx(&source, default_view()).unwrap_err();
+    let error = parse_bsx(&source).unwrap_err();
     assert_eq!(error.code, "bsx.syntax");
     assert!(error.message.contains("at most"), "{error}");
 }
@@ -330,7 +280,7 @@ fn the_deps_unknown_hint_says_what_the_kind_does() {
             kind: kind.into(),
             ..BlokScope::default()
         };
-        let findings = check_blok_tree(&tree, &scope, None);
+        let findings = check_blok_tree(&tree, &scope);
         let codes: Vec<&str> = findings.iter().map(|f| f.code.as_str()).collect();
         assert_eq!(codes, ["deps.unknown"], "{kind}");
         assert!(
@@ -344,7 +294,7 @@ fn the_deps_unknown_hint_says_what_the_kind_does() {
         kind: "agent".into(),
         ..BlokScope::default()
     };
-    let codes: Vec<String> = check_blok_tree(&tree, &scope, None)
+    let codes: Vec<String> = check_blok_tree(&tree, &scope)
         .into_iter()
         .map(|f| f.code)
         .collect();

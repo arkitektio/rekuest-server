@@ -13924,6 +13924,8 @@
      "components": null,
      "source": "<Html><Resizable direction=\"row\" className=\"rounded-xl border\"><ResizablePanel><StructureDisplay value={args.dataset} /></ResizablePanel><ResizablePanel><Card><Slider bind={bins} /><Button onClick={self.intensity_histogram(dataset: args.dataset, bins: bins) into run}>Histogram</Button><Progress value={run.progress} /><Chart data={run.returns.histogram} /></Card></ResizablePanel></Resizable></Html>",
      "module": null,
+     "catalog": null,
+     "catalog_minor": null,
      "description": "A dataset next to the histogram of its intensities.",
      "context": "HTML",
      "default": false,
@@ -14245,6 +14247,8 @@
        "components": null,
        "source": "<Html><Button label=\"Keep\" onClick={task.answer(values: {choice: \"keep\"})} /></Html>",
        "module": null,
+       "catalog": null,
+       "catalog_minor": null,
        "args": [],
        "returns": [
         {
@@ -14293,6 +14297,8 @@
        "components": null,
        "source": "<Html><Card><CardTitle text={args.question} /><Button label=\"Go\" onClick={task.answer(values: {name: args.question, count: 2})} /></Card></Html>",
        "module": null,
+       "catalog": null,
+       "catalog_minor": null,
        "args": [
         {
          "key": "question",
@@ -14383,6 +14389,8 @@
        "components": null,
        "source": "<Html><Card><CardTitle text={args.question} /><Text text={args.count} /></Card></Html>",
        "module": null,
+       "catalog": null,
+       "catalog_minor": null,
        "args": [
         {
          "key": "question",
@@ -17045,6 +17053,8 @@
      ],
      "source": null,
      "module": null,
+     "catalog": null,
+     "catalog_minor": null,
      "description": null,
      "context": "HTML",
      "default": false,
@@ -17147,6 +17157,8 @@
      ],
      "source": null,
      "module": null,
+     "catalog": null,
+     "catalog_minor": null,
      "description": null,
      "context": "HTML",
      "default": false,
@@ -17254,6 +17266,8 @@
      ],
      "source": null,
      "module": null,
+     "catalog": null,
+     "catalog_minor": null,
      "description": null,
      "context": "HTML",
      "default": false,
@@ -17567,6 +17581,8 @@
      ],
      "source": null,
      "module": "orkestrator",
+     "catalog": null,
+     "catalog_minor": null,
      "description": null,
      "context": "HTML",
      "default": false,
@@ -17839,6 +17855,8 @@
      ],
      "source": null,
      "module": null,
+     "catalog": null,
+     "catalog_minor": null,
      "description": null,
      "context": "HTML",
      "default": false,
@@ -17972,7 +17990,7 @@
     }
    ]
   },
-  "error": "Catalog 'ui' is not name@version (ui@1). [manifest.catalog]",
+  "error": "Catalog 'ui' is neither the address a catalog is published at (https://arkitekt.live/catalogs/orkestrator/v1) nor the name of one registered in the organization. [manifest.catalog]",
   "error_type": "value_error"
  },
  "blok with a query": {
@@ -18064,6 +18082,8 @@
      ],
      "source": null,
      "module": null,
+     "catalog": null,
+     "catalog_minor": null,
      "description": null,
      "context": "HTML",
      "default": false,
@@ -18443,6 +18463,8 @@
      ],
      "source": null,
      "module": null,
+     "catalog": null,
+     "catalog_minor": null,
      "description": null,
      "context": "HTML",
      "default": false,
@@ -19052,6 +19074,8 @@
      ],
      "source": null,
      "module": null,
+     "catalog": null,
+     "catalog_minor": null,
      "description": null,
      "context": "HTML",
      "default": false,
@@ -19279,6 +19303,8 @@
      ],
      "source": null,
      "module": null,
+     "catalog": null,
+     "catalog_minor": null,
      "description": null,
      "context": "HTML",
      "default": false,
@@ -19398,6 +19424,8 @@
      ],
      "source": null,
      "module": null,
+     "catalog": null,
+     "catalog_minor": null,
      "description": null,
      "context": "HTML",
      "default": false,
@@ -19486,6 +19514,8 @@
      ],
      "source": null,
      "module": null,
+     "catalog": null,
+     "catalog_minor": null,
      "description": null,
      "context": "HTML",
      "default": false,
@@ -19878,6 +19908,8 @@
         ],
         "source": null,
         "module": null,
+        "catalog": null,
+        "catalog_minor": null,
         "description": null,
         "vocab": 2,
         "catalogs": [],
@@ -19945,6 +19977,8 @@
         ],
         "source": null,
         "module": null,
+        "catalog": null,
+        "catalog_minor": null,
         "description": "The run",
         "vocab": 2,
         "catalogs": [],
@@ -20415,6 +20449,8 @@
         ],
         "source": null,
         "module": null,
+        "catalog": null,
+        "catalog_minor": null,
         "description": null,
         "vocab": 2,
         "catalogs": [],
@@ -20823,6 +20859,8 @@
         ],
         "source": null,
         "module": null,
+        "catalog": null,
+        "catalog_minor": null,
         "description": null,
         "vocab": 2,
         "catalogs": [],
@@ -21585,6 +21623,8 @@
         ],
         "source": null,
         "module": null,
+        "catalog": null,
+        "catalog_minor": null,
         "description": null,
         "vocab": 2,
         "catalogs": [],
@@ -21613,6 +21653,8 @@
         ],
         "source": null,
         "module": null,
+        "catalog": null,
+        "catalog_minor": null,
         "description": null,
         "vocab": 2,
         "catalogs": [],
@@ -21854,6 +21896,8 @@
         ],
         "source": null,
         "module": null,
+        "catalog": null,
+        "catalog_minor": null,
         "description": null,
         "vocab": 2,
         "catalogs": [],
@@ -21989,7 +22033,7 @@
     }
    ]
   },
-  "error": "t: task.status: an assign blok has no 'task' (it reads args, deps, queries, self, subscriptions, viewer). [roots.not_in_kind]",
+  "error": "t: task.status: an assign blok has no 'task' (it reads args, assign, deps, queries, self, subscriptions, viewer). [roots.not_in_kind]",
   "error_type": "value_error"
  },
  "assign blok asking": {
@@ -22130,6 +22174,8 @@
         ],
         "source": null,
         "module": null,
+        "catalog": null,
+        "catalog_minor": null,
         "description": null,
         "vocab": 2,
         "catalogs": [],
@@ -22256,8 +22302,162 @@
     }
    ]
   },
-  "error": "a: <args> belongs to starting a run, so only an action's assign blok holds it, not an action blok. [assign.kind]",
-  "error_type": "value_error"
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": [
+    {
+     "definition": {
+      "key": "act",
+      "version": "1",
+      "description": null,
+      "collections": [],
+      "name": "Act",
+      "stateful": false,
+      "pure": false,
+      "idempotent": false,
+      "allow_probe": false,
+      "port_groups": [],
+      "args": [
+       {
+        "key": "slides",
+        "label": null,
+        "kind": "LIST",
+        "description": null,
+        "identifier": null,
+        "nullable": false,
+        "effects": null,
+        "choices": null,
+        "reference_unit": null,
+        "proposed_units": null,
+        "dimension": null,
+        "children": [
+         {
+          "key": "...",
+          "label": null,
+          "kind": "STRING",
+          "description": null,
+          "identifier": null,
+          "nullable": false,
+          "effects": null,
+          "choices": null,
+          "reference_unit": null,
+          "proposed_units": null,
+          "dimension": null,
+          "children": null,
+          "validators": null,
+          "default": null,
+          "widget": null,
+          "requires": null
+         }
+        ],
+        "validators": null,
+        "default": null,
+        "widget": null,
+        "requires": null
+       }
+      ],
+      "returns": [],
+      "kind": "FUNCTION",
+      "is_test_for": [],
+      "is_dev": false,
+      "catalogs": [],
+      "protocols": [],
+      "bloks": [
+       {
+        "context": "HTML",
+        "phase": "RUN",
+        "components": [
+         {
+          "id": "Html[0]",
+          "component": "Html",
+          "props": null,
+          "children": [
+           {
+            "id": "a",
+            "component": "args",
+            "props": null,
+            "children": null
+           }
+          ]
+         }
+        ],
+        "source": null,
+        "module": null,
+        "catalog": null,
+        "catalog_minor": null,
+        "description": null,
+        "vocab": 2,
+        "catalogs": [],
+        "locals": [],
+        "demo": null,
+        "queries": [],
+        "subscriptions": []
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": null,
+       "state_dependencies": null,
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      },
+      {
+       "key": "frame",
+       "app": null,
+       "version": null,
+       "name": null,
+       "description": null,
+       "optional": false,
+       "action_dependencies": null,
+       "state_dependencies": null,
+       "auto_resolvable": false,
+       "mutually_exclusive_keys": null,
+       "min_viable_instances": null,
+       "max_viable_instances": null,
+       "prefered_instances": null
+      }
+     ],
+     "interface": "act",
+     "params": null,
+     "instance_id": null,
+     "locks": null,
+     "optimistics": null,
+     "manipulates": null,
+     "needs_token": true,
+     "provenance_audience": null,
+     "effects": "UNKNOWN",
+     "execution": "PLAIN",
+     "code_hash": null,
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
+    }
+   ],
+   "locks": null,
+   "bloks": null,
+   "assets": null,
+   "hash": null
+  },
+  "hashes": [
+   "886545f7ab6379be425a13432bdfe27a6996b575bdb5e07bc8f8c4b9b1dbdefb"
+  ]
  },
  "assign bloks twice in one context": {
   "input": {
@@ -22358,7 +22558,54 @@
     }
    ]
   },
-  "error": "root: <Space> places the run's dependencies, so only an action's own blok holds it, not an agent blok. [space.kind]",
-  "error_type": "value_error"
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": null,
+   "locks": null,
+   "bloks": [
+    {
+     "key": "lab",
+     "dependencies": [],
+     "components": [
+      {
+       "id": "root",
+       "component": "Space",
+       "props": [
+        {
+         "key": "room",
+         "static_value": "room:lab",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        }
+       ],
+       "children": null
+      }
+     ],
+     "source": null,
+     "module": null,
+     "catalog": null,
+     "catalog_minor": null,
+     "description": null,
+     "context": "SCENE",
+     "default": false,
+     "for_model": null,
+     "for_node": null,
+     "args": [],
+     "vocab": 2,
+     "catalogs": [],
+     "locals": [],
+     "demo": null,
+     "queries": [],
+     "subscriptions": []
+    }
+   ],
+   "assets": null,
+   "hash": null
+  },
+  "hashes": []
  }
 }

@@ -41,8 +41,7 @@ from rekuest_core.inputs.models import (
     PortMatchInputModel,
     UtilCallInputModel,
 )
-from rekuest_core.vocabulary.view import BlokView
-from rekuest_core.vocabulary.walk import BIND_PROP, Where, action_key_for, walk_tree
+from rekuest_core.vocabulary.walk import Where, action_key_for, walk_tree
 
 if TYPE_CHECKING:
     from rekuest_core.vocabulary.check import BlokScope
@@ -131,17 +130,13 @@ class _Uses:
 
     locals: frozenset[str]
     dependencies: Mapping[str, AgentDependencyInputModel]
-    view: BlokView | None
     arguments: dict[str, list[Typed]] = field(default_factory=dict[str, list[Typed]])
     binds: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
 
     def visit_component(self, node: ComponentNodeInputModel, ancestors: tuple[ComponentNodeInputModel, ...], scope: Mapping[str, None]) -> None:
-        spec = self.view.component(node.component) if self.view is not None else None
-        bind = next((prop for prop in spec.props if prop.key == BIND_PROP), None) if spec is not None else None
-        for prop in node.props or ():
-            path = prop.dynamic_value.path if prop.key == BIND_PROP and prop.dynamic_value is not None else None
-            if bind is not None and path is not None and path in self.locals and path not in scope:
-                self.binds.setdefault(path, []).append(bind.kind.value)
+        # What a control writes through its `bind` is its catalog's to say, and a server reads none:
+        # a local only a bind would type stays ANY here, and the renderer types it.
+        return None
 
     def visit_path(self, path: str, where: Where, scope: Mapping[str, None]) -> None:
         return None
@@ -170,11 +165,10 @@ class _Uses:
         return None
 
 
-def _uses(tree: ComponentNodeInputModel, scope: "BlokScope", view: BlokView | None) -> _Uses:
+def _uses(tree: ComponentNodeInputModel, scope: "BlokScope") -> _Uses:
     uses = _Uses(
         locals=frozenset(local.key for local in scope.locals),
         dependencies={dependency.key: dependency for dependency in scope.dependencies},
-        view=view,
     )
     walk_tree(tree, uses)
     return uses
@@ -197,10 +191,10 @@ def resolve_local(local: BlokLocalInputModel, arguments: Sequence[Mapping[str, o
     return any_local(local)
 
 
-def resolve_scope(tree: ComponentNodeInputModel, scope: "BlokScope", view: BlokView | None = None) -> "BlokScope":
+def resolve_scope(tree: ComponentNodeInputModel, scope: "BlokScope") -> "BlokScope":
     """``scope`` with what ``tree`` tells: each local's kind (see the module). Resolving a
     resolved scope changes nothing."""
-    uses = _uses(tree, scope, view)
+    uses = _uses(tree, scope)
     locals_ = tuple(resolve_local(local, uses.arguments.get(local.key, ()), uses.binds.get(local.key, ())) for local in scope.locals)
     return replace(scope, locals=locals_)
 
