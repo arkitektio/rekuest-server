@@ -25,11 +25,11 @@ MATERIALIZED_BLOKS = """
 
 @sync_to_async
 def _seed(prefix: str) -> HttpContext:
-    """One materialized blok per context, in the token-"test" organization."""
+    """A materialized panel, scene, agent logo and action logo (both LOGO), in the token-"test" organization."""
     context, user, _client, org = tenant_context(TEST_TOKEN)
     catalog = Module.objects.get_or_create(name="default", organization=org)[0]
-    for blok_context in ("HTML", "SCENE", "LOGO", "ACTION_LOGO"):
-        blok = Blok.objects.create(name=f"{prefix}-{blok_context}", creator=user, organization=org, module=catalog, context=blok_context)
+    for name, blok_context in (("panel", "PANEL"), ("scene", "SCENE"), ("logo", "LOGO"), ("action-logo", "LOGO")):
+        blok = Blok.objects.create(name=f"{prefix}-{name}", creator=user, organization=org, module=catalog, context=blok_context)
         MaterializedBlok.objects.create(blok=blok, name=blok.name, description="")
     return context
 
@@ -49,16 +49,16 @@ class TestMaterializedBlokContextFilter:
     """The ``contexts`` key of ``MaterializedBlokFilter``."""
 
     async def test_interfaces_leave_out_the_logos(self, authenticated_context: HttpContext) -> None:
-        """HTML and SCENE keep the interfaces and drop both kinds of logo."""
+        """PANEL and SCENE keep the interfaces and drop both kinds of logo."""
         context = await _seed("ctx-ui")
-        assert await _contexts(context, "ctx-ui", ["HTML", "SCENE"]) == ["HTML", "SCENE"]
+        assert await _contexts(context, "ctx-ui", ["PANEL", "SCENE"]) == ["PANEL", "SCENE"]
 
     async def test_logos_only(self, authenticated_context: HttpContext) -> None:
-        """LOGO and ACTION_LOGO keep the logos alone."""
+        """LOGO keeps the logos alone, an agent's and an action's."""
         context = await _seed("ctx-logo")
-        assert await _contexts(context, "ctx-logo", ["LOGO", "ACTION_LOGO"]) == ["ACTION_LOGO", "LOGO"]
+        assert await _contexts(context, "ctx-logo", ["LOGO"]) == ["LOGO", "LOGO"]
 
     async def test_no_contexts_keeps_everything(self, authenticated_context: HttpContext) -> None:
         """Without the key nothing is filtered by context."""
         context = await _seed("ctx-all")
-        assert await _contexts(context, "ctx-all", None) == ["ACTION_LOGO", "HTML", "LOGO", "SCENE"]
+        assert await _contexts(context, "ctx-all", None) == ["LOGO", "LOGO", "PANEL", "SCENE"]

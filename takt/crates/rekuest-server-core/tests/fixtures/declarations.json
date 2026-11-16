@@ -13613,7 +13613,7 @@
      ],
      "module": null,
      "description": "A dataset next to the histogram of its intensities.",
-     "context": "HTML",
+     "context": "PANEL",
      "default": false,
      "for_model": null,
      "for_node": null,
@@ -13639,14 +13639,7 @@
       }
      ],
      "vocab": 2,
-     "source": "<Html><Resizable direction=\"row\" className=\"rounded-xl border\"><ResizablePanel><StructureDisplay value={args.dataset} /></ResizablePanel><ResizablePanel><Card><Slider bind={bins} /><Button onClick={self.intensity_histogram(dataset: args.dataset, bins: bins) into run}>Histogram</Button><Progress value={run.progress} /><Chart data={run.returns.histogram} /></Card></ResizablePanel></Resizable></Html>",
-     "locals": [
-      {
-       "key": "bins",
-       "kind": "INT",
-       "default": 32
-      }
-     ],
+     "source": "<Blok kind=\"agent\" context=\"panel\"><local name=\"bins\" kind=\"INT\" default={32} /><Resizable direction=\"row\" className=\"rounded-xl border\"><ResizablePanel><StructureDisplay value={args.dataset} /></ResizablePanel><ResizablePanel><Card><Slider bind={bins} /><Button onClick={self.intensity_histogram(dataset: args.dataset, bins: bins) into run}>Histogram</Button><Progress value={run.progress} /><Chart data={run.returns.histogram} /></Card></ResizablePanel></Resizable></Blok>",
      "demo": {
       "args": {
        "dataset": null
@@ -13922,12 +13915,12 @@
       }
      ],
      "components": null,
-     "source": "<Html><Resizable direction=\"row\" className=\"rounded-xl border\"><ResizablePanel><StructureDisplay value={args.dataset} /></ResizablePanel><ResizablePanel><Card><Slider bind={bins} /><Button onClick={self.intensity_histogram(dataset: args.dataset, bins: bins) into run}>Histogram</Button><Progress value={run.progress} /><Chart data={run.returns.histogram} /></Card></ResizablePanel></Resizable></Html>",
+     "source": "<Blok kind=\"agent\" context=\"panel\"><local name=\"bins\" kind=\"INT\" default={32} /><Resizable direction=\"row\" className=\"rounded-xl border\"><ResizablePanel><StructureDisplay value={args.dataset} /></ResizablePanel><ResizablePanel><Card><Slider bind={bins} /><Button onClick={self.intensity_histogram(dataset: args.dataset, bins: bins) into run}>Histogram</Button><Progress value={run.progress} /><Chart data={run.returns.histogram} /></Card></ResizablePanel></Resizable></Blok>",
      "module": null,
      "catalog": null,
      "catalog_minor": null,
      "description": "A dataset next to the histogram of its intensities.",
-     "context": "HTML",
+     "context": "PANEL",
      "default": false,
      "for_model": null,
      "for_node": null,
@@ -13961,27 +13954,6 @@
      ],
      "vocab": 2,
      "catalogs": [],
-     "locals": [
-      {
-       "key": "bins",
-       "label": null,
-       "kind": "INT",
-       "description": null,
-       "identifier": null,
-       "nullable": false,
-       "effects": null,
-       "choices": null,
-       "reference_unit": null,
-       "proposed_units": null,
-       "dimension": null,
-       "children": null,
-       "validators": null,
-       "default": 32,
-       "widget": null,
-       "requires": null,
-       "persist": false
-      }
-     ],
      "demo": {
       "deps": null,
       "args": {
@@ -13990,9 +13962,7 @@
       "task": null,
       "queries": null,
       "subscriptions": null
-     },
-     "queries": [],
-     "subscriptions": []
+     }
     }
    ],
    "assets": null,
@@ -14054,7 +14024,7 @@
       {
        "key": "asks.choose",
        "description": "Keep it?",
-       "source": "<Html><Button label=\"Keep\" onClick={task.answer(values: {choice: \"keep\"})} /></Html>",
+       "source": "<Blok kind=\"task\" context=\"panel\"><Button label=\"Keep\" onClick={task.answer(values: {choice: \"keep\"})} /></Blok>",
        "args": [],
        "returns": [
         {
@@ -14079,15 +14049,12 @@
        "vocab": 2,
        "catalogs": [
         "ui@1"
-       ],
-       "locals": [],
-       "queries": [],
-       "subscriptions": []
+       ]
       },
       {
        "key": "asks.pick",
        "description": "Pick one.",
-       "source": "<Html><Card><CardTitle text={args.question} /><Button label=\"Go\" onClick={task.answer(values: {name: args.question, count: 2})} /></Card></Html>",
+       "source": "<Blok kind=\"task\" context=\"panel\"><Card><CardTitle text={args.question} /><Button label=\"Go\" onClick={task.answer(values: {name: args.question, count: 2})} /></Card></Blok>",
        "args": [
         {
          "key": "question",
@@ -14123,17 +14090,14 @@
        "vocab": 2,
        "catalogs": [
         "ui@1"
-       ],
-       "locals": [],
-       "queries": [],
-       "subscriptions": []
+       ]
       }
      ],
      "informs": [
       {
        "key": "asks.progress",
        "description": "Progress.",
-       "source": "<Html><Card><CardTitle text={args.question} /><Text text={args.count} /></Card></Html>",
+       "source": "<Blok kind=\"task\" context=\"panel\"><Card><CardTitle text={args.question} /><Text text={args.count} /></Card></Blok>",
        "args": [
         {
          "key": "question",
@@ -14154,10 +14118,7 @@
        "vocab": 2,
        "catalogs": [
         "ui@1"
-       ],
-       "locals": [],
-       "queries": [],
-       "subscriptions": []
+       ]
       }
      ]
     }
@@ -14245,7 +14206,7 @@
        "key": "asks.choose",
        "description": "Keep it?",
        "components": null,
-       "source": "<Html><Button label=\"Keep\" onClick={task.answer(values: {choice: \"keep\"})} /></Html>",
+       "source": "<Blok kind=\"task\" context=\"panel\"><Button label=\"Keep\" onClick={task.answer(values: {choice: \"keep\"})} /></Blok>",
        "module": null,
        "catalog": null,
        "catalog_minor": null,
@@ -14286,16 +14247,13 @@
        "catalogs": [
         "ui@1"
        ],
-       "locals": [],
-       "demo": null,
-       "queries": [],
-       "subscriptions": []
+       "demo": null
       },
       {
        "key": "asks.pick",
        "description": "Pick one.",
        "components": null,
-       "source": "<Html><Card><CardTitle text={args.question} /><Button label=\"Go\" onClick={task.answer(values: {name: args.question, count: 2})} /></Card></Html>",
+       "source": "<Blok kind=\"task\" context=\"panel\"><Card><CardTitle text={args.question} /><Button label=\"Go\" onClick={task.answer(values: {name: args.question, count: 2})} /></Card></Blok>",
        "module": null,
        "catalog": null,
        "catalog_minor": null,
@@ -14376,10 +14334,7 @@
        "catalogs": [
         "ui@1"
        ],
-       "locals": [],
-       "demo": null,
-       "queries": [],
-       "subscriptions": []
+       "demo": null
       }
      ],
      "informs": [
@@ -14387,7 +14342,7 @@
        "key": "asks.progress",
        "description": "Progress.",
        "components": null,
-       "source": "<Html><Card><CardTitle text={args.question} /><Text text={args.count} /></Card></Html>",
+       "source": "<Blok kind=\"task\" context=\"panel\"><Card><CardTitle text={args.question} /><Text text={args.count} /></Card></Blok>",
        "module": null,
        "catalog": null,
        "catalog_minor": null,
@@ -14434,10 +14389,7 @@
        "catalogs": [
         "ui@1"
        ],
-       "locals": [],
-       "demo": null,
-       "queries": [],
-       "subscriptions": []
+       "demo": null
       }
      ],
      "dynamic_asks": null,
@@ -17013,8 +16965,18 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
         {
          "id": "Box[0]",
@@ -17038,9 +17000,26 @@
      "dependencies": [],
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
-       "props": null,
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        },
+        {
+         "key": "context",
+         "static_value": "panel",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        }
+       ],
        "children": [
         {
          "id": "Box[0]",
@@ -17056,17 +17035,14 @@
      "catalog": null,
      "catalog_minor": null,
      "description": null,
-     "context": "HTML",
+     "context": "PANEL",
      "default": false,
      "for_model": null,
      "for_node": null,
      "args": [],
      "vocab": 2,
      "catalogs": [],
-     "locals": [],
-     "demo": null,
-     "queries": [],
-     "subscriptions": []
+     "demo": null
     }
    ],
    "assets": null,
@@ -17082,8 +17058,18 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
         {
          "id": "Box[0]",
@@ -17130,9 +17116,26 @@
      "dependencies": [],
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
-       "props": null,
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        },
+        {
+         "key": "context",
+         "static_value": "panel",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        }
+       ],
        "children": [
         {
          "id": "Box[0]",
@@ -17160,7 +17163,7 @@
      "catalog": null,
      "catalog_minor": null,
      "description": null,
-     "context": "HTML",
+     "context": "PANEL",
      "default": false,
      "for_model": null,
      "for_node": null,
@@ -17192,10 +17195,7 @@
      ],
      "vocab": 2,
      "catalogs": [],
-     "locals": [],
-     "demo": null,
-     "queries": [],
-     "subscriptions": []
+     "demo": null
     }
    ],
    "assets": null,
@@ -17211,8 +17211,18 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
         {
          "id": "Box[0]",
@@ -17251,9 +17261,26 @@
      "dependencies": [],
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
-       "props": null,
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        },
+        {
+         "key": "context",
+         "static_value": "panel",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        }
+       ],
        "children": [
         {
          "id": "Box[0]",
@@ -17269,7 +17296,7 @@
      "catalog": null,
      "catalog_minor": null,
      "description": null,
-     "context": "HTML",
+     "context": "PANEL",
      "default": false,
      "for_model": null,
      "for_node": null,
@@ -17314,10 +17341,7 @@
      ],
      "vocab": 2,
      "catalogs": [],
-     "locals": [],
-     "demo": null,
-     "queries": [],
-     "subscriptions": []
+     "demo": null
     }
    ],
    "assets": null,
@@ -17333,8 +17357,18 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
         {
          "id": "Box[0]",
@@ -17379,14 +17413,22 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Box[0]",
-       "component": "Box",
+       "id": "Blok[0]",
+       "component": "Blok",
        "props": [
         {
-         "key": "label",
-         "dynamic_value": {
-          "path": "args.image"
-         }
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "scene"
+        }
+       ],
+       "children": [
+        {
+         "id": "Scene[0]",
+         "component": "Scene"
         }
        ]
       }
@@ -17403,7 +17445,7 @@
     }
    ]
   },
-  "error": "Blok manifest: only an html blok takes args, not a SCENE blok",
+  "error": "Blok manifest: only a panel blok takes args, not a SCENE blok",
   "error_type": "value_error"
  },
  "blok arg of a bad shape": {
@@ -17414,8 +17456,18 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
         {
          "id": "Box[0]",
@@ -17452,8 +17504,18 @@
      "key": "inspector",
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
         {
          "id": "Box[0]",
@@ -17476,8 +17538,18 @@
      "vocab": 1,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
         {
          "id": "Box[0]",
@@ -17508,38 +17580,80 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
+        {
+         "id": "local-pose",
+         "component": "local",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "pose",
+           "declares_value": "pose"
+          },
+          {
+           "key": "kind",
+           "static_value": "LIST"
+          },
+          {
+           "key": "children",
+           "static_value": [
+            {
+             "key": "...",
+             "kind": "FLOAT"
+            }
+           ]
+          },
+          {
+           "key": "default",
+           "static_value": [
+            1,
+            0,
+            0,
+            0
+           ]
+          },
+          {
+           "key": "persist",
+           "static_value": true
+          }
+         ]
+        },
+        {
+         "id": "local-zoom",
+         "component": "local",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "zoom",
+           "declares_value": "zoom"
+          },
+          {
+           "key": "kind",
+           "static_value": "INT"
+          },
+          {
+           "key": "default",
+           "static_value": 1
+          }
+         ]
+        },
         {
          "id": "Box[0]",
          "component": "Box"
         }
        ]
-      }
-     ],
-     "locals": [
-      {
-       "key": "pose",
-       "kind": "LIST",
-       "children": [
-        {
-         "key": "...",
-         "kind": "FLOAT"
-        }
-       ],
-       "default": [
-        1,
-        0,
-        0,
-        0
-       ],
-       "persist": true
-      },
-      {
-       "key": "zoom",
-       "kind": "INT",
-       "default": 1
       }
      ],
      "demo": {
@@ -17566,10 +17680,115 @@
      "dependencies": [],
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
-       "props": null,
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        },
+        {
+         "key": "context",
+         "static_value": "panel",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        }
+       ],
        "children": [
+        {
+         "id": "local-pose",
+         "component": "local",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "pose",
+           "dynamic_value": null,
+           "declares_value": "pose",
+           "agent_call": null,
+           "util_call": null
+          },
+          {
+           "key": "kind",
+           "static_value": "LIST",
+           "dynamic_value": null,
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          },
+          {
+           "key": "children",
+           "static_value": [
+            {
+             "key": "...",
+             "kind": "FLOAT"
+            }
+           ],
+           "dynamic_value": null,
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          },
+          {
+           "key": "default",
+           "static_value": [
+            1,
+            0,
+            0,
+            0
+           ],
+           "dynamic_value": null,
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          },
+          {
+           "key": "persist",
+           "static_value": true,
+           "dynamic_value": null,
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          }
+         ],
+         "children": null
+        },
+        {
+         "id": "local-zoom",
+         "component": "local",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "zoom",
+           "dynamic_value": null,
+           "declares_value": "zoom",
+           "agent_call": null,
+           "util_call": null
+          },
+          {
+           "key": "kind",
+           "static_value": "INT",
+           "dynamic_value": null,
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          },
+          {
+           "key": "default",
+           "static_value": 1,
+           "dynamic_value": null,
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          }
+         ],
+         "children": null
+        },
         {
          "id": "Box[0]",
          "component": "Box",
@@ -17584,7 +17803,7 @@
      "catalog": null,
      "catalog_minor": null,
      "description": null,
-     "context": "HTML",
+     "context": "PANEL",
      "default": false,
      "for_model": null,
      "for_node": null,
@@ -17592,70 +17811,6 @@
      "vocab": 2,
      "catalogs": [
       "ui@1"
-     ],
-     "locals": [
-      {
-       "key": "pose",
-       "label": null,
-       "kind": "LIST",
-       "description": null,
-       "identifier": null,
-       "nullable": false,
-       "effects": null,
-       "choices": null,
-       "reference_unit": null,
-       "proposed_units": null,
-       "dimension": null,
-       "children": [
-        {
-         "key": "...",
-         "label": null,
-         "kind": "FLOAT",
-         "description": null,
-         "identifier": null,
-         "nullable": false,
-         "effects": null,
-         "choices": null,
-         "reference_unit": null,
-         "proposed_units": null,
-         "dimension": null,
-         "children": null,
-         "validators": null,
-         "default": null,
-         "widget": null,
-         "requires": null
-        }
-       ],
-       "validators": null,
-       "default": [
-        1,
-        0,
-        0,
-        0
-       ],
-       "widget": null,
-       "requires": null,
-       "persist": true
-      },
-      {
-       "key": "zoom",
-       "label": null,
-       "kind": "INT",
-       "description": null,
-       "identifier": null,
-       "nullable": false,
-       "effects": null,
-       "choices": null,
-       "reference_unit": null,
-       "proposed_units": null,
-       "dimension": null,
-       "children": null,
-       "validators": null,
-       "default": 1,
-       "widget": null,
-       "requires": null,
-       "persist": false
-      }
      ],
      "demo": {
       "deps": null,
@@ -17665,9 +17820,7 @@
       "task": null,
       "queries": null,
       "subscriptions": null
-     },
-     "queries": [],
-     "subscriptions": []
+     }
     }
    ],
    "assets": null,
@@ -17683,9 +17836,49 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
+        {
+         "id": "local-zoom",
+         "component": "local",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "zoom",
+           "declares_value": "zoom"
+          },
+          {
+           "key": "kind",
+           "static_value": "INT"
+          }
+         ]
+        },
+        {
+         "id": "local-zoom-2",
+         "component": "local",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "zoom",
+           "declares_value": "zoom"
+          },
+          {
+           "key": "kind",
+           "static_value": "INT"
+          }
+         ]
+        },
         {
          "id": "Box[0]",
          "component": "Box",
@@ -17700,47 +17893,11 @@
         }
        ]
       }
-     ],
-     "locals": [
-      {
-       "key": "pose",
-       "kind": "LIST",
-       "children": [
-        {
-         "key": "...",
-         "kind": "FLOAT"
-        }
-       ],
-       "default": [
-        1,
-        0,
-        0,
-        0
-       ],
-       "persist": true
-      },
-      {
-       "key": "pose",
-       "kind": "LIST",
-       "children": [
-        {
-         "key": "...",
-         "kind": "FLOAT"
-        }
-       ],
-       "default": [
-        1,
-        0,
-        0,
-        0
-       ],
-       "persist": true
-      }
      ]
     }
    ]
   },
-  "error": "locals: 'pose' is declared twice. [manifest.duplicate]",
+  "error": "local-zoom-2: 'zoom' is declared twice: as the local local-zoom and as the local local-zoom-2. [roots.shadow]",
   "error_type": "value_error"
  },
  "blok with a reserved local": {
@@ -17751,9 +17908,34 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
+        {
+         "id": "local-task",
+         "component": "local",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "task",
+           "declares_value": "task"
+          },
+          {
+           "key": "kind",
+           "static_value": "STRING"
+          }
+         ]
+        },
         {
          "id": "Box[0]",
          "component": "Box",
@@ -17768,17 +17950,11 @@
         }
        ]
       }
-     ],
-     "locals": [
-      {
-       "key": "task",
-       "kind": "STRING"
-      }
      ]
     }
    ]
   },
-  "error": "'task' is reserved: no local, let or into may use it. [roots.reserved]",
+  "error": "local-task: 'task' is reserved: no local, let or into may use it. [roots.reserved]",
   "error_type": "value_error"
  },
  "blok with a local of no kind": {
@@ -17789,9 +17965,34 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
+        {
+         "id": "local-zoom",
+         "component": "local",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "zoom",
+           "declares_value": "zoom"
+          },
+          {
+           "key": "default",
+           "static_value": 1
+          }
+         ]
+        },
         {
          "id": "Box[0]",
          "component": "Box",
@@ -17805,12 +18006,6 @@
          ]
         }
        ]
-      }
-     ],
-     "locals": [
-      {
-       "key": "zoom",
-       "default": 1
       }
      ]
     }
@@ -17828,10 +18023,50 @@
      "dependencies": [],
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
-       "props": null,
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        },
+        {
+         "key": "context",
+         "static_value": "panel",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        }
+       ],
        "children": [
+        {
+         "id": "local-zoom",
+         "component": "local",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "zoom",
+           "dynamic_value": null,
+           "declares_value": "zoom",
+           "agent_call": null,
+           "util_call": null
+          },
+          {
+           "key": "default",
+           "static_value": 1,
+           "dynamic_value": null,
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          }
+         ],
+         "children": null
+        },
         {
          "id": "Box[0]",
          "component": "Box",
@@ -17858,22 +18093,14 @@
      "catalog": null,
      "catalog_minor": null,
      "description": null,
-     "context": "HTML",
+     "context": "PANEL",
      "default": false,
      "for_model": null,
      "for_node": null,
      "args": [],
      "vocab": 2,
      "catalogs": [],
-     "locals": [
-      {
-       "key": "zoom",
-       "default": 1
-      }
-     ],
-     "demo": null,
-     "queries": [],
-     "subscriptions": []
+     "demo": null
     }
    ],
    "assets": null,
@@ -17889,9 +18116,38 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
+        {
+         "id": "local-zoom",
+         "component": "local",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "zoom",
+           "declares_value": "zoom"
+          },
+          {
+           "key": "kind",
+           "static_value": "INT"
+          },
+          {
+           "key": "default",
+           "static_value": "1"
+          }
+         ]
+        },
         {
          "id": "Box[0]",
          "component": "Box",
@@ -17906,18 +18162,11 @@
         }
        ]
       }
-     ],
-     "locals": [
-      {
-       "key": "zoom",
-       "kind": "INT",
-       "default": "1"
-      }
      ]
     }
    ]
   },
-  "error": "locals.zoom: local 'zoom': its default '1' is not a INT. [local.default]",
+  "error": "local-zoom: local 'zoom': its default '1' is not a INT. [local.default]",
   "error_type": "value_error"
  },
  "blok with a local of a bad shape": {
@@ -17928,9 +18177,34 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
+        {
+         "id": "local-form",
+         "component": "local",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "form",
+           "declares_value": "form"
+          },
+          {
+           "key": "kind",
+           "static_value": "DICT"
+          }
+         ]
+        },
         {
          "id": "Box[0]",
          "component": "Box",
@@ -17945,17 +18219,123 @@
         }
        ]
       }
-     ],
-     "locals": [
+     ]
+    }
+   ]
+  },
+  "error": "local-form: local 'form': its port is no valid port (local 'form': its port is no valid port: Value error, Port 'form' of kind DICT must have at least 1 children, got 0. [local.attribute]). [local.attribute]",
+  "error_type": "value_error"
+ },
+ "blok with a local after its content": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
       {
-       "key": "form",
-       "kind": "DICT"
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box"
+        },
+        {
+         "id": "local-zoom",
+         "component": "local",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "zoom",
+           "declares_value": "zoom"
+          },
+          {
+           "key": "kind",
+           "static_value": "INT"
+          }
+         ]
+        }
+       ]
       }
      ]
     }
    ]
   },
-  "error": "Port 'form' of kind DICT must have at least 1 children, got 0",
+  "error": "local-zoom: local 'zoom' comes after <Box> (Box[0]); locals come first among their parent's children. [local.position]",
+  "error_type": "value_error"
+ },
+ "blok with a local out of scope": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
+       "children": [
+        {
+         "id": "Card[0]",
+         "component": "Card",
+         "children": [
+          {
+           "id": "local-open",
+           "component": "local",
+           "props": [
+            {
+             "key": "name",
+             "static_value": "open",
+             "declares_value": "open"
+            },
+            {
+             "key": "default",
+             "static_value": false
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "Text[0]",
+         "component": "Text",
+         "props": [
+          {
+           "key": "text",
+           "dynamic_value": {
+            "path": "open"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Text[0]: open reads 'open', which is no root, local, loop variable or record of this blok. [roots.unknown]",
   "error_type": "value_error"
  },
  "blok with a catalog badly spelled": {
@@ -17966,8 +18346,18 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
         {
          "id": "Box[0]",
@@ -18001,9 +18391,55 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
+        {
+         "id": "query-positions",
+         "component": "query",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "positions"
+          },
+          {
+           "key": "service",
+           "static_value": "mikro"
+          },
+          {
+           "key": "document",
+           "static_value": "query($slide: ID!) { positions(slide: $slide) { id } }"
+          }
+         ],
+         "children": [
+          {
+           "id": "query-positions/var0",
+           "component": "var",
+           "props": [
+            {
+             "key": "key",
+             "static_value": "slide"
+            },
+            {
+             "key": "value",
+             "dynamic_value": {
+              "path": "args.image"
+             }
+            }
+           ]
+          }
+         ]
+        },
         {
          "id": "Text[0]",
          "component": "Text",
@@ -18026,19 +18462,6 @@
        "identifier": "@mikro/image",
        "nullable": false
       }
-     ],
-     "queries": [
-      {
-       "key": "positions",
-       "service": "mikro",
-       "document": "query($slide: ID!) { positions(slide: $slide) { id } }",
-       "variables": [
-        {
-         "key": "slide",
-         "value_path": "args.image"
-        }
-       ]
-      }
      ]
     }
    ]
@@ -18055,10 +18478,85 @@
      "dependencies": [],
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
-       "props": null,
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        },
+        {
+         "key": "context",
+         "static_value": "panel",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        }
+       ],
        "children": [
+        {
+         "id": "query-positions",
+         "component": "query",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "positions",
+           "dynamic_value": null,
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          },
+          {
+           "key": "service",
+           "static_value": "mikro",
+           "dynamic_value": null,
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          },
+          {
+           "key": "document",
+           "static_value": "query($slide: ID!) { positions(slide: $slide) { id } }",
+           "dynamic_value": null,
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          }
+         ],
+         "children": [
+          {
+           "id": "query-positions/var0",
+           "component": "var",
+           "props": [
+            {
+             "key": "key",
+             "static_value": "slide",
+             "dynamic_value": null,
+             "declares_value": null,
+             "agent_call": null,
+             "util_call": null
+            },
+            {
+             "key": "value",
+             "static_value": null,
+             "dynamic_value": {
+              "literal": null,
+              "path": "args.image"
+             },
+             "declares_value": null,
+             "agent_call": null,
+             "util_call": null
+            }
+           ],
+           "children": null
+          }
+         ]
+        },
         {
          "id": "Text[0]",
          "component": "Text",
@@ -18085,7 +18583,7 @@
      "catalog": null,
      "catalog_minor": null,
      "description": null,
-     "context": "HTML",
+     "context": "PANEL",
      "default": false,
      "for_model": null,
      "for_node": null,
@@ -18111,29 +18609,7 @@
      ],
      "vocab": 2,
      "catalogs": [],
-     "locals": [],
-     "demo": null,
-     "queries": [
-      {
-       "key": "positions",
-       "service": "mikro",
-       "document": "query($slide: ID!) { positions(slide: $slide) { id } }",
-       "variables": [
-        {
-         "key": "slide",
-         "value_literal": null,
-         "value_path": "args.image",
-         "agent_call": null,
-         "util_call": null,
-         "value_list": null,
-         "value_dict": null
-        }
-       ],
-       "poll": null,
-       "more": null
-      }
-     ],
-     "subscriptions": []
+     "demo": null
     }
    ],
    "assets": null,
@@ -18149,9 +18625,55 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
+        {
+         "id": "query-positions",
+         "component": "query",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "positions"
+          },
+          {
+           "key": "service",
+           "static_value": "mikro"
+          },
+          {
+           "key": "document",
+           "static_value": "mutation { a }"
+          }
+         ],
+         "children": [
+          {
+           "id": "query-positions/var0",
+           "component": "var",
+           "props": [
+            {
+             "key": "key",
+             "static_value": "slide"
+            },
+            {
+             "key": "value",
+             "dynamic_value": {
+              "path": "args.image"
+             }
+            }
+           ]
+          }
+         ]
+        },
         {
          "id": "Box[0]",
          "component": "Box",
@@ -18167,23 +18689,18 @@
        ]
       }
      ],
-     "queries": [
+     "args": [
       {
-       "key": "positions",
-       "service": "mikro",
-       "document": "mutation { a }",
-       "variables": [
-        {
-         "key": "slide",
-         "value_path": "args.image"
-        }
-       ]
+       "key": "image",
+       "kind": "STRUCTURE",
+       "identifier": "@mikro/image",
+       "nullable": false
       }
      ]
     }
    ]
   },
-  "error": "query 'positions': is a mutation: a blok reads, and writes only through a task [query.read_only]",
+  "error": "queries.positions: query 'positions': is a mutation: a blok reads, and writes only through a task [query.read_only]",
   "error_type": "value_error"
  },
  "blok with a query key that is no name": {
@@ -18194,9 +18711,55 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
+        {
+         "id": "query-my positions",
+         "component": "query",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "my positions"
+          },
+          {
+           "key": "service",
+           "static_value": "mikro"
+          },
+          {
+           "key": "document",
+           "static_value": "query($slide: ID!) { positions(slide: $slide) { id } }"
+          }
+         ],
+         "children": [
+          {
+           "id": "query-my positions/var0",
+           "component": "var",
+           "props": [
+            {
+             "key": "key",
+             "static_value": "slide"
+            },
+            {
+             "key": "value",
+             "dynamic_value": {
+              "path": "args.image"
+             }
+            }
+           ]
+          }
+         ]
+        },
         {
          "id": "Box[0]",
          "component": "Box",
@@ -18212,23 +18775,18 @@
        ]
       }
      ],
-     "queries": [
+     "args": [
       {
-       "key": "my positions",
-       "service": "mikro",
-       "document": "query($slide: ID!) { positions(slide: $slide) { id } }",
-       "variables": [
-        {
-         "key": "slide",
-         "value_path": "args.image"
-        }
-       ]
+       "key": "image",
+       "kind": "STRUCTURE",
+       "identifier": "@mikro/image",
+       "nullable": false
       }
      ]
     }
    ]
   },
-  "error": "queries: 'my positions' is not a name. [manifest.name]",
+  "error": "queries.my positions: query: 'my positions' is not a name. [manifest.name]",
   "error_type": "value_error"
  },
  "blok with a query twice": {
@@ -18239,9 +18797,91 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
+        {
+         "id": "query-positions",
+         "component": "query",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "positions"
+          },
+          {
+           "key": "service",
+           "static_value": "mikro"
+          },
+          {
+           "key": "document",
+           "static_value": "query($slide: ID!) { positions(slide: $slide) { id } }"
+          }
+         ],
+         "children": [
+          {
+           "id": "query-positions/var0",
+           "component": "var",
+           "props": [
+            {
+             "key": "key",
+             "static_value": "slide"
+            },
+            {
+             "key": "value",
+             "dynamic_value": {
+              "path": "args.image"
+             }
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "query-twice",
+         "component": "query",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "positions"
+          },
+          {
+           "key": "service",
+           "static_value": "mikro"
+          },
+          {
+           "key": "document",
+           "static_value": "query($slide: ID!) { positions(slide: $slide) { id } }"
+          }
+         ],
+         "children": [
+          {
+           "id": "query-twice/var0",
+           "component": "var",
+           "props": [
+            {
+             "key": "key",
+             "static_value": "slide"
+            },
+            {
+             "key": "value",
+             "dynamic_value": {
+              "path": "args.image"
+             }
+            }
+           ]
+          }
+         ]
+        },
         {
          "id": "Box[0]",
          "component": "Box",
@@ -18257,84 +18897,98 @@
        ]
       }
      ],
-     "queries": [
+     "args": [
       {
-       "key": "positions",
-       "service": "mikro",
-       "document": "query($slide: ID!) { positions(slide: $slide) { id } }",
-       "variables": [
-        {
-         "key": "slide",
-         "value_path": "args.image"
-        }
-       ]
-      },
-      {
-       "key": "positions",
-       "service": "mikro",
-       "document": "query($slide: ID!) { positions(slide: $slide) { id } }",
-       "variables": [
-        {
-         "key": "slide",
-         "value_path": "args.image"
-        }
-       ]
+       "key": "image",
+       "kind": "STRUCTURE",
+       "identifier": "@mikro/image",
+       "nullable": false
       }
      ]
     }
    ]
   },
-  "error": "queries: 'positions' is declared twice. [manifest.duplicate]",
+  "error": "query-twice: query 'positions' is declared twice (query-positions and query-twice). [query.duplicate]",
   "error_type": "value_error"
  },
- "blok with locals twice out of order": {
+ "blok with a query inside its content": {
   "input": {
    "bloks": [
     {
      "key": "inspector",
      "vocab": 2,
+     "args": [
+      {
+       "key": "image",
+       "kind": "STRUCTURE",
+       "identifier": "@mikro/image",
+       "nullable": false
+      }
+     ],
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
         {
-         "id": "Box[0]",
-         "component": "Box",
-         "props": [
+         "id": "Card[0]",
+         "component": "Card",
+         "children": [
           {
-           "key": "label",
-           "dynamic_value": {
-            "path": "args.image"
-           }
+           "id": "query-positions",
+           "component": "query",
+           "props": [
+            {
+             "key": "name",
+             "static_value": "positions"
+            },
+            {
+             "key": "service",
+             "static_value": "mikro"
+            },
+            {
+             "key": "document",
+             "static_value": "query($slide: ID!) { positions(slide: $slide) { id } }"
+            }
+           ],
+           "children": [
+            {
+             "id": "query-positions/var0",
+             "component": "var",
+             "props": [
+              {
+               "key": "key",
+               "static_value": "slide"
+              },
+              {
+               "key": "value",
+               "dynamic_value": {
+                "path": "args.image"
+               }
+              }
+             ]
+            }
+           ]
           }
          ]
         }
        ]
       }
-     ],
-     "locals": [
-      {
-       "key": "a",
-       "kind": "STRING"
-      },
-      {
-       "key": "b",
-       "kind": "STRING"
-      },
-      {
-       "key": "b",
-       "kind": "STRING"
-      },
-      {
-       "key": "a",
-       "kind": "STRING"
-      }
      ]
     }
    ]
   },
-  "error": "locals: 'a' is declared twice. [manifest.duplicate]",
+  "error": "query-positions: <query> 'positions' is declared at Card[0]: queries and subscriptions are children of <Blok>. [query.position]",
   "error_type": "value_error"
  },
  "blok with a query fetching more": {
@@ -18345,9 +18999,59 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
+        {
+         "id": "query-positions",
+         "component": "query",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "positions"
+          },
+          {
+           "key": "service",
+           "static_value": "mikro"
+          },
+          {
+           "key": "document",
+           "static_value": "query($slide: ID!) { positions(slide: $slide) { id } }"
+          },
+          {
+           "key": "more",
+           "static_value": "positions"
+          }
+         ],
+         "children": [
+          {
+           "id": "query-positions/var0",
+           "component": "var",
+           "props": [
+            {
+             "key": "key",
+             "static_value": "slide"
+            },
+            {
+             "key": "value",
+             "dynamic_value": {
+              "path": "args.image"
+             }
+            }
+           ]
+          }
+         ]
+        },
         {
          "id": "Button[0]",
          "component": "Button",
@@ -18378,18 +19082,12 @@
        ]
       }
      ],
-     "queries": [
+     "args": [
       {
-       "key": "positions",
-       "service": "mikro",
-       "document": "query($slide: ID!) { positions(slide: $slide) { id } }",
-       "variables": [
-        {
-         "key": "slide",
-         "value_path": "args.image"
-        }
-       ],
-       "more": "positions"
+       "key": "image",
+       "kind": "STRUCTURE",
+       "identifier": "@mikro/image",
+       "nullable": false
       }
      ]
     }
@@ -18407,10 +19105,93 @@
      "dependencies": [],
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
-       "props": null,
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        },
+        {
+         "key": "context",
+         "static_value": "panel",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        }
+       ],
        "children": [
+        {
+         "id": "query-positions",
+         "component": "query",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "positions",
+           "dynamic_value": null,
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          },
+          {
+           "key": "service",
+           "static_value": "mikro",
+           "dynamic_value": null,
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          },
+          {
+           "key": "document",
+           "static_value": "query($slide: ID!) { positions(slide: $slide) { id } }",
+           "dynamic_value": null,
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          },
+          {
+           "key": "more",
+           "static_value": "positions",
+           "dynamic_value": null,
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          }
+         ],
+         "children": [
+          {
+           "id": "query-positions/var0",
+           "component": "var",
+           "props": [
+            {
+             "key": "key",
+             "static_value": "slide",
+             "dynamic_value": null,
+             "declares_value": null,
+             "agent_call": null,
+             "util_call": null
+            },
+            {
+             "key": "value",
+             "static_value": null,
+             "dynamic_value": {
+              "literal": null,
+              "path": "args.image"
+             },
+             "declares_value": null,
+             "agent_call": null,
+             "util_call": null
+            }
+           ],
+           "children": null
+          }
+         ]
+        },
         {
          "id": "Button[0]",
          "component": "Button",
@@ -18466,36 +19247,33 @@
      "catalog": null,
      "catalog_minor": null,
      "description": null,
-     "context": "HTML",
+     "context": "PANEL",
      "default": false,
      "for_model": null,
      "for_node": null,
-     "args": [],
-     "vocab": 2,
-     "catalogs": [],
-     "locals": [],
-     "demo": null,
-     "queries": [
+     "args": [
       {
-       "key": "positions",
-       "service": "mikro",
-       "document": "query($slide: ID!) { positions(slide: $slide) { id } }",
-       "variables": [
-        {
-         "key": "slide",
-         "value_literal": null,
-         "value_path": "args.image",
-         "agent_call": null,
-         "util_call": null,
-         "value_list": null,
-         "value_dict": null
-        }
-       ],
-       "poll": null,
-       "more": "positions"
+       "key": "image",
+       "label": null,
+       "kind": "STRUCTURE",
+       "description": null,
+       "identifier": "@mikro/image",
+       "nullable": false,
+       "effects": null,
+       "choices": null,
+       "reference_unit": null,
+       "proposed_units": null,
+       "dimension": null,
+       "children": null,
+       "validators": null,
+       "default": null,
+       "widget": null,
+       "requires": null
       }
      ],
-     "subscriptions": []
+     "vocab": 2,
+     "catalogs": [],
+     "demo": null
     }
    ],
    "assets": null,
@@ -18511,9 +19289,55 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
+        {
+         "id": "query-positions",
+         "component": "query",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "positions"
+          },
+          {
+           "key": "service",
+           "static_value": "mikro"
+          },
+          {
+           "key": "document",
+           "static_value": "query($slide: ID!) { positions(slide: $slide) { id } }"
+          }
+         ],
+         "children": [
+          {
+           "id": "query-positions/var0",
+           "component": "var",
+           "props": [
+            {
+             "key": "key",
+             "static_value": "slide"
+            },
+            {
+             "key": "value",
+             "dynamic_value": {
+              "path": "args.image"
+             }
+            }
+           ]
+          }
+         ]
+        },
         {
          "id": "Button[0]",
          "component": "Button",
@@ -18535,17 +19359,12 @@
        ]
       }
      ],
-     "queries": [
+     "args": [
       {
-       "key": "positions",
-       "service": "mikro",
-       "document": "query($slide: ID!) { positions(slide: $slide) { id } }",
-       "variables": [
-        {
-         "key": "slide",
-         "value_path": "args.image"
-        }
-       ]
+       "key": "image",
+       "kind": "STRUCTURE",
+       "identifier": "@mikro/image",
+       "nullable": false
       }
      ]
     }
@@ -18562,9 +19381,59 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
+        {
+         "id": "query-positions",
+         "component": "query",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "positions"
+          },
+          {
+           "key": "service",
+           "static_value": "mikro"
+          },
+          {
+           "key": "document",
+           "static_value": "query($slide: ID!) { positions(slide: $slide) { id } }"
+          },
+          {
+           "key": "more",
+           "static_value": "positions[0]"
+          }
+         ],
+         "children": [
+          {
+           "id": "query-positions/var0",
+           "component": "var",
+           "props": [
+            {
+             "key": "key",
+             "static_value": "slide"
+            },
+            {
+             "key": "value",
+             "dynamic_value": {
+              "path": "args.image"
+             }
+            }
+           ]
+          }
+         ]
+        },
         {
          "id": "Box[0]",
          "component": "Box",
@@ -18580,24 +19449,18 @@
        ]
       }
      ],
-     "queries": [
+     "args": [
       {
-       "key": "positions",
-       "service": "mikro",
-       "document": "query($slide: ID!) { positions(slide: $slide) { id } }",
-       "variables": [
-        {
-         "key": "slide",
-         "value_path": "args.image"
-        }
-       ],
-       "more": "positions[0]"
+       "key": "image",
+       "kind": "STRUCTURE",
+       "identifier": "@mikro/image",
+       "nullable": false
       }
      ]
     }
    ]
   },
-  "error": "query 'positions': more 'positions[0]' is not a field path into its data (positions, images.items). [query.more]",
+  "error": "queries.positions: query 'positions': more 'positions[0]' is not a field path into its data (positions, images.items). [query.more]",
   "error_type": "value_error"
  },
  "blok with a subscription document as a query": {
@@ -18608,9 +19471,55 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
+        {
+         "id": "query-positions",
+         "component": "query",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "positions"
+          },
+          {
+           "key": "service",
+           "static_value": "mikro"
+          },
+          {
+           "key": "document",
+           "static_value": "subscription { a }"
+          }
+         ],
+         "children": [
+          {
+           "id": "query-positions/var0",
+           "component": "var",
+           "props": [
+            {
+             "key": "key",
+             "static_value": "slide"
+            },
+            {
+             "key": "value",
+             "dynamic_value": {
+              "path": "args.image"
+             }
+            }
+           ]
+          }
+         ]
+        },
         {
          "id": "Box[0]",
          "component": "Box",
@@ -18626,23 +19535,18 @@
        ]
       }
      ],
-     "queries": [
+     "args": [
       {
-       "key": "positions",
-       "service": "mikro",
-       "document": "subscription { a }",
-       "variables": [
-        {
-         "key": "slide",
-         "value_path": "args.image"
-        }
-       ]
+       "key": "image",
+       "kind": "STRUCTURE",
+       "identifier": "@mikro/image",
+       "nullable": false
       }
      ]
     }
    ]
   },
-  "error": "query 'positions' is a subscription, not a query. [query.kind]",
+  "error": "queries.positions: query 'positions' is a subscription, not a query. [query.kind]",
   "error_type": "value_error"
  },
  "blok with a query of no operation": {
@@ -18653,9 +19557,55 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
+        {
+         "id": "query-positions",
+         "component": "query",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "positions"
+          },
+          {
+           "key": "service",
+           "static_value": "mikro"
+          },
+          {
+           "key": "document",
+           "static_value": "  # nothing"
+          }
+         ],
+         "children": [
+          {
+           "id": "query-positions/var0",
+           "component": "var",
+           "props": [
+            {
+             "key": "key",
+             "static_value": "slide"
+            },
+            {
+             "key": "value",
+             "dynamic_value": {
+              "path": "args.image"
+             }
+            }
+           ]
+          }
+         ]
+        },
         {
          "id": "Box[0]",
          "component": "Box",
@@ -18671,23 +19621,18 @@
        ]
       }
      ],
-     "queries": [
+     "args": [
       {
-       "key": "positions",
-       "service": "mikro",
-       "document": "  # nothing",
-       "variables": [
-        {
-         "key": "slide",
-         "value_path": "args.image"
-        }
-       ]
+       "key": "image",
+       "kind": "STRUCTURE",
+       "identifier": "@mikro/image",
+       "nullable": false
       }
      ]
     }
    ]
   },
-  "error": "query 'positions' is a document without an operation, not a query. [query.kind]",
+  "error": "queries.positions: query 'positions' is a document without an operation, not a query. [query.kind]",
   "error_type": "value_error"
  },
  "blok with a query document as a subscription": {
@@ -18698,9 +19643,38 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
+        {
+         "id": "subscription-s",
+         "component": "subscription",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "s"
+          },
+          {
+           "key": "service",
+           "static_value": "rekuest"
+          },
+          {
+           "key": "document",
+           "static_value": "query { a }"
+          }
+         ],
+         "children": null
+        },
         {
          "id": "Box[0]",
          "component": "Box",
@@ -18715,18 +19689,11 @@
         }
        ]
       }
-     ],
-     "subscriptions": [
-      {
-       "key": "s",
-       "service": "rekuest",
-       "document": "query { a }"
-      }
      ]
     }
    ]
   },
-  "error": "subscription 's' is a query, not a subscription. [query.kind]",
+  "error": "subscriptions.s: subscription 's' is a query, not a subscription. [query.kind]",
   "error_type": "value_error"
  },
  "blok with a subscription that is a mutation": {
@@ -18737,9 +19704,38 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
+        {
+         "id": "subscription-s",
+         "component": "subscription",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "s"
+          },
+          {
+           "key": "service",
+           "static_value": "rekuest"
+          },
+          {
+           "key": "document",
+           "static_value": "mutation { a }"
+          }
+         ],
+         "children": null
+        },
         {
          "id": "Box[0]",
          "component": "Box",
@@ -18754,18 +19750,11 @@
         }
        ]
       }
-     ],
-     "subscriptions": [
-      {
-       "key": "s",
-       "service": "rekuest",
-       "document": "mutation { a }"
-      }
      ]
     }
    ]
   },
-  "error": "subscription 's': is a mutation: a blok reads, and writes only through a task [query.read_only]",
+  "error": "subscriptions.s: subscription 's': is a mutation: a blok reads, and writes only through a task [query.read_only]",
   "error_type": "value_error"
  },
  "blok with a subscription replaying an unknown query": {
@@ -18776,9 +19765,42 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
+        {
+         "id": "subscription-s",
+         "component": "subscription",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "s"
+          },
+          {
+           "key": "service",
+           "static_value": "rekuest"
+          },
+          {
+           "key": "document",
+           "static_value": "subscription { a }"
+          },
+          {
+           "key": "history",
+           "static_value": "nope"
+          }
+         ],
+         "children": null
+        },
         {
          "id": "Box[0]",
          "component": "Box",
@@ -18793,19 +19815,11 @@
         }
        ]
       }
-     ],
-     "subscriptions": [
-      {
-       "key": "s",
-       "service": "rekuest",
-       "document": "subscription { a }",
-       "history": "nope"
-      }
      ]
     }
    ]
   },
-  "error": "subscription 's' replays from 'nope', which is no declared query. [query.history]",
+  "error": "subscriptions.s: subscription 's' replays from 'nope', which is no declared query. [query.history]",
   "error_type": "value_error"
  },
  "blok reading an undeclared query": {
@@ -18816,8 +19830,18 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
         {
          "id": "Text[0]",
@@ -18848,8 +19872,18 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
         {
          "id": "Text[0]",
@@ -18910,8 +19944,18 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
         {
          "id": "Text[0]",
@@ -19047,9 +20091,26 @@
      ],
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
-       "props": null,
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        },
+        {
+         "key": "context",
+         "static_value": "panel",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        }
+       ],
        "children": [
         {
          "id": "Text[0]",
@@ -19077,17 +20138,14 @@
      "catalog": null,
      "catalog_minor": null,
      "description": null,
-     "context": "HTML",
+     "context": "PANEL",
      "default": false,
      "for_model": null,
      "for_node": null,
      "args": [],
      "vocab": 2,
      "catalogs": [],
-     "locals": [],
-     "demo": null,
-     "queries": [],
-     "subscriptions": []
+     "demo": null
     }
    ],
    "assets": null,
@@ -19103,8 +20161,18 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
         {
          "id": "Button[0]",
@@ -19254,9 +20322,26 @@
      ],
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
-       "props": null,
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        },
+        {
+         "key": "context",
+         "static_value": "panel",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        }
+       ],
        "children": [
         {
          "id": "Button[0]",
@@ -19306,17 +20391,14 @@
      "catalog": null,
      "catalog_minor": null,
      "description": null,
-     "context": "HTML",
+     "context": "PANEL",
      "default": false,
      "for_model": null,
      "for_node": null,
      "args": [],
      "vocab": 2,
      "catalogs": [],
-     "locals": [],
-     "demo": null,
-     "queries": [],
-     "subscriptions": []
+     "demo": null
     }
    ],
    "assets": null,
@@ -19332,8 +20414,18 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
         {
          "id": "Text[0]",
@@ -19364,8 +20456,18 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
         {
          "id": "Text[0]",
@@ -19397,9 +20499,26 @@
      "dependencies": [],
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
-       "props": null,
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        },
+        {
+         "key": "context",
+         "static_value": "panel",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        }
+       ],
        "children": [
         {
          "id": "Text[0]",
@@ -19427,17 +20546,14 @@
      "catalog": null,
      "catalog_minor": null,
      "description": null,
-     "context": "HTML",
+     "context": "PANEL",
      "default": false,
      "for_model": null,
      "for_node": null,
      "args": [],
      "vocab": 2,
      "catalogs": [],
-     "locals": [],
-     "demo": null,
-     "queries": [],
-     "subscriptions": []
+     "demo": null
     }
    ],
    "assets": null,
@@ -19453,8 +20569,18 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
         {
          "id": "Box[0]",
@@ -19487,9 +20613,26 @@
      "dependencies": [],
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
-       "props": null,
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        },
+        {
+         "key": "context",
+         "static_value": "panel",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        }
+       ],
        "children": [
         {
          "id": "Box[0]",
@@ -19517,17 +20660,133 @@
      "catalog": null,
      "catalog_minor": null,
      "description": null,
-     "context": "HTML",
+     "context": "PANEL",
      "default": false,
      "for_model": null,
      "for_node": null,
      "args": [],
      "vocab": 2,
      "catalogs": [],
-     "locals": [],
-     "demo": null,
-     "queries": [],
-     "subscriptions": []
+     "demo": null
+    }
+   ],
+   "assets": null,
+   "hash": null
+  },
+  "hashes": []
+ },
+ "blok with an old locals field": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "locals": [
+      {
+       "key": "zoom",
+       "kind": "INT"
+      }
+     ]
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": null,
+   "locks": null,
+   "bloks": [
+    {
+     "key": "inspector",
+     "dependencies": [],
+     "components": [
+      {
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        },
+        {
+         "key": "context",
+         "static_value": "panel",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        }
+       ],
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "static_value": null,
+           "dynamic_value": {
+            "literal": null,
+            "path": "args.image"
+           },
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          }
+         ],
+         "children": null
+        }
+       ]
+      }
+     ],
+     "source": null,
+     "module": null,
+     "catalog": null,
+     "catalog_minor": null,
+     "description": null,
+     "context": "PANEL",
+     "default": false,
+     "for_model": null,
+     "for_node": null,
+     "args": [],
+     "vocab": 2,
+     "catalogs": [],
+     "demo": null
     }
    ],
    "assets": null,
@@ -19557,6 +20816,101 @@
   "error": "Blok manifest: a blok has one root, not 2",
   "error_type": "value_error"
  },
+ "blok whose root is no Blok": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Box[0]",
+       "component": "Box"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Box[0]: A blok is one <Blok kind=... context=...> element, not <Box>. [blok.root]",
+  "error_type": "value_error"
+ },
+ "blok whose root says another context": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box"
+        }
+       ]
+      }
+     ],
+     "context": "SCENE"
+    }
+   ]
+  },
+  "error": "Blok manifest: sent as a SCENE blok, but its <Blok> says PANEL",
+  "error_type": "value_error"
+ },
+ "blok of a kind an agent does not declare": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "custom"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok[0]: This is a custom blok, but it is mounted as an agent blok (the agent's blok 'inspector'). [kind.placement]",
+  "error_type": "value_error"
+ },
  "blok demo naming no dependency": {
   "input": {
    "bloks": [
@@ -19565,8 +20919,18 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Html[0]",
-       "component": "Html",
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
        "children": [
         {
          "id": "Box[0]",
@@ -19594,6 +20958,100 @@
   "error": "demo.deps names robot, which are not dependencies of the blok. [manifest.demo]",
   "error_type": "value_error"
  },
+ "action logo": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "action"
+        },
+        {
+         "key": "context",
+         "static_value": "logo"
+        }
+       ],
+       "children": [
+        {
+         "id": "Logo[0]",
+         "component": "Logo"
+        }
+       ]
+      }
+     ],
+     "context": "LOGO"
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": null,
+   "locks": null,
+   "bloks": [
+    {
+     "key": "inspector",
+     "dependencies": [],
+     "components": [
+      {
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "action",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        },
+        {
+         "key": "context",
+         "static_value": "logo",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        }
+       ],
+       "children": [
+        {
+         "id": "Logo[0]",
+         "component": "Logo",
+         "props": null,
+         "children": null
+        }
+       ]
+      }
+     ],
+     "source": null,
+     "module": null,
+     "catalog": null,
+     "catalog_minor": null,
+     "description": null,
+     "context": "LOGO",
+     "default": false,
+     "for_model": null,
+     "for_node": null,
+     "args": [],
+     "vocab": 2,
+     "catalogs": [],
+     "demo": null
+    }
+   ],
+   "assets": null,
+   "hash": null
+  },
+  "hashes": []
+ },
  "action logo declaring a local": {
   "input": {
    "bloks": [
@@ -19602,21 +21060,128 @@
      "vocab": 2,
      "components": [
       {
-       "id": "Logo[0]",
-       "component": "ActionLogo"
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "action"
+        },
+        {
+         "key": "context",
+         "static_value": "logo"
+        }
+       ],
+       "children": [
+        {
+         "id": "local-x",
+         "component": "local",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "x",
+           "declares_value": "x"
+          },
+          {
+           "key": "kind",
+           "static_value": "STRING"
+          }
+         ]
+        },
+        {
+         "id": "Logo[0]",
+         "component": "Logo"
+        }
+       ]
       }
      ],
-     "context": "ACTION_LOGO",
-     "locals": [
+     "context": "LOGO"
+    }
+   ]
+  },
+  "error": "local-x: <local name='x'>: an action blok has no 'locals' (it reads task). [roots.not_in_kind]",
+  "error_type": "value_error"
+ },
+ "action logo with a dependency": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
       {
-       "key": "x",
-       "kind": "STRING"
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "action"
+        },
+        {
+         "key": "context",
+         "static_value": "logo"
+        }
+       ],
+       "children": [
+        {
+         "id": "Logo[0]",
+         "component": "Logo"
+        }
+       ]
+      }
+     ],
+     "context": "LOGO",
+     "dependencies": [
+      {
+       "key": "self"
       }
      ]
     }
    ]
   },
-  "error": "An action logo reads only the task it is drawn against: no locals, queries, subscriptions or dependencies. [manifest.action_logo]",
+  "error": "Blok[0]: An action logo reads only the task it is drawn against: no dependencies. [manifest.action_logo]",
+  "error_type": "value_error"
+ },
+ "action panel declared by an agent": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "action"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
+       "children": [
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok[0]: This is an action blok, but it is mounted as an agent blok (the agent's blok 'inspector'). [kind.placement]",
   "error_type": "value_error"
  },
  "action bloks": {
@@ -19649,78 +21214,119 @@
         "vocab": 2,
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab"
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
            }
           ],
           "children": [
            {
-            "id": "placed-robot",
-            "component": "Placed",
+            "id": "local-show_path",
+            "component": "local",
             "props": [
              {
-              "key": "dep",
-              "static_value": "robot"
+              "key": "name",
+              "static_value": "show_path",
+              "declares_value": "show_path"
+             },
+             {
+              "key": "kind",
+              "static_value": "BOOL"
+             },
+             {
+              "key": "default",
+              "static_value": true
+             },
+             {
+              "key": "persist",
+              "static_value": true
+             }
+            ]
+           },
+           {
+            "id": "root",
+            "component": "Space",
+            "props": [
+             {
+              "key": "room",
+              "static_value": "room:lab"
              }
             ],
             "children": [
              {
-              "id": "glow",
-              "component": "Glow",
+              "id": "placed-robot",
+              "component": "Placed",
               "props": [
                {
-                "key": "on",
+                "key": "dep",
+                "static_value": "robot"
+               }
+              ],
+              "children": [
+               {
+                "id": "glow",
+                "component": "Glow",
+                "props": [
+                 {
+                  "key": "on",
+                  "dynamic_value": {
+                   "path": "self.helsinki.stage"
+                  }
+                 }
+                ]
+               }
+              ]
+             },
+             {
+              "id": "route",
+              "component": "Route",
+              "props": [
+               {
+                "key": "through",
+                "static_value": [
+                 "robot",
+                 "frame",
+                 "robot"
+                ]
+               },
+               {
+                "key": "progress",
                 "dynamic_value": {
-                 "path": "self.helsinki.stage"
+                 "path": "task.progress"
                 }
                }
               ]
              }
             ]
-           },
-           {
-            "id": "route",
-            "component": "Route",
-            "props": [
-             {
-              "key": "through",
-              "static_value": [
-               "robot",
-               "frame",
-               "robot"
-              ]
-             },
-             {
-              "key": "progress",
-              "dynamic_value": {
-               "path": "task.progress"
-              }
-             }
-            ]
            }
           ]
-         }
-        ],
-        "locals": [
-         {
-          "key": "show_path",
-          "kind": "BOOL",
-          "default": true,
-          "persist": true
          }
         ]
        },
        {
-        "context": "HTML",
+        "context": "PANEL",
         "vocab": 2,
         "components": [
          {
-          "id": "Html[0]",
-          "component": "Html",
+          "id": "Blok[0]",
+          "component": "Blok",
+          "props": [
+           {
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "panel"
+           }
+          ],
           "children": [
            {
             "id": "card",
@@ -19826,12 +21432,20 @@
         "phase": "RUN",
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab",
+            "key": "kind",
+            "static_value": "action",
+            "dynamic_value": null,
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           },
+           {
+            "key": "context",
+            "static_value": "scene",
             "dynamic_value": null,
             "declares_value": null,
             "agent_call": null,
@@ -19840,12 +21454,51 @@
           ],
           "children": [
            {
-            "id": "placed-robot",
-            "component": "Placed",
+            "id": "local-show_path",
+            "component": "local",
             "props": [
              {
-              "key": "dep",
-              "static_value": "robot",
+              "key": "name",
+              "static_value": "show_path",
+              "dynamic_value": null,
+              "declares_value": "show_path",
+              "agent_call": null,
+              "util_call": null
+             },
+             {
+              "key": "kind",
+              "static_value": "BOOL",
+              "dynamic_value": null,
+              "declares_value": null,
+              "agent_call": null,
+              "util_call": null
+             },
+             {
+              "key": "default",
+              "static_value": true,
+              "dynamic_value": null,
+              "declares_value": null,
+              "agent_call": null,
+              "util_call": null
+             },
+             {
+              "key": "persist",
+              "static_value": true,
+              "dynamic_value": null,
+              "declares_value": null,
+              "agent_call": null,
+              "util_call": null
+             }
+            ],
+            "children": null
+           },
+           {
+            "id": "root",
+            "component": "Space",
+            "props": [
+             {
+              "key": "room",
+              "static_value": "room:lab",
               "dynamic_value": null,
               "declares_value": null,
               "agent_call": null,
@@ -19854,15 +21507,61 @@
             ],
             "children": [
              {
-              "id": "glow",
-              "component": "Glow",
+              "id": "placed-robot",
+              "component": "Placed",
               "props": [
                {
-                "key": "on",
+                "key": "dep",
+                "static_value": "robot",
+                "dynamic_value": null,
+                "declares_value": null,
+                "agent_call": null,
+                "util_call": null
+               }
+              ],
+              "children": [
+               {
+                "id": "glow",
+                "component": "Glow",
+                "props": [
+                 {
+                  "key": "on",
+                  "static_value": null,
+                  "dynamic_value": {
+                   "literal": null,
+                   "path": "self.helsinki.stage"
+                  },
+                  "declares_value": null,
+                  "agent_call": null,
+                  "util_call": null
+                 }
+                ],
+                "children": null
+               }
+              ]
+             },
+             {
+              "id": "route",
+              "component": "Route",
+              "props": [
+               {
+                "key": "through",
+                "static_value": [
+                 "robot",
+                 "frame",
+                 "robot"
+                ],
+                "dynamic_value": null,
+                "declares_value": null,
+                "agent_call": null,
+                "util_call": null
+               },
+               {
+                "key": "progress",
                 "static_value": null,
                 "dynamic_value": {
                  "literal": null,
-                 "path": "self.helsinki.stage"
+                 "path": "task.progress"
                 },
                 "declares_value": null,
                 "agent_call": null,
@@ -19872,36 +21571,6 @@
               "children": null
              }
             ]
-           },
-           {
-            "id": "route",
-            "component": "Route",
-            "props": [
-             {
-              "key": "through",
-              "static_value": [
-               "robot",
-               "frame",
-               "robot"
-              ],
-              "dynamic_value": null,
-              "declares_value": null,
-              "agent_call": null,
-              "util_call": null
-             },
-             {
-              "key": "progress",
-              "static_value": null,
-              "dynamic_value": {
-               "literal": null,
-               "path": "task.progress"
-              },
-              "declares_value": null,
-              "agent_call": null,
-              "util_call": null
-             }
-            ],
-            "children": null
            }
           ]
          }
@@ -19913,39 +21582,33 @@
         "description": null,
         "vocab": 2,
         "catalogs": [],
-        "locals": [
-         {
-          "key": "show_path",
-          "label": null,
-          "kind": "BOOL",
-          "description": null,
-          "identifier": null,
-          "nullable": false,
-          "effects": null,
-          "choices": null,
-          "reference_unit": null,
-          "proposed_units": null,
-          "dimension": null,
-          "children": null,
-          "validators": null,
-          "default": true,
-          "widget": null,
-          "requires": null,
-          "persist": true
-         }
-        ],
-        "demo": null,
-        "queries": [],
-        "subscriptions": []
+        "demo": null
        },
        {
-        "context": "HTML",
+        "context": "PANEL",
         "phase": "RUN",
         "components": [
          {
-          "id": "Html[0]",
-          "component": "Html",
-          "props": null,
+          "id": "Blok[0]",
+          "component": "Blok",
+          "props": [
+           {
+            "key": "kind",
+            "static_value": "action",
+            "dynamic_value": null,
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           },
+           {
+            "key": "context",
+            "static_value": "panel",
+            "dynamic_value": null,
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           }
+          ],
           "children": [
            {
             "id": "card",
@@ -19982,10 +21645,7 @@
         "description": "The run",
         "vocab": 2,
         "catalogs": [],
-        "locals": [],
-        "demo": null,
-        "queries": [],
-        "subscriptions": []
+        "demo": null
        }
       ]
      },
@@ -20081,31 +21741,47 @@
         "vocab": 2,
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab"
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
            }
           ],
           "children": [
            {
-            "id": "route",
-            "component": "Route",
+            "id": "root",
+            "component": "Space",
             "props": [
              {
-              "key": "through",
-              "static_value": [
-               "robot",
-               "stitcher"
-              ]
-             },
+              "key": "room",
+              "static_value": "room:lab"
+             }
+            ],
+            "children": [
              {
-              "key": "progress",
-              "dynamic_value": {
-               "path": "task.progress"
-              }
+              "id": "route",
+              "component": "Route",
+              "props": [
+               {
+                "key": "through",
+                "static_value": [
+                 "robot",
+                 "stitcher"
+                ]
+               },
+               {
+                "key": "progress",
+                "dynamic_value": {
+                 "path": "task.progress"
+                }
+               }
+              ]
              }
             ]
            }
@@ -20159,25 +21835,41 @@
         "vocab": 2,
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab"
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
            }
           ],
           "children": [
            {
-            "id": "placed-stitcher",
-            "component": "Placed",
+            "id": "root",
+            "component": "Space",
             "props": [
              {
-              "key": "dep",
-              "static_value": "stitcher"
+              "key": "room",
+              "static_value": "room:lab"
              }
             ],
-            "children": null
+            "children": [
+             {
+              "id": "placed-stitcher",
+              "component": "Placed",
+              "props": [
+               {
+                "key": "dep",
+                "static_value": "stitcher"
+               }
+              ],
+              "children": null
+             }
+            ]
            }
           ]
          }
@@ -20229,25 +21921,41 @@
         "vocab": 2,
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab"
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
            }
           ],
           "children": [
            {
-            "id": "placed-self",
-            "component": "Placed",
+            "id": "root",
+            "component": "Space",
             "props": [
              {
-              "key": "dep",
-              "static_value": "self"
+              "key": "room",
+              "static_value": "room:lab"
              }
             ],
-            "children": null
+            "children": [
+             {
+              "id": "placed-self",
+              "component": "Placed",
+              "props": [
+               {
+                "key": "dep",
+                "static_value": "self"
+               }
+              ],
+              "children": null
+             }
+            ]
            }
           ]
          }
@@ -20299,36 +22007,67 @@
         "vocab": 2,
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab"
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
            }
           ],
           "children": [
            {
-            "id": "at",
-            "component": "Placed",
+            "id": "local-show_path",
+            "component": "local",
             "props": [
              {
-              "key": "dep",
-              "dynamic_value": {
-               "path": "show_path"
-              }
+              "key": "name",
+              "static_value": "show_path",
+              "declares_value": "show_path"
+             },
+             {
+              "key": "kind",
+              "static_value": "BOOL"
+             },
+             {
+              "key": "default",
+              "static_value": true
+             },
+             {
+              "key": "persist",
+              "static_value": true
+             }
+            ]
+           },
+           {
+            "id": "root",
+            "component": "Space",
+            "props": [
+             {
+              "key": "room",
+              "static_value": "room:lab"
+             }
+            ],
+            "children": [
+             {
+              "id": "at",
+              "component": "Placed",
+              "props": [
+               {
+                "key": "dep",
+                "dynamic_value": {
+                 "path": "show_path"
+                }
+               }
+              ]
              }
             ]
            }
           ]
-         }
-        ],
-        "locals": [
-         {
-          "key": "show_path",
-          "kind": "BOOL",
-          "default": true,
-          "persist": true
          }
         ]
        }
@@ -20413,12 +22152,20 @@
         "phase": "RUN",
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab",
+            "key": "kind",
+            "static_value": "action",
+            "dynamic_value": null,
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           },
+           {
+            "key": "context",
+            "static_value": "scene",
             "dynamic_value": null,
             "declares_value": null,
             "agent_call": null,
@@ -20427,22 +22174,77 @@
           ],
           "children": [
            {
-            "id": "at",
-            "component": "Placed",
+            "id": "local-show_path",
+            "component": "local",
             "props": [
              {
-              "key": "dep",
-              "static_value": null,
-              "dynamic_value": {
-               "literal": null,
-               "path": "show_path"
-              },
+              "key": "name",
+              "static_value": "show_path",
+              "dynamic_value": null,
+              "declares_value": "show_path",
+              "agent_call": null,
+              "util_call": null
+             },
+             {
+              "key": "kind",
+              "static_value": "BOOL",
+              "dynamic_value": null,
+              "declares_value": null,
+              "agent_call": null,
+              "util_call": null
+             },
+             {
+              "key": "default",
+              "static_value": true,
+              "dynamic_value": null,
+              "declares_value": null,
+              "agent_call": null,
+              "util_call": null
+             },
+             {
+              "key": "persist",
+              "static_value": true,
+              "dynamic_value": null,
               "declares_value": null,
               "agent_call": null,
               "util_call": null
              }
             ],
             "children": null
+           },
+           {
+            "id": "root",
+            "component": "Space",
+            "props": [
+             {
+              "key": "room",
+              "static_value": "room:lab",
+              "dynamic_value": null,
+              "declares_value": null,
+              "agent_call": null,
+              "util_call": null
+             }
+            ],
+            "children": [
+             {
+              "id": "at",
+              "component": "Placed",
+              "props": [
+               {
+                "key": "dep",
+                "static_value": null,
+                "dynamic_value": {
+                 "literal": null,
+                 "path": "show_path"
+                },
+                "declares_value": null,
+                "agent_call": null,
+                "util_call": null
+               }
+              ],
+              "children": null
+             }
+            ]
            }
           ]
          }
@@ -20454,30 +22256,7 @@
         "description": null,
         "vocab": 2,
         "catalogs": [],
-        "locals": [
-         {
-          "key": "show_path",
-          "label": null,
-          "kind": "BOOL",
-          "description": null,
-          "identifier": null,
-          "nullable": false,
-          "effects": null,
-          "choices": null,
-          "reference_unit": null,
-          "proposed_units": null,
-          "dimension": null,
-          "children": null,
-          "validators": null,
-          "default": true,
-          "widget": null,
-          "requires": null,
-          "persist": true
-         }
-        ],
-        "demo": null,
-        "queries": [],
-        "subscriptions": []
+        "demo": null
        }
       ]
      },
@@ -20573,24 +22352,40 @@
         "vocab": 2,
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab"
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
            }
           ],
           "children": [
            {
-            "id": "t",
-            "component": "Text",
+            "id": "root",
+            "component": "Space",
             "props": [
              {
-              "key": "text",
-              "dynamic_value": {
-               "path": "stage.position"
-              }
+              "key": "room",
+              "static_value": "room:lab"
+             }
+            ],
+            "children": [
+             {
+              "id": "t",
+              "component": "Text",
+              "props": [
+               {
+                "key": "text",
+                "dynamic_value": {
+                 "path": "stage.position"
+                }
+               }
+              ]
              }
             ]
            }
@@ -20644,24 +22439,40 @@
         "vocab": 2,
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab"
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
            }
           ],
           "children": [
            {
-            "id": "t",
-            "component": "Text",
+            "id": "root",
+            "component": "Space",
             "props": [
              {
-              "key": "text",
-              "dynamic_value": {
-               "path": "args.nope"
-              }
+              "key": "room",
+              "static_value": "room:lab"
+             }
+            ],
+            "children": [
+             {
+              "id": "t",
+              "component": "Text",
+              "props": [
+               {
+                "key": "text",
+                "dynamic_value": {
+                 "path": "args.nope"
+                }
+               }
+              ]
              }
             ]
            }
@@ -20715,25 +22526,41 @@
         "vocab": 2,
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab"
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
            }
           ],
           "children": [
            {
-            "id": "b",
-            "component": "Button",
+            "id": "root",
+            "component": "Space",
             "props": [
              {
-              "key": "onClick",
-              "agent_call": {
-               "dependency": "robot",
-               "operation": "home"
-              }
+              "key": "room",
+              "static_value": "room:lab"
+             }
+            ],
+            "children": [
+             {
+              "id": "b",
+              "component": "Button",
+              "props": [
+               {
+                "key": "onClick",
+                "agent_call": {
+                 "dependency": "robot",
+                 "operation": "home"
+                }
+               }
+              ]
              }
             ]
            }
@@ -20822,12 +22649,20 @@
         "phase": "RUN",
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab",
+            "key": "kind",
+            "static_value": "action",
+            "dynamic_value": null,
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           },
+           {
+            "key": "context",
+            "static_value": "scene",
             "dynamic_value": null,
             "declares_value": null,
             "agent_call": null,
@@ -20836,23 +22671,39 @@
           ],
           "children": [
            {
-            "id": "b",
-            "component": "Button",
+            "id": "root",
+            "component": "Space",
             "props": [
              {
-              "key": "onClick",
-              "static_value": null,
+              "key": "room",
+              "static_value": "room:lab",
               "dynamic_value": null,
               "declares_value": null,
-              "agent_call": {
-               "dependency": "robot",
-               "operation": "home",
-               "arguments": null
-              },
+              "agent_call": null,
               "util_call": null
              }
             ],
-            "children": null
+            "children": [
+             {
+              "id": "b",
+              "component": "Button",
+              "props": [
+               {
+                "key": "onClick",
+                "static_value": null,
+                "dynamic_value": null,
+                "declares_value": null,
+                "agent_call": {
+                 "dependency": "robot",
+                 "operation": "home",
+                 "arguments": null
+                },
+                "util_call": null
+               }
+              ],
+              "children": null
+             }
+            ]
            }
           ]
          }
@@ -20864,10 +22715,7 @@
         "description": null,
         "vocab": 2,
         "catalogs": [],
-        "locals": [],
-        "demo": null,
-        "queries": [],
-        "subscriptions": []
+        "demo": null
        }
       ]
      },
@@ -20963,25 +22811,41 @@
         "vocab": 2,
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab"
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
            }
           ],
           "children": [
            {
-            "id": "b",
-            "component": "Button",
+            "id": "root",
+            "component": "Space",
             "props": [
              {
-              "key": "onClick",
-              "agent_call": {
-               "dependency": "stage",
-               "operation": "home"
-              }
+              "key": "room",
+              "static_value": "room:lab"
+             }
+            ],
+            "children": [
+             {
+              "id": "b",
+              "component": "Button",
+              "props": [
+               {
+                "key": "onClick",
+                "agent_call": {
+                 "dependency": "stage",
+                 "operation": "home"
+                }
+               }
+              ]
              }
             ]
            }
@@ -21035,15 +22899,31 @@
         "vocab": 2,
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab"
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
            }
           ],
-          "children": []
+          "children": [
+           {
+            "id": "root",
+            "component": "Space",
+            "props": [
+             {
+              "key": "room",
+              "static_value": "room:lab"
+             }
+            ],
+            "children": []
+           }
+          ]
          }
         ]
        },
@@ -21052,15 +22932,31 @@
         "vocab": 2,
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab"
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
            }
           ],
-          "children": []
+          "children": [
+           {
+            "id": "root",
+            "component": "Space",
+            "props": [
+             {
+              "key": "room",
+              "static_value": "room:lab"
+             }
+            ],
+            "children": []
+           }
+          ]
          }
         ]
        }
@@ -21110,8 +23006,24 @@
         "vocab": 2,
         "components": [
          {
-          "id": "root",
-          "component": "AgentLogo"
+          "id": "Blok[0]",
+          "component": "Blok",
+          "props": [
+           {
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "logo"
+           }
+          ],
+          "children": [
+           {
+            "id": "root",
+            "component": "Logo"
+           }
+          ]
          }
         ]
        }
@@ -21128,7 +23040,7 @@
     }
    ]
   },
-  "error": "An action blok is drawn in HTML, SCENE, not LOGO. [context.kind]",
+  "error": "An action blok is drawn in PANEL, SCENE, LOGO, not LOGO. [context.kind]",
   "error_type": "value_error"
  },
  "action blok sent twice": {
@@ -21157,12 +23069,22 @@
       "returns": [],
       "bloks": [
        {
-        "context": "HTML",
+        "context": "PANEL",
         "vocab": 2,
         "components": [
          {
-          "id": "Html[0]",
-          "component": "Html",
+          "id": "Blok[0]",
+          "component": "Blok",
+          "props": [
+           {
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "panel"
+           }
+          ],
           "children": [
            {
             "id": "root",
@@ -21171,7 +23093,7 @@
           ]
          }
         ],
-        "source": "<Html><Card /></Html>"
+        "source": "<Blok kind=\"action\" context=\"panel\"><Card /></Blok>"
        }
       ]
      },
@@ -21215,7 +23137,7 @@
       "returns": [],
       "bloks": [
        {
-        "context": "HTML",
+        "context": "PANEL",
         "vocab": 2
        }
       ]
@@ -21260,11 +23182,21 @@
       "returns": [],
       "bloks": [
        {
-        "context": "HTML",
+        "context": "PANEL",
         "components": [
          {
-          "id": "Html[0]",
-          "component": "Html",
+          "id": "Blok[0]",
+          "component": "Blok",
+          "props": [
+           {
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "panel"
+           }
+          ],
           "children": [
            {
             "id": "root",
@@ -21320,15 +23252,31 @@
         "vocab": 2,
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab"
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
            }
           ],
-          "children": []
+          "children": [
+           {
+            "id": "root",
+            "component": "Space",
+            "props": [
+             {
+              "key": "room",
+              "static_value": "room:lab"
+             }
+            ],
+            "children": []
+           }
+          ]
          }
         ],
         "name": "nope"
@@ -21379,15 +23327,31 @@
         "vocab": 2,
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab"
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
            }
           ],
-          "children": []
+          "children": [
+           {
+            "id": "root",
+            "component": "Space",
+            "props": [
+             {
+              "key": "room",
+              "static_value": "room:lab"
+             }
+            ],
+            "children": []
+           }
+          ]
          }
         ],
         "demo_state": {}
@@ -21407,6 +23371,222 @@
   },
   "error": "Extra inputs are not permitted",
   "error_type": "extra_forbidden"
+ },
+ "action blok with an old locals field": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "SCENE",
+        "vocab": 2,
+        "components": [
+         {
+          "id": "Blok[0]",
+          "component": "Blok",
+          "props": [
+           {
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
+           }
+          ],
+          "children": [
+           {
+            "id": "root",
+            "component": "Space",
+            "props": [
+             {
+              "key": "room",
+              "static_value": "room:lab"
+             }
+            ],
+            "children": []
+           }
+          ]
+         }
+        ],
+        "locals": []
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Extra inputs are not permitted",
+  "error_type": "extra_forbidden"
+ },
+ "action blok of the assign kind for a run": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "SCENE",
+        "vocab": 2,
+        "components": [
+         {
+          "id": "Blok[0]",
+          "component": "Blok",
+          "props": [
+           {
+            "key": "kind",
+            "static_value": "assign"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
+           }
+          ],
+          "children": [
+           {
+            "id": "root",
+            "component": "Space",
+            "props": [
+             {
+              "key": "room",
+              "static_value": "room:lab"
+             }
+            ],
+            "children": []
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok[0]: This is an assign blok, but it is mounted as an action blok (an action's run bloks). [kind.placement]",
+  "error_type": "value_error"
+ },
+ "action blok saying another context": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "SCENE",
+        "vocab": 2,
+        "components": [
+         {
+          "id": "Blok[0]",
+          "component": "Blok",
+          "props": [
+           {
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "panel"
+           }
+          ],
+          "children": [
+           {
+            "id": "root",
+            "component": "Card"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok manifest: sent as a SCENE blok, but its <Blok> says PANEL",
+  "error_type": "value_error"
  },
  "assign blok": {
   "input": {
@@ -21434,13 +23614,23 @@
       "returns": [],
       "bloks": [
        {
-        "context": "HTML",
+        "context": "PANEL",
         "phase": "ASSIGN",
         "vocab": 2,
         "components": [
          {
-          "id": "Html[0]",
-          "component": "Html",
+          "id": "Blok[0]",
+          "component": "Blok",
+          "props": [
+           {
+            "key": "kind",
+            "static_value": "assign"
+           },
+           {
+            "key": "context",
+            "static_value": "panel"
+           }
+          ],
           "children": [
            {
             "id": "t",
@@ -21476,12 +23666,22 @@
         ]
        },
        {
-        "context": "HTML",
+        "context": "PANEL",
         "vocab": 2,
         "components": [
          {
-          "id": "Html[0]",
-          "component": "Html",
+          "id": "Blok[0]",
+          "component": "Blok",
+          "props": [
+           {
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "panel"
+           }
+          ],
           "children": [
            {
             "id": "root",
@@ -21568,13 +23768,30 @@
       "protocols": [],
       "bloks": [
        {
-        "context": "HTML",
+        "context": "PANEL",
         "phase": "ASSIGN",
         "components": [
          {
-          "id": "Html[0]",
-          "component": "Html",
-          "props": null,
+          "id": "Blok[0]",
+          "component": "Blok",
+          "props": [
+           {
+            "key": "kind",
+            "static_value": "assign",
+            "dynamic_value": null,
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           },
+           {
+            "key": "context",
+            "static_value": "panel",
+            "dynamic_value": null,
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           }
+          ],
           "children": [
            {
             "id": "t",
@@ -21628,19 +23845,33 @@
         "description": null,
         "vocab": 2,
         "catalogs": [],
-        "locals": [],
-        "demo": null,
-        "queries": [],
-        "subscriptions": []
+        "demo": null
        },
        {
-        "context": "HTML",
+        "context": "PANEL",
         "phase": "RUN",
         "components": [
          {
-          "id": "Html[0]",
-          "component": "Html",
-          "props": null,
+          "id": "Blok[0]",
+          "component": "Blok",
+          "props": [
+           {
+            "key": "kind",
+            "static_value": "action",
+            "dynamic_value": null,
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           },
+           {
+            "key": "context",
+            "static_value": "panel",
+            "dynamic_value": null,
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           }
+          ],
           "children": [
            {
             "id": "root",
@@ -21658,10 +23889,7 @@
         "description": null,
         "vocab": 2,
         "catalogs": [],
-        "locals": [],
-        "demo": null,
-        "queries": [],
-        "subscriptions": []
+        "demo": null
        }
       ]
      },
@@ -21757,25 +23985,41 @@
         "vocab": 2,
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab"
+            "key": "kind",
+            "static_value": "assign"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
            }
           ],
           "children": [
            {
-            "id": "placed-robot",
-            "component": "Placed",
+            "id": "root",
+            "component": "Space",
             "props": [
              {
-              "key": "dep",
-              "static_value": "robot"
+              "key": "room",
+              "static_value": "room:lab"
              }
             ],
-            "children": null
+            "children": [
+             {
+              "id": "placed-robot",
+              "component": "Placed",
+              "props": [
+               {
+                "key": "dep",
+                "static_value": "robot"
+               }
+              ],
+              "children": null
+             }
+            ]
            }
           ]
          }
@@ -21863,12 +24107,20 @@
         "phase": "ASSIGN",
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab",
+            "key": "kind",
+            "static_value": "assign",
+            "dynamic_value": null,
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           },
+           {
+            "key": "context",
+            "static_value": "scene",
             "dynamic_value": null,
             "declares_value": null,
             "agent_call": null,
@@ -21877,19 +24129,35 @@
           ],
           "children": [
            {
-            "id": "placed-robot",
-            "component": "Placed",
+            "id": "root",
+            "component": "Space",
             "props": [
              {
-              "key": "dep",
-              "static_value": "robot",
+              "key": "room",
+              "static_value": "room:lab",
               "dynamic_value": null,
               "declares_value": null,
               "agent_call": null,
               "util_call": null
              }
             ],
-            "children": null
+            "children": [
+             {
+              "id": "placed-robot",
+              "component": "Placed",
+              "props": [
+               {
+                "key": "dep",
+                "static_value": "robot",
+                "dynamic_value": null,
+                "declares_value": null,
+                "agent_call": null,
+                "util_call": null
+               }
+              ],
+              "children": null
+             }
+            ]
            }
           ]
          }
@@ -21901,10 +24169,7 @@
         "description": null,
         "vocab": 2,
         "catalogs": [],
-        "locals": [],
-        "demo": null,
-        "queries": [],
-        "subscriptions": []
+        "demo": null
        }
       ]
      },
@@ -21970,6 +24235,93 @@
    "886545f7ab6379be425a13432bdfe27a6996b575bdb5e07bc8f8c4b9b1dbdefb"
   ]
  },
+ "assign blok of the action kind": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "slides",
+        "kind": "LIST",
+        "nullable": false,
+        "children": [
+         {
+          "key": "...",
+          "kind": "STRING",
+          "nullable": false
+         }
+        ]
+       }
+      ],
+      "returns": [],
+      "bloks": [
+       {
+        "context": "SCENE",
+        "vocab": 2,
+        "components": [
+         {
+          "id": "Blok[0]",
+          "component": "Blok",
+          "props": [
+           {
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
+           }
+          ],
+          "children": [
+           {
+            "id": "root",
+            "component": "Space",
+            "props": [
+             {
+              "key": "room",
+              "static_value": "room:lab"
+             }
+            ],
+            "children": [
+             {
+              "id": "placed-robot",
+              "component": "Placed",
+              "props": [
+               {
+                "key": "dep",
+                "static_value": "robot"
+               }
+              ],
+              "children": null
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "phase": "ASSIGN"
+       }
+      ]
+     },
+     "dependencies": [
+      {
+       "key": "robot"
+      },
+      {
+       "key": "frame"
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Blok[0]: This is an action blok, but it is mounted as an assign blok (an action's assign bloks). [kind.placement]",
+  "error_type": "value_error"
+ },
  "assign blok reading a task": {
   "input": {
    "implementations": [
@@ -21996,13 +24348,23 @@
       "returns": [],
       "bloks": [
        {
-        "context": "HTML",
+        "context": "PANEL",
         "phase": "ASSIGN",
         "vocab": 2,
         "components": [
          {
-          "id": "Html[0]",
-          "component": "Html",
+          "id": "Blok[0]",
+          "component": "Blok",
+          "props": [
+           {
+            "key": "kind",
+            "static_value": "assign"
+           },
+           {
+            "key": "context",
+            "static_value": "panel"
+           }
+          ],
           "children": [
            {
             "id": "t",
@@ -22062,13 +24424,23 @@
       "returns": [],
       "bloks": [
        {
-        "context": "HTML",
+        "context": "PANEL",
         "phase": "ASSIGN",
         "vocab": 2,
         "components": [
          {
-          "id": "Html[0]",
-          "component": "Html",
+          "id": "Blok[0]",
+          "component": "Blok",
+          "props": [
+           {
+            "key": "kind",
+            "static_value": "assign"
+           },
+           {
+            "key": "context",
+            "static_value": "panel"
+           }
+          ],
           "children": [
            {
             "id": "a",
@@ -22155,13 +24527,30 @@
       "protocols": [],
       "bloks": [
        {
-        "context": "HTML",
+        "context": "PANEL",
         "phase": "ASSIGN",
         "components": [
          {
-          "id": "Html[0]",
-          "component": "Html",
-          "props": null,
+          "id": "Blok[0]",
+          "component": "Blok",
+          "props": [
+           {
+            "key": "kind",
+            "static_value": "assign",
+            "dynamic_value": null,
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           },
+           {
+            "key": "context",
+            "static_value": "panel",
+            "dynamic_value": null,
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           }
+          ],
           "children": [
            {
             "id": "a",
@@ -22179,10 +24568,7 @@
         "description": null,
         "vocab": 2,
         "catalogs": [],
-        "locals": [],
-        "demo": null,
-        "queries": [],
-        "subscriptions": []
+        "demo": null
        }
       ]
      },
@@ -22274,12 +24660,22 @@
       "returns": [],
       "bloks": [
        {
-        "context": "HTML",
+        "context": "PANEL",
         "vocab": 2,
         "components": [
          {
-          "id": "Html[0]",
-          "component": "Html",
+          "id": "Blok[0]",
+          "component": "Blok",
+          "props": [
+           {
+            "key": "kind",
+            "static_value": "action"
+           },
+           {
+            "key": "context",
+            "static_value": "panel"
+           }
+          ],
           "children": [
            {
             "id": "a",
@@ -22366,13 +24762,30 @@
       "protocols": [],
       "bloks": [
        {
-        "context": "HTML",
+        "context": "PANEL",
         "phase": "RUN",
         "components": [
          {
-          "id": "Html[0]",
-          "component": "Html",
-          "props": null,
+          "id": "Blok[0]",
+          "component": "Blok",
+          "props": [
+           {
+            "key": "kind",
+            "static_value": "action",
+            "dynamic_value": null,
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           },
+           {
+            "key": "context",
+            "static_value": "panel",
+            "dynamic_value": null,
+            "declares_value": null,
+            "agent_call": null,
+            "util_call": null
+           }
+          ],
           "children": [
            {
             "id": "a",
@@ -22390,10 +24803,7 @@
         "description": null,
         "vocab": 2,
         "catalogs": [],
-        "locals": [],
-        "demo": null,
-        "queries": [],
-        "subscriptions": []
+        "demo": null
        }
       ]
      },
@@ -22489,15 +24899,31 @@
         "vocab": 2,
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab"
+            "key": "kind",
+            "static_value": "assign"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
            }
           ],
-          "children": []
+          "children": [
+           {
+            "id": "root",
+            "component": "Space",
+            "props": [
+             {
+              "key": "room",
+              "static_value": "room:lab"
+             }
+            ],
+            "children": []
+           }
+          ]
          }
         ],
         "phase": "ASSIGN"
@@ -22507,15 +24933,31 @@
         "vocab": 2,
         "components": [
          {
-          "id": "root",
-          "component": "Space",
+          "id": "Blok[0]",
+          "component": "Blok",
           "props": [
            {
-            "key": "room",
-            "static_value": "room:lab"
+            "key": "kind",
+            "static_value": "assign"
+           },
+           {
+            "key": "context",
+            "static_value": "scene"
            }
           ],
-          "children": []
+          "children": [
+           {
+            "id": "root",
+            "component": "Space",
+            "props": [
+             {
+              "key": "room",
+              "static_value": "room:lab"
+             }
+            ],
+            "children": []
+           }
+          ]
          }
         ],
         "phase": "ASSIGN"
@@ -22545,12 +24987,28 @@
      "context": "SCENE",
      "components": [
       {
-       "id": "root",
-       "component": "Space",
+       "id": "Blok[0]",
+       "component": "Blok",
        "props": [
         {
-         "key": "room",
-         "static_value": "room:lab"
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "scene"
+        }
+       ],
+       "children": [
+        {
+         "id": "root",
+         "component": "Space",
+         "props": [
+          {
+           "key": "room",
+           "static_value": "room:lab"
+          }
+         ]
         }
        ]
       }
@@ -22570,19 +25028,43 @@
      "dependencies": [],
      "components": [
       {
-       "id": "root",
-       "component": "Space",
+       "id": "Blok[0]",
+       "component": "Blok",
        "props": [
         {
-         "key": "room",
-         "static_value": "room:lab",
+         "key": "kind",
+         "static_value": "agent",
+         "dynamic_value": null,
+         "declares_value": null,
+         "agent_call": null,
+         "util_call": null
+        },
+        {
+         "key": "context",
+         "static_value": "scene",
          "dynamic_value": null,
          "declares_value": null,
          "agent_call": null,
          "util_call": null
         }
        ],
-       "children": null
+       "children": [
+        {
+         "id": "root",
+         "component": "Space",
+         "props": [
+          {
+           "key": "room",
+           "static_value": "room:lab",
+           "dynamic_value": null,
+           "declares_value": null,
+           "agent_call": null,
+           "util_call": null
+          }
+         ],
+         "children": null
+        }
+       ]
       }
      ],
      "source": null,
@@ -22597,10 +25079,7 @@
      "args": [],
      "vocab": 2,
      "catalogs": [],
-     "locals": [],
-     "demo": null,
-     "queries": [],
-     "subscriptions": []
+     "demo": null
     }
    ],
    "assets": null,

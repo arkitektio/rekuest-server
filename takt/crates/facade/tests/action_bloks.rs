@@ -98,17 +98,23 @@ impl Lab {
 }
 
 fn space(through: &[&str]) -> Value {
-    json!({"context": "SCENE", "vocab": 2, "locals": [{"key": "show_path", "kind": "BOOL", "default": true, "persist": true}],
-           "components": [{"id": "root", "component": "Space", "props": [{"key": "room", "static_value": "room:lab"}], "children": [
+    json!({"context": "SCENE", "vocab": 2,
+           "components": [{"id": "blok", "component": "Blok", "props": [
+               {"key": "kind", "static_value": "action"}, {"key": "context", "static_value": "scene"}], "children": [
+           {"id": "show_path", "component": "local", "props": [
+               {"key": "name", "static_value": "show_path", "declares_value": "show_path"},
+               {"key": "kind", "static_value": "BOOL"}, {"key": "default", "static_value": true},
+               {"key": "persist", "static_value": true}]},
+           {"id": "root", "component": "Space", "props": [{"key": "room", "static_value": "room:lab"}], "children": [
                {"id": "robot", "component": "Placed", "props": [{"key": "dep", "static_value": "robot"}], "children": [
                    {"id": "glow", "component": "Glow", "props": [{"key": "on", "dynamic_value": {"path": "self.helsinki.stage"}}]}]},
                {"id": "route", "component": "Route", "props": [
                    {"key": "through", "static_value": through},
-                   {"key": "progress", "dynamic_value": {"path": "task.progress"}}]}]}]})
+                   {"key": "progress", "dynamic_value": {"path": "task.progress"}}]}]}]}]})
 }
 
 fn panel() -> Value {
-    json!({"context": "HTML", "vocab": 2, "source": "<Html><Card><Progress value={task.progress} /><ask /></Card></Html>"})
+    json!({"context": "PANEL", "vocab": 2, "source": "<Blok kind=\"action\" context=\"panel\"><Card><Progress value={task.progress} /><ask /></Card></Blok>"})
 }
 
 fn workflow(bloks: Value) -> Value {
@@ -134,7 +140,7 @@ async fn an_actions_bloks_are_held_by_it_shared_and_collected() {
             .iter()
             .map(|(context, _, held, root)| (context.as_str(), *held, root.as_str()))
             .collect::<Vec<_>>(),
-        vec![("HTML", true, "Html"), ("SCENE", true, "Space")],
+        vec![("PANEL", true, "Blok"), ("SCENE", true, "Blok")],
         "one blok per context, the BSX parsed, both held by the action"
     );
     // Not an agent's: no slot holds it, and it is not part of the action's hash.
@@ -204,7 +210,7 @@ async fn an_actions_bloks_name_only_its_dependencies() {
     );
     assert!(refused.contains("[deps.unknown]"), "{refused}");
 
-    let wandering = json!([{"context": "HTML", "vocab": 2, "source": "<Html><Text text={stage.position} /></Html>"}]);
+    let wandering = json!([{"context": "PANEL", "vocab": 2, "source": "<Blok kind=\"action\" context=\"panel\"><Text text={stage.position} /></Blok>"}]);
     let refused = lab.register(agent, workflow(wandering)).await.unwrap_err();
     assert!(refused.contains("[roots.unknown]"), "{refused}");
 
@@ -212,13 +218,20 @@ async fn an_actions_bloks_name_only_its_dependencies() {
     let refused = lab.register(agent, workflow(twice)).await.unwrap_err();
     assert_eq!(
         refused,
-        "Definition process_slides: the html blok is given twice; an action has one blok per context"
+        "Definition process_slides: the panel blok is given twice; an action has one blok per context"
     );
 
-    // A scene blok's root is a Scene or a Space, whatever the catalog says.
-    let rooted = json!([{"context": "SCENE", "vocab": 2, "source": "<Html />"}]);
+    // A blok is one <Blok>, and a scene blok holds one Scene or Space, whatever the catalog says.
+    let rooted = json!([{"context": "SCENE", "vocab": 2, "source": "<Space room=\"lab\" />"}]);
     let refused = lab.register(agent, workflow(rooted)).await.unwrap_err();
-    assert!(refused.contains("[context.root]"), "{refused}");
+    assert!(refused.contains("[blok.root]"), "{refused}");
+    let held = json!([{"context": "SCENE", "vocab": 2, "source": "<Blok kind=\"action\" context=\"scene\"><Card /></Blok>"}]);
+    let refused = lab.register(agent, workflow(held)).await.unwrap_err();
+    assert!(refused.contains("[blok.content]"), "{refused}");
+    // The phase is the kind its <Blok> says.
+    let misplaced = json!([{"context": "PANEL", "phase": "ASSIGN", "vocab": 2, "source": "<Blok kind=\"action\" context=\"panel\"><Card /></Blok>"}]);
+    let refused = lab.register(agent, workflow(misplaced)).await.unwrap_err();
+    assert!(refused.contains("[kind.placement]"), "{refused}");
 }
 
 #[tokio::test]
@@ -226,8 +239,8 @@ async fn an_action_holds_a_blok_for_starting_a_run_beside_the_one_for_the_run() 
     let Some(lab) = lab().await else { return };
     let agent = lab.agent("first").await;
 
-    let prepare = json!({"context": "HTML", "phase": "ASSIGN", "vocab": 2,
-        "source": "<Html><Card><args /><Button onClick={assign.start()}>Start</Button></Card></Html>"});
+    let prepare = json!({"context": "PANEL", "phase": "ASSIGN", "vocab": 2,
+        "source": "<Blok kind=\"assign\" context=\"panel\"><Card><args /><Button onClick={assign.start()}>Start</Button></Card></Blok>"});
     lab.register(agent, workflow(json!([panel(), prepare.clone()])))
         .await
         .unwrap();
@@ -242,10 +255,10 @@ async fn an_action_holds_a_blok_for_starting_a_run_beside_the_one_for_the_run() 
     assert_eq!(
         rows,
         vec![
-            ("ASSIGN".to_owned(), "HTML".to_owned()),
-            ("RUN".to_owned(), "HTML".to_owned())
+            ("ASSIGN".to_owned(), "PANEL".to_owned()),
+            ("RUN".to_owned(), "PANEL".to_owned())
         ],
-        "one html blok per phase"
+        "one panel blok per phase"
     );
 
     // Registered again without it, the assign blok goes and the run's stays.
@@ -261,7 +274,7 @@ async fn an_action_holds_a_blok_for_starting_a_run_beside_the_one_for_the_run() 
     assert_eq!(left, vec!["RUN".to_owned()]);
 
     // What belongs to a run stays out of it, and the other way round.
-    let watching = json!({"context": "HTML", "phase": "ASSIGN", "vocab": 2, "source": "<Html><Text>{task.status}</Text></Html>"});
+    let watching = json!({"context": "PANEL", "phase": "ASSIGN", "vocab": 2, "source": "<Blok kind=\"assign\" context=\"panel\"><Text>{task.status}</Text></Blok>"});
     let refused = lab
         .register(agent, workflow(json!([watching])))
         .await
@@ -272,7 +285,7 @@ async fn an_action_holds_a_blok_for_starting_a_run_beside_the_one_for_the_run() 
     );
     // Which phase draws a part (the args form is an assign blok's) is the catalog's to say,
     // and so the frontend's to tell: the server registers it.
-    let starting = json!({"context": "HTML", "vocab": 2, "source": "<Html><args /></Html>"});
+    let starting = json!({"context": "PANEL", "vocab": 2, "source": "<Blok kind=\"action\" context=\"panel\"><args /></Blok>"});
     lab.register(agent, workflow(json!([starting])))
         .await
         .unwrap();
@@ -284,16 +297,25 @@ async fn only_an_actions_blok_reads_a_run() {
     let agent = lab.agent("first").await;
 
     // An agent's own blok has no run to read: `task` is no root of it (the language's).
-    let reading = json!({"bloks": [{"key": "panel", "vocab": 2, "source": "<Html><Text>{task.status}</Text></Html>"}]});
+    let reading = json!({"bloks": [{"key": "panel", "vocab": 2, "source": "<Blok kind=\"agent\" context=\"panel\"><Text>{task.status}</Text></Blok>"}]});
     let refused = lab.register(agent, reading).await.unwrap_err();
     assert!(refused.contains("[roots.not_in_kind]"), "{refused}");
 
     // Which kind of blok a component belongs to (an ask, a Placed, a Space are an action's)
     // is its catalog's to say: the frontend that draws the blok tells it, the server does not.
     for (context, source) in [
-        ("HTML", "<Html><Card><ask /></Card></Html>"),
-        ("SCENE", "<Scene><Placed dep=\"robot\" /></Scene>"),
-        ("SCENE", "<Space room=\"lab\" />"),
+        (
+            "PANEL",
+            "<Blok kind=\"agent\" context=\"panel\"><Card><ask /></Card></Blok>",
+        ),
+        (
+            "SCENE",
+            "<Blok kind=\"agent\" context=\"scene\"><Scene><Placed dep=\"robot\" /></Scene></Blok>",
+        ),
+        (
+            "SCENE",
+            "<Blok kind=\"agent\" context=\"scene\"><Space room=\"lab\" /></Blok>",
+        ),
     ] {
         let held =
             json!({"bloks": [{"key": "panel", "vocab": 2, "context": context, "source": source}]});
@@ -311,7 +333,7 @@ fn asking(asks: Value) -> Value {
 
 fn pick() -> Value {
     json!({"key": "asks.pick", "description": "Pick one.", "vocab": 2,
-           "source": "<Html><Button label={args.question} onClick={task.answer(values: {name: args.question})} /></Html>",
+           "source": "<Blok kind=\"task\" context=\"panel\"><Button label={args.question} onClick={task.answer(values: {name: args.question})} /></Blok>",
            "args": [{"key": "question", "kind": "STRING", "nullable": false, "effects": [], "validators": []}],
            "returns": [{"key": "name", "kind": "STRING", "nullable": false, "effects": []}]})
 }
@@ -363,7 +385,7 @@ async fn an_implementations_asks_are_held_by_it_shared_and_collected() {
 async fn an_ask_that_is_no_task_blok_is_refused_at_registration() {
     let Some(lab) = lab().await else { return };
     let agent = lab.agent("only").await;
-    let broken = json!({"key": "asks.pick", "vocab": 2, "source": "<Html><Button"});
+    let broken = json!({"key": "asks.pick", "vocab": 2, "source": "<Blok kind=\"task\" context=\"panel\"><Button"});
     assert!(lab.register(agent, asking(json!([broken]))).await.is_err());
 
     let twice = json!([pick(), pick()]);
@@ -380,7 +402,7 @@ async fn an_ask_that_is_no_task_blok_is_refused_at_registration() {
 
 fn progress() -> Value {
     json!({"key": "asks.progress", "description": "Progress.", "vocab": 2,
-           "source": "<Html><Text text={args.step} /></Html>",
+           "source": "<Blok kind=\"task\" context=\"panel\"><Text text={args.step} /></Blok>",
            "args": [{"key": "step", "kind": "INT", "nullable": false, "effects": [], "validators": []}]})
 }
 

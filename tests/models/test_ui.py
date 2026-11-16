@@ -37,7 +37,7 @@ class TestUIModels:
         assert blok.description == "A test UI blok"
         assert blok.creator == user
         assert blok.components == []
-        assert blok.demo == {} and blok.locals == [] and blok.vocab == 2
+        assert blok.demo == {} and blok.resolved_locals == [] and blok.vocab == 2 and blok.context == "PANEL"
 
     def test_dashboard_creation(self):
         """Test creating a Dashboard model instance."""

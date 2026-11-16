@@ -232,7 +232,7 @@ class TestGraphQLAgents:
         def declare() -> None:
             agent = Agent.objects.get(id=agent_id)
             catalog, _ = Module.objects.get_or_create(organization=agent.organization, name="orkestrator")
-            for name, context, default in (("panel", "HTML", True), ("logo", "LOGO", True), ("old-logo", "LOGO", False)):
+            for name, context, default in (("panel", "PANEL", True), ("logo", "LOGO", True), ("old-logo", "LOGO", False)):
                 blok = Blok.objects.create(organization=agent.organization, creator=agent.user, module=catalog, name=name, context=context)
                 MaterializedBlok.objects.create(blok=blok, declared_by=agent, name=name, description=name, is_default=default)
 
@@ -242,7 +242,7 @@ class TestGraphQLAgents:
             query($id: ID!) {
                 agent(id: $id) {
                     logo: defaultBlok(context: LOGO) { name blok { context } }
-                    panel: defaultBlok(context: HTML) { name }
+                    panel: defaultBlok(context: PANEL) { name }
                     scene: defaultBlok(context: SCENE) { name }
                 }
             }
@@ -266,7 +266,8 @@ class TestGraphQLAgents:
             implementation = registered.create_implementation(ImplementationInputModel(interface="crop", definition=definition), agent)
             plain = registered.create_implementation(ImplementationInputModel(interface="plain", definition=DefinitionInputModel(key="plain", name="Plain", kind="FUNCTION", args=[], returns=[])), agent)
             catalog, _ = Module.objects.get_or_create(organization=agent.organization, name="orkestrator")
-            logo = Blok.objects.create(organization=agent.organization, creator=agent.user, module=catalog, name="crop", context="ACTION_LOGO")
+            components = [registered.blok("action", "logo", registered.node("Logo", registered.node("Path", d="M0 0")))]
+            logo = Blok.objects.create(organization=agent.organization, creator=agent.user, module=catalog, name="crop", context="LOGO", components=components)
             Implementation.objects.filter(id=implementation.id).update(logo=logo)
             # What takt writes as it links the logo.
             Action.objects.filter(id=implementation.action_id).update(latest_logo=logo)
@@ -276,14 +277,17 @@ class TestGraphQLAgents:
 
         query = """
             query($drawn: ID!, $plain: ID!, $action: ID!) {
-                drawn: implementation(id: $drawn) { logo { name context } }
+                drawn: implementation(id: $drawn) { logo { name context componentTree } }
                 plain: implementation(id: $plain) { logo { name } action { logo { name } } }
                 action(id: $action) { logo { name hash } }
             }
         """
         result = await schema.execute(query, context_value=authenticated_context, variable_values={"drawn": implementation_id, "plain": plain_id, "action": action_id})
         assert not result.errors, result.errors
-        assert result.data["drawn"] == {"logo": {"name": "crop", "context": "ACTION_LOGO"}}
+        # An action logo is a LOGO blok whose <Blok> says kind action.
+        drawn = result.data["drawn"]["logo"]
+        assert (drawn["name"], drawn["context"]) == ("crop", "LOGO")
+        assert {"key": "kind", "static_value": "action"} in drawn["componentTree"][0]["props"]
         assert result.data["plain"] == {"logo": None, "action": {"logo": None}}
         assert result.data["action"]["logo"]["name"] == "crop"
         assert len(result.data["action"]["logo"]["hash"]) == 64

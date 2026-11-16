@@ -798,7 +798,7 @@ async fn a_task_asks_through_a_blok_it_writes_and_gets_the_values_back() {
         frame(json!({
             "type": "HELD", "task": task.to_string(), "message": "Which one?",
             "blok": {
-                "source": "<Html><Box/></Html>", "name": "Pick an image", "args": {"images": images},
+                "source": "<Blok kind=\"task\" context=\"panel\"><Box/></Blok>", "name": "Pick an image", "args": {"images": images},
                 "returns": [{"key": "image", "kind": "STRUCTURE", "identifier": "@mikro/image",
                              "nullable": false, "effects": []}],
             },
@@ -915,7 +915,7 @@ async fn a_blok_that_cannot_be_made_refuses_the_hold_and_says_why() {
         (json!({"source": "<Box"}), "does not hold"),
         (json!({"key": "nothing"}), "declares no ask"),
         (
-            json!({"source": "<Html><Box/></Html>", "agent_mappings": {"other": "1"}}),
+            json!({"source": "<Blok kind=\"task\" context=\"panel\"><Box/></Blok>", "agent_mappings": {"other": "1"}}),
             "no dependency",
         ),
     ] {
@@ -962,7 +962,7 @@ async fn a_blok_the_catalog_does_not_know_still_holds() {
     route(
         &ctx,
         holder,
-        &frame(json!({"type": "HELD", "task": task.to_string(), "blok": {"source": "<Html><Box><Knob/></Box></Html>"}})),
+        &frame(json!({"type": "HELD", "task": task.to_string(), "blok": {"source": "<Blok kind=\"task\" context=\"panel\"><Box><Knob/></Box></Blok>"}})),
         None,
     )
     .await
@@ -979,21 +979,24 @@ async fn a_blok_the_catalog_does_not_know_still_holds() {
     assert_eq!(findings, json!([]), "{findings}");
 }
 
-/// A `source` blok sent with a task keeps every v2 field it declares beside its tree, as a
-/// declared blok does: its vocab, catalogs, module, locals, demo, queries and subscriptions.
+/// A `source` blok sent with a task keeps what it says, as a declared blok does: its vocab,
+/// catalogs, module and demo beside its tree, and its locals, queries and subscriptions in it
+/// (its locals resolved beside, by node). Sent beside its tree, they are refused.
 #[tokio::test]
-async fn a_source_blok_keeps_what_it_declares_beside_its_tree() {
+async fn a_source_blok_keeps_what_it_declares() {
     let Some(ctx) = context().await else { return };
     let person = Person::new();
     let holder = person.agent(&ctx).await;
     standard_catalog(&ctx, holder).await;
     let (_, workflow) = action(&ctx, holder).await;
     let desk = person.at_a_desk(&ctx).await;
-    let local = json!({"key": "note", "kind": "STRING", "default": "", "persist": true});
-    let query = json!({"key": "positions", "service": "mikro", "document": "query Positions { positions { id } }",
-                       "variables": [], "poll": 5.0, "more": "positions"});
-    let subscription = json!({"key": "live", "service": "mikro", "document": "subscription Live { live { id } }",
-                              "variables": [], "keep": 3, "history": "positions"});
+    let source = concat!(
+        r#"<Blok kind="task" context="panel">"#,
+        r#"<local name="note" kind="STRING" default="" persist />"#,
+        r#"<query name="positions" service="mikro" document="query Positions { positions { id } }" poll={5.0} more="positions" />"#,
+        r#"<subscription name="live" service="mikro" document="subscription Live { live { id } }" keep={3} history="positions" />"#,
+        r#"<Box><Input bind={note} /></Box></Blok>"#,
+    );
 
     let task = root(&ctx, &desk, workflow, "ASK").await;
     route(
@@ -1002,9 +1005,8 @@ async fn a_source_blok_keeps_what_it_declares_beside_its_tree() {
         &frame(json!({
             "type": "INFORM", "task": task.to_string(),
             "blok": {
-                "source": "<Html><Box/></Html>", "vocab": 2, "catalogs": ["ui@1"], "module": "orkestrator",
-                "locals": [local], "demo": {"args": {"done": 5}},
-                "queries": [query], "subscriptions": [subscription],
+                "source": source, "vocab": 2, "catalogs": ["ui@1"], "module": "orkestrator",
+                "demo": {"args": {"done": 5}},
             },
         })),
         None,
@@ -1013,30 +1015,24 @@ async fn a_source_blok_keeps_what_it_declares_beside_its_tree() {
     .unwrap();
     let refused = of_type(queued(&ctx, holder).await, "BLOK_REFUSED");
     assert!(refused.is_empty(), "{refused:?}");
-    assert_stored(&ctx, task, &query).await;
+    assert_stored(&ctx, task).await;
 
-    // As arkitekt-runtime dumps it: every unset field null, each local a full port.
+    // As arkitekt-runtime dumps it: every unset field null.
     let task = root(&ctx, &desk, workflow, "ASK").await;
     route(
         &ctx,
         holder,
         &frame(json!({
             "type": "INFORM", "task": task.to_string(),
-            "blok": {"key": null, "id": null, "source": "<Html><Box/></Html>", "name": null, "args": null,
+            "blok": {"key": null, "id": null, "source": source, "name": null, "args": null,
                      "returns": [{"key": "image", "label": null, "kind": "STRUCTURE", "description": null,
                                   "identifier": "@mikro/image", "nullable": false, "effects": null, "choices": null,
                                   "reference_unit": null, "proposed_units": null, "dimension": null,
                                   "children": null, "widget": null, "provides": null}],
                      "dependencies": null, "agent_mappings": null, "vocab": 2, "catalogs": ["ui@1"],
-                     "locals": [{"key": "note", "label": null, "description": null, "identifier": null,
-                                 "nullable": false, "effects": null, "choices": null, "reference_unit": null,
-                                 "proposed_units": null, "dimension": null, "children": null, "validators": null,
-                                 "default": "", "widget": null, "requires": null, "kind": "STRING", "persist": true}],
+                     "locals": null,
                      "demo": {"deps": null, "args": {"done": 5}, "task": null, "queries": null, "subscriptions": null},
-                     "queries": [{"key": "positions", "service": "mikro", "document": "query Positions { positions { id } }",
-                                  "variables": [], "poll": 5.0, "more": "positions"}],
-                     "subscriptions": [{"key": "live", "service": "mikro", "document": "subscription Live { live { id } }",
-                                        "variables": [], "keep": 3, "history": "positions"}],
+                     "queries": null, "subscriptions": null,
                      "module": "orkestrator"},
         })),
         None,
@@ -1045,20 +1041,35 @@ async fn a_source_blok_keeps_what_it_declares_beside_its_tree() {
     .unwrap();
     let refused = of_type(queued(&ctx, holder).await, "BLOK_REFUSED");
     assert!(refused.is_empty(), "{refused:?}");
-    assert_stored(&ctx, task, &query).await;
+    assert_stored(&ctx, task).await;
+
+    // Locals beside the tree are no more.
+    let task = root(&ctx, &desk, workflow, "ASK").await;
+    route(
+        &ctx,
+        holder,
+        &frame(json!({
+            "type": "INFORM", "task": task.to_string(),
+            "blok": {"source": source, "locals": [{"key": "other", "kind": "STRING"}]},
+        })),
+        None,
+    )
+    .await
+    .unwrap();
+    let refused = of_type(queued(&ctx, holder).await, "BLOK_REFUSED");
+    assert_eq!(refused.len(), 1, "{refused:?}");
 }
 
-async fn assert_stored(ctx: &Context, task: i64, query: &Value) {
-    let (vocab, catalogs, module, locals, demo, queries, subscriptions): (
+async fn assert_stored(ctx: &Context, task: i64) {
+    let (vocab, catalogs, module, components, resolved, demo): (
         i16,
         Value,
         String,
         Value,
         Value,
         Value,
-        Value,
     ) = sqlx::query_as(
-        "SELECT b.vocab, b.catalogs, mo.name, b.locals, b.demo, b.queries, b.subscriptions
+        "SELECT b.vocab, b.catalogs, mo.name, b.components, b.resolved_locals, b.demo
            FROM facade_materializedblok m JOIN facade_blok b ON b.id = m.blok_id
            JOIN facade_module mo ON mo.id = b.module_id
           WHERE m.owner_task_id = $1",
@@ -1069,14 +1080,18 @@ async fn assert_stored(ctx: &Context, task: i64, query: &Value) {
     .unwrap();
     assert_eq!((vocab, module.as_str()), (2, "orkestrator"));
     assert_eq!(catalogs, json!(["ui@1"]));
-    assert_eq!(locals[0]["key"], "note");
-    assert_eq!(locals[0]["kind"], "STRING");
-    assert_eq!(locals[0]["persist"], true);
+    let children: Vec<&str> = components[0]["children"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|child| child["component"].as_str().unwrap())
+        .collect();
+    assert_eq!(children, ["local", "query", "subscription", "Box"]);
+    assert_eq!(resolved[0]["node"], "Blok[0]/local[0]");
+    assert_eq!(resolved[0]["key"], "note");
+    assert_eq!(resolved[0]["kind"], "STRING");
+    assert_eq!(resolved[0]["persist"], true);
     assert_eq!(demo["args"], json!({"done": 5}));
-    assert_eq!(queries[0]["more"], "positions");
-    assert_eq!(queries[0]["document"], query["document"]);
-    assert_eq!(subscriptions[0]["history"], "positions");
-    assert_eq!(subscriptions[0]["keep"], 3);
 }
 
 #[tokio::test]
@@ -1094,7 +1109,7 @@ async fn an_inform_shows_a_blok_and_goes_with_its_task() {
         holder,
         &frame(json!({
             "type": "INFORM", "task": task.to_string(), "message": "Halfway there",
-            "blok": {"source": "<Html><Box/></Html>", "name": "Progress"},
+            "blok": {"source": "<Blok kind=\"task\" context=\"panel\"><Box/></Blok>", "name": "Progress"},
         })),
         None,
     )
@@ -1147,7 +1162,7 @@ async fn a_blok_made_at_run_time_needs_the_flag_and_the_scope() {
     standard_catalog(&ctx, holder).await;
     let (_, workflow) = action(&ctx, holder).await;
     let desk = person.at_a_desk(&ctx).await;
-    let blok = json!({"source": "<Html><Box/></Html>"});
+    let blok = json!({"source": "<Blok kind=\"task\" context=\"panel\"><Box/></Blok>"});
 
     let refused = |task: i64| {
         let ctx = &ctx;
@@ -1260,7 +1275,7 @@ async fn an_ask_by_key_is_one_its_implementation_declares() {
 
     // Any blok will do as the declared one: one a task made is at hand.
     let made = root(&ctx, &desk, workflow, "ASK").await;
-    route(&ctx, holder, &frame(json!({"type": "HELD", "task": made.to_string(), "blok": {"source": "<Html><Box/></Html>"}})), None)
+    route(&ctx, holder, &frame(json!({"type": "HELD", "task": made.to_string(), "blok": {"source": "<Blok kind=\"task\" context=\"panel\"><Box/></Blok>"}})), None)
         .await
         .unwrap();
     let blok: i64 =
@@ -1321,7 +1336,7 @@ async fn an_inform_by_key_is_one_its_implementation_declares() {
     let desk = person.at_a_desk(&ctx).await;
 
     let made = root(&ctx, &desk, workflow, "ASK").await;
-    route(&ctx, holder, &frame(json!({"type": "INFORM", "task": made.to_string(), "blok": {"source": "<Html><Box/></Html>"}})), None)
+    route(&ctx, holder, &frame(json!({"type": "INFORM", "task": made.to_string(), "blok": {"source": "<Blok kind=\"task\" context=\"panel\"><Box/></Blok>"}})), None)
         .await
         .unwrap();
     let blok: i64 =

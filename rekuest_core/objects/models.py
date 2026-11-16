@@ -352,7 +352,7 @@ class CatalogComponentModel(BaseModel):
     description: str | None = None
     props: list[CatalogPropModel] = []
     accepts_children: bool = True
-    context: enums.ComponentContext = enums.ComponentContext.HTML
+    context: enums.ComponentContext = enums.ComponentContext.PANEL
     children_context: enums.ComponentContext | None = None
     inherits_context: bool = False
     downstream_of: list[str] = []
@@ -400,8 +400,9 @@ class BlokLocalModel(BaseModel):
 
 
 class ResolvedBlokLocalModel(BlokLocalModel):
-    """A stored local as the blok's tree resolves it: its kind always set."""
+    """A ``<local>`` of a blok's tree as it resolves: its node, and its kind always set."""
 
+    node: str
     kind: enums.LocalKind
 
 

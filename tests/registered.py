@@ -56,11 +56,79 @@ def rebuild_relational_ports(action: models.Action, definition: DefinitionInputM
     action.save(update_fields=["arg_count", "return_count"])
 
 
+# --------------------------------------------------------------------------- blok trees
+# Every blok is one ``<Blok kind context>`` whose declarations (``<local>``, ``<query>``,
+# ``<subscription>``) are its leading children. Ids are derived as the BSX parser derives them
+# (``Blok[0]/local[0]``, ``Blok[0]/Card[0]``, ...); an explicit id is kept.
+
+_PROP_KEYS = {"static_value": "staticValue", "dynamic_value": "dynamicValue", "util_call": "utilCall", "agent_call": "agentCall", "declares_value": "declaresValue"}
+
+
+def node(component: str, *children: dict, id: str = "", **props: t.Any) -> dict:
+    """A component node, its props literals (a dict with ``path`` is a path)."""
+    out: dict[str, t.Any] = {"id": id, "component": component}
+    if props:
+        out["props"] = [{"key": key, "dynamic_value": value} if isinstance(value, dict) and set(value) == {"path"} else {"key": key, "static_value": value} for key, value in props.items()]
+    if children:
+        out["children"] = list(children)
+    return out
+
+
+def local(name: str, **fields: t.Any) -> dict:
+    """``<local name=... />``: a port's fields as literals (``kind``, ``default``, ``persist``...)."""
+    props = [{"key": "name", "static_value": name, "declares_value": name}, *({"key": key, "static_value": value} for key, value in fields.items())]
+    return {"id": "", "component": "local", "props": props}
+
+
+def query(name: str, service: str, document: str, *variables: tuple[str, t.Any], component: str = "query", **fields: t.Any) -> dict:
+    """``<query name service document>`` with a ``<var key value>`` per variable (a dict with ``path`` is a path)."""
+    return node(component, *(node("var", key=key, value=value) for key, value in variables), name=name, service=service, document=document, **fields)
+
+
+def _ids(tree: dict, node_id: str) -> dict:
+    out = {**tree, "id": node_id}
+    counts: dict[str, int] = {}
+    children = []
+    for child in tree.get("children") or []:
+        if child["component"] == "#text":
+            index = counts.get("#", 0)
+            counts["#"] = index + 1
+            children.append({**child, "id": f"{node_id}/#{index}"})
+            continue
+        index = counts.get(child["component"], 0)
+        counts[child["component"]] = index + 1
+        children.append(_ids(child, child["id"] or f"{node_id}/{child['component']}[{index}]"))
+    if children:
+        out["children"] = children
+    return out
+
+
+def text(value: str) -> dict:
+    """A run of text."""
+    return {"id": "", "component": "#text", "props": [{"key": "value", "static_value": value}]}
+
+
+def blok(kind: str, context: str, *children: dict, chrome: str | None = None) -> dict:
+    """``<Blok kind context>`` holding ``children`` (declarations first), every id derived."""
+    root = node("Blok", *children, kind=kind, context=context, **({"chrome": chrome} if chrome else {}))
+    return _ids(root, "Blok[0]")
+
+
+def gql(tree: dict) -> dict:
+    """A tree built here as a GraphQL ComponentNodeInput (camelCase prop fields)."""
+    out = dict(tree)
+    if out.get("props"):
+        out["props"] = [{_PROP_KEYS.get(key, key): value for key, value in prop.items()} for prop in out["props"]]
+    if out.get("children"):
+        out["children"] = [gql(child) for child in out["children"]]
+    return out
+
+
 def create_blok(organization: t.Any, creator: t.Any, name: str, args: t.Sequence[dict] = (), **fields: t.Any) -> models.Blok:
     """A blok with its declared args stored and as BlokArgPort rows, as takt registers them."""
-    declared = BlokImplementationInputModel(key=name, vocab=2, components=[{"id": "Html[0]", "component": "Html", "children": [{"id": "Html[0]/Card[0]", "component": "Card"}]}], args=list(args))
+    declared = BlokImplementationInputModel(key=name, vocab=2, components=[blok("agent", "panel", node("Card"))], args=list(args))
     catalog = models.Module.objects.get_or_create(name="orkestrator", organization=organization)[0]
-    blok = models.Blok.objects.create(
+    row = models.Blok.objects.create(
         name=name,
         organization=organization,
         creator=creator,
@@ -68,8 +136,8 @@ def create_blok(organization: t.Any, creator: t.Any, name: str, args: t.Sequence
         args=declared.model_dump(mode="json")["args"],
         **fields,
     )
-    _ports(declared.args, {"blok": blok}, models.BlokArgPort, "requires")
-    return blok
+    _ports(declared.args, {"blok": row}, models.BlokArgPort, "requires")
+    return row
 
 
 def create_implementation(input: ImplementationInputModel, agent: models.Agent) -> models.Implementation:

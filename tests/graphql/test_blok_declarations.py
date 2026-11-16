@@ -1,9 +1,10 @@
-"""What a v2 blok declares beside its tree, through the API: locals, demo, queries, subscriptions,
-catalogs and the language version.
+"""What a v2 blok declares, through the API: its ``<local>``, ``<query>`` and ``<subscription>``
+children (in its tree), and beside the tree its demo, catalogs and language version.
 
-createBlok stores them on the blok and its first revision; an edit that leaves one out keeps it;
-what is malformed is refused with the reason; an editBlok dry run reports every finding of the
-tree, errors included, with the vocabulary's code, and keeps nothing.
+createBlok stores them on the blok and its first revision (``queries``/``subscriptions`` derived
+from the tree, ``resolvedLocals`` by node); an edit that leaves a part out keeps it; what is
+malformed is refused with the reason; an editBlok dry run reports every finding of the tree,
+errors included, with the vocabulary's code, and keeps nothing.
 """
 
 import pytest
@@ -12,11 +13,12 @@ from kante.context import HttpContext
 
 from facade.models import BlokRevision
 from facade.schema import schema
+from tests.registered import blok, gql, local, node, query
 
 DECLARED = """
     vocab
     catalogs
-    locals { key kind default persist }
+    resolvedLocals { node key kind default persist }
     demo { deps args task queries subscriptions }
     queries { key service document variables { key valuePath } poll more }
     subscriptions { key service document keep history }
@@ -39,24 +41,30 @@ mutation EditBlok($input: EditBlokInput!) {{
 }}
 """
 
-TREE = [{"id": "html", "component": "Html", "children": [{"id": "Text[0]", "component": "Text", "props": [{"key": "text", "dynamicValue": {"path": "queries.positions.status"}}]}]}]
-POSITIONS = {"key": "positions", "service": "mikro", "document": "query($slide: ID!) { positions(slide: $slide) { id } }", "variables": [{"key": "slide", "valuePath": "args.slide"}], "poll": 10, "more": "positions"}
-EVENTS = {"key": "events", "service": "rekuest", "document": "subscription { events { id } }", "keep": 20, "history": "positions"}
+DOCUMENT = "query($slide: ID!) { positions(slide: $slide) { id } }"
+ITERATIONS = local("iterations", kind="INT", default=15, persist=True)
+POSITIONS = query("positions", "mikro", DOCUMENT, ("slide", {"path": "args.slide"}), poll=10, more="positions")
+EVENTS = query("events", "rekuest", "subscription { events { id } }", component="subscription", keep=20, history="positions")
+
+
+def _tree(*declarations: dict, reads: str = "queries.positions.status") -> list[dict]:
+    """A custom blok declaring ``declarations`` (the three above by default) that shows ``reads``."""
+    return [gql(blok("custom", "panel", *(declarations or (ITERATIONS, POSITIONS, EVENTS)), node("Text", text={"path": reads})))]
+
+
+TREE = _tree()
 DECLARATIONS = {
     "vocab": 2,
     "catalogs": ["ui@1"],
-    "locals": [{"key": "iterations", "kind": "INT", "default": 15, "persist": True}],
     "demo": {"args": {"slide": "1"}, "queries": {"positions": [{"id": "p"}]}},
-    "queries": [POSITIONS],
-    "subscriptions": [EVENTS],
 }
 EXPECTED = {
     "vocab": 2,
     "catalogs": ["ui@1"],
-    "locals": [{"key": "iterations", "kind": "INT", "default": 15, "persist": True}],
+    "resolvedLocals": [{"node": "Blok[0]/local[0]", "key": "iterations", "kind": "INT", "default": 15, "persist": True}],
     "demo": {"deps": None, "args": {"slide": "1"}, "task": None, "queries": {"positions": [{"id": "p"}]}, "subscriptions": None},
-    "queries": [{"key": "positions", "service": "mikro", "document": POSITIONS["document"], "variables": [{"key": "slide", "valuePath": "args.slide"}], "poll": 10.0, "more": "positions"}],
-    "subscriptions": [{"key": "events", "service": "rekuest", "document": EVENTS["document"], "keep": 20, "history": "positions"}],
+    "queries": [{"key": "positions", "service": "mikro", "document": DOCUMENT, "variables": [{"key": "slide", "valuePath": "args.slide"}], "poll": 10.0, "more": "positions"}],
+    "subscriptions": [{"key": "events", "service": "rekuest", "document": "subscription { events { id } }", "keep": 20, "history": "positions"}],
 }
 
 
@@ -85,46 +93,30 @@ class TestBlokDeclarations:
         assert _declared(created) == EXPECTED
         assert _declared(created["head"]) == EXPECTED
 
-        # An edit of the tree alone keeps everything declared beside it.
-        tree = [{"id": "html", "component": "Html", "children": [{"id": "Text[0]", "component": "Text", "props": [{"key": "text", "dynamicValue": {"path": "iterations"}}]}]}]
+        # An edit of the tree keeps everything said beside it; what the tree declares follows the tree.
+        tree = _tree(local("iterations", kind="INT", default=3), reads="iterations")
         edited = (await _run(authenticated_context, EDIT, {"input": {"blok": created["id"], "base": created["head"]["id"], "components": tree}}))["editBlok"]
         assert edited["applied"] is True
         assert edited["revision"]["number"] == 2
-        assert _declared(edited["revision"]) == EXPECTED
-        assert _declared(edited["blok"]) == EXPECTED
-
-        # One part given replaces that part only.
-        locals_only = [{"key": "iterations", "kind": "INT", "default": 3}]
-        relocal = (await _run(authenticated_context, EDIT, {"input": {"blok": created["id"], "base": (await self._head(created["id"])), "locals": locals_only}}))["editBlok"]
-        assert relocal["blok"]["locals"] == [{"key": "iterations", "kind": "INT", "default": 3, "persist": False}]
-        assert relocal["blok"]["queries"] == EXPECTED["queries"]
-
-    @staticmethod
-    @sync_to_async
-    def _head(blok_id: str) -> str:
-        return str(BlokRevision.objects.filter(blok_id=blok_id).order_by("-number").first().id)
+        kept = {**EXPECTED, "resolvedLocals": [{"node": "Blok[0]/local[0]", "key": "iterations", "kind": "INT", "default": 3, "persist": False}], "queries": [], "subscriptions": []}
+        assert _declared(edited["revision"]) == kept
+        assert _declared(edited["blok"]) == kept
 
     async def test_malformed_declarations_are_refused(self, authenticated_context: HttpContext) -> None:
-        for declarations, message in (
-            ({"locals": [{"key": "task", "kind": "STRING"}]}, "'task' is reserved: no local, let or into may use it. [roots.reserved]"),
-            ({"queries": [{**POSITIONS, "document": "mutation { delete }"}]}, "is a mutation: a blok reads, and writes only through a task [query.read_only]"),
-            ({"subscriptions": [{**EVENTS, "history": "nope"}]}, "replays from 'nope', which is no declared query. [query.history]"),
+        for changed, message in (
+            ({"components": _tree(local("task", kind="STRING"), POSITIONS, EVENTS)}, "'task' is reserved: no local, let or into may use it."),
+            ({"components": _tree(ITERATIONS, query("positions", "mikro", "mutation { delete }"))}, "is a mutation: a blok reads, and writes only through a task"),
+            ({"components": _tree(ITERATIONS, POSITIONS, query("events", "rekuest", "subscription { events { id } }", component="subscription", history="nope"))}, "replays from 'nope', which is no declared query."),
+            ({"components": _tree(ITERATIONS, query("positions", "mikro", DOCUMENT, more="positions[0]"))}, "is not a field path into its data (positions, images.items)."),
             ({"catalogs": ["ui"]}, "nor the name of one registered in the organization. [manifest.catalog]"),
-            ({"queries": [{**POSITIONS, "more": "positions[0]"}]}, "is not a field path into its data (positions, images.items). [query.more]"),
             ({"vocab": 1}, "2"),
         ):
-            message_got = await _refused(authenticated_context, CREATE, {"input": {"name": "broken", "components": TREE, **{**DECLARATIONS, **declarations}}})
-            assert message in message_got, (declarations, message_got)
+            message_got = await _refused(authenticated_context, CREATE, {"input": {"name": "broken", "components": TREE, **DECLARATIONS, **changed}})
+            assert message in message_got, (changed, message_got)
 
     async def test_a_dry_run_reports_vocabulary_codes_and_keeps_nothing(self, authenticated_context: HttpContext) -> None:
         created = (await _run(authenticated_context, CREATE, {"input": {"name": "positions", "components": TREE, **DECLARATIONS}}))["createBlok"]
-        tree = [
-            {"id": "Html[0]", "component": "Html", "children": [
-                {"id": "Html[0]/Card[0]", "component": "Card", "props": [{"key": "className", "staticValue": "bg-red-500"}], "children": [
-                    {"id": "Html[0]/Card[0]/Text[0]", "component": "Text", "props": [{"key": "text", "dynamicValue": {"path": "nothing.here"}}]},
-                ]},
-            ]},
-        ]
+        tree = [gql(blok("custom", "panel", node("Card", node("Text", text={"path": "nothing.here"}), className="bg-red-500")))]
         checked = (await _run(authenticated_context, EDIT, {"input": {"blok": created["id"], "base": created["head"]["id"], "components": tree, "dryRun": True}}))["editBlok"]
         assert checked["applied"] is False
         assert checked["revision"] is None

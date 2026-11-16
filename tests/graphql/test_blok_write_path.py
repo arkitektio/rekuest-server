@@ -13,6 +13,7 @@ from kante.context import HttpContext
 from facade.models import Agent, Blok, BlokAgentMapping, BlokDependency, Caller, Dashboard, DashboardPlacement, MaterializedBlok, Module
 from facade.schema import schema
 from tests.graphql_ops import CREATE_BLOK, DELETE_MATERIALIZED_BLOK, MATERIALIZE_BLOK, UPDATE_BLOK, UPDATE_MATERIALIZED_BLOK
+from tests.registered import blok, gql, local, node
 
 
 def _agent_in(org: Organization, user: User, prefix: str) -> Agent:
@@ -50,11 +51,12 @@ def _counts() -> tuple[int, int, int]:
 @pytest.mark.asyncio
 class TestBlokWritePath:
     async def test_update_blok_round_trip(self, authenticated_context: HttpContext) -> None:
-        """Every field of UpdateBlokInput is applied; omitted fields stay untouched; dependencies replace wholesale."""
+        """Every field of UpdateBlokInput is applied; omitted fields stay untouched; dependencies replace wholesale.
+        What the new tree declares (its ``<local>``) is what the blok resolves."""
         created = await schema.execute(
             CREATE_BLOK,
             context_value=authenticated_context,
-            variable_values={"input": {"name": "Updatable", "vocab": 2, "description": "before", "dependencies": [{"key": "stage"}], "locals": [{"key": "exposure", "default": 3, "kind": "INT"}]}},
+            variable_values={"input": {"name": "Updatable", "vocab": 2, "description": "before", "dependencies": [{"key": "stage"}], "components": [gql(blok("custom", "panel", node("Text")))]}},
         )
         assert not created.errors, created.errors
         blok_id = created.data["createBlok"]["id"]
@@ -66,23 +68,23 @@ class TestBlokWritePath:
                 "input": {
                     "id": blok_id,
                     "module": "custom",
-                    "components": [{"id": "html", "component": "Html", "children": [{"id": "root", "component": "Slider"}]}],
+                    "components": [gql(blok("custom", "panel", local("exposure", kind="INT", default=3), node("Slider", bind={"path": "exposure"})))],
                     "dependencies": [{"key": "camera", "optional": True}],
                 }
             },
         )
 
         assert not result.errors, result.errors
-        blok = result.data["updateBlok"]
-        assert blok["name"] == "Updatable"
-        assert blok["description"] == "before"
-        # updateBlok keeps what it is not given: the locals and the language version.
-        assert blok["vocab"] == 2
-        assert blok["locals"] == [{"key": "exposure", "kind": "INT", "default": 3, "persist": False}]
-        assert blok["module"]["name"] == "custom"
-        assert blok["dependencies"] == [{"key": "camera", "optional": True}]
-        # The selection reads the root only: the html blok's `Html`, holding the Slider.
-        assert blok["components"] == [{"id": "html", "component": "Html"}]
+        updated = result.data["updateBlok"]
+        assert updated["name"] == "Updatable"
+        assert updated["description"] == "before"
+        # updateBlok keeps what it is not given (the language version); the locals are the new tree's.
+        assert updated["vocab"] == 2
+        assert updated["resolvedLocals"] == [{"node": "Blok[0]/local[0]", "key": "exposure", "kind": "INT", "default": 3, "persist": False}]
+        assert updated["module"]["name"] == "custom"
+        assert updated["dependencies"] == [{"key": "camera", "optional": True}]
+        # The selection reads the root only: the `<Blok>`, holding the local and the Slider.
+        assert updated["components"] == [{"id": "Blok[0]", "component": "Blok"}]
 
     async def test_materialize_blok_with_two_dependencies(self, authenticated_context: HttpContext) -> None:
         """Both mappings are written under their own keys, the placement is created, and a second materialization is a second row."""
@@ -213,7 +215,7 @@ class TestBlokWritePath:
         )
         assert not created.errors, created.errors
         blok_id = created.data["createBlok"]["id"]
-        components = [{"id": "html", "component": "Html", "children": [{"id": "root", "component": "Button", "props": [{"key": "onClick", "agentCall": {"dependency": "laser", "operation": "fire"}}]}]}]
+        components = [gql(blok("custom", "panel", {"id": "", "component": "Button", "props": [{"key": "onClick", "agent_call": {"dependency": "laser", "operation": "fire"}}]}))]
 
         rejected = await schema.execute(UPDATE_BLOK, context_value=authenticated_context, variable_values={"input": {"id": blok_id, "components": components}})
         assert rejected.errors

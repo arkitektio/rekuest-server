@@ -1,6 +1,6 @@
 {
  "vocab": 2,
- "minor": 1,
+ "minor": 2,
  "description": "The blok language, version 2: what a blok may read, call and store. The spec's parser, the server (rekuest_core, takt) and the renderer (orkestrator) load this file or are generated from it. The design is the blok-vocab-v2 proposal of 2026-10-25. Three layers, each versioned on its own: this language (vocab, and minor for what it gained since); the base catalog, everything every renderer draws; and the app catalogs that extend it with what one frontend draws beyond (see catalogs). A server holds a blok to the language alone, never to a catalog: whoever draws a blok checks it against the catalog it has, and an author's tooling checks it when asked.",
  "roots": {
   "data": {
@@ -35,47 +35,62 @@
    "description": "Declared by an app for its own agent (app.blok).",
    "roots": ["self", "args", "queries", "subscriptions", "viewer", "then"],
    "locals": true,
-   "contexts": ["HTML", "SCENE", "LOGO"]
+   "contexts": ["PANEL", "SCENE", "LOGO"]
   },
   "custom": {
    "description": "Built by a user and materialized onto agents.",
    "roots": ["deps", "args", "queries", "subscriptions", "viewer", "then"],
    "locals": true,
-   "contexts": ["HTML", "SCENE"]
+   "contexts": ["PANEL", "SCENE"]
   },
   "task": {
    "description": "A task's ask or inform blok; its dependencies are the sending task's, mapped.",
    "roots": ["self", "deps", "args", "task", "queries", "subscriptions", "viewer", "then"],
    "locals": true,
-   "contexts": ["HTML"]
+   "contexts": ["PANEL"]
   },
   "action": {
-   "description": "An action's own blok, declared inline with the action (ActionBlok); its dependencies are the action's.",
+   "description": "An action's own blok, declared with the action (bloks=); its dependencies are the action's. In the logo context it is the action's logo, drawn against the task the viewer last ran of it (null until then): it reads only task and declares nothing.",
    "roots": ["self", "deps", "args", "task", "queries", "subscriptions", "viewer", "then"],
    "locals": true,
-   "contexts": ["HTML", "SCENE"]
+   "contexts": ["PANEL", "SCENE", "LOGO"],
+   "in": {"LOGO": {"roots": ["task"], "locals": false}}
   },
   "assign": {
-   "description": "An action's own blok for starting a run of it (assign_bloks): shown before there is a task, with the arguments being filled in as args and the agents a run would get as deps.",
+   "description": "An action's own blok for starting a run of it (bloks=, kind assign): shown before there is a task, with the arguments being filled in as args and the agents a run would get as deps.",
    "roots": ["self", "deps", "args", "assign", "queries", "subscriptions", "viewer"],
    "locals": true,
-   "contexts": ["HTML", "SCENE"]
-  },
-  "action_logo": {
-   "description": "An action's logo, drawn against the task the viewer last ran of it (null until then).",
-   "roots": ["task"],
-   "locals": false,
-   "contexts": ["LOGO"]
+   "contexts": ["PANEL", "SCENE"]
   }
  },
  "contexts": {
-  "HTML": {"text": true, "description": "Panels, dashboards and popouts."},
+  "PANEL": {"text": true, "description": "Panels, dashboards and popouts: a flat rectangle the host lays out."},
   "SCENE": {"text": false, "description": "A 3D view: a Scene, or an action's Space, which places the run's dependencies in a room whose layout is shared."},
-  "LOGO": {"text": false, "description": "An SVG drawing in the viewer's palette: an agent's logo, or an action's (an ACTION_LOGO blok is drawn in LOGO)."}
+  "LOGO": {"text": false, "description": "An SVG drawing in the viewer's palette: an agent's logo, or an action's (kind action), which paints with the palette's pens only."}
  },
- "blok_roots": {
-  "description": "A blok's root component names its context: every blok starts with one of these, and nothing else declares the context.",
-  "roots": {"Html": "HTML", "Scene": "SCENE", "Space": "SCENE", "AgentLogo": "LOGO", "ActionLogo": "ACTION_LOGO"}
+ "blok": {
+  "description": "Every blok is one <Blok> element that says what it is: its kind (what it reads, and where it may be mounted), its context (what host draws it), the catalog it is written for and whether the host draws its own chrome around it. What the blok owns is declared inside it (<local>, <query>, <subscription>); what its mount provides (deps, args, task, self's actions) is checked only where it is mounted.",
+  "component": "Blok",
+  "attributes": {
+   "kind": "Required: agent, custom, task, action or assign (a row of kinds).",
+   "context": "Required: panel, scene or logo.",
+   "catalog": "The catalog it is written for (the address it is published at, or the name of one registered in the organization); the base catalog when left out.",
+   "chrome": "\"none\": the host draws none of its own interface around the blok (panel and scene only)."
+  },
+  "contexts": {"panel": "PANEL", "scene": "SCENE", "logo": "LOGO"},
+  "content": {
+   "description": "Per context, the one element a blok holds besides its declarations; a panel holds any elements.",
+   "SCENE": ["Scene", "Space"],
+   "LOGO": ["Logo"]
+  },
+  "chrome": ["PANEL", "SCENE"],
+  "declarations": {
+   "description": "What a blok owns, declared in its tree. Each is stored as a node of its own and draws nothing.",
+   "local": "<local name=\"x\" default={...} persist kind=... />: a local (see locals). It comes before every other child of its parent and is in scope in its parent's subtree only; inside a foreach there is one per item. Every attribute but name is a literal: a port field (kind, identifier, nullable, choices, children, label, description, default, ...), persist, or like=\"self.<action>.<arg>\" / like=\"deps.<key>.<action>.<arg>\" (the port of that argument, resolved where the blok is mounted).",
+   "query": "<query name=\"x\" service=\"mikro\" document=\"query (...) {...}\" poll={5} more=\"items\"><var key=\"k\" value={...} /></query>: a declared read, queries.<name>. A child of <Blok>, before its content.",
+   "subscription": "<subscription name=\"x\" service=\"mikro\" document=\"subscription (...) {...}\" keep={10} history=\"q\"><var key=\"k\" value={...} /></subscription>: a declared stream, subscriptions.<name>. A child of <Blok>, before its content.",
+   "var": "<var key=\"k\" value={expression or literal} />: one variable of a query or subscription; an expression over args, blok-level locals and agents."
+  }
  },
  "records": {
   "task": {
@@ -324,10 +339,12 @@
   "text": "Text is a child like any other: each run of text between elements is stored as a node {id: <parent>/#<n>, component: \"#text\", props: [value]}, its value a literal or an expression; several parts of one run desugar to str.template(template, values). No element can be called #text, so only text makes one. Parsing needs no catalog. What a component does with its text is its renderer's: one with a text_prop makes its text children that prop (a Button its label), any other that takes children draws them in place; a component that sets its text_prop as an attribute too, or takes neither text nor children, is a catalog finding (catalog.text). A tree stored before text was a node holds the text_prop itself, and implicit Text or span nodes under the same ids: a renderer draws both."
  },
  "locals": {
-  "description": "Blok-level form state that feeds a call: a local is an arg port (key, kind, identifier, nullable, default, children, choices, validators, description, ...) plus persist, written only through `bind` on controls, read bare. persist remembers the last input on this device. Its kind is a port kind or ANY; left out on the wire it is inferred (kind_inference) and the stored local always carries one.",
+  "description": "Form state that feeds a call, declared in the tree as <local name=... />: a local is an arg port (key, kind, identifier, nullable, default, children, choices, validators, description, ...) plus persist, written only through `bind` on controls, read bare. persist remembers the last input on this device. Its kind is a port kind or ANY; left out it is inferred (kind_inference).",
   "fields": ["persist"],
+  "node": {"component": "local", "name": "name", "like": "like", "persist": "persist"},
+  "scope": "A local is in scope in its parent's subtree: its siblings, their children, and nothing outside its parent. It is the first of its parent's children (only other locals before it), never a child of a component that takes no children. Inside a foreach there is one value per item (by the item's runtime id); it lives as long as the blok is open, an if's branch closing and reopening included. A kept (persist) value is kept by the local's runtime id: an explicit id keeps it across edits of the tree. A local never shadows a name in scope (another local, a let, an into name) nor a reserved root.",
   "any": "ANY is a local's kind only (no action port is ever ANY): an untyped value. It is never an error and gets no warning; it skips the bind_kinds and arg_kinds checks and a path below it is taken as written. A renderer treats it as an untyped value.",
-  "kind_inference": ["A given kind (ANY included) is kept; only a left-out kind is inferred, by the first rule that gives one:", "1. the default: a bool BOOL, an integer INT, any other number FLOAT, a string STRING; a non-empty list of one scalar kind LIST of it, a non-empty object of one scalar kind DICT of it (the item port keyed ...); null, [], {} and mixed items tell nothing;", "2. the port of the task argument the local is passed to whole (an argument whose value is exactly the local's path), at the first such call in tree order whose arg port is known and makes a valid local: its kind, identifier, nullable, choices, reference_unit, proposed_units, dimension and children (from a demand's arg match: kind, identifier, nullable and children, every child with a kind);", "3. the bind kind of the first control bound to the local whole, when it is STRING, INT, FLOAT or BOOL (LIST, DICT and ANY controls tell too little);", "4. else ANY.", "The SDK's Local[T]() / Local(type=T) and Local.like(action, arg) come before rule 1. Tree order is the walk order: nodes depth first, each node's props in order, a call's arguments in order. Every field the local sets (choices, nullable, widget, identifier, children, description, ...) wins over the inferred type, which only fills what it leaves out; a candidate whose merge is no valid port is skipped. The other call sites and binds are then checked against the kind found (local.arg_kind, local.bind_kind). A left-out kind stays distinguishable from a given ANY until inference ran (no default filled in at deserialization; null is left out)."],
+  "kind_inference": ["A given kind (ANY included) is kept; only a left-out kind is inferred, by the first rule that gives one:", "1. the default: a bool BOOL, an integer INT, any other number FLOAT, a string STRING; a non-empty list of one scalar kind LIST of it, a non-empty object of one scalar kind DICT of it (the item port keyed ...); null, [], {} and mixed items tell nothing;", "2. the port of the task argument the local is passed to whole (an argument whose value is exactly the local's path), at the first such call in tree order whose arg port is known and makes a valid local: its kind, identifier, nullable, choices, reference_unit, proposed_units, dimension and children (from a demand's arg match: kind, identifier, nullable and children, every child with a kind);", "3. the bind kind of the first control bound to the local whole, when it is STRING, INT, FLOAT or BOOL (LIST, DICT and ANY controls tell too little);", "4. else ANY.", "A given kind and like= come before rule 1. Only uses inside the local's scope (its parent's subtree) count. Tree order is the walk order: nodes depth first, each node's props in order, a call's arguments in order. Every field the local sets (choices, nullable, widget, identifier, children, description, ...) wins over the inferred type, which only fills what it leaves out; a candidate whose merge is no valid port is skipped. The other call sites and binds are then checked against the kind found (local.arg_kind, local.bind_kind). A left-out kind stays distinguishable from a given ANY until inference ran (no default filled in at deserialization; null is left out)."],
   "bind": "bind={<local>} or bind={<local>.<field>...}: the control writes the local; nothing else does. The catalog's kind of the bind prop is what the control writes: the local (or the field of it bound) must be a port kind bind_kinds lists for it.",
   "bind_kinds": {"description": "Per catalog kind of a bind prop, the port kinds of the locals it may write. A kind not listed (ANY) writes any local.", "STRING": ["STRING", "ENUM", "DATE"], "FLOAT": ["FLOAT", "INT", "QUANTITY"], "INT": ["INT"], "BOOL": ["BOOL"], "LIST": ["LIST"], "DICT": ["DICT", "MODEL"]},
   "arg_kinds": {"description": "Per port kind of a local passed whole as a task call's argument, the kinds of the action's arg port that take it, where the action is known (agent self.<action> demands, an action's dependencies). STRUCTURE also needs the same identifier. An ANY local is not checked.", "STRING": ["STRING"], "INT": ["INT", "FLOAT"], "FLOAT": ["FLOAT"], "BOOL": ["BOOL"], "ENUM": ["ENUM", "STRING"], "DATE": ["DATE", "STRING"], "QUANTITY": ["QUANTITY", "FLOAT"], "LIST": ["LIST"], "DICT": ["DICT"], "MODEL": ["MODEL", "DICT"], "STRUCTURE": ["STRUCTURE"]}
@@ -370,9 +387,9 @@
   "logo_path_data_props": ["d", "points"]
  },
  "catalogs": {
-  "description": "A catalog is a versioned set of components. The base catalog is what every renderer draws, whole, in the contexts it draws (HTML, SCENE, LOGO): a blok written for it runs everywhere. An app catalog extends another (in the end the base) with what one frontend draws beyond it; it is that frontend's to publish. A catalog is named by the address it is published at (its id); a blok names the one catalog it is written for (catalog), the base when it names none, and may record the minor it needs (catalog_minor). A version only ever gains components and props: each says the minor that added it (since), so a blok valid at v1.2 stays valid. A renderer reports the catalogs and minors it speaks; what it lacks it draws as a placeholder, and reports. A catalog never redefines a component of the one it extends. Nobody's server fetches a catalog: it holds what a frontend registered under the id, and an author's tooling resolves an id from what ships with it, from its cache, or by fetching it.",
-  "base": "https://arkitekt.live/catalogs/base/v3",
-  "bundled": {"https://arkitekt.live/catalogs/base/v3": "catalogs/base@3.json", "https://arkitekt.live/catalogs/orkestrator/v1": "catalogs/orkestrator@1.json"},
+  "description": "A catalog is a versioned set of components. The base catalog is what every renderer draws, whole, in the contexts it draws (PANEL, SCENE, LOGO): a blok written for it runs everywhere. An app catalog extends another (in the end the base) with what one frontend draws beyond it; it is that frontend's to publish. A catalog is named by the address it is published at (its id); a blok names the one catalog it is written for (catalog), the base when it names none, and may record the minor it needs (catalog_minor). A version only ever gains components and props: each says the minor that added it (since), so a blok valid at v1.2 stays valid. A renderer reports the catalogs and minors it speaks; what it lacks it draws as a placeholder, and reports. A catalog never redefines a component of the one it extends. Nobody's server fetches a catalog: it holds what a frontend registered under the id, and an author's tooling resolves an id from what ships with it, from its cache, or by fetching it.",
+  "base": "https://arkitekt.live/catalogs/base/v4",
+  "bundled": {"https://arkitekt.live/catalogs/base/v4": "catalogs/base@4.json", "https://arkitekt.live/catalogs/orkestrator/v1": "catalogs/orkestrator@1.json"},
   "id": "^https://[^\\s/]+(/[^\\s/]+)*/v[0-9]+$",
   "name": "^[A-Za-z_][A-Za-z0-9_.-]*$",
   "host_parts": {
@@ -390,8 +407,8 @@
  "diagnostics": {
   "description": "One table of stable codes, the same in Python, Rust and TypeScript. level: error refuses the blok, warning is reported; runtime: true marks a code no checker raises, the renderer's error code of a record (deps.unbound). Messages are str.format templates; parity compares codes, never text.",
   "bsx.syntax": {"level": "error", "message": "{detail}", "hint": "Fix the markup at the line and column given; every attribute is name=\"text\" or name={{expression}}."},
-  "bsx.empty": {"level": "error", "message": "A blok has one root element; this source has none.", "hint": "Write one root element, the one the blok's context names (<Html> for an html blok)."},
-  "bsx.multiple_roots": {"level": "error", "message": "A blok has one root element; found another after it: <{component}>.", "hint": "Wrap everything in the one root element (<Html>...</Html>); siblings go inside it."},
+  "bsx.empty": {"level": "error", "message": "A blok has one root element; this source has none.", "hint": "Write one root element: <Blok kind=\"...\" context=\"...\">."},
+  "bsx.multiple_roots": {"level": "error", "message": "A blok has one root element; found another after it: <{component}>.", "hint": "Wrap everything in the one root element (<Blok ...>...</Blok>); siblings go inside it."},
   "bsx.unclosed": {"level": "error", "message": "<{component}> is never closed.", "hint": "Close it with </{component}>, or write it self-closing as <{component} ... />."},
   "bsx.mismatched_tag": {"level": "error", "message": "</{found}> closes <{expected}>.", "hint": "Close <{expected}> before </{found}>: tags nest, the last one opened closes first."},
   "bsx.duplicate_attribute": {"level": "error", "message": "<{component}> sets {key} twice.", "hint": "Keep one {key}; to choose between values, write one expression (c ? a : b)."},
@@ -440,7 +457,13 @@
   "local.bind": {"level": "error", "message": "bind holds a local's path ({{name}} or {{name.field}}), not {what}.", "hint": "Write bind={{name}} with a declared local's name."},
   "local.default": {"level": "error", "message": "local {name!r}: its default {default!r} is not a {kind}.", "hint": "Give a default of that kind, or leave the kind out so the default sets it."},
   "local.kind": {"level": "error", "message": "local {name!r}: type={type!r} is a name, not an annotation; give the type itself (int, list[str], a registered structure)."},
-  "local.like": {"level": "error", "message": "local {name!r}: Local.like names {action!r}, which {problem}."},
+  "local.like": {"level": "error", "message": "local {name!r}: like={like!r} {problem}.", "hint": "Write like=\"self.<action>.<arg>\" or like=\"deps.<key>.<action>.<arg>\"."},
+  "local.position": {"level": "error", "message": "local {name!r} {problem}.", "hint": "Declare a local first among its parent's children, inside an element that takes children."},
+  "local.attribute": {"level": "error", "message": "local {name!r}: {key} {problem}.", "hint": "Every attribute of a local but name is a literal: default={{3}}, persist, kind=\"INT\"."},
+  "local.persist_id": {"level": "warning", "message": "local {name!r} persists inside a foreach without key: its kept value follows the item's position, not the item.", "hint": "Give the foreach a key={{...}}."},
+  "query.position": {"level": "error", "message": "<{component}> {name!r} is declared at {at}: queries and subscriptions are children of <Blok>.", "hint": "Move it to the top of the <Blok>."},
+  "query.duplicate": {"level": "error", "message": "{what} {name!r} is declared twice ({first} and {second})."},
+  "query.declaration": {"level": "error", "message": "<{component}> {problem}."},
   "local.bind_kind": {"level": "error", "message": "{key} of <{component}> writes a {prop_kind}, but {path} is a {kind} local (a {prop_kind} control writes {kinds}).", "hint": "Bind a local of a kind the control writes, or leave the local's kind out so the control sets it."},
   "local.arg_kind": {"level": "error", "message": "{call}: {argument} takes a {port_kind}, but {path} is a {kind} local.", "hint": "Pass a local of the argument's kind, or leave the local's kind out so the argument sets it."},
   "local.unused_persist": {"level": "warning", "message": "local {name!r} persists, but no control binds it.", "hint": "Bind a control to it, or drop persist."},
@@ -462,10 +485,13 @@
   "props.literal_type": {"level": "error", "message": "<{component}> {key}={value!r} is a string, but {key} takes a {kind}; write {hint}.", "hint": "Write the value as an expression in braces: {key}={{...}}."},
   "foreach.position_key": {"level": "warning", "message": "<foreach let=\"{let}\"> has no key, so its items are keyed by their position; they are not scalars, so key them by a stable field (key={{{let}.id}})."},
   "returns.unnamed": {"level": "warning", "message": "{path} reads {port}, a return the action left unnamed; name it in the action, as Annotated[T, Key(\"name\")] or as a field of a NamedTuple return, and read it by that name."},
-  "context.root": {"level": "error", "message": "The root of a {context} blok is <{root}>, not <{component}>.", "hint": "Make <{root}> the root and put <{component}> inside it."},
-  "context.root_unknown": {"level": "error", "message": "A blok's root names its context ({roots}), not <{component}>.", "hint": "Make the root one of {roots} and put <{component}> inside it."},
+  "blok.root": {"level": "error", "message": "A blok is one <Blok kind=... context=...> element, not <{component}>.", "hint": "Wrap it: <Blok kind=\"agent\" context=\"panel\">...</Blok>."},
+  "blok.attribute": {"level": "error", "message": "<Blok> {problem}.", "hint": "Write kind=\"agent|custom|task|action|assign\" and context=\"panel|scene|logo\" as literals."},
+  "blok.content": {"level": "error", "message": "A {context} blok holds {expected} beside its declarations, not {found}.", "hint": "Put everything inside one {expected}."},
   "context.kind": {"level": "error", "message": "A{n} {kind} blok is drawn in {contexts}, not {context}."},
-  "assign.kind": {"level": "error", "message": "{what} belongs to starting a run, so only an action's assign blok holds it, not a{n} {kind} blok.", "hint": "Declare it with the action: @app.workflow(assign_bloks=[...])."},
+  "kind.placement": {"level": "error", "message": "This is a{n} {kind} blok, but it is mounted as a{m} {expected} blok ({where}).", "hint": "Write kind=\"{expected}\" on its <Blok>, or mount it where a{n} {kind} blok goes."},
+  "chrome.context": {"level": "error", "message": "chrome is the host's interface around a panel or a scene, not a {context} blok's.", "hint": "Drop chrome."},
+  "assign.kind": {"level": "error", "message": "{what} belongs to starting a run, so only an action's assign blok holds it, not a{n} {kind} blok.", "hint": "Make it <Blok kind=\"assign\"> in the action's bloks=[...]."},
   "logo.complexity": {"level": "error", "message": "{detail}"},
   "catalog.unknown_component": {"level": "warning", "message": "<{component}> is not in the catalog the blok is written for ({catalogs}).", "hint": "Look the component up in the catalog; names are case-sensitive."},
   "catalog.children": {"level": "warning", "message": "<{component}> takes no children.", "hint": "Close <{component}> without children (<{component} ... />), or put them beside it."},
@@ -476,7 +502,7 @@
   "catalog.asset": {"level": "warning", "message": "{key} of <{component}> names an asset as <agent>.assets.<name>.", "hint": "Write {key}={{self.assets.<name>}} with an asset the app registered."},
   "catalog.target": {"level": "error", "message": "<{component}> is of {catalog}, and this blok is written for {target}.", "hint": "Name the catalog it is written for (catalog=\"{catalog}\"), or use what {target} draws."},
   "catalog.unknown": {"level": "warning", "message": "The catalog {catalog!r} is not known here ({catalogs}), so what it adds to the base catalog is not checked.", "hint": "Register the catalog with the tooling, or check the address."},
-  "catalog.kind": {"level": "error", "message": "<{component}> belongs to {kinds} bloks, not to a{n} {kind} blok.", "hint": "Declare it with the action: @app.workflow(bloks=[...]) for a run, assign_bloks=[...] for starting one."},
+  "catalog.kind": {"level": "error", "message": "<{component}> belongs to {kinds} bloks, not to a{n} {kind} blok.", "hint": "Declare it with the action, in bloks=[...]: <Blok kind=\"action\"> for a run, <Blok kind=\"assign\"> for starting one."},
   "catalog.context": {"level": "warning", "message": "<{component}> needs the {service} service where it is drawn; without it a notice shows in its place."},
   "part.conditional": {"level": "warning", "message": "<{component}> is inside <{inside}>: placing it anywhere claims it, so the host draws none of its own even while this one does not show.", "hint": "Place <{component}> outside <{inside}>, or hide what is around it instead."},
   "chrome.no_ask": {"level": "warning", "message": "chrome=\"none\" leaves the run's asks to the blok, and it places no <ask />: an ask can then only be answered elsewhere.", "hint": "Place <ask /> where the run's questions should show, or answer task.ask with task.answer(values: ...)."},
@@ -486,7 +512,7 @@
   "manifest.catalog": {"level": "error", "message": "Catalog {catalog!r} is neither the address a catalog is published at (https://arkitekt.live/catalogs/orkestrator/v1) nor the name of one registered in the organization."},
   "manifest.duplicate": {"level": "error", "message": "{what}: {key!r} is declared twice."},
   "manifest.name": {"level": "error", "message": "{what}: {key!r} is not a name."},
-  "manifest.action_logo": {"level": "error", "message": "An action logo reads only the task it is drawn against: no locals, queries, subscriptions or dependencies."},
+  "manifest.action_logo": {"level": "error", "message": "An action logo reads only the task it is drawn against: no dependencies."},
   "manifest.demo": {"level": "error", "message": "demo.deps names {keys}, which are not dependencies of the blok."}
  }
 }

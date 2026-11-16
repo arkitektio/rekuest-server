@@ -1,5 +1,6 @@
-//! What a v2 blok declares beside its tree (`rekuest_core/inputs/models.py`, the blok v2
-//! declarations): its locals, its demo and its declared reads (queries, subscriptions).
+//! What a v2 blok declares (`rekuest_core/inputs/models.py`, the blok v2 declarations): its
+//! locals and its declared reads (queries, subscriptions) as its tree's `<local>`, `<query>` and
+//! `<subscription>` nodes make them (`blok::declared`), and beside its tree its demo.
 
 use serde::de::Error as _;
 use serde::ser::Error as _;
@@ -12,12 +13,12 @@ use super::ValidationError;
 use crate::blok::vocabulary::{diagnostic_message, vocabulary};
 use crate::enums::{ComponentContext, LocalKind, PortKind};
 
-/// A local: blok-level form state that feeds a call, written only through `bind` on controls
-/// (`BlokLocalInputModel`). A local is an arg port (its key the name the tree reads it by) whose
-/// kind is a port kind or ANY, plus `persist`.
+/// A local: form state that feeds a call, written only through `bind` on controls
+/// (`BlokLocalInputModel`), declared in the tree as `<local name=... />`. A local is an arg port
+/// (its key the name the tree reads it by) whose kind is a port kind or ANY, plus `persist`.
 ///
-/// Its kind may be left out (absent or null on the wire): it is then inferred from the tree
-/// (`blok::infer::resolve_scope`), and the stored local always carries one. A left-out kind is
+/// Its kind may be left out: it is then inferred from the tree (`blok::infer::resolve_locals`),
+/// and the resolved local (stored as the blok's `resolved_locals`) always carries one. A left-out kind is
 /// kept distinct from a given ANY until inference has run: nothing fills it in when reading.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BlokLocalInputModel {
@@ -168,6 +169,21 @@ pub struct BlokQueryInputModel {
     pub more: Option<String>,
 }
 
+impl BlokQueryInputModel {
+    /// Its fields' bounds: a name, a service and a document, and a positive poll.
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        super::min_length(&self.key, "key")?;
+        super::min_length(&self.service, "service")?;
+        super::min_length(&self.document, "document")?;
+        if self.poll.is_some_and(|poll| poll <= 0.0) {
+            return Err(ValidationError(
+                "poll: Input should be greater than 0".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// A declared stream: one GraphQL `subscription` on a service (`BlokSubscriptionInputModel`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -181,6 +197,21 @@ pub struct BlokSubscriptionInputModel {
     pub keep: Option<i64>,
     #[serde(default)]
     pub history: Option<String>,
+}
+
+impl BlokSubscriptionInputModel {
+    /// Its fields' bounds: a name, a service and a document, and at least one payload kept.
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        super::min_length(&self.key, "key")?;
+        super::min_length(&self.service, "service")?;
+        super::min_length(&self.document, "document")?;
+        if self.keep.is_some_and(|keep| keep < 1) {
+            return Err(ValidationError(
+                "keep: Input should be greater than or equal to 1".into(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// What a preview renders a blok with, mirroring the roots it reads (`BlokDemoInputModel`).
@@ -199,7 +230,8 @@ pub struct BlokDemoInputModel {
     pub subscriptions: Option<Value>,
 }
 
-fn is_name(key: &str) -> bool {
+/// Whether `key` is a name a local, a query or a subscription may have.
+pub fn is_name(key: &str) -> bool {
     let mut chars = key.chars();
     chars
         .next()
@@ -208,7 +240,7 @@ fn is_name(key: &str) -> bool {
 }
 
 /// A query's `more`: a dotted path of names (`positions`, `images.items`).
-fn is_field_path(path: &str) -> bool {
+pub fn is_field_path(path: &str) -> bool {
     path.split('.').all(is_name)
 }
 
@@ -241,108 +273,23 @@ pub fn operation_keyword(document: &str) -> String {
         .collect()
 }
 
-/// What a v2 blok declares beside its tree (`check_blok_declarations`)
+/// What a v2 blok's input says beside its tree (`check_blok_declarations`).
 #[derive(Debug, Clone, Copy)]
 pub struct BlokDeclarations<'a> {
     pub catalogs: &'a [String],
-    pub locals: &'a [BlokLocalInputModel],
-    pub queries: &'a [BlokQueryInputModel],
-    pub subscriptions: &'a [BlokSubscriptionInputModel],
     pub dependency_keys: &'a [&'a str],
     pub demo: Option<&'a BlokDemoInputModel>,
 }
 
-/// The rules of what a v2 blok declares beside its tree, as the spec's `check_blok_declarations`
-/// words them: catalogs spelled `name@version`; locals, queries and subscriptions each named
-/// once, by a name (a local by no reserved one); a query a `query`, a subscription a
-/// `subscription`, never a mutation; a query's `more` a dotted field path; a subscription's history a declared query; an action logo
-/// declaring nothing; `demo.deps` naming only dependencies (and `self`). The tree is checked
-/// against them by the blok checker.
-pub fn check_blok_declarations(
-    blok: BlokDeclarations<'_>,
-    kind: &str,
-    reserved: &dyn Fn(&str) -> bool,
-) -> Result<(), ValidationError> {
+/// The rules of what a v2 blok's input says beside its tree, as the spec's
+/// `check_blok_declarations` words them: catalogs spelled `name@version`; `demo.deps` naming only
+/// dependencies (and `self`). What the blok owns (locals, queries, subscriptions) is declared in
+/// its tree and checked with it by the blok checker.
+pub fn check_blok_declarations(blok: BlokDeclarations<'_>) -> Result<(), ValidationError> {
     for catalog in blok.catalogs {
         if !is_catalog(catalog) {
             return Err(blok_error("manifest.catalog", &[("catalog", s(catalog))]));
         }
-    }
-    let named: [(&str, Vec<&str>); 3] = [
-        (
-            "locals",
-            blok.locals.iter().map(BlokLocalInputModel::key).collect(),
-        ),
-        (
-            "queries",
-            blok.queries.iter().map(|q| q.key.as_str()).collect(),
-        ),
-        (
-            "subscriptions",
-            blok.subscriptions.iter().map(|s| s.key.as_str()).collect(),
-        ),
-    ];
-    for (what, keys) in &named {
-        // The first key (in order) that is declared more than once, as Python's `next(...)`.
-        if let Some(twice) = keys
-            .iter()
-            .find(|key| keys.iter().filter(|other| other == key).count() > 1)
-        {
-            return Err(blok_error(
-                "manifest.duplicate",
-                &[("what", s(*what)), ("key", s(*twice))],
-            ));
-        }
-        for key in keys {
-            if !is_name(key) {
-                return Err(blok_error(
-                    "manifest.name",
-                    &[("what", s(*what)), ("key", s(*key))],
-                ));
-            }
-            if *what == "locals" && reserved(key) {
-                return Err(blok_error("roots.reserved", &[("name", s(*key))]));
-            }
-        }
-    }
-    for query in blok.queries {
-        check_operation("query", &query.key, &operation_keyword(&query.document))?;
-        if let Some(more) = &query.more {
-            if !is_field_path(more) {
-                let fields = [
-                    ("name", s(&query.key)),
-                    ("more", s(more)),
-                    (
-                        "problem",
-                        s("is not a field path into its data (positions, images.items)"),
-                    ),
-                ];
-                return Err(blok_error("query.more", &fields));
-            }
-        }
-    }
-    for subscription in blok.subscriptions {
-        check_operation(
-            "subscription",
-            &subscription.key,
-            &operation_keyword(&subscription.document),
-        )?;
-        if let Some(history) = &subscription.history {
-            if !blok.queries.iter().any(|q| &q.key == history) {
-                return Err(blok_error(
-                    "query.history",
-                    &[("name", s(&subscription.key)), ("history", s(history))],
-                ));
-            }
-        }
-    }
-    if kind == "action_logo"
-        && !(blok.locals.is_empty()
-            && blok.queries.is_empty()
-            && blok.subscriptions.is_empty()
-            && blok.dependency_keys.is_empty())
-    {
-        return Err(blok_error("manifest.action_logo", &[]));
     }
     if let Some(Value::Object(deps)) = blok.demo.and_then(|demo| demo.deps.as_ref()) {
         let mut unknown: Vec<&str> = deps
@@ -369,36 +316,6 @@ fn s(value: impl Into<String>) -> Value {
 /// its message filled, its code after it.
 pub fn blok_error(code: &str, fields: &[(&str, Value)]) -> ValidationError {
     ValidationError(format!("{} [{code}]", diagnostic_message(code, fields)))
-}
-
-/// A query's document is a `query`, a subscription's a `subscription`; neither writes
-/// (`check_operation`).
-pub fn check_operation(kind: &str, name: &str, operation: &str) -> Result<(), ValidationError> {
-    if operation == kind {
-        return Ok(());
-    }
-    if operation == "mutation" {
-        let fields = [
-            ("kind", s(kind)),
-            ("name", s(name)),
-            (
-                "problem",
-                s("is a mutation: a blok reads, and writes only through a task"),
-            ),
-        ];
-        return Err(blok_error("query.read_only", &fields));
-    }
-    let operation = if operation.is_empty() {
-        "document without an operation"
-    } else {
-        operation
-    };
-    let fields = [
-        ("kind", s(kind)),
-        ("name", s(name)),
-        ("operation", s(operation)),
-    ];
-    Err(blok_error("query.kind", &fields))
 }
 
 /// `context.kind`: a blok of `kind` drawn in a context its kind has no blok for (`wrong_context`).

@@ -6,10 +6,12 @@
 //! takes, where it may sit and which catalog it is of is checked by whoever draws the blok.
 
 pub mod check;
+pub mod declared;
 pub mod expr;
 pub mod infer;
 pub mod vocabulary;
 
-pub use check::{check_blok_tree, BlokScope};
+pub use check::{check_blok, check_blok_tree, BlokScope};
+pub use declared::{blok_header, BlokHeader};
 pub use expr::BsxError;
 pub use vocabulary::{vocabulary, Finding, Level, Vocabulary};

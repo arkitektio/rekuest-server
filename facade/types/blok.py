@@ -35,21 +35,40 @@ if TYPE_CHECKING:
 
 def blok_hash(row: models.Blok | models.BlokRevision) -> str:
     """The hash of a blok's rendering: canonical JSON (sorted keys, no whitespace) of what it draws."""
-    parts = rendering_of(row.components, row.context, row.vocab, row.catalogs, row.locals, row.demo, row.queries, row.subscriptions)
+    parts = rendering_of(row.components, row.context, row.vocab, row.catalogs, row.demo)
     canonical = json.dumps(parts, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
-RENDERING_FIELDS = ["components", "context", "vocab", "catalogs", "locals", "demo", "queries", "subscriptions"]
+RENDERING_FIELDS = ["components", "context", "vocab", "catalogs", "demo"]
+
+
+def _tree_queries(components: list[dict]) -> list[rtypes.BlokQuery]:
+    """The ``<query>`` declarations of a stored tree, as ``Blok.queries`` lists them."""
+    from rekuest_core.vocabulary import declared_queries
+
+    if not components:
+        return []
+    tree = rimodels.ComponentNodeInputModel(**components[0])
+    return cast("list[rtypes.BlokQuery]", [rmodels.BlokQueryModel(**query.model_dump(mode="json")) for query in declared_queries(tree)])
+
+
+def _tree_subscriptions(components: list[dict]) -> list[rtypes.BlokSubscription]:
+    """The ``<subscription>`` declarations of a stored tree, as ``Blok.subscriptions`` lists them."""
+    from rekuest_core.vocabulary import declared_subscriptions
+
+    if not components:
+        return []
+    tree = rimodels.ComponentNodeInputModel(**components[0])
+    return cast("list[rtypes.BlokSubscription]", [rmodels.BlokSubscriptionModel(**subscription.model_dump(mode="json")) for subscription in declared_subscriptions(tree)])
 
 V2_FIELD_DOCS = {
     "vocab": "The blok language version it speaks; 2 is the only one.",
     "catalogs": "The catalogs it needs, as name@version ('ui@1', 'scene@1').",
-    "locals": "Its locals as written: form state that feeds a call, written only through `bind`, read bare; each an arg port plus `persist`, its kind null when it was left out. A persisted one stays on the device, never on a server. What `hash` covers.",
-    "resolved_locals": "Its locals as its tree resolves them, each with a kind (a left-out kind inferred from its default, the task argument it is passed to or the control bound to it; ANY when nothing tells). Derived from the rest on every write: what renderers type the locals with, never part of `hash`.",
+    "resolved_locals": "The `<local>` declarations of its tree as they resolve, each with its node and a kind (a left-out kind inferred from its default, the argument it borrows with `like`, the task argument it is passed to or the control bound to it; ANY when nothing tells). Derived from the tree on every write: what renderers type the locals with, never part of `hash`.",
     "demo": "What a preview renders it with, mirroring the roots it reads (deps, args, task, queries, subscriptions); null when it declares none.",
-    "queries": "Its declared reads, read as `queries.<key>`.",
-    "subscriptions": "Its declared streams, read as `subscriptions.<key>`.",
+    "queries": "The `<query>` declarations of its tree (derived from it), read as `queries.<key>`.",
+    "subscriptions": "The `<subscription>` declarations of its tree (derived from it), read as `subscriptions.<key>`.",
 }
 
 
@@ -96,7 +115,7 @@ class Blok:
         description="Dependencies that need to be resolved for this blok.",
     )
 
-    @strawberry_django.field(description="The renderer for this blok's root.")
+    @strawberry_django.field(description="What draws it, as its `<Blok context=...>` says.")
     def context(self) -> renums.ComponentContext:
         return renums.ComponentContext(self.context)
 
@@ -111,10 +130,6 @@ class Blok:
     vocab: int = strawberry_django.field(description=V2_FIELD_DOCS["vocab"])
     catalogs: list[str] = strawberry_django.field(description=V2_FIELD_DOCS["catalogs"])
 
-    @strawberry_django.field(description=V2_FIELD_DOCS["locals"])
-    def locals(self) -> list[rtypes.BlokLocal]:
-        return cast("list[rtypes.BlokLocal]", [rmodels.BlokLocalModel(**i) for i in self.locals])
-
     @strawberry_django.field(description=V2_FIELD_DOCS["resolved_locals"])
     def resolved_locals(self) -> list[rtypes.ResolvedBlokLocal]:
         return cast("list[rtypes.ResolvedBlokLocal]", [rmodels.ResolvedBlokLocalModel(**i) for i in self.resolved_locals])
@@ -123,13 +138,13 @@ class Blok:
     def demo(self) -> rtypes.BlokDemo | None:
         return cast("rtypes.BlokDemo", rmodels.BlokDemoModel(**self.demo)) if self.demo else None
 
-    @strawberry_django.field(description=V2_FIELD_DOCS["queries"])
+    @strawberry_django.field(description=V2_FIELD_DOCS["queries"], only=["components"])
     def queries(self) -> list[rtypes.BlokQuery]:
-        return cast("list[rtypes.BlokQuery]", [rmodels.BlokQueryModel(**i) for i in self.queries])
+        return _tree_queries(self.components)
 
-    @strawberry_django.field(description=V2_FIELD_DOCS["subscriptions"])
+    @strawberry_django.field(description=V2_FIELD_DOCS["subscriptions"], only=["components"])
     def subscriptions(self) -> list[rtypes.BlokSubscription]:
-        return cast("list[rtypes.BlokSubscription]", [rmodels.BlokSubscriptionModel(**i) for i in self.subscriptions])
+        return _tree_subscriptions(self.components)
 
     for_model: str | None = strawberry_django.field(description="The model reference this blok decorates, if any.")
     for_node: str | None = strawberry_django.field(description="The node of `forModel` this blok attaches to; the model's root when null.")
@@ -145,7 +160,7 @@ class Blok:
         return cast("list[rtypes.ComponentNode]", [rmodels.ComponentNodeModel(**i) for i in self.components])
 
     @strawberry_django.field(
-        description="A SHA-256 of what the blok renders: its component tree, context, language version, catalogs, locals, demo, queries and subscriptions. Two bloks with the same hash draw the same thing, so a client may cache what it rendered under it.",
+        description="A SHA-256 of what the blok renders: its component tree (its declarations included), context, language version, catalogs and demo. Two bloks with the same hash draw the same thing, so a client may cache what it rendered under it.",
         only=RENDERING_FIELDS,
     )
     def hash(self) -> str:
@@ -176,7 +191,7 @@ class ActionBlok:
     action: Action = strawberry_django.field(description="The action whose runs it shows.")
     blok: Blok = strawberry_django.field(description="What it draws: a blok held by its actions only (`heldByAction`), shared by every action of the app declaring the same.")
 
-    @strawberry_django.field(description="Where a client shows a run with it: HTML in a task panel, SCENE as a 3D view (a `Space` places the run's dependencies in a room whose layout is shared).")
+    @strawberry_django.field(description="Where a client shows a run with it: PANEL in a task panel, SCENE as a 3D view (a `Space` places the run's dependencies in a room whose layout is shared).")
     def context(self) -> renums.ComponentContext:
         return renums.ComponentContext(self.context)
 
@@ -226,10 +241,6 @@ class BlokRevision:
     vocab: int = strawberry_django.field(description=V2_FIELD_DOCS["vocab"])
     catalogs: list[str] = strawberry_django.field(description=V2_FIELD_DOCS["catalogs"])
 
-    @strawberry_django.field(description=V2_FIELD_DOCS["locals"])
-    def locals(self) -> list[rtypes.BlokLocal]:
-        return cast("list[rtypes.BlokLocal]", [rmodels.BlokLocalModel(**i) for i in self.locals])
-
     @strawberry_django.field(description=V2_FIELD_DOCS["resolved_locals"])
     def resolved_locals(self) -> list[rtypes.ResolvedBlokLocal]:
         return cast("list[rtypes.ResolvedBlokLocal]", [rmodels.ResolvedBlokLocalModel(**i) for i in self.resolved_locals])
@@ -238,13 +249,13 @@ class BlokRevision:
     def demo(self) -> rtypes.BlokDemo | None:
         return cast("rtypes.BlokDemo", rmodels.BlokDemoModel(**self.demo)) if self.demo else None
 
-    @strawberry_django.field(description=V2_FIELD_DOCS["queries"])
+    @strawberry_django.field(description=V2_FIELD_DOCS["queries"], only=["components"])
     def queries(self) -> list[rtypes.BlokQuery]:
-        return cast("list[rtypes.BlokQuery]", [rmodels.BlokQueryModel(**i) for i in self.queries])
+        return _tree_queries(self.components)
 
-    @strawberry_django.field(description=V2_FIELD_DOCS["subscriptions"])
+    @strawberry_django.field(description=V2_FIELD_DOCS["subscriptions"], only=["components"])
     def subscriptions(self) -> list[rtypes.BlokSubscription]:
-        return cast("list[rtypes.BlokSubscription]", [rmodels.BlokSubscriptionModel(**i) for i in self.subscriptions])
+        return _tree_subscriptions(self.components)
 
 
     @strawberry_django.field(description="The agent dependencies of this revision.")

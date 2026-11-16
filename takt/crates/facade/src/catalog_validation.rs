@@ -12,8 +12,8 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use rekuest_core::blok::infer::{resolve_scope, ArgPorts};
-use rekuest_core::blok::{check_blok_tree, BlokScope, Finding};
+use rekuest_core::blok::infer::{ArgPorts, ResolvedLocal};
+use rekuest_core::blok::{check_blok, BlokScope, Finding};
 use rekuest_core::catalogs::{
     base_components, base_operations, base_version_named, BASE_CATALOG_ID, BASE_CATALOG_VERSION,
 };
@@ -463,12 +463,33 @@ fn check_asset_prop(
     Ok(())
 }
 
-/// A blok checked against the language: its warnings, and its scope resolved (its locals'
-/// kinds), whose locals are stored as the blok's `resolved_locals`.
+/// A blok checked against the language: its warnings, and its `<local>` declarations resolved
+/// (by node id, in tree order), stored as the blok's `resolved_locals`.
 #[derive(Debug, Clone)]
 pub struct CheckedBlok {
     pub diagnostics: Vec<Diagnostic>,
-    pub scope: BlokScope,
+    pub locals: Vec<(String, ResolvedLocal)>,
+}
+
+impl CheckedBlok {
+    /// Its locals as a row stores them (`resolved_locals`): each its node id plus its port with
+    /// a kind, without nulls.
+    pub fn stored_locals(&self) -> serde_json::Value {
+        let stored: Vec<serde_json::Value> = self
+            .locals
+            .iter()
+            .map(|(node, resolved)| {
+                let mut dumped =
+                    match serde_json::to_value(&resolved.local).expect("a local serializes") {
+                        serde_json::Value::Object(fields) => fields,
+                        _ => serde_json::Map::new(),
+                    };
+                dumped.insert("node".into(), serde_json::Value::String(node.clone()));
+                serde_json::Value::Object(dumped)
+            })
+            .collect();
+        crate::registration::without_nulls(serde_json::Value::Array(stored))
+    }
 }
 
 /// A finding as a row stores it.
@@ -485,9 +506,9 @@ pub fn diagnostic_of(finding: &Finding) -> Diagnostic {
     }
 }
 
-/// A v2 blok tree against what its blok declares (`scope`): the language alone
-/// (`validate_blok_against_catalog`). Its scope is resolved first (`resolve_scope`), then it is
-/// refused on its first error (the finding, with its code); its warnings and resolved scope
+/// A v2 blok tree mounted as `scope` says: the language alone
+/// (`validate_blok_against_catalog`). Its locals are resolved first (`resolve_locals`), then it
+/// is refused on its first error (the finding, with its code); its warnings and resolved locals
 /// are returned. `catalog` is not read: the server holds a blok to no catalog, and what a
 /// component takes or where it may sit is checked by the frontend that draws the blok.
 pub fn validate_blok_against_catalog(
@@ -495,7 +516,7 @@ pub fn validate_blok_against_catalog(
     components: Option<&[ComponentNodeInputModel]>,
     scope: &BlokScope,
 ) -> Result<CheckedBlok, String> {
-    validate_blok_with_arg_ports(catalog, components, scope, &ArgPorts::new())
+    validate_blok_with_arg_ports(catalog, components, scope, &scope.arg_ports)
 }
 
 /// [`validate_blok_against_catalog`], its locals resolved with `arg_ports` too: the full arg
@@ -510,14 +531,17 @@ pub fn validate_blok_with_arg_ports(
     let [tree] = roots else {
         return Err(format!("a blok has exactly one root, not {}", roots.len()));
     };
-    let resolved = resolve_scope(tree, scope, arg_ports);
-    let findings = check_blok_tree(tree, &resolved);
+    let scope = BlokScope {
+        arg_ports: arg_ports.clone(),
+        ..scope.clone()
+    };
+    let (findings, locals) = check_blok(tree, &scope);
     if let Some(error) = findings.iter().find(|f| f.is_error()) {
         return Err(error.to_string());
     }
     Ok(CheckedBlok {
         diagnostics: findings.iter().map(diagnostic_of).collect(),
-        scope: resolved,
+        locals,
     })
 }
 

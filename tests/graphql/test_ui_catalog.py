@@ -10,6 +10,7 @@ from facade.models import Module
 from facade.schema import schema
 from tests.graphql.test_cross_tenant_isolation import OTHER_TOKEN, tenant_context
 from tests.graphql_ops import CREATE_BLOK
+from tests.registered import blok, gql, local, node
 
 REGISTER_UI_CATALOG = """
     mutation RegisterModule($input: RegisterModuleInput!) {
@@ -71,19 +72,22 @@ async def _register(context: HttpContext, catalog: dict = CATALOG) -> dict:
     return result.data["registerModule"]
 
 
-def _html(*children: dict) -> list[dict]:
-    """An html blok's tree: its root is ``Html`` (the root names the context)."""
-    return [{"id": "html", "component": "Html", "children": list(children)}]
+SPELLED = {"PANEL": "panel", "SCENE": "scene", "LOGO": "logo"}
+EXPOSURE = local("exposure", kind="INT", default=1)
 
 
-async def _create_blok(http: HttpContext, components: list[dict], catalog: str = "electron", **extra: object):
-    """An html blok's single root is wrapped in its ``Html`` root unless it already is one."""
-    if extra.get("context", "HTML") == "HTML" and len(components) == 1 and components[0]["component"] != "Html":
-        components = _html(*components)
+def _tree(*content: dict, context: str = "PANEL", declarations: tuple[dict, ...] = (EXPOSURE,)) -> list[dict]:
+    """A custom blok's tree: one ``<Blok kind="custom">`` holding its declarations, then ``content``."""
+    return [gql(blok("custom", SPELLED[context], *declarations, *content))]
+
+
+async def _create_blok(http: HttpContext, content: list[dict], catalog: str = "electron", *, context: str = "PANEL", components: list[dict] | None = None, **extra: object):
+    """A custom blok holding ``content`` beside its local ``exposure``; ``components`` is sent as it is instead."""
+    tree = components if components is not None else _tree(*content, context=context)
     return await schema.execute(
         CREATE_BLOK,
         context_value=http,
-        variable_values={"input": {"name": "catalogued", "vocab": 2, "module": catalog, "components": components, "locals": [{"key": "exposure", "kind": "INT", "default": 1}], **extra}},
+        variable_values={"input": {"name": "catalogued", "vocab": 2, "module": catalog, "components": tree, "context": context, **extra}},
     )
 
 
@@ -194,11 +198,11 @@ class TestUiCatalog:
         await _register(authenticated_context, {**CATALOG, "name": "orkestrator"})
         unnamed = {"name": "catalogued", "vocab": 2}
 
-        unknown = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**unnamed, "components": _html({"id": "root", "component": "Knob"})}})
+        unknown = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**unnamed, "components": _tree({"id": "root", "component": "Knob"}, declarations=())}})
         _unchecked(await _stored(unknown))
 
         for component in ("Frame", "Card"):
-            accepted = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**unnamed, "components": _html({"id": "root", "component": component})}})
+            accepted = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**unnamed, "components": _tree({"id": "root", "component": component}, declarations=())}})
             assert await _stored(accepted) == [], component
 
     async def test_components_are_held_to_their_declared_placement(self, authenticated_context: HttpContext) -> None:
@@ -207,24 +211,24 @@ class TestUiCatalog:
 
         ids = itertools.count()
 
-        def node(component: str, *children: dict, props: list[dict] | None = None) -> dict:
+        def element(component: str, *children: dict, props: list[dict] | None = None) -> dict:
             return {"id": f"{component}{next(ids)}", "component": component, "props": props, "children": list(children)}
 
         moved = [{"key": "node", "staticValue": "arm"}, {"key": "axis", "staticValue": "x"}]
         model = [{"key": "src", "dynamicValue": {"path": "deps.robot.assets.arm"}}]
-        accepted = await _create_blok(authenticated_context, [node("Frame", node("Scene", node("Model", node("Move", props=moved), node("Popout", node("Frame", node("Caption"))), props=model)))], dependencies=[{"key": "robot"}])
+        accepted = await _create_blok(authenticated_context, [element("Frame", element("Scene", element("Model", element("Move", props=moved), element("Popout", element("Frame", element("Caption"))), props=model)))], dependencies=[{"key": "robot"}])
         assert await _stored(accepted) == []
 
         for tree, message in (
-            (node("Frame", node("Move", props=moved)), "<Move> is a scene component, not one of the html context"),
-            (node("Scene", node("Caption")), "<Caption> is a html component, not one of the scene context"),
-            (node("Scene", node("Move", props=moved)), "<Move> must be inside one of ['Model', 'Robot']"),
+            (element("Frame", element("Move", props=moved)), "<Move> is a scene component, not one of the panel context"),
+            (element("Frame", element("Scene", element("Caption"))), "<Caption> is a panel component, not one of the scene context"),
+            (element("Frame", element("Scene", element("Move", props=moved))), "<Move> must be inside one of ['Model', 'Robot']"),
         ):
             misplaced = await _create_blok(authenticated_context, [tree])
             _unchecked(await _stored(misplaced))
 
     async def test_a_scene_blok_opens_a_scene_and_names_its_models_properly(self, authenticated_context: HttpContext) -> None:
-        """The root of a scene blok is a Scene; a model names an asset of a declared dependency."""
+        """A scene blok holds one Scene (or Space); a model names an asset of a declared dependency."""
         await _register(authenticated_context, {**CATALOG, "components": [{"name": "Frame"}]})
 
         def scene(src: dict) -> list[dict]:
@@ -240,16 +244,18 @@ class TestUiCatalog:
 
         assert await sync_to_async(lambda: Blok.objects.get(name="catalogued").context)() == "SCENE"
 
-        for roots, catalog, message in (
-            ([{"id": "root", "component": "Frame"}], "electron", "The root of a scene blok is <Scene> or <Space>, not <Frame>"),
-            ([{"id": "root", "component": "Frame", "children": scene(named)}], "electron", "The root of a scene blok is <Scene> or <Space>, not <Frame>"),
-            # A catalog nothing registered in: the root is still the vocabulary's.
-            ([{"id": "root", "component": "Frame"}], "unregistered", "The root of a scene blok is <Scene> or <Space>, not <Frame>"),
-            (scene(named) + [{"id": "other", "component": "Scene"}], "electron", "a blok has one root, not 2"),
+        for content, catalog, message in (
+            ([{"id": "root", "component": "Frame"}], "electron", "A scene blok holds one <Scene> or one <Space> beside its declarations, not <Frame>"),
+            ([{"id": "root", "component": "Frame", "children": scene(named)}], "electron", "A scene blok holds one <Scene> or one <Space> beside its declarations, not <Frame>"),
+            # A catalog nothing registered in: what a scene holds is still the vocabulary's.
+            ([{"id": "root", "component": "Frame"}], "unregistered", "A scene blok holds one <Scene> or one <Space> beside its declarations, not <Frame>"),
+            ([*scene(named), {"id": "other", "component": "Scene"}], "electron", "not <Scene>, <Scene>"),
             (scene({"dynamicValue": {"path": "deps.robot.assets"}}), "electron", "an asset is <agent>.assets.<name>"),
         ):
-            refused = await _create_blok(authenticated_context, roots, module=catalog, context="SCENE", dependencies=robot)
+            refused = await _create_blok(authenticated_context, content, module=catalog, context="SCENE", dependencies=robot)
             assert refused.errors and message in refused.errors[0].message, refused.errors
+        two_roots = await _create_blok(authenticated_context, [], components=[*_tree(*scene(named), context="SCENE"), {"id": "other", "component": "Scene"}], context="SCENE", dependencies=robot)
+        assert two_roots.errors and "a blok has one root, not 2" in two_roots.errors[0].message, two_roots.errors
         # A custom blok reads no `self`; an asset is a dependency's.
         of_nobody = await _create_blok(authenticated_context, scene({"dynamicValue": {"path": "self.assets.scope"}}), context="SCENE")
         assert of_nobody.errors and "a custom blok has no 'self'" in of_nobody.errors[0].message, of_nobody.errors
@@ -258,74 +264,68 @@ class TestUiCatalog:
         _unchecked(await _stored(by_hash))
 
         decorating_scene = await _create_blok(authenticated_context, scene(named), context="SCENE", dependencies=robot, forModel=ref)
-        assert decorating_scene.errors and "only an html blok can decorate a model" in decorating_scene.errors[0].message
+        assert decorating_scene.errors and "only a panel blok can decorate a model" in decorating_scene.errors[0].message
         decorating = await _create_blok(authenticated_context, [{"id": "root", "component": "Frame"}], forModel=ref, forNode="turret")
         assert not decorating.errors, decorating.errors
         found = await schema.execute("query($ref: String!) { bloksForModel(ref: $ref) { name forNode context componentTree } }", context_value=authenticated_context, variable_values={"ref": ref})
         assert not found.errors, found.errors
-        assert [(blok["name"], blok["forNode"], blok["context"]) for blok in found.data["bloksForModel"]] == [("catalogued", "turret", "HTML")]
-        assert found.data["bloksForModel"][0]["componentTree"][0]["component"] == "Html"
-        assert found.data["bloksForModel"][0]["componentTree"][0]["children"][0]["component"] == "Frame"
+        assert [(blok["name"], blok["forNode"], blok["context"]) for blok in found.data["bloksForModel"]] == [("catalogued", "turret", "PANEL")]
+        root = found.data["bloksForModel"][0]["componentTree"][0]
+        assert root["component"] == "Blok"
+        assert [child["component"] for child in root["children"]] == ["local", "Frame"]
 
     async def test_a_custom_blok_is_no_logo_but_may_draw_one(self, authenticated_context: HttpContext) -> None:
-        """A logo is an agent's (or an action's): a user's blok is drawn in html or a scene, and an html blok may hold an AgentLogo."""
+        """A logo is an agent's (or an action's): a custom blok is drawn in a panel or a scene, and a panel may hold a Logo."""
         await _register(authenticated_context, {**CATALOG, "components": [{"name": "Frame"}]})
-        logo = [{"id": "logo", "component": "AgentLogo", "children": [{"id": "g", "component": "G", "children": [{"id": "p", "component": "Path"}]}]}]
+        logo = {"id": "logo", "component": "Logo", "children": [{"id": "g", "component": "G", "children": [{"id": "p", "component": "Path"}]}]}
 
-        for context, root in (("LOGO", "AgentLogo"), ("ACTION_LOGO", "ActionLogo")):
-            refused = await _create_blok(authenticated_context, [{**logo[0], "component": root}], context=context)
-            assert refused.errors and "is drawn in HTML, SCENE" in refused.errors[0].message, refused.errors
-        embedded = await _create_blok(authenticated_context, [{"id": "root", "component": "Frame", "children": logo}])
+        refused = await _create_blok(authenticated_context, [logo], context="LOGO")
+        assert refused.errors and "A custom blok is drawn in panel, scene, not logo" in refused.errors[0].message, refused.errors
+        embedded = await _create_blok(authenticated_context, [{"id": "root", "component": "Frame", "children": [logo]}])
         assert await _stored(embedded) == []
         # Where the catalog places a shape is a finding.
         loose = await _create_blok(authenticated_context, [{"id": "root", "component": "Frame", "children": [{"id": "p", "component": "Path"}]}])
         _unchecked(await _stored(loose))
-        # No component lives in the action logo context: its shapes are logo components.
-        placed = await schema.execute(
-            REGISTER_UI_CATALOG,
-            context_value=authenticated_context,
-            variable_values={"input": {**CATALOG, "components": [{"name": "Path", "context": "ACTION_LOGO"}]}},
-        )
-        assert placed.errors and "ACTION_LOGO is a blok context only" in placed.errors[0].message, placed.errors
 
     async def test_a_blok_may_be_sent_as_its_bsx_source(self, authenticated_context: HttpContext, takt: str) -> None:
         """takt parses the source into the tree a client would have sent: same tree, same hash."""
         from facade.models import Blok
 
         await _register(authenticated_context, {**CATALOG, "components": [{"name": "Frame"}, {"name": "Caption", "props": [{"key": "text", "kind": "STRING"}], "acceptsChildren": False}]})
-        tree = [{"id": "Html[0]", "component": "Html", "children": [{"id": "Html[0]/Frame[0]", "component": "Frame", "children": [{"id": "Html[0]/Frame[0]/Caption[0]", "component": "Caption", "props": [{"key": "text", "staticValue": "hi"}]}]}]}]
+        tree = _tree(node("Frame", node("Caption", text="hi")))
+        opening = '<Blok kind="custom" context="panel"><local name="exposure" kind="INT" default={1} />'
 
         async def stored() -> tuple[list, str]:
             blok = await sync_to_async(lambda: Blok.objects.get(name="catalogued"))()
             result = await schema.execute("query($id: ID!) { blok(id: $id) { hash } }", context_value=authenticated_context, variable_values={"id": str(blok.id)})
             return blok.components, result.data["blok"]["hash"]
 
-        as_tree = await _create_blok(authenticated_context, tree)
+        as_tree = await _create_blok(authenticated_context, [], components=tree)
         assert not as_tree.errors, as_tree.errors
         from_tree = await stored()
 
-        source = {"name": "catalogued", "vocab": 2, "module": "electron", "locals": [{"key": "exposure", "kind": "INT", "default": 1}]}
-        as_source = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**source, "source": '<Html><Frame><Caption text="hi" /></Frame></Html>'}})
+        source = {"name": "catalogued", "vocab": 2, "module": "electron"}
+        as_source = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**source, "source": f'{opening}<Frame><Caption text="hi" /></Frame></Blok>'}})
         assert not as_source.errors, as_source.errors
         assert await stored() == from_tree
 
-        both = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**source, "components": tree, "source": "<Html><Frame /></Html>"}})
+        both = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**source, "components": tree, "source": f"{opening}<Frame /></Blok>"}})
         assert both.errors and "not both" in both.errors[0].message
-        broken = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**source, "source": "<Html><Frame>\n<Caption>\n</Frame></Html>"}})
+        broken = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**source, "source": f"{opening}<Frame>\n<Caption>\n</Frame></Blok>"}})
         assert broken.errors and "line 3" in broken.errors[0].message, broken.errors
         # What a parsed source draws is held to the catalog like any tree.
-        unknown = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**source, "source": "<Html><Frame><Knob /></Frame></Html>"}})
+        unknown = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {**source, "source": f"{opening}<Frame><Knob /></Frame></Blok>"}})
         _unchecked(await _stored(unknown))
 
     async def test_a_blok_hash_follows_what_it_renders(self, authenticated_context: HttpContext) -> None:
-        """The hash moves with the tree, the context and what it declares beside it, and with nothing else."""
+        """The hash moves with the tree (its declarations included) and what the blok says beside it, and with nothing else."""
         from facade.models import Blok
 
         await _register(authenticated_context, {**CATALOG, "components": [{"name": "Frame"}]})
         query = "query($id: ID!) { blok(id: $id) { hash } }"
 
-        async def hash_of(components: list[dict], **extra: object) -> str:
-            created = await _create_blok(authenticated_context, components, **extra)
+        async def hash_of(content: list[dict], **extra: object) -> str:
+            created = await _create_blok(authenticated_context, content, **extra)
             assert not created.errors, created.errors
             blok_id = await sync_to_async(lambda: Blok.objects.get(name="catalogued").id)()
             result = await schema.execute(query, context_value=authenticated_context, variable_values={"id": str(blok_id)})
@@ -337,12 +337,13 @@ class TestUiCatalog:
         assert len(first) == 64
         assert await hash_of(frame, description="described differently") == first
         assert await hash_of([{"id": "other", "component": "Frame"}]) != first
-        assert await hash_of(frame, locals=[{"key": "exposure", "kind": "INT", "default": 2}]) != first
+        # A local is a node of the tree: its default is part of what the blok draws.
+        assert await hash_of([], components=_tree(*frame, declarations=(local("exposure", kind="INT", default=2),))) != first
         assert await hash_of(frame, demo={"args": {"x": 1}}) != first
         assert await hash_of(frame, catalogs=["ui@1"]) != first
 
     async def test_control_flow_takes_the_context_it_is_placed_in(self, authenticated_context: HttpContext) -> None:
-        """The language's components (foreach) sit in a scene or html, and their children stay in that context."""
+        """The language's components (foreach) sit in a scene or a panel, and their children stay in that context."""
         await _register(authenticated_context, {**CATALOG, "components": [{"name": "Frame"}]})
 
         def loop(*children: dict, id: str = "loop") -> dict:
@@ -356,7 +357,7 @@ class TestUiCatalog:
         model = {"id": "m", "component": "Model", "props": [{"key": "src", "dynamicValue": {"path": "deps.robot.assets.arm"}}]}
         for roots, context in (
             ([{"id": "root", "component": "Scene", "children": [loop(model)]}], "SCENE"),
-            ([loop({"id": "b", "component": "Frame"})], "HTML"),
+            ([loop({"id": "b", "component": "Frame"})], "PANEL"),
         ):
             accepted = await _create_blok(authenticated_context, roots, context=context, dependencies=[{"key": "robot"}])
             assert await _stored(accepted) == [], context
@@ -364,9 +365,9 @@ class TestUiCatalog:
         # What the loop holds is still checked in the context it passes on.
         boxed = await _create_blok(authenticated_context, [{"id": "root", "component": "Scene", "children": [loop({"id": "b", "component": "Frame"})]}], context="SCENE")
         _unchecked(await _stored(boxed))
-        # The context is the blok's, not something a loop at the root can stand in for.
+        # A scene blok holds one Scene, not a loop standing in for one.
         rooted = await _create_blok(authenticated_context, [loop({"id": "root", "component": "Scene"})], context="SCENE")
-        assert rooted.errors and "The root of a scene blok is <Scene> or <Space>, not <foreach>" in rooted.errors[0].message
+        assert rooted.errors and "A scene blok holds one <Scene> or one <Space> beside its declarations, not <foreach>" in rooted.errors[0].message
 
         # The base catalog of port definitions (base@1) is unchanged.
         listed = await schema.execute("query { baseCatalog { components { name inheritsContext } } }", context_value=authenticated_context)
@@ -484,37 +485,12 @@ CREATE_RESOLVED_BLOK = """
         createBlok(input: $input) {
             id
             hash
-            locals { key kind identifier nullable default }
-            resolvedLocals { key kind identifier nullable default }
+            resolvedLocals { node key kind identifier nullable default }
             dependencies { key }
             diagnostics { code }
         }
     }
 """
-
-UPDATE_RESOLVED_BLOK = """
-    mutation UpdateBlok($input: UpdateBlokInput!) {
-        updateBlok(input: $input) {
-            id
-            hash
-            locals { key kind }
-            resolvedLocals { key kind }
-            revisions { number }
-        }
-    }
-"""
-
-EDIT_RESOLVED_BLOK = """
-    mutation EditBlok($input: EditBlokInput!) {
-        editBlok(input: $input) {
-            applied
-            blok { id hash head { id } locals { key kind } resolvedLocals { key kind } }
-            revision { locals { key kind } resolvedLocals { key kind } }
-        }
-    }
-"""
-
-HEAD = "query Head($id: ID!) { blok(id: $id) { head { id } } }"
 
 MOVE_DEMAND = {
     "key": "stage",
@@ -529,85 +505,37 @@ def _move_button(path: str) -> dict:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 class TestResolvedBloks:
-    """A blok stores its locals as written (``locals``, what is hashed) and as its tree resolves
-    them (``resolvedLocals``, each kinded), recomputed on every write. Dependencies are never inferred."""
+    """A blok's ``<local>`` declarations are stored as its tree resolves them (``resolvedLocals``,
+    each with its node and a kind), recomputed on every write. Dependencies are never inferred."""
 
-    async def _create(self, http: HttpContext, **input: object) -> dict:
-        components = input.get("components")
-        if isinstance(components, list) and len(components) == 1 and components[0]["component"] != "Html":
-            input["components"] = _html(*components)
-        result = await schema.execute(CREATE_RESOLVED_BLOK, context_value=http, variable_values={"input": {"name": "resolved", "vocab": 2, **input}})
+    async def _create(self, http: HttpContext, *content: dict, declarations: tuple[dict, ...] = (), **input: object) -> dict:
+        result = await schema.execute(CREATE_RESOLVED_BLOK, context_value=http, variable_values={"input": {"name": "resolved", "vocab": 2, "components": _tree(*content, declarations=declarations), **input}})
         assert not result.errors, result.errors
         return result.data["createBlok"]
 
-    async def test_a_left_out_kind_takes_its_task_arguments_port(self, authenticated_context: HttpContext) -> None:
-        """Sent through GraphQL with only its key, a local passed whole to a STRUCTURE argument resolves to that structure; it is kept as written."""
-        blok = await self._create(authenticated_context, components=[_move_button("picked")], dependencies=[MOVE_DEMAND], locals=[{"key": "picked"}])
-        assert blok["locals"] == [{"key": "picked", "kind": None, "identifier": None, "nullable": False, "default": None}]
-        assert blok["resolvedLocals"] == [{"key": "picked", "kind": "STRUCTURE", "identifier": "@mikro/image", "nullable": True, "default": None}]
-
-    async def test_what_a_local_says_wins_over_what_it_infers(self, authenticated_context: HttpContext) -> None:
-        blok = await self._create(authenticated_context, components=[_move_button("picked")], dependencies=[MOVE_DEMAND], locals=[{"key": "picked", "kind": None, "nullable": False}])
-        assert blok["resolvedLocals"] == [{"key": "picked", "kind": "STRUCTURE", "identifier": "@mikro/image", "nullable": False, "default": None}]
-
-    async def test_a_given_any_is_kept_and_nothing_told_is_any(self, authenticated_context: HttpContext) -> None:
-        text = {"id": "root", "component": "Card", "children": [{"id": "a", "component": "Text", "props": [{"key": "text", "dynamicValue": {"path": "given"}}]}, {"id": "b", "component": "Text", "props": [{"key": "text", "dynamicValue": {"path": "untold"}}]}]}
-        blok = await self._create(authenticated_context, components=[text], locals=[{"key": "given", "kind": "ANY", "default": 3}, {"key": "untold"}, {"key": "counted", "default": 2}])
-        assert [(local["key"], local["kind"]) for local in blok["locals"]] == [("given", "ANY"), ("untold", None), ("counted", None)]
-        assert [(local["key"], local["kind"]) for local in blok["resolvedLocals"]] == [("given", "ANY"), ("untold", "ANY"), ("counted", "INT")]
+    async def test_a_left_out_kind_is_resolved_per_local_node(self, authenticated_context: HttpContext) -> None:
+        """A local passed whole to a STRUCTURE argument takes that structure; one with only a default takes its kind. Each is told by its node."""
+        blok = await self._create(authenticated_context, _move_button("picked"), declarations=(local("picked"), local("counted", default=2)), dependencies=[MOVE_DEMAND])
+        assert blok["resolvedLocals"] == [
+            {"node": "Blok[0]/local[0]", "key": "picked", "kind": "STRUCTURE", "identifier": "@mikro/image", "nullable": True, "default": None},
+            {"node": "Blok[0]/local[1]", "key": "counted", "kind": "INT", "identifier": None, "nullable": False, "default": 2},
+        ]
 
     async def test_a_custom_blok_must_declare_the_dependencies_its_tree_reads(self, authenticated_context: HttpContext) -> None:
         tree = {"id": "root", "component": "Card", "children": [{"id": "t", "component": "Text", "props": [{"key": "text", "dynamicValue": {"path": "deps.robot.arm.mode"}}]}, _move_button("picked")]}
-        result = await schema.execute(CREATE_RESOLVED_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "resolved", "vocab": 2, "components": _html(tree), "dependencies": [MOVE_DEMAND], "locals": [{"key": "picked"}]}})
+        components = _tree(tree, declarations=(local("picked"),))
+        result = await schema.execute(CREATE_RESOLVED_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "resolved", "vocab": 2, "components": components, "dependencies": [MOVE_DEMAND]}})
         assert result.errors
         message = result.errors[0].message
         assert "'robot' is not a dependency of the blok" in message and 'Fix: dependencies=[AgentDependencyInput(key="robot")]' in message
-
-    async def test_a_bound_control_types_no_local_on_the_server(self, authenticated_context: HttpContext) -> None:
-        """An edit that leaves the locals out keeps them as written and resolves them against the new tree. What a control writes is its catalog's to say, which the server does not read: bound to a Slider or to an Input, the local is ANY."""
-        slider = {"id": "c", "component": "Slider", "props": [{"key": "bind", "dynamicValue": {"path": "level"}}]}
-        field = {"id": "c", "component": "Input", "props": [{"key": "bind", "dynamicValue": {"path": "level"}}]}
-        blok = await self._create(authenticated_context, components=[slider], locals=[{"key": "level"}])
-        assert [local["kind"] for local in blok["resolvedLocals"]] == ["ANY"]
-        head = (await schema.execute(HEAD, context_value=authenticated_context, variable_values={"id": blok["id"]})).data["blok"]["head"]["id"]
-
-        result = await schema.execute(EDIT_RESOLVED_BLOK, context_value=authenticated_context, variable_values={"input": {"blok": blok["id"], "base": head, "components": _html(field)}})
-        assert not result.errors, result.errors
-        edited = result.data["editBlok"]
-        assert edited["applied"]
-        assert edited["blok"]["locals"] == edited["revision"]["locals"] == [{"key": "level", "kind": None}]
-        assert edited["blok"]["resolvedLocals"] == edited["revision"]["resolvedLocals"] == [{"key": "level", "kind": "ANY"}]
-
-    async def test_an_explicit_kind_is_never_overwritten(self, authenticated_context: HttpContext) -> None:
-        slider = {"id": "c", "component": "Slider", "props": [{"key": "bind", "dynamicValue": {"path": "level"}}]}
-        blok = await self._create(authenticated_context, components=[slider], locals=[{"key": "level", "kind": "ANY"}, {"key": "count", "kind": "INT", "default": 2}])
-        assert blok["locals"] == blok["resolvedLocals"] == [
-            {"key": "level", "kind": "ANY", "identifier": None, "nullable": False, "default": None},
-            {"key": "count", "kind": "INT", "identifier": None, "nullable": False, "default": 2},
-        ]
-
-    async def test_the_hash_covers_the_locals_as_written_only(self, authenticated_context: HttpContext) -> None:
-        """A module registered after the blok says what its Slider writes: the server reads no catalog, so the local resolves as before, and the same content (and hash) makes no revision."""
-        slider = {"id": "s", "component": "Slider", "props": [{"key": "bind", "dynamicValue": {"path": "label"}}]}
-        blok = await self._create(authenticated_context, module="later", components=[slider], locals=[{"key": "label"}])
-        assert [local["kind"] for local in blok["resolvedLocals"]] == ["ANY"]
-
-        await _register(authenticated_context, {"name": "later", "components": [{"name": "Slider", "props": [{"key": "bind", "kind": "STRING"}], "acceptsChildren": False}]})
-        result = await schema.execute(UPDATE_RESOLVED_BLOK, context_value=authenticated_context, variable_values={"input": {"id": blok["id"], "components": _html(slider)}})
-        assert not result.errors, result.errors
-        updated = result.data["updateBlok"]
-        assert [local["kind"] for local in updated["resolvedLocals"]] == ["ANY"]
-        assert updated["locals"] == [{"key": "label", "kind": None}]
-        assert updated["hash"] == blok["hash"]
-        assert [revision["number"] for revision in updated["revisions"]] == [1]
 
     async def test_a_module_shadows_a_standard_component(self, authenticated_context: HttpContext) -> None:
         """What a module registers is stored for the frontends; the server checks no blok against it."""
         await _register(authenticated_context, {"name": "mine", "components": [{"name": "Slider", "props": [{"key": "bind", "kind": "STRING"}], "acceptsChildren": False}]})
         slider = {"id": "s", "component": "Slider", "props": [{"key": "bind", "dynamicValue": {"path": "label"}}]}
-        blok = await self._create(authenticated_context, module="mine", components=[slider], locals=[{"key": "label", "kind": "STRING"}])
+        blok = await self._create(authenticated_context, slider, declarations=(local("label", kind="STRING"),), module="mine")
         assert [diagnostic["code"] for diagnostic in blok["diagnostics"]] == []
 
     async def test_a_module_nobody_registered_is_not_the_servers_to_judge(self, authenticated_context: HttpContext) -> None:
-        blok = await self._create(authenticated_context, module="nowhere", components=[{"id": "root", "component": "Card"}])
+        blok = await self._create(authenticated_context, {"id": "root", "component": "Card"}, module="nowhere")
         assert [diagnostic["code"] for diagnostic in blok["diagnostics"]] == []

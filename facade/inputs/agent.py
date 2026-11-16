@@ -126,8 +126,21 @@ class ImplementAgentInputModel(BaseModel):
 
     @model_validator(mode="after")
     def check_logos(self) -> Self:
-        """An implementation's logo is an action logo blok the agent declares."""
-        logos = {blok.key for blok in self.bloks or [] if blok.context == enums.ComponentContext.ACTION_LOGO}
+        """An implementation's logo is an action logo blok the agent declares: a logo blok whose
+        ``<Blok>`` says kind action (one sent as source is told once takt has parsed it)."""
+        from rekuest_core.vocabulary import BlokError, blok_header
+
+        def is_action_logo(blok: BlokImplementationInputModel) -> bool:
+            if blok.context != enums.ComponentContext.LOGO:
+                return False
+            if not blok.components:
+                return True
+            try:
+                return blok_header(blok.components[0]).kind == "action"
+            except BlokError:
+                return False
+
+        logos = {blok.key for blok in self.bloks or [] if is_action_logo(blok)}
         for implementation in self.implementations or []:
             if implementation.logo is not None and implementation.logo not in logos:
                 raise ValueError(f"implementation {implementation.interface!r} is drawn by the logo {implementation.logo!r}, which is not an action logo blok this agent declares")

@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 
 use super::bloks::{
     check_blok_declarations, check_blok_sent_once, wrong_context, BlokDeclarations,
-    BlokDemoInputModel, BlokLocalInputModel, BlokQueryInputModel, BlokSubscriptionInputModel,
+    BlokDemoInputModel,
 };
 use super::calls::{
     check_pure_call, iter_component_nodes, ComponentNodeInputModel, UtilCallInputModel,
@@ -22,7 +22,7 @@ use super::ports::{
 };
 use super::{min_length, ValidationError};
 use crate::blok::check::validate_blok;
-use crate::blok::{BlokScope, Finding};
+use crate::blok::{blok_header, BlokScope, Finding};
 use crate::enums::{
     ActionBlokPhase, ActionKind, AssetKind, CatalogValueKind, ComponentContext, Effects, Execution,
     PortKind,
@@ -703,10 +703,14 @@ impl ImplementationInputModel {
         for ask in asks {
             // Checked as a task's blok, as it is made at registration; the clone keeps the
             // ask as sent, which is what its template is addressed by.
-            ask.to_blok().validate_as(TASK_BLOK_KIND)?;
+            ask.to_blok()
+                .validate_as(&[TASK_BLOK_KIND], &task_mount("ask", &ask.key))?;
         }
         for inform in informs {
-            inform.as_ask().to_blok().validate_as(TASK_BLOK_KIND)?;
+            inform
+                .as_ask()
+                .to_blok()
+                .validate_as(&[TASK_BLOK_KIND], &task_mount("inform", &inform.key))?;
         }
         for optimistic in self.optimistics.iter_mut().flatten() {
             optimistic.validate()?;
@@ -920,12 +924,13 @@ impl AssetInputModel {
     }
 }
 
-/// The kind of a blok an agent declares (`blok_kind`): an action logo when drawn as one.
-pub fn blok_kind(context: ComponentContext) -> &'static str {
-    if context == ComponentContext::ACTION_LOGO {
-        "action_logo"
+/// The kinds a blok an agent declares may be (`agent_blok_kinds`): an agent blok, or in a logo an
+/// action's logo.
+pub fn agent_blok_kinds(context: ComponentContext) -> &'static [&'static str] {
+    if context == ComponentContext::LOGO {
+        &["agent", "action"]
     } else {
-        "agent"
+        &["agent"]
     }
 }
 
@@ -980,11 +985,13 @@ fn check_vocab(vocab: u32) -> Result<(), ValidationError> {
     Ok(())
 }
 
-/// A v2 tree against what its blok declares and its kind, without a catalog
-/// (`check_blok_manifest`): refused on its first error, its warnings returned. A tree is one root.
+/// A v2 tree mounted where it is sent (the language rules, no catalog; `check_blok_manifest`):
+/// refused on its first error, its warnings returned. Its `<Blok>` must say the context it is
+/// sent as, and a kind the mount takes. A tree is one root.
 pub fn check_blok_manifest(
     components: Option<&[ComponentNodeInputModel]>,
     scope: &BlokScope,
+    context: ComponentContext,
 ) -> Result<Vec<Finding>, ValidationError> {
     let Some(components) = components else {
         return Ok(vec![]);
@@ -1007,10 +1014,32 @@ pub fn check_blok_manifest(
             return Err(ValidationError(finding.to_string()));
         }
     }
-    validate_blok(tree, scope).map_err(|finding| ValidationError(finding.to_string()))
+    let findings =
+        validate_blok(tree, scope).map_err(|finding| ValidationError(finding.to_string()))?;
+    check_blok_context(tree, context)?;
+    Ok(findings)
 }
 
-/// A blok's args are the items it is opened for: an html blok's, keyed once (`check_blok_args`).
+/// A blok is sent as the context its `<Blok>` says (a tree whose root is no readable `<Blok>`
+/// is the checker's to refuse).
+pub fn check_blok_context(
+    tree: &ComponentNodeInputModel,
+    context: ComponentContext,
+) -> Result<(), ValidationError> {
+    let Ok(header) = blok_header(tree) else {
+        return Ok(());
+    };
+    if header.context != context.value() {
+        return Err(ValidationError(format!(
+            "Blok manifest: sent as a {} blok, but its <Blok> says {}",
+            context.value(),
+            header.context
+        )));
+    }
+    Ok(())
+}
+
+/// A blok's args are the items it is opened for: a panel blok's, keyed once (`check_blok_args`).
 pub fn check_blok_args(
     context: ComponentContext,
     args: &[ArgPortInputModel],
@@ -1018,9 +1047,9 @@ pub fn check_blok_args(
     if args.is_empty() {
         return Ok(());
     }
-    if context != ComponentContext::HTML {
+    if context != ComponentContext::PANEL {
         return Err(ValidationError(format!(
-            "Blok manifest: only an html blok takes args, not a {} blok",
+            "Blok manifest: only a panel blok takes args, not a {} blok",
             context.value()
         )));
     }
@@ -1053,19 +1082,20 @@ pub struct BlokImplementationInputModel {
     pub catalog_minor: Option<u32>,
     #[serde(default)]
     pub description: Option<String>,
-    /// The renderer for the blok's root: HTML, SCENE, LOGO or ACTION_LOGO.
-    #[serde(default = "html_")]
+    /// What draws it, as its `<Blok context=...>` says (the two must agree): PANEL, SCENE or
+    /// LOGO (an agent's logo, or an action's when its kind is action).
+    #[serde(default = "panel_")]
     pub context: ComponentContext,
     /// Whether this is its agent's default blok for its context.
     #[serde(default)]
     pub default: bool,
-    /// The model (`sha256:...`) this blok decorates. HTML bloks only.
+    /// The model (`sha256:...`) this blok decorates. PANEL bloks only.
     #[serde(default)]
     pub for_model: Option<String>,
     /// The node of `for_model` this blok attaches to; the model's root when absent.
     #[serde(default)]
     pub for_node: Option<String>,
-    /// The items this blok is opened for, read under `args.<key>`. HTML bloks only.
+    /// The items this blok is opened for, read under `args.<key>`. PANEL bloks only.
     #[serde(default)]
     pub args: Vec<ArgPortInputModel>,
     /// What a person answers through this blok when a task asks with it (`task.answer`).
@@ -1077,16 +1107,10 @@ pub struct BlokImplementationInputModel {
     #[serde(default)]
     pub catalogs: Vec<String>,
     #[serde(default)]
-    pub locals: Vec<BlokLocalInputModel>,
-    #[serde(default)]
     pub demo: Option<BlokDemoInputModel>,
-    #[serde(default)]
-    pub queries: Vec<BlokQueryInputModel>,
-    #[serde(default)]
-    pub subscriptions: Vec<BlokSubscriptionInputModel>,
 }
 
-/// A blok that decorates a model names it by reference, and is an html blok (`check_blok_target`).
+/// A blok that decorates a model names it by reference, and is a panel blok (`check_blok_target`).
 pub fn check_blok_target(
     context: ComponentContext,
     for_model: Option<&str>,
@@ -1106,45 +1130,44 @@ pub fn check_blok_target(
             repr_str(for_model)
         )));
     }
-    if context != ComponentContext::HTML {
+    if context != ComponentContext::PANEL {
         return Err(ValidationError(
-            "Blok manifest: only an html blok can decorate a model".into(),
+            "Blok manifest: only a panel blok can decorate a model".into(),
         ));
     }
     Ok(())
 }
 
-fn reserved(name: &str) -> bool {
-    crate::blok::vocabulary().is_reserved(name)
-}
-
 impl BlokImplementationInputModel {
-    /// What the tree is checked against, as `kind` (`agent`, `action_logo`, or `task` for a
-    /// task's blok).
-    pub fn scope(&self, kind: &str) -> BlokScope {
+    /// Where its tree is mounted: where `kinds` go (`mount` says where that is, for a message),
+    /// with its own dependencies and args.
+    pub fn scope(&self, kinds: &[&str], mount: &str) -> BlokScope {
         BlokScope {
-            kind: kind.to_owned(),
-            context: self.context.value().to_owned(),
-            dependencies: self.dependencies.clone(),
-            locals: self.locals.clone(),
-            queries: self.queries.clone(),
-            subscriptions: self.subscriptions.clone(),
             args: (!self.args.is_empty())
                 .then(|| self.args.iter().map(|a| a.key.clone()).collect()),
             demo: self.demo.clone(),
-            assets: None,
+            ..BlokScope::mounted(kinds, mount, self.dependencies.clone())
         }
+    }
+
+    /// How an agent's blok is mounted: its kinds and where (`the agent's blok 'panel'`).
+    pub fn agent_mount(&self) -> (&'static [&'static str], String) {
+        (
+            agent_blok_kinds(self.context),
+            format!("the agent's blok {}", repr_str(&self.key)),
+        )
     }
 
     /// Validated as the blok of an agent (or an action logo).
     pub fn validate(&mut self) -> Result<(), ValidationError> {
-        self.validate_as(blok_kind(self.context))
+        let (kinds, mount) = self.agent_mount();
+        self.validate_as(kinds, &mount)
     }
 
-    /// Sent one way (its source parsed into its tree); what it declares well-formed; its tree
-    /// coherent with that and with its kind's roots (the language rules; the catalog rules are
-    /// the catalog check's).
-    pub fn validate_as(&mut self, kind: &str) -> Result<(), ValidationError> {
+    /// Sent one way (its source parsed into its tree); what it says beside its tree
+    /// well-formed; its tree coherent with where it is mounted (`kinds`) and with its kind's
+    /// roots (the language rules; the catalog rules are the catalog check's).
+    pub fn validate_as(&mut self, kinds: &[&str], mount: &str) -> Result<(), ValidationError> {
         written_for(&mut self.module, self.catalog.as_deref())?;
         parse_sent(&mut self.components, &mut self.source)?;
         check_vocab(self.vocab)?;
@@ -1157,36 +1180,43 @@ impl BlokImplementationInputModel {
         for port in &mut self.returns {
             port.validate()?;
         }
-        for local in &mut self.locals {
-            local.validate()?;
-        }
         let keys: Vec<&str> = self.dependencies.iter().map(|d| d.key.as_str()).collect();
-        check_blok_declarations(
-            BlokDeclarations {
-                catalogs: &self.catalogs,
-                locals: &self.locals,
-                queries: &self.queries,
-                subscriptions: &self.subscriptions,
-                dependency_keys: &keys,
-                demo: self.demo.as_ref(),
-            },
-            kind,
-            &reserved,
-        )?;
+        check_blok_declarations(BlokDeclarations {
+            catalogs: &self.catalogs,
+            dependency_keys: &keys,
+            demo: self.demo.as_ref(),
+        })?;
         check_blok_target(
             self.context,
             self.for_model.as_deref(),
             self.for_node.as_deref(),
         )?;
         check_blok_args(self.context, &self.args)?;
-        check_blok_manifest(self.components.as_deref(), &self.scope(kind))?;
+        check_blok_manifest(
+            self.components.as_deref(),
+            &self.scope(kinds, mount),
+            self.context,
+        )?;
         Ok(())
+    }
+
+    /// The kind its `<Blok>` says, when its tree is one readable `<Blok>`.
+    pub fn blok_kind(&self) -> Option<String> {
+        match self.components.as_deref() {
+            Some([tree]) => blok_header(tree).ok().map(|header| header.kind),
+            _ => None,
+        }
     }
 }
 
 /// The kind of a task's blok in the vocabulary's root matrix: it reads `self`, `deps`, `args`
 /// and `task`, and answers with `task.answer`.
 pub const TASK_BLOK_KIND: &str = "task";
+
+/// Where a task's blok is mounted, for a message: `the ask 'stage.confirm'`.
+pub fn task_mount(what: &str, key: &str) -> String {
+    format!("the {what} {}", repr_str(key))
+}
 
 /// The dependency every task blok has: the agent whose task shows it.
 pub const SELF_DEPENDENCY: &str = "self";
@@ -1225,17 +1255,11 @@ pub struct AskBlokInputModel {
     #[serde(default)]
     pub catalogs: Vec<String>,
     #[serde(default)]
-    pub locals: Vec<BlokLocalInputModel>,
-    #[serde(default)]
     pub demo: Option<BlokDemoInputModel>,
-    #[serde(default)]
-    pub queries: Vec<BlokQueryInputModel>,
-    #[serde(default)]
-    pub subscriptions: Vec<BlokSubscriptionInputModel>,
 }
 
 impl AskBlokInputModel {
-    /// The ask as the html task blok it is made as: its own dependencies and `self`.
+    /// The ask as the panel task blok it is made as: its own dependencies and `self`.
     pub fn to_blok(&self) -> BlokImplementationInputModel {
         let mut dependencies = self.dependencies.clone();
         if !dependencies.iter().any(|d| d.key == SELF_DEPENDENCY) {
@@ -1256,7 +1280,7 @@ impl AskBlokInputModel {
             catalog: self.catalog.clone(),
             catalog_minor: self.catalog_minor,
             description: self.description.clone(),
-            context: ComponentContext::HTML,
+            context: ComponentContext::PANEL,
             default: false,
             for_model: None,
             for_node: None,
@@ -1264,10 +1288,7 @@ impl AskBlokInputModel {
             returns: self.returns.clone(),
             vocab: self.vocab,
             catalogs: self.catalogs.clone(),
-            locals: self.locals.clone(),
             demo: self.demo.clone(),
-            queries: self.queries.clone(),
-            subscriptions: self.subscriptions.clone(),
         }
     }
 }
@@ -1305,13 +1326,7 @@ pub struct InformBlokInputModel {
     #[serde(default)]
     pub catalogs: Vec<String>,
     #[serde(default)]
-    pub locals: Vec<BlokLocalInputModel>,
-    #[serde(default)]
     pub demo: Option<BlokDemoInputModel>,
-    #[serde(default)]
-    pub queries: Vec<BlokQueryInputModel>,
-    #[serde(default)]
-    pub subscriptions: Vec<BlokSubscriptionInputModel>,
 }
 
 impl InformBlokInputModel {
@@ -1330,10 +1345,7 @@ impl InformBlokInputModel {
             dependencies: self.dependencies.clone(),
             vocab: self.vocab,
             catalogs: self.catalogs.clone(),
-            locals: self.locals.clone(),
             demo: self.demo.clone(),
-            queries: self.queries.clone(),
-            subscriptions: self.subscriptions.clone(),
         }
     }
 }
@@ -1352,10 +1364,12 @@ pub const ASK_COMPONENT: &str = "ask";
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ActionBlokInputModel {
-    /// HTML (a task panel) or SCENE (a 3D view: a `Scene`, or a `Space` placing the run's dependencies).
-    #[serde(default = "html_")]
+    /// PANEL (a task panel) or SCENE (a 3D view: a `Scene`, or a `Space` placing the run's
+    /// dependencies), as its `<Blok context=...>` says.
+    #[serde(default = "panel_")]
     pub context: ComponentContext,
-    /// RUN for a run of the action, ASSIGN before one, to start it. One blok per context and phase.
+    /// RUN for a run of the action (kind action), ASSIGN before one, to start it (kind assign),
+    /// as its `<Blok kind=...>` says. One blok per context and phase.
     #[serde(default = "run_")]
     pub phase: ActionBlokPhase,
     /// The tree, unless the blok is sent as its `source`; `validate` parses that into this.
@@ -1382,17 +1396,11 @@ pub struct ActionBlokInputModel {
     #[serde(default)]
     pub catalogs: Vec<String>,
     #[serde(default)]
-    pub locals: Vec<BlokLocalInputModel>,
-    #[serde(default)]
     pub demo: Option<BlokDemoInputModel>,
-    #[serde(default)]
-    pub queries: Vec<BlokQueryInputModel>,
-    #[serde(default)]
-    pub subscriptions: Vec<BlokSubscriptionInputModel>,
 }
 
 impl ActionBlokInputModel {
-    /// The blok kind it is checked as: `assign` for one that starts a run, else `action`.
+    /// The kind its `<Blok>` must say: `assign` for one that starts a run, else `action`.
     pub fn kind(&self) -> &'static str {
         if self.phase == ActionBlokPhase::ASSIGN {
             "assign"
@@ -1409,34 +1417,27 @@ impl ActionBlokInputModel {
         for component in self.components.iter_mut().flatten() {
             component.validate()?;
         }
-        for local in &mut self.locals {
-            local.validate()?;
-        }
         if !matches!(
             self.context,
-            ComponentContext::HTML | ComponentContext::SCENE
+            ComponentContext::PANEL | ComponentContext::SCENE
         ) {
             return Err(wrong_context("action", self.context));
         }
         Ok(())
     }
 
-    /// What its tree is checked against: kind `action`, the action's dependencies and args.
+    /// Where its tree is mounted: among the action's bloks of its phase, with the action's
+    /// dependencies and args.
     pub fn scope(
         &self,
         dependencies: &[AgentDependencyInputModel],
         arg_keys: Option<Vec<String>>,
     ) -> BlokScope {
+        let mount = format!("an action's {} bloks", self.phase.value().to_lowercase());
         BlokScope {
-            kind: self.kind().into(),
-            context: self.context.value().to_owned(),
-            dependencies: dependencies.to_vec(),
-            locals: self.locals.clone(),
-            queries: self.queries.clone(),
-            subscriptions: self.subscriptions.clone(),
             args: arg_keys,
             demo: self.demo.clone(),
-            assets: None,
+            ..BlokScope::mounted(&[self.kind()], mount, dependencies.to_vec())
         }
     }
 }
@@ -1451,24 +1452,18 @@ pub fn check_action_blok(
     arg_keys: Option<Vec<String>>,
 ) -> Result<Vec<Finding>, ValidationError> {
     let keys: Vec<&str> = dependencies.iter().map(|d| d.key.as_str()).collect();
-    check_blok_declarations(
-        BlokDeclarations {
-            catalogs: &blok.catalogs,
-            locals: &blok.locals,
-            queries: &blok.queries,
-            subscriptions: &blok.subscriptions,
-            dependency_keys: &keys,
-            demo: blok.demo.as_ref(),
-        },
-        blok.kind(),
-        &reserved,
-    )?;
+    check_blok_declarations(BlokDeclarations {
+        catalogs: &blok.catalogs,
+        dependency_keys: &keys,
+        demo: blok.demo.as_ref(),
+    })?;
     if blok.components.is_none() {
         return Ok(vec![]);
     }
     check_blok_manifest(
         blok.components.as_deref(),
         &blok.scope(dependencies, arg_keys),
+        blok.context,
     )
 }
 
@@ -1541,7 +1536,7 @@ pub struct CatalogComponentInputModel {
     #[serde(default = "true_")]
     pub accepts_children: bool,
     /// The context this component may be placed in.
-    #[serde(default = "html_")]
+    #[serde(default = "panel_")]
     pub context: ComponentContext,
     /// The context of its children when it differs from its own: the component bridges two renderers.
     #[serde(default)]
@@ -1563,8 +1558,8 @@ pub struct CatalogComponentInputModel {
     pub catalog: Option<String>,
 }
 
-fn html_() -> ComponentContext {
-    ComponentContext::HTML
+fn panel_() -> ComponentContext {
+    ComponentContext::PANEL
 }
 
 fn run_() -> ActionBlokPhase {
@@ -1580,17 +1575,7 @@ impl CatalogComponentInputModel {
         check_unique_keys(
             self.props.iter().map(|p| p.key.as_str()),
             &format!("catalog component {}", self.name),
-        )?;
-        // ACTION_LOGO is a blok's context, never a component's (`check_no_action_logo_context`).
-        if self.context == ComponentContext::ACTION_LOGO
-            || self.children_context == Some(ComponentContext::ACTION_LOGO)
-        {
-            return Err(ValidationError(format!(
-                "catalog component {}: ACTION_LOGO is a blok context only; its shapes are LOGO components",
-                self.name
-            )));
-        }
-        Ok(())
+        )
     }
 }
 
@@ -1662,12 +1647,16 @@ impl ImplementAgentInputModel {
         for blok in self.bloks.iter_mut().flatten() {
             blok.validate()?;
         }
-        // An implementation's logo is an action logo blok the agent declares (`check_logos`).
+        // An implementation's logo is an action logo blok the agent declares (`check_logos`): a
+        // logo blok whose `<Blok>` says kind action.
         let logos: HashSet<&str> = self
             .bloks
             .iter()
             .flatten()
-            .filter(|blok| blok.context == ComponentContext::ACTION_LOGO)
+            .filter(|blok| {
+                blok.context == ComponentContext::LOGO
+                    && blok.blok_kind().is_none_or(|kind| kind == "action")
+            })
             .map(|blok| blok.key.as_str())
             .collect();
         for implementation in self.implementations.iter().flatten() {

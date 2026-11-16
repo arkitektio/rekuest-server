@@ -123,7 +123,7 @@ impl Fleet {
 
 fn panel(label: &str) -> Value {
     json!({"key": "panel", "vocab": 2, "module": "electron", "components": [
-        {"id": "html", "component": "Html", "children": [
+        {"id": "html", "component": "Blok", "props": [{"key": "kind", "static_value": "agent"}, {"key": "context", "static_value": "panel"}], "children": [
             {"id": "root", "component": "Box", "props": [{"key": "label", "static_value": label}]}]}]})
 }
 
@@ -218,7 +218,7 @@ async fn a_custom_blok_of_the_same_name_is_left_alone() {
     let agent = f.agent("first", "app", "1").await;
     let custom: i64 = sqlx::query_scalar(
         "INSERT INTO facade_blok (name, components, diagnostics, context, creator_id, organization_id, module_id)
-         VALUES ('panel', '[\"mine\"]', '[]', 'HTML', $1, $2,
+         VALUES ('panel', '[\"mine\"]', '[]', 'PANEL', $1, $2,
                  (SELECT id FROM facade_module WHERE organization_id = $2 AND name = 'electron'))
          RETURNING id",
     )
@@ -245,9 +245,11 @@ async fn an_action_keeps_its_logo_while_any_agent_still_provides_it() {
     let declaration = json!({
         "implementations": [{"interface": "scan", "logo": "crop",
             "definition": {"key": "scan", "version": "1", "name": "Scan", "kind": "FUNCTION", "args": [], "returns": []}}],
-        "bloks": [{"key": "crop", "vocab": 2, "module": "electron", "context": "ACTION_LOGO",
-            "components": [{"id": "logo", "component": "ActionLogo", "children": [
-                {"id": "p", "component": "Path", "props": [{"key": "d", "static_value": "M0 0"}]}]}]}],
+        "bloks": [{"key": "crop", "vocab": 2, "module": "electron", "context": "LOGO",
+            "components": [{"id": "blok", "component": "Blok", "props": [
+                {"key": "kind", "static_value": "action"}, {"key": "context", "static_value": "logo"}], "children": [
+            {"id": "logo", "component": "Logo", "children": [
+                {"id": "p", "component": "Path", "props": [{"key": "d", "static_value": "M0 0"}]}]}]}]}],
     });
     f.register(first, declaration.clone()).await;
     f.register(second, declaration).await;
@@ -276,9 +278,11 @@ async fn an_action_falls_back_to_another_releases_logo() {
         json!({
             "implementations": [{"interface": "scan", "logo": "crop",
                 "definition": {"key": "scan", "version": "1", "name": "Scan", "kind": "FUNCTION", "args": [], "returns": []}}],
-            "bloks": [{"key": "crop", "vocab": 2, "module": "electron", "context": "ACTION_LOGO",
-                "components": [{"id": "logo", "component": "ActionLogo", "children": [
-                    {"id": "p", "component": "Path", "props": [{"key": "d", "static_value": d}]}]}]}],
+            "bloks": [{"key": "crop", "vocab": 2, "module": "electron", "context": "LOGO",
+                "components": [{"id": "blok", "component": "Blok", "props": [
+                    {"key": "kind", "static_value": "action"}, {"key": "context", "static_value": "logo"}], "children": [
+                {"id": "logo", "component": "Logo", "children": [
+                    {"id": "p", "component": "Path", "props": [{"key": "d", "static_value": d}]}]}]}]}],
         })
     };
     f.register(old, drawn("M0 0")).await;
@@ -304,7 +308,7 @@ async fn an_action_falls_back_to_another_releases_logo() {
 
 fn inspector(args: Value) -> Value {
     json!({"key": "inspector", "vocab": 2, "module": "electron", "args": args, "demo": {"args": {"image": null}},
-        "components": [{"id": "html", "component": "Html", "children": [{"id": "root", "component": "Box", "props": [
+        "components": [{"id": "html", "component": "Blok", "props": [{"key": "kind", "static_value": "agent"}, {"key": "context", "static_value": "panel"}], "children": [{"id": "root", "component": "Box", "props": [
             {"key": "label", "dynamic_value": {"path": "args.image"}}]}]}]})
 }
 
@@ -376,20 +380,24 @@ async fn a_blok_with_args_writes_them_as_port_rows_once_per_template() {
 }
 
 #[tokio::test]
-async fn a_blok_stores_what_it_declares_beside_its_tree_and_new_locals_are_a_new_template() {
+async fn a_blok_stores_what_it_declares_and_a_new_local_is_a_new_template() {
     let Some(f) = fleet().await else { return };
     f.catalog().await;
     let agent = f.agent("first", "app", "1").await;
     let posed = |locals: Value| {
-        json!({"key": "posed", "vocab": 2, "module": "electron", "locals": locals, "catalogs": ["ui@1"],
+        let mut children = locals.as_array().cloned().unwrap_or_default();
+        children.push(json!({"id": "root", "component": "Box"}));
+        json!({"key": "posed", "vocab": 2, "module": "electron", "catalogs": ["ui@1"],
             "demo": {"args": {"pose": [1, 0, 0, 0]}},
-            "components": [{"id": "html", "component": "Html", "children": [{"id": "root", "component": "Box"}]}]})
+            "components": [{"id": "html", "component": "Blok", "props": [
+                {"key": "kind", "static_value": "agent"}, {"key": "context", "static_value": "panel"}],
+                "children": children}]})
     };
     let stored = |id: i64| {
         let db = f.db.clone();
         async move {
             sqlx::query_as::<_, (i16, Value, Value, Value)>(
-                "SELECT vocab, locals, catalogs, demo FROM facade_blok WHERE id = $1",
+                "SELECT vocab, resolved_locals, catalogs, demo FROM facade_blok WHERE id = $1",
             )
             .bind(id)
             .fetch_one(&db)
@@ -411,16 +419,19 @@ async fn a_blok_stores_what_it_declares_beside_its_tree_and_new_locals_are_a_new
         )
     );
 
-    let locals = json!([{"key": "zoom", "kind": "INT", "default": 1, "persist": true}]);
-    f.register(agent, declaring(json!([posed(locals.clone())])))
-        .await;
+    let zoom = json!([{"id": "zoom", "component": "local", "props": [
+        {"key": "name", "static_value": "zoom", "declares_value": "zoom"},
+        {"key": "kind", "static_value": "INT"}, {"key": "default", "static_value": 1},
+        {"key": "persist", "static_value": true}]}]);
+    f.register(agent, declaring(json!([posed(zoom)]))).await;
     let (same_slot, kept) = f.slot(agent, "posed").await.unwrap();
     assert_eq!(same_slot, slot, "the slot keeps its id");
     assert_ne!(kept, plain, "a local is other content");
-    // Stored as the port dumps (nulls dropped): `nullable` is a port's, said even when false.
+    // Stored by its node, as the port dumps (nulls dropped): `nullable` is a port's, said even
+    // when false.
     assert_eq!(
         stored(kept).await.1,
-        json!([{"key": "zoom", "kind": "INT", "nullable": false, "default": 1, "persist": true}])
+        json!([{"node": "zoom", "key": "zoom", "kind": "INT", "nullable": false, "default": 1, "persist": true}])
     );
     f.delete(agent).await;
 }
@@ -437,19 +448,25 @@ async fn a_local_takes_the_full_port_of_the_agents_own_action_and_is_kept_as_sen
         "bloks": [{"key": "picker", "vocab": 2,
             "dependencies": [{"key": "self", "action_dependencies": [
                 {"key": "pick", "demand": {"arg_matches": [{"key": "mode", "kind": "ENUM"}]}}]}],
-            "locals": [{"key": "m"}],
-            "components": [{"id": "html", "component": "Html", "children": [{"id": "go", "component": "Button", "props": [{"key": "onClick", "agent_call": {
+            "components": [{"id": "html", "component": "Blok", "props": [{"key": "kind", "static_value": "agent"}, {"key": "context", "static_value": "panel"}], "children": [
+                {"id": "m", "component": "local", "props": [{"key": "name", "static_value": "m", "declares_value": "m"}]},
+                {"id": "go", "component": "Button", "props": [{"key": "onClick", "agent_call": {
                 "dependency": "self", "operation": "pick", "arguments": [{"key": "mode", "value_path": "m"}]}}]}]}]}],
     });
     f.register(agent, declaration).await;
     let (_, blok) = f.slot(agent, "picker").await.unwrap();
-    let (locals, resolved): (Value, Value) =
-        sqlx::query_as("SELECT locals, resolved_locals FROM facade_blok WHERE id = $1")
+    let (components, resolved): (Value, Value) =
+        sqlx::query_as("SELECT components, resolved_locals FROM facade_blok WHERE id = $1")
             .bind(blok)
             .fetch_one(&f.db)
             .await
             .unwrap();
-    assert_eq!(locals, json!([{"key": "m"}]), "the locals as sent");
+    assert_eq!(
+        components[0]["children"][0]["props"],
+        json!([{"key": "name", "static_value": "m", "declares_value": "m"}]),
+        "the local as sent"
+    );
+    assert_eq!(resolved[0]["node"], json!("m"), "{resolved}");
     // The demand's arg match has no choices: the ENUM comes whole from the action's own port.
     assert_eq!(resolved[0]["kind"], json!("ENUM"), "{resolved}");
     assert_eq!(resolved[0]["choices"], choices, "{resolved}");

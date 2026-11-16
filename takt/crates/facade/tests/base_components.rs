@@ -17,19 +17,24 @@ fn catalog(name: &str, components: serde_json::Value) -> Catalog {
     }
 }
 
-const PICKER: &str = r#"<Html>
+const PICKER: &str = r#"<Blok kind="agent" context="panel">
   <Column>
     <foreach items={args.lenses} let="lens" key={lens.id}>
       <Button>Use</Button>
     </foreach>
   </Column>
-</Html>"#;
+</Blok>"#;
+
+/// Mounted as an agent's blok, with no dependencies.
+fn agent() -> BlokScope {
+    BlokScope::mounted(&["agent"], "the agent's blok", vec![])
+}
 
 #[test]
 fn the_language_and_the_modules_need_no_registration() {
     let tree = vec![parse_bsx_default(PICKER).unwrap()];
     let empty = catalog("orkestrator", json!([]));
-    let checked = validate_blok_against_catalog(&empty, Some(&tree), &BlokScope::default());
+    let checked = validate_blok_against_catalog(&empty, Some(&tree), &agent());
     assert_eq!(checked.map(|c| c.diagnostics), Ok(vec![]));
 }
 
@@ -40,7 +45,7 @@ fn the_orkestrators_registration_never_replaces_the_spec() {
         "orkestrator",
         json!([{"name": "Button", "props": [{"key": "label", "kind": "STRING"}]}]),
     );
-    let found = validate_blok_against_catalog(&older, Some(&tree), &BlokScope::default())
+    let found = validate_blok_against_catalog(&older, Some(&tree), &agent())
         .unwrap()
         .diagnostics;
     assert_eq!(found, vec![]);
@@ -54,7 +59,7 @@ fn what_a_module_registered_is_not_read() {
         "mine",
         json!([{"name": "Button", "props": [{"key": "tone", "kind": "STRING"}]}]),
     );
-    let found = validate_blok_against_catalog(&mine, Some(&tree), &BlokScope::default())
+    let found = validate_blok_against_catalog(&mine, Some(&tree), &agent())
         .unwrap()
         .diagnostics;
     assert_eq!(found, vec![]);
@@ -62,12 +67,15 @@ fn what_a_module_registered_is_not_read() {
 
 #[test]
 fn what_no_catalog_draws_is_not_the_servers_to_judge() {
-    let tree = vec![parse_bsx_default("<Html><Column><Knob /></Column></Html>").unwrap()];
+    let tree = vec![parse_bsx_default(
+        r#"<Blok kind="agent" context="panel"><Column><Knob /></Column></Blok>"#,
+    )
+    .unwrap()];
     for components in [json!([]), json!([{"name": "Knob"}])] {
         let found = validate_blok_against_catalog(
             &catalog("orkestrator", components),
             Some(&tree),
-            &BlokScope::default(),
+            &agent(),
         )
         .unwrap()
         .diagnostics;
@@ -77,53 +85,55 @@ fn what_no_catalog_draws_is_not_the_servers_to_judge() {
 
 #[test]
 fn an_error_refuses_with_its_code() {
-    let tree = vec![parse_bsx_default("<Html><Text text={task.status} /></Html>").unwrap()];
-    let refused = validate_blok_against_catalog(
-        &catalog("orkestrator", json!([])),
-        Some(&tree),
-        &BlokScope::default(),
+    let tree = vec![parse_bsx_default(
+        r#"<Blok kind="agent" context="panel"><Text text={task.status} /></Blok>"#,
     )
-    .unwrap_err();
+    .unwrap()];
+    let refused =
+        validate_blok_against_catalog(&catalog("orkestrator", json!([])), Some(&tree), &agent())
+            .unwrap_err();
     assert!(refused.contains("[roots.not_in_kind]"), "{refused}");
 }
 
 #[test]
-fn a_checked_blok_carries_its_resolved_scope() {
-    let tree = vec![parse_bsx_default("<Html><Switch bind={on} /></Html>").unwrap()];
-    let scope = BlokScope {
-        locals: vec![serde_json::from_value(json!({"key": "on"})).unwrap()],
-        ..BlokScope::default()
+fn a_checked_blok_carries_its_resolved_locals() {
+    let checked = |source: &str| {
+        let tree = vec![parse_bsx_default(source).unwrap()];
+        validate_blok_against_catalog(&catalog("orkestrator", json!([])), Some(&tree), &agent())
+            .unwrap()
     };
-    assert_eq!(scope.locals[0].kind, None);
-    let checked =
-        validate_blok_against_catalog(&catalog("orkestrator", json!([])), Some(&tree), &scope)
-            .unwrap();
     // What a Switch writes through its `bind` is its catalog's to say: with nothing else to
     // tell its kind the local stays ANY here, and the renderer types it.
+    let found = checked(
+        r#"<Blok kind="agent" context="panel"><local name="on" /><Switch bind={on} /></Blok>"#,
+    );
+    assert_eq!(found.locals[0].0, "Blok[0]/local[0]");
     assert_eq!(
-        checked.scope.locals[0].kind,
+        found.locals[0].1.local.kind,
         Some(rekuest_core::enums::LocalKind::ANY)
     );
-    let typed = BlokScope {
-        locals: vec![serde_json::from_value(json!({"key": "on", "default": false})).unwrap()],
-        ..BlokScope::default()
-    };
-    let checked =
-        validate_blok_against_catalog(&catalog("orkestrator", json!([])), Some(&tree), &typed)
-            .unwrap();
+    let found = checked(
+        r#"<Blok kind="agent" context="panel"><local name="on" default={false} /><Switch bind={on} /></Blok>"#,
+    );
     assert_eq!(
-        checked.scope.locals[0].kind,
+        found.locals[0].1.local.kind,
         Some(rekuest_core::enums::LocalKind::BOOL)
+    );
+    assert_eq!(
+        found.stored_locals(),
+        json!([{"node": "Blok[0]/local[0]", "key": "on", "kind": "BOOL", "default": false,
+                "nullable": false, "persist": false}]),
+        "stored as its node and its port"
     );
 }
 
 #[test]
 fn a_custom_blok_must_declare_the_dependencies_it_reads() {
-    let tree = vec![parse_bsx_default("<Html><Text text={deps.robot.arm.mode} /></Html>").unwrap()];
-    let scope = BlokScope {
-        kind: "custom".into(),
-        ..BlokScope::default()
-    };
+    let tree = vec![parse_bsx_default(
+        r#"<Blok kind="custom" context="panel"><Text text={deps.robot.arm.mode} /></Blok>"#,
+    )
+    .unwrap()];
+    let scope = BlokScope::mounted(&["custom"], "a custom blok", vec![]);
     let refused =
         validate_blok_against_catalog(&catalog("orkestrator", json!([])), Some(&tree), &scope)
             .unwrap_err();

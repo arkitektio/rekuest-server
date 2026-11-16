@@ -6763,7 +6763,7 @@
     ],
     "module": null,
     "description": "A dataset next to the histogram of its intensities.",
-    "context": "HTML",
+    "context": "PANEL",
     "default": false,
     "for_model": null,
     "for_node": null,
@@ -6789,14 +6789,7 @@
      }
     ],
     "vocab": 2,
-    "source": "<Html><Resizable direction=\"row\" className=\"rounded-xl border\"><ResizablePanel><StructureDisplay value={args.dataset} /></ResizablePanel><ResizablePanel><Card><Slider bind={bins} /><Button onClick={self.intensity_histogram(dataset: args.dataset, bins: bins) into run}>Histogram</Button><Progress value={run.progress} /><Chart data={run.returns.histogram} /></Card></ResizablePanel></Resizable></Html>",
-    "locals": [
-     {
-      "key": "bins",
-      "kind": "INT",
-      "default": 32
-     }
-    ],
+    "source": "<Blok kind=\"agent\" context=\"panel\"><local name=\"bins\" kind=\"INT\" default={32} /><Resizable direction=\"row\" className=\"rounded-xl border\"><ResizablePanel><StructureDisplay value={args.dataset} /></ResizablePanel><ResizablePanel><Card><Slider bind={bins} /><Button onClick={self.intensity_histogram(dataset: args.dataset, bins: bins) into run}>Histogram</Button><Progress value={run.progress} /><Chart data={run.returns.histogram} /></Card></ResizablePanel></Resizable></Blok>",
     "demo": {
      "args": {
       "dataset": null
@@ -6856,7 +6849,7 @@
      {
       "key": "asks.choose",
       "description": "Keep it?",
-      "source": "<Html><Button label=\"Keep\" onClick={task.answer(values: {choice: \"keep\"})} /></Html>",
+      "source": "<Blok kind=\"task\" context=\"panel\"><Button label=\"Keep\" onClick={task.answer(values: {choice: \"keep\"})} /></Blok>",
       "args": [],
       "returns": [
        {
@@ -6881,15 +6874,12 @@
       "vocab": 2,
       "catalogs": [
        "ui@1"
-      ],
-      "locals": [],
-      "queries": [],
-      "subscriptions": []
+      ]
      },
      {
       "key": "asks.pick",
       "description": "Pick one.",
-      "source": "<Html><Card><CardTitle text={args.question} /><Button label=\"Go\" onClick={task.answer(values: {name: args.question, count: 2})} /></Card></Html>",
+      "source": "<Blok kind=\"task\" context=\"panel\"><Card><CardTitle text={args.question} /><Button label=\"Go\" onClick={task.answer(values: {name: args.question, count: 2})} /></Card></Blok>",
       "args": [
        {
         "key": "question",
@@ -6925,17 +6915,14 @@
       "vocab": 2,
       "catalogs": [
        "ui@1"
-      ],
-      "locals": [],
-      "queries": [],
-      "subscriptions": []
+      ]
      }
     ],
     "informs": [
      {
       "key": "asks.progress",
       "description": "Progress.",
-      "source": "<Html><Card><CardTitle text={args.question} /><Text text={args.count} /></Card></Html>",
+      "source": "<Blok kind=\"task\" context=\"panel\"><Card><CardTitle text={args.question} /><Text text={args.count} /></Card></Blok>",
       "args": [
        {
         "key": "question",
@@ -6956,10 +6943,7 @@
       "vocab": 2,
       "catalogs": [
        "ui@1"
-      ],
-      "locals": [],
-      "queries": [],
-      "subscriptions": []
+      ]
      }
     ]
    }

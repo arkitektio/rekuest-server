@@ -16,9 +16,17 @@ from facade.models import Agent, Blok, BlokAgentMapping, BlokRevision, Caller, M
 from facade.schema import schema
 from tests.factories import _build_task
 from tests.graphql_ops import CREATE_BLOK, MATERIALIZE_BLOK, UPDATE_BLOK
+from tests.registered import blok, gql, local, node
 
-BOX = [{"id": "Html[0]", "component": "Html", "children": [{"id": "Html[0]/Box[0]", "component": "Box"}]}]
-TEXT = [{"id": "Html[0]", "component": "Html", "children": [{"id": "Html[0]/Text[0]", "component": "Text"}]}]
+# Trees as stored (and read back from componentTree, snake_case); sent through GraphQL as ``*_IN``.
+BOX = [blok("custom", "panel", node("Box"))]
+TEXT = [blok("custom", "panel", node("Text"))]
+PROVIDED = [blok("agent", "panel", node("Box"))]
+"""A blok an agent provides says kind agent; a fork of it says custom."""
+BOX_IN = [gql(BOX[0])]
+TEXT_IN = [gql(TEXT[0])]
+WITH_X_IN = [gql(blok("custom", "panel", local("x", kind="INT", default=1), node("Text")))]
+"""Some other content: TEXT with a local."""
 
 REVISION = """
     id
@@ -62,7 +70,7 @@ EDIT_BLOK = f"""
             revision {{ {REVISION} }}
             materializedBlok {{ id blok {{ id provided }} agentMappings {{ key agent {{ id }} }} }}
             diagnostics {{ message }}
-            resolvedLocals {{ key kind default }}
+            resolvedLocals {{ node key kind default }}
         }}
     }}
 """
@@ -107,7 +115,7 @@ async def _refused(context: HttpContext, operation: str, variables: dict) -> str
 
 async def _blok_with_two_materializations(context: HttpContext) -> dict:
     """A custom blok (revision 1) shown by two materializations."""
-    created = await _run(context, CREATE_BLOK, {"input": {"name": "panel", "vocab": 2, "components": BOX}})
+    created = await _run(context, CREATE_BLOK, {"input": {"name": "panel", "vocab": 2, "components": BOX_IN}})
     blok_id = created["createBlok"]["id"]
     first = await _run(context, MATERIALIZE_BLOK, {"input": {"blok": blok_id, "name": "first"}})
     second = await _run(context, MATERIALIZE_BLOK, {"input": {"blok": blok_id, "name": "second"}})
@@ -124,10 +132,10 @@ def _revision_count(blok_id: str) -> int:
 @pytest.mark.asyncio
 class TestBlokRevisions:
     async def test_every_write_is_a_revision_and_one_that_changes_nothing_is_not(self, authenticated_context: HttpContext) -> None:
-        created = await _run(authenticated_context, CREATE_BLOK, {"input": {"name": "history", "vocab": 2, "components": BOX}})
+        created = await _run(authenticated_context, CREATE_BLOK, {"input": {"name": "history", "vocab": 2, "components": BOX_IN}})
         blok_id = created["createBlok"]["id"]
-        await _run(authenticated_context, UPDATE_BLOK, {"input": {"id": blok_id, "components": TEXT}})
-        await _run(authenticated_context, UPDATE_BLOK, {"input": {"id": blok_id, "components": TEXT}})
+        await _run(authenticated_context, UPDATE_BLOK, {"input": {"id": blok_id, "components": TEXT_IN}})
+        await _run(authenticated_context, UPDATE_BLOK, {"input": {"id": blok_id, "components": TEXT_IN}})
 
         blok = (await _run(authenticated_context, BLOK, {"id": blok_id}))["blok"]
         assert [revision["number"] for revision in blok["revisions"]] == [2, 1]
@@ -147,7 +155,7 @@ class TestBlokRevisions:
                 "input": {
                     "materializedBlok": env["first"],
                     "base": env["head"],
-                    "components": TEXT,
+                    "components": TEXT_IN,
                     "dependencies": [{"key": "stage"}],
                     "agentMappings": [{"key": "stage", "agent": str(stage.id)}],
                     "message": "Show the stage",
@@ -172,16 +180,16 @@ class TestBlokRevisions:
     async def test_an_edit_from_a_stale_base_is_refused(self, authenticated_context: HttpContext) -> None:
         env = await _blok_with_two_materializations(authenticated_context)
         # Someone else changes the blok meanwhile.
-        await _run(authenticated_context, UPDATE_BLOK, {"input": {"id": env["blok"], "components": TEXT}})
+        await _run(authenticated_context, UPDATE_BLOK, {"input": {"id": env["blok"], "components": TEXT_IN}})
 
-        message = await _refused(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "base": env["head"], "locals": [{"key": "x", "kind": "INT", "default": 1}]}})
+        message = await _refused(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "base": env["head"], "components": WITH_X_IN}})
         assert "changed since revision 1" in message
         assert await _revision_count(env["blok"]) == 2
 
     async def test_a_dry_run_checks_and_keeps_nothing(self, authenticated_context: HttpContext) -> None:
         env = await _blok_with_two_materializations(authenticated_context)
 
-        checked = await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "base": env["head"], "components": TEXT, "module": "brand-new", "dryRun": True}})
+        checked = await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "base": env["head"], "components": TEXT_IN, "module": "brand-new", "dryRun": True}})
         assert checked["editBlok"]["applied"] is False
         assert checked["editBlok"]["revision"] is None
         assert await _revision_count(env["blok"]) == 1
@@ -193,17 +201,19 @@ class TestBlokRevisions:
 
     async def test_a_dry_run_shows_the_kinds_it_infers(self, authenticated_context: HttpContext) -> None:
         """An editor shows inferred kinds before saving: the dry run answers the resolved locals,
-        and the locals it would store stay as written. What a control writes into the local bound
-        to it is its catalog's to say, which the server does not read: that local stays ANY."""
+        each by its node. What a control writes into the local bound to it is its catalog's to say,
+        which the server does not read: that local stays ANY."""
         env = await _blok_with_two_materializations(authenticated_context)
-        components = [{"id": "Html[0]", "component": "Html", "children": [{"id": "Html[0]/Switch[0]", "component": "Switch", "props": [{"key": "bind", "dynamicValue": {"path": "on"}}]}]}]
-        written = [{"key": "zoom", "default": 2}, {"key": "on"}]
+        components = [gql(blok("custom", "panel", local("zoom", default=2), local("on"), node("Switch", bind={"path": "on"})))]
 
-        checked = (await _run(authenticated_context, EDIT_BLOK, {"input": {"blok": env["blok"], "base": env["head"], "components": components, "locals": written, "dryRun": True}}))["editBlok"]
+        checked = (await _run(authenticated_context, EDIT_BLOK, {"input": {"blok": env["blok"], "base": env["head"], "components": components, "dryRun": True}}))["editBlok"]
         assert checked["applied"] is False
-        assert checked["resolvedLocals"] == [{"key": "zoom", "kind": "INT", "default": 2}, {"key": "on", "kind": "ANY", "default": None}]
+        assert checked["resolvedLocals"] == [
+            {"node": "Blok[0]/local[0]", "key": "zoom", "kind": "INT", "default": 2},
+            {"node": "Blok[0]/local[1]", "key": "on", "kind": "ANY", "default": None},
+        ]
 
-        saved = (await _run(authenticated_context, EDIT_BLOK, {"input": {"blok": env["blok"], "base": env["head"], "components": components, "locals": written}}))["editBlok"]
+        saved = (await _run(authenticated_context, EDIT_BLOK, {"input": {"blok": env["blok"], "base": env["head"], "components": components}}))["editBlok"]
         assert saved["resolvedLocals"] == checked["resolvedLocals"]
 
     async def test_a_refused_binding_writes_nothing(self, authenticated_context: HttpContext) -> None:
@@ -212,7 +222,7 @@ class TestBlokRevisions:
         await _refused(
             authenticated_context,
             EDIT_BLOK,
-            {"input": {"materializedBlok": env["first"], "base": env["head"], "components": TEXT, "dependencies": [{"key": "stage"}], "agentMappings": [{"key": "stage", "agent": "999999"}]}},
+            {"input": {"materializedBlok": env["first"], "base": env["head"], "components": TEXT_IN, "dependencies": [{"key": "stage"}], "agentMappings": [{"key": "stage", "agent": "999999"}]}},
         )
         blok = (await _run(authenticated_context, BLOK, {"id": env["blok"]}))["blok"]
         assert blok["head"]["id"] == env["head"]
@@ -221,7 +231,7 @@ class TestBlokRevisions:
 
     async def test_revert_is_a_new_revision_with_the_old_content(self, authenticated_context: HttpContext) -> None:
         env = await _blok_with_two_materializations(authenticated_context)
-        edited = await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "base": env["head"], "components": TEXT}})
+        edited = await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "base": env["head"], "components": TEXT_IN}})
         second = edited["editBlok"]["revision"]["id"]
 
         # Reverting from a base that is not the head any more is refused like an edit.
@@ -239,14 +249,14 @@ class TestBlokRevisions:
         env = await _blok_with_two_materializations(authenticated_context)
         await _run(authenticated_context, PIN, {"input": {"id": env["second"], "revision": env["head"]}})
 
-        edited = await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "base": env["head"], "components": TEXT}})
+        edited = await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "base": env["head"], "components": TEXT_IN}})
         head = edited["editBlok"]["revision"]["id"]
         pinned = (await _run(authenticated_context, MATERIALIZED, {"id": env["second"]}))["materializedBlok"]
         assert pinned["revision"]["number"] == 1
         assert _drawn(pinned["revision"]["componentTree"]) == BOX
 
         # Edited where it is shown, so shown as edited.
-        await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["second"], "base": head, "locals": [{"key": "x", "kind": "INT", "default": 1}]}})
+        await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["second"], "base": head, "components": WITH_X_IN}})
         unpinned = (await _run(authenticated_context, MATERIALIZED, {"id": env["second"]}))["materializedBlok"]
         assert unpinned["pinnedRevision"] is None
         assert unpinned["revision"]["number"] == 3
@@ -258,7 +268,7 @@ class TestBlokRevisions:
         def provided() -> tuple[Blok, MaterializedBlok, Agent]:
             agent = _agent_in(org, user, "viewer")
             catalog = Module.objects.get_or_create(name="orkestrator", organization=org)[0]
-            blok = Blok.objects.create(name="panel", creator=user, organization=org, module=catalog, app=agent.app, declaration_hash="a" * 64, components=BOX)
+            blok = Blok.objects.create(name="panel", creator=user, organization=org, module=catalog, app=agent.app, declaration_hash="a" * 64, components=PROVIDED)
             blok.dependencies.create(key="self")
             slot = MaterializedBlok.objects.create(blok=blok, declared_by=agent, name="panel", description="")
             BlokAgentMapping.objects.create(materialized_blok=slot, key="self", dependency=blok.dependencies.get(), agent=agent)
@@ -267,7 +277,7 @@ class TestBlokRevisions:
             return blok, slot, agent
 
         blok, slot, agent = await provided()
-        edited = (await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": str(slot.id), "components": TEXT, "message": "Make it mine"}}))["editBlok"]
+        edited = (await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": str(slot.id), "components": TEXT_IN, "message": "Make it mine"}}))["editBlok"]
         assert edited["applied"] and edited["forked"]
         assert edited["revision"]["number"] == 2
         assert edited["materializedBlok"]["id"] != str(slot.id)
@@ -279,11 +289,11 @@ class TestBlokRevisions:
         assert _drawn(fork.components) == TEXT
         await sync_to_async(slot.refresh_from_db)()
         assert slot.blok_id == blok.id
-        assert (await sync_to_async(Blok.objects.get)(id=blok.id)).components == BOX
+        assert (await sync_to_async(Blok.objects.get)(id=blok.id)).components == PROVIDED
 
     async def test_a_custom_edit_names_its_base(self, authenticated_context: HttpContext) -> None:
         env = await _blok_with_two_materializations(authenticated_context)
-        message = await _refused(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "components": TEXT}})
+        message = await _refused(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "components": TEXT_IN}})
         assert "changed since no revision" in message
 
     async def test_a_blok_without_history_is_edited_from_no_base(self, authenticated_context: HttpContext) -> None:
@@ -296,7 +306,7 @@ class TestBlokRevisions:
             return MaterializedBlok.objects.create(blok=blok, name="bare", description="")
 
         mblok = await bare()
-        edited = (await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": str(mblok.id), "components": TEXT}}))["editBlok"]
+        edited = (await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": str(mblok.id), "components": TEXT_IN}}))["editBlok"]
         assert edited["revision"]["number"] == 1
 
     async def test_a_task_of_another_client_is_refused(self, authenticated_context: HttpContext) -> None:
@@ -317,7 +327,7 @@ class TestBlokRevisions:
             return str(_build_task("designer", agent_pk=agent.pk).pk)
 
         task = await own_task()
-        edited = (await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "base": env["head"], "components": TEXT, "task": task}}))["editBlok"]
+        edited = (await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "base": env["head"], "components": TEXT_IN, "task": task}}))["editBlok"]
         assert edited["revision"]["task"] == {"id": task}
 
         reverted = (await _run(authenticated_context, REVERT_BLOK, {"input": {"blok": env["blok"], "to": env["head"], "base": edited["revision"]["id"], "task": task}}))["revertBlok"]
@@ -326,7 +336,7 @@ class TestBlokRevisions:
     async def test_an_editor_of_the_blok_itself_saves_on_its_head(self, authenticated_context: HttpContext) -> None:
         env = await _blok_with_two_materializations(authenticated_context)
 
-        saved = (await _run(authenticated_context, EDIT_BLOK, {"input": {"blok": env["blok"], "base": env["head"], "components": TEXT, "dependencies": [{"key": "stage"}], "message": "From the editor"}}))["editBlok"]
+        saved = (await _run(authenticated_context, EDIT_BLOK, {"input": {"blok": env["blok"], "base": env["head"], "components": TEXT_IN, "dependencies": [{"key": "stage"}], "message": "From the editor"}}))["editBlok"]
         assert saved["applied"] and not saved["forked"]
         assert saved["blok"]["id"] == env["blok"] and saved["materializedBlok"] is None
         assert (saved["revision"]["number"], saved["revision"]["message"]) == (2, "From the editor")
@@ -335,7 +345,7 @@ class TestBlokRevisions:
             assert (await _run(authenticated_context, MATERIALIZED, {"id": materialized}))["materializedBlok"]["unboundDependencies"] == ["stage"]
 
         # An assistant saved meanwhile: the editor, still on revision 1, is refused.
-        message = await _refused(authenticated_context, EDIT_BLOK, {"input": {"blok": env["blok"], "base": env["head"], "locals": [{"key": "x", "kind": "INT", "default": 1}]}})
+        message = await _refused(authenticated_context, EDIT_BLOK, {"input": {"blok": env["blok"], "base": env["head"], "components": WITH_X_IN}})
         assert "changed since revision 1" in message
         assert await _revision_count(env["blok"]) == 2
 
@@ -354,26 +364,26 @@ class TestBlokRevisions:
         def provided() -> Blok:
             agent = _agent_in(org, user, "editor-viewer")
             catalog = Module.objects.get_or_create(name="orkestrator", organization=org)[0]
-            blok = Blok.objects.create(name="viewer", creator=user, organization=org, module=catalog, app=agent.app, declaration_hash="b" * 64, components=BOX)
+            blok = Blok.objects.create(name="viewer", creator=user, organization=org, module=catalog, app=agent.app, declaration_hash="b" * 64, components=PROVIDED)
             MaterializedBlok.objects.create(blok=blok, declared_by=agent, name="viewer", description="")
             return blok
 
         blok = await provided()
         materializations = await sync_to_async(MaterializedBlok.objects.count)()
 
-        checked = (await _run(authenticated_context, EDIT_BLOK, {"input": {"blok": str(blok.id), "components": TEXT, "dryRun": True}}))["editBlok"]
+        checked = (await _run(authenticated_context, EDIT_BLOK, {"input": {"blok": str(blok.id), "components": TEXT_IN, "dryRun": True}}))["editBlok"]
         assert (checked["applied"], checked["forked"], checked["blok"]["id"]) == (False, True, str(blok.id))
         assert await sync_to_async(Blok.objects.count)() == 1
 
-        saved = (await _run(authenticated_context, EDIT_BLOK, {"input": {"blok": str(blok.id), "components": TEXT}}))["editBlok"]
+        saved = (await _run(authenticated_context, EDIT_BLOK, {"input": {"blok": str(blok.id), "components": TEXT_IN}}))["editBlok"]
         assert saved["forked"] and saved["materializedBlok"] is None
         assert saved["blok"]["id"] != str(blok.id) and saved["blok"]["provided"] is False and saved["blok"]["name"] == "viewer"
         assert saved["revision"]["number"] == 2
         assert await sync_to_async(MaterializedBlok.objects.count)() == materializations
-        assert _drawn((await sync_to_async(Blok.objects.get)(id=blok.id)).components) == BOX
+        assert _drawn((await sync_to_async(Blok.objects.get)(id=blok.id)).components) == PROVIDED
 
     async def test_deleting_a_blok_takes_its_history(self, authenticated_context: HttpContext) -> None:
         env = await _blok_with_two_materializations(authenticated_context)
-        await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "base": env["head"], "components": TEXT}})
+        await _run(authenticated_context, EDIT_BLOK, {"input": {"materializedBlok": env["first"], "base": env["head"], "components": TEXT_IN}})
         await sync_to_async(Blok.objects.filter(id=env["blok"]).delete)()
         assert await _revision_count(env["blok"]) == 0

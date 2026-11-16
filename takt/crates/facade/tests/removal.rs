@@ -74,7 +74,7 @@ async fn registered(ctx: &Context, org: &str) -> (i64, i64) {
             "definition": {"key": format!("move-{unique}"), "name": "Move", "kind": "FUNCTION"},
         }],
         "bloks": [{"key": format!("panel-{unique}"), "vocab": 2, "description": "A panel", "components": [
-            {"id": "html", "component": "Html", "children": [
+            {"id": "html", "component": "Blok", "props": [{"key": "kind", "static_value": "agent"}, {"key": "context", "static_value": "panel"}], "children": [
                 {"id": "root", "component": "Text", "props": [{"key": "text", "static_value": "hi"}]}]}],
             "dependencies": [{"key": "camera"}]}],
     }))

@@ -397,30 +397,10 @@ class CatalogComponent:
     catalog: Optional[str] = strawberry.field(default=None, description="The catalog it belongs to, as name@version (`ui@1`), or the name of the module it is from.")
 
 
-@pydantic.type(models.BlokLocalModel, description="A local as the blok declares it: blok-level form state that feeds a call, written only through `bind` on controls. A local is an arg port plus `persist`; its kind may be left out.")
-class BlokLocal:
-    key: str = strawberry.field(description="Its name, read bare in the tree.")
-    kind: enums.LocalKind | None = strawberry.field(default=None, description="What it holds, as a port's kind (what the controls bound to it write and what a task call may pass it to), or ANY: an untyped value. Null: the blok left it out, and its tree tells it (see `resolvedLocals`).")
-    identifier: scalars.Identifier | None = strawberry.field(default=None, description="The structure (or model, enum) identifier of what it holds.")
-    nullable: bool = strawberry.field(default=False, description="Whether it may hold null.")
-    label: str | None = strawberry.field(default=None, description="Its label.")
-    description: str | None = strawberry.field(default=None, description="What it is for.")
-    default: scalars.AnyDefault | None = strawberry.field(default=None, description="The value it starts with.")
-    children: list[ArgPort] | None = strawberry.field(default=None, description="Its child ports (the item of a LIST, the fields of a DICT or MODEL).")
-    choices: list[Choice] | None = strawberry.field(default=None, description="The values it takes (an ENUM's).")
-    validators: list[Validator] | None = strawberry.field(default=None, description="Its validators.")
-    effects: list[Effect] | None = strawberry.field(default=None, description="Its effects.")
-    widget: AssignWidget | None = strawberry.field(default=None, description="The widget a form of it uses.")
-    requires: list[Requires] | None = strawberry.field(default=None, description="Its descriptor requirements.")
-    reference_unit: str | None = strawberry.field(default=None, description="For a QUANTITY: its reference unit.")
-    proposed_units: list[str] | None = strawberry.field(default=None, description="For a QUANTITY: the units offered.")
-    dimension: str | None = strawberry.field(default=None, description="For a QUANTITY: its dimensionality.")
-    persist: bool = strawberry.field(default=False, description="Whether a renderer remembers the last input on the device (never on a server).")
-
-
-@pydantic.type(models.ResolvedBlokLocalModel, description="A local as the blok's tree resolves it: its kind always set (inferred from its default, the task argument it is passed to or the control bound to it when the blok left it out; ANY when nothing tells).")
+@pydantic.type(models.ResolvedBlokLocalModel, description="A `<local>` of a blok's tree as it resolves: its kind always set (inferred from its default, the argument it borrows with `like`, the task argument it is passed to or the control bound to it when the blok left it out; ANY when nothing tells).")
 class ResolvedBlokLocal:
-    key: str = strawberry.field(description="Its name, read bare in the tree.")
+    node: str = strawberry.field(description="The id of its `<local>` node: a renderer keeps its value (one per item inside a foreach) under that node's runtime id.")
+    key: str = strawberry.field(description="Its name, read bare in its parent's subtree.")
     kind: enums.LocalKind = strawberry.field(description="What it holds, as a port's kind (what the controls bound to it write and what a task call may pass it to), or ANY: an untyped value. Always set: a kind the blok left out is inferred from its tree.")
     identifier: scalars.Identifier | None = strawberry.field(default=None, description="The structure (or model, enum) identifier of what it holds.")
     nullable: bool = strawberry.field(default=False, description="Whether it may hold null.")

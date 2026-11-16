@@ -71,7 +71,8 @@ UPDATE_BLOK = """
             description
             vocab
             catalogs
-            locals {
+            resolvedLocals {
+                node
                 key
                 kind
                 default

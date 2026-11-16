@@ -12,6 +12,7 @@ from kante.context import HttpContext
 
 from facade.models import Blok
 from facade.schema import schema
+from tests.registered import blok, gql, node
 
 CREATE = """
 mutation CreateBlok($input: CreateBlokInput!) {
@@ -26,7 +27,7 @@ query Bloks($filters: BlokFilter) {
 """
 
 ORIGIN = "github:arkitektio/bloks:main#layers"
-TREE = [{"id": "Html[0]", "component": "Html", "children": [{"id": "Html[0]/Slider[0]", "component": "Slider"}]}]
+TREE = [gql(blok("custom", "panel", node("Slider")))]
 
 
 async def _create(context: HttpContext, **fields) -> dict:

@@ -8490,24 +8490,43 @@
             },
             "name": "dataset_inspector",
             "vocab": 2,
-            "locals": [
-              {
-                "key": "bins",
-                "kind": "INT",
-                "default": 32,
-                "persist": false,
-                "nullable": false
-              }
-            ],
             "module": "orkestrator",
-            "queries": [],
             "catalogs": [],
             "components": [
               {
-                "id": "Html[0]",
+                "id": "Blok[0]",
+                "props": [
+                  {
+                    "key": "kind",
+                    "static_value": "agent"
+                  },
+                  {
+                    "key": "context",
+                    "static_value": "panel"
+                  }
+                ],
                 "children": [
                   {
-                    "id": "Html[0]/Resizable[0]",
+                    "id": "Blok[0]/local[0]",
+                    "props": [
+                      {
+                        "key": "name",
+                        "static_value": "bins",
+                        "declares_value": "bins"
+                      },
+                      {
+                        "key": "kind",
+                        "static_value": "INT"
+                      },
+                      {
+                        "key": "default",
+                        "static_value": 32
+                      }
+                    ],
+                    "component": "local"
+                  },
+                  {
+                    "id": "Blok[0]/Resizable[0]",
                     "props": [
                       {
                         "key": "direction",
@@ -8520,10 +8539,10 @@
                     ],
                     "children": [
                       {
-                        "id": "Html[0]/Resizable[0]/ResizablePanel[0]",
+                        "id": "Blok[0]/Resizable[0]/ResizablePanel[0]",
                         "children": [
                           {
-                            "id": "Html[0]/Resizable[0]/ResizablePanel[0]/StructureDisplay[0]",
+                            "id": "Blok[0]/Resizable[0]/ResizablePanel[0]/StructureDisplay[0]",
                             "props": [
                               {
                                 "key": "value",
@@ -8538,13 +8557,13 @@
                         "component": "ResizablePanel"
                       },
                       {
-                        "id": "Html[0]/Resizable[0]/ResizablePanel[1]",
+                        "id": "Blok[0]/Resizable[0]/ResizablePanel[1]",
                         "children": [
                           {
-                            "id": "Html[0]/Resizable[0]/ResizablePanel[1]/Card[0]",
+                            "id": "Blok[0]/Resizable[0]/ResizablePanel[1]/Card[0]",
                             "children": [
                               {
-                                "id": "Html[0]/Resizable[0]/ResizablePanel[1]/Card[0]/Slider[0]",
+                                "id": "Blok[0]/Resizable[0]/ResizablePanel[1]/Card[0]/Slider[0]",
                                 "props": [
                                   {
                                     "key": "bind",
@@ -8556,7 +8575,7 @@
                                 "component": "Slider"
                               },
                               {
-                                "id": "Html[0]/Resizable[0]/ResizablePanel[1]/Card[0]/Button[0]",
+                                "id": "Blok[0]/Resizable[0]/ResizablePanel[1]/Card[0]/Button[0]",
                                 "props": [
                                   {
                                     "key": "onClick",
@@ -8579,7 +8598,7 @@
                                 ],
                                 "children": [
                                   {
-                                    "id": "Html[0]/Resizable[0]/ResizablePanel[1]/Card[0]/Button[0]/#0",
+                                    "id": "Blok[0]/Resizable[0]/ResizablePanel[1]/Card[0]/Button[0]/#0",
                                     "props": [
                                       {
                                         "key": "value",
@@ -8592,7 +8611,7 @@
                                 "component": "Button"
                               },
                               {
-                                "id": "Html[0]/Resizable[0]/ResizablePanel[1]/Card[0]/Progress[0]",
+                                "id": "Blok[0]/Resizable[0]/ResizablePanel[1]/Card[0]/Progress[0]",
                                 "props": [
                                   {
                                     "key": "value",
@@ -8604,7 +8623,7 @@
                                 "component": "Progress"
                               },
                               {
-                                "id": "Html[0]/Resizable[0]/ResizablePanel[1]/Card[0]/Chart[0]",
+                                "id": "Blok[0]/Resizable[0]/ResizablePanel[1]/Card[0]/Chart[0]",
                                 "props": [
                                   {
                                     "key": "data",
@@ -8625,7 +8644,7 @@
                     "component": "Resizable"
                   }
                 ],
-                "component": "Html"
+                "component": "Blok"
               }
             ],
             "description": "A dataset next to the histogram of its intensities.",
@@ -8730,11 +8749,11 @@
                 "min_viable_instances": null
               }
             ],
-            "subscriptions": [],
             "resolved_locals": [
               {
                 "key": "bins",
                 "kind": "INT",
+                "node": "Blok[0]/local[0]",
                 "default": 32,
                 "persist": false,
                 "nullable": false
@@ -9151,22 +9170,41 @@
             },
             "name": "panel-<side>",
             "vocab": 2,
-            "locals": [
-              {
-                "key": "x",
-                "kind": "INT",
-                "default": 1,
-                "persist": false,
-                "nullable": false
-              }
-            ],
             "module": "orkestrator",
-            "queries": [],
             "catalogs": [],
             "components": [
               {
                 "id": "html",
+                "props": [
+                  {
+                    "key": "kind",
+                    "static_value": "agent"
+                  },
+                  {
+                    "key": "context",
+                    "static_value": "panel"
+                  }
+                ],
                 "children": [
+                  {
+                    "id": "x",
+                    "props": [
+                      {
+                        "key": "name",
+                        "static_value": "x",
+                        "declares_value": "x"
+                      },
+                      {
+                        "key": "kind",
+                        "static_value": "INT"
+                      },
+                      {
+                        "key": "default",
+                        "static_value": 1
+                      }
+                    ],
+                    "component": "local"
+                  },
                   {
                     "id": "root",
                     "props": [
@@ -9193,7 +9231,7 @@
                     "component": "Stack"
                   }
                 ],
-                "component": "Html"
+                "component": "Blok"
               }
             ],
             "description": "A panel",
@@ -9231,11 +9269,11 @@
                 "min_viable_instances": null
               }
             ],
-            "subscriptions": [],
             "resolved_locals": [
               {
                 "key": "x",
                 "kind": "INT",
+                "node": "x",
                 "default": 1,
                 "persist": false,
                 "nullable": false
@@ -9681,22 +9719,41 @@
             },
             "name": "panel-<side>",
             "vocab": 2,
-            "locals": [
-              {
-                "key": "x",
-                "kind": "INT",
-                "default": 1,
-                "persist": false,
-                "nullable": false
-              }
-            ],
             "module": "orkestrator",
-            "queries": [],
             "catalogs": [],
             "components": [
               {
                 "id": "html",
+                "props": [
+                  {
+                    "key": "kind",
+                    "static_value": "agent"
+                  },
+                  {
+                    "key": "context",
+                    "static_value": "panel"
+                  }
+                ],
                 "children": [
+                  {
+                    "id": "x",
+                    "props": [
+                      {
+                        "key": "name",
+                        "static_value": "x",
+                        "declares_value": "x"
+                      },
+                      {
+                        "key": "kind",
+                        "static_value": "INT"
+                      },
+                      {
+                        "key": "default",
+                        "static_value": 1
+                      }
+                    ],
+                    "component": "local"
+                  },
                   {
                     "id": "root",
                     "props": [
@@ -9723,7 +9780,7 @@
                     "component": "Stack"
                   }
                 ],
-                "component": "Html"
+                "component": "Blok"
               }
             ],
             "description": "A panel",
@@ -9749,11 +9806,11 @@
                 "min_viable_instances": null
               }
             ],
-            "subscriptions": [],
             "resolved_locals": [
               {
                 "key": "x",
                 "kind": "INT",
+                "node": "x",
                 "default": 1,
                 "persist": false,
                 "nullable": false
@@ -10196,22 +10253,41 @@
             },
             "name": "panel-<side>",
             "vocab": 2,
-            "locals": [
-              {
-                "key": "x",
-                "kind": "INT",
-                "default": 1,
-                "persist": false,
-                "nullable": false
-              }
-            ],
             "module": "orkestrator",
-            "queries": [],
             "catalogs": [],
             "components": [
               {
                 "id": "html",
+                "props": [
+                  {
+                    "key": "kind",
+                    "static_value": "agent"
+                  },
+                  {
+                    "key": "context",
+                    "static_value": "panel"
+                  }
+                ],
                 "children": [
+                  {
+                    "id": "x",
+                    "props": [
+                      {
+                        "key": "name",
+                        "static_value": "x",
+                        "declares_value": "x"
+                      },
+                      {
+                        "key": "kind",
+                        "static_value": "INT"
+                      },
+                      {
+                        "key": "default",
+                        "static_value": 1
+                      }
+                    ],
+                    "component": "local"
+                  },
                   {
                     "id": "root",
                     "props": [
@@ -10238,7 +10314,7 @@
                     "component": "Stack"
                   }
                 ],
-                "component": "Html"
+                "component": "Blok"
               }
             ],
             "description": "A panel",
@@ -10264,11 +10340,11 @@
                 "min_viable_instances": null
               }
             ],
-            "subscriptions": [],
             "resolved_locals": [
               {
                 "key": "x",
                 "kind": "INT",
+                "node": "x",
                 "default": 1,
                 "persist": false,
                 "nullable": false

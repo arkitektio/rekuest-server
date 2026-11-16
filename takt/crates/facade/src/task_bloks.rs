@@ -20,7 +20,9 @@
 use serde_json::{json, Map, Value};
 use sqlx::PgConnection;
 
-use rekuest_core::inputs::{ArgPortInputModel, BlokImplementationInputModel, ReturnPortInputModel};
+use rekuest_core::inputs::{
+    task_mount, ArgPortInputModel, BlokImplementationInputModel, ReturnPortInputModel,
+};
 use rekuest_core::values::validate_assignment_args;
 
 use crate::catalog_validation::{
@@ -28,7 +30,7 @@ use crate::catalog_validation::{
 };
 use crate::messages::TaskBlok;
 use crate::mutations::blok::sync_blok_dependencies;
-use crate::registration::{stored_components, stored_demo, stored_list};
+use crate::registration::{stored_components, stored_demo};
 
 /// Why a task's blok shows: the task holds until a person answers it, or carries on.
 pub const ASK: &str = "ASK";
@@ -119,6 +121,26 @@ async fn blok_from_source(
             json!({"key": SELF_DEPENDENCY, "description": "The agent that showed this blok."}),
         );
     }
+    // A blok declares what it owns in its tree (`<local>`, `<query>`, `<subscription>`).
+    let beside = [
+        (
+            "locals",
+            sent.locals.as_ref().is_some_and(|l| !l.is_empty()),
+        ),
+        (
+            "queries",
+            sent.queries.as_ref().is_some_and(|q| !q.is_empty()),
+        ),
+        (
+            "subscriptions",
+            sent.subscriptions.as_ref().is_some_and(|s| !s.is_empty()),
+        ),
+    ];
+    if let Some((field, _)) = beside.iter().find(|(_, sent)| *sent) {
+        return Err(refused(format!(
+            "The blok sends {field} beside its tree; declare them in it, as <local>, <query> and <subscription> children"
+        )));
+    }
     let name = sent
         .name
         .clone()
@@ -132,14 +154,12 @@ async fn blok_from_source(
         "returns": sent.returns.clone().unwrap_or_default(),
         "catalogs": sent.catalogs.clone().unwrap_or_default(),
         "module": sent.module,
-        "locals": sent.locals.clone().unwrap_or_default(),
         "demo": sent.demo,
-        "queries": sent.queries.clone().unwrap_or_default(),
-        "subscriptions": sent.subscriptions.clone().unwrap_or_default(),
     }))
     .map_err(|e| refused(format!("The blok is not a blok: {e}")))?;
+    let mount = task_mount(&role.to_lowercase(), &model.key);
     model
-        .validate_as(TASK_KIND)
+        .validate_as(&[TASK_KIND], &mount)
         .map_err(|e| refused(format!("The blok does not hold: {e}")))?;
 
     let catalog_name = model
@@ -153,21 +173,20 @@ async fn blok_from_source(
     let checked = validate_blok_against_catalog(
         &catalog,
         model.components.as_deref(),
-        &model.scope(TASK_KIND),
+        &model.scope(&[TASK_KIND], &mount),
     )
     .map_err(|e| {
         refused(format!(
             "The blok does not fit the catalog {catalog_name:?}: {e}"
         ))
     })?;
-    // Stored as sent, its locals as resolved beside (`resolved_locals`).
-    let diagnostics: Vec<Diagnostic> = checked.diagnostics;
+    // Stored as sent, its `<local>` declarations as resolved beside (`resolved_locals`).
+    let diagnostics: Vec<Diagnostic> = checked.diagnostics.clone();
 
     let id: i64 = sqlx::query_scalar(
         "INSERT INTO facade_blok (name, components, diagnostics, creator_id, organization_id, module_id,
-                                  context, args, returns, owner_task_id, vocab, catalogs, locals, resolved_locals,
-                                  demo, queries, subscriptions)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, '[]'::jsonb, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                                  context, args, returns, owner_task_id, vocab, catalogs, resolved_locals, demo)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, '[]'::jsonb, $8, $9, $10, $11, $12, $13)
          RETURNING id",
     )
     .bind(&model.key)
@@ -181,11 +200,8 @@ async fn blok_from_source(
     .bind(task)
     .bind(model.vocab as i16)
     .bind(serde_json::to_value(&model.catalogs).expect("blok catalogs serialize"))
-    .bind(stored_list(&model.locals))
-    .bind(stored_list(&checked.scope.locals))
+    .bind(checked.stored_locals())
     .bind(stored_demo(model.demo.as_ref()))
-    .bind(stored_list(&model.queries))
-    .bind(stored_list(&model.subscriptions))
     .fetch_one(&mut *conn)
     .await?;
     sync_blok_dependencies(conn, id, &model.dependencies, true).await?;

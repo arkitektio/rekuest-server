@@ -1,12 +1,12 @@
 """Check blok trees against the blok language, and port calls and port widgets against base@1.
 
 **Blok trees** (blok language v2) are held to the language alone, by ``rekuest_core.vocabulary``'s
-checker: what a tree reads and calls resolves against what its blok declares and its kind. The
-server reads no catalog. What a component takes, where it may sit, which catalog it is of and
-whether a frontend draws it is checked by the frontend that draws the blok, and by an author's
-tooling. The scope is resolved first (``rekuest_core.vocabulary.infer``): the tree is checked
-against its locals resolved, which are stored beside the locals as written
-(``resolved_locals``); a local only a control's ``bind`` would type stays ``ANY``, and
+checker: a tree is one ``<Blok kind context>`` that declares what it owns (``<local>``,
+``<query>``, ``<subscription>``), and what it reads and calls resolves against where it is
+mounted. The server reads no catalog. What a component takes, where it may sit, which catalog it
+is of and whether a frontend draws it is checked by the frontend that draws the blok, and by an
+author's tooling. Its locals are resolved first (``rekuest_core.vocabulary.infer``) and stored as
+``resolved_locals``; a local only a control's ``bind`` would type stays ``ANY``, and
 dependencies are never inferred. Every finding carries its vocabulary code (``roots.unknown``,
 ``palette.raw_colour``, ...): an error refuses the blok (``BlokError``), a warning is stored
 with it (``Blok.diagnostics``) and shown by the UI.
@@ -30,7 +30,7 @@ from rekuest_core.catalogs import BASE_CATALOG_ID, base_component_names, base_co
 from rekuest_core.inputs import models as rimodels
 from rekuest_core.inputs.models import iter_util_calls
 from rekuest_core.objects.models import DiagnosticModel
-from rekuest_core.vocabulary import BlokError, BlokScope, Finding, check_blok_tree, resolve_scope
+from rekuest_core.vocabulary import BlokError, BlokScope, Finding, check_blok_tree
 
 UNKNOWN_OPERATION = "unknown_operation"
 OPERATION_ARGUMENTS = "operation_arguments"
@@ -223,15 +223,6 @@ def _check_asset_prop(kind: enums.CatalogValueKind | None, prop: rimodels.Compon
 
 
 # --------------------------------------------------------------------------- blok trees (v2)
-
-
-def resolved_scope(module: models.Module | None, components: list[rimodels.ComponentNodeInputModel] | None, scope: BlokScope) -> BlokScope:
-    """``scope`` resolved against its one-root tree: each local's left-out kind (stored as the
-    blok's ``resolved_locals``). Unchanged without one root. ``module`` is not read: no catalog is."""
-    roots = components or []
-    if len(roots) != 1:
-        return scope
-    return resolve_scope(roots[0], scope)
 
 
 def diagnostic_of(finding: Finding) -> DiagnosticModel:

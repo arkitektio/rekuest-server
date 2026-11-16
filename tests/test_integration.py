@@ -85,7 +85,7 @@ class TestIntegration:
         """Test creating UI components workflow."""
 
         # Step 1: Create a blok
-        blok_result = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "Integration Test Blok", "vocab": 2, "source": "<Html><Card /></Html>"}})
+        blok_result = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "Integration Test Blok", "vocab": 2, "source": '<Blok kind="custom" context="panel"><Card /></Blok>'}})
 
         assert blok_result.data is not None
         blok_id = blok_result.data["createBlok"]["id"]

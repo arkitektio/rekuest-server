@@ -58,9 +58,17 @@ pub struct Kind {
     pub locals: bool,
     pub contexts: Vec<String>,
     pub description: String,
+    /// Per context, the row the kind reads there when it reads less (an action's logo reads
+    /// only `task`).
+    pub within: BTreeMap<String, Kind>,
 }
 
 impl Kind {
+    /// The row of this kind in `context`: its own, or the narrower one it has there.
+    pub fn drawn_in(&self, context: &str) -> &Kind {
+        self.within.get(context).unwrap_or(self)
+    }
+
     /// Its roots, sorted, joined for a message.
     pub fn roots_text(&self) -> String {
         let mut roots: Vec<&str> = self.roots.iter().map(String::as_str).collect();
@@ -74,6 +82,22 @@ impl Kind {
 pub struct Context {
     pub name: String,
     pub text: bool,
+}
+
+/// The one element every blok is (`vocabulary.json` `blok`): `<Blok kind context catalog chrome>`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlokElement {
+    /// `Blok`.
+    pub component: String,
+    pub attributes: Vec<String>,
+    /// The `context` attribute's spelling -> the context (`panel` -> `PANEL`).
+    pub contexts: BTreeMap<String, String>,
+    /// Per context, the components its one element may be (a panel holds anything).
+    pub content: BTreeMap<String, Vec<String>>,
+    /// The contexts `chrome` is said in.
+    pub chrome: HashSet<String>,
+    /// The components that declare what a blok owns and draw nothing (`local`, `query`, ...).
+    pub declarations: Vec<String>,
 }
 
 /// A field of a record (the task record, a query's record, `viewer`).
@@ -158,8 +182,8 @@ pub struct Vocabulary {
     pub agent_fields: Vec<String>,
     pub kinds: BTreeMap<String, Kind>,
     pub contexts: BTreeMap<String, Context>,
-    /// A blok's root component -> the blok context it names (`Html` -> `HTML`).
-    pub blok_roots: BTreeMap<String, String>,
+    /// The one element every blok is: `<Blok kind context catalog chrome>`.
+    pub blok: BlokElement,
     pub records: BTreeMap<String, Record>,
     pub idle_task: Map<String, Value>,
     pub functions: BTreeMap<String, Function>,
@@ -355,6 +379,32 @@ pub fn parse_vocabulary(raw: &Value) -> Loaded<Vocabulary> {
         if kind_roots.iter().any(|root| !data_roots.contains(root)) {
             return Err(format!("vocabulary.json: kind {name} reads unknown roots"));
         }
+        let mut within = BTreeMap::new();
+        if let Some(narrower) = entry.get("in") {
+            for (context, row) in object(Some(narrower), &format!("kinds.{name}.in"))? {
+                let where_ = format!("kinds.{name}.in.{context}");
+                let row = object(Some(row), &where_)?;
+                let roots: HashSet<String> = strings(row.get("roots"), &format!("{where_}.roots"))?
+                    .into_iter()
+                    .collect();
+                if !roots.is_subset(&kind_roots) {
+                    return Err(format!(
+                        "vocabulary.json: kind {name} reads more in {context} than it reads"
+                    ));
+                }
+                within.insert(
+                    context.clone(),
+                    Kind {
+                        name: name.clone(),
+                        roots,
+                        locals: flag(row, "locals"),
+                        contexts: vec![context.clone()],
+                        description: String::new(),
+                        within: BTreeMap::new(),
+                    },
+                );
+            }
+        }
         kinds.insert(
             name.clone(),
             Kind {
@@ -363,6 +413,7 @@ pub fn parse_vocabulary(raw: &Value) -> Loaded<Vocabulary> {
                 locals: flag(entry, "locals"),
                 contexts: strings(entry.get("contexts"), &format!("kinds.{name}.contexts"))?,
                 description: text(entry, "description"),
+                within,
             },
         );
     }
@@ -378,13 +429,50 @@ pub fn parse_vocabulary(raw: &Value) -> Loaded<Vocabulary> {
             },
         );
     }
-    let blok_roots_entry = object(top.get("blok_roots"), "blok_roots")?;
-    let mut blok_roots = BTreeMap::new();
-    for (root, context) in object(blok_roots_entry.get("roots"), "blok_roots.roots")? {
-        blok_roots.insert(
-            root.clone(),
-            string(Some(context), &format!("blok_roots.roots.{root}"))?,
+    let blok_entry = object(top.get("blok"), "blok")?;
+    let mut blok_contexts = BTreeMap::new();
+    for (spelled, context) in object(blok_entry.get("contexts"), "blok.contexts")? {
+        blok_contexts.insert(
+            spelled.clone(),
+            string(Some(context), &format!("blok.contexts.{spelled}"))?,
         );
+    }
+    let mut blok_content = BTreeMap::new();
+    for (context, components) in object(blok_entry.get("content"), "blok.content")? {
+        if context == "description" {
+            continue;
+        }
+        blok_content.insert(
+            context.clone(),
+            strings(Some(components), &format!("blok.content.{context}"))?,
+        );
+    }
+    let blok = BlokElement {
+        component: string(blok_entry.get("component"), "blok.component")?,
+        attributes: object(blok_entry.get("attributes"), "blok.attributes")?
+            .keys()
+            .cloned()
+            .collect(),
+        contexts: blok_contexts,
+        content: blok_content,
+        chrome: strings(blok_entry.get("chrome"), "blok.chrome")?
+            .into_iter()
+            .collect(),
+        declarations: object(blok_entry.get("declarations"), "blok.declarations")?
+            .keys()
+            .filter(|name| *name != "description")
+            .cloned()
+            .collect(),
+    };
+    if let Some(unknown) = blok
+        .contexts
+        .values()
+        .chain(blok.content.keys())
+        .find(|context| !contexts.contains_key(*context))
+    {
+        return Err(format!(
+            "vocabulary.json: blok names unknown context {unknown}"
+        ));
     }
 
     let mut records = BTreeMap::new();
@@ -500,7 +588,7 @@ pub fn parse_vocabulary(raw: &Value) -> Loaded<Vocabulary> {
             .collect(),
         kinds,
         contexts,
-        blok_roots,
+        blok,
         records,
         idle_task,
         functions,

@@ -17,13 +17,14 @@ from facade import models
 from facade.schema import schema
 from rekuest_core.inputs.models import DefinitionInputModel, ImplementationInputModel
 from tests.graphql_ops import BLOKS, CREATE_BLOK, DELETE_BLOK, FORK_BLOK, MATERIALIZE_BLOK, UPDATE_BLOK
-from tests.registered import create_implementation
+from tests.registered import blok, create_implementation, local, node
 
-SPACE = [{"id": "root", "component": "Space", "props": [{"key": "room", "static_value": "room:lab"}], "children": [{"id": "at", "component": "Placed", "props": [{"key": "dep", "static_value": "relay"}]}]}]
+SPACE = [blok("action", "scene", local("show_path", kind="BOOL", default=True, persist=True), node("Space", node("Placed", dep="relay"), room="room:lab"))]
+SHOW_PATH = {"node": "Blok[0]/local[0]", "key": "show_path", "kind": "BOOL", "default": True, "persist": True}
 
 ACTION = """
 query Action($id: ID!) {
-  action(id: $id) { bloks { context blok { id heldByAction provided context componentTree vocab locals { key kind default persist } } } }
+  action(id: $id) { bloks { context blok { id heldByAction provided context componentTree vocab resolvedLocals { node key kind default persist } } } }
 }
 """
 
@@ -71,7 +72,7 @@ def _seed(context: HttpContext) -> dict:
         declaration_hash="b" * 64,
         context="SCENE",
         components=SPACE,
-        locals=[{"key": "show_path", "kind": "BOOL", "default": True, "persist": True}],
+        resolved_locals=[SHOW_PATH],
         held_by_action=True,
     )
     models.ActionBlok.objects.create(action=workflow.action, context="SCENE", blok=blok)
@@ -88,7 +89,7 @@ async def _run(context: HttpContext, operation: str, variables: dict) -> dict:
 def test_bloks_are_not_part_of_the_actions_hash() -> None:
     """An action with bloks is the action without them: the same hash, pinned as it was before bloks existed."""
     plain = DefinitionInputModel.model_validate(_definition("workflow"))
-    with_bloks = DefinitionInputModel.model_validate({**_definition("workflow"), "bloks": [{"context": "SCENE", "vocab": 2, "components": SPACE}, {"context": "HTML", "vocab": 2, "source": "<Html><Card /></Html>"}]})
+    with_bloks = DefinitionInputModel.model_validate({**_definition("workflow"), "bloks": [{"context": "SCENE", "vocab": 2, "components": SPACE}, {"context": "PANEL", "vocab": 2, "source": '<Blok kind="action" context="panel"><Card /></Blok>'}]})
     assert with_bloks.unique_hash == plain.unique_hash == "fe79742535ec9df6b24d85b1d6b85f0e252173a39333bda6b3549e6bfe987932"
 
 
@@ -99,7 +100,7 @@ class TestActionBloks:
         env = await sync_to_async(_seed)(authenticated_context)
         (shown,) = (await _run(authenticated_context, ACTION, {"id": str(env["workflow"].action_id)}))["action"]["bloks"]
         assert shown["context"] == "SCENE"
-        assert shown["blok"] == {"id": str(env["blok"].id), "heldByAction": True, "provided": True, "context": "SCENE", "componentTree": SPACE, "vocab": 2, "locals": [{"key": "show_path", "kind": "BOOL", "default": True, "persist": True}]}
+        assert shown["blok"] == {"id": str(env["blok"].id), "heldByAction": True, "provided": True, "context": "SCENE", "componentTree": SPACE, "vocab": 2, "resolvedLocals": [SHOW_PATH]}
 
         listed = (await _run(authenticated_context, BLOKS, {}))["bloks"]
         assert "workflow:scene" not in [blok["name"] for blok in listed]
@@ -120,7 +121,7 @@ class TestActionBloks:
         refused = {
             "materializeBlok": (MATERIALIZE_BLOK, {"blok": blok, "agentMappings": [{"key": "relay", "agent": agent}]}),
             "materializeBlok for a message": (MATERIALIZE_BLOK, {"blok": blok, "scope": "MESSAGE", "agentMappings": []}),
-            "editBlok": (EDIT, {"blok": blok, "locals": [{"key": "show_path", "kind": "BOOL", "default": False}]}),
+            "editBlok": (EDIT, {"blok": blok, "catalogs": ["ui@1"]}),
             "forkBlok": (FORK_BLOK, {"id": blok, "name": "mine"}),
             "updateBlok": (UPDATE_BLOK, {"id": blok, "description": "mine now"}),
             "deleteBlok": (DELETE_BLOK, {"id": blok}),
@@ -136,8 +137,8 @@ class TestActionBloks:
         """A `Space`, a `Placed` and an `ask` belong to an action's own blok: the base catalog says so
         (`kinds`), and the frontend that draws a blok checks it. The server reads no catalog."""
         for name, context, source in (
-            ("spaced", "SCENE", '<Space room="lab" />'),
-            ("asking", "HTML", "<Html><Card><ask /></Card></Html>"),
+            ("spaced", "SCENE", '<Blok kind="custom" context="scene"><Space room="lab" /></Blok>'),
+            ("asking", "PANEL", '<Blok kind="custom" context="panel"><Card><ask /></Card></Blok>'),
         ):
             result = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": name, "vocab": 2, "context": context, "source": source}})
             assert not result.errors, result.errors
@@ -169,22 +170,22 @@ class TestActionBloks:
 
         def prepare() -> models.Blok:
             org, user = authenticated_context.request.organization, authenticated_context.request.user
-            blok = models.Blok.objects.create(
-                name="workflow:assign:html",
+            row = models.Blok.objects.create(
+                name="workflow:assign:panel",
                 creator=user,
                 organization=org,
                 module=models.Module.objects.get(name="orkestrator", organization=org),
                 app=env["flow_agent"].app,
                 declaration_hash="c" * 64,
-                context="HTML",
-                components=[{"id": "root", "component": "Html", "children": [{"id": "form", "component": "args"}]}],
+                context="PANEL",
+                components=[blok("assign", "panel", node("args"))],
                 held_by_action=True,
             )
-            models.ActionBlok.objects.create(action=env["workflow"].action, context="HTML", phase="ASSIGN", blok=blok)
-            return blok
+            models.ActionBlok.objects.create(action=env["workflow"].action, context="PANEL", phase="ASSIGN", blok=row)
+            return row
 
         prepared = await sync_to_async(prepare)()
         query = "query($id: ID!) { action(id: $id) { bloks { phase context blok { id } } assignBloks { phase context blok { id } } } }"
         action = (await _run(authenticated_context, query, {"id": str(env["workflow"].action_id)}))["action"]
         assert action["bloks"] == [{"phase": "RUN", "context": "SCENE", "blok": {"id": str(env["blok"].id)}}]
-        assert action["assignBloks"] == [{"phase": "ASSIGN", "context": "HTML", "blok": {"id": str(prepared.id)}}]
+        assert action["assignBloks"] == [{"phase": "ASSIGN", "context": "PANEL", "blok": {"id": str(prepared.id)}}]

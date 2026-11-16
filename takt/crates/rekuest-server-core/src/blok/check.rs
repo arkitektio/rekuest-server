@@ -2,12 +2,23 @@
 //! it (the Rust twin of arkitekt-spec's `declare/blok/validate.py` and `walk.py`, held to the
 //! `checked` cases of `tests/fixtures/bsx_v2.json`).
 //!
-//! Every rule is a row of the vocabulary's diagnostic table: roots and the per-kind matrix,
-//! agents' state, tasks and assets, the callback rule (one task call or one effect, a query
-//! effect naming a declared query by a literal), locals as ports (`bind_kinds`, `arg_kinds`),
-//! records, the theme. A finding
-//! is an error (the blok is refused) or a warning (it is reported). The walk's scoping:
+//! Every rule is a row of the vocabulary's diagnostic table: the `<Blok>` (its kind drawn in its
+//! context, a scene's or a logo's one element, `chrome` a panel's or a scene's, the kind the
+//! mount takes), the declarations (`<local>` first among its parent's children and shadowing
+//! nothing, `<query>`/`<subscription>` children of the `<Blok>`, each named once), roots and the
+//! per-kind matrix, agents' state, tasks and assets, the callback rule (one task call or one
+//! effect, a query effect naming a declared query by a literal), locals as ports (`bind_kinds`,
+//! `arg_kinds`), records, the theme. A finding is an error (the blok is refused) or a warning
+//! (it is reported).
+//!
+//! Mounted or not: a [`BlokScope`] without dependencies is a blok checked on its own; what its
+//! mount provides (`deps.<key>`, `Placed`/`Route` keys, a local's `like`) is then taken as
+//! written. Every server path mounts.
+//!
+//! The walk's scoping:
 //! - `into` names are in scope in the whole tree, each written by one call site;
+//! - a `<local>` is in scope in its parent's subtree: every local of a node is bound before any
+//!   of its children is walked;
 //! - a `foreach`'s `let` is in scope in its children and its own `key`, not its `items`;
 //! - `event` only in a callback prop, `error` only inside the `<error>` slot of a `<suspense>`.
 
@@ -17,15 +28,20 @@ use std::sync::OnceLock;
 use regex::Regex;
 use serde_json::Value;
 
+use super::declared::{
+    blok_header, content, declaration_problem, declared_queries, declared_subscriptions,
+    header_problem, iter_with_parents, local_declared, local_name, local_problem, BlokHeader,
+    LIKE_PROP, LOCAL_COMPONENT, NAME_PROP, QUERY_COMPONENT, SUBSCRIPTION_COMPONENT, VAR_COMPONENT,
+};
 use super::expr::s;
-use super::infer::{resolve_scope, ArgPorts};
+use super::infer::{resolve_locals, ArgPorts, ResolvedLocal};
 use super::vocabulary::{vocabulary, Finding, Kind, RecordField, Vocabulary};
 use crate::enums::PortKind;
 use crate::inputs::{
-    ActionArgumentInputModel, AgentDependencyInputModel, AgentProbeInputModel, ArgPortInputModel,
-    BlokDemoInputModel, BlokLocalInputModel, BlokQueryInputModel, BlokSubscriptionInputModel,
-    ComponentNodeInputModel, ComponentPropInputModel, PortMatchInputModel,
-    StateDependencyInputModel, UtilCallInputModel,
+    is_field_path, is_name, operation_keyword, ActionArgumentInputModel, AgentDependencyInputModel,
+    AgentProbeInputModel, ArgPortInputModel, BlokDemoInputModel, BlokLocalInputModel,
+    BlokQueryInputModel, BlokSubscriptionInputModel, ComponentNodeInputModel,
+    ComponentPropInputModel, PortMatchInputModel, StateDependencyInputModel, UtilCallInputModel,
 };
 use crate::pyjson::repr;
 
@@ -40,7 +56,6 @@ const GIVEN_FIELD: &str = "given";
 /// The one field of an agent that is no string: whether it is connected right now.
 const CONNECTED_FIELD: &str = "connected";
 const ASK_COMPONENT: &str = "ask";
-const CHROME_PROP: &str = "chrome";
 const CHROME_NONE: &str = "none";
 /// The language's elements whose children do not always show: a host part inside one still claims its slot.
 const CONDITIONAL_COMPONENTS: [&str; 9] = [
@@ -52,8 +67,8 @@ const START_EFFECT: &str = "assign.start";
 const TOAST_COMPONENT: &str = "Toast";
 const TOAST_TASK_PROP: &str = "task";
 const CLASS_NAME: &str = "className";
-const ACTION_LOGO: &str = "ACTION_LOGO";
 const LOGO: &str = "LOGO";
+const TEXT_NODE: &str = "#text";
 pub const FOREACH_COMPONENT: &str = "foreach";
 pub const FOREACH_LET_PROP: &str = "let";
 pub const FOREACH_ITEMS_PROP: &str = "items";
@@ -97,50 +112,57 @@ pub fn query_verb(operation: &str) -> Option<&'static str> {
         .map(|(verb, _)| *verb)
 }
 
-/// What a blok declares beside its tree: what its reads and calls resolve against.
-#[derive(Debug, Clone)]
+/// Where a blok is mounted: what its mount provides, which its reads and calls resolve against.
+/// The default is a blok checked on its own, mounted nowhere.
+#[derive(Debug, Clone, Default)]
 pub struct BlokScope {
-    /// `agent`, `custom`, `task`, `action` or `action_logo` (the root matrix).
-    pub kind: String,
-    /// `HTML`, `SCENE`, `LOGO` or `ACTION_LOGO`.
-    pub context: String,
-    /// What `self` and `deps.<key>` resolve against; a `self` entry types `self`.
-    pub dependencies: Vec<AgentDependencyInputModel>,
-    pub locals: Vec<BlokLocalInputModel>,
-    pub queries: Vec<BlokQueryInputModel>,
-    pub subscriptions: Vec<BlokSubscriptionInputModel>,
+    /// The kinds the mount takes (an agent's blok: agent; an action's: action or assign); empty
+    /// takes any.
+    pub kinds: Vec<String>,
+    /// What the mount is, for a message (`an action's run bloks`).
+    pub mount: String,
+    /// What `self` and `deps.<key>` resolve against; a `self` entry types `self`. None: not
+    /// mounted, every agent (and a `Placed` key, a local's `like`) taken as written.
+    pub dependencies: Option<Vec<AgentDependencyInputModel>>,
     /// The keys `args.<key>` may read; none reads any.
     pub args: Option<Vec<String>>,
     pub demo: Option<BlokDemoInputModel>,
     /// The assets `self.assets.<name>` may name; none names any.
     pub assets: Option<HashSet<String>>,
-}
-
-impl Default for BlokScope {
-    fn default() -> Self {
-        BlokScope {
-            kind: "agent".into(),
-            context: "HTML".into(),
-            dependencies: vec![],
-            locals: vec![],
-            queries: vec![],
-            subscriptions: vec![],
-            args: None,
-            demo: None,
-            assets: None,
-        }
-    }
+    /// The full arg ports of the actions this side knows (an agent's own): what a local passed
+    /// to one whole, or borrowing one (`like`), takes its port from.
+    pub arg_ports: ArgPorts,
 }
 
 impl BlokScope {
-    /// The context its components are drawn in: an action logo's is a logo's.
-    pub fn drawn_in(&self) -> &str {
-        if self.context == ACTION_LOGO {
-            LOGO
-        } else {
-            &self.context
+    /// Mounted where `kinds` go, with `dependencies` (none of them is still a mount).
+    pub fn mounted(
+        kinds: &[&str],
+        mount: impl Into<String>,
+        dependencies: Vec<AgentDependencyInputModel>,
+    ) -> BlokScope {
+        BlokScope {
+            kinds: kinds.iter().map(|kind| (*kind).to_owned()).collect(),
+            mount: mount.into(),
+            dependencies: Some(dependencies),
+            ..BlokScope::default()
         }
     }
+
+    /// Whether the blok is checked where it is mounted (its dependencies are known).
+    pub fn is_mounted(&self) -> bool {
+        self.dependencies.is_some()
+    }
+}
+
+/// What a name in scope is bound to: a value of a known shape, or a `<local>`.
+#[derive(Debug, Clone)]
+enum Bound {
+    Shape(Shape),
+    Local {
+        node: String,
+        local: Box<BlokLocalInputModel>,
+    },
 }
 
 // --------------------------------------------------------------------------- shapes
@@ -344,52 +366,12 @@ pub(crate) fn foreach_let(node: &ComponentNodeInputModel) -> Option<&str> {
         .find_map(|p| p.declares_value.as_deref().filter(|v| !v.is_empty()))
 }
 
-fn iter_nodes(node: &ComponentNodeInputModel) -> Vec<&ComponentNodeInputModel> {
+pub(crate) fn iter_nodes(node: &ComponentNodeInputModel) -> Vec<&ComponentNodeInputModel> {
     let mut nodes = vec![node];
     for child in node.children.iter().flatten() {
         nodes.extend(iter_nodes(child));
     }
     nodes
-}
-
-/// Every path a list of arguments reads (a query's variables), depth first.
-pub(crate) fn argument_paths(arguments: &[ActionArgumentInputModel]) -> Vec<String> {
-    fn visit(argument: &ActionArgumentInputModel, paths: &mut Vec<String>) {
-        if let Some(path) = &argument.value_path {
-            paths.push(path.clone());
-        }
-        for nested in argument
-            .util_call
-            .as_ref()
-            .and_then(|c| c.arguments.as_ref())
-            .into_iter()
-            .flatten()
-        {
-            visit(nested, paths);
-        }
-        for nested in argument
-            .agent_call
-            .as_ref()
-            .and_then(|c| c.arguments.as_ref())
-            .into_iter()
-            .flatten()
-        {
-            visit(nested, paths);
-        }
-        for nested in argument
-            .value_list
-            .iter()
-            .flatten()
-            .chain(argument.value_dict.iter().flatten())
-        {
-            visit(nested, paths);
-        }
-    }
-    let mut paths = vec![];
-    for argument in arguments {
-        visit(argument, &mut paths);
-    }
-    paths
 }
 
 fn article(kind: &str) -> &'static str {
@@ -485,17 +467,36 @@ fn colour_pattern() -> &'static Regex {
     })
 }
 
-type Scope = HashMap<String, Shape>;
+type Scope = HashMap<String, Bound>;
+
+/// A list of named declarations as a Python dict built from it reads: each name where it first
+/// came, holding the last one of that name.
+fn by_name<T: Clone>(items: Vec<T>, name: impl Fn(&T) -> &str) -> Vec<(String, T)> {
+    let mut found: Vec<(String, T)> = vec![];
+    for item in items {
+        let key = name(&item).to_owned();
+        match found.iter_mut().find(|(k, _)| *k == key) {
+            Some((_, slot)) => *slot = item,
+            None => found.push((key, item)),
+        }
+    }
+    found
+}
 
 struct Checker<'a> {
     scope: &'a BlokScope,
+    header: BlokHeader,
     vocabulary: &'static Vocabulary,
+    /// The row of the blok's kind in its context.
     kind: Kind,
     findings: Vec<Finding>,
+    mounted: bool,
     dependencies: HashMap<&'a str, &'a AgentDependencyInputModel>,
-    locals: HashMap<&'a str, &'a BlokLocalInputModel>,
-    queries: HashMap<&'a str, &'a BlokQueryInputModel>,
-    subscriptions: HashSet<&'a str>,
+    /// Per `<local>` node id, its port with its kind resolved, in tree order.
+    resolved: Vec<(String, ResolvedLocal)>,
+    queries: Vec<(String, BlokQueryInputModel)>,
+    subscriptions: Vec<(String, BlokSubscriptionInputModel)>,
+    /// The node ids of the locals a control binds.
     bound_locals: HashSet<String>,
     into: HashSet<String>,
     /// Whether the tree places an `<ask>`.
@@ -509,67 +510,105 @@ impl<'a> Checker<'a> {
         self.findings.push(Finding::of(code, at, fields));
     }
 
+    fn kind_name(&self) -> &str {
+        &self.header.kind
+    }
+
     fn not_in_kind(&mut self, at: &str, path: &str, root: &str) {
         let fields = [
             ("path", s(path)),
-            ("n", s(article(&self.scope.kind))),
-            ("kind", s(self.scope.kind.clone())),
+            ("n", s(article(self.kind_name()))),
+            ("kind", s(self.kind_name())),
             ("root", s(root)),
             ("roots", s(self.kind.roots_text())),
         ];
         self.add("roots.not_in_kind", Some(at), &fields);
     }
 
+    fn query(&self, name: &str) -> Option<&BlokQueryInputModel> {
+        self.queries
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, query)| query)
+    }
+
+    fn resolved_local(&self, node: &str) -> Option<&ResolvedLocal> {
+        self.resolved
+            .iter()
+            .find(|(id, _)| id == node)
+            .map(|(_, resolved)| resolved)
+    }
+
     // -- declarations
 
     fn check_declarations(&mut self, tree: &'a ComponentNodeInputModel) {
         let vocabulary = self.vocabulary;
-        let scope = self.scope;
-        let wrong_logo = (scope.context == ACTION_LOGO) != (scope.kind == "action_logo");
-        if wrong_logo || !self.kind.contexts.iter().any(|c| c == scope.drawn_in()) {
+        let kind = self.kind_name().to_owned();
+        let row = vocabulary.kind(&kind).expect("the header names a kind");
+        let context = self.header.context.clone();
+        let spelled = context.to_lowercase();
+        if !row.contexts.contains(&context) {
+            let contexts: Vec<String> = row.contexts.iter().map(|c| c.to_lowercase()).collect();
             let fields = [
-                ("n", s(article(&scope.kind))),
-                ("kind", s(scope.kind.clone())),
-                ("contexts", s(self.kind.contexts.join(", "))),
-                ("context", s(scope.context.clone())),
+                ("n", s(article(&kind))),
+                ("kind", s(kind.clone())),
+                ("contexts", s(contexts.join(", "))),
+                ("context", s(spelled.clone())),
             ];
-            self.add("context.kind", None, &fields);
+            self.add("context.kind", Some(&tree.id), &fields);
         }
-        // A context may have several roots (a SCENE blok is a <Scene> or a <Space>).
-        let roots: Vec<&str> = vocabulary
-            .blok_roots
-            .iter()
-            .filter(|(_, context)| **context == scope.context)
-            .map(|(root, _)| root.as_str())
-            .collect();
-        if !roots.is_empty() && !roots.contains(&tree.component.as_str()) {
+        if !self.scope.kinds.is_empty() && !self.scope.kinds.contains(&kind) {
+            let mount = if self.scope.mount.is_empty() {
+                "here".to_owned()
+            } else {
+                self.scope.mount.clone()
+            };
             let fields = [
-                ("context", s(scope.context.to_lowercase())),
-                ("root", s(roots.join("> or <"))),
-                ("component", s(tree.component.clone())),
+                ("n", s(article(&kind))),
+                ("kind", s(kind.clone())),
+                ("m", s(article(&self.scope.kinds[0]))),
+                ("expected", s(self.scope.kinds.join(" or "))),
+                ("where", s(mount)),
             ];
-            self.add("context.root", Some(&tree.id), &fields);
+            self.add("kind.placement", Some(&tree.id), &fields);
         }
-        if !scope.locals.is_empty() && !self.kind.locals {
-            let fields = [
-                ("path", s("locals")),
-                ("n", s(article(&scope.kind))),
-                ("kind", s(scope.kind.clone())),
-                ("root", s("locals")),
-                ("roots", s(self.kind.roots_text())),
-            ];
-            self.add("roots.not_in_kind", None, &fields);
+        if self.header.chrome.is_some() && !vocabulary.blok.chrome.contains(&context) {
+            self.add(
+                "chrome.context",
+                Some(&tree.id),
+                &[("context", s(spelled.clone()))],
+            );
         }
-        for local in &scope.locals {
-            if vocabulary.is_reserved(local.key()) {
-                self.add(
-                    "roots.reserved",
-                    Some(&format!("locals.{}", local.key())),
-                    &[("name", s(local.key()))],
-                );
+        if let Some(allowed) = vocabulary.blok.content.get(&context) {
+            let drawn = content(tree);
+            if drawn.len() != 1 || !allowed.contains(&drawn[0].component) {
+                let found: Vec<String> = drawn
+                    .iter()
+                    .map(|node| {
+                        if node.component == TEXT_NODE {
+                            "text".to_owned()
+                        } else {
+                            format!("<{}>", node.component)
+                        }
+                    })
+                    .collect();
+                let found = if found.is_empty() {
+                    "nothing".to_owned()
+                } else {
+                    found.join(", ")
+                };
+                let expected: Vec<String> =
+                    allowed.iter().map(|name| format!("one <{name}>")).collect();
+                let fields = [
+                    ("context", s(spelled.clone())),
+                    ("expected", s(expected.join(" or "))),
+                    ("found", s(found)),
+                ];
+                self.add("blok.content", Some(&tree.id), &fields);
             }
-            self.check_local_default(local);
         }
+        self.check_local_positions(tree);
+        self.check_queries(tree);
         for (name, sites) in into_sites(tree) {
             self.into.insert(name.clone());
             if vocabulary.is_reserved(&name) {
@@ -578,14 +617,6 @@ impl<'a> Checker<'a> {
                     Some(&sites[0].1),
                     &[("name", s(name.clone()))],
                 );
-            }
-            if self.locals.contains_key(name.as_str()) {
-                let fields = [
-                    ("name", s(name.clone())),
-                    ("first", s("a local")),
-                    ("second", s(format!("the record of {}", sites[0].1))),
-                ];
-                self.add("roots.shadow", Some(&sites[0].1), &fields);
             }
             if sites.len() > 1 {
                 let fields = [
@@ -596,60 +627,285 @@ impl<'a> Checker<'a> {
                 self.add("into.twice", Some(&sites[1].1), &fields);
             }
         }
-        for node in iter_nodes(tree) {
-            let Some(let_) = foreach_let(node) else {
-                continue;
-            };
-            if vocabulary.is_reserved(let_) {
-                self.add("roots.reserved", Some(&node.id), &[("name", s(let_))]);
-            } else if self.locals.contains_key(let_) || self.into.contains(let_) {
-                let first = if self.locals.contains_key(let_) {
-                    "a local"
-                } else {
-                    "a call's record"
-                };
+    }
+
+    /// Each `<local>` reads, comes first among its parent's children, inside an element that
+    /// takes children, in a kind that has locals; a persisted one inside a keyless foreach is a
+    /// warning.
+    fn check_local_positions(&mut self, tree: &ComponentNodeInputModel) {
+        for (node, ancestors) in iter_with_parents(tree) {
+            if node.component == VAR_COMPONENT
+                && !ancestors.last().is_some_and(|parent| {
+                    parent.component == QUERY_COMPONENT
+                        || parent.component == SUBSCRIPTION_COMPONENT
+                })
+            {
                 let fields = [
-                    ("name", s(let_)),
-                    ("first", s(first)),
-                    ("second", s(format!("the let of <foreach> ({})", node.id))),
+                    ("component", s("var")),
+                    ("problem", s("belongs inside a <query> or <subscription>")),
                 ];
-                self.add("roots.shadow", Some(&node.id), &fields);
+                self.add("query.declaration", Some(&node.id), &fields);
             }
-        }
-        let empty = Scope::new();
-        for query in &scope.queries {
-            for path in argument_paths(&query.variables) {
-                self.resolve(&path, None, &empty, &format!("query {}", query.key));
+            if node.component != LOCAL_COMPONENT {
+                continue;
             }
-        }
-        for subscription in &scope.subscriptions {
-            for path in argument_paths(&subscription.variables) {
-                self.resolve(
-                    &path,
-                    None,
-                    &empty,
-                    &format!("subscription {}", subscription.key),
+            let name = local_name(node).unwrap_or("?").to_owned();
+            if let Some(problem) = local_problem(node) {
+                self.findings.push(problem);
+                continue;
+            }
+            if !self.kind.locals {
+                let path = format!("<local name={}>", repr(&s(name.clone())));
+                self.not_in_kind(&node.id, &path, "locals");
+            }
+            if self.vocabulary.is_reserved(&name) {
+                self.add(
+                    "roots.reserved",
+                    Some(&node.id),
+                    &[("name", s(name.clone()))],
                 );
             }
-            if let Some(history) = &subscription.history {
-                if !self.queries.contains_key(history.as_str()) {
-                    let fields = [
-                        ("name", s(subscription.key.clone())),
-                        ("history", s(history.clone())),
-                    ];
-                    self.add(
-                        "query.history",
-                        Some(&format!("subscriptions.{}", subscription.key)),
-                        &fields,
-                    );
+            let Some(parent) = ancestors.last() else {
+                let fields = [
+                    ("name", s(name.clone())),
+                    ("problem", s("is a blok's root; a blok is a <Blok>")),
+                ];
+                self.add("local.position", Some(&node.id), &fields);
+                continue;
+            };
+            let siblings = parent.children.as_deref().unwrap_or_default();
+            let other = siblings
+                .iter()
+                .take_while(|sibling| !std::ptr::eq(*sibling, node))
+                .find(|sibling| sibling.component != LOCAL_COMPONENT);
+            if let Some(other) = other {
+                let shown = if other.component == TEXT_NODE {
+                    "text".to_owned()
+                } else {
+                    format!("<{}>", other.component)
+                };
+                let problem = format!(
+                    "comes after {shown} ({}); locals come first among their parent's children",
+                    other.id
+                );
+                self.add(
+                    "local.position",
+                    Some(&node.id),
+                    &[("name", s(name.clone())), ("problem", s(problem))],
+                );
+            }
+            if [
+                QUERY_COMPONENT,
+                SUBSCRIPTION_COMPONENT,
+                LOCAL_COMPONENT,
+                VAR_COMPONENT,
+            ]
+            .contains(&parent.component.as_str())
+            {
+                let problem = format!(
+                    "is inside <{}>, which declares, and draws nothing",
+                    parent.component
+                );
+                self.add(
+                    "local.position",
+                    Some(&node.id),
+                    &[("name", s(name.clone())), ("problem", s(problem))],
+                );
+            }
+            // Whether the parent takes children at all is its catalog's to say: none is read here.
+            let Some(resolved) = self.resolved_local(&node.id).cloned() else {
+                continue;
+            };
+            if let Some(problem) = &resolved.like_problem {
+                let like = node
+                    .props
+                    .iter()
+                    .flatten()
+                    .find(|prop| prop.key == LIKE_PROP)
+                    .and_then(|prop| prop.static_value.clone())
+                    .unwrap_or(Value::Null);
+                let fields = [
+                    ("name", s(name.clone())),
+                    ("like", like),
+                    ("problem", s(problem.clone())),
+                ];
+                self.add("local.like", Some(&node.id), &fields);
+            }
+            self.check_local_default(&node.id, &resolved.local);
+            if resolved.local.persist {
+                let loop_ = ancestors
+                    .iter()
+                    .rev()
+                    .find(|ancestor| ancestor.component == FOREACH_COMPONENT);
+                if loop_.is_some_and(|loop_| {
+                    !loop_
+                        .props
+                        .iter()
+                        .flatten()
+                        .any(|p| p.key == FOREACH_KEY_PROP)
+                }) {
+                    self.add("local.persist_id", Some(&node.id), &[("name", s(name))]);
                 }
+            }
+        }
+    }
+
+    /// Queries and subscriptions are children of the `<Blok>`, each declared once and readable.
+    fn check_queries(&mut self, tree: &ComponentNodeInputModel) {
+        let mut first: Vec<((String, String), String)> = vec![];
+        for (node, ancestors) in iter_with_parents(tree) {
+            if node.component != QUERY_COMPONENT && node.component != SUBSCRIPTION_COMPONENT {
+                continue;
+            }
+            let name = node
+                .props
+                .iter()
+                .flatten()
+                .find(|prop| {
+                    prop.key == NAME_PROP
+                        && prop.static_value.as_ref().is_some_and(Value::is_string)
+                })
+                .and_then(|prop| prop.static_value.as_ref())
+                .and_then(Value::as_str)
+                .unwrap_or("?")
+                .to_owned();
+            if ancestors.len() != 1 {
+                let at = ancestors
+                    .last()
+                    .map_or_else(|| "the root".to_owned(), |parent| parent.id.clone());
+                let fields = [
+                    ("component", s(node.component.clone())),
+                    ("name", s(name.clone())),
+                    ("at", s(at)),
+                ];
+                self.add("query.position", Some(&node.id), &fields);
+            }
+            if let Some(problem) = declaration_problem(node) {
+                self.findings.push(problem);
+                continue;
+            }
+            let key = (node.component.clone(), name.clone());
+            match first.iter().find(|(k, _)| *k == key) {
+                Some((_, seen)) => {
+                    let fields = [
+                        ("what", s(node.component.clone())),
+                        ("name", s(name)),
+                        ("first", s(seen.clone())),
+                        ("second", s(node.id.clone())),
+                    ];
+                    self.add("query.duplicate", Some(&node.id), &fields);
+                }
+                None => first.push((key, node.id.clone())),
+            }
+        }
+        self.queries = by_name(declared_queries(tree), |query| query.key.as_str());
+        self.subscriptions = by_name(declared_subscriptions(tree), |subscription| {
+            subscription.key.as_str()
+        });
+        let declared: Vec<(&str, String, String)> = self
+            .queries
+            .iter()
+            .map(|(_, query)| ("query", query.key.clone(), query.document.clone()))
+            .chain(self.subscriptions.iter().map(|(_, subscription)| {
+                (
+                    "subscription",
+                    subscription.key.clone(),
+                    subscription.document.clone(),
+                )
+            }))
+            .collect();
+        for (what, key, document) in declared {
+            let roots = if what == "query" {
+                "queries"
+            } else {
+                "subscriptions"
+            };
+            let at = format!("{roots}.{key}");
+            if !is_name(&key) {
+                self.add(
+                    "manifest.name",
+                    Some(&at),
+                    &[("what", s(what)), ("key", s(key.clone()))],
+                );
+            }
+            if self.vocabulary.is_reserved(&key) {
+                self.add("roots.reserved", Some(&at), &[("name", s(key.clone()))]);
+            }
+            let operation = operation_keyword(&document);
+            if operation == "mutation" {
+                let fields = [
+                    ("kind", s(what)),
+                    ("name", s(key.clone())),
+                    (
+                        "problem",
+                        s("is a mutation: a blok reads, and writes only through a task"),
+                    ),
+                ];
+                self.add("query.read_only", Some(&at), &fields);
+            } else if operation != what {
+                let operation = if operation.is_empty() {
+                    "document without an operation".to_owned()
+                } else {
+                    operation
+                };
+                let fields = [
+                    ("kind", s(what)),
+                    ("name", s(key.clone())),
+                    ("operation", s(operation)),
+                ];
+                self.add("query.kind", Some(&at), &fields);
+            }
+        }
+        let more: Vec<(String, String)> = self
+            .queries
+            .iter()
+            .filter_map(|(_, query)| query.more.clone().map(|more| (query.key.clone(), more)))
+            .collect();
+        for (key, more) in more {
+            if !is_field_path(&more) {
+                let fields = [
+                    ("name", s(key.clone())),
+                    ("more", s(more)),
+                    (
+                        "problem",
+                        s("is not a field path into its data (positions, images.items)"),
+                    ),
+                ];
+                self.add("query.more", Some(&format!("queries.{key}")), &fields);
+            }
+        }
+        if self.header.kind == "action"
+            && self.header.context == LOGO
+            && !self.dependencies.is_empty()
+        {
+            let at = self.header.node.clone();
+            self.add("manifest.action_logo", Some(&at), &[]);
+        }
+        let histories: Vec<(String, String)> = self
+            .subscriptions
+            .iter()
+            .filter_map(|(_, subscription)| {
+                subscription
+                    .history
+                    .clone()
+                    .map(|history| (subscription.key.clone(), history))
+            })
+            .collect();
+        for (key, history) in histories {
+            if self.query(&history).is_none() {
+                let fields = [("name", s(key.clone())), ("history", s(history))];
+                self.add(
+                    "query.history",
+                    Some(&format!("subscriptions.{key}")),
+                    &fields,
+                );
             }
         }
     }
 
     /// A local's default fits its port: a number for a number, a list for a list, one of its
     /// choices.
-    fn check_local_default(&mut self, local: &BlokLocalInputModel) {
+    fn check_local_default(&mut self, node_id: &str, local: &BlokLocalInputModel) {
         let Some(port) = local.arg_port() else {
             return;
         };
@@ -676,20 +932,15 @@ impl<'a> Checker<'a> {
                 ("default", default.clone()),
                 ("kind", s(kind)),
             ];
-            self.add(
-                "local.default",
-                Some(&format!("locals.{}", local.key())),
-                &fields,
-            );
+            self.add("local.default", Some(node_id), &fields);
         }
     }
 
     /// The port a path into a local names (the local, or a field of it), or none when its
     /// shape does not say (an ANY local).
-    fn local_port(&self, path: &str) -> Option<&'a ArgPortInputModel> {
-        let mut parts = path.split('.');
-        let mut port: &ArgPortInputModel = self.locals.get(parts.next()?)?.arg_port()?;
-        for part in parts {
+    fn local_port<'l>(local: &'l BlokLocalInputModel, path: &str) -> Option<&'l ArgPortInputModel> {
+        let mut port: &ArgPortInputModel = local.arg_port()?;
+        for part in path.split('.').skip(1) {
             let children = port.children.as_deref().unwrap_or_default();
             let child = children.iter().find(|c| c.key == part).or(match children {
                 [only] if only.key == ITEM => Some(only),
@@ -701,14 +952,14 @@ impl<'a> Checker<'a> {
     }
 
     fn finish(&mut self) {
-        for local in &self.scope.locals {
-            if local.persist && !self.bound_locals.contains(local.key()) {
-                self.add(
-                    "local.unused_persist",
-                    Some(&format!("locals.{}", local.key())),
-                    &[("name", s(local.key()))],
-                );
-            }
+        let unused: Vec<(String, String)> = self
+            .resolved
+            .iter()
+            .filter(|(node, resolved)| resolved.local.persist && !self.bound_locals.contains(node))
+            .map(|(node, resolved)| (node.clone(), resolved.local.key().to_owned()))
+            .collect();
+        for (node, name) in unused {
+            self.add("local.unused_persist", Some(&node), &[("name", s(name))]);
         }
         if let Some(root) = self.chromeless.clone() {
             if self.kind.roots.contains("task") && !self.asks {
@@ -726,7 +977,7 @@ impl<'a> Checker<'a> {
         ancestors: &mut Vec<&'a ComponentNodeInputModel>,
         in_error: bool,
     ) {
-        self.visit_component(node, ancestors);
+        self.visit_component(node, ancestors, scope);
         let mut inner = scope.clone();
         let let_ = foreach_let(node);
         if let Some(let_) = let_ {
@@ -742,7 +993,7 @@ impl<'a> Checker<'a> {
                 in_error,
             };
             let bound = self.bind_let(let_, items, &where_, scope);
-            inner.insert(let_.to_owned(), bound);
+            inner.insert(let_.to_owned(), Bound::Shape(bound));
         }
         for prop in node.props.iter().flatten() {
             let prop_scope = if let_.is_some() && prop.key == FOREACH_ITEMS_PROP {
@@ -757,8 +1008,15 @@ impl<'a> Checker<'a> {
                 && ancestors
                     .last()
                     .is_some_and(|a| a.component == SUSPENSE_COMPONENT));
+        let children = node.children.as_deref().unwrap_or_default();
+        for child in children {
+            if let Some(name) = local_declared(child) {
+                let bound = self.bind_local(name, child, &inner);
+                inner.insert(name.to_owned(), bound);
+            }
+        }
         ancestors.push(node);
-        for child in node.children.iter().flatten() {
+        for child in children {
             self.walk_node(child, &inner, ancestors, in_slot);
         }
         ancestors.pop();
@@ -838,10 +1096,11 @@ impl<'a> Checker<'a> {
         &mut self,
         node: &ComponentNodeInputModel,
         ancestors: &[&ComponentNodeInputModel],
+        scope: &Scope,
     ) {
         self.check_host_part(node, ancestors);
         for prop in node.props.iter().flatten() {
-            self.check_prop(node, prop);
+            self.check_prop(node, prop, scope);
         }
     }
 
@@ -854,14 +1113,6 @@ impl<'a> Checker<'a> {
     ) {
         if node.component == ASK_COMPONENT {
             self.asks = true;
-        }
-        if ancestors.is_empty()
-            && node.props.iter().flatten().any(|prop| {
-                prop.key == CHROME_PROP
-                    && prop.static_value.as_ref().and_then(Value::as_str) == Some(CHROME_NONE)
-            })
-        {
-            self.chromeless = Some(node.id.clone());
         }
         if self.vocabulary.host_parts.contains(&node.component) {
             let inside = ancestors
@@ -882,8 +1133,8 @@ impl<'a> Checker<'a> {
     fn assign_kind(&mut self, node: &ComponentNodeInputModel, what: &str) {
         let fields = [
             ("what", s(what)),
-            ("n", s(article(&self.scope.kind))),
-            ("kind", s(self.scope.kind.clone())),
+            ("n", s(article(self.kind_name()))),
+            ("kind", s(self.kind_name())),
         ];
         self.add("assign.kind", Some(&node.id), &fields);
     }
@@ -894,8 +1145,9 @@ impl<'a> Checker<'a> {
         node: &ComponentNodeInputModel,
         prop: &ComponentPropInputModel,
     ) {
-        // Which kinds a Space and its parts belong to is their catalog's to say.
-        if !RUN_KINDS.contains(&self.scope.kind.as_str()) {
+        // Which kinds a Space and its parts belong to is their catalog's to say; mounted nowhere,
+        // the keys are taken as written.
+        if !RUN_KINDS.contains(&self.kind_name()) || !self.mounted {
             return;
         }
         let path = format!("{}.{}", node.component, prop.key);
@@ -913,14 +1165,19 @@ impl<'a> Checker<'a> {
                     ("path", s(path.clone())),
                     ("key", s(key.clone())),
                     ("keys", s(self.dependency_keys())),
-                    ("hint", s(dependency_hint(&key, &self.scope.kind))),
+                    ("hint", s(dependency_hint(&key, self.kind_name()))),
                 ];
                 self.add("deps.unknown", Some(&node.id), &fields);
             }
         }
     }
 
-    fn check_prop(&mut self, node: &ComponentNodeInputModel, prop: &ComponentPropInputModel) {
+    fn check_prop(
+        &mut self,
+        node: &ComponentNodeInputModel,
+        prop: &ComponentPropInputModel,
+        scope: &Scope,
+    ) {
         let vocabulary = self.vocabulary;
         let at = Some(node.id.as_str());
         // `task.answer(...)`, `task.cancel()` and their kin act on the task the blok is about.
@@ -940,10 +1197,11 @@ impl<'a> Checker<'a> {
                 None => self.add("local.bind", at, &[("what", s(what(prop)))]),
                 Some(path) => {
                     let root = path.split('.').next().unwrap_or_default();
-                    if self.locals.contains_key(root) {
-                        self.bound_locals.insert(root.to_owned());
-                    } else {
-                        self.add("local.unknown", at, &[("path", s(path)), ("root", s(root))]);
+                    match scope.get(root) {
+                        Some(Bound::Local { node: local, .. }) => {
+                            self.bound_locals.insert(local.clone());
+                        }
+                        _ => self.add("local.unknown", at, &[("path", s(path)), ("root", s(root))]),
                     }
                 }
             }
@@ -952,7 +1210,7 @@ impl<'a> Checker<'a> {
             .util_call
             .as_ref()
             .is_some_and(|call| call.operation == START_EFFECT)
-            && self.scope.kind != ASSIGN_KIND
+            && self.kind_name() != ASSIGN_KIND
         {
             self.assign_kind(node, "assign.start()");
         }
@@ -970,8 +1228,7 @@ impl<'a> Checker<'a> {
             if prop.key == CLASS_NAME {
                 self.check_classes(value, &node.id);
             }
-            if self.scope.drawn_in() == LOGO
-                && vocabulary.theme.logo_paint_props.contains(&prop.key)
+            if self.header.context == LOGO && vocabulary.theme.logo_paint_props.contains(&prop.key)
             {
                 self.check_paint(node, &prop.key, value);
             }
@@ -1067,14 +1324,14 @@ impl<'a> Checker<'a> {
             return;
         }
         let Some(dependency) = self.dependencies.get(call.dependency.as_str()).copied() else {
-            if call.dependency != "self" {
+            if call.dependency != "self" && self.mounted {
                 let fields = [
                     ("path", s(owner)),
                     ("key", s(call.dependency.clone())),
                     ("keys", s(self.dependency_keys())),
                     (
                         "hint",
-                        s(dependency_hint(&call.dependency, &self.scope.kind)),
+                        s(dependency_hint(&call.dependency, self.kind_name())),
                     ),
                 ];
                 self.add("deps.unknown", Some(&where_.node.id), &fields);
@@ -1140,10 +1397,10 @@ impl<'a> Checker<'a> {
                 continue;
             };
             let root = path.split('.').next().unwrap_or_default();
-            if scope.contains_key(root) || !self.locals.contains_key(root) {
+            let Some(Bound::Local { local, .. }) = scope.get(root) else {
                 continue;
-            }
-            let Some(port) = self.local_port(path) else {
+            };
+            let Some(port) = Self::local_port(local, path) else {
                 continue;
             };
             let kind = port.kind.value();
@@ -1305,11 +1562,14 @@ impl<'a> Checker<'a> {
             self.not_in_kind(&where_.node.id, &path, "queries");
             return;
         }
-        let Some(query) = self.queries.get(name.as_str()).copied() else {
+        let Some(query) = self.query(&name).cloned() else {
             let fields = [
                 ("path", s(path)),
                 ("name", s(name)),
-                ("names", s(sorted_keys(self.queries.keys().copied()))),
+                (
+                    "names",
+                    s(sorted_keys(self.queries.iter().map(|(k, _)| k.as_str()))),
+                ),
             ];
             self.add("query.unknown", Some(&where_.node.id), &fields);
             return;
@@ -1330,6 +1590,23 @@ impl<'a> Checker<'a> {
         where_: &Where<'_>,
         scope: &Scope,
     ) -> Shape {
+        if self.vocabulary.is_reserved(name) {
+            self.add(
+                "roots.reserved",
+                Some(&where_.node.id),
+                &[("name", s(name))],
+            );
+        } else if let Some(bound) = scope.get(name) {
+            let fields = [
+                ("name", s(name)),
+                ("first", s(self.binding_what(name, bound))),
+                (
+                    "second",
+                    s(format!("the let of <foreach> ({})", where_.node.id)),
+                ),
+            ];
+            self.add("roots.shadow", Some(&where_.node.id), &fields);
+        }
         let keyed = where_
             .node
             .props
@@ -1393,6 +1670,37 @@ impl<'a> Checker<'a> {
         Shape::open(Some(name))
     }
 
+    /// What a `<local>` named `name` (the node `node`) is bound to in its parent's subtree;
+    /// `scope` is what is in scope where it is declared.
+    fn bind_local(&mut self, name: &str, node: &ComponentNodeInputModel, scope: &Scope) -> Bound {
+        if !self.vocabulary.is_reserved(name) {
+            if let Some(bound) = scope.get(name) {
+                let fields = [
+                    ("name", s(name)),
+                    ("first", s(self.binding_what(name, bound))),
+                    ("second", s(format!("the local {}", node.id))),
+                ];
+                self.add("roots.shadow", Some(&node.id), &fields);
+            }
+        }
+        match self.resolved_local(&node.id) {
+            Some(resolved) => Bound::Local {
+                node: node.id.clone(),
+                local: Box::new(resolved.local.clone()),
+            },
+            None => Bound::Shape(Shape::open(Some(name))),
+        }
+    }
+
+    /// What a name in scope is, for a message.
+    fn binding_what(&self, name: &str, bound: &Bound) -> String {
+        match bound {
+            Bound::Local { node, .. } => format!("the local {node}"),
+            Bound::Shape(_) if self.into.contains(name) => "a call's record".to_owned(),
+            Bound::Shape(_) => "a let".to_owned(),
+        }
+    }
+
     fn bind_into(&self, name: &str, call: &AgentProbeInputModel) -> Shape {
         let action = action_key_for(call);
         let returns = self
@@ -1425,16 +1733,24 @@ impl<'a> Checker<'a> {
         let parts: Vec<&str> = path.split('.').collect();
         let (root, rest) = (parts[0], &parts[1..]);
         if let Some(bound) = scope.get(root) {
+            let shape = match bound {
+                Bound::Local { local, .. } => {
+                    let Some(port) = local.arg_port().filter(|p| !OPAQUE_KINDS.contains(&p.kind))
+                    else {
+                        return Some(Shape::open(Some(root)));
+                    };
+                    return self.descend(
+                        Some(Shape::of_port(port).with_key(root)),
+                        rest,
+                        path,
+                        &node_id,
+                    );
+                }
+                Bound::Shape(shape) => shape.clone(),
+            };
             if self.into.contains(root) {
                 self.check_returns(path, rest, &node_id);
             }
-            return self.descend(Some(bound.clone()), rest, path, &node_id);
-        }
-        if let Some(local) = self.locals.get(root).copied() {
-            let Some(port) = local.arg_port().filter(|p| !OPAQUE_KINDS.contains(&p.kind)) else {
-                return Some(Shape::open(Some(root)));
-            };
-            let shape = Shape::of_port(port).with_key(root);
             return self.descend(Some(shape), rest, path, &node_id);
         }
         if root == "event" {
@@ -1511,11 +1827,14 @@ impl<'a> Checker<'a> {
                     return whole(self, "deps");
                 };
                 let Some(dependency) = self.dependencies.get(key).copied() else {
+                    if !self.mounted {
+                        return Some(Shape::open(Some(path)));
+                    }
                     let fields = [
                         ("path", s(path)),
                         ("key", s(*key)),
                         ("keys", s(self.dependency_keys())),
-                        ("hint", s(dependency_hint(key, &self.scope.kind))),
+                        ("hint", s(dependency_hint(key, self.kind_name()))),
                     ];
                     self.add("deps.unknown", Some(&node_id), &fields);
                     return None;
@@ -1572,11 +1891,14 @@ impl<'a> Checker<'a> {
                 let Some(name) = rest.first() else {
                     return whole(self, "queries");
                 };
-                if !self.queries.contains_key(name) {
+                if self.query(name).is_none() {
                     let fields = [
                         ("path", s(path)),
                         ("name", s(*name)),
-                        ("names", s(sorted_keys(self.queries.keys().copied()))),
+                        (
+                            "names",
+                            s(sorted_keys(self.queries.iter().map(|(k, _)| k.as_str()))),
+                        ),
                     ];
                     self.add("query.unknown", Some(&node_id), &fields);
                     return None;
@@ -1588,11 +1910,16 @@ impl<'a> Checker<'a> {
                 let Some(name) = rest.first() else {
                     return whole(self, "subscriptions");
                 };
-                if !self.subscriptions.contains(name) {
+                if !self.subscriptions.iter().any(|(k, _)| k == name) {
                     let fields = [
                         ("path", s(path)),
                         ("name", s(*name)),
-                        ("names", s(sorted_keys(self.subscriptions.iter().copied()))),
+                        (
+                            "names",
+                            s(sorted_keys(
+                                self.subscriptions.iter().map(|(k, _)| k.as_str()),
+                            )),
+                        ),
                     ];
                     self.add("subscription.unknown", Some(&node_id), &fields);
                     return None;
@@ -1889,53 +2216,68 @@ fn demo_items(prop: &ComponentPropInputModel, demo: Option<&BlokDemoInputModel>)
     value.and_then(Value::as_array).map_or(0, Vec::len)
 }
 
-/// Every finding of `tree` against `scope`: errors and warnings, in tree order
-/// (`check_blok_tree`). The language alone: no catalog is read, so what a component takes,
-/// where it may sit and which catalog it is of is left to whoever draws the blok.
-pub fn check_blok_tree(tree: &ComponentNodeInputModel, scope: &BlokScope) -> Vec<Finding> {
-    let resolved = resolve_scope(tree, scope, &ArgPorts::new());
-    let scope = &resolved;
+/// Every finding of `tree` mounted as `scope` says, and its `<local>` declarations resolved (by
+/// node id, in tree order): errors and warnings, in tree order (`check_blok_tree`). A root that
+/// is no readable `<Blok>` is the one finding, and resolves nothing. The language alone: no
+/// catalog is read, so what a component takes, where it may sit and which catalog it is of is
+/// left to whoever draws the blok.
+pub fn check_blok(
+    tree: &ComponentNodeInputModel,
+    scope: &BlokScope,
+) -> (Vec<Finding>, Vec<(String, ResolvedLocal)>) {
+    if let Some(problem) = header_problem(tree) {
+        return (vec![problem], vec![]);
+    }
+    let header = blok_header(tree).expect("a readable header");
+    let resolved = resolve_locals(tree, scope.dependencies.as_deref(), &scope.arg_ports);
     let vocabulary = vocabulary();
-    let Some(kind) = vocabulary.kind(&scope.kind).cloned() else {
-        let fields = [
-            ("n", s(article(&scope.kind))),
-            ("kind", s(scope.kind.clone())),
-            ("contexts", s("none")),
-            ("context", s(scope.context.clone())),
-        ];
-        return vec![Finding::of("context.kind", None, &fields)];
-    };
+    let kind = vocabulary
+        .kind(&header.kind)
+        .expect("the header names a kind")
+        .drawn_in(&header.context)
+        .clone();
+    let chromeless = (header.chrome.as_deref() == Some(CHROME_NONE)).then(|| header.node.clone());
     let mut checker = Checker {
         scope,
+        header,
         vocabulary,
         kind,
         findings: vec![],
+        mounted: scope.is_mounted(),
         dependencies: scope
             .dependencies
             .iter()
+            .flatten()
             .map(|d| (d.key.as_str(), d))
             .collect(),
-        locals: scope.locals.iter().map(|l| (l.key(), l)).collect(),
-        queries: scope.queries.iter().map(|q| (q.key.as_str(), q)).collect(),
-        subscriptions: scope.subscriptions.iter().map(|q| q.key.as_str()).collect(),
+        resolved,
+        queries: vec![],
+        subscriptions: vec![],
         bound_locals: HashSet::new(),
         into: HashSet::new(),
         asks: false,
-        chromeless: None,
+        chromeless,
     };
     checker.check_declarations(tree);
     let mut root_scope = Scope::new();
     for (name, sites) in into_sites(tree) {
-        root_scope.insert(name.clone(), checker.bind_into(&name, sites[0].0));
+        root_scope.insert(
+            name.clone(),
+            Bound::Shape(checker.bind_into(&name, sites[0].0)),
+        );
     }
     checker.walk_node(tree, &root_scope, &mut vec![], false);
-    if scope.drawn_in() == LOGO {
-        checker
-            .findings
-            .extend(check_logo(tree, scope.demo.as_ref()));
+    if checker.header.context == LOGO {
+        let demo = scope.demo.as_ref();
+        checker.findings.extend(check_logo(tree, demo));
     }
     checker.finish();
-    checker.findings
+    (checker.findings, checker.resolved)
+}
+
+/// Every finding of `tree` mounted as `scope` says (`check_blok_tree`): see [`check_blok`].
+pub fn check_blok_tree(tree: &ComponentNodeInputModel, scope: &BlokScope) -> Vec<Finding> {
+    check_blok(tree, scope).0
 }
 
 /// What a blok of `kind` that reads an undeclared `deps.<key>` does about it:
@@ -1944,7 +2286,7 @@ pub fn check_blok_tree(tree: &ComponentNodeInputModel, scope: &BlokScope) -> Vec
 /// - an agent blok has none: ``agent bloks read only `self` ``.
 pub fn dependency_hint(key: &str, kind: &str) -> String {
     match kind {
-        "action" | "assign" | "action_logo" => {
+        "action" | "assign" => {
             format!("add a dependency parameter `{key}` to the action")
         }
         "agent" => "agent bloks read only `self`".to_string(),

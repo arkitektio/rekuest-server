@@ -158,64 +158,109 @@ ASSETS = {
     "asset bad reference": asset(ref="md5:abc", size=1),
 }
 
+def root(kind: str, context: str, *children: dict) -> list[dict]:
+    """A blok's tree: one `<Blok kind context>` holding `children`."""
+    props = [{"key": "kind", "static_value": kind}, {"key": "context", "static_value": context}]
+    return [{"id": "Blok[0]", "component": "Blok", "props": props, "children": list(children)}]
+
+
 def html(*children: dict) -> list[dict]:
-    """An html blok's tree: its root is `Html` (the root names the context)."""
-    return [{"id": "Html[0]", "component": "Html", "children": list(children)}]
+    """An action's panel blok's tree."""
+    return root("action", "panel", *children)
 
 
-def blok(**fields) -> dict:
-    """An agent blok; an html one's single root wrapped in `Html` (two roots are left as sent)."""
-    tree = [{"id": "Box[0]", "component": "Box", "props": [{"key": "label", "dynamic_value": {"path": "args.image"}}]}]
-    components = fields.pop("components", tree)
-    if fields.get("context", "HTML") == "HTML" and len(components) == 1:
-        components = html(*components)
+def local(name: str, **fields) -> dict:
+    """A `<local name=...>` node; every other field a literal prop."""
+    props = [{"key": "name", "static_value": name, "declares_value": name}]
+    props += [{"key": key, "static_value": value} for key, value in fields.items()]
+    return {"id": f"local-{name}", "component": "local", "props": props}
+
+
+def query(component: str = "query", node: str | None = None, **fields) -> dict:
+    """A `<query>` (or `<subscription>`) node; `key` is its name, `variables` its `<var>` children."""
+    node = node or f"{component}-{fields.get('key')}"
+    variables = fields.pop("variables", [])
+    props = [{"key": "name" if key == "key" else key, "static_value": value} for key, value in fields.items()]
+    children = []
+    for index, variable in enumerate(variables):
+        value = {"key": "value", "dynamic_value": {"path": variable["value_path"]}} if "value_path" in variable else {"key": "value", "static_value": variable.get("value_literal")}
+        children.append({"id": f"{node}/var{index}", "component": "var", "props": [{"key": "key", "static_value": variable["key"]}, value]})
+    return {"id": node, "component": component, "props": props, "children": children or None}
+
+
+def blok(*declarations: dict, **fields) -> dict:
+    """An agent blok: its declarations, then its one node (a Box reading `args.image`), in one
+    `<Blok kind="agent">` of its context; a list of components is left as sent."""
+    tree = {"id": "Box[0]", "component": "Box", "props": [{"key": "label", "dynamic_value": {"path": "args.image"}}]}
+    components = fields.pop("components", None)
+    if not isinstance(components, list):
+        context = fields.get("context", "PANEL").lower()
+        components = root(fields.pop("kind", "agent"), context, *declarations, components or tree)
     return {"key": "inspector", "vocab": 2, "components": components, **fields}
 
 
 IMAGE = port("image", "STRUCTURE", identifier="@mikro/image", nullable=False)
-POSE = [{"key": "pose", "kind": "LIST", "children": [{"key": "...", "kind": "FLOAT"}], "default": [1, 0, 0, 0], "persist": True}, {"key": "zoom", "kind": "INT", "default": 1}]
 SELF = [{"key": "self", "state_dependencies": [{"key": "arm", "demand": {"matches": [{"key": "mode", "kind": "STRING"}]}}], "action_dependencies": [{"key": "move", "demand": {"arg_matches": [{"key": "to"}]}}]}]
 POSITIONS = {"key": "positions", "service": "mikro", "document": "query($slide: ID!) { positions(slide: $slide) { id } }", "variables": [{"key": "slide", "value_path": "args.image"}]}
+BOX = {"id": "Box[0]", "component": "Box"}
+
+
+def text(path: str) -> dict:
+    return {"id": "Text[0]", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": path}}]}
+
+
+def fetch_more(*arguments: dict) -> dict:
+    return {"id": "Button[0]", "component": "Button", "props": [{"key": "onClick", "util_call": {"operation": "query.fetch_more", "arguments": [{"key": "query", "value_literal": "positions"}, *arguments]}}]}
+
 
 BLOKS = {
-    "blok without args": blok(components=[{"id": "Box[0]", "component": "Box"}]),
+    "blok without args": blok(components=BOX),
     "blok with args": blok(args=[{**IMAGE, "requires": [{"key": "@mikro/z_size", "operator": "GTE", "value": 2}]}]),
-    "blok with a list arg": blok(args=[port("images", "LIST", nullable=False, children=[IMAGE])], components=[{"id": "Box[0]", "component": "Box"}]),
+    "blok with a list arg": blok(args=[port("images", "LIST", nullable=False, children=[IMAGE])], components=BOX),
     "blok args keyed twice": blok(args=[IMAGE, IMAGE]),
-    "blok args on a scene": blok(context="SCENE", args=[IMAGE]),
+    "blok args on a scene": blok(context="SCENE", args=[IMAGE], components={"id": "Scene[0]", "component": "Scene"}),
     "blok arg of a bad shape": blok(args=[port("image", "STRUCTURE", nullable=False)]),
-    "blok without vocab": {"key": "inspector", "components": html({"id": "Box[0]", "component": "Box"})},
+    "blok without vocab": {"key": "inspector", "components": root("agent", "panel", BOX)},
     "blok of another vocab": blok(vocab=1),
-    "blok with locals, demo and catalogs": blok(components=[{"id": "Box[0]", "component": "Box"}], locals=POSE, demo={"args": {"image": None}}, catalogs=["ui@1"], module="orkestrator"),
-    "blok with a local twice": blok(locals=[POSE[0], POSE[0]]),
-    "blok with a reserved local": blok(locals=[{"key": "task", "kind": "STRING"}]),
-    "blok with a local of no kind": blok(locals=[{"key": "zoom", "default": 1}]),
-    "blok with a local whose default does not fit": blok(locals=[{"key": "zoom", "kind": "INT", "default": "1"}]),
-    "blok with a local of a bad shape": blok(locals=[{"key": "form", "kind": "DICT"}]),
+    "blok with locals, demo and catalogs": blok(local("pose", kind="LIST", children=[{"key": "...", "kind": "FLOAT"}], default=[1, 0, 0, 0], persist=True), local("zoom", kind="INT", default=1), components=BOX, demo={"args": {"image": None}}, catalogs=["ui@1"], module="orkestrator"),
+    "blok with a local twice": blok(local("zoom", kind="INT"), local("zoom", kind="INT") | {"id": "local-zoom-2"}),
+    "blok with a reserved local": blok(local("task", kind="STRING")),
+    "blok with a local of no kind": blok(local("zoom", default=1)),
+    "blok with a local whose default does not fit": blok(local("zoom", kind="INT", default="1")),
+    "blok with a local of a bad shape": blok(local("form", kind="DICT")),
+    "blok with a local after its content": {"key": "inspector", "vocab": 2, "components": root("agent", "panel", BOX, local("zoom", kind="INT"))},
+    "blok with a local out of scope": {"key": "inspector", "vocab": 2, "components": root("agent", "panel", {"id": "Card[0]", "component": "Card", "children": [local("open", default=False)]}, text("open"))},
     "blok with a catalog badly spelled": blok(catalogs=["ui"]),
-    "blok with a query": blok(args=[IMAGE], queries=[POSITIONS], components=[{"id": "Text[0]", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "queries.positions.status"}}]}]),
-    "blok with a mutation": blok(queries=[{**POSITIONS, "document": "mutation { a }"}]),
-    "blok with a query key that is no name": blok(queries=[{**POSITIONS, "key": "my positions"}]),
-    "blok with a query twice": blok(queries=[POSITIONS, POSITIONS]),
-    "blok with locals twice out of order": blok(locals=[{"key": k, "kind": "STRING"} for k in ("a", "b", "b", "a")]),
-    "blok with a query fetching more": blok(queries=[{**POSITIONS, "more": "positions"}], components=[{"id": "Button[0]", "component": "Button", "props": [{"key": "onClick", "util_call": {"operation": "query.fetch_more", "arguments": [{"key": "query", "value_literal": "positions"}, {"key": "variables", "value_dict": [{"key": "after", "value_literal": 1}]}]}}]}]),
-    "blok fetching more of a query without more": blok(queries=[POSITIONS], components=[{"id": "Button[0]", "component": "Button", "props": [{"key": "onClick", "util_call": {"operation": "query.fetch_more", "arguments": [{"key": "query", "value_literal": "positions"}]}}]}]),
-    "blok with a query more that is no path": blok(queries=[{**POSITIONS, "more": "positions[0]"}]),
-    "blok with a subscription document as a query": blok(queries=[{**POSITIONS, "document": "subscription { a }"}]),
-    "blok with a query of no operation": blok(queries=[{**POSITIONS, "document": "  # nothing"}]),
-    "blok with a query document as a subscription": blok(subscriptions=[{"key": "s", "service": "rekuest", "document": "query { a }"}]),
-    "blok with a subscription that is a mutation": blok(subscriptions=[{"key": "s", "service": "rekuest", "document": "mutation { a }"}]),
-    "blok with a subscription replaying an unknown query": blok(subscriptions=[{"key": "s", "service": "rekuest", "document": "subscription { a }", "history": "nope"}]),
-    "blok reading an undeclared query": blok(components=[{"id": "Text[0]", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "queries.positions.value"}}]}]),
-    "blok reading deps as an agent": blok(dependencies=SELF, components=[{"id": "Text[0]", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "deps.robot.arm"}}]}]),
-    "blok reading its own state": blok(dependencies=SELF, components=[{"id": "Text[0]", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "self.arm.mode"}}]}]),
-    "blok calling itself into a record": blok(dependencies=SELF, components=[{"id": "Button[0]", "component": "Button", "props": [{"key": "onClick", "declares_value": "move", "agent_call": {"dependency": "self", "operation": "move", "arguments": [{"key": "to", "value_literal": True}]}}, {"key": "disabled", "dynamic_value": {"path": "move.running"}}]}]),
-    "blok reading now": blok(components=[{"id": "Text[0]", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "now"}}]}]),
-    "blok reading then": blok(components=[{"id": "Text[0]", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "then"}}]}]),
+    "blok with a query": blok(query(**POSITIONS), args=[IMAGE], components=text("queries.positions.status")),
+    "blok with a mutation": blok(query(**{**POSITIONS, "document": "mutation { a }"}), args=[IMAGE]),
+    "blok with a query key that is no name": blok(query(**{**POSITIONS, "key": "my positions"}), args=[IMAGE]),
+    "blok with a query twice": blok(query(**POSITIONS), query(node="query-twice", **POSITIONS), args=[IMAGE]),
+    "blok with a query inside its content": {"key": "inspector", "vocab": 2, "args": [IMAGE], "components": root("agent", "panel", {"id": "Card[0]", "component": "Card", "children": [query(**POSITIONS)]})},
+    "blok with a query fetching more": blok(query(**{**POSITIONS, "more": "positions"}), args=[IMAGE], components=fetch_more({"key": "variables", "value_dict": [{"key": "after", "value_literal": 1}]})),
+    "blok fetching more of a query without more": blok(query(**POSITIONS), args=[IMAGE], components=fetch_more()),
+    "blok with a query more that is no path": blok(query(**{**POSITIONS, "more": "positions[0]"}), args=[IMAGE]),
+    "blok with a subscription document as a query": blok(query(**{**POSITIONS, "document": "subscription { a }"}), args=[IMAGE]),
+    "blok with a query of no operation": blok(query(**{**POSITIONS, "document": "  # nothing"}), args=[IMAGE]),
+    "blok with a query document as a subscription": blok(query("subscription", key="s", service="rekuest", document="query { a }")),
+    "blok with a subscription that is a mutation": blok(query("subscription", key="s", service="rekuest", document="mutation { a }")),
+    "blok with a subscription replaying an unknown query": blok(query("subscription", key="s", service="rekuest", document="subscription { a }", history="nope")),
+    "blok reading an undeclared query": blok(components=text("queries.positions.value")),
+    "blok reading deps as an agent": blok(dependencies=SELF, components=text("deps.robot.arm")),
+    "blok reading its own state": blok(dependencies=SELF, components=text("self.arm.mode")),
+    "blok calling itself into a record": blok(dependencies=SELF, components={"id": "Button[0]", "component": "Button", "props": [{"key": "onClick", "declares_value": "move", "agent_call": {"dependency": "self", "operation": "move", "arguments": [{"key": "to", "value_literal": True}]}}, {"key": "disabled", "dynamic_value": {"path": "move.running"}}]}),
+    "blok reading now": blok(components=text("now")),
+    "blok reading then": blok(components=text("then")),
     "blok with an old now_interval": blok(now_interval=5),
-    "blok with two roots": blok(components=[{"id": "Box[0]", "component": "Box"}, {"id": "Box[1]", "component": "Box"}]),
+    "blok with an old locals field": blok(locals=[{"key": "zoom", "kind": "INT"}]),
+    "blok with two roots": blok(components=[BOX, {"id": "Box[1]", "component": "Box"}]),
+    "blok whose root is no Blok": blok(components=[BOX]),
+    "blok whose root says another context": blok(context="SCENE", components=root("agent", "panel", BOX)),
+    "blok of a kind an agent does not declare": blok(kind="custom"),
     "blok demo naming no dependency": blok(demo={"deps": {"robot": {}}}),
-    "action logo declaring a local": blok(context="ACTION_LOGO", components=[{"id": "Logo[0]", "component": "ActionLogo"}], locals=[{"key": "x", "kind": "STRING"}]),
+    "action logo": blok(kind="action", context="LOGO", components={"id": "Logo[0]", "component": "Logo"}),
+    "action logo declaring a local": blok(local("x", kind="STRING"), kind="action", context="LOGO", components={"id": "Logo[0]", "component": "Logo"}),
+    "action logo with a dependency": blok(kind="action", context="LOGO", dependencies=[{"key": "self"}], components={"id": "Logo[0]", "component": "Logo"}),
+    "action panel declared by an agent": blok(kind="action"),
 }
 
 def placed(key: str, *children: dict) -> dict:
@@ -226,8 +271,9 @@ def through(*keys: str) -> dict:
     return {"id": "route", "component": "Route", "props": [{"key": "through", "static_value": list(keys)}, {"key": "progress", "dynamic_value": {"path": "task.progress"}}]}
 
 
-def space(*children: dict, **fields) -> dict:
-    return {"context": "SCENE", "vocab": 2, "components": [{"id": "root", "component": "Space", "props": [{"key": "room", "static_value": "room:lab"}], "children": list(children)}], **fields}
+def space(*children: dict, kind: str = "action", declarations: tuple[dict, ...] = (), **fields) -> dict:
+    room = {"id": "root", "component": "Space", "props": [{"key": "room", "static_value": "room:lab"}], "children": list(children)}
+    return {"context": "SCENE", "vocab": 2, "components": root(kind, "scene", *declarations, room), **fields}
 
 
 def flow(*bloks: dict, dependencies: tuple[str, ...] = ("robot", "frame")) -> dict:
@@ -235,42 +281,51 @@ def flow(*bloks: dict, dependencies: tuple[str, ...] = ("robot", "frame")) -> di
 
 
 GLOW = {"id": "glow", "component": "Glow", "props": [{"key": "on", "dynamic_value": {"path": "self.helsinki.stage"}}]}
-SHOW = [{"key": "show_path", "kind": "BOOL", "default": True, "persist": True}]
+SHOW = (local("show_path", kind="BOOL", default=True, persist=True),)
+
+
+def assign(*children: dict) -> dict:
+    return {"context": "PANEL", "phase": "ASSIGN", "vocab": 2, "components": root("assign", "panel", *children)}
+
 
 ACTION_BLOKS = {
     "action bloks": flow(
-        space(placed("robot", GLOW), through("robot", "frame", "robot"), locals=SHOW),
-        {"context": "HTML", "vocab": 2, "components": html({"id": "card", "component": "Card", "props": [{"key": "value", "dynamic_value": {"path": "args.slides"}}], "children": [{"id": "ask", "component": "ask"}]}), "description": "The run"},
+        space(placed("robot", GLOW), through("robot", "frame", "robot"), declarations=SHOW),
+        {"context": "PANEL", "vocab": 2, "components": html({"id": "card", "component": "Card", "props": [{"key": "value", "dynamic_value": {"path": "args.slides"}}], "children": [{"id": "ask", "component": "ask"}]}), "description": "The run"},
     ),
     "action blok through an unknown key": flow(space(through("robot", "stitcher"))),
     "action blok placing an unknown key": flow(space(placed("stitcher"))),
     "action blok placing self": flow(space(placed("self"))),
-    "action blok placing a dynamic key": flow(space({"id": "at", "component": "Placed", "props": [{"key": "dep", "dynamic_value": {"path": "show_path"}}]}, locals=SHOW)),
+    "action blok placing a dynamic key": flow(space({"id": "at", "component": "Placed", "props": [{"key": "dep", "dynamic_value": {"path": "show_path"}}]}, declarations=SHOW)),
     "action blok reading an unknown root": flow(space({"id": "t", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "stage.position"}}]})),
     "action blok reading an undeclared arg": flow(space({"id": "t", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "args.nope"}}]})),
     "action blok calling a dependency": flow(space({"id": "b", "component": "Button", "props": [{"key": "onClick", "agent_call": {"dependency": "robot", "operation": "home"}}]})),
     "action blok calling an undeclared agent": flow(space({"id": "b", "component": "Button", "props": [{"key": "onClick", "agent_call": {"dependency": "stage", "operation": "home"}}]})),
     "action bloks twice in one context": flow(space(), space()),
-    "action blok in a logo context": flow({"context": "LOGO", "vocab": 2, "components": [{"id": "root", "component": "AgentLogo"}]}),
-    "action blok sent twice": flow({"context": "HTML", "vocab": 2, "components": html({"id": "root", "component": "Card"}), "source": "<Html><Card /></Html>"}),
-    "action blok sent not at all": flow({"context": "HTML", "vocab": 2}),
-    "action blok without vocab": flow({"context": "HTML", "components": html({"id": "root", "component": "Card"})}),
+    "action blok in a logo context": flow({"context": "LOGO", "vocab": 2, "components": root("action", "logo", {"id": "root", "component": "Logo"})}),
+    "action blok sent twice": flow({"context": "PANEL", "vocab": 2, "components": html({"id": "root", "component": "Card"}), "source": '<Blok kind="action" context="panel"><Card /></Blok>'}),
+    "action blok sent not at all": flow({"context": "PANEL", "vocab": 2}),
+    "action blok without vocab": flow({"context": "PANEL", "components": html({"id": "root", "component": "Card"})}),
     "action blok with an unknown field": flow({**space(), "name": "nope"}),
     "action blok with an old field": flow({**space(), "demo_state": {}}),
+    "action blok with an old locals field": flow({**space(), "locals": []}),
+    "action blok of the assign kind for a run": flow(space(kind="assign")),
+    "action blok saying another context": flow({"context": "SCENE", "vocab": 2, "components": html({"id": "root", "component": "Card"})}),
     "assign blok": flow(
-        {"context": "HTML", "phase": "ASSIGN", "vocab": 2, "components": html(
+        assign(
             {"id": "t", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "args.slides"}}]},
             {"id": "form", "component": "args"},
             {"id": "go", "component": "Button", "props": [{"key": "onClick", "util_call": {"operation": "assign.start", "arguments": []}}]},
-        )},
-        {"context": "HTML", "vocab": 2, "components": html({"id": "root", "component": "Card"})},
+        ),
+        {"context": "PANEL", "vocab": 2, "components": html({"id": "root", "component": "Card"})},
     ),
-    "assign blok placing its dependencies": flow({**space(placed("robot")), "phase": "ASSIGN"}),
-    "assign blok reading a task": flow({"context": "HTML", "phase": "ASSIGN", "vocab": 2, "components": html({"id": "t", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "task.status"}}]})}),
-    "assign blok asking": flow({"context": "HTML", "phase": "ASSIGN", "vocab": 2, "components": html({"id": "a", "component": "ask"})}),
-    "run blok placing the argument form": flow({"context": "HTML", "vocab": 2, "components": html({"id": "a", "component": "args"})}),
-    "assign bloks twice in one context": flow({**space(), "phase": "ASSIGN"}, {**space(), "phase": "ASSIGN"}),
-    "agent declaring a space blok": {"bloks": [{"key": "lab", "vocab": 2, "context": "SCENE", "components": [{"id": "root", "component": "Space", "props": [{"key": "room", "static_value": "room:lab"}]}]}]},
+    "assign blok placing its dependencies": flow({**space(placed("robot"), kind="assign"), "phase": "ASSIGN"}),
+    "assign blok of the action kind": flow({**space(placed("robot")), "phase": "ASSIGN"}),
+    "assign blok reading a task": flow(assign({"id": "t", "component": "Text", "props": [{"key": "text", "dynamic_value": {"path": "task.status"}}]})),
+    "assign blok asking": flow(assign({"id": "a", "component": "ask"})),
+    "run blok placing the argument form": flow({"context": "PANEL", "vocab": 2, "components": html({"id": "a", "component": "args"})}),
+    "assign bloks twice in one context": flow({**space(kind="assign"), "phase": "ASSIGN"}, {**space(kind="assign"), "phase": "ASSIGN"}),
+    "agent declaring a space blok": {"bloks": [{"key": "lab", "vocab": 2, "context": "SCENE", "components": root("agent", "scene", {"id": "root", "component": "Space", "props": [{"key": "room", "static_value": "room:lab"}]})}]},
 }
 
 cases = {}

@@ -1,14 +1,18 @@
-"""Resolve what a blok leaves to its tree: the kinds of its locals.
+"""Resolve what a blok leaves to its tree: the kinds of its ``<local>`` declarations.
 
-The server's port of arkitekt-spec's ``declare/blok/infer.py`` (``resolve_scope``), on
+The server's port of arkitekt-spec's ``declare/blok/infer.py`` (``resolve_locals``), on
 rekuest_core's models. The spec, the server and takt infer the same way, so a source blok sent
-without kinds resolves the same everywhere; the spec corpus (``bsx_v2.json``, the ``resolved`` of
-its checked cases) holds them to it. A blok stores its locals as written and, beside them, as
-resolved (``resolved_locals``: every local with a kind). Dependencies are never inferred: every
+without kinds resolves the same everywhere; the spec corpus (``bsx_v2.json``, the
+``language.resolved`` of its checked cases) holds them to it. A blok stores its tree as written
+and, beside it, its locals as resolved (``resolved_locals``: every ``<local>`` by its node, with a
+kind). Dependencies are never inferred: every
 ``deps.<key>`` a blok reads, whatever its kind, must be declared (``deps.unknown``).
 
 **A local's kind**, when it is left out (a given kind, ``ANY`` included, is kept), is the first of:
 
+0. the argument it borrows with ``like="self.<action>.<arg>"`` / ``"deps.<key>.<action>.<arg>"``,
+   as the mount's dependency demands type it (resolved only where the blok is mounted: not
+   mounted, it borrows nothing and says nothing of it);
 1. its ``default``: a bool ``BOOL``, an integer ``INT``, a number ``FLOAT``, a string ``STRING``,
    a non-empty list of one scalar kind a ``LIST`` of it, a non-empty object of one scalar kind a
    ``DICT`` of it (the item port keyed ``...``);
@@ -19,15 +23,15 @@ resolved (``resolved_locals``: every local with a kind). Dependencies are never 
    that is ``STRING``, ``INT``, ``FLOAT`` or ``BOOL``;
 4. else ``ANY``: an untyped value, never an error.
 
-Every argument site comes before every bind site, whatever their place in the tree. Every field
+Only uses in the local's scope (its parent's subtree) count. Every argument site comes before
+every bind site, whatever their place in the tree. Every field
 the local sets wins over the inferred type, which only fills what it leaves out; a candidate that
 makes no valid local with them is skipped. The other call sites and binds are then checked against
 the kind found (``local.arg_kind``, ``local.bind_kind``), which ``ANY`` skips.
 """
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
 
 from pydantic import ValidationError
 
@@ -41,10 +45,8 @@ from rekuest_core.inputs.models import (
     PortMatchInputModel,
     UtilCallInputModel,
 )
-from rekuest_core.vocabulary.walk import Where, action_key_for, walk_tree
-
-if TYPE_CHECKING:
-    from rekuest_core.vocabulary.check import BlokScope
+from rekuest_core.vocabulary.declared import LOCAL_COMPONENT, declared_local, local_like, local_problem
+from rekuest_core.vocabulary.walk import Where, action_key_for, iter_nodes, walk_tree
 
 ITEM_KEY = "..."
 BIND_INFERRED = ("STRING", "INT", "FLOAT", "BOOL")
@@ -124,61 +126,102 @@ def any_local(local: BlokLocalInputModel) -> BlokLocalInputModel:
     return BlokLocalInputModel.model_validate({**local.model_dump(mode="json", exclude_none=True, exclude={"kind"}), "kind": enums.LocalKind.ANY.value})
 
 
+@dataclass(frozen=True)
+class ResolvedLocal:
+    """A ``<local>`` with its kind resolved, and why its ``like`` borrows nothing (None when it
+    borrows, has none, or the blok is not mounted)."""
+
+    local: BlokLocalInputModel
+    like_problem: str | None = None
+
+
 @dataclass
 class _Uses:
-    """Where a tree uses its locals whole (task arguments, binds)."""
+    """Where a tree uses its locals whole (task arguments, binds), per local node id.
 
-    locals: frozenset[str]
+    A local's binding is its node id; a ``let`` or ``into`` name is bound to None, so a path
+    whose root is bound to a string reads a local, and that local only (scoping is the walker's).
+    """
+
     dependencies: Mapping[str, AgentDependencyInputModel]
     arguments: dict[str, list[Typed]] = field(default_factory=dict[str, list[Typed]])
     binds: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
 
-    def visit_component(self, node: ComponentNodeInputModel, ancestors: tuple[ComponentNodeInputModel, ...], scope: Mapping[str, None]) -> None:
+    def visit_component(self, node: ComponentNodeInputModel, ancestors: tuple[ComponentNodeInputModel, ...], scope: Mapping[str, str | None]) -> None:
         # What a control writes through its `bind` is its catalog's to say, and a server reads none:
         # a local only a bind would type stays ANY here, and the renderer types it.
         return None
 
-    def visit_path(self, path: str, where: Where, scope: Mapping[str, None]) -> None:
+    def visit_path(self, path: str, where: Where, scope: Mapping[str, str | None]) -> None:
         return None
 
-    def visit_agent_call(self, call: AgentProbeInputModel, where: Where, scope: Mapping[str, None], into: str | None) -> None:
+    def visit_agent_call(self, call: AgentProbeInputModel, where: Where, scope: Mapping[str, str | None], into: str | None) -> None:
         action = action_key_for(call)
-        dependency = self.dependencies.get(call.dependency)
-        demand = next((each.demand for each in (dependency.action_dependencies or ()) if each.key == action), None) if dependency is not None else None
-        matches = {match.key: match for match in (demand.arg_matches or ()) if match.key is not None} if demand is not None else {}
         for argument in call.arguments or ():
             path = argument.value_path
-            if path is None or path not in self.locals or path in scope or argument.key is None:
+            local = scope.get(path) if path is not None else None
+            if local is None or argument.key is None:
                 continue
-            match = matches.get(argument.key)
-            typed = match_type(match) if match is not None else None
+            typed = argument_type(call.dependency, action, argument.key, self.dependencies)
             if typed is not None:
-                self.arguments.setdefault(path, []).append(typed)
+                self.arguments.setdefault(local, []).append(typed)
 
-    def visit_util_call(self, call: UtilCallInputModel, where: Where, scope: Mapping[str, None], top: bool) -> None:
+    def visit_util_call(self, call: UtilCallInputModel, where: Where, scope: Mapping[str, str | None], top: bool) -> None:
         return None
 
-    def bind_let(self, name: str, items: ComponentPropInputModel | None, where: Where, scope: Mapping[str, None]) -> None:
+    def bind_let(self, name: str, items: ComponentPropInputModel | None, where: Where, scope: Mapping[str, str | None]) -> None:
         return None
 
     def bind_into(self, name: str, call: AgentProbeInputModel) -> None:
         return None
 
-
-def _uses(tree: ComponentNodeInputModel, scope: "BlokScope") -> _Uses:
-    uses = _Uses(
-        locals=frozenset(local.key for local in scope.locals),
-        dependencies={dependency.key: dependency for dependency in scope.dependencies},
-    )
-    walk_tree(tree, uses)
-    return uses
+    def bind_local(self, name: str, node: ComponentNodeInputModel, scope: Mapping[str, str | None]) -> str:
+        return node.id
 
 
-def resolve_local(local: BlokLocalInputModel, arguments: Sequence[Mapping[str, object]], binds: Sequence[str]) -> BlokLocalInputModel:
+def argument_type(dependency: str, action: str, argument: str, dependencies: Mapping[str, AgentDependencyInputModel]) -> Typed | None:
+    """The type of an action's argument, as the server knows it: the arg match of a dependency's
+    demand; None when it does not tell (the server knows no action's full arg ports)."""
+    declared = dependencies.get(dependency)
+    demand = next((each.demand for each in (declared.action_dependencies or ()) if each.key == action), None) if declared is not None else None
+    match = next((each for each in (demand.arg_matches or ()) if each.key == argument), None) if demand is not None else None
+    return match_type(match) if match is not None else None
+
+
+def borrowed_type(like: str, dependencies: Mapping[str, AgentDependencyInputModel]) -> tuple[Typed | None, str | None]:
+    """What ``like="self.<action>.<arg>"`` / ``"deps.<key>.<action>.<arg>"`` borrows: the
+    argument's type as the dependency's demand says it, or why it borrows nothing."""
+    parts = like.split(".")
+    if parts[:1] == ["self"] and len(parts) == 3:
+        dependency, action, argument = "self", parts[1], parts[2]
+    elif parts[:1] == ["deps"] and len(parts) == 4:
+        dependency, action, argument = parts[1], parts[2], parts[3]
+    else:
+        return None, "is no argument: write self.<action>.<arg> or deps.<key>.<action>.<arg>"
+    if dependency not in dependencies and dependency != "self":
+        return None, f"names the dependency {dependency!r}, which the mount does not have ({', '.join(sorted(dependencies)) or 'none'})"
+    declared = dependencies.get(dependency)
+    actions = {each.key: each for each in (declared.action_dependencies or ())} if declared is not None else {}
+    if action not in actions:
+        return None, f"names the action {action!r}, which {dependency} does not have ({', '.join(sorted(actions)) or 'none'})"
+    typed = argument_type(dependency, action, argument, dependencies)
+    if typed is None:
+        return None, f"names the argument {argument!r}, which {dependency}.{action} does not have, or does not type"
+    return typed, None
+
+
+def resolve_local(
+    local: BlokLocalInputModel,
+    arguments: Sequence[Mapping[str, object]],
+    binds: Sequence[str],
+    borrowed: Mapping[str, object] | None = None,
+) -> BlokLocalInputModel:
     """``local`` with its kind resolved by the rules of this module (a given kind is kept)."""
     if kind_given(local):
         return local
     candidates: list[Mapping[str, object]] = []
+    if borrowed is not None:
+        candidates.append(borrowed)
     from_default = default_type(local.default)
     if from_default is not None:
         candidates.append(from_default)
@@ -191,12 +234,42 @@ def resolve_local(local: BlokLocalInputModel, arguments: Sequence[Mapping[str, o
     return any_local(local)
 
 
-def resolve_scope(tree: ComponentNodeInputModel, scope: "BlokScope") -> "BlokScope":
-    """``scope`` with what ``tree`` tells: each local's kind (see the module). Resolving a
-    resolved scope changes nothing."""
-    uses = _uses(tree, scope)
-    locals_ = tuple(resolve_local(local, uses.arguments.get(local.key, ()), uses.binds.get(local.key, ())) for local in scope.locals)
-    return replace(scope, locals=locals_)
+def resolve_locals(
+    tree: ComponentNodeInputModel,
+    dependencies: Sequence[AgentDependencyInputModel] | None = None,
+) -> dict[str, ResolvedLocal]:
+    """Every readable ``<local>`` of ``tree`` with its kind resolved (see the module), by node id.
+
+    ``dependencies`` None is a blok not mounted: a ``like`` then borrows nothing, and says nothing
+    of it either. Resolving resolved locals changes nothing.
+    """
+    by_key = {dependency.key: dependency for dependency in dependencies or ()}
+    uses = _Uses(dependencies=by_key)
+    walk_tree(tree, uses)
+    resolved: dict[str, ResolvedLocal] = {}
+    for node in iter_nodes(tree):
+        if node.component != LOCAL_COMPONENT or local_problem(node) is not None:
+            continue
+        local = declared_local(node)
+        like = local_like(node)
+        borrowed, problem = (None, None)
+        if like is not None and dependencies is not None:
+            borrowed, problem = borrowed_type(like, by_key)
+        resolved[node.id] = ResolvedLocal(
+            local=resolve_local(local, uses.arguments.get(node.id, ()), uses.binds.get(node.id, ()), borrowed),
+            like_problem=problem,
+        )
+    return resolved
 
 
-__all__ = ["default_type", "kind_given", "match_type", "resolve_local", "resolve_scope", "typed_local"]
+__all__ = [
+    "ResolvedLocal",
+    "argument_type",
+    "borrowed_type",
+    "default_type",
+    "kind_given",
+    "match_type",
+    "resolve_local",
+    "resolve_locals",
+    "typed_local",
+]

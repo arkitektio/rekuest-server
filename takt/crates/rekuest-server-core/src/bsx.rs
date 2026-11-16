@@ -8,6 +8,8 @@
 //!   its renderer's to say. Several parts of one run desugar to `str.template`. Whitespace
 //!   follows JSX.
 //! - `className={[...]}` and `className={{...}}` desugar to `str.classes` (clsx).
+//! - `<local name="x" .../>` declares `x` (stored as its `name` prop's `declares_value`, like a
+//!   `let`); a name that is no plain identifier is refused (`local.attribute`).
 //! - Operators desugar to `cmp.*` / `logic.*` calls; a callback holds one task call (`into
 //!   name` names its record) or one effect. `queries.<name>.refetch()` and
 //!   `queries.<name>.fetch_more(name: value, ...)` desugar to the effects `query.refetch` and
@@ -46,6 +48,8 @@ const TEMPLATE_FUNCTION: &str = "str.template";
 const ELSE: &str = "else";
 const IF: &str = "if";
 const FOREACH: &str = "foreach";
+const LOCAL: &str = "local";
+const LOCAL_NAME: &str = "name";
 
 type Parsed<T> = Result<T, BsxError>;
 
@@ -792,6 +796,34 @@ impl Lowering<'_> {
 
     fn prop(&self, component: &str, attribute: &Attribute) -> Parsed<ComponentPropInputModel> {
         let key = attribute.name.as_str();
+        // `<local name="x">` declares `x` to its parent's subtree, as a `let` does to its loop.
+        if component == LOCAL && key == LOCAL_NAME {
+            return match &attribute.value {
+                AttributeValue::Text(name) if is_local(name) => Ok(ComponentPropInputModel {
+                    static_value: Some(s(name.clone())),
+                    declares_value: Some(name.clone()),
+                    ..prop(key)
+                }),
+                other => {
+                    let written = match other {
+                        AttributeValue::Text(text) => text.clone(),
+                        _ => "{...}".to_owned(),
+                    };
+                    Err(self.fail(
+                        "local.attribute",
+                        attribute.offset,
+                        &[
+                            ("name", s(written)),
+                            ("key", s(LOCAL_NAME)),
+                            (
+                                "problem",
+                                s("is not a name: write name=\"x\", a plain identifier"),
+                            ),
+                        ],
+                    ))
+                }
+            };
+        }
         match &attribute.value {
             AttributeValue::Flag => Ok(ComponentPropInputModel {
                 static_value: Some(Value::Bool(true)),

@@ -14,6 +14,8 @@ from kante.context import HttpContext
 from facade.models import Agent, Blok, BlokDependency, Caller, MaterializedBlok, Module
 from facade.schema import schema
 from tests.graphql_ops import BLOKS, CREATE_BLOK, DELETE_BLOK, DELETE_MATERIALIZED_BLOK, FORK_BLOK, MATERIALIZE_BLOK, UPDATE_BLOK, UPDATE_MATERIALIZED_BLOK
+from tests.registered import blok as blok_tree
+from tests.registered import node
 
 
 @sync_to_async
@@ -32,7 +34,7 @@ def _provided(context: HttpContext) -> dict:
         module=catalog,
         app=release.app,
         declaration_hash="a" * 64,
-        components=[{"id": "Html[0]", "component": "Html", "children": [{"id": "Html[0]/Box[0]", "component": "Box"}]}],
+        components=[blok_tree("agent", "panel", node("Box"))],
     )
     BlokDependency.objects.create(blok=blok, key="self")
     slot = MaterializedBlok.objects.create(blok=blok, declared_by=agent, name="panel", description="")
@@ -72,7 +74,8 @@ class TestProvidedBloks:
         fork = forked.data["forkBlok"]
         assert fork["name"] == "my-panel"
         assert fork["provided"] is False
-        assert fork["componentTree"] == [{"id": "Html[0]", "component": "Html", "children": [{"id": "Html[0]/Box[0]", "component": "Box"}]}]
+        # The copy is a custom blok: its <Blok> says so.
+        assert fork["componentTree"] == [blok_tree("custom", "panel", node("Box"))]
         assert fork["dependencies"] == [{"key": "self"}]
 
         # The copy is the user's: editable, and it outlives the provided one.

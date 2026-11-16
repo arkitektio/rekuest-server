@@ -99,6 +99,29 @@ class Kind:
     locals: bool
     contexts: tuple[str, ...]
     description: str = ""
+    within: Mapping[str, "Kind"] = field(default_factory=dict[str, "Kind"])
+    """Per context, the row the kind reads there when it reads less (an action's logo reads only ``task``)."""
+
+    def drawn_in(self, context: str) -> "Kind":
+        """The row of this kind in ``context``: its own, or the narrower one it has there."""
+        return self.within.get(context, self)
+
+
+@dataclass(frozen=True)
+class BlokElement:
+    """The one element every blok is (``vocabulary.json`` ``blok``)."""
+
+    component: str
+    """``Blok``."""
+    attributes: tuple[str, ...]
+    contexts: Mapping[str, str]
+    """The ``context`` attribute's spelling -> the context (``panel`` -> ``PANEL``)."""
+    content: Mapping[str, tuple[str, ...]]
+    """Per context, the components its one element may be (a panel holds anything)."""
+    chrome: frozenset[str]
+    """The contexts ``chrome`` is said in."""
+    declarations: tuple[str, ...]
+    """The components that declare what a blok owns and draw nothing (``local``, ``query``, ...)."""
 
 
 @dataclass(frozen=True)
@@ -191,8 +214,8 @@ class Vocabulary:
     agent_fields: tuple[str, ...]
     kinds: Mapping[str, Kind]
     contexts: Mapping[str, Context]
-    blok_roots: Mapping[str, str]
-    """A blok's root component -> the blok context it names (``Html`` -> ``HTML``)."""
+    blok: BlokElement
+    """The one element every blok is: ``<Blok kind context catalog chrome>``."""
     records: Mapping[str, Record]
     idle_task: Mapping[str, JSON]
     functions: Mapping[str, Function]
@@ -316,20 +339,39 @@ def parse_vocabulary(raw: JSON) -> Vocabulary:
         if unknown:
             raise ValueError(f"vocabulary.json: kind {name} reads unknown roots {unknown}")
         description = entry.get("description", "")
+        within: dict[str, Kind] = {}
+        for context_name, narrower in _object(entry.get("in", {}), f"kinds.{name}.in").items():
+            row = _object(narrower, f"kinds.{name}.in.{context_name}")
+            narrower_roots = frozenset(_strings(row.get("roots"), f"kinds.{name}.in.{context_name}.roots"))
+            if not narrower_roots <= kind_roots:
+                raise ValueError(f"vocabulary.json: kind {name} reads more in {context_name} than it reads")
+            within[context_name] = Kind(name=name, roots=narrower_roots, locals=_flag(row, "locals"), contexts=(context_name,))
         kinds[name] = Kind(
             name=name,
             roots=kind_roots,
             locals=_flag(entry, "locals"),
             contexts=_strings(entry.get("contexts"), f"kinds.{name}.contexts"),
             description=description if isinstance(description, str) else "",
+            within=within,
         )
 
     contexts: dict[str, Context] = {}
     for name, item in _object(top.get("contexts"), "contexts").items():
         entry = _object(item, f"contexts.{name}")
         contexts[name] = Context(name=name, text=_flag(entry, "text"))
-    roots_entry = _object(_object(top.get("blok_roots"), "blok_roots").get("roots"), "blok_roots.roots")
-    blok_roots = {root: _string(context, f"blok_roots.roots.{root}") for root, context in roots_entry.items()}
+    blok_entry = _object(top.get("blok"), "blok")
+    content_entry = _object(blok_entry.get("content"), "blok.content")
+    blok = BlokElement(
+        component=_string(blok_entry.get("component"), "blok.component"),
+        attributes=tuple(_object(blok_entry.get("attributes"), "blok.attributes")),
+        contexts={spelled: _string(context, f"blok.contexts.{spelled}") for spelled, context in _object(blok_entry.get("contexts"), "blok.contexts").items()},
+        content={context: _strings(components, f"blok.content.{context}") for context, components in content_entry.items() if context != "description"},
+        chrome=frozenset(_strings(blok_entry.get("chrome"), "blok.chrome")),
+        declarations=tuple(name for name in _object(blok_entry.get("declarations"), "blok.declarations") if name != "description"),
+    )
+    unknown_contexts = sorted({*blok.contexts.values(), *blok.content} - set(contexts))
+    if unknown_contexts:
+        raise ValueError(f"vocabulary.json: blok names unknown contexts {unknown_contexts}")
     for kind in kinds.values():
         unknown = sorted(set(kind.contexts) - set(contexts))
         if unknown:
@@ -412,7 +454,7 @@ def parse_vocabulary(raw: JSON) -> Vocabulary:
         agent_fields=tuple(_object(segments.get("fields"), "agent_segments.fields")),
         kinds=kinds,
         contexts=contexts,
-        blok_roots=blok_roots,
+        blok=blok,
         records=records,
         idle_task=idle_task,
         functions=functions,
@@ -597,6 +639,7 @@ class BlokError(ValueError):
 __all__ = [
     "JSON",
     "VOCAB",
+    "BlokElement",
     "BlokError",
     "Context",
     "DiagnosticSpec",

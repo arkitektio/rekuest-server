@@ -1138,7 +1138,7 @@ class ImplementationInputModel(BaseModel):
     effects: enums.Effects = Field(default=enums.Effects.UNKNOWN, description="What running this implementation again would do to the world. Informational: shown to whoever decides about a lost task.")
     execution: enums.Execution = Field(default=enums.Execution.PLAIN, description="How this implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies.")
     code_hash: str | None = Field(default=None, description="A hash of the implementation's code. A workflow is only resumed by an implementation with the same hash.")
-    logo: str | None = Field(default=None, description="The key of the agent's action logo blok (context ACTION_LOGO) that draws this action.")
+    logo: str | None = Field(default=None, description="The key of the agent's action logo blok (`<Blok kind=\"action\" context=\"logo\">`) that draws this action.")
     asks: list["AskBlokInputModel"] | None = Field(default=None, description="The bloks this implementation asks a person through, declared up front: a task asks one by its key.")
     informs: list["InformBlokInputModel"] | None = Field(default=None, description="The bloks this implementation shows a person while a task goes on, declared up front: a task shows one by its key.")
     dynamic_asks: bool | None = Field(default=None, description="Whether a task may also ask through a blok made at ask time, or any blok of the organization. Refused otherwise, and without the `rekuest_dynamic_ask` scope.")
@@ -1527,33 +1527,6 @@ def check_blok_sent_once(components: object | None, source: str | None, *, requi
 _CATALOG = re.compile(r"[a-z][a-z0-9_-]*@[0-9]+")
 CATALOG_PATTERN = _CATALOG
 """How a catalog is spelled: ``name@version`` (``ui@1``)."""
-_FIELD_PATH = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*")
-"""A query's ``more``: a dotted path into its data (``positions``, ``images.items``)."""
-_LOCAL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-_GRAPHQL_COMMENT = re.compile(r"#[^\n]*")
-
-
-def operation_keyword(document: str) -> str:
-    """The kind of a GraphQL document's first operation: ``query`` (also for ``{ ... }``),
-    ``mutation``, ``subscription``, or whatever word it starts with."""
-    text = _GRAPHQL_COMMENT.sub("", document).lstrip()
-    if text.startswith("{"):
-        return "query"
-    match = re.match(r"[A-Za-z_]+", text)
-    return match.group(0) if match else ""
-
-
-def check_operation(kind: str, name: str, operation: str) -> None:
-    """A query's document is a ``query``, a subscription's a ``subscription``; neither writes."""
-    from rekuest_core.vocabulary import BlokError
-
-    if operation == kind:
-        return
-    if operation == "mutation":
-        raise BlokError("query.read_only", kind=kind, name=name, problem="is a mutation: a blok reads, and writes only through a task")
-    raise BlokError("query.kind", kind=kind, name=name, operation=operation or "document without an operation")
-
-
 def wrong_context(kind: str, context: enums.ComponentContext) -> ValueError:
     """``context.kind``: a blok of ``kind`` drawn in a context its kind has no blok for."""
     from rekuest_core.vocabulary import BlokError, load_vocabulary
@@ -1564,53 +1537,20 @@ def wrong_context(kind: str, context: enums.ComponentContext) -> ValueError:
 
 def check_blok_declarations(
     *,
-    kind: str,
     catalogs: list[str],
-    locals: list[BlokLocalInputModel],
-    queries: list[BlokQueryInputModel],
-    subscriptions: list[BlokSubscriptionInputModel],
     dependency_keys: set[str],
     demo: "BlokDemoInputModel | None",
 ) -> None:
-    """What a v2 blok declares beside its tree, as arkitekt-spec's ``check_blok_declarations`` has it.
-
-    Its catalogs spelled ``name@version``; its locals, queries and subscriptions each named once,
-    by a name (a local by none the vocabulary reserves); a query a ``query``, a subscription a
-    ``subscription``, neither a mutation; a query's ``more`` a dotted field path; a subscription's history a declared query; an action
-    logo declaring nothing; ``demo.deps`` naming only dependencies (and ``self``). Each refusal
-    is a row of the vocabulary's diagnostic table (``manifest.*``, ``query.*``, ``roots.reserved``).
+    """What a v2 blok's input says beside its tree, as arkitekt-spec's ``check_blok_declarations``
+    has it: its catalogs spelled ``name@version``, its ``demo.deps`` naming only dependencies (and
+    ``self``). What the blok owns (locals, queries, subscriptions) is declared in its tree and
+    checked with it (``rekuest_core.vocabulary``).
     """
-    from rekuest_core.vocabulary import BlokError, load_vocabulary
+    from rekuest_core.vocabulary import BlokError
 
-    reserved = load_vocabulary().reserved
     for catalog in catalogs:
         if not _CATALOG.fullmatch(catalog):
             raise BlokError("manifest.catalog", catalog=catalog)
-    named: tuple[tuple[str, list[str]], ...] = (
-        ("locals", [local.key for local in locals]),
-        ("queries", [query.key for query in queries]),
-        ("subscriptions", [subscription.key for subscription in subscriptions]),
-    )
-    for what, keys in named:
-        twice = next((key for key in keys if keys.count(key) > 1), None)
-        if twice is not None:
-            raise BlokError("manifest.duplicate", what=what, key=twice)
-        for key in keys:
-            if not _LOCAL_NAME.fullmatch(key):
-                raise BlokError("manifest.name", what=what, key=key)
-            if what == "locals" and key in reserved:
-                raise BlokError("roots.reserved", name=key)
-    for query in queries:
-        check_operation("query", query.key, operation_keyword(query.document))
-        if query.more is not None and not _FIELD_PATH.fullmatch(query.more):
-            raise BlokError("query.more", name=query.key, more=query.more, problem="is not a field path into its data (positions, images.items)")
-    declared = {query.key for query in queries}
-    for subscription in subscriptions:
-        check_operation("subscription", subscription.key, operation_keyword(subscription.document))
-        if subscription.history is not None and subscription.history not in declared:
-            raise BlokError("query.history", name=subscription.key, history=subscription.history)
-    if kind == "action_logo" and (locals or queries or subscriptions or dependency_keys):
-        raise BlokError("manifest.action_logo")
     deps = demo.deps if demo is not None else None
     if isinstance(deps, dict):
         unknown = sorted(set(deps) - dependency_keys - {"self"})
@@ -1618,26 +1558,24 @@ def check_blok_declarations(
             raise BlokError("manifest.demo", keys=", ".join(unknown))
 
 
-def blok_kind(context: enums.ComponentContext) -> str:
-    """The kind of a blok an agent declares: an action logo when drawn as one, else an agent blok."""
-    return "action_logo" if context == enums.ComponentContext.ACTION_LOGO else "agent"
+def agent_blok_kinds(context: enums.ComponentContext) -> tuple[str, ...]:
+    """The kinds a blok an agent declares may be: an agent blok, or in a logo an action's logo."""
+    return ("agent", "action") if context == enums.ComponentContext.LOGO else ("agent",)
 
 
 def check_blok_manifest(
     components: Optional[List[ComponentNodeInputModel]],
     *,
-    kind: str,
+    kinds: tuple[str, ...],
+    mount: str,
     context: enums.ComponentContext,
     dependencies: list[AgentDependencyInputModel],
-    locals: list[BlokLocalInputModel],
-    queries: list[BlokQueryInputModel],
-    subscriptions: list[BlokSubscriptionInputModel],
     args: list[str] | None,
-    catalogs: list[str],
     demo: "BlokDemoInputModel | None" = None,
 ) -> list["Finding"]:
-    """A v2 tree against what its blok declares and its kind, without a catalog (the language
-    rules of ``rekuest_core.vocabulary.check``): refused on the first error, its warnings returned.
+    """A v2 tree mounted where it is sent (the language rules of ``rekuest_core.vocabulary``,
+    no catalog): refused on the first error, its warnings returned. Its ``<Blok>`` must say the
+    context it is sent as, and a kind the mount takes.
 
     A tree is one root. Its catalog findings (component names, props, placement) are the
     catalog check's (``facade/catalog_validation.py``), which runs where the catalogs are.
@@ -1645,7 +1583,7 @@ def check_blok_manifest(
     Raises:
         BlokError: With the code of the first error finding.
     """
-    from rekuest_core.vocabulary import BlokError, BlokScope, check_blok_tree
+    from rekuest_core.vocabulary import BlokError, BlokScope, blok_header, check_blok_tree
 
     if components is None:
         return []
@@ -1658,12 +1596,9 @@ def check_blok_manifest(
             raise BlokError("bsx.duplicate_id", id=node.id)
         seen.add(node.id)
     scope = BlokScope(
-        kind=kind,
-        context=context.value,
+        kinds=kinds,
+        mount=mount,
         dependencies=tuple(dependencies),
-        locals=tuple(locals),
-        queries=tuple(queries),
-        subscriptions=tuple(subscriptions),
         args=tuple(args) if args is not None else None,
         demo=demo,
     )
@@ -1671,6 +1606,9 @@ def check_blok_manifest(
     for finding in findings:
         if finding.level == "error":
             raise BlokError.from_finding(finding)
+    said = blok_header(components[0]).context
+    if said != context.value:
+        raise ValueError(f"Blok manifest: sent as a {context.value} blok, but its <Blok> says {said}")
     return findings
 
 
@@ -1678,26 +1616,26 @@ MODEL_REF_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
 
 
 def check_blok_target(context: enums.ComponentContext, for_model: Optional[str], for_node: Optional[str]) -> None:
-    """A blok that decorates a model names it by reference, and is an html blok."""
+    """A blok that decorates a model names it by reference, and is a panel blok."""
     if for_node is not None and for_model is None:
         raise ValueError("Blok manifest: for_node needs a for_model")
     if for_model is None:
         return
     if not MODEL_REF_PATTERN.fullmatch(for_model):
         raise ValueError(f"Blok manifest: for_model must be 'sha256:' and 64 lowercase hex characters, not {for_model!r}")
-    if context != enums.ComponentContext.HTML:
-        raise ValueError("Blok manifest: only an html blok can decorate a model")
+    if context != enums.ComponentContext.PANEL:
+        raise ValueError("Blok manifest: only a panel blok can decorate a model")
 
 
 BLOK_ARGS_ROOT = "args"
 
 
 def check_blok_args(context: enums.ComponentContext, args: list["ArgPortInputModel"]) -> None:
-    """A blok's args are the items it is opened for: an html blok's, keyed once, read under ``args.<key>``."""
+    """A blok's args are the items it is opened for: a panel blok's, keyed once, read under ``args.<key>``."""
     if not args:
         return
-    if context != enums.ComponentContext.HTML:
-        raise ValueError(f"Blok manifest: only an html blok takes args, not a {context.value} blok")
+    if context != enums.ComponentContext.PANEL:
+        raise ValueError(f"Blok manifest: only a panel blok takes args, not a {context.value} blok")
     _check_unique(args, "key", "Blok manifest args")
 
 
@@ -1732,17 +1670,14 @@ class BlokImplementationInputModel(BaseModel):
     catalog_minor: Optional[int] = Field(default=None, ge=0, description="The minor of its catalog the blok needs: the newest `since` among the components and props it uses.")
     _written_for = model_validator(mode="before")(_catalog_names_the_module)
     description: Optional[str] = Field(default=None, description="A human-readable description about this Blok's purpose and functionality.")
-    context: enums.ComponentContext = Field(default=enums.ComponentContext.HTML, description="The renderer for this Blok's root: HTML for panels and dashboards, SCENE for a full 3D view whose root is a Scene, LOGO an agent's logo, ACTION_LOGO an action's.")
+    context: enums.ComponentContext = Field(default=enums.ComponentContext.PANEL, description="What draws it, as its `<Blok context=...>` says (the two must agree): PANEL for panels and dashboards, SCENE for a 3D view (one Scene), LOGO for a logo (one Logo): an agent's, or an action's when its kind is action.")
     default: bool = Field(default=False, description="Whether this Blok is its agent's default for its context. A newly declared default replaces the previous one.")
-    for_model: Optional[str] = Field(default=None, description="The model ('sha256:...') this Blok decorates: viewers showing that model offer this Blok at `for_node`. HTML bloks only.")
+    for_model: Optional[str] = Field(default=None, description="The model ('sha256:...') this Blok decorates: viewers showing that model offer this Blok at `for_node`. PANEL bloks only.")
     for_node: Optional[str] = Field(default=None, description="The node of `for_model` this Blok attaches to; the model's root when absent.")
-    args: list[ArgPortInputModel] = Field(default_factory=list, description="The items this Blok is opened for, declared like an action's args and read under `args.<key>`. A UI offers the Blok on any item its args accept (`MaterializedBlokFilter.demands`). HTML bloks only.")
+    args: list[ArgPortInputModel] = Field(default_factory=list, description="The items this Blok is opened for, declared like an action's args and read under `args.<key>`. A UI offers the Blok on any item its args accept (`MaterializedBlokFilter.demands`). PANEL bloks only.")
     vocab: Literal[2] = Field(description="The blok language version the blok speaks; 2 is the only one.")
     catalogs: list[str] = Field(default_factory=list, description="The catalogs it needs, as name@version ('ui@1', 'scene@1').")
-    locals: list[BlokLocalInputModel] = Field(default_factory=list, description="Its locals: form state that feeds a call, written only through bind.")
     demo: Optional[BlokDemoInputModel] = Field(default=None, description="What a preview renders it with.")
-    queries: list[BlokQueryInputModel] = Field(default_factory=list, description="Its declared reads, as `queries.<key>`.")
-    subscriptions: list[BlokSubscriptionInputModel] = Field(default_factory=list, description="Its declared streams, as `subscriptions.<key>`.")
 
     @model_validator(mode="after")
     def check_manifest(self) -> Self:
@@ -1750,28 +1685,24 @@ class BlokImplementationInputModel(BaseModel):
 
         A blok sent as its source is checked once takt has parsed it, at registration."""
         check_blok_sent_once(self.components, self.source, required=True)
-        kind = blok_kind(self.context)
         dependency_keys = {dependency.key for dependency in self.dependencies}
-        check_blok_declarations(kind=kind, catalogs=self.catalogs, locals=self.locals, queries=self.queries, subscriptions=self.subscriptions, dependency_keys=dependency_keys, demo=self.demo)
+        check_blok_declarations(catalogs=self.catalogs, dependency_keys=dependency_keys, demo=self.demo)
         check_blok_target(self.context, self.for_model, self.for_node)
         check_blok_args(self.context, self.args)
         check_blok_manifest(
             self.components,
-            kind=kind,
+            kinds=agent_blok_kinds(self.context),
+            mount=f"the agent's blok {self.key!r}",
             context=self.context,
             dependencies=self.dependencies,
-            locals=self.locals,
-            queries=self.queries,
-            subscriptions=self.subscriptions,
             args=[arg.key for arg in self.args] if self.args else None,
-            catalogs=self.catalogs,
             demo=self.demo,
         )
         return self
 
 
 #: The contexts an action has a blok for, one each.
-ACTION_BLOK_CONTEXTS = (enums.ComponentContext.HTML, enums.ComponentContext.SCENE)
+ACTION_BLOK_CONTEXTS = (enums.ComponentContext.PANEL, enums.ComponentContext.SCENE)
 
 #: A 3D view placing the run's dependencies in a room whose layout is shared.
 SPACE_COMPONENT = "Space"
@@ -1801,20 +1732,16 @@ def check_action_blok(blok: "ActionBlokInputModel", dependencies: list[AgentDepe
         BlokError: With the code of the first error finding.
     """
     keys = {dependency.key for dependency in dependencies}
-    kind = blok.kind
-    check_blok_declarations(kind=kind, catalogs=blok.catalogs, locals=blok.locals, queries=blok.queries, subscriptions=blok.subscriptions, dependency_keys=keys, demo=blok.demo)
+    check_blok_declarations(catalogs=blok.catalogs, dependency_keys=keys, demo=blok.demo)
     if blok.components is None:
         return []
     return check_blok_manifest(
         blok.components,
-        kind=kind,
+        kinds=(blok.kind,),
+        mount=f"an action's {blok.phase.value.lower()} bloks",
         context=blok.context,
         dependencies=dependencies,
-        locals=blok.locals,
-        queries=blok.queries,
-        subscriptions=blok.subscriptions,
         args=arg_keys,
-        catalogs=blok.catalogs,
         demo=blok.demo,
     )
 
@@ -1823,8 +1750,8 @@ class ActionBlokInputModel(BaseModel):
     """An action's own blok: how a client shows a run of it in one context. It has no name and is never listed
     on its own; its dependencies are the action's, which it names by key."""
 
-    context: enums.ComponentContext = Field(default=enums.ComponentContext.HTML, description="Where a client shows the run with it: HTML in a task panel, SCENE as a 3D view (its root a `Scene`, or a `Space` placing the run's dependencies in a room whose layout is shared).")
-    phase: enums.ActionBlokPhase = Field(default=enums.ActionBlokPhase.RUN, description="When a client shows it: RUN for a run of the action, ASSIGN before one, to start it. One blok per context and phase.")
+    context: enums.ComponentContext = Field(default=enums.ComponentContext.PANEL, description="Where a client shows the run with it, as its `<Blok context=...>` says: PANEL in a task panel, SCENE as a 3D view (a `Scene`, or a `Space` placing the run's dependencies in a room whose layout is shared).")
+    phase: enums.ActionBlokPhase = Field(default=enums.ActionBlokPhase.RUN, description="When a client shows it, as its `<Blok kind=...>` says: RUN for a run of the action (kind action), ASSIGN before one, to start it (kind assign). One blok per context and phase.")
     components: Optional[list[ComponentNodeInputModel]] = Field(default=None, description="The UI component tree, unless the blok is sent as its `source`.")
     source: Optional[str] = Field(default=None, description="The blok as v2 BSX, parsed by the server into its component tree. Exactly one of `components` and `source` is sent.")
     module: Optional[str] = Field(default=None, description="The module the blok renders against besides its catalogs; the Orkestrator's when absent.")
@@ -1834,16 +1761,13 @@ class ActionBlokInputModel(BaseModel):
     description: Optional[str] = Field(default=None, description="What the blok shows of a run.")
     vocab: Literal[2] = Field(description="The blok language version the blok speaks; 2 is the only one.")
     catalogs: list[str] = Field(default_factory=list, description="The catalogs it needs, as name@version.")
-    locals: list[BlokLocalInputModel] = Field(default_factory=list, description="Its locals: form state that feeds a call, written only through bind.")
     demo: Optional[BlokDemoInputModel] = Field(default=None, description="What a preview renders it with.")
-    queries: list[BlokQueryInputModel] = Field(default_factory=list, description="Its declared reads.")
-    subscriptions: list[BlokSubscriptionInputModel] = Field(default_factory=list, description="Its declared streams.")
 
     model_config = ConfigDict(extra="forbid")
 
     @property
     def kind(self) -> str:
-        """The blok kind it is checked as: ``assign`` for one that starts a run, else ``action``."""
+        """The kind its ``<Blok>`` must say: ``assign`` for one that starts a run, else ``action``."""
         return "assign" if self.phase == enums.ActionBlokPhase.ASSIGN else "action"
 
     @model_validator(mode="after")
@@ -1874,10 +1798,7 @@ class AskBlokInputModel(BaseModel):
     dependencies: list[AgentDependencyInputModel] = Field(default_factory=list, description="The agents it reads or calls besides `self`, as `deps.<key>`.")
     vocab: Literal[2] = Field(description="The blok language version the blok speaks; 2 is the only one.")
     catalogs: list[str] = Field(default_factory=list, description="The catalogs it needs, as name@version.")
-    locals: list[BlokLocalInputModel] = Field(default_factory=list, description="Its locals: form state that feeds a call, written only through bind.")
     demo: Optional[BlokDemoInputModel] = Field(default=None, description="What a preview renders it with.")
-    queries: list[BlokQueryInputModel] = Field(default_factory=list, description="Its declared reads.")
-    subscriptions: list[BlokSubscriptionInputModel] = Field(default_factory=list, description="Its declared streams.")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1886,11 +1807,7 @@ class AskBlokInputModel(BaseModel):
         """Sent one way; its declarations a task blok's; its args and returns each keyed once."""
         check_blok_sent_once(self.components, self.source, required=True)
         check_blok_declarations(
-            kind="task",
             catalogs=self.catalogs,
-            locals=self.locals,
-            queries=self.queries,
-            subscriptions=self.subscriptions,
             dependency_keys={dependency.key for dependency in self.dependencies} | {"self"},
             demo=self.demo,
         )
@@ -1920,10 +1837,7 @@ class InformBlokInputModel(BaseModel):
     dependencies: list[AgentDependencyInputModel] = Field(default_factory=list, description="The agents it reads or calls besides `self`, as `deps.<key>`.")
     vocab: Literal[2] = Field(description="The blok language version the blok speaks; 2 is the only one.")
     catalogs: list[str] = Field(default_factory=list, description="The catalogs it needs, as name@version.")
-    locals: list[BlokLocalInputModel] = Field(default_factory=list, description="Its locals: form state that feeds a call, written only through bind.")
     demo: Optional[BlokDemoInputModel] = Field(default=None, description="What a preview renders it with.")
-    queries: list[BlokQueryInputModel] = Field(default_factory=list, description="Its declared reads.")
-    subscriptions: list[BlokSubscriptionInputModel] = Field(default_factory=list, description="Its declared streams.")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1932,11 +1846,7 @@ class InformBlokInputModel(BaseModel):
         """Sent one way; its declarations a task blok's; its args each keyed once."""
         check_blok_sent_once(self.components, self.source, required=True)
         check_blok_declarations(
-            kind="task",
             catalogs=self.catalogs,
-            locals=self.locals,
-            queries=self.queries,
-            subscriptions=self.subscriptions,
             dependency_keys={dependency.key for dependency in self.dependencies} | {"self"},
             demo=self.demo,
         )
@@ -2012,7 +1922,7 @@ class CatalogComponentInputModel(BaseModel):
     description: str | None = Field(default=None, description="Human-readable description of the component.")
     props: list[CatalogPropInputModel] = Field(default_factory=list, description="The props this component accepts.")
     accepts_children: bool = Field(default=True, description="Whether ComponentNode.children may be nested under this component.")
-    context: enums.ComponentContext = Field(default=enums.ComponentContext.HTML, description="The context this component may be placed in.")
+    context: enums.ComponentContext = Field(default=enums.ComponentContext.PANEL, description="The context this component may be placed in.")
     children_context: enums.ComponentContext | None = Field(default=None, description="The context in force for this component's children, when it differs from its own: such a component bridges two renderers.")
     inherits_context: bool = Field(default=False, description="Whether the component may be placed in any context, taking its parent's for itself and its children (control flow such as foreach or if). Its context is then ignored.")
     downstream_of: list[str] = Field(default_factory=list, description="Component names of which at least one must be an ancestor, at any depth. Empty means no requirement.")
@@ -2024,13 +1934,6 @@ class CatalogComponentInputModel(BaseModel):
     def check_unique_props(self) -> Self:
         """Prop keys are unique per component."""
         _check_unique(self.props, "key", f"catalog component {self.name}")
-        return self
-
-    @model_validator(mode="after")
-    def check_no_action_logo_context(self) -> Self:
-        """ACTION_LOGO is a blok's context, never a component's: an action logo draws logo components."""
-        if enums.ComponentContext.ACTION_LOGO in (self.context, self.children_context):
-            raise ValueError(f"catalog component {self.name}: ACTION_LOGO is a blok context only; its shapes are LOGO components")
         return self
 
 

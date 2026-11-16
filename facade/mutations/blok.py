@@ -15,7 +15,7 @@ from django.db import transaction
 from kante.types import Info
 
 from facade import inputs, models, takt, takt_api, types
-from facade.blok_revisions import BlokContent, StaleRevisionError, commit_revision, content_of_blok, content_of_revision, lock_blok
+from facade.blok_revisions import BlokContent, StaleRevisionError, commit_revision, content_of_blok, content_of_revision, lock_blok, tree_context, with_kind
 from facade.caller_context import CallerContext
 from facade.catalog_validation import blok_findings_against_module, validate_blok_against_module
 from facade.mutations.materialized_blok import check_agent_mappings, organization_of, write_mappings
@@ -96,19 +96,18 @@ def create_blok(info: Info, input: inputs.CreateBlokInput) -> types.Blok:
 
     # create is an upsert on (name, organization): it commits what it is given as the blok's next
     # revision, dependencies a previous one declared but this one does not included.
+    components = [json_object(component.model_dump(mode="json", exclude_none=True)) for component in model.components or []]
     content = BlokContent(
-        components=[json_object(component.model_dump(mode="json", exclude_none=True)) for component in model.components or []],
-        context=model.context,
+        components=components,
+        # Its <Blok> says its context; one created without a tree says it in the input.
+        context=(tree_context(components) if components else None) or model.context,
         module=module,
         dependencies=list(model.dependencies or []),
         # createBlok declares no args: a blok created again keeps the ones it has.
         args=[rimodels.ArgPortInputModel(**arg) for arg in blok.args or []],
         catalogs=list(model.catalogs),
-        locals=list(model.locals),
         demo=model.demo,
-        queries=list(model.queries),
-        subscriptions=list(model.subscriptions),
-    ).resolved()
+    )
     content.check()
     commit_revision(blok, content, base=None, guarded=False, author=CallerContext.from_info(info).user, message="Created" if blok.head_id is None else "Created again")
 
@@ -147,7 +146,9 @@ def _fork(provided: models.Blok, name: str, user: User) -> models.Blok:
         port.parent = None if parent_id is None else copies[parent_id]
         port.save()
         copies[source_id] = port
-    commit_revision(blok, content_of_blok(provided), base=None, author=user, message=f"Forked from the blok '{provided.name}' its agents provide")
+    content = content_of_blok(provided)
+    content = content.but(components=with_kind(content.components, "custom"))
+    commit_revision(blok, content, base=None, author=user, message=f"Forked from the blok '{provided.name}' its agents provide")
     return blok
 
 
@@ -169,6 +170,8 @@ def fork_blok(info: Info, input: inputs.ForkBlokInput) -> types.Blok:
     refuse_held_by_action(provided)
     if provided.app_id is None:
         raise ValueError(f"Blok '{provided.name}' is already custom.")
+    if provided.context == "LOGO":
+        raise ValueError(f"Blok '{provided.name}' is a logo: a logo draws its agent or action, and a custom blok is a panel or a scene, so it is not forked.")
     return cast("types.Blok", _fork(provided, input.name or provided.name, CallerContext.from_info(info).user))
 
 
@@ -186,7 +189,7 @@ def update_blok(info: Info, input: inputs.UpdateBlokInput) -> types.Blok:
 
     # A partial update is validated as the content it results in: new components against the
     # dependencies and local state that will be in force after the update.
-    content = _edited(info, lock_blok(blok.pk), model.source, model.components, model.module, model.dependencies, None).resolved()
+    content = _edited(info, lock_blok(blok.pk), model.source, model.components, model.module, model.dependencies, None)
     content.check()
     commit_revision(blok, content, base=None, guarded=False, author=CallerContext.from_info(info).user)
     return cast("types.Blok", blok)
@@ -211,10 +214,7 @@ def _edited(
         dependencies=dependencies,
         args=args,
         catalogs=edit.catalogs if edit is not None else None,
-        locals=edit.locals if edit is not None else None,
         demo=edit.demo if edit is not None else None,
-        queries=edit.queries if edit is not None else None,
-        subscriptions=edit.subscriptions if edit is not None else None,
     )
 
 
@@ -264,9 +264,7 @@ def edit_blok(info: Info, input: inputs.EditBlokInput) -> types.BlokEdit:
         if (None if base is None else base.pk) != blok.head_id:
             raise StaleRevisionError(blok, base, blok.head)
 
-    # Resolved before anything reads it: its locals as written (the head's, when the edit
-    # leaves them out) are resolved against the new tree, and checked and stored that way.
-    content = _edited(info, blok, model.source, model.components, model.module, model.dependencies, model.args, model).resolved()
+    content = _edited(info, blok, model.source, model.components, model.module, model.dependencies, model.args, model)
     if model.dry_run:
         # A dry run shows every finding, errors included, with its vocabulary code: what is
         # declared beside the tree must still hold, the tree is only reported on.

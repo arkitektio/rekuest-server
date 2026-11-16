@@ -57,7 +57,7 @@ class Action:
         field_name="latest_logo",
         description="The action logo that draws this action: that of the implementation most recently registered with one (`Action.latest_logo`, kept by takt). Each implementation has its own (`Implementation.logo`); an action without one is drawn by its agent's default logo.",
     )
-    @strawberry_django.field(description="The action's own bloks, at most one per context (HTML for a task panel, SCENE a 3D view, as a `Space` placing the run's dependencies): declared with the action, the latest registration's. Not part of its hash.")
+    @strawberry_django.field(description="The action's own bloks, at most one per context (PANEL for a task panel, SCENE a 3D view, as a `Space` placing the run's dependencies): declared with the action, the latest registration's. Not part of its hash.")
     def bloks(self) -> list["ActionBlok"]:
         return cast("list[ActionBlok]", list(models.ActionBlok.objects.filter(action_id=row_of(self, models.Action).pk, phase="RUN").order_by("context")))
 

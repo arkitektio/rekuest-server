@@ -19,13 +19,12 @@ from django.db import transaction
 from django.db.models import Max
 
 from facade import models
-from facade.catalog_validation import dump_diagnostics, resolved_scope, validate_blok_against_module
+from facade.catalog_validation import dump_diagnostics, validate_blok_against_module
 from facade.descriptors import compile_descriptors_to_jsonpath
 from facade.json_types import JSONObject, json_object
 from rekuest_core import enums as renums
 from rekuest_core.inputs import models as rimodels
-from rekuest_core.vocabulary import BlokScope
-from rekuest_core.vocabulary.infer import resolve_local
+from rekuest_core.vocabulary import BlokScope, resolve_locals
 
 
 class StaleRevisionError(ValueError):
@@ -41,25 +40,19 @@ class StaleRevisionError(ValueError):
 @dataclasses.dataclass(frozen=True)
 class BlokContent:
     """What a revision holds: everything that decides what a blok draws and which agents it needs
-    (blok language v2)."""
+    (blok language v2). What the blok owns -- its locals, queries and subscriptions -- is in its
+    tree (``<local>``, ``<query>``, ``<subscription>``)."""
 
     components: list[JSONObject]
-    """The component tree as stored (one root): a copy keeps it as it is, a check parses it."""
+    """The component tree as stored (one ``<Blok>`` root): a copy keeps it as it is, a check parses it."""
     context: renums.ComponentContext
     module: models.Module
     dependencies: list[rimodels.AgentDependencyInputModel]
     args: list[rimodels.ArgPortInputModel] = dataclasses.field(default_factory=list)
     """The items the blok is opened for, read under ``args.<key>``."""
     catalogs: list[str] = dataclasses.field(default_factory=list)
-    locals: list[rimodels.BlokLocalInputModel] = dataclasses.field(default_factory=list)
-    """Its locals as written: a kind left out stays out. What is stored as ``locals`` and hashed."""
     demo: rimodels.BlokDemoInputModel | None = None
-    queries: list[rimodels.BlokQueryInputModel] = dataclasses.field(default_factory=list)
-    subscriptions: list[rimodels.BlokSubscriptionInputModel] = dataclasses.field(default_factory=list)
     vocab: int = 2
-    resolved_locals: list[rimodels.BlokLocalInputModel] | None = None
-    """Its locals as its tree resolves them (:meth:`resolved`), each with a kind; None until
-    resolved. Derived from the rest: never hashed, and dropped by :meth:`but`."""
 
     def but(
         self,
@@ -69,24 +62,21 @@ class BlokContent:
         dependencies: list[rimodels.AgentDependencyInputModel] | None = None,
         args: list[rimodels.ArgPortInputModel] | None = None,
         catalogs: list[str] | None = None,
-        locals: list[rimodels.BlokLocalInputModel] | None = None,
         demo: rimodels.BlokDemoInputModel | None = None,
-        queries: list[rimodels.BlokQueryInputModel] | None = None,
-        subscriptions: list[rimodels.BlokSubscriptionInputModel] | None = None,
     ) -> BlokContent:
-        """This content with every part that is given replaced; ``None`` keeps a part. The
-        resolved locals are not kept: they follow from the new content."""
+        """This content with every part that is given replaced; ``None`` keeps a part. A new tree
+        brings its context along (its ``<Blok>`` says it)."""
+        context = self.context
+        if components is not None and components:
+            context = tree_context(components) or context
         return BlokContent(
             components=self.components if components is None else components,
-            context=self.context,
+            context=context,
             module=self.module if module is None else module,
             dependencies=self.dependencies if dependencies is None else dependencies,
             args=self.args if args is None else args,
             catalogs=self.catalogs if catalogs is None else catalogs,
-            locals=self.locals if locals is None else locals,
             demo=self.demo if demo is None else demo,
-            queries=self.queries if queries is None else queries,
-            subscriptions=self.subscriptions if subscriptions is None else subscriptions,
         )
 
     def parsed_components(self) -> list[rimodels.ComponentNodeInputModel]:
@@ -98,24 +88,20 @@ class BlokContent:
     def stored_args(self) -> list[dict]:
         return [arg.model_dump(mode="json") for arg in self.args]
 
-    def stored_locals(self) -> list[dict]:
-        return [local.model_dump(mode="json", exclude_none=True) for local in self.locals]
-
     def stored_resolved_locals(self) -> list[dict]:
-        return [local.model_dump(mode="json", exclude_none=True) for local in self.locals_resolved()]
+        """Every ``<local>`` of its tree as it resolves, by node: what is stored as ``resolved_locals``."""
+        roots = self.parsed_components()
+        if len(roots) != 1:
+            return []
+        resolved = resolve_locals(roots[0], tuple(self.dependencies))
+        return [{"node": node, **each.local.model_dump(mode="json", exclude_none=True)} for node, each in resolved.items()]
 
     def stored_demo(self) -> dict:
         return self.demo.model_dump(mode="json", exclude_none=True) if self.demo is not None else {}
 
-    def stored_queries(self) -> list[dict]:
-        return [query.model_dump(mode="json", exclude_none=True) for query in self.queries]
-
-    def stored_subscriptions(self) -> list[dict]:
-        return [subscription.model_dump(mode="json", exclude_none=True) for subscription in self.subscriptions]
-
     def rendering(self) -> dict[str, object]:
         """What decides what the blok draws: what :func:`blok_hash` hashes."""
-        return rendering_of(self.components, self.context.value, self.vocab, self.catalogs, self.stored_locals(), self.stored_demo(), self.stored_queries(), self.stored_subscriptions())
+        return rendering_of(self.components, self.context.value, self.vocab, self.catalogs, self.stored_demo())
 
     def hash(self) -> str:
         """sha256 of canonical JSON of every part; the module by its id. Parts that are empty are left out."""
@@ -125,76 +111,64 @@ class BlokContent:
         canonical = json.dumps(parts, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         return hashlib.sha256(canonical.encode()).hexdigest()
 
-    def scope(self, kind: str = "custom") -> BlokScope:
-        """What its tree is checked against: its locals resolved."""
+    def scope(self, kinds: tuple[str, ...] = ("custom",)) -> BlokScope:
+        """Where its tree is checked: mounted on its declared dependencies, as a custom blok."""
         return BlokScope(
-            kind=kind,
-            context=self.context.value,
+            kinds=kinds,
+            mount="a custom blok",
             dependencies=tuple(self.dependencies),
-            locals=tuple(self.locals_resolved()),
-            queries=tuple(self.queries),
-            subscriptions=tuple(self.subscriptions),
             args=tuple(arg.key for arg in self.args) if self.args else None,
             demo=self.demo,
         )
 
-    def locals_resolved(self) -> list[rimodels.BlokLocalInputModel]:
-        """Its locals as its tree (against its module's view) resolves them, each with a kind
-        (``rekuest_core.vocabulary.infer``): the ones :meth:`resolved` found, or found now.
-        Without a tree a local's kind comes from its default alone, ``ANY`` otherwise."""
-        if self.resolved_locals is not None:
-            return self.resolved_locals
-        if not self.components:
-            return [resolve_local(local, (), ()) for local in self.locals]
-        written = BlokScope(context=self.context.value, dependencies=tuple(self.dependencies), locals=tuple(self.locals))
-        return list(resolved_scope(self.module, self.parsed_components(), written).locals)
-
-    def resolved(self) -> BlokContent:
-        """This content with its locals resolved beside the written ones (``resolved_locals``):
-        what every write checks against and stores. Dependencies are never inferred."""
-        return dataclasses.replace(self, resolved_locals=self.locals_resolved())
-
     def check_declarations(self) -> None:
-        """What it declares beside its tree well-formed; ``ValueError`` otherwise."""
+        """What it says beside its tree well-formed; ``ValueError`` otherwise."""
         rimodels.check_blok_declarations(
-            kind="custom",
             catalogs=self.catalogs,
-            locals=self.locals_resolved(),
-            queries=self.queries,
-            subscriptions=self.subscriptions,
             dependency_keys={dependency.key for dependency in self.dependencies},
             demo=self.demo,
         )
         rimodels.check_blok_args(self.context, self.args)
 
     def check(self) -> None:
-        """What it declares well-formed and its tree coherent with it (no catalog); ``ValueError`` otherwise."""
-        rimodels.check_blok_declarations(
-            kind="custom",
-            catalogs=self.catalogs,
-            locals=self.locals_resolved(),
-            queries=self.queries,
-            subscriptions=self.subscriptions,
-            dependency_keys={dependency.key for dependency in self.dependencies},
-            demo=self.demo,
-        )
-        rimodels.check_blok_args(self.context, self.args)
+        """What it says well-formed and its tree coherent with it (no catalog); ``ValueError`` otherwise."""
+        self.check_declarations()
         if not self.components:
             # A custom blok created before it draws anything (createBlok without a tree): nothing to check yet.
             return
         scope = self.scope()
         rimodels.check_blok_manifest(
             self.parsed_components(),
-            kind=scope.kind,
+            kinds=scope.kinds,
+            mount=scope.mount,
             context=self.context,
             dependencies=self.dependencies,
-            locals=list(scope.locals),
-            queries=self.queries,
-            subscriptions=self.subscriptions,
             args=list(scope.args) if scope.args is not None else None,
-            catalogs=self.catalogs,
             demo=self.demo,
         )
+
+
+def tree_context(components: list[JSONObject]) -> renums.ComponentContext | None:
+    """The context a stored tree's ``<Blok>`` says, or None when it says none readably."""
+    from rekuest_core.vocabulary import BlokError, blok_header
+
+    try:
+        return renums.ComponentContext(blok_header(rimodels.ComponentNodeInputModel.model_validate(components[0])).context)
+    except (BlokError, ValueError):
+        return None
+
+
+def with_kind(components: list[JSONObject], kind: str) -> list[JSONObject]:
+    """A stored tree whose ``<Blok>`` says ``kind``: what a fork of a provided blok becomes."""
+    if not components:
+        return components
+    root = dict(components[0])
+    props = [dict(prop) for prop in root.get("props") or []]
+    for prop in props:
+        if prop.get("key") == "kind":
+            prop["static_value"] = kind
+    root["props"] = props
+    return [json_object(root), *components[1:]]
 
 
 def rendering_of(
@@ -202,15 +176,12 @@ def rendering_of(
     context: str,
     vocab: int,
     catalogs: list[str],
-    locals: list[dict],
     demo: dict,
-    queries: list[dict],
-    subscriptions: list[dict],
 ) -> dict[str, object]:
-    """A blok's rendering parts as hashed: the tree, the context and the language version always,
-    the rest only when set."""
+    """A blok's rendering parts as hashed: the tree (its declarations included), the context and
+    the language version always, the rest only when set."""
     parts: dict[str, object] = {"components": components, "context": context, "vocab": vocab}
-    optional: dict[str, object] = {"catalogs": catalogs, "locals": locals, "demo": demo, "queries": queries, "subscriptions": subscriptions}
+    optional: dict[str, object] = {"catalogs": catalogs, "demo": demo}
     parts.update({key: value for key, value in optional.items() if value not in (None, [], {})})
     return parts
 
@@ -240,10 +211,7 @@ def content_of_blok(blok: models.Blok) -> BlokContent:
         dependencies=[dependency_input_of(row) for row in blok.dependencies.order_by("key")],
         args=[rimodels.ArgPortInputModel(**arg) for arg in blok.args or []],
         catalogs=list(blok.catalogs or []),
-        locals=[rimodels.BlokLocalInputModel(**local) for local in blok.locals or []],
         demo=rimodels.BlokDemoInputModel(**blok.demo) if blok.demo else None,
-        queries=[rimodels.BlokQueryInputModel(**query) for query in blok.queries or []],
-        subscriptions=[rimodels.BlokSubscriptionInputModel(**subscription) for subscription in blok.subscriptions or []],
     )
 
 
@@ -255,10 +223,7 @@ def content_of_revision(revision: models.BlokRevision) -> BlokContent:
         dependencies=[rimodels.AgentDependencyInputModel(**dependency) for dependency in revision.dependencies],
         args=[rimodels.ArgPortInputModel(**arg) for arg in revision.args or []],
         catalogs=list(revision.catalogs or []),
-        locals=[rimodels.BlokLocalInputModel(**local) for local in revision.locals or []],
         demo=rimodels.BlokDemoInputModel(**revision.demo) if revision.demo else None,
-        queries=[rimodels.BlokQueryInputModel(**query) for query in revision.queries or []],
-        subscriptions=[rimodels.BlokSubscriptionInputModel(**subscription) for subscription in revision.subscriptions or []],
     )
 
 
@@ -344,7 +309,7 @@ def commit_revision(
     message: str | None = None,
 ) -> models.BlokRevision:
     """Commit ``content`` as the custom blok's next revision and copy it onto the blok, its
-    locals as written and as resolved (recomputed here when ``content`` is not resolved yet).
+    tree's locals as they resolve stored beside it.
 
     Joins the caller's transaction, if any. With ``guarded`` the write is refused
     (:class:`StaleRevisionError`) unless ``base`` is still the head; an unguarded write (the
@@ -358,7 +323,6 @@ def commit_revision(
     if guarded and (None if base is None else base.pk) != (None if head is None else head.pk):
         raise StaleRevisionError(locked, base, head)
 
-    content = content.resolved()
     content_hash = content.hash()
     if head is not None and head.content_hash == content_hash:
         # Nothing to commit, but the findings and the resolved locals depend on the module as it is now.
@@ -380,11 +344,8 @@ def commit_revision(
         args=content.stored_args(),
         vocab=content.vocab,
         catalogs=content.catalogs,
-        locals=content.stored_locals(),
         resolved_locals=content.stored_resolved_locals(),
         demo=content.stored_demo(),
-        queries=content.stored_queries(),
-        subscriptions=content.stored_subscriptions(),
         content_hash=content_hash,
         author=author,
         task=task,
@@ -401,12 +362,9 @@ def commit_revision(
     locked.args = revision.args
     locked.vocab = revision.vocab
     locked.catalogs = revision.catalogs
-    locked.locals = revision.locals
     locked.resolved_locals = revision.resolved_locals
     locked.demo = revision.demo
-    locked.queries = revision.queries
-    locked.subscriptions = revision.subscriptions
-    locked.save(update_fields=["components", "context", "module", "args", "vocab", "catalogs", "locals", "resolved_locals", "demo", "queries", "subscriptions", "diagnostics", "head"])
+    locked.save(update_fields=["components", "context", "module", "args", "vocab", "catalogs", "resolved_locals", "demo", "diagnostics", "head"])
     sync_blok_dependencies(locked, content.dependencies)
     if args_changed:
         sync_blok_arg_ports(locked, content.args)

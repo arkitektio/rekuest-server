@@ -207,13 +207,10 @@ wire_enum!(
     ActionBlokPhase { RUN, ASSIGN }
 );
 wire_enum!(
-    /// The renderer a catalog component lives in; it may only be placed where its context is in force.
-    ComponentContext {
-        HTML,
-        SCENE,
-        LOGO,
-        ACTION_LOGO
-    }
+    /// What draws a blok, as its `<Blok context=...>` says, and the renderer a catalog component
+    /// lives in: PANEL (panels, dashboards, popouts), SCENE (a 3D view) or LOGO (an SVG drawing:
+    /// an agent's logo, or an action's when the blok's kind is action).
+    ComponentContext { PANEL, SCENE, LOGO }
 );
 wire_enum!(
     /// Severity of a registration finding: errors abort registration, so only WARNING is stored.

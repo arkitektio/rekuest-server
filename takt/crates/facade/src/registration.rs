@@ -274,7 +274,7 @@ use std::collections::HashMap;
 
 use rekuest_core::blok::infer::ArgPorts;
 use rekuest_core::inputs::{
-    blok_kind, AgentDependencyInputModel, AskBlokInputModel, BlokDemoInputModel,
+    task_mount, AgentDependencyInputModel, AskBlokInputModel, BlokDemoInputModel,
     BlokImplementationInputModel, ComponentNodeInputModel, DefinitionInputModel,
     ImplementAgentInputModel, InformBlokInputModel, StateImplementationInputModel,
 };
@@ -383,11 +383,6 @@ pub fn stored_components(components: Option<&[ComponentNodeInputModel]>) -> serd
     )
 }
 
-/// A blok's locals, queries or subscriptions as stored.
-pub fn stored_list<T: serde::Serialize>(items: &[T]) -> serde_json::Value {
-    without_nulls(serde_json::to_value(items).expect("blok declarations serialize"))
-}
-
 /// A blok's demo as stored: `{}` when it has none.
 pub fn stored_demo(demo: Option<&BlokDemoInputModel>) -> serde_json::Value {
     let Some(serde_json::Value::Object(fields)) =
@@ -414,15 +409,16 @@ async fn register_blok(
         .filter(|c| !c.is_empty())
         .unwrap_or(STANDARD_CATALOG_NAME);
     let catalog = Catalog::get_or_create(conn, catalog_name, agent.organization).await?;
+    let (kinds, mount) = blok.agent_mount();
     let checked = validate_blok_with_arg_ports(
         &catalog,
         blok.components.as_deref(),
-        &blok.scope(blok_kind(blok.context)),
+        &blok.scope(kinds, &mount),
         self_arg_ports,
     )?;
-    // What is hashed and stored is the blok as sent; its locals as resolved are stored beside
-    // (`resolved_locals`), recomputed on every registration.
-    let diagnostics: Vec<Diagnostic> = checked.diagnostics;
+    // What is hashed and stored is the blok as sent; its `<local>` declarations as resolved are
+    // stored beside (`resolved_locals`), recomputed on every registration.
+    let diagnostics: Vec<Diagnostic> = checked.diagnostics.clone();
     check_blok_arg_descriptor_keys(conn, &blok.key, &blok.args).await?;
 
     // Same content, same row: only the findings (which depend on the catalog as it is now) are
@@ -431,8 +427,8 @@ async fn register_blok(
     let (id, name, description, inserted): (i64, String, Option<String>, bool) = sqlx::query_as(
         "INSERT INTO facade_blok (name, description, components, diagnostics, creator_id, organization_id, module_id,
                                   context, for_model, for_node, app_id, declaration_hash, args, returns,
-                                  vocab, catalogs, locals, resolved_locals, demo, queries, subscriptions)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+                                  vocab, catalogs, resolved_locals, demo)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
          ON CONFLICT (organization_id, app_id, name, declaration_hash) WHERE app_id IS NOT NULL DO UPDATE SET
              diagnostics = excluded.diagnostics, resolved_locals = excluded.resolved_locals
          RETURNING id, name, description, (xmax = 0)",
@@ -453,11 +449,8 @@ async fn register_blok(
     .bind(serde_json::to_value(&blok.returns).expect("blok returns serialize"))
     .bind(blok.vocab as i16)
     .bind(serde_json::to_value(&blok.catalogs).expect("blok catalogs serialize"))
-    .bind(stored_list(&blok.locals))
-    .bind(stored_list(&checked.scope.locals))
+    .bind(checked.stored_locals())
     .bind(stored_demo(blok.demo.as_ref()))
-    .bind(stored_list(&blok.queries))
-    .bind(stored_list(&blok.subscriptions))
     .fetch_one(&mut *conn)
     .await?;
     if inserted {
@@ -553,7 +546,7 @@ pub async fn sync_action_bloks(
             blok.components.as_deref(),
             &blok.scope(dependencies, Some(arg_keys.clone())),
         )?;
-        let found: Vec<Diagnostic> = checked.diagnostics;
+        let found: Vec<Diagnostic> = checked.diagnostics.clone();
         // Its name only says whose it is: an action's blok is never listed or looked up by it.
         let assign = blok.phase == rekuest_core::enums::ActionBlokPhase::ASSIGN;
         let name = format!(
@@ -565,8 +558,8 @@ pub async fn sync_action_bloks(
         let id: i64 = sqlx::query_scalar(
             "INSERT INTO facade_blok (name, description, components, diagnostics, creator_id, organization_id,
                                       module_id, context, app_id, declaration_hash, held_by_action,
-                                      vocab, catalogs, locals, resolved_locals, demo, queries, subscriptions)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13, $14, $15, $16, $17)
+                                      vocab, catalogs, resolved_locals, demo)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13, $14)
              ON CONFLICT (organization_id, app_id, name, declaration_hash) WHERE app_id IS NOT NULL DO UPDATE SET
                  diagnostics = excluded.diagnostics, resolved_locals = excluded.resolved_locals
              RETURNING id",
@@ -583,11 +576,8 @@ pub async fn sync_action_bloks(
         .bind(hash_action_blok(blok))
         .bind(blok.vocab as i16)
         .bind(serde_json::to_value(&blok.catalogs).expect("blok catalogs serialize"))
-        .bind(stored_list(&blok.locals))
-        .bind(stored_list(&checked.scope.locals))
+        .bind(checked.stored_locals())
         .bind(stored_demo(blok.demo.as_ref()))
-        .bind(stored_list(&blok.queries))
-        .bind(stored_list(&blok.subscriptions))
         .fetch_one(&mut *conn)
         .await?;
         sqlx::query(
@@ -649,7 +639,8 @@ pub async fn sync_implementation_interactions(
     for (role, ask) in declared {
         let what = role.to_lowercase();
         let mut blok = ask.to_blok();
-        blok.validate_as(rekuest_core::inputs::TASK_BLOK_KIND)
+        let mount = task_mount(&what, &ask.key);
+        blok.validate_as(&[rekuest_core::inputs::TASK_BLOK_KIND], &mount)
             .map_err(|e| {
                 Refusal::Invalid(format!(
                     "The {what} {:?} of {interface:?} does not hold: {e}",
@@ -665,17 +656,17 @@ pub async fn sync_implementation_interactions(
         let checked = validate_blok_against_catalog(
             &catalog,
             blok.components.as_deref(),
-            &blok.scope(rekuest_core::inputs::TASK_BLOK_KIND),
+            &blok.scope(&[rekuest_core::inputs::TASK_BLOK_KIND], &mount),
         )?;
-        let found: Vec<Diagnostic> = checked.diagnostics;
+        let found: Vec<Diagnostic> = checked.diagnostics.clone();
         check_blok_arg_descriptor_keys(conn, &ask.key, &ask.args).await?;
         // Its name only says whose it is: it is looked up by its implementation and key.
         let name = format!("{interface}:{}", ask.key);
         let (id, inserted): (i64, bool) = sqlx::query_as(
             "INSERT INTO facade_blok (name, description, components, diagnostics, creator_id, organization_id,
                                       module_id, context, app_id, declaration_hash, held_by_action, args, returns,
-                                      vocab, catalogs, locals, resolved_locals, demo, queries, subscriptions)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 'HTML', $8, $9, true, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+                                      vocab, catalogs, resolved_locals, demo)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'PANEL', $8, $9, true, $10, $11, $12, $13, $14, $15)
              ON CONFLICT (organization_id, app_id, name, declaration_hash) WHERE app_id IS NOT NULL DO UPDATE SET
                  diagnostics = excluded.diagnostics, resolved_locals = excluded.resolved_locals
              RETURNING id, (xmax = 0)",
@@ -693,11 +684,8 @@ pub async fn sync_implementation_interactions(
         .bind(serde_json::to_value(&ask.returns).expect("interaction returns serialize"))
         .bind(ask.vocab as i16)
         .bind(serde_json::to_value(&blok.catalogs).expect("blok catalogs serialize"))
-        .bind(stored_list(&blok.locals))
-        .bind(stored_list(&checked.scope.locals))
+        .bind(checked.stored_locals())
         .bind(stored_demo(blok.demo.as_ref()))
-        .bind(stored_list(&blok.queries))
-        .bind(stored_list(&blok.subscriptions))
         .fetch_one(&mut *conn)
         .await?;
         if inserted {

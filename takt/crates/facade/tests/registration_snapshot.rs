@@ -134,8 +134,8 @@ SELECT jsonb_build_object(
       'name', replace(m.name, $2, '<side>'), 'description', m.description,
       'blok', (SELECT jsonb_build_object(
           'name', replace(b.name, $2, '<side>'), 'description', b.description, 'components', b.components,
-          'vocab', b.vocab, 'catalogs', b.catalogs, 'locals', b.locals, 'resolved_locals', b.resolved_locals, 'demo', b.demo, 'queries', b.queries,
-          'subscriptions', b.subscriptions, 'diagnostics', b.diagnostics,
+          'vocab', b.vocab, 'catalogs', b.catalogs, 'resolved_locals', b.resolved_locals, 'demo', b.demo,
+          'diagnostics', b.diagnostics,
           'module', (SELECT name FROM facade_module WHERE id = b.module_id),
           'dependencies', (SELECT coalesce(jsonb_agg(to_jsonb(d) - 'id' - 'created_at' - 'blok_id' ORDER BY d.key), '[]')
                              FROM facade_blokdependency d WHERE d.blok_id = b.id))
@@ -198,11 +198,13 @@ fn synthetic_steps() -> Vec<(&'static str, Value)> {
         {"key": "x", "kind": "FLOAT", "nullable": false}, {"key": "y", "kind": "FLOAT", "nullable": false}]}});
     let blok = |deps: Value| {
         json!({"key": "panel-{side}", "vocab": 2, "description": "A panel", "components": [
-            {"id": "html", "component": "Html", "children": [
+            {"id": "html", "component": "Blok", "props": [{"key": "kind", "static_value": "agent"}, {"key": "context", "static_value": "panel"}], "children": [
+            {"id": "x", "component": "local", "props": [{"key": "name", "static_value": "x", "declares_value": "x"},
+                {"key": "kind", "static_value": "INT"}, {"key": "default", "static_value": 1}]},
             {"id": "root", "component": "Stack", "props": [{"key": "className", "static_value": "bg-red-500"}],
              "children": [{"id": "leaf", "component": "Text", "props": [
                  {"key": "text", "util_call": {"operation": "fmt.made_up_ui_operation", "arguments": []}}]}]}]}],
-            "locals": [{"key": "x", "kind": "INT", "default": 1}], "demo": {"args": {"x": 1}},
+            "demo": {"args": {"x": 1}},
             "dependencies": deps})
     };
     let stage_dep = json!({"key": "stage", "app": "stage-app", "optional": true});

@@ -1282,7 +1282,7 @@
         }
       ],
       "accepts_children": true,
-      "context": "HTML",
+      "context": "PANEL",
       "children_context": null,
       "inherits_context": true,
       "downstream_of": [
@@ -1295,7 +1295,7 @@
       "description": "The branch of a `match` that renders when no `case` matches.",
       "props": [],
       "accepts_children": true,
-      "context": "HTML",
+      "context": "PANEL",
       "children_context": null,
       "inherits_context": true,
       "downstream_of": [
@@ -1315,7 +1315,7 @@
         }
       ],
       "accepts_children": true,
-      "context": "HTML",
+      "context": "PANEL",
       "children_context": null,
       "inherits_context": true,
       "downstream_of": [],
@@ -1333,7 +1333,7 @@
         }
       ],
       "accepts_children": true,
-      "context": "HTML",
+      "context": "PANEL",
       "children_context": null,
       "inherits_context": true,
       "downstream_of": [],
@@ -1357,7 +1357,7 @@
         }
       ],
       "accepts_children": true,
-      "context": "HTML",
+      "context": "PANEL",
       "children_context": null,
       "inherits_context": true,
       "downstream_of": [],
@@ -1375,7 +1375,7 @@
         }
       ],
       "accepts_children": true,
-      "context": "HTML",
+      "context": "PANEL",
       "children_context": null,
       "inherits_context": true,
       "downstream_of": [],
@@ -1405,7 +1405,7 @@
         }
       ],
       "accepts_children": false,
-      "context": "HTML",
+      "context": "PANEL",
       "children_context": null,
       "inherits_context": true,
       "downstream_of": [],
@@ -1423,7 +1423,7 @@
         }
       ],
       "accepts_children": true,
-      "context": "HTML",
+      "context": "PANEL",
       "children_context": null,
       "inherits_context": true,
       "downstream_of": [],
@@ -1441,7 +1441,7 @@
         }
       ],
       "accepts_children": true,
-      "context": "HTML",
+      "context": "PANEL",
       "children_context": null,
       "inherits_context": true,
       "downstream_of": [],
@@ -1489,7 +1489,7 @@
         }
       ],
       "accepts_children": true,
-      "context": "HTML",
+      "context": "PANEL",
       "children_context": null,
       "inherits_context": true,
       "downstream_of": [],
@@ -1507,7 +1507,7 @@
         }
       ],
       "accepts_children": true,
-      "context": "HTML",
+      "context": "PANEL",
       "children_context": null,
       "inherits_context": true,
       "downstream_of": [],
@@ -1531,7 +1531,7 @@
         }
       ],
       "accepts_children": true,
-      "context": "HTML",
+      "context": "PANEL",
       "children_context": null,
       "inherits_context": true,
       "downstream_of": [],

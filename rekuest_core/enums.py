@@ -170,12 +170,11 @@ class ActionBlokPhase(str, Enum):
     ASSIGN = "ASSIGN"
 
 
-@strawberry.enum(description="The renderer a catalog component lives in. A component may only be placed where its context is in force. ACTION_LOGO is a blok context only.")
+@strawberry.enum(description="What draws a blok, as its `<Blok context=...>` says, and the renderer a catalog component lives in: PANEL (panels, dashboards, popouts), SCENE (a 3D view) or LOGO (an SVG drawing: an agent's logo, or an action's when the blok's kind is action).")
 class ComponentContext(str, Enum):
-    HTML = "HTML"
+    PANEL = "PANEL"
     SCENE = "SCENE"
     LOGO = "LOGO"
-    ACTION_LOGO = "ACTION_LOGO"
 
 
 @strawberry.enum(description="Severity of a finding on a blok or a definition, as the blok vocabulary's diagnostic table levels it. An ERROR refuses a write, so only a blok rewritten by a migration (blok language v2) stores one; everything registered or written since stores WARNINGs.")

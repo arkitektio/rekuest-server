@@ -1,15 +1,15 @@
 //! takt parses BSX v2 into exactly the tree arkitekt-spec's parser makes, refuses what it
 //! refuses (same code, line and column, in code points), and its checker finds what the spec
 //! says the language alone finds: the server reads no catalog, so it is held to each checked
-//! case's `language` (its codes and its resolved locals with no catalog read). The corpus is
-//! written by the spec (`arkitekt_spec.blok.corpus`, see `tests/fixtures/generate_bsx.py`).
+//! case's `language` (its codes and its `<local>` declarations resolved, by node id, with no
+//! catalog read), mounted as the case's `mount` says. The corpus is written by the spec
+//! (`arkitekt_spec.blok.corpus`, see `tests/fixtures/generate_bsx.py`).
 
-use rekuest_core::blok::infer::{resolve_scope, ArgPorts};
+use rekuest_core::blok::infer::{resolve_locals, ArgPorts};
 use rekuest_core::blok::{check_blok_tree, BlokScope};
 use rekuest_core::bsx::{parse_bsx, parse_bsx_default, MAX_SOURCE_BYTES};
 use rekuest_core::inputs::{
-    AgentDependencyInputModel, BlokLocalInputModel, BlokQueryInputModel,
-    BlokSubscriptionInputModel, ComponentNodeInputModel,
+    AgentDependencyInputModel, BlokLocalInputModel, ComponentNodeInputModel,
 };
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -108,58 +108,69 @@ fn every_refused_source_is_refused_with_the_spec_code_and_place() {
     );
 }
 
-fn scope_of(scope: &Value) -> BlokScope {
-    let list = |key: &str| scope[key].as_array().cloned().unwrap_or_default();
+/// Where a checked case is mounted: the kinds the mount takes, its dependencies (null: mounted
+/// nowhere) and its args.
+fn mount_of(mount: &Value) -> BlokScope {
+    let kinds: Vec<String> = typed(&mount["kinds"]);
     BlokScope {
-        kind: scope["kind"].as_str().expect("a kind").to_owned(),
-        context: scope["context"].as_str().expect("a context").to_owned(),
-        dependencies: list("dependencies")
-            .iter()
-            .map(typed::<AgentDependencyInputModel>)
-            .collect(),
-        locals: list("locals")
-            .iter()
-            .map(typed::<BlokLocalInputModel>)
-            .collect(),
-        queries: list("queries")
-            .iter()
-            .map(typed::<BlokQueryInputModel>)
-            .collect(),
-        subscriptions: list("subscriptions")
-            .iter()
-            .map(typed::<BlokSubscriptionInputModel>)
-            .collect(),
-        args: scope["args"].as_array().map(|args| {
+        kinds,
+        dependencies: mount["dependencies"].as_array().map(|dependencies| {
+            dependencies
+                .iter()
+                .map(typed::<AgentDependencyInputModel>)
+                .collect()
+        }),
+        args: mount["args"].as_array().map(|args| {
             args.iter()
                 .map(|a| a.as_str().expect("an arg key").to_owned())
                 .collect()
         }),
-        demo: None,
-        assets: None,
+        ..BlokScope::default()
     }
 }
 
-/// A list of models as the spec dumps them (`exclude_none`): read and written again, so the
-/// defaults each side fills in compare equal.
-fn normalized<T: DeserializeOwned + serde::Serialize>(values: &Value) -> Value {
-    let models: Vec<T> = typed(values);
-    without_nulls(serde_json::to_value(models).expect("models serialize"))
+/// Resolved locals by node id, as the spec dumps them (`exclude_none`): read and written again,
+/// so the defaults each side fills in compare equal.
+fn normalized(locals: &Value) -> Value {
+    let locals = locals.as_object().expect("locals by node id");
+    Value::Object(
+        locals
+            .iter()
+            .map(|(node, local)| {
+                let local: BlokLocalInputModel = typed(local);
+                (
+                    node.clone(),
+                    without_nulls(serde_json::to_value(local).expect("a local serializes")),
+                )
+            })
+            .collect(),
+    )
 }
 
 #[test]
-fn every_checked_source_resolves_its_scope_as_the_spec_does() {
+fn every_checked_source_resolves_its_locals_as_the_spec_does() {
     let mut differences = vec![];
     let mut count = 0;
     for case in cases().iter().filter(|c| c.get("resolved").is_some()) {
         count += 1;
         let tree: ComponentNodeInputModel = typed(&case["tree"]);
-        let scope = scope_of(&case["scope"]);
-        let resolved = resolve_scope(&tree, &scope, &ArgPorts::new());
+        let scope = mount_of(&case["mount"]);
+        let resolved = resolve_locals(&tree, scope.dependencies.as_deref(), &ArgPorts::new());
         let got = serde_json::json!({
-            "locals": without_nulls(serde_json::to_value(&resolved.locals).expect("locals")),
+            "locals": Value::Object(
+                resolved
+                    .iter()
+                    .map(|(node, each)| {
+                        (
+                            node.clone(),
+                            without_nulls(serde_json::to_value(&each.local).expect("a local")),
+                        )
+                    })
+                    .collect()
+            ),
         });
         let expected = serde_json::json!({
-            "locals": normalized::<BlokLocalInputModel>(&case["language"]["resolved"]["locals"]),
+            "locals": normalized(&case["language"]["resolved"]["locals"]),
         });
         if got != expected {
             differences.push(format!(
@@ -167,9 +178,17 @@ fn every_checked_source_resolves_its_scope_as_the_spec_does() {
                 case["name"], case["source"]
             ));
         }
-        let again = resolve_scope(&tree, &resolved, &ArgPorts::new());
-        if serde_json::to_value(&again.locals).ok() != serde_json::to_value(&resolved.locals).ok() {
-            differences.push(format!("{}: resolving twice changes it", case["name"]));
+        let order: Vec<&String> = resolved.iter().map(|(node, _)| node).collect();
+        let spec_order: Vec<&String> = case["language"]["resolved"]["locals"]
+            .as_object()
+            .expect("locals by node id")
+            .keys()
+            .collect();
+        if order != spec_order {
+            differences.push(format!(
+                "{}: resolved in another order: {order:?}, the spec {spec_order:?}",
+                case["name"]
+            ));
         }
     }
     assert!(count >= 100, "the corpus has its resolved cases");
@@ -185,10 +204,10 @@ fn every_checked_source_resolves_its_scope_as_the_spec_does() {
 fn every_checked_source_finds_the_codes_the_spec_finds() {
     let mut differences = vec![];
     let mut count = 0;
-    for case in cases().iter().filter(|c| c.get("scope").is_some()) {
+    for case in cases().iter().filter(|c| c.get("mount").is_some()) {
         count += 1;
         let tree: ComponentNodeInputModel = typed(&case["tree"]);
-        let scope = scope_of(&case["scope"]);
+        let scope = mount_of(&case["mount"]);
         let codes: Vec<String> = check_blok_tree(&tree, &scope)
             .into_iter()
             .map(|f| f.code)
@@ -242,6 +261,20 @@ fn a_parse_error_says_where_in_code_points() {
 }
 
 #[test]
+fn unmounted_a_dependency_is_taken_as_written() {
+    let tree = parse_bsx_default(
+        "<Blok kind=\"action\" context=\"panel\"><Text text={deps.laser.power} /></Blok>",
+    )
+    .expect("parses");
+    assert!(check_blok_tree(&tree, &BlokScope::default()).is_empty());
+    let codes: Vec<String> = check_blok_tree(&tree, &BlokScope::mounted(&[], "", vec![]))
+        .into_iter()
+        .map(|f| f.code)
+        .collect();
+    assert_eq!(codes, ["deps.unknown"]);
+}
+
+#[test]
 fn a_source_larger_than_a_blok_is_refused_unread() {
     let source = format!("<Text text=\"{}\" />", "x".repeat(MAX_SOURCE_BYTES));
     let error = parse_bsx(&source).unwrap_err();
@@ -253,18 +286,23 @@ fn a_source_larger_than_a_blok_is_refused_unread() {
 fn a_finding_is_json_as_the_spec_writes_it() {
     let finding = rekuest_core::blok::Finding::of(
         "roots.reserved",
-        Some("locals.self"),
+        Some("Blok[0]/local[0]"),
         &[("name", Value::from("self"))],
     );
     assert_eq!(
         finding.to_json(),
-        serde_json::json!({"code": "roots.reserved", "level": "error", "message": "'self' is reserved: no local, let or into may use it.", "path": "locals.self"})
+        serde_json::json!({"code": "roots.reserved", "level": "error", "message": "'self' is reserved: no local, let or into may use it.", "path": "Blok[0]/local[0]"})
     );
 }
 
 #[test]
 fn the_deps_unknown_hint_says_what_the_kind_does() {
-    let tree = parse_bsx_default("<Html><Text text={deps.laser.power} /></Html>").expect("parses");
+    let blok = |kind: &str| {
+        parse_bsx_default(&format!(
+            "<Blok kind=\"{kind}\" context=\"panel\"><Text text={{deps.laser.power}} /></Blok>"
+        ))
+        .expect("parses")
+    };
     for (kind, hint) in [
         (
             "custom",
@@ -276,11 +314,9 @@ fn the_deps_unknown_hint_says_what_the_kind_does() {
         ),
         ("action", "add a dependency parameter `laser` to the action"),
     ] {
-        let scope = BlokScope {
-            kind: kind.into(),
-            ..BlokScope::default()
-        };
-        let findings = check_blok_tree(&tree, &scope);
+        // Mounted (with no dependencies): mounted nowhere, `deps.laser` is taken as written.
+        let scope = BlokScope::mounted(&[], "", vec![]);
+        let findings = check_blok_tree(&blok(kind), &scope);
         let codes: Vec<&str> = findings.iter().map(|f| f.code.as_str()).collect();
         assert_eq!(codes, ["deps.unknown"], "{kind}");
         assert!(
@@ -290,11 +326,8 @@ fn the_deps_unknown_hint_says_what_the_kind_does() {
         );
     }
     // An agent blok has no `deps` root: the kind refuses it before any key is looked up.
-    let scope = BlokScope {
-        kind: "agent".into(),
-        ..BlokScope::default()
-    };
-    let codes: Vec<String> = check_blok_tree(&tree, &scope)
+    let scope = BlokScope::mounted(&[], "", vec![]);
+    let codes: Vec<String> = check_blok_tree(&blok("agent"), &scope)
         .into_iter()
         .map(|f| f.code)
         .collect();

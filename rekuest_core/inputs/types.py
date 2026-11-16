@@ -482,7 +482,7 @@ class DefinitionInput:
     )
     bloks: list[Annotated["ActionBlokInput", strawberry.lazy(__name__)]] = strawberry.field(
         default_factory=list,
-        description="The action's own bloks, at most one per context: how a client shows a run of it (HTML in a task panel, SCENE a 3D view, as a `Space` placing the run's dependencies). They name devices only by the action's dependency keys. Not part of the action's hash.",
+        description="The action's own bloks, at most one per context: how a client shows a run of it (PANEL in a task panel, SCENE a 3D view, as a `Space` placing the run's dependencies). They name devices only by the action's dependency keys. Not part of the action's hash.",
     )
     port_groups: list[PortGroupInput] = strawberry.field(
         default_factory=list,
@@ -723,16 +723,13 @@ class BlokImplementationInput:
     catalog: Optional[str] = None
     catalog_minor: Optional[int] = None
     description: Optional[str] = None
-    context: enums.ComponentContext = enums.ComponentContext.HTML
+    context: enums.ComponentContext = enums.ComponentContext.PANEL
     default: bool = False
     for_model: Optional[str] = None
     for_node: Optional[str] = None
     args: list[ArgPortInput] = strawberry.field(default_factory=list)
     catalogs: list[str] = strawberry.field(default_factory=list)
-    locals: list[BlokLocalInput] = strawberry.field(default_factory=list)
     demo: Optional[BlokDemoInput] = None
-    queries: list[BlokQueryInput] = strawberry.field(default_factory=list)
-    subscriptions: list[BlokSubscriptionInput] = strawberry.field(default_factory=list)
 
 
 @pydantic.input(models.AskBlokInputModel, description="A blok an action asks a person through, declared with it (blok language v2): a task blok, its args and returns ports.")
@@ -749,10 +746,7 @@ class AskBlokInput:
     returns: list[ReturnPortInput] = strawberry.field(default_factory=list)
     dependencies: list[AgentDependencyInput] = strawberry.field(default_factory=list)
     catalogs: list[str] = strawberry.field(default_factory=list)
-    locals: list[BlokLocalInput] = strawberry.field(default_factory=list)
     demo: Optional[BlokDemoInput] = None
-    queries: list[BlokQueryInput] = strawberry.field(default_factory=list)
-    subscriptions: list[BlokSubscriptionInput] = strawberry.field(default_factory=list)
 
 
 @pydantic.input(models.InformBlokInputModel, description="A blok an action shows a person while its task goes on, declared with it (blok language v2): a task blok, its args ports, no returns.")
@@ -768,16 +762,13 @@ class InformBlokInput:
     args: list[ArgPortInput] = strawberry.field(default_factory=list)
     dependencies: list[AgentDependencyInput] = strawberry.field(default_factory=list)
     catalogs: list[str] = strawberry.field(default_factory=list)
-    locals: list[BlokLocalInput] = strawberry.field(default_factory=list)
     demo: Optional[BlokDemoInput] = None
-    queries: list[BlokQueryInput] = strawberry.field(default_factory=list)
-    subscriptions: list[BlokSubscriptionInput] = strawberry.field(default_factory=list)
 
 
 @pydantic.input(models.ActionBlokInputModel, description="An action's own blok (blok language v2): how a client shows a run of it in one context, naming devices by the action's dependency keys.")
 class ActionBlokInput:
     vocab: int
-    context: enums.ComponentContext = enums.ComponentContext.HTML
+    context: enums.ComponentContext = enums.ComponentContext.PANEL
     phase: enums.ActionBlokPhase = enums.ActionBlokPhase.RUN
     components: list[ComponentNodeInput] | None = None
     source: str | None = None
@@ -786,10 +777,7 @@ class ActionBlokInput:
     catalog_minor: Optional[int] = None
     description: Optional[str] = None
     catalogs: list[str] = strawberry.field(default_factory=list)
-    locals: list[BlokLocalInput] = strawberry.field(default_factory=list)
     demo: Optional[BlokDemoInput] = None
-    queries: list[BlokQueryInput] = strawberry.field(default_factory=list)
-    subscriptions: list[BlokSubscriptionInput] = strawberry.field(default_factory=list)
 
 
 @pydantic.input(models.CatalogEventFieldInputModel, description="A field of the event a CALLBACK prop hands its callback (`event.<key>`).")
@@ -814,7 +802,7 @@ class CatalogComponentInput:
     description: Optional[str] = None
     props: List[CatalogPropInput] = strawberry.field(default_factory=list)
     accepts_children: bool = True
-    context: enums.ComponentContext = enums.ComponentContext.HTML
+    context: enums.ComponentContext = enums.ComponentContext.PANEL
     children_context: Optional[enums.ComponentContext] = None
     inherits_context: bool = False
     downstream_of: List[str] = strawberry.field(default_factory=list)

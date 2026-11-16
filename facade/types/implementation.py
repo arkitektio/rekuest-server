@@ -85,7 +85,7 @@ class Implementation:
     effects: renums.Effects = strawberry_django.field(description="What running this implementation again would do to the world. Informational: shown to whoever decides about a lost task.")
     execution: renums.Execution = strawberry_django.field(description="How this implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies.")
     code_hash: Optional[str] = strawberry_django.field(description="A hash of the implementation's code; a workflow is only resumed by an implementation with the same hash.")
-    logo: Optional["Blok"] = strawberry_django.field(description="The agent's action logo blok (context ACTION_LOGO) that draws this implementation's action, if it declared one.")
+    logo: Optional["Blok"] = strawberry_django.field(description="The agent's action logo blok (`<Blok kind=\"action\" context=\"logo\">`) that draws this implementation's action, if it declared one.")
     interactions: list[ImplementationInteraction] = strawberry_django.field(description="The bloks it declared to ask a person through or show them, asks and informs both. A task shows only these unless the implementation declares `dynamicAsks` / `dynamicInforms`.")
     dynamic_asks: bool = strawberry_django.field(description="Whether a task may also ask through a blok made at ask time, or any blok of the organization. Needs the agent's `rekuest_dynamic_ask` scope too.")
     dynamic_calls: bool = strawberry_django.field(description="Whether a task may also call actions it found at run time, not only its declared dependencies. Needs the agent's `rekuest_dynamic_call` scope too.")

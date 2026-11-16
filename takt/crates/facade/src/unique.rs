@@ -132,51 +132,63 @@ mod tests {
     #[test]
     fn a_v2_blok_has_a_pinned_hash() {
         let panel = blok(
-            serde_json::json!({"key": "panel", "vocab": 2, "source": "<Html><Card><Button>Go</Button></Card></Html>"}),
+            serde_json::json!({"key": "panel", "vocab": 2, "source": "<Blok kind=\"agent\" context=\"panel\"><Card><Button>Go</Button></Card></Blok>"}),
         );
         assert_eq!(
             hash_blok_definition(&panel),
-            "a0e45c775dd19dd6ce75e627d97b9f674f473c171fd061242988c394b8d26583"
+            "85a1f336e7b0f9d19cc3a0f25b61761d169a1deb4ad51c14933d8326d55d090c"
         );
     }
 
-    /// A blok without text between its tags keeps the digest it always had.
+    /// A blok without text between its tags has a pinned digest too (re-pinned when every blok
+    /// became one `<Blok kind context>`).
     #[test]
     fn a_blok_without_text_keeps_its_digest() {
         let panel = blok(
-            serde_json::json!({"key": "panel", "vocab": 2, "source": "<Html><Card><Button label=\"Go\" /></Card></Html>"}),
+            serde_json::json!({"key": "panel", "vocab": 2, "source": "<Blok kind=\"agent\" context=\"panel\"><Card><Button label=\"Go\" /></Card></Blok>"}),
         );
         assert_eq!(
             hash_blok_definition(&panel),
-            "103a18f95c478800a4e9895abf4d215b75c06535cacf2577177567ff14144798"
+            "69d96be51d44bc779c783f1870cd34cb3a689fbad1dc0cad9ee240dde848cc44"
         );
     }
 
     #[test]
     fn source_and_tree_share_a_template_and_defaults_do_not_count() {
         let sent = blok(
-            serde_json::json!({"key": "panel", "vocab": 2, "source": "<Html><Card /></Html>", "default": true}),
+            serde_json::json!({"key": "panel", "vocab": 2, "source": "<Blok kind=\"agent\" context=\"panel\"><Card /></Blok>", "default": true}),
         );
         let tree = blok(
-            serde_json::json!({"key": "panel", "vocab": 2, "components": [{"id": "Html[0]", "component": "Html", "children": [{"id": "Html[0]/Card[0]", "component": "Card"}]}],
-            "locals": [], "catalogs": []}),
+            serde_json::json!({"key": "panel", "vocab": 2, "components": [{"id": "Blok[0]", "component": "Blok",
+                "props": [{"key": "kind", "static_value": "agent"}, {"key": "context", "static_value": "panel"}],
+                "children": [{"id": "Blok[0]/Card[0]", "component": "Card"}]}],
+            "catalogs": []}),
         );
         assert_eq!(hash_blok_definition(&sent), hash_blok_definition(&tree));
     }
 
+    const PANEL: &str = "<Blok kind=\"agent\" context=\"panel\"><Card /></Blok>";
+
+    #[test]
+    fn what_a_blok_declares_in_its_tree_counts() {
+        let plain = blok(serde_json::json!({"key": "panel", "vocab": 2, "source": PANEL}));
+        let declaring = blok(serde_json::json!({"key": "panel", "vocab": 2,
+            "source": "<Blok kind=\"agent\" context=\"panel\"><local name=\"n\" kind=\"INT\" default={1} /><Card /></Blok>"}));
+        assert_ne!(
+            hash_blok_definition(&plain),
+            hash_blok_definition(&declaring)
+        );
+    }
+
     #[test]
     fn what_a_blok_declares_beside_its_tree_counts() {
-        let plain = blok(
-            serde_json::json!({"key": "panel", "vocab": 2, "source": "<Html><Card /></Html>"}),
-        );
+        let plain = blok(serde_json::json!({"key": "panel", "vocab": 2, "source": PANEL}));
         for extra in [
-            serde_json::json!({"locals": [{"key": "n", "kind": "INT", "default": 1}]}),
             serde_json::json!({"catalogs": ["ui@1"]}),
             serde_json::json!({"module": "orkestrator"}),
             serde_json::json!({"demo": {"args": {"x": 1}}}),
         ] {
-            let mut fields =
-                serde_json::json!({"key": "panel", "vocab": 2, "source": "<Html><Card /></Html>"});
+            let mut fields = serde_json::json!({"key": "panel", "vocab": 2, "source": PANEL});
             fields
                 .as_object_mut()
                 .unwrap()
