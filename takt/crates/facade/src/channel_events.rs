@@ -46,6 +46,12 @@ pub struct PatchEvent {
     pub session: Option<i64>,
     #[serde(serialize_with = "optional_datetime")]
     pub timestamp: Option<DateTime<Utc>>,
+    /// The task that made the change, if one did.
+    pub task: Option<i64>,
+    /// Where in a task's or the agent's life the change was made, when not in its ordinary course.
+    pub lifecycle: Option<String>,
+    /// What the app says the change was for.
+    pub qualifiers: Vec<String>,
 }
 
 /// `TaskChangePayload`: a snapshot of a task for the change feeds. `revision` orders the

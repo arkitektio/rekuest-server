@@ -50,6 +50,12 @@ class StatePatchEvent:
     global_revision: int
     session_id: str | None
     timestamp: datetime.datetime | None
+    task_id: strawberry.ID | None = strawberry.field(default=None, description="The task that made the change, if one did.")
+    lifecycle: str | None = strawberry.field(
+        default=None,
+        description="Where in a task's or the agent's life the change was made, when not in its ordinary course: `cleanup` or `shutdown`.",
+    )
+    qualifiers: list[str] = strawberry.field(default_factory=list, description="What the app says the change was for: its own names.")
 
 
 async def watch_state(
@@ -98,6 +104,9 @@ async def watch_state(
             session_id=str(message.session) if message.session is not None else None,
             timestamp=message.timestamp,
             interface=message.interface,
+            task_id=strawberry.ID(str(message.task)) if message.task is not None else None,
+            lifecycle=message.lifecycle,
+            qualifiers=list(message.qualifiers),
         )
 
 
@@ -147,4 +156,7 @@ async def watch_agent(
             session_id=str(message.session) if message.session is not None else None,
             timestamp=message.timestamp,
             interface=message.interface,
+            task_id=strawberry.ID(str(message.task)) if message.task is not None else None,
+            lifecycle=message.lifecycle,
+            qualifiers=list(message.qualifiers),
         )

@@ -451,12 +451,16 @@ struct PatchRow {
     global_rev: i32,
     session_id: Option<i64>,
     timestamp: DateTime<Utc>,
+    task_id: Option<i64>,
+    lifecycle: Option<String>,
+    qualifiers: Option<sqlx::types::Json<Vec<String>>>,
 }
 
 /// A patch was recorded (`patch_post_save`, created only): its state's and its agent's patch feeds.
 pub async fn patch_created(ctx: &Context, patch_id: i64) {
     let patch: PatchRow = match sqlx::query_as(
-        "SELECT id, state_id, agent_id, interface, op, path, value, global_rev, session_id, timestamp
+        "SELECT id, state_id, agent_id, interface, op, path, value, global_rev, session_id, timestamp,
+                task_id, lifecycle, qualifiers
            FROM facade_patch WHERE id = $1",
     )
     .bind(patch_id)
@@ -487,6 +491,9 @@ pub async fn patch_created(ctx: &Context, patch_id: i64) {
             global_rev: i64::from(patch.global_rev),
             session: patch.session_id,
             timestamp: Some(patch.timestamp),
+            task: patch.task_id,
+            lifecycle: patch.lifecycle,
+            qualifiers: patch.qualifiers.map(|q| q.0).unwrap_or_default(),
         },
         groups,
     )

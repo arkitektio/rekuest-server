@@ -110,6 +110,7 @@ class Patch(models.Model):
     session_id: int | None
     state_id: int
     agent_id: int | None
+    task_id: int | None
 
     state = models.ForeignKey(State, on_delete=models.CASCADE, related_name="patches")
     agent = models.ForeignKey("Agent", on_delete=models.CASCADE, related_name="patches_created", null=True, blank=True)
@@ -125,6 +126,8 @@ class Patch(models.Model):
     agent_pos = models.PositiveBigIntegerField(null=True, blank=True, help_text="The session position (pos) of the frame that carried this patch. NULL for agents without numbering.")
     agent_ts = models.DateTimeField(null=True, blank=True, help_text="When the agent recorded the patch (the frame's agent_ts). NULL for agents without numbering.")
     step = models.PositiveBigIntegerField(null=True, blank=True, help_text="The changing task's step (the frame's task_step). NULL for agents without numbering and patches outside a task.")
+    lifecycle = models.CharField(max_length=1000, null=True, blank=True, help_text="Where in a task's or the agent's life the change was made, when not in its ordinary course: 'cleanup' (a task being stopped, on its way out) or 'shutdown' (the agent's shutdown hooks). Said by the agent's runtime; NULL for an ordinary change.")
+    qualifiers = models.JSONField(null=True, blank=True, help_text="What the app says the change was for: a list of its own names. NULL when it said nothing.")
 
     class Meta:
         constraints = [

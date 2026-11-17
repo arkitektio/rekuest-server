@@ -5076,9 +5076,19 @@ type Patch {
   """The value the patch replaced, when the agent reported it."""
   oldValue: Args
   timestamp: DateTime!
+
+  """
+  Where in a task's or the agent's life the change was made, when not in its ordinary course: `cleanup` (a task being stopped, on its way out) or `shutdown` (the agent's shutdown hooks). Said by the agent's runtime.
+  """
+  lifecycle: String
   task: Task
   state: State!
   interface: String!
+
+  """
+  What the app says the change was for: its own names. Empty when it said nothing.
+  """
+  qualifiers: [String!]!
 
   """Global revision this patch applied to (global_rev - 1)."""
   globalCurrentRevision: Int!
@@ -7208,6 +7218,17 @@ type StatePatchEvent {
   globalRevision: Int!
   sessionId: String
   timestamp: DateTime
+
+  """The task that made the change, if one did."""
+  taskId: ID
+
+  """
+  Where in a task's or the agent's life the change was made, when not in its ordinary course: `cleanup` or `shutdown`.
+  """
+  lifecycle: String
+
+  """What the app says the change was for: its own names."""
+  qualifiers: [String!]!
 }
 
 """

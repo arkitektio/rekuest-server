@@ -36,6 +36,9 @@ class PatchEvent(BaseModel):
     global_rev: int = Field(default=0, description="The global revision after this patch.")
     session: Optional[int] = Field(default=None, description="The session ID related to the patch.")
     timestamp: Optional[datetime.datetime] = Field(default=None, description="When the patch was created.")
+    task: Optional[int] = Field(default=None, description="The task that made the change, if one did.")
+    lifecycle: Optional[str] = Field(default=None, description="Where in a task's or the agent's life the change was made, when not in its ordinary course.")
+    qualifiers: list[str] = Field(default_factory=list, description="What the app says the change was for.")
 
     @classmethod
     def from_patch(cls, p: models.Patch) -> "PatchEvent":
@@ -50,6 +53,9 @@ class PatchEvent(BaseModel):
             global_rev=p.global_rev,
             session=p.session_id,
             timestamp=p.timestamp,
+            task=p.task_id,
+            lifecycle=p.lifecycle,
+            qualifiers=list(p.qualifiers or []),
         )
 
 

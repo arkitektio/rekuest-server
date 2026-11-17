@@ -67,6 +67,14 @@ class Patch:
     value: scalars.Args
     old_value: scalars.Args | None = strawberry_django.field(description="The value the patch replaced, when the agent reported it.")
     timestamp: datetime.datetime
+    lifecycle: str | None = strawberry_django.field(
+        description="Where in a task's or the agent's life the change was made, when not in its ordinary course: `cleanup` (a task being stopped, on its way out) or `shutdown` (the agent's shutdown hooks). Said by the agent's runtime."
+    )
+
+    @strawberry.field(description="What the app says the change was for: its own names. Empty when it said nothing.")
+    def qualifiers(self) -> list[str]:
+        row = row_of(self, models.Patch)
+        return [str(q) for q in row.qualifiers or []]
 
     # Patch/Snapshot store exactly one revision column, ``global_rev``, the revision *after* the
     # patch applies (see facade.logic.get_latest_state). These were declared as real columns that

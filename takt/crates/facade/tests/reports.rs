@@ -510,7 +510,8 @@ async fn patches_link_own_tasks_and_drop_duplicate_revisions() {
     let patch = |rev: u64, task: i64| {
         frame(
             json!({"type": "STATE_PATCH", "session_id": "s1", "global_rev": rev, "state_name": "plate", "ts": 1.0,
-                     "op": "replace", "path": "/barcode", "value": "B1", "old_value": null, "task_id": task.to_string()}),
+                     "op": "replace", "path": "/barcode", "value": "B1", "old_value": null, "task_id": task.to_string(),
+                     "lifecycle": "cleanup", "qualifiers": ["homing"]}),
         )
     };
     route(&ctx, agent, &patch(1, own), None).await.unwrap();
@@ -528,6 +529,19 @@ async fn patches_link_own_tasks_and_drop_duplicate_revisions() {
         rows,
         vec![(1, Some(own)), (2, None)],
         "another agent's task is never linked"
+    );
+
+    // What the agent said of the change beside its value is kept with it.
+    let said: (Option<String>, Option<sqlx::types::Json<Vec<String>>>) = sqlx::query_as(
+        "SELECT p.lifecycle, p.qualifiers FROM facade_patch p JOIN facade_state s ON s.id = p.state_id WHERE s.agent_id = $1 AND p.global_rev = 1",
+    )
+    .bind(agent)
+    .fetch_one(&ctx.db)
+    .await
+    .unwrap();
+    assert_eq!(
+        (said.0.as_deref(), said.1.map(|q| q.0)),
+        (Some("cleanup"), Some(vec!["homing".to_string()]))
     );
 
     // A patch for a state the agent never declared closes an unnumbered connection, as in Python.

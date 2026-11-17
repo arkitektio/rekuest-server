@@ -37,6 +37,8 @@ pub async fn on_agent_state_patch(
     path: &str,
     value: &Value,
     task_id: Option<&str>,
+    lifecycle: Option<&str>,
+    qualifiers: Option<&[String]>,
 ) -> PersistResult<()> {
     let state = state_id(ctx, agent, state_name).await?;
     let session = get_or_create_session(&ctx.db, agent, session_id).await?;
@@ -58,8 +60,8 @@ pub async fn on_agent_state_patch(
     let inserted: Result<i64, sqlx::Error> = sqlx::query_scalar(
         "INSERT INTO facade_patch
             (state_id, agent_id, session_id, interface, op, path, value, old_value, task_id,
-             global_rev, agent_pos, agent_ts, step)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+             global_rev, agent_pos, agent_ts, step, lifecycle, qualifiers)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          RETURNING id",
     )
     .bind(state)
@@ -76,6 +78,9 @@ pub async fn on_agent_state_patch(
     .bind(stamp.agent_pos)
     .bind(stamp.agent_ts)
     .bind(stamp.step)
+    // What the agent says of the change beside its value: an empty one says nothing.
+    .bind(lifecycle.filter(|l| !l.is_empty()))
+    .bind(qualifiers.filter(|q| !q.is_empty()).map(sqlx::types::Json))
     .fetch_one(&ctx.db)
     .await;
     match inserted {
@@ -189,6 +194,8 @@ pub async fn on_state(ctx: &Context, agent: i64, frame: &AgentFrame) -> PersistR
             path,
             value,
             task_id,
+            lifecycle,
+            qualifiers,
             ..
         } => {
             on_agent_state_patch(
@@ -202,6 +209,8 @@ pub async fn on_state(ctx: &Context, agent: i64, frame: &AgentFrame) -> PersistR
                 path,
                 value,
                 task_id.as_deref(),
+                lifecycle.as_deref(),
+                qualifiers.as_deref(),
             )
             .await?
         }
