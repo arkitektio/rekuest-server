@@ -1,6 +1,6 @@
 {
  "vocab": 2,
- "minor": 2,
+ "minor": 3,
  "catalogs": {
   "base": "https://arkitekt.live/catalogs/base/v4",
   "bundled": {
@@ -6144,6 +6144,202 @@
    "mount": {
     "kinds": [],
     "dependencies": [],
+    "args": null,
+    "catalog": true
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "path.unknown"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "path.unknown"
+    ]
+   }
+  },
+  {
+   "name": "a structure reads as its reference",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><foreach items={self.camera.streams} let=\"stream\" key={stream.object}><Text>{stream.__identifier}</Text></foreach></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/foreach[0]",
+      "component": "foreach",
+      "props": [
+       {
+        "key": "items",
+        "dynamic_value": {
+         "path": "self.camera.streams"
+        }
+       },
+       {
+        "key": "let",
+        "static_value": "stream",
+        "declares_value": "stream"
+       },
+       {
+        "key": "key",
+        "dynamic_value": {
+         "path": "stream.object"
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Blok[0]/foreach[0]/Text[0]",
+        "component": "Text",
+        "children": [
+         {
+          "id": "Blok[0]/foreach[0]/Text[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "dynamic_value": {
+             "path": "stream.__identifier"
+            }
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [
+     {
+      "key": "self",
+      "state_dependencies": [
+       {
+        "key": "camera",
+        "demand": {
+         "matches": [
+          {
+           "key": "streams",
+           "kind": "LIST",
+           "children": [
+            {
+             "key": "...",
+             "kind": "STRUCTURE",
+             "identifier": "@lovekit/stream"
+            }
+           ]
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ],
+    "args": null,
+    "catalog": true
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "a structure has no other field",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><foreach items={self.camera.streams} let=\"stream\" key={stream.id}><Text /></foreach></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/foreach[0]",
+      "component": "foreach",
+      "props": [
+       {
+        "key": "items",
+        "dynamic_value": {
+         "path": "self.camera.streams"
+        }
+       },
+       {
+        "key": "let",
+        "static_value": "stream",
+        "declares_value": "stream"
+       },
+       {
+        "key": "key",
+        "dynamic_value": {
+         "path": "stream.id"
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Blok[0]/foreach[0]/Text[0]",
+        "component": "Text"
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [
+     {
+      "key": "self",
+      "state_dependencies": [
+       {
+        "key": "camera",
+        "demand": {
+         "matches": [
+          {
+           "key": "streams",
+           "kind": "LIST",
+           "children": [
+            {
+             "key": "...",
+             "kind": "STRUCTURE",
+             "identifier": "@lovekit/stream"
+            }
+           ]
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ],
     "args": null,
     "catalog": true
    },

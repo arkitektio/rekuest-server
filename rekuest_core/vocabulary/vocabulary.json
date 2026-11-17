@@ -1,6 +1,6 @@
 {
  "vocab": 2,
- "minor": 2,
+ "minor": 3,
  "description": "The blok language, version 2: what a blok may read, call and store. The spec's parser, the server (rekuest_core, takt) and the renderer (orkestrator) load this file or are generated from it. The design is the blok-vocab-v2 proposal of 2026-10-25. Three layers, each versioned on its own: this language (vocab, and minor for what it gained since); the base catalog, everything every renderer draws; and the app catalogs that extend it with what one frontend draws beyond (see catalogs). A server holds a blok to the language alone, never to a catalog: whoever draws a blok checks it against the catalog it has, and an author's tooling checks it when asked.",
  "roots": {
   "data": {
@@ -93,6 +93,13 @@
   }
  },
  "records": {
+  "structure": {
+   "description": "What a STRUCTURE value (a state field, an argument, a let over a list of them) reads as below it: the reference it travels as. Paths below these two are refused.",
+   "fields": [
+    {"key": "object", "kind": "STRING", "description": "The id of the object in the service that owns it."},
+    {"key": "__identifier", "kind": "STRING", "description": "The structure's identifier (@lovekit/stream)."}
+   ]
+  },
   "task": {
    "description": "One shape for task, deps.<key>.tasks.<action>, self.tasks.<action> and every into name.",
    "fields": [

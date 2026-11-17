@@ -254,6 +254,16 @@ fn record_shape(key: &str, fields: &[RecordField], overrides: &[(&str, Shape)]) 
     }
 }
 
+/// A STRUCTURE as what may be read below it: the `structure` record (`object`, `__identifier`).
+fn structure_shape(structure: &Shape) -> Shape {
+    let key = structure
+        .key
+        .as_deref()
+        .filter(|k| !k.is_empty())
+        .unwrap_or("structure");
+    record_shape(key, &vocabulary().records["structure"].fields, &[])
+}
+
 fn task_record_shape(key: &str, returns: Option<&[PortMatchInputModel]>) -> Shape {
     let record = &vocabulary().records["task"];
     match returns {
@@ -2058,6 +2068,16 @@ impl<'a> Checker<'a> {
             let shape = match &current {
                 Some(shape) if !shape.open => shape,
                 _ => return current,
+            };
+            // A structure reads below it as the reference it travels as.
+            let structure;
+            let shape = if shape.kind == Some(PortKind::STRUCTURE)
+                && shape.children.as_deref().unwrap_or_default().is_empty()
+            {
+                structure = structure_shape(shape);
+                &structure
+            } else {
+                shape
             };
             let children = shape.children.as_deref().unwrap_or_default();
             let mut child = children.iter().find(|c| c.key.as_deref() == Some(*part));
