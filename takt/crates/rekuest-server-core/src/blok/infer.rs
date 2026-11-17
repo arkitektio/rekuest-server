@@ -21,7 +21,9 @@ use std::collections::{BTreeSet, HashMap};
 
 use serde_json::{Map, Value};
 
-use super::check::{action_key_for, foreach_let, into_sites, iter_nodes, FOREACH_ITEMS_PROP};
+use super::check::{
+    action_key_for, foreach_index, foreach_let, into_sites, iter_nodes, FOREACH_ITEMS_PROP,
+};
 use super::declared::{declared_local, local_declared, local_like, local_problem, LOCAL_COMPONENT};
 use crate::inputs::{
     ActionArgumentInputModel, AgentDependencyInputModel, AgentProbeInputModel, ArgPortInputModel,
@@ -295,6 +297,9 @@ impl Uses<'_> {
         let let_ = foreach_let(node);
         if let Some(let_) = let_ {
             inner.insert(let_.to_owned(), None);
+        }
+        if let Some(index) = foreach_index(node) {
+            inner.insert(index.to_owned(), None);
         }
         for prop in node.props.iter().flatten() {
             let prop_scope = if let_.is_some() && prop.key == FOREACH_ITEMS_PROP {

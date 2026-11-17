@@ -17954,7 +17954,7 @@
     }
    ]
   },
-  "error": "local-task: 'task' is reserved: no local, let or into may use it. [roots.reserved]",
+  "error": "local-task: 'task' is reserved: no local, let, index or into may use it. [roots.reserved]",
   "error_type": "value_error"
  },
  "blok with a local of no kind": {

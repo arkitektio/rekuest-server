@@ -1,6 +1,6 @@
 {
  "vocab": 2,
- "minor": 3,
+ "minor": 4,
  "description": "The blok language, version 2: what a blok may read, call and store. The spec's parser, the server (rekuest_core, takt) and the renderer (orkestrator) load this file or are generated from it. The design is the blok-vocab-v2 proposal of 2026-10-25. Three layers, each versioned on its own: this language (vocab, and minor for what it gained since); the base catalog, everything every renderer draws; and the app catalogs that extend it with what one frontend draws beyond (see catalogs). A server holds a blok to the language alone, never to a catalog: whoever draws a blok checks it against the catalog it has, and an author's tooling checks it when asked.",
  "roots": {
   "data": {
@@ -175,7 +175,7 @@
    "stale": "Known, but the source stopped updating (agent offline): the last value, flagged.",
    "failed": "Cannot be known (no access, agent gone, query error), with an error."
   },
-  "always_ready": ["locals", "event", "let", "literals"],
+  "always_ready": ["locals", "event", "let", "index", "literals"],
   "propagation": [
    "If any input of an expression is pending, the result is pending; else if any failed, the result is failed; else if any is stale, the result is stale.",
    "logic.choose and <if> read only the branch taken; logic.all and logic.any stop at the first operand that decides them.",
@@ -340,7 +340,7 @@
   "description": "How a v2 blok is stored: ComponentNodeInput {id, component, props?, children?}; ComponentPropInput {key, static_value? | dynamic_value {path} | util_call | agent_call (+ declares_value)}; ActionArgumentInput {key?, value_literal? | value_path? | util_call? | value_list? | value_dict?}. A prop or argument with no value field is null.",
   "ids": "An explicit id matches explicit_id; a derived id is the parent's id plus /<Component>[<n>] (n: occurrence among same-named siblings), the root's <Component>[0]. A derived id always ends in ']'. A text node is <parent>/#<n> (n: text-run index) and nothing may target it.",
   "explicit_id": "^[A-Za-z_][A-Za-z0-9_.:-]*$",
-  "foreach": "foreach props: items (expression), let (static_value and declares_value the name), key (expression, optional). With a key each item's subtree takes its runtime ids from it: <id>@<key>; without one, from its position: <id>@#<n> (n: the 0-based index). A foreach without key is stored with no key prop at all; the validator warns foreach.position_key when its items are known not to be scalars.",
+  "foreach": "foreach props: items (expression), let (static_value and declares_value the name), index (optional; static_value and declares_value the name: an INT, the item's 0-based position in items, in scope where let is), key (expression, optional). With a key each item's subtree takes its runtime ids from it: <id>@<key>; without one, from its position: <id>@#<n> (n: the 0-based index). A foreach without key is stored with no key prop at all; the validator warns foreach.position_key when its items are known not to be scalars.",
   "if": "if props: when; children: the then-branch, then the else nodes (component else, an else-if with a when prop; only the last else may lack when).",
   "into": "agent_call prop with declares_value <name>: a task record only that call writes. Allowed inside foreach; one name is written by one call site.",
   "text": "Text is a child like any other: each run of text between elements is stored as a node {id: <parent>/#<n>, component: \"#text\", props: [value]}, its value a literal or an expression; several parts of one run desugar to str.template(template, values). No element can be called #text, so only text makes one. Parsing needs no catalog. What a component does with its text is its renderer's: one with a text_prop makes its text children that prop (a Button its label), any other that takes children draws them in place; a component that sets its text_prop as an attribute too, or takes neither text nor children, is a catalog finding (catalog.text). A tree stored before text was a node holds the text_prop itself, and implicit Text or span nodes under the same ids: a renderer draws both."
@@ -424,7 +424,8 @@
   "bsx.text_callback": {"level": "error", "message": "Text holds a call or an effect; only a callback prop may.", "hint": "Put the call in a callback prop (onClick={{...}}), never between tags."},
   "bsx.else_outside_if": {"level": "error", "message": "<else> is a child of <if>, after its then-branch.", "hint": "Move the <else> inside its <if>, after the then-branch children."},
   "bsx.else_order": {"level": "error", "message": "<else> comes after the then-branch, and only the last <else> may lack when.", "hint": "Put the <else> branches last in the <if>; only the final one may leave out when."},
-  "bsx.foreach": {"level": "error", "message": "<foreach> needs items={{...}} and let=\"name\" (key={{...}} is optional): {missing}."},
+  "bsx.foreach": {"level": "error", "message": "<foreach> needs items={{...}} and let=\"name\" (key={{...}} and index=\"name\" are optional): {missing}."},
+  "bsx.index": {"level": "error", "message": "index={index!r} is not a name.", "hint": "Write index=\"i\": a plain identifier the children read as the item's position, from 0."},
   "bsx.let": {"level": "error", "message": "let={let!r} is not a name.", "hint": "Write let=\"name\": a plain identifier the children read as name.field."},
   "expr.syntax": {"level": "error", "message": "{detail}", "hint": "Expressions are a JavaScript subset: paths, literals, calls with name: value arguments, == != > >= < <=, && || !, ?? and c ? a : b."},
   "expr.arithmetic": {"level": "error", "message": "{operator} is not an operator of the blok language; call math.{function}(a, b)."},
@@ -445,9 +446,9 @@
   "callback.not_callback": {"level": "error", "message": "{key} of <{component}> is not a callback prop, so it cannot hold {what}.", "hint": "Use a callback prop of <{component}> (the catalog lists them as CALLBACK), or compute {key} without a call."},
   "callback.unbound": {"level": "error", "message": "{key} of <{component}> is a callback prop: it holds one task call or one effect (queries.<name>.refetch(), queries.<name>.fetch_more(...), ui.copy, task.answer, assign.start).", "hint": "Give {key} a task call (deps.<key>.<action>(name: value)) or one effect, not a value."},
   "callback.event_field": {"level": "error", "message": "event has no field {field!r} in {key} of <{component}> (its fields: {fields}).", "hint": "Read one of the fields listed for {key}: {fields}."},
-  "roots.unknown": {"level": "error", "message": "{path} reads {root!r}, which is no root, local, loop variable or record of this blok.", "hint": "Read a root this blok has (deps.<key>, args.<key>, queries.<name>, ...), a declared local, a foreach let, or an into record."},
+  "roots.unknown": {"level": "error", "message": "{path} reads {root!r}, which is no root, local, loop variable or record of this blok.", "hint": "Read a root this blok has (deps.<key>, args.<key>, queries.<name>, ...), a declared local, a foreach let or index, or an into record."},
   "roots.not_in_kind": {"level": "error", "message": "{path}: a{n} {kind} blok has no {root!r} (it reads {roots}).", "hint": "Read one of {roots} instead."},
-  "roots.reserved": {"level": "error", "message": "{name!r} is reserved: no local, let or into may use it."},
+  "roots.reserved": {"level": "error", "message": "{name!r} is reserved: no local, let, index or into may use it."},
   "roots.shadow": {"level": "error", "message": "{name!r} is declared twice: as {first} and as {second}."},
   "roots.event_outside_callback": {"level": "error", "message": "{path} reads event outside a callback.", "hint": "Read event only inside a callback prop; outside one, bind a control to a local and read the local."},
   "roots.error_outside_boundary": {"level": "error", "message": "{path} reads error outside an <error> slot.", "hint": "Read error only inside the <error> slot of a <suspense>."},

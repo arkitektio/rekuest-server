@@ -19,7 +19,7 @@
 //! - `into` names are in scope in the whole tree, each written by one call site;
 //! - a `<local>` is in scope in its parent's subtree: every local of a node is bound before any
 //!   of its children is walked;
-//! - a `foreach`'s `let` is in scope in its children and its own `key`, not its `items`;
+//! - a `foreach`'s `let` (and its `index`) is in scope in its children and its own `key`, not its `items`;
 //! - `event` only in a callback prop, `error` only inside the `<error>` slot of a `<suspense>`.
 
 use std::collections::{HashMap, HashSet};
@@ -71,6 +71,7 @@ const LOGO: &str = "LOGO";
 const TEXT_NODE: &str = "#text";
 pub const FOREACH_COMPONENT: &str = "foreach";
 pub const FOREACH_LET_PROP: &str = "let";
+pub const FOREACH_INDEX_PROP: &str = "index";
 pub const FOREACH_ITEMS_PROP: &str = "items";
 pub const SUSPENSE_COMPONENT: &str = "suspense";
 pub const ERROR_SLOT: &str = "error";
@@ -373,6 +374,18 @@ pub(crate) fn foreach_let(node: &ComponentNodeInputModel) -> Option<&str> {
         .iter()
         .flatten()
         .filter(|p| p.key == FOREACH_LET_PROP)
+        .find_map(|p| p.declares_value.as_deref().filter(|v| !v.is_empty()))
+}
+
+/// The name a `foreach` gives each item's position (`index="i"`), when it names one.
+pub(crate) fn foreach_index(node: &ComponentNodeInputModel) -> Option<&str> {
+    if node.component != FOREACH_COMPONENT {
+        return None;
+    }
+    node.props
+        .iter()
+        .flatten()
+        .filter(|p| p.key == FOREACH_INDEX_PROP)
         .find_map(|p| p.declares_value.as_deref().filter(|v| !v.is_empty()))
 }
 
@@ -1004,6 +1017,16 @@ impl<'a> Checker<'a> {
             };
             let bound = self.bind_let(let_, items, &where_, scope);
             inner.insert(let_.to_owned(), Bound::Shape(bound));
+        }
+        if let Some(index) = foreach_index(node) {
+            let where_ = Where {
+                node,
+                key: FOREACH_INDEX_PROP.into(),
+                callback: false,
+                in_error,
+            };
+            let bound = self.bind_index(index, &where_, &inner);
+            inner.insert(index.to_owned(), Bound::Shape(bound));
         }
         for prop in node.props.iter().flatten() {
             let prop_scope = if let_.is_some() && prop.key == FOREACH_ITEMS_PROP {
@@ -1678,6 +1701,29 @@ impl<'a> Checker<'a> {
         ];
         self.add("path.unknown", Some(&where_.node.id), &fields);
         Shape::open(Some(name))
+    }
+
+    /// What a `foreach`'s `index` is bound to: the item's 0-based position. `scope` holds the
+    /// loop variable already.
+    fn bind_index(&mut self, name: &str, where_: &Where<'_>, scope: &Scope) -> Shape {
+        if self.vocabulary.is_reserved(name) {
+            self.add(
+                "roots.reserved",
+                Some(&where_.node.id),
+                &[("name", s(name))],
+            );
+        } else if let Some(bound) = scope.get(name) {
+            let fields = [
+                ("name", s(name)),
+                ("first", s(self.binding_what(name, bound))),
+                (
+                    "second",
+                    s(format!("the index of <foreach> ({})", where_.node.id)),
+                ),
+            ];
+            self.add("roots.shadow", Some(&where_.node.id), &fields);
+        }
+        Shape::typed(name, Some(PortKind::INT))
     }
 
     /// What a `<local>` named `name` (the node `node`) is bound to in its parent's subtree;

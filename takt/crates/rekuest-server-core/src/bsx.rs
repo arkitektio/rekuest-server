@@ -688,6 +688,16 @@ impl Lowering<'_> {
             }
             _ => return Err(self.fail("bsx.let", let_.offset, &[("let", s("{...}"))])),
         }
+        // The index is optional: a name for the item's position.
+        if let Some(index) = get("index") {
+            match &index.value {
+                AttributeValue::Text(name) if is_local(name) => {}
+                AttributeValue::Text(name) => {
+                    return Err(self.fail("bsx.index", index.offset, &[("index", s(name.clone()))]))
+                }
+                _ => return Err(self.fail("bsx.index", index.offset, &[("index", s("{...}"))])),
+            }
+        }
         // The key is optional (items are then keyed by their position); given, it is an expression.
         for attribute in ["items", "key"].into_iter().filter_map(get) {
             if !matches!(attribute.value, AttributeValue::Expression(_)) {
@@ -831,11 +841,15 @@ impl Lowering<'_> {
             }),
             AttributeValue::Text(text) => Ok(ComponentPropInputModel {
                 static_value: Some(s(text.clone())),
-                declares_value: (key == "let" && component == FOREACH).then(|| text.clone()),
+                declares_value: ((key == "let" || key == "index") && component == FOREACH)
+                    .then(|| text.clone()),
                 ..prop(key)
             }),
             AttributeValue::Expression(_) if key == "let" && component == FOREACH => {
                 Err(self.fail("bsx.let", attribute.offset, &[("let", s("{...}"))]))
+            }
+            AttributeValue::Expression(_) if key == "index" && component == FOREACH => {
+                Err(self.fail("bsx.index", attribute.offset, &[("index", s("{...}"))]))
             }
             AttributeValue::Expression(expression) => self.value(key, expression, attribute.offset),
         }

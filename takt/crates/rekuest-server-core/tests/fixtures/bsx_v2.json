@@ -1,6 +1,6 @@
 {
  "vocab": 2,
- "minor": 3,
+ "minor": 4,
  "catalogs": {
   "base": "https://arkitekt.live/catalogs/base/v4",
   "bundled": {
@@ -2644,6 +2644,63 @@
    "printed": "<foreach items={self.names} let=\"n\">\n  <Text>{n}</Text>\n</foreach>"
   },
   {
+   "name": "a foreach with an index",
+   "source": "<foreach items={self.names} let=\"n\" index=\"i\"><Text>{math.add(a: i, b: 1)}</Text></foreach>",
+   "tree": {
+    "id": "foreach[0]",
+    "component": "foreach",
+    "props": [
+     {
+      "key": "items",
+      "dynamic_value": {
+       "path": "self.names"
+      }
+     },
+     {
+      "key": "let",
+      "static_value": "n",
+      "declares_value": "n"
+     },
+     {
+      "key": "index",
+      "static_value": "i",
+      "declares_value": "i"
+     }
+    ],
+    "children": [
+     {
+      "id": "foreach[0]/Text[0]",
+      "component": "Text",
+      "children": [
+       {
+        "id": "foreach[0]/Text[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "util_call": {
+           "operation": "math.add",
+           "arguments": [
+            {
+             "key": "a",
+             "value_path": "i"
+            },
+            {
+             "key": "b",
+             "value_literal": 1
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "printed": "<foreach items={self.names} let=\"n\" index=\"i\">\n  <Text>{math.add(i, 1)}</Text>\n</foreach>"
+  },
+  {
    "name": "coalesce",
    "source": "<Text text={a ?? b} />",
    "tree": {
@@ -3104,6 +3161,15 @@
     "code": "bsx.let",
     "line": 1,
     "column": 21
+   }
+  },
+  {
+   "name": "an index from an expression",
+   "source": "<foreach items={xs} let=\"p\" index={i}><Text /></foreach>",
+   "error": {
+    "code": "bsx.index",
+    "line": 1,
+    "column": 29
    }
   },
   {
@@ -4441,6 +4507,174 @@
        "persist": false
       }
      }
+    },
+    "codes": [
+     "roots.shadow"
+    ]
+   }
+  },
+  {
+   "name": "an index is a number",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><foreach items={args.xs} let=\"x\" index=\"i\" key={i}><Progress value={i} /><Text text={i.name} /></foreach></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/foreach[0]",
+      "component": "foreach",
+      "props": [
+       {
+        "key": "items",
+        "dynamic_value": {
+         "path": "args.xs"
+        }
+       },
+       {
+        "key": "let",
+        "static_value": "x",
+        "declares_value": "x"
+       },
+       {
+        "key": "index",
+        "static_value": "i",
+        "declares_value": "i"
+       },
+       {
+        "key": "key",
+        "dynamic_value": {
+         "path": "i"
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Blok[0]/foreach[0]/Progress[0]",
+        "component": "Progress",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "i"
+          }
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/foreach[0]/Text[0]",
+        "component": "Text",
+        "props": [
+         {
+          "key": "text",
+          "dynamic_value": {
+           "path": "i.name"
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "path.unknown"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "path.unknown"
+    ]
+   }
+  },
+  {
+   "name": "an index shadowing its let",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><foreach items={args.xs} let=\"x\" index=\"x\" key={x}><Text /></foreach></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/foreach[0]",
+      "component": "foreach",
+      "props": [
+       {
+        "key": "items",
+        "dynamic_value": {
+         "path": "args.xs"
+        }
+       },
+       {
+        "key": "let",
+        "static_value": "x",
+        "declares_value": "x"
+       },
+       {
+        "key": "index",
+        "static_value": "x",
+        "declares_value": "x"
+       },
+       {
+        "key": "key",
+        "dynamic_value": {
+         "path": "x"
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Blok[0]/foreach[0]/Text[0]",
+        "component": "Text"
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "roots.shadow"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
     },
     "codes": [
      "roots.shadow"

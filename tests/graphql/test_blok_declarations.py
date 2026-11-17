@@ -104,7 +104,7 @@ class TestBlokDeclarations:
 
     async def test_malformed_declarations_are_refused(self, authenticated_context: HttpContext) -> None:
         for changed, message in (
-            ({"components": _tree(local("task", kind="STRING"), POSITIONS, EVENTS)}, "'task' is reserved: no local, let or into may use it."),
+            ({"components": _tree(local("task", kind="STRING"), POSITIONS, EVENTS)}, "'task' is reserved: no local, let, index or into may use it."),
             ({"components": _tree(ITERATIONS, query("positions", "mikro", "mutation { delete }"))}, "is a mutation: a blok reads, and writes only through a task"),
             ({"components": _tree(ITERATIONS, POSITIONS, query("events", "rekuest", "subscription { events { id } }", component="subscription", history="nope"))}, "replays from 'nope', which is no declared query."),
             ({"components": _tree(ITERATIONS, query("positions", "mikro", DOCUMENT, more="positions[0]"))}, "is not a field path into its data (positions, images.items)."),

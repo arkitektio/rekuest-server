@@ -291,7 +291,7 @@ fn a_finding_is_json_as_the_spec_writes_it() {
     );
     assert_eq!(
         finding.to_json(),
-        serde_json::json!({"code": "roots.reserved", "level": "error", "message": "'self' is reserved: no local, let or into may use it.", "path": "Blok[0]/local[0]"})
+        serde_json::json!({"code": "roots.reserved", "level": "error", "message": "'self' is reserved: no local, let, index or into may use it.", "path": "Blok[0]/local[0]"})
     );
 }
 
