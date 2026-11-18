@@ -1670,7 +1670,7 @@ class BlokImplementationInputModel(BaseModel):
     catalog_minor: Optional[int] = Field(default=None, ge=0, description="The minor of its catalog the blok needs: the newest `since` among the components and props it uses.")
     _written_for = model_validator(mode="before")(_catalog_names_the_module)
     description: Optional[str] = Field(default=None, description="A human-readable description about this Blok's purpose and functionality.")
-    context: enums.ComponentContext = Field(default=enums.ComponentContext.PANEL, description="What draws it, as its `<Blok context=...>` says (the two must agree): PANEL for panels and dashboards, SCENE for a 3D view (one Scene), LOGO for a logo (one Logo): an agent's, or an action's when its kind is action.")
+    context: Optional[enums.ComponentContext] = Field(default=None, description="What draws it, as its `<Blok context=...>` says (the two must agree): PANEL for panels and dashboards, SCENE for a 3D view (one Scene), LOGO for a logo (one Logo): an agent's, or an action's when its kind is action. A blok sent as its `source` need not say it: it is read off its `<Blok>`. PANEL otherwise.")
     default: bool = Field(default=False, description="Whether this Blok is its agent's default for its context. A newly declared default replaces the previous one.")
     for_model: Optional[str] = Field(default=None, description="The model ('sha256:...') this Blok decorates: viewers showing that model offer this Blok at `for_node`. PANEL bloks only.")
     for_node: Optional[str] = Field(default=None, description="The node of `for_model` this Blok attaches to; the model's root when absent.")
@@ -1687,13 +1687,19 @@ class BlokImplementationInputModel(BaseModel):
         check_blok_sent_once(self.components, self.source, required=True)
         dependency_keys = {dependency.key for dependency in self.dependencies}
         check_blok_declarations(catalogs=self.catalogs, dependency_keys=dependency_keys, demo=self.demo)
-        check_blok_target(self.context, self.for_model, self.for_node)
-        check_blok_args(self.context, self.args)
+        if self.context is None and self.source is not None:
+            # Sent as its source alone, a blok is drawn as its `<Blok>` says: takt reads it
+            # there once it has parsed the source, and holds the blok to the rest.
+            return self
+        context = self.context or enums.ComponentContext.PANEL
+        self.context = context
+        check_blok_target(context, self.for_model, self.for_node)
+        check_blok_args(context, self.args)
         check_blok_manifest(
             self.components,
-            kinds=agent_blok_kinds(self.context),
+            kinds=agent_blok_kinds(context),
             mount=f"the agent's blok {self.key!r}",
-            context=self.context,
+            context=context,
             dependencies=self.dependencies,
             args=[arg.key for arg in self.args] if self.args else None,
             demo=self.demo,

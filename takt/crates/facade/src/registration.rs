@@ -440,7 +440,7 @@ async fn register_blok(
     .bind(agent.user)
     .bind(agent.organization)
     .bind(catalog.id)
-    .bind(blok.context.value())
+    .bind(blok.context().value())
     .bind(&blok.for_model)
     .bind(&blok.for_node)
     .bind(agent.app)
@@ -467,7 +467,7 @@ async fn register_blok(
               WHERE b.id = m.blok_id AND m.declared_by_id = $1 AND m.is_default AND b.context = $2 AND m.name <> $3",
         )
         .bind(agent.id)
-        .bind(blok.context.value())
+        .bind(blok.context().value())
         .bind(&name)
         .execute(&mut *conn)
         .await?;

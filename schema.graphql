@@ -1912,9 +1912,9 @@ input BlokImplementationInput {
   description: String = null
 
   """
-  What draws it, as its `<Blok context=...>` says (the two must agree): PANEL for panels and dashboards, SCENE for a 3D view (one Scene), LOGO for a logo (one Logo): an agent's, or an action's when its kind is action.
+  What draws it, as its `<Blok context=...>` says (the two must agree): PANEL for panels and dashboards, SCENE for a 3D view (one Scene), LOGO for a logo (one Logo): an agent's, or an action's when its kind is action. A blok sent as its `source` need not say it: it is read off its `<Blok>`. PANEL otherwise.
   """
-  context: ComponentContext! = PANEL
+  context: ComponentContext = null
 
   """
   Whether this Blok is its agent's default for its context. A newly declared default replaces the previous one.

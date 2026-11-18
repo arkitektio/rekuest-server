@@ -22,6 +22,8 @@ use super::ports::{
 };
 use super::{min_length, ValidationError};
 use crate::blok::check::validate_blok;
+use crate::blok::declared::blok_catalog;
+use crate::blok::reads::{self_dependency, self_reads};
 use crate::blok::{blok_header, BlokScope, Finding};
 use crate::enums::{
     ActionBlokPhase, ActionKind, AssetKind, CatalogValueKind, ComponentContext, Effects, Execution,
@@ -1083,9 +1085,10 @@ pub struct BlokImplementationInputModel {
     #[serde(default)]
     pub description: Option<String>,
     /// What draws it, as its `<Blok context=...>` says (the two must agree): PANEL, SCENE or
-    /// LOGO (an agent's logo, or an action's when its kind is action).
-    #[serde(default = "panel_")]
-    pub context: ComponentContext,
+    /// LOGO (an agent's logo, or an action's when its kind is action). A blok sent as its
+    /// source need not say it twice: `validate` reads it off the `<Blok>`. PANEL otherwise.
+    #[serde(default)]
+    pub context: Option<ComponentContext>,
     /// Whether this is its agent's default blok for its context.
     #[serde(default)]
     pub default: bool,
@@ -1139,6 +1142,72 @@ pub fn check_blok_target(
 }
 
 impl BlokImplementationInputModel {
+    /// What draws it: what was sent, or read off its `<Blok>` (`read_source`); PANEL when
+    /// neither says.
+    pub fn context(&self) -> ComponentContext {
+        self.context.unwrap_or(ComponentContext::PANEL)
+    }
+
+    /// Sent as its source, a blok says the rest itself: its tree is parsed, and the context
+    /// that draws it and the catalog it is written for are read off its `<Blok>` where they
+    /// were not sent beside it. A blok sent as its tree is taken as sent.
+    fn read_source(&mut self) -> Result<(), ValidationError> {
+        let sourced = self.source.is_some() && self.components.is_none();
+        parse_sent(&mut self.components, &mut self.source)?;
+        if let (true, Some([tree])) = (sourced, self.components.as_deref()) {
+            if self.context.is_none() {
+                if let Ok(header) = blok_header(tree) {
+                    self.context = [
+                        ComponentContext::PANEL,
+                        ComponentContext::SCENE,
+                        ComponentContext::LOGO,
+                    ]
+                    .into_iter()
+                    .find(|context| context.value() == header.context);
+                }
+            }
+            if self.catalog.is_none() && self.module.is_none() {
+                self.catalog = blok_catalog(tree).map(str::to_owned);
+            }
+        }
+        self.context = Some(self.context());
+        Ok(())
+    }
+
+    /// The `self` dependency of an agent's blok that names none: what its tree reads of the
+    /// agent declaring `implementations` and `states` (`self_dependency`), added to its
+    /// dependencies, and its tree checked again mounted with it. Refused when it reads a state
+    /// or names an action the agent does not declare.
+    pub fn name_self(
+        &mut self,
+        implementations: &[ImplementationInputModel],
+        states: &[StateImplementationInputModel],
+    ) -> Result<(), ValidationError> {
+        if self.blok_kind().as_deref() != Some("agent")
+            || self.dependencies.iter().any(|d| d.key == SELF_DEPENDENCY)
+        {
+            return Ok(());
+        }
+        let Some([tree]) = self.components.as_deref() else {
+            return Ok(());
+        };
+        let dependency =
+            self_dependency(&self_reads(tree), implementations, states).map_err(|finding| {
+                ValidationError(format!("Blok {}: {finding}", repr_str(&self.key)))
+            })?;
+        let Some(dependency) = dependency else {
+            return Ok(());
+        };
+        self.dependencies.insert(0, dependency);
+        let (kinds, mount) = self.agent_mount();
+        check_blok_manifest(
+            self.components.as_deref(),
+            &self.scope(kinds, &mount),
+            self.context(),
+        )?;
+        Ok(())
+    }
+
     /// Where its tree is mounted: where `kinds` go (`mount` says where that is, for a message),
     /// with its own dependencies and args.
     pub fn scope(&self, kinds: &[&str], mount: &str) -> BlokScope {
@@ -1153,13 +1222,15 @@ impl BlokImplementationInputModel {
     /// How an agent's blok is mounted: its kinds and where (`the agent's blok 'panel'`).
     pub fn agent_mount(&self) -> (&'static [&'static str], String) {
         (
-            agent_blok_kinds(self.context),
+            agent_blok_kinds(self.context()),
             format!("the agent's blok {}", repr_str(&self.key)),
         )
     }
 
     /// Validated as the blok of an agent (or an action logo).
     pub fn validate(&mut self) -> Result<(), ValidationError> {
+        // Its context decides the kinds its mount takes, and its source may be what says it.
+        self.read_source()?;
         let (kinds, mount) = self.agent_mount();
         self.validate_as(kinds, &mount)
     }
@@ -1168,8 +1239,9 @@ impl BlokImplementationInputModel {
     /// well-formed; its tree coherent with where it is mounted (`kinds`) and with its kind's
     /// roots (the language rules; the catalog rules are the catalog check's).
     pub fn validate_as(&mut self, kinds: &[&str], mount: &str) -> Result<(), ValidationError> {
+        self.read_source()?;
+        let context = self.context();
         written_for(&mut self.module, self.catalog.as_deref())?;
-        parse_sent(&mut self.components, &mut self.source)?;
         check_vocab(self.vocab)?;
         for component in self.components.iter_mut().flatten() {
             component.validate()?;
@@ -1186,16 +1258,12 @@ impl BlokImplementationInputModel {
             dependency_keys: &keys,
             demo: self.demo.as_ref(),
         })?;
-        check_blok_target(
-            self.context,
-            self.for_model.as_deref(),
-            self.for_node.as_deref(),
-        )?;
-        check_blok_args(self.context, &self.args)?;
+        check_blok_target(context, self.for_model.as_deref(), self.for_node.as_deref())?;
+        check_blok_args(context, &self.args)?;
         check_blok_manifest(
             self.components.as_deref(),
             &self.scope(kinds, mount),
-            self.context,
+            context,
         )?;
         Ok(())
     }
@@ -1280,7 +1348,7 @@ impl AskBlokInputModel {
             catalog: self.catalog.clone(),
             catalog_minor: self.catalog_minor,
             description: self.description.clone(),
-            context: ComponentContext::PANEL,
+            context: Some(ComponentContext::PANEL),
             default: false,
             for_model: None,
             for_node: None,
@@ -1644,8 +1712,17 @@ impl ImplementAgentInputModel {
         for state in self.states.iter_mut().flatten() {
             state.validate()?;
         }
+        // A blok sent as its source alone names no `self`: what its tree reads of the agent is
+        // worked out against what is declared with it, as an SDK that parses BSX does before
+        // it sends one. A blok sent as its tree is left as sent.
+        let implementations = self.implementations.as_deref().unwrap_or_default();
+        let states = self.states.as_deref().unwrap_or_default();
         for blok in self.bloks.iter_mut().flatten() {
+            let sourced = blok.source.is_some() && blok.components.is_none();
             blok.validate()?;
+            if sourced {
+                blok.name_self(implementations, states)?;
+            }
         }
         // An implementation's logo is an action logo blok the agent declares (`check_logos`): a
         // logo blok whose `<Blok>` says kind action.
@@ -1654,7 +1731,7 @@ impl ImplementAgentInputModel {
             .iter()
             .flatten()
             .filter(|blok| {
-                blok.context == ComponentContext::LOGO
+                blok.context() == ComponentContext::LOGO
                     && blok.blok_kind().is_none_or(|kind| kind == "action")
             })
             .map(|blok| blok.key.as_str())

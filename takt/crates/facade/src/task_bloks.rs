@@ -195,7 +195,7 @@ async fn blok_from_source(
     .bind(sender.user_id)
     .bind(sender.organization_id)
     .bind(catalog.id)
-    .bind(model.context.value())
+    .bind(model.context().value())
     .bind(serde_json::to_value(&model.returns).expect("returns serialize"))
     .bind(task)
     .bind(model.vocab as i16)

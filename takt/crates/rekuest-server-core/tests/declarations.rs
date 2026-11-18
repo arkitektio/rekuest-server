@@ -108,3 +108,28 @@ fn a_dependency_from_a_released_client_still_parses() {
     .expect("the legacy field is ignored");
     assert_eq!(dependency.key, "stage");
 }
+
+/// A blok sent as its source alone is completed by the server: the context its `<Blok>` says,
+/// and the `self` dependency its tree reads of the agent declaring it. Held to what the Python
+/// SDK sends beside the same source (`app_declarations.json`, recorded from it).
+#[test]
+fn a_blok_sent_as_its_source_alone_comes_out_as_the_sdk_sends_it() {
+    let apps: Value = serde_json::from_str(include_str!("fixtures/app_declarations.json")).unwrap();
+    let sent = &apps["dataset_inspector"];
+    let expected = validate(sent).unwrap();
+    let mut bare = sent.clone();
+    let blok = bare["bloks"][0].as_object_mut().unwrap();
+    assert!(blok["dependencies"][0]["action_dependencies"].is_array());
+    blok.remove("dependencies");
+    blok.remove("context");
+    assert_eq!(validate(&bare).unwrap().bloks, expected.bloks);
+}
+
+#[test]
+fn a_blok_sent_as_its_source_reads_only_what_its_agent_declares() {
+    let declaration = serde_json::json!({"bloks": [{"key": "panel", "vocab": 2,
+        "source": "<Blok kind=\"agent\" context=\"panel\"><Text>{self.stage.x}</Text></Blok>"}]});
+    let error = validate(&declaration).unwrap_err();
+    assert!(error.contains("[deps.unknown_state]"), "{error}");
+    assert!(error.contains("'stage'"), "{error}");
+}

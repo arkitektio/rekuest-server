@@ -723,7 +723,7 @@ class BlokImplementationInput:
     catalog: Optional[str] = None
     catalog_minor: Optional[int] = None
     description: Optional[str] = None
-    context: enums.ComponentContext = enums.ComponentContext.PANEL
+    context: Optional[enums.ComponentContext] = None
     default: bool = False
     for_model: Optional[str] = None
     for_node: Optional[str] = None

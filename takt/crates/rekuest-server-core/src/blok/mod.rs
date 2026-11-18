@@ -9,6 +9,7 @@ pub mod check;
 pub mod declared;
 pub mod expr;
 pub mod infer;
+pub mod reads;
 pub mod vocabulary;
 
 pub use check::{check_blok, check_blok_tree, BlokScope};
