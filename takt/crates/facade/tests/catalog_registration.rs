@@ -382,12 +382,21 @@ async fn a_logo_blok_is_one_logo_and_control_flow_takes_its_context() {
     let blok = |context: &str, source: &str| json!([{"key": "view", "vocab": 2, "module": "electron", "context": context, "source": source}]);
     let logo = |inner: &str| format!(r#"<Blok kind="agent" context="logo">{inner}</Blok>"#);
     let panel = |inner: &str| format!(r#"<Blok kind="agent" context="panel">{inner}</Blok>"#);
+    // The lamps a logo draws are a state of its agent: a blok sent as its source reads only
+    // what is declared with it.
+    let declared = |bloks: Value| {
+        let mut declared = payload(&[], "gt", ("a", "b"), bloks);
+        declared["states"] = json!([{"interface": "board", "definition": {"name": "board", "ports": [
+            {"key": "lamps", "kind": "LIST", "nullable": false,
+             "children": [{"key": "...", "kind": "STRING", "nullable": false}]}]}}]);
+        declared
+    };
 
     for bloks in [
         blok(
             "LOGO",
             &logo(
-                r#"<Logo><foreach items={self.lamps} let="lamp" key={lamp}><Path d="M0 0" /></foreach></Logo>"#,
+                r#"<Logo><foreach items={self.board.lamps} let="lamp" key={lamp}><Path d="M0 0" /></foreach></Logo>"#,
             ),
         ),
         blok(
@@ -399,14 +408,11 @@ async fn a_logo_blok_is_one_logo_and_control_flow_takes_its_context() {
         blok(
             "LOGO",
             &logo(
-                r#"<Logo><foreach items={self.lamps} let="lamp" key={lamp}><Box /></foreach></Logo>"#,
+                r#"<Logo><foreach items={self.board.lamps} let="lamp" key={lamp}><Box /></foreach></Logo>"#,
             ),
         ),
     ] {
-        assert_eq!(
-            t.findings(payload(&[], "gt", ("a", "b"), bloks)).await,
-            vec![]
-        );
+        assert_eq!(t.findings(declared(bloks)).await, vec![]);
     }
 
     // A logo holds one Logo (an error of the vocabulary), and a blok is one <Blok>.
@@ -419,7 +425,9 @@ async fn a_logo_blok_is_one_logo_and_control_flow_takes_its_context() {
         (
             blok(
                 "LOGO",
-                &logo(r#"<foreach items={self.lamps} let="lamp" key={lamp}><Logo /></foreach>"#),
+                &logo(
+                    r#"<foreach items={self.board.lamps} let="lamp" key={lamp}><Logo /></foreach>"#,
+                ),
             ),
             "refused",
             "[blok.content]",
@@ -430,7 +438,7 @@ async fn a_logo_blok_is_one_logo_and_control_flow_takes_its_context() {
             "[blok.root]",
         ),
     ] {
-        let findings = t.findings(payload(&[], "gt", ("a", "b"), bloks)).await;
+        let findings = t.findings(declared(bloks)).await;
         assert!(found(&findings, code, message), "{findings:?}");
     }
 }
