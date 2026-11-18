@@ -83,7 +83,7 @@ class Patch:
         description="Where in a task's or the agent's life the change was made, when not in its ordinary course: `cleanup` (a task being stopped, on its way out) or `shutdown` (the agent's shutdown hooks). Said by the agent's runtime."
     )
 
-    @strawberry.field(description="What the app says the change was for: its own names. Empty when it said nothing.")
+    @strawberry_django.field(only=["qualifiers"], description="What the app says the change was for: its own names. Empty when it said nothing.")
     def qualifiers(self) -> list[str]:
         row = row_of(self, models.Patch)
         return [str(q) for q in row.qualifiers or []]
@@ -110,7 +110,9 @@ class Patch:
     state: State
     interface: str
 
-    @strawberry.field(description="What the update does, as RFC 6902 operations: apply them in order, and all of them before showing the state.")
+    # ``only``: a resolver's columns are not loaded with the row unless it names them, and
+    # loading one afterwards is a query from an async resolver, which Django refuses.
+    @strawberry_django.field(only=["ops"], description="What the update does, as RFC 6902 operations: apply them in order, and all of them before showing the state.")
     def ops(self) -> list[JSONPatch]:
         row = row_of(self, models.Patch)
         return JSONPatch.of(row.ops)

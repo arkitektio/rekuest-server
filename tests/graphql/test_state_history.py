@@ -102,7 +102,8 @@ class TestStateHistory:
         result = await schema.execute(
             """query Q($f: Int!, $t: Int!) {
                  patchEventsBetweenGlobalRevs(fromGlobalRevision: $f, toGlobalRevision: $t) {
-                   globalCurrentRevision globalFutureRevision
+                   globalCurrentRevision globalFutureRevision qualifiers
+                   ops { op path value }
                  }
                }""",
             context_value=authenticated_context,
@@ -114,6 +115,12 @@ class TestStateHistory:
         assert len(rows) == 2
         for row in rows:
             assert row["globalFutureRevision"] == row["globalCurrentRevision"] + 1
+        # An update's operations and what is said of it are read with the row.
+        assert [row["ops"] for row in rows] == [
+            [{"op": "replace", "path": "/count", "value": 1}],
+            [{"op": "replace", "path": "/count", "value": 2}],
+        ]
+        assert [row["qualifiers"] for row in rows] == [[], []]
 
     async def test_every_state_history_query_executes(self, authenticated_context):
         """All six remaining root fields — each of these previously raised FieldError."""
