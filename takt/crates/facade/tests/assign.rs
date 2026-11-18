@@ -336,6 +336,87 @@ async fn an_action_goes_to_the_first_agent_it_fits() {
     assert!(refused.to_string().contains("size < memory"), "{refused}");
 }
 
+/// A stateful action reads or changes the state of the agent that runs it, so an assign names
+/// that agent: also when one agent alone offers the action.
+#[tokio::test]
+async fn a_stateful_action_is_assigned_to_a_named_agent() {
+    let Some(ctx) = context().await else { return };
+    let executor = agent(&ctx, None).await;
+    let (stateful, implementation) = action(&ctx, executor, false).await;
+    let hash: String =
+        sqlx::query_scalar("UPDATE facade_action SET stateful = true WHERE id = $1 RETURNING hash")
+            .bind(stateful)
+            .fetch_one(&ctx.db)
+            .await
+            .unwrap();
+    let caller = principal(&ctx, executor).await;
+    let args = json!({"x": 1}).as_object().unwrap().clone();
+
+    for by_itself in [
+        AssignInput {
+            action: Some(stateful.to_string()),
+            args: args.clone(),
+            ..AssignInput::default()
+        },
+        AssignInput {
+            action_hash: Some(hash),
+            args: args.clone(),
+            ..AssignInput::default()
+        },
+    ] {
+        let refused =
+            backend::assign_with_status(&ctx, &caller, &by_itself, AssignOrigin::default())
+                .await
+                .unwrap_err();
+        assert!(
+            refused
+                .to_string()
+                .contains("A stateful action is assigned to a named agent"),
+            "{refused}"
+        );
+    }
+
+    // Named: by its implementation, or as "this action, on that agent".
+    for named in [
+        AssignInput {
+            implementation: Some(implementation.to_string()),
+            args: args.clone(),
+            ..AssignInput::default()
+        },
+        AssignInput {
+            action: Some(stateful.to_string()),
+            agent: Some(executor.to_string()),
+            args: args.clone(),
+            ..AssignInput::default()
+        },
+    ] {
+        let assigned = backend::assign_with_status(&ctx, &caller, &named, AssignOrigin::default())
+            .await
+            .unwrap();
+        let ran: i64 =
+            sqlx::query_scalar("SELECT implementation_id FROM facade_task WHERE id = $1")
+                .bind(assigned.task)
+                .fetch_one(&ctx.db)
+                .await
+                .unwrap();
+        assert_eq!(ran, implementation);
+    }
+    let other = agent(&ctx, None).await;
+    let elsewhere = AssignInput {
+        action: Some(stateful.to_string()),
+        agent: Some(other.to_string()),
+        args,
+        ..AssignInput::default()
+    };
+    let refused = backend::assign_with_status(&ctx, &caller, &elsewhere, AssignOrigin::default())
+        .await
+        .unwrap_err();
+    assert!(
+        refused.to_string().contains("has no implementation of"),
+        "{refused}"
+    );
+}
+
 #[tokio::test]
 async fn an_assign_is_persisted_dispatched_once_and_deduped() {
     let Some(ctx) = context().await else { return };
@@ -1174,6 +1255,84 @@ async fn an_optional_dependency_below_stays_unbound() {
         snapshot(&ctx, root).await,
         json!({"relay": bound(relay_agent, relay, json!({"leaf": []}))})
     );
+}
+
+/// What a flow declares of a step: the action by its hash, under a slot of another name, and no
+/// app. It binds to whoever implements it; a stateful one binds only when that is one agent.
+#[tokio::test]
+async fn a_dependency_by_hash_binds_its_implementer_and_a_stateful_one_only_one() {
+    let Some(ctx) = context().await else { return };
+    let organization = format!("o-{}", uuid::Uuid::new_v4().simple());
+    let runner = agent(&ctx, Some(&organization)).await;
+    let (_, flow) = action(&ctx, runner, false).await;
+    let stage = agent(&ctx, Some(&organization)).await;
+    let step = fitting_action(&ctx, &[(stage, None)]).await;
+    let (hash, on_stage): (String, i64) = sqlx::query_as(
+        "SELECT ac.hash, i.id FROM facade_action ac JOIN facade_implementation i ON i.action_id = ac.id
+          WHERE ac.id = $1",
+    )
+    .bind(step)
+    .fetch_one(&ctx.db)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO facade_dependency (key, action_demands, state_demands, auto_resolvable, optional, implementation_id)
+         VALUES ('step', $2, '[]', true, false, $1)",
+    )
+    .bind(flow)
+    .bind(json!([{"key": "move", "demand": {"hash": hash}}]))
+    .execute(&ctx.db)
+    .await
+    .unwrap();
+    let principal = principal(&ctx, runner).await;
+    let binds = |agent: i64, implementation: i64| {
+        json!({"step": [{"agent": agent.to_string(),
+                         "actions": {"move": {"implementation": implementation.to_string(), "dependencies": {}}}}]})
+    };
+
+    let assigned = backend::assign_with_status(
+        &ctx,
+        &principal,
+        &echo(flow, 1, None),
+        AssignOrigin::default(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(snapshot(&ctx, assigned.task).await, binds(stage, on_stage));
+
+    // A second agent with the same step, now stateful: nobody said which one.
+    let other = agent(&ctx, Some(&organization)).await;
+    let on_other: i64 = sqlx::query_scalar(
+        "INSERT INTO facade_implementation (interface, higher_order_config, params, created_at,
+                                            updated_at, diagnostics, needs_token, provenance_audience,
+                                            effects, execution, action_id, agent_id,
+                                            dynamic_asks, dynamic_calls, dynamic_informs)
+         VALUES ('echo', '{}', '{}', now(), now(), '[]', true, '[]', 'UNKNOWN', 'PLAIN',
+                 $2, $1, true, true, true)
+         RETURNING id",
+    )
+    .bind(other)
+    .bind(step)
+    .fetch_one(&ctx.db)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE facade_action SET stateful = true WHERE id = $1")
+        .bind(step)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    let refused = refusal(&ctx, &principal, &echo(flow, 2, None)).await;
+    assert!(
+        refused.starts_with("A stateful action is bound to one agent")
+            && refused.contains("2 agents"),
+        "{refused}"
+    );
+    let mut pinned = echo(flow, 3, None);
+    pinned.dependencies = Some(vec![pin("step", other, vec![])]);
+    let assigned = backend::assign_with_status(&ctx, &principal, &pinned, AssignOrigin::default())
+        .await
+        .unwrap();
+    assert_eq!(snapshot(&ctx, assigned.task).await, binds(other, on_other));
 }
 
 #[tokio::test]

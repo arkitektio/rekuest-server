@@ -65,6 +65,20 @@ tasks (fields mirror the server's `AssignInputModel`):
 | `dependency` / `method` / `resolution` | Resolve a dependency when running inside a resolved task. |
 | `step` / `capture` / `hooks` | Stop at first breakpoint / debug-capture mode / lifecycle hooks. |
 
+**A stateful action names its agent.** An action whose definition is `stateful` reads or changes
+the state of the agent that runs it, so it is never run on whichever agent offers it: `action` or
+`action_hash` alone is refused (`A stateful action is assigned to a named agent: …`), also when
+exactly one agent implements it. Name the agent: `implementation`, `agent` + `interface`, or
+`action` (or `action_hash`) **together with `agent`**, which is "this action, on that agent". The
+same holds for the GraphQL `assign` mutation, and for a schedule or a trigger, which is pinned
+when it is written.
+
+Through a dependency the agent was named when the parent was assigned. A dependency that binds a
+stateful action is bound to **one** agent: a binding that more than one agent answers is refused
+at the parent's assign (and reported by the dry run) with `A stateful action is bound to one
+agent: …`. A demand that names its action by `hash` binds that action whatever the slot is called,
+and a dependency that names no app is resolved to the agents that implement every hash it names.
+
 **Reply — `AssignResponse`:**
 
 ```jsonc

@@ -233,6 +233,43 @@ pub(crate) struct ActionRow {
     pub hash: String,
     pub args: Value,
     pub allow_probe: bool,
+    /// Whether it matters which agent runs it: it reads or changes that agent's state.
+    pub stateful: bool,
+}
+
+/// How the refusal of a stateful action assigned by itself begins: a caller tells it by this.
+pub(crate) const STATEFUL_NEEDS_AGENT: &str = "A stateful action is assigned to a named agent";
+
+/// What every refusal of a dependency that would let a stateful action run on one of several
+/// agents starts with. Its own text: the answer is to bind the dependency, not to name a target.
+pub(crate) const STATEFUL_BINDS_ONE: &str = "A stateful action is bound to one agent";
+
+/// The actions a dependency's demands name outright, by hash.
+fn demanded_hashes(action_demands: &Value) -> Vec<String> {
+    let mut hashes: Vec<String> = action_demands
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|slot| slot.get("demand")?.get("hash")?.as_str())
+        .filter(|hash| !hash.is_empty())
+        .map(str::to_owned)
+        .collect();
+    hashes.sort();
+    hashes.dedup();
+    hashes
+}
+
+/// A stateful action reads or changes the state of the agent that runs it, so it matters which
+/// agent that is: an assign names it (an implementation, or an agent and its interface), also
+/// when a single agent offers the action today. Naming only the action is refused.
+fn names_its_agent(action: &ActionRow) -> BackendResult<()> {
+    if action.stateful {
+        return Err(BackendError::Refused(format!(
+            "{STATEFUL_NEEDS_AGENT}: {} reads or changes the state of the agent that runs it, so it is not run on whichever agent offers it. Name an implementation, or an agent and its interface.",
+            action.name
+        )));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -251,10 +288,12 @@ const IMPLEMENTATION: &str = "i.id, i.interface, i.action_id, i.agent_id, i.high
 
 async fn action_row(db: &PgPool, id: i64) -> BackendResult<ActionRow> {
     get(
-        sqlx::query_as("SELECT id, name, hash, args, allow_probe FROM facade_action WHERE id = $1")
-            .bind(id)
-            .fetch_optional(db)
-            .await?,
+        sqlx::query_as(
+            "SELECT id, name, hash, args, allow_probe, stateful FROM facade_action WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(db)
+        .await?,
         "Action",
     )
 }
@@ -323,8 +362,37 @@ async fn available_implementation(
 
 const NOT_AVAILABLE: &str = "Agent is not available (not connected, and not a webhook agent)";
 
+/// The implementation of `action` on `agent`: what "this action, on that agent" names. An action
+/// (or its hash) given together with an agent is a named target, also for a stateful action.
+async fn implementation_on(
+    ctx: &Context,
+    action: &ActionRow,
+    agent: i64,
+) -> BackendResult<ImplementationRow> {
+    let implementation: Option<ImplementationRow> = sqlx::query_as(&format!(
+        "SELECT {IMPLEMENTATION} FROM facade_implementation i
+          WHERE i.action_id = $1 AND i.agent_id = $2 AND i.higher_order_for_id IS NULL
+          ORDER BY i.id LIMIT 1"
+    ))
+    .bind(action.id)
+    .bind(agent)
+    .fetch_optional(&ctx.db)
+    .await?;
+    let Some(implementation) = implementation else {
+        return Err(BackendError::Refused(format!(
+            "Agent {agent} has no implementation of {}",
+            action.name
+        )));
+    };
+    if !agent_is_available(ctx, agent).await? {
+        return Err(BackendError::Refused(NOT_AVAILABLE.into()));
+    }
+    Ok(implementation)
+}
+
 /// `(action, implementation)` from one of the direct target forms (`resolve_direct_target`).
-/// Precedence: action → implementation → action_hash → agent+interface.
+/// Precedence: action (with an agent: that agent's implementation of it) → implementation →
+/// action_hash (likewise) → agent+interface. A stateful action named without an agent is refused.
 pub(crate) async fn resolve_direct_target(
     ctx: &Context,
     input: &AssignInput,
@@ -332,6 +400,11 @@ pub(crate) async fn resolve_direct_target(
 ) -> BackendResult<(ActionRow, ImplementationRow)> {
     if let Some(action) = input.action.as_deref().filter(|a| !a.is_empty()) {
         let action = action_row(&ctx.db, parse_id(action)?).await?;
+        if let Some(agent) = input.agent.as_deref().filter(|a| !a.is_empty()) {
+            let implementation = implementation_on(ctx, &action, parse_id(agent)?).await?;
+            return Ok((action, implementation));
+        }
+        names_its_agent(&action)?;
         let implementation =
             available_implementation(ctx, &action, organization, &input.args).await?;
         return Ok((action, implementation));
@@ -350,7 +423,7 @@ pub(crate) async fn resolve_direct_target(
     if let Some(hash) = input.action_hash.as_deref().filter(|h| !h.is_empty()) {
         let action: ActionRow = get(
             sqlx::query_as(
-                "SELECT id, name, hash, args, allow_probe FROM facade_action WHERE hash = $1 AND organization_id = $2",
+                "SELECT id, name, hash, args, allow_probe, stateful FROM facade_action WHERE hash = $1 AND organization_id = $2",
             )
             .bind(hash)
             .bind(organization)
@@ -358,6 +431,11 @@ pub(crate) async fn resolve_direct_target(
             .await?,
             "Action",
         )?;
+        if let Some(agent) = input.agent.as_deref().filter(|a| !a.is_empty()) {
+            let implementation = implementation_on(ctx, &action, parse_id(agent)?).await?;
+            return Ok((action, implementation));
+        }
+        names_its_agent(&action)?;
         let implementation =
             available_implementation(ctx, &action, organization, &input.args).await?;
         return Ok((action, implementation));
@@ -477,6 +555,14 @@ async fn resolve_dependency_target(
         .unwrap_or_default();
     let implementation = implementation_row(&ctx.db, parse_id(&implementation)?).await?;
     let action = action_row(&ctx.db, implementation.action_id).await?;
+    // A dependency bound to several agents is called on one of them, picked here. That is no
+    // way to choose whose state a stateful action reads or changes: the binding names one.
+    if action.stateful && candidates.len() > 1 {
+        return Err(BackendError::Refused(format!(
+            "{STATEFUL_BINDS_ONE}: {method} of dependency {dependency} is stateful, and the dependency is bound to {} agents. Bind it to one.",
+            candidates.len()
+        )));
+    }
     let nested = implementation_dep
         .get("dependencies")
         .cloned()
@@ -551,6 +637,32 @@ async fn resolve_dependency_agents(
             .filter(|app| !app.is_empty())
             .is_none()
         {
+            // Unless its demands name their actions outright: then it is whoever implements
+            // them all. A flow's steps are named so: by what they are, not by whose they are.
+            let hashes = demanded_hashes(&dependency.action_demands);
+            if !hashes.is_empty() {
+                let agents: Vec<i64> = sqlx::query_scalar(&format!(
+                    "SELECT a.id FROM facade_agent a
+                      WHERE a.organization_id = $3 AND {AVAILABLE}
+                        AND (SELECT count(DISTINCT ac.hash) FROM facade_implementation i
+                               JOIN facade_action ac ON ac.id = i.action_id
+                              WHERE i.agent_id = a.id AND ac.hash = ANY($2)) = $4
+                      ORDER BY a.id"
+                ))
+                .bind(live_cutoff(ctx))
+                .bind(&hashes)
+                .bind(caller.organization)
+                .bind(hashes.len() as i64)
+                .fetch_all(&ctx.db)
+                .await?;
+                if agents.is_empty() && !dependency.optional {
+                    return Err(BackendError::Refused(format!(
+                        "No agent that implements what dependency {} names is available right now",
+                        dependency.key
+                    )));
+                }
+                return Ok(agents);
+            }
             return if dependency.optional {
                 Ok(vec![])
             } else {
@@ -756,11 +868,13 @@ impl<'a> Resolve<'a> {
                 )));
             }
         }
+        // Counted before the cap: a cap of one does not say which one.
+        let matched = agents.len();
         if let Some(max) = dependency.max_viable_instances {
             agents.truncate(max.max(0) as usize);
         }
         self.states_met(dependency, &agents).await?;
-        self.entries(dependency, &agents, overwrite).await
+        self.entries(dependency, &agents, matched, overwrite).await
     }
 
     /// Refuse an agent bound to `dependency` that lacks a state it demands, or has it with
@@ -824,11 +938,14 @@ impl<'a> Resolve<'a> {
         &mut self,
         dependency: &DependencyRow,
         agents: &[i64],
+        matched: usize,
         overwrite: Option<&ResolvedDependencyInput>,
     ) -> BackendResult<Vec<Value>> {
         // Slot → action key: the demand's key names the action; the slot key stands in for it
         // when the demand pins none. A later slot for the same action wins, as in the dict.
+        // A demand by hash names its action outright: there the hash is what is looked up.
         let mut action_keys: Vec<(String, String)> = vec![];
+        let hashed = demanded_hashes(&dependency.action_demands);
         // What each slot demands of the action bound to it: (action key, slot, demand).
         let mut demanded: Vec<(String, String, ActionDemandInputModel)> = vec![];
         for demand in dependency.action_demands.as_array().into_iter().flatten() {
@@ -837,12 +954,16 @@ impl<'a> Resolve<'a> {
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_owned();
-            let action_key = demand
-                .get("demand")
-                .and_then(|d| d.get("key"))
-                .and_then(Value::as_str)
-                .filter(|k| !k.is_empty())
-                .map(str::to_owned)
+            let named = |field: &str| {
+                demand
+                    .get("demand")
+                    .and_then(|d| d.get(field))
+                    .and_then(Value::as_str)
+                    .filter(|k| !k.is_empty())
+                    .map(str::to_owned)
+            };
+            let action_key = named("hash")
+                .or_else(|| named("key"))
                 .unwrap_or_else(|| slot.clone());
             if let Some(model) = demand
                 .get("demand")
@@ -857,31 +978,34 @@ impl<'a> Resolve<'a> {
             }
         }
 
-        // (agent, action key, implementation, has dependencies of its own, is a wrapper,
-        //  the action's name, args and returns)
+        // (agent, action key, action hash, implementation, has dependencies of its own, is a
+        //  wrapper, the action's name, args and returns, whether it is stateful)
         #[allow(clippy::type_complexity)]
         let mut found: Vec<(
             i64,
             String,
+            String,
             i64,
             bool,
             bool,
             String,
             Option<Value>,
             Option<Value>,
+            bool,
         )> = vec![];
         if !agents.is_empty() && !action_keys.is_empty() {
             let keys: Vec<&str> = action_keys.iter().map(|(key, _)| key.as_str()).collect();
             found = sqlx::query_as(
-                "SELECT i.agent_id, ac.key, i.id,
+                "SELECT i.agent_id, ac.key, ac.hash, i.id,
                         EXISTS (SELECT 1 FROM facade_dependency d WHERE d.implementation_id = i.id),
-                        i.higher_order_for_id IS NOT NULL, ac.name, ac.args, ac.returns
+                        i.higher_order_for_id IS NOT NULL, ac.name, ac.args, ac.returns, ac.stateful
                    FROM facade_implementation i JOIN facade_action ac ON ac.id = i.action_id
-                  WHERE i.agent_id = ANY($1) AND ac.key = ANY($2)
+                  WHERE i.agent_id = ANY($1) AND (ac.key = ANY($2) OR ac.hash = ANY($3))
                   ORDER BY i.id",
             )
             .bind(agents)
             .bind(&keys)
+            .bind(&hashed)
             .fetch_all(&self.ctx.db)
             .await?;
         }
@@ -902,15 +1026,25 @@ impl<'a> Resolve<'a> {
                 .unwrap_or_default();
             let mut actions = Map::new();
             for (action_key, slot) in &action_keys {
-                let Some((_, _, implementation, nested, wrapper, name, args, returns)) = found
-                    .iter()
-                    .rev()
-                    .find(|(a, key, ..)| a == agent && key == action_key)
+                let by_hash = hashed.contains(action_key);
+                let Some((_, _, _, implementation, nested, wrapper, name, args, returns, stateful)) =
+                    found.iter().rev().find(|(a, key, hash, ..)| {
+                        a == agent && (if by_hash { hash } else { key }) == action_key
+                    })
                 else {
                     return Err(BackendError::Refused(format!(
                         "No implementation found for dependency demand {slot} on agent {agent}"
                     )));
                 };
+                // A call through this binding goes to one of its agents, picked per call. That
+                // is no way to choose whose state a stateful action reads or changes, so the
+                // run is refused here, before it starts, and not at the call in its middle.
+                if *stateful && matched > 1 {
+                    return Err(BackendError::Refused(format!(
+                        "{STATEFUL_BINDS_ONE}: {slot} of dependency {} is {name}, which is stateful, and {matched} agents answer the dependency. Bind it to one.",
+                        dependency.key
+                    )));
+                }
                 // The action is there by its key; it also has to take and return what is
                 // demanded, or the call made through this binding fails inside the agent.
                 for (_, demanding, demand) in demanded.iter().filter(|(key, ..)| key == action_key)
@@ -1765,8 +1899,22 @@ pub async fn assign_with_status(
     .await;
 
     for hook in hooks.iter().filter(|hook| hook.kind == "INIT") {
+        // A stateful hook is the parent's own agent's to run: the state it reads or changes is
+        // that agent's. One the agent does not implement is refused like any stateful action
+        // named by itself.
+        let own: Option<i64> = sqlx::query_scalar(
+            "SELECT i.id FROM facade_implementation i JOIN facade_action ac ON ac.id = i.action_id
+              WHERE ac.hash = $1 AND ac.organization_id = $2 AND ac.stateful AND i.agent_id = $3
+              ORDER BY i.id LIMIT 1",
+        )
+        .bind(&hook.hash)
+        .bind(organization)
+        .bind(implementation.agent_id)
+        .fetch_optional(&ctx.db)
+        .await?;
         let hook_input = AssignInput {
-            action_hash: Some(hook.hash.clone()),
+            action_hash: own.is_none().then(|| hook.hash.clone()),
+            implementation: own.map(|id| id.to_string()),
             parent: Some(task.to_string()),
             args: json!({"task": task.to_string()})
                 .as_object()
