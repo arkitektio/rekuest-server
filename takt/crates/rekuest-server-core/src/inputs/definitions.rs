@@ -1712,17 +1712,14 @@ impl ImplementAgentInputModel {
         for state in self.states.iter_mut().flatten() {
             state.validate()?;
         }
-        // A blok sent as its source alone names no `self`: what its tree reads of the agent is
-        // worked out against what is declared with it, as an SDK that parses BSX does before
-        // it sends one. A blok sent as its tree is left as sent.
+        // An agent's blok that names no `self` gets the one its tree reads of the agent, worked
+        // out against what is declared with it, however the blok was sent. One that names
+        // `self` itself is left as sent.
         let implementations = self.implementations.as_deref().unwrap_or_default();
         let states = self.states.as_deref().unwrap_or_default();
         for blok in self.bloks.iter_mut().flatten() {
-            let sourced = blok.source.is_some() && blok.components.is_none();
             blok.validate()?;
-            if sourced {
-                blok.name_self(implementations, states)?;
-            }
+            blok.name_self(implementations, states)?;
         }
         // An implementation's logo is an action logo blok the agent declares (`check_logos`): a
         // logo blok whose `<Blok>` says kind action.

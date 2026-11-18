@@ -174,13 +174,15 @@ connection — the agent is told why in a `ProtocolError` and closed with
 closes like any other malformed frame (3003).
 
 A blok may be sent as its BSX `source` and nothing else beside its `key` and `vocab`: an SDK
-needs no parser. The server parses it and reads the rest off it. The context that draws it and
-the catalog it is written for are what its `<Blok>` says, and an agent's blok that names no
-`self` dependency gets the one its tree reads: the states and actions of this same declaration,
-each with the demand an SDK that parses BSX would have built. A source that reads a state or
-names an action the declaration does not carry is refused like any other declaration the models
-refuse (3003, with the finding: `deps.unknown_state`, `deps.unknown_action`). A blok sent as its
-tree is taken as sent.
+needs no parser. The server parses it and reads the rest off it: the context that draws it and
+the catalog it is written for are what its `<Blok>` says.
+
+However it was sent, as its source or as its tree, an agent's blok that names no `self`
+dependency gets the one its tree reads: the states and actions of this same declaration, each
+with the demand an SDK that parses BSX would have built. A blok that reads a state or names an
+action the declaration does not carry is refused like any other declaration the models refuse
+(3003, with the finding: `deps.unknown_state`, `deps.unknown_action`). One that names `self`
+itself is checked against the demand it sent.
 
 The registration runs inline in the handshake; it is sub-second, and no heartbeat is pending
 before `Init`.

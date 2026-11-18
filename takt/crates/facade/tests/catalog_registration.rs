@@ -1230,19 +1230,23 @@ async fn an_implementation_is_drawn_by_the_action_logo_blok_it_names() {
         assert!(refused.contains(message), "{refused}");
     }
 
-    let lamps = |n: usize| json!({"deps": {"self": {"lamps": (0..n).collect::<Vec<_>>()}}});
+    // The lamps are a state of the agent: a blok reads of `self` only what is declared with it.
+    let with_board = |blok: Value| {
+        let mut declared = payload(&[], "gt", ("a", "b"), json!([blok]));
+        declared["states"] = json!([{"interface": "board", "definition": {"name": "board", "ports": [
+            {"key": "lamps", "kind": "LIST", "nullable": false,
+             "children": [{"key": "...", "kind": "INT", "nullable": false}]}]}}]);
+        declared
+    };
+    let lamps =
+        |n: usize| json!({"deps": {"self": {"board": {"lamps": (0..n).collect::<Vec<_>>()}}}});
     let looped = json!([{"id": "loop", "component": "foreach", "props": [
-        {"key": "items", "dynamic_value": {"path": "self.lamps"}},
+        {"key": "items", "dynamic_value": {"path": "self.board.lamps"}},
         {"key": "let", "static_value": "lamp", "declares_value": "lamp"},
         {"key": "key", "dynamic_value": {"path": "lamp"}}], "children": [path(0)]}]);
-    t.register(payload(
-        &[],
-        "gt",
-        ("a", "b"),
-        json!([logo("lamps", looped.clone(), lamps(64))]),
-    ))
-    .await
-    .unwrap();
+    t.register(with_board(logo("lamps", looped.clone(), lamps(64))))
+        .await
+        .unwrap();
     for (blok, message) in [
         (
             logo(
@@ -1266,10 +1270,7 @@ async fn an_implementation_is_drawn_by_the_action_logo_blok_it_names() {
             "a logo holds at most 16384 characters of path data, this one 16385",
         ),
     ] {
-        let refused = t
-            .register(payload(&[], "gt", ("a", "b"), json!([blok])))
-            .await
-            .unwrap_err();
+        let refused = t.register(with_board(blok)).await.unwrap_err();
         assert!(refused.contains(message), "{refused}");
     }
 }
