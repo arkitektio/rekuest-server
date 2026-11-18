@@ -122,6 +122,16 @@ class CustomAssignWidgetInput:
     fallback: Optional[Annotated["AssignWidgetInput", strawberry.lazy(__name__)]] = None
 
 
+@union_member("AssignWidgetInput", key="BLOK")
+@pydantic.input(models.BlokAssignWidgetInputModel, description="A port blok as the port's widget: BSX the form draws where the port's control would be.")
+class BlokAssignWidgetInput:
+    kind: enums.AssignWidgetKind
+    follow_value: str | None = None
+    source: str
+    vocab: int = 2
+    fallback: Optional[Annotated["AssignWidgetInput", strawberry.lazy(__name__)]] = None
+
+
 @union_member("AssignWidgetInput", key="STATE_CHOICE")
 @pydantic.input(models.StateChoiceAssignWidgetInputModel, description="A choice over entries of an agent's state.")
 class StateChoiceAssignWidgetInput:
@@ -145,7 +155,7 @@ class ProxyAssignWidgetInput:
 
 
 @merged_input(
-    members=[SliderAssignWidgetInput, ChoiceAssignWidgetInput, StringAssignWidgetInput, SearchAssignWidgetInput, CustomAssignWidgetInput, StateChoiceAssignWidgetInput, ProxyAssignWidgetInput],
+    members=[SliderAssignWidgetInput, ChoiceAssignWidgetInput, StringAssignWidgetInput, SearchAssignWidgetInput, CustomAssignWidgetInput, BlokAssignWidgetInput, StateChoiceAssignWidgetInput, ProxyAssignWidgetInput],
     noun="assign widget",
     description="An assign widget: the UI element used to assign a value to a port, as a discriminated union over `kind`. Only the fields of the chosen kind may be set; see the `*AssignWidgetInput` members.",
     descriptions={"kind": "Which kind of assign widget this is; decides which other fields are read."},

@@ -37,10 +37,12 @@ def _dependencies(raw: dict[str, JSON]) -> tuple[rimodels.AgentDependencyInputMo
 def _scope(raw: dict[str, JSON]) -> BlokScope:
     kinds = raw.get("kinds")
     args = raw.get("args")
+    port = raw.get("port")
     return BlokScope(
         kinds=tuple(str(kind) for kind in kinds) if isinstance(kinds, list) else (),
         dependencies=_dependencies(raw),
         args=tuple(str(arg) for arg in args) if isinstance(args, list) else None,
+        port=rimodels.PortMatchInputModel.model_validate(port) if isinstance(port, dict) else None,
     )
 
 

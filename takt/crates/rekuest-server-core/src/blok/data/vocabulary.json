@@ -1,6 +1,6 @@
 {
  "vocab": 2,
- "minor": 4,
+ "minor": 5,
  "description": "The blok language, version 2: what a blok may read, call and store. The spec's parser, the server (rekuest_core, takt) and the renderer (orkestrator) load this file or are generated from it. The design is the blok-vocab-v2 proposal of 2026-10-25. Three layers, each versioned on its own: this language (vocab, and minor for what it gained since); the base catalog, everything every renderer draws; and the app catalogs that extend it with what one frontend draws beyond (see catalogs). A server holds a blok to the language alone, never to a catalog: whoever draws a blok checks it against the catalog it has, and an author's tooling checks it when asked.",
  "roots": {
   "data": {
@@ -8,9 +8,10 @@
    "deps": "deps.<key>: an agent bound to a dependency of the blok, a custom blok or an action.",
    "queries": "queries.<name>: a declared query's record (status, value, error, refetching, fetching_more).",
    "subscriptions": "subscriptions.<name>: a declared subscription's record (status, value, error); value is the latest payload, or the last `keep` payloads.",
-   "args": "args.<key>: what the blok is opened on: the item for an agent or custom blok, the task's args for a task or action blok.",
+   "args": "args.<key>: what the blok is opened on: the item for an agent or custom blok, the task's args for a task or action blok, the form's other arguments as they are filled in for a port blok (read only).",
    "task": "The task this blok is about: the sending task, or the run. A task record.",
    "assign": "The run an assign blok prepares: assign.given.<key> (true for an argument the caller decided, which is locked), assign.missing (the keys of required arguments still empty) and assign.ready (nothing is missing).",
+   "port": "The port a port blok is the widget of: its value (port.value, which a control writes through bind) and what the form knows of it. A port record.",
    "event": "The payload a component hands its callback. Only inside a callback.",
    "viewer": "{user, org, roles} of whoever is looking.",
    "then": "The moment being viewed while time-travelling (an ISO 8601 datetime), null while live. A blok never reads the wall clock: a query passes then as an ordinary variable (variables={at: \"then\"}), <Time> measures relative time from it, and while it is set subscriptions pause (their history query, or the value at travel start, stale)."
@@ -22,7 +23,7 @@
   "functions": ["cmp", "logic", "math", "str", "list", "obj", "val", "fmt", "time", "ui", "query"],
   "future": ["mutations"]
  },
- "reserved": ["self", "deps", "queries", "subscriptions", "args", "task", "assign", "event", "viewer", "then", "error", "cmp", "logic", "math", "str", "list", "obj", "val", "fmt", "time", "ui", "query", "mutations"],
+ "reserved": ["self", "deps", "queries", "subscriptions", "args", "task", "assign", "port", "event", "viewer", "then", "error", "cmp", "logic", "math", "str", "list", "obj", "val", "fmt", "time", "ui", "query", "mutations"],
  "agent_segments": {
   "description": "What follows an agent (self or deps.<key>): .<state>.<field> is state, .tasks.<action> the latest task of that action, .assets.<name> one of the agent's assets; deps.<key>.<action>(...) calls it.",
   "tasks": "tasks",
@@ -61,6 +62,13 @@
    "roots": ["self", "deps", "args", "assign", "queries", "subscriptions", "viewer"],
    "locals": true,
    "contexts": ["PANEL", "SCENE"]
+  },
+  "port": {
+   "description": "A port's own widget, declared with the port: drawn in the action's form where the port's control would be. It is a field of that form: it reads the port, the form's other arguments as args and the state of the agents a run would get, and writes the port's value and nothing else. It calls no agent.",
+   "roots": ["self", "deps", "args", "port", "queries", "subscriptions", "viewer"],
+   "locals": true,
+   "contexts": ["PANEL"],
+   "calls": false
   }
  },
  "contexts": {
@@ -72,7 +80,7 @@
   "description": "Every blok is one <Blok> element that says what it is: its kind (what it reads, and where it may be mounted), its context (what host draws it), the catalog it is written for and whether the host draws its own chrome around it. What the blok owns is declared inside it (<local>, <query>, <subscription>); what its mount provides (deps, args, task, self's actions) is checked only where it is mounted.",
   "component": "Blok",
   "attributes": {
-   "kind": "Required: agent, custom, task, action or assign (a row of kinds).",
+   "kind": "Required: agent, custom, task, action, assign or port (a row of kinds).",
    "context": "Required: panel, scene or logo.",
    "catalog": "The catalog it is written for (the address it is published at, or the name of one registered in the organization); the base catalog when left out.",
    "chrome": "\"none\": the host draws none of its own interface around the blok (panel and scene only)."
@@ -152,6 +160,26 @@
     {"key": "blocked", "kind": "STRING", "nullable": true, "description": "Why the run cannot start now, as a sentence (a dependency is not met, no agent fits); null when it can."}
    ]
   },
+  "port": {
+   "description": "What a port blok knows of the port it draws: its value, what the port declares, and where it stands in the form. Everything but value is the form's to say: a port blok sets no error and no flag.",
+   "fields": [
+    {"key": "value", "kind": "ANY", "nullable": true, "description": "The port's value as the form holds it, typed as the port; null while nothing is given. The one thing a port blok writes: a control through bind={port.value}, a callback with port.set(...)."},
+    {"key": "key", "kind": "STRING", "description": "The port's key."},
+    {"key": "label", "kind": "STRING", "nullable": true, "description": "What the form calls the port."},
+    {"key": "description", "kind": "STRING", "nullable": true},
+    {"key": "kind", "kind": "STRING", "description": "The port's kind (FLOAT, STRUCTURE, ...)."},
+    {"key": "identifier", "kind": "STRING", "nullable": true, "description": "The structure's identifier, for a STRUCTURE port."},
+    {"key": "nullable", "kind": "BOOL", "description": "Whether the port may be left empty."},
+    {"key": "default", "kind": "ANY", "nullable": true, "description": "What port.reset() goes back to."},
+    {"key": "choices", "kind": "LIST", "description": "The choices the port declares, each {value, label, description}; empty when it declares none."},
+    {"key": "unit", "kind": "STRING", "nullable": true, "description": "The unit a QUANTITY port's value is in."},
+    {"key": "editable", "kind": "BOOL", "description": "False where the value is only shown: the caller decided it, the form is locked or sent. A control bound to the port is then disabled, and port.set does nothing."},
+    {"key": "error", "kind": "STRING", "nullable": true, "description": "What the form says is wrong with the value, by the port's own rules (required, its kind, its validators); null when nothing is, or nothing was checked yet."},
+    {"key": "invalid", "kind": "BOOL", "description": "True while error is set."},
+    {"key": "touched", "kind": "BOOL", "description": "True once the viewer left the field (a bound control lost focus, or port.touch())."},
+    {"key": "dirty", "kind": "BOOL", "description": "True once the value differs from what the form opened with."}
+   ]
+  },
   "viewer": {
    "description": "Exposes nothing beyond what the viewer's own token says.",
    "fields": [
@@ -187,7 +215,7 @@
   ]
  },
  "functions": {
-  "description": "Pure functions by namespace, snake_case. Positional arguments map onto params in order. `lazy`: arguments are read only as needed. `effect`: allowed only as a callback's one thing (ui.*, task.*, assign.start, query.*). `command`: an effect that changes the world (it acts on a task or starts one, and is recorded with it); an effect without it only changes what the viewer sees. A blok does nothing else: every other function is pure. `sees_status`: sees pending/failed instead of suspending. No function reads the wall clock. `null` says what the function does with a null argument (known absence); a missing path reads as null.",
+  "description": "Pure functions by namespace, snake_case. Positional arguments map onto params in order. `lazy`: arguments are read only as needed. `effect`: allowed only as a callback's one thing (ui.*, task.*, assign.start, port.*, query.*). `needs`: the root a blok's kind must read to hold the effect (port.set needs port). `command`: an effect that changes the world (it acts on a task or starts one, and is recorded with it); an effect without it only changes what the viewer sees. A blok does nothing else: every other function is pure. `sees_status`: sees pending/failed instead of suspending. No function reads the wall clock. `null` says what the function does with a null argument (known absence); a missing path reads as null.",
   "cmp.eq": {"params": [["a", "ANY"], ["b", "ANY"]], "returns": "BOOL", "description": "Deep JSON equality.", "null": "null equals only null"},
   "cmp.ne": {"params": [["a", "ANY"], ["b", "ANY"]], "returns": "BOOL", "description": "Not deep-equal.", "null": "null equals only null"},
   "cmp.gt": {"params": [["a", "ANY"], ["b", "ANY"]], "returns": "BOOL", "description": "a > b, numbers or strings.", "null": "false"},
@@ -313,6 +341,10 @@
   "task.step": {"params": [], "returns": "ANY", "effect": true, "command": true, "task_operation": true, "description": "Resumes the run `task` is about until its next breakpoint. Refused while `task.can.step` is false, and while the blok shows the past. Counts as a task operation.", "null": "takes no arguments"},
   "task.interrupt": {"params": [], "returns": "ANY", "effect": true, "command": true, "task_operation": true, "description": "Interrupts the run `task` is about: stopped at once, without waiting for it to wind down. Refused while `task.can.interrupt` is false, and while the blok shows the past. Counts as a task operation.", "null": "takes no arguments"},
   "assign.start": {"params": [], "returns": "ANY", "effect": true, "command": true, "description": "Starts the run an assign blok prepares, with the arguments as they are filled in and the agents the blok was shown (deps) pinned. An assign blok only.", "null": "starts the run"},
+  "port.set": {"params": [["value", "ANY"]], "returns": "ANY", "effect": true, "needs": "port", "description": "Sets the port's value, as a control bound to it would: the form marks it dirty and checks it. A port blok only.", "null": "sets the port to empty, as port.clear() does"},
+  "port.clear": {"params": [], "returns": "ANY", "effect": true, "needs": "port", "description": "Empties the port: nothing is given for it. A port blok only.", "null": "takes no arguments"},
+  "port.reset": {"params": [], "returns": "ANY", "effect": true, "needs": "port", "description": "Puts the port back to what the form opened with (port.default when nothing was given), and clears touched and dirty. A port blok only.", "null": "takes no arguments"},
+  "port.touch": {"params": [], "returns": "ANY", "effect": true, "needs": "port", "description": "Says the viewer left the field: what a bound control says itself when it loses focus, for a control drawn by hand. A port blok only.", "null": "takes no arguments"},
   "query.refetch": {"params": [["query", "STRING"]], "returns": "ANY", "effect": true, "description": "Re-reads the declared query named by the literal `query`; never suspends, queries.<name>.refetching is true meanwhile. BSX writes it queries.<name>.refetch().", "null": "refused: the query is named by a literal"},
   "query.fetch_more": {"params": [["query", "STRING"], ["variables", "DICT", false]], "returns": "ANY", "effect": true, "description": "Reads the next page of the declared query named by the literal `query`, its variables overridden by `variables`, and appends the page's list at the query's `more` field to what is shown; queries.<name>.fetching_more is true meanwhile. BSX writes it queries.<name>.fetch_more(name: value, ...). Refused on a query without `more`.", "null": "refused: the query is named by a literal; null variables fetch with the query's own"}
  },
@@ -326,8 +358,8 @@
  "calls": {
   "description": "What a prop or an argument may hold besides a literal, a path or a util call.",
   "kinds": {
-   "agent_call": "A task call: self.<action>(...) or deps.<key>.<action>(...), only as a callback's one thing, optionally named with `into <name>` (stored as the prop's declares_value).",
-   "util_call": "A pure function, or an effect (ui.copy, task.answer, assign.start, query.refetch, query.fetch_more) as a callback's one thing."
+   "agent_call": "A task call: self.<action>(...) or deps.<key>.<action>(...), only as a callback's one thing, optionally named with `into <name>` (stored as the prop's declares_value). A kind that says calls: false (a port blok) holds none.",
+   "util_call": "A pure function, or an effect (ui.copy, task.answer, assign.start, port.set, query.refetch, query.fetch_more) as a callback's one thing."
   },
   "reserved_kinds": {
    "service_call": "Reserved for mutations, should they ever exist. Renderers refuse a call kind they do not know."
@@ -401,7 +433,7 @@
   "name": "^[A-Za-z_][A-Za-z0-9_.-]*$",
   "host_parts": {
    "description": "Parts of the host's own interface a blok may place itself: placing one anywhere in the tree claims it, and the host then draws none of its own. The claim is read off the stored tree, so a part inside an inactive <if> still claims it (part.conditional). What a blok does not place, the host still draws, unless its root says chrome=\"none\".",
-   "parts": ["args", "arg", "deps", "dep", "ask", "returns", "status", "timeline"]
+   "parts": ["args", "arg", "deps", "dep", "ask", "returns", "status", "timeline", "label", "description", "message", "control", "field"]
   }
  },
  "classes": {
@@ -444,7 +476,7 @@
   "callback.positional": {"level": "error", "message": "{call}: a task call names its arguments (name: value)."},
   "callback.into": {"level": "error", "message": "into names the record of a task call: `<call> into <name>`.", "hint": "Write `deps.<key>.<action>(name: value) into run`, then read run.running, run.returns.<port>."},
   "callback.not_callback": {"level": "error", "message": "{key} of <{component}> is not a callback prop, so it cannot hold {what}.", "hint": "Use a callback prop of <{component}> (the catalog lists them as CALLBACK), or compute {key} without a call."},
-  "callback.unbound": {"level": "error", "message": "{key} of <{component}> is a callback prop: it holds one task call or one effect (queries.<name>.refetch(), queries.<name>.fetch_more(...), ui.copy, task.answer, assign.start).", "hint": "Give {key} a task call (deps.<key>.<action>(name: value)) or one effect, not a value."},
+  "callback.unbound": {"level": "error", "message": "{key} of <{component}> is a callback prop: it holds one task call or one effect (queries.<name>.refetch(), queries.<name>.fetch_more(...), ui.copy, task.answer, assign.start, port.set).", "hint": "Give {key} a task call (deps.<key>.<action>(name: value)) or one effect, not a value."},
   "callback.event_field": {"level": "error", "message": "event has no field {field!r} in {key} of <{component}> (its fields: {fields}).", "hint": "Read one of the fields listed for {key}: {fields}."},
   "roots.unknown": {"level": "error", "message": "{path} reads {root!r}, which is no root, local, loop variable or record of this blok.", "hint": "Read a root this blok has (deps.<key>, args.<key>, queries.<name>, ...), a declared local, a foreach let or index, or an into record."},
   "roots.not_in_kind": {"level": "error", "message": "{path}: a{n} {kind} blok has no {root!r} (it reads {roots}).", "hint": "Read one of {roots} instead."},
@@ -462,6 +494,7 @@
   "args.unknown": {"level": "error", "message": "{path} reads args.{key}, which the blok does not declare (declared: {keys}).", "hint": "Read one of the declared args, or declare args.{key} (only when the user asks what the blok is opened for)."},
   "into.twice": {"level": "error", "message": "{name!r} is written by two calls: {first} and {second}. Each call site needs a record of its own."},
   "local.unknown": {"level": "error", "message": "bind={{{path}}} writes {root!r}, which is no declared local.", "hint": "Declare {root!r} in locals (its default, or null), then bind it."},
+  "port.bind": {"level": "error", "message": "bind={{{path}}}: a port blok writes port.value and nothing else of its port.", "hint": "Write bind={{port.value}}; what the form knows of the port (its label, its error) is the form's to say."},
   "local.bind": {"level": "error", "message": "bind holds a local's path ({{name}} or {{name.field}}), not {what}.", "hint": "Write bind={{name}} with a declared local's name."},
   "local.default": {"level": "error", "message": "local {name!r}: its default {default!r} is not a {kind}.", "hint": "Give a default of that kind, or leave the kind out so the default sets it."},
   "local.kind": {"level": "error", "message": "local {name!r}: type={type!r} is a name, not an annotation; give the type itself (int, list[str], a registered structure)."},
@@ -494,11 +527,12 @@
   "foreach.position_key": {"level": "warning", "message": "<foreach let=\"{let}\"> has no key, so its items are keyed by their position; they are not scalars, so key them by a stable field (key={{{let}.id}})."},
   "returns.unnamed": {"level": "warning", "message": "{path} reads {port}, a return the action left unnamed; name it in the action, as Annotated[T, Key(\"name\")] or as a field of a NamedTuple return, and read it by that name."},
   "blok.root": {"level": "error", "message": "A blok is one <Blok kind=... context=...> element, not <{component}>.", "hint": "Wrap it: <Blok kind=\"agent\" context=\"panel\">...</Blok>."},
-  "blok.attribute": {"level": "error", "message": "<Blok> {problem}.", "hint": "Write kind=\"agent|custom|task|action|assign\" and context=\"panel|scene|logo\" as literals."},
+  "blok.attribute": {"level": "error", "message": "<Blok> {problem}.", "hint": "Write kind=\"agent|custom|task|action|assign|port\" and context=\"panel|scene|logo\" as literals."},
   "blok.content": {"level": "error", "message": "A {context} blok holds {expected} beside its declarations, not {found}.", "hint": "Put everything inside one {expected}."},
   "context.kind": {"level": "error", "message": "A{n} {kind} blok is drawn in {contexts}, not {context}."},
   "kind.placement": {"level": "error", "message": "This is a{n} {kind} blok, but it is mounted as a{m} {expected} blok ({where}).", "hint": "Write kind=\"{expected}\" on its <Blok>, or mount it where a{n} {kind} blok goes."},
   "chrome.context": {"level": "error", "message": "chrome is the host's interface around a panel or a scene, not a {context} blok's.", "hint": "Drop chrome."},
+  "calls.not_in_kind": {"level": "error", "message": "{path}: a{n} {kind} blok calls no agent.", "hint": "A port blok is a field of a form: read the agent's state and write the port (port.set(...), bind={{port.value}}). What starts a task belongs in the action's assign blok."},
   "assign.kind": {"level": "error", "message": "{what} belongs to starting a run, so only an action's assign blok holds it, not a{n} {kind} blok.", "hint": "Make it <Blok kind=\"assign\"> in the action's bloks=[...]."},
   "logo.complexity": {"level": "error", "message": "{detail}"},
   "catalog.unknown_component": {"level": "warning", "message": "<{component}> is not in the catalog the blok is written for ({catalogs}).", "hint": "Look the component up in the catalog; names are case-sensitive."},

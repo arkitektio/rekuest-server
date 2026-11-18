@@ -1,6 +1,6 @@
 {
  "vocab": 2,
- "minor": 4,
+ "minor": 5,
  "catalogs": {
   "base": "https://arkitekt.live/catalogs/base/v4",
   "bundled": {
@@ -3661,7 +3661,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -3747,7 +3748,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -3837,7 +3839,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -3889,7 +3892,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -3971,7 +3975,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -4023,7 +4028,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -4075,7 +4081,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -4127,7 +4134,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -4179,7 +4187,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -4238,7 +4247,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -4311,7 +4321,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -4384,7 +4395,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -4482,7 +4494,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -4590,7 +4603,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -4664,7 +4678,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -4788,7 +4803,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -4878,7 +4894,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -4955,7 +4972,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -5065,7 +5083,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -5153,7 +5172,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -5243,7 +5263,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -5334,7 +5355,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -5424,7 +5446,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -5514,7 +5537,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -5626,7 +5650,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -5680,7 +5705,8 @@
     "args": [
      "dataset"
     ],
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -5732,7 +5758,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -5784,7 +5811,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -5878,7 +5906,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -5932,7 +5961,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -6021,7 +6051,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -6093,7 +6124,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -6151,7 +6183,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -6209,7 +6242,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -6283,7 +6317,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -6331,7 +6366,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -6379,7 +6415,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -6486,7 +6523,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -6575,7 +6613,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -6651,7 +6690,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -6703,7 +6743,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -6761,7 +6802,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -6832,7 +6874,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -6884,7 +6927,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -6930,7 +6974,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -7025,7 +7070,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -7120,7 +7166,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -7208,7 +7255,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -7277,7 +7325,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -7364,7 +7413,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -7447,7 +7497,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -7534,7 +7585,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -7617,7 +7669,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -7700,7 +7753,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -7785,7 +7839,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -7870,7 +7925,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -7982,7 +8038,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -8089,7 +8146,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -8209,7 +8267,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -8325,7 +8384,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -8445,7 +8505,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -8565,7 +8626,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -8685,7 +8747,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -8735,7 +8798,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -8781,7 +8845,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -8829,7 +8894,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -8913,7 +8979,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -8967,7 +9034,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -9027,7 +9095,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -9077,7 +9146,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -9175,7 +9245,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -9224,7 +9295,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": false
+    "catalog": false,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -9352,7 +9424,8 @@
     "args": [
      "slides"
     ],
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -9448,7 +9521,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -9502,7 +9576,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -9570,7 +9645,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -9585,6 +9661,930 @@
     },
     "codes": [
      "assign.kind"
+    ]
+   }
+  },
+  {
+   "name": "a port blok",
+   "source": "<Blok kind=\"port\" context=\"panel\"><label /><Slider bind={port.value} max={args.limit} /><Button onClick={port.set(args.limit)}>Longest</Button><Button onClick={port.reset()}>Reset</Button><Text>{deps.robot.arm.mode}</Text><message /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "port"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/label[0]",
+      "component": "label"
+     },
+     {
+      "id": "Blok[0]/Slider[0]",
+      "component": "Slider",
+      "props": [
+       {
+        "key": "bind",
+        "dynamic_value": {
+         "path": "port.value"
+        }
+       },
+       {
+        "key": "max",
+        "dynamic_value": {
+         "path": "args.limit"
+        }
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Button[0]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "onClick",
+        "util_call": {
+         "operation": "port.set",
+         "arguments": [
+          {
+           "key": "value",
+           "value_path": "args.limit"
+          }
+         ]
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Blok[0]/Button[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "Longest"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Button[1]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "onClick",
+        "util_call": {
+         "operation": "port.reset"
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Blok[0]/Button[1]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "Reset"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Text[0]",
+      "component": "Text",
+      "children": [
+       {
+        "id": "Blok[0]/Text[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "deps.robot.arm.mode"
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/message[0]",
+      "component": "message"
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [
+     "port"
+    ],
+    "dependencies": [
+     {
+      "key": "robot",
+      "action_dependencies": [
+       {
+        "key": "move_to",
+        "demand": {
+         "arg_matches": [
+          {
+           "key": "position"
+          }
+         ],
+         "return_matches": [
+          {
+           "key": "arrived"
+          }
+         ]
+        }
+       }
+      ],
+      "state_dependencies": [
+       {
+        "key": "arm",
+        "demand": {
+         "matches": [
+          {
+           "key": "joints",
+           "kind": "LIST"
+          },
+          {
+           "key": "mode",
+           "kind": "STRING"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ],
+    "args": [
+     "limit",
+     "exposure"
+    ],
+    "catalog": true,
+    "port": {
+     "key": "exposure",
+     "kind": "FLOAT",
+     "nullable": false
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "a port blok keeps a draft",
+   "source": "<Blok kind=\"port\" context=\"panel\"><local name=\"draft\" default={0} /><Slider bind={draft} /><Button onClick={port.set(draft)}>Take</Button></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "port"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/local[0]",
+      "component": "local",
+      "props": [
+       {
+        "key": "name",
+        "static_value": "draft",
+        "declares_value": "draft"
+       },
+       {
+        "key": "default",
+        "static_value": 0
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Slider[0]",
+      "component": "Slider",
+      "props": [
+       {
+        "key": "bind",
+        "dynamic_value": {
+         "path": "draft"
+        }
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Button[0]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "onClick",
+        "util_call": {
+         "operation": "port.set",
+         "arguments": [
+          {
+           "key": "value",
+           "value_path": "draft"
+          }
+         ]
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Blok[0]/Button[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "Take"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [
+     "port"
+    ],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": {
+     "key": "exposure",
+     "kind": "FLOAT",
+     "nullable": false
+    }
+   },
+   "resolved": {
+    "locals": {
+     "Blok[0]/local[0]": {
+      "key": "draft",
+      "nullable": false,
+      "default": 0,
+      "kind": "INT",
+      "persist": false
+     }
+    }
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": {
+      "Blok[0]/local[0]": {
+       "key": "draft",
+       "nullable": false,
+       "default": 0,
+       "kind": "INT",
+       "persist": false
+      }
+     }
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "a port blok calls no agent",
+   "source": "<Blok kind=\"port\" context=\"panel\"><Button onClick={deps.robot.move_to(position: 1)}>Go</Button></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "port"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/Button[0]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "onClick",
+        "agent_call": {
+         "dependency": "robot",
+         "operation": "move_to",
+         "arguments": [
+          {
+           "key": "position",
+           "value_literal": 1
+          }
+         ]
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Blok[0]/Button[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "Go"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [
+     "port"
+    ],
+    "dependencies": [
+     {
+      "key": "robot",
+      "action_dependencies": [
+       {
+        "key": "move_to",
+        "demand": {
+         "arg_matches": [
+          {
+           "key": "position"
+          }
+         ],
+         "return_matches": [
+          {
+           "key": "arrived"
+          }
+         ]
+        }
+       }
+      ],
+      "state_dependencies": [
+       {
+        "key": "arm",
+        "demand": {
+         "matches": [
+          {
+           "key": "joints",
+           "kind": "LIST"
+          },
+          {
+           "key": "mode",
+           "kind": "STRING"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ],
+    "args": null,
+    "catalog": true,
+    "port": {
+     "key": "exposure",
+     "kind": "FLOAT",
+     "nullable": false
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "calls.not_in_kind"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "calls.not_in_kind"
+    ]
+   }
+  },
+  {
+   "name": "a port blok calls not itself either",
+   "source": "<Blok kind=\"port\" context=\"panel\"><Button onClick={self.focus() into run}>Focus</Button></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "port"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/Button[0]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "onClick",
+        "declares_value": "run",
+        "agent_call": {
+         "dependency": "self",
+         "operation": "focus"
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Blok[0]/Button[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "Focus"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [
+     "port"
+    ],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": {
+     "key": "exposure",
+     "kind": "FLOAT",
+     "nullable": false
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "calls.not_in_kind"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "calls.not_in_kind"
+    ]
+   }
+  },
+  {
+   "name": "a port blok writes the value of its port",
+   "source": "<Blok kind=\"port\" context=\"panel\"><Slider bind={port.touched} /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "port"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/Slider[0]",
+      "component": "Slider",
+      "props": [
+       {
+        "key": "bind",
+        "dynamic_value": {
+         "path": "port.touched"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [
+     "port"
+    ],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": {
+     "key": "exposure",
+     "kind": "FLOAT",
+     "nullable": false
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "port.bind"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "port.bind"
+    ]
+   }
+  },
+  {
+   "name": "a port blok reads the other arguments, and does not write them",
+   "source": "<Blok kind=\"port\" context=\"panel\"><Text>{args.gain}</Text><Slider bind={args.limit} /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "port"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/Text[0]",
+      "component": "Text",
+      "children": [
+       {
+        "id": "Blok[0]/Text[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "args.gain"
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Slider[0]",
+      "component": "Slider",
+      "props": [
+       {
+        "key": "bind",
+        "dynamic_value": {
+         "path": "args.limit"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [
+     "port"
+    ],
+    "dependencies": [],
+    "args": [
+     "limit",
+     "exposure"
+    ],
+    "catalog": true,
+    "port": {
+     "key": "exposure",
+     "kind": "FLOAT",
+     "nullable": false
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "args.unknown",
+    "local.unknown"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "args.unknown",
+     "local.unknown"
+    ]
+   }
+  },
+  {
+   "name": "the value of a port is typed as the port",
+   "source": "<Blok kind=\"port\" context=\"panel\"><Text>{port.value.x}</Text><Text>{port.value.z}</Text><Text>{port.frob}</Text></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "port"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/Text[0]",
+      "component": "Text",
+      "children": [
+       {
+        "id": "Blok[0]/Text[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "port.value.x"
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Text[1]",
+      "component": "Text",
+      "children": [
+       {
+        "id": "Blok[0]/Text[1]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "port.value.z"
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Text[2]",
+      "component": "Text",
+      "children": [
+       {
+        "id": "Blok[0]/Text[2]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "port.frob"
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [
+     "port"
+    ],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": {
+     "key": "region",
+     "kind": "MODEL",
+     "children": [
+      {
+       "key": "x",
+       "kind": "INT"
+      },
+      {
+       "key": "y",
+       "kind": "INT"
+      }
+     ]
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "path.unknown",
+    "path.unknown"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "path.unknown",
+     "path.unknown"
+    ]
+   }
+  },
+  {
+   "name": "a port blok is a panel with no task",
+   "source": "<Blok kind=\"port\" context=\"panel\"><Text>{task.status}</Text></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "port"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/Text[0]",
+      "component": "Text",
+      "children": [
+       {
+        "id": "Blok[0]/Text[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "task.status"
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [
+     "port"
+    ],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "roots.not_in_kind"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "roots.not_in_kind"
+    ]
+   }
+  },
+  {
+   "name": "setting a port is a port blok's",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><Button onClick={port.set(1)}>Set</Button><label /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/Button[0]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "onClick",
+        "util_call": {
+         "operation": "port.set",
+         "arguments": [
+          {
+           "key": "value",
+           "value_literal": 1
+          }
+         ]
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Blok[0]/Button[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "Set"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/label[0]",
+      "component": "label"
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "roots.not_in_kind",
+    "catalog.kind"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "roots.not_in_kind"
+    ]
+   }
+  },
+  {
+   "name": "a port blok is mounted on a port",
+   "source": "<Blok kind=\"port\" context=\"panel\"><control /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "port"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/control[0]",
+      "component": "control"
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [
+     "agent"
+    ],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "kind.placement"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "kind.placement"
     ]
    }
   },
@@ -9615,7 +10615,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -9663,7 +10664,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -9705,7 +10707,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -9803,7 +10806,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -9855,7 +10859,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -9915,7 +10920,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -9983,7 +10989,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -10043,7 +11050,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -10119,7 +11127,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": false
+    "catalog": false,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -10159,7 +11168,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -10219,7 +11229,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -10269,7 +11280,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -10390,7 +11402,8 @@
     "args": [
      "slides"
     ],
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -10496,7 +11509,8 @@
     "args": [
      "slides"
     ],
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -10556,7 +11570,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -10615,7 +11630,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -10773,7 +11789,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -10821,7 +11838,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -10869,7 +11887,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -10927,7 +11946,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -10971,7 +11991,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -11079,7 +12100,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -11125,7 +12147,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -11191,7 +12214,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -11306,7 +12330,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -11415,7 +12440,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -11475,7 +12501,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -11538,7 +12565,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -11584,7 +12612,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -11630,7 +12659,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -11682,7 +12712,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -11754,7 +12785,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -11884,7 +12916,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -11946,7 +12979,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -12023,7 +13057,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -12131,7 +13166,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -12237,7 +13273,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -12312,7 +13349,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -12393,7 +13431,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -12514,7 +13553,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -12658,7 +13698,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -12791,7 +13832,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -12872,7 +13914,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -12949,7 +13992,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -13067,7 +14111,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -13144,7 +14189,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -13254,7 +14300,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -13331,7 +14378,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -13457,7 +14505,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -13579,7 +14628,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -13691,7 +14741,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -13755,7 +14806,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -13818,7 +14870,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -13903,7 +14956,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -13972,7 +15026,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -14024,7 +15079,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -14114,7 +15170,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -14175,7 +15232,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -14309,7 +15367,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -14355,7 +15414,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -14415,7 +15475,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -14545,7 +15606,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -14569,7 +15631,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -14609,7 +15672,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -14653,7 +15717,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -14697,7 +15762,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -14741,7 +15807,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -14785,7 +15852,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -14833,7 +15901,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -14887,7 +15956,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -14937,7 +16007,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -15051,7 +16122,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -15098,7 +16170,8 @@
     ],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -15145,7 +16218,8 @@
     ],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -15218,7 +16292,8 @@
     "kinds": [],
     "dependencies": null,
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -15276,7 +16351,8 @@
     "kinds": [],
     "dependencies": null,
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -15330,7 +16406,8 @@
     "kinds": [],
     "dependencies": null,
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -15401,7 +16478,8 @@
     "kinds": [],
     "dependencies": null,
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -15494,7 +16572,8 @@
     "kinds": [],
     "dependencies": null,
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -15601,7 +16680,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -15704,7 +16784,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -15793,7 +16874,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -15925,7 +17007,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -16027,7 +17110,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -16120,7 +17204,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -16197,7 +17282,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -16311,7 +17397,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -16421,7 +17508,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -16529,7 +17617,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -16602,7 +17691,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -16657,7 +17747,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -16717,7 +17808,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -16826,7 +17918,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -16939,7 +18032,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -17039,7 +18133,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -17143,7 +18238,8 @@
      }
     ],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {
@@ -17221,7 +18317,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -17297,7 +18394,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -17351,7 +18449,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -17410,7 +18509,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -17468,7 +18568,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -17530,7 +18631,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -17584,7 +18686,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {}
@@ -17694,7 +18797,8 @@
     "kinds": [],
     "dependencies": [],
     "args": null,
-    "catalog": true
+    "catalog": true,
+    "port": null
    },
    "resolved": {
     "locals": {

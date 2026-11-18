@@ -165,6 +165,8 @@ pub enum AssignWidgetInputModel {
     Search(SearchWidget),
     #[serde(rename = "CUSTOM")]
     Custom(CustomWidget),
+    #[serde(rename = "BLOK")]
+    Blok(BlokWidget),
     #[serde(rename = "STATE_CHOICE")]
     StateChoice(StateChoiceWidget),
     #[serde(rename = "PROXY")]
@@ -235,6 +237,45 @@ pub struct CustomWidget {
     #[serde(default)]
     pub fallback: Option<Box<AssignWidgetInputModel>>,
 }
+
+/// A port blok as the port's widget (`BlokAssignWidgetInputModel`): BSX the form draws where the
+/// port's control would be. It travels, is hashed and is stored as its source.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BlokWidget {
+    #[serde(default)]
+    pub follow_value: Option<String>,
+    /// One `<Blok kind="port" context="panel">`.
+    pub source: String,
+    /// The blok language version the source speaks; 2 is the only one.
+    #[serde(default = "vocab_2")]
+    pub vocab: u32,
+    #[serde(default)]
+    pub fallback: Option<Box<AssignWidgetInputModel>>,
+}
+
+fn vocab_2() -> u32 {
+    2
+}
+
+impl BlokWidget {
+    /// Its source as the tree it parses into: one `<Blok kind="port">`.
+    pub fn tree(&self) -> Result<ComponentNodeInputModel, ValidationError> {
+        let tree = crate::bsx::parse_bsx_default(&self.source)
+            .map_err(|e| ValidationError(format!("BlokAssignWidget: {e}")))?;
+        match crate::blok::blok_header(&tree) {
+            Ok(header) if header.kind == PORT_BLOK_KIND => Ok(tree),
+            Ok(header) => Err(ValidationError(format!(
+                "BlokAssignWidget: a port's widget is a <Blok kind=\"port\">, not a {} blok",
+                header.kind
+            ))),
+            Err(finding) => Err(ValidationError(format!("BlokAssignWidget: {finding}"))),
+        }
+    }
+}
+
+/// The kind a port's own blok is.
+pub const PORT_BLOK_KIND: &str = "port";
 
 fn no_children(children: &Option<Vec<ComponentNodeInputModel>>) -> bool {
     children.as_ref().is_none_or(Vec::is_empty)
@@ -317,6 +358,7 @@ impl AssignWidgetInputModel {
             Self::String(_) => "STRING",
             Self::Search(_) => "SEARCH",
             Self::Custom(_) => "CUSTOM",
+            Self::Blok(_) => "BLOK",
             Self::StateChoice(_) => "STATE_CHOICE",
             Self::Proxy(_) => "PROXY",
         }
@@ -329,6 +371,7 @@ impl AssignWidgetInputModel {
             Self::String(w) => w.follow_value.as_deref(),
             Self::Search(w) => w.follow_value.as_deref(),
             Self::Custom(w) => w.follow_value.as_deref(),
+            Self::Blok(w) => w.follow_value.as_deref(),
             Self::StateChoice(w) => w.follow_value.as_deref(),
             Self::Proxy(w) => w.follow_value.as_deref(),
         }
@@ -348,6 +391,10 @@ impl AssignWidgetInputModel {
         let mut out = vec![self];
         let mut current = self;
         while let Self::Custom(CustomWidget {
+            fallback: Some(next),
+            ..
+        })
+        | Self::Blok(BlokWidget {
             fallback: Some(next),
             ..
         }) = current
@@ -461,6 +508,21 @@ impl AssignWidgetInputModel {
                         .filter_map(|prop| prop.declares_value.clone()),
                 );
                 check_widget_tree(w.children.as_deref(), &in_scope, "CustomAssignWidget")?;
+            }
+            Self::Blok(w) => {
+                if let Some(fallback) = w.fallback.as_mut() {
+                    fallback.validate()?;
+                }
+                min_length(&w.source, "source")?;
+                if w.vocab != 2 {
+                    return Err(ValidationError(format!(
+                        "BlokAssignWidget: vocab {} is not a blok language this server speaks (2)",
+                        w.vocab
+                    )));
+                }
+                // That it parses into a port blok; where it is mounted (its port, the action's
+                // arguments and dependencies) is the implementation's to check.
+                w.tree()?;
             }
             Self::StateChoice(w) => {
                 if let Some(call) = w.state_call.as_mut() {

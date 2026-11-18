@@ -58,6 +58,8 @@ def call(operation: str = "isTrue", **arguments) -> dict:
 
 
 BROKEN = {
+    "port blok widget without source": impl(args=[port("f", "FLOAT", widget={"kind": "BLOK"})]),
+    "port blok widget of another language": impl(args=[port("f", "FLOAT", widget={"kind": "BLOK", "vocab": 3, "source": '<Blok kind="port" context="panel"><control /></Blok>'})]),
     "reserved key": impl(args=[port("value", "INT")]),
     "separator in key": impl(args=[port("a..b", "INT")]),
     "empty key": impl(args=[port("", "INT")]),
@@ -121,6 +123,12 @@ VALID_EXTRA = {
                 ]},
             ]}),
             port("e", "STRING", widget={"kind": "CUSTOM", "component": "X", "children": []}),
+        ]
+    ),
+    "port blok widget": impl(
+        args=[
+            port("limit", "FLOAT"),
+            port("f", "FLOAT", widget={"kind": "BLOK", "source": '<Blok kind="port" context="panel"><Slider bind={port.value} max={args.limit} /><Button onClick={port.set(args.limit)}>Longest</Button><message /></Blok>', "fallback": {"kind": "SLIDER", "min": 0, "max": 1}}),
         ]
     ),
     "rich widgets": impl(

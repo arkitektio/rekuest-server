@@ -520,6 +520,23 @@ class CustomAssignWidgetInputModel(_AssignWidgetBase):
         return dumped
 
 
+class BlokAssignWidgetInputModel(_AssignWidgetBase):
+    """A port blok as the port's widget: BSX the form draws where the port's control would be.
+
+    It travels, is hashed and is stored as its source. takt parses it and checks it where it is
+    mounted (its port, the action's arguments and dependencies) at registration."""
+
+    kind: Literal["BLOK"] = Field(description="Which member of AssignWidgetInput this is.")
+    source: str = Field(min_length=1, description='The port blok as v2 BSX: one `<Blok kind="port" context="panel">`. It reads the port as `port`, the form\'s other arguments as `args` and the agents a run would get as `self` and `deps`; it writes `port.value` and calls no agent.')
+    vocab: Literal[2] = Field(default=2, description="The blok language version the source speaks; 2 is the only one.")
+    fallback: Optional["AssignWidgetInputModel"] = Field(default=None, description="Widget to render where the UI draws no port bloks; the port's own kind's widget when left out.")
+
+    @field_validator("fallback", mode="before")
+    @classmethod
+    def _plain_fallback(cls, value: Any) -> Any:
+        return _as_plain(value)
+
+
 class StateChoiceAssignWidgetInputModel(_AssignWidgetBase):
     kind: Literal["STATE_CHOICE"] = Field(description="Which member of AssignWidgetInput this is.")
     dependency: str | None = Field(default=None, description="The agent dependency (by key) whose state provides the choices; omitted: the implementing agent's own state.")
@@ -555,6 +572,7 @@ AssignWidgetInputModel = Annotated[
         StringAssignWidgetInputModel,
         SearchAssignWidgetInputModel,
         CustomAssignWidgetInputModel,
+        BlokAssignWidgetInputModel,
         StateChoiceAssignWidgetInputModel,
         ProxyAssignWidgetInputModel,
     ],
@@ -568,6 +586,7 @@ ASSIGN_WIDGET_INPUT_MODELS: dict[str, type[_AssignWidgetBase]] = {
     "STRING": StringAssignWidgetInputModel,
     "SEARCH": SearchAssignWidgetInputModel,
     "CUSTOM": CustomAssignWidgetInputModel,
+    "BLOK": BlokAssignWidgetInputModel,
     "STATE_CHOICE": StateChoiceAssignWidgetInputModel,
     "PROXY": ProxyAssignWidgetInputModel,
 }

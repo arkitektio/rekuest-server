@@ -78,6 +78,8 @@ class Function:
     command: bool = False
     """An effect that changes the world (it acts on a task, or starts one); an effect without
     it only changes what the viewer sees."""
+    needs: str | None = None
+    """The root a blok's kind must read to hold this effect (``port.set`` needs ``port``)."""
 
     @property
     def keys(self) -> tuple[str, ...]:
@@ -101,6 +103,9 @@ class Kind:
     description: str = ""
     within: Mapping[str, "Kind"] = field(default_factory=dict[str, "Kind"])
     """Per context, the row the kind reads there when it reads less (an action's logo reads only ``task``)."""
+    calls: bool = True
+    """Whether a blok of this kind may call an agent (``self.<action>(...)``). A port blok may
+    not: it is a field of a form, and reads the agents it reads."""
 
     def drawn_in(self, context: str) -> "Kind":
         """The row of this kind in ``context``: its own, or the narrower one it has there."""
@@ -308,6 +313,7 @@ def _function(name: str, raw: JSON) -> Function:
         sees_status=_flag(entry, "sees_status"),
         task_operation=_flag(entry, "task_operation"),
         command=_flag(entry, "command"),
+        needs=_string(entry.get("needs"), f"functions.{name}.needs") if entry.get("needs") is not None else None,
     )
 
 
@@ -353,6 +359,7 @@ def parse_vocabulary(raw: JSON) -> Vocabulary:
             contexts=_strings(entry.get("contexts"), f"kinds.{name}.contexts"),
             description=description if isinstance(description, str) else "",
             within=within,
+            calls=entry.get("calls") is not False,
         )
 
     contexts: dict[str, Context] = {}
@@ -394,6 +401,8 @@ def parse_vocabulary(raw: JSON) -> Vocabulary:
         # A root's own operations (task.answer, assign.start) are effects named after the root.
         if namespace not in namespaces and not (function.effect and namespace in data_roots):
             raise ValueError(f"vocabulary.json: function {name} is in no function namespace")
+        if function.needs is not None and function.needs not in data_roots:
+            raise ValueError(f"vocabulary.json: function {name} needs {function.needs!r}, which is no root")
         functions[name] = function
 
     operators = {

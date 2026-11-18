@@ -29,6 +29,9 @@ pub struct SelfReads {
     pub states: BTreeSet<String>,
     pub actions: BTreeSet<String>,
     pub assets: BTreeSet<String>,
+    /// Whether it reads anything of `self` at all, the agent's own fields (`self.connected`)
+    /// included.
+    pub agent: bool,
 }
 
 impl SelfReads {
@@ -43,7 +46,11 @@ impl SelfReads {
         if parts.len() > 1 && parts[0] == "deps" && parts[1] == SELF_DEPENDENCY {
             parts.remove(0);
         }
-        if parts.len() < 2 || parts[0] != SELF_DEPENDENCY {
+        if parts[0] != SELF_DEPENDENCY {
+            return;
+        }
+        self.agent = true;
+        if parts.len() < 2 {
             return;
         }
         let head = parts[1];
@@ -216,6 +223,20 @@ fn port_matches<P: Matched>(ports: &[P]) -> Option<Vec<PortMatchInputModel>> {
         })
         .collect();
     (!matches.is_empty()).then_some(matches)
+}
+
+/// One port as a match with no position: what `port.value` of its own blok is typed as.
+pub fn port_match(port: &ArgPortInputModel) -> PortMatchInputModel {
+    PortMatchInputModel {
+        at: None,
+        key: Some(port.key.clone()),
+        kind: Some(port.kind),
+        identifier: port.identifier.clone(),
+        nullable: Some(port.nullable),
+        dimension: None,
+        descriptors: None,
+        children: port_matches(Matched::children(port)),
+    }
 }
 
 /// An action of the agent itself, demanded by its key and its ports

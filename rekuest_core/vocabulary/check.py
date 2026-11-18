@@ -190,6 +190,8 @@ class BlokScope:
         demo: What a preview renders it with (a logo's loops are counted against it).
         query_values: Per declared query, the shape of its value as its service answers it.
         assets: The assets ``self.assets.<name>`` may name; ``None`` names any.
+        port: The port a port blok is the widget of, as a match: what ``port.value`` is typed
+            as. None leaves the value open.
     """
 
     kinds: tuple[str, ...] = ()
@@ -199,6 +201,7 @@ class BlokScope:
     demo: BlokDemoInputModel | None = None
     query_values: Mapping[str, PortMatchInputModel] = field(default_factory=dict[str, PortMatchInputModel])
     assets: frozenset[str] | None = None
+    port: PortMatchInputModel | None = None
 
     @property
     def mounted(self) -> bool:
@@ -238,6 +241,10 @@ RUN_KINDS = ("action", "assign")
 """The kinds that have a run's dependencies: an action's own bloks, for a run and for starting one."""
 
 ASSIGN_KIND = "assign"
+PORT_ROOT = "port"
+"""The root of a port blok: the port it is the widget of."""
+PORT_VALUE_FIELD = "value"
+"""The one field of ``port`` a control writes."""
 GIVEN_FIELD = "given"
 """The field of ``assign`` that holds one flag per argument the caller decided."""
 CONNECTED_FIELD = "connected"
@@ -476,6 +483,9 @@ class _Checker:
         operation = vocabulary.functions.get(prop.util_call.operation) if prop.util_call is not None else None
         if operation is not None and operation.task_operation and "task" not in self.kind.roots:
             self.add("roots.not_in_kind", node.id, path=operation.name, n=_article(self.kind_name), kind=self.kind_name, root="task", roots=self.roots())
+        # An effect that is a root's own (port.set) belongs to the kinds that read that root.
+        if operation is not None and operation.needs is not None and operation.needs not in self.kind.roots:
+            self.add("roots.not_in_kind", node.id, path=operation.name, n=_article(self.kind_name), kind=self.kind_name, root=operation.needs, roots=self.roots())
         if prop.key == BIND_PROP:
             path = prop.dynamic_value.path if prop.dynamic_value is not None else None
             if path is None:
@@ -483,7 +493,12 @@ class _Checker:
             else:
                 root = path.split(".")[0]
                 binding = scope.get(root)
-                if not isinstance(binding, LocalBinding):
+                if root == PORT_ROOT and root not in scope and PORT_ROOT in self.kind.roots:
+                    # The one thing besides a local a control writes: the value of the port a
+                    # port blok stands for (and what is below it), never what the form says of it.
+                    if path.split(".")[1:2] != [PORT_VALUE_FIELD]:
+                        self.add("port.bind", node.id, path=path)
+                elif not isinstance(binding, LocalBinding):
                     self.add("local.unknown", node.id, path=path, root=root)
                 else:
                     # What kind the control writes is its catalog's to say: not checked here.
@@ -536,6 +551,10 @@ class _Checker:
         kind = self.kind
         owner = where.text
         action = action_key_for(call)
+        if not kind.calls:
+            called = f"self.{action}(...)" if call.dependency == "self" else f"deps.{call.dependency}.{action}(...)"
+            self.add("calls.not_in_kind", where.node.id, path=called, n=_article(self.kind_name), kind=self.kind_name)
+            return
         if call.dependency == "self":
             if "self" not in kind.roots:
                 self.add("roots.not_in_kind", where.node.id, path=f"self.{action}(...)", n=_article(self.kind_name), kind=self.kind_name, root="self", roots=self.roots())
@@ -741,6 +760,11 @@ class _Checker:
                     return None
                 return PortMatchInputModel(key=rest[1], kind=enums.PortKind.BOOL)
             return self.descend(record_match("assign", vocabulary.records["assign"].fields), rest, path, node_id)
+        if root == PORT_ROOT:
+            # ``port.value`` is the port's own type where the mount says it; the rest is the record.
+            value = self.scope.port
+            overrides = {PORT_VALUE_FIELD: value.model_copy(update={"at": None, "nullable": True})} if value is not None else None
+            return self.descend(record_match(PORT_ROOT, vocabulary.records[PORT_ROOT].fields, overrides), rest, path, node_id)
         if root == "viewer":
             return self.descend(record_match("viewer", vocabulary.records["viewer"].fields), rest, path, node_id)
         if root == "queries":
@@ -884,7 +908,7 @@ def dependency_hint(key: str, kind: str) -> str:
     - an action blok's dependencies are its action's: ``add a dependency parameter `laser` to the action``;
     - an agent blok has none: ``agent bloks read only `self```.
     """
-    if kind in ("action", "assign"):
+    if kind in ("action", "assign", "port"):
         return f"add a dependency parameter `{key}` to the action"
     if kind == "agent":
         return "agent bloks read only `self`"

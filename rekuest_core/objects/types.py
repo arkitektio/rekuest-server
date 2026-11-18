@@ -60,6 +60,13 @@ class CustomAssignWidget(AssignWidget):
     fallback: Optional[Annotated["AssignWidget", strawberry.lazy(__name__)]] = strawberry.field(default=None, description="Widget to render when the UI has no such component in its catalog.")
 
 
+@pydantic.type(models.BlokAssignWidgetModel, description="A port blok as the port's widget: BSX the form draws where the port's control would be.")
+class BlokAssignWidget(AssignWidget):
+    source: str = strawberry.field(description='The port blok as v2 BSX: one `<Blok kind="port" context="panel">`. It reads the port as `port`, the form\'s other arguments as `args` and the agents a run would get as `self` and `deps`; it writes `port.value` and calls no agent.')
+    vocab: int = strawberry.field(default=2, description="The blok language version the source speaks.")
+    fallback: Optional[Annotated["AssignWidget", strawberry.lazy(__name__)]] = strawberry.field(default=None, description="Widget to render where the UI draws no port bloks.")
+
+
 @pydantic.type(models.StateAccessorModel)
 class StateAccessor:
     option_key: enums.OptionKey

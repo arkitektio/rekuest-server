@@ -79,6 +79,7 @@ class AssignWidgetKind(str, Enum):
     CHOICE = "CHOICE"
     SLIDER = "SLIDER"
     CUSTOM = "CUSTOM"
+    BLOK = "BLOK"
     STRING = "STRING"
     STATE_CHOICE = "STATE_CHOICE"
     PROXY = "PROXY"

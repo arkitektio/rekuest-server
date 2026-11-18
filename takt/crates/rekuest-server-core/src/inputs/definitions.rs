@@ -18,12 +18,12 @@ use super::calls::{
 use super::formula::{EstimatedRuntimeInputModel, FitsInputModel};
 use super::ports::{
     check_unique_keys, ArgPortInputModel, AssignWidgetInputModel, EffectInputModel,
-    ReturnPortInputModel, ReturnWidgetInputModel,
+    ReturnPortInputModel, ReturnWidgetInputModel, PORT_BLOK_KIND,
 };
 use super::{min_length, ValidationError};
 use crate::blok::check::validate_blok;
 use crate::blok::declared::blok_catalog;
-use crate::blok::reads::{self_dependency, self_reads};
+use crate::blok::reads::{port_match, self_dependency, self_reads};
 use crate::blok::{blok_header, BlokScope, Finding};
 use crate::enums::{
     ActionBlokPhase, ActionKind, AssetKind, CatalogValueKind, ComponentContext, Effects, Execution,
@@ -718,6 +718,13 @@ impl ImplementationInputModel {
             optimistic.validate()?;
         }
         self.check_widget_targets()?;
+        // A port's own blok is a field of the action's form: checked against its port, the
+        // action's arguments and the dependencies this implementation declares.
+        check_port_bloks(
+            &self.definition.args,
+            &self.dependencies,
+            self.definition.stateful,
+        )?;
         // The action's bloks name devices by the dependency keys this implementation declares.
         let arg_keys: Vec<String> = self.definition.args.iter().map(|a| a.key.clone()).collect();
         for blok in &self.definition.bloks {
@@ -1535,6 +1542,61 @@ pub fn check_action_blok(
     )
 }
 
+/// Every port blok among `ports` and the ports below them (`port_bloks`): the port it is the
+/// widget of (its own, or the one another widget falls back to) and the tree its source parses
+/// into.
+pub fn port_bloks(
+    ports: &[ArgPortInputModel],
+) -> Result<Vec<(&ArgPortInputModel, ComponentNodeInputModel)>, ValidationError> {
+    let mut found = vec![];
+    for port in ports {
+        for widget in port.widget.iter().flat_map(AssignWidgetInputModel::chain) {
+            if let AssignWidgetInputModel::Blok(blok) = widget {
+                found.push((port, blok.tree()?));
+            }
+        }
+        found.extend(port_bloks(port.children.as_deref().unwrap_or_default())?);
+    }
+    Ok(found)
+}
+
+/// Every port blok of an action where it is mounted (`check_port_bloks`): it reads its own port
+/// as `port` (the value typed as the port), the action's arguments as `args`, the agents a run
+/// would get as `deps.<key>` and the agent running it as `self`. It writes `port.value` and
+/// calls no agent.
+///
+/// Reading `self` is a stateful action's: there a caller names the agent that runs it, and the
+/// form is drawn for that one. A stateless action runs on whichever agent offers it, so its
+/// widgets have no `self` to read (`stateful`).
+pub fn check_port_bloks(
+    args: &[ArgPortInputModel],
+    dependencies: &[AgentDependencyInputModel],
+    stateful: bool,
+) -> Result<(), ValidationError> {
+    let arg_keys: Vec<String> = args.iter().map(|a| a.key.clone()).collect();
+    for (port, tree) in port_bloks(args)? {
+        if !stateful && self_reads(&tree).agent {
+            return Err(ValidationError(format!(
+                "Widget of port {}: it reads `self`, the agent that runs the action, but the action is not stateful: it runs on whichever agent offers it. Declare the action stateful, or read a dependency (deps.<key>) instead.",
+                repr_str(&port.key)
+            )));
+        }
+        let mount = format!("the widget of port {}", repr_str(&port.key));
+        let scope = BlokScope {
+            args: Some(arg_keys.clone()),
+            port: Some(port_match(port)),
+            ..BlokScope::mounted(&[PORT_BLOK_KIND], mount, dependencies.to_vec())
+        };
+        check_blok_manifest(
+            Some(std::slice::from_ref(&tree)),
+            &scope,
+            ComponentContext::PANEL,
+        )
+        .map_err(|e| ValidationError(format!("Widget of port {}: {}", repr_str(&port.key), e.0)))?;
+    }
+    Ok(())
+}
+
 /// A catalog's default widget for ports of a kind and/or identifier (`WidgetDefaultInputModel`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WidgetDefaultInputModel {
@@ -1717,6 +1779,21 @@ impl ImplementAgentInputModel {
         // `self` itself is left as sent.
         let implementations = self.implementations.as_deref().unwrap_or_default();
         let states = self.states.as_deref().unwrap_or_default();
+        // What the port bloks of its actions read of the agent is declared with it: a state
+        // they show, an action whose latest task they watch.
+        for implementation in implementations {
+            for (port, tree) in port_bloks(&implementation.definition.args)? {
+                self_dependency(&self_reads(&tree), implementations, states).map_err(
+                    |finding| {
+                        ValidationError(format!(
+                            "Implementation {}, widget of port {}: {finding}",
+                            repr_str(&implementation.interface),
+                            repr_str(&port.key)
+                        ))
+                    },
+                )?;
+            }
+        }
         for blok in self.bloks.iter_mut().flatten() {
             blok.validate()?;
             blok.name_self(implementations, states)?;

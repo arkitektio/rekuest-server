@@ -32,6 +32,8 @@ pub struct Function {
     pub effect: bool,
     pub sees_status: bool,
     pub task_operation: bool,
+    /// The root a blok's kind must read to hold this effect (`port.set` needs `port`).
+    pub needs: Option<String>,
 }
 
 impl Function {
@@ -61,6 +63,9 @@ pub struct Kind {
     /// Per context, the row the kind reads there when it reads less (an action's logo reads
     /// only `task`).
     pub within: BTreeMap<String, Kind>,
+    /// Whether a blok of this kind may call an agent (`self.<action>(...)`). A port blok may
+    /// not: it is a field of a form, and reads the agents it reads.
+    pub calls: bool,
 }
 
 impl Kind {
@@ -337,6 +342,10 @@ fn function(name: &str, raw: &Value) -> Loaded<Function> {
         effect: flag(entry, "effect"),
         sees_status: flag(entry, "sees_status"),
         task_operation: flag(entry, "task_operation"),
+        needs: entry
+            .get("needs")
+            .map(|needs| string(Some(needs), &format!("{where_}.needs")))
+            .transpose()?,
     })
 }
 
@@ -401,6 +410,7 @@ pub fn parse_vocabulary(raw: &Value) -> Loaded<Vocabulary> {
                         contexts: vec![context.clone()],
                         description: String::new(),
                         within: BTreeMap::new(),
+                        calls: true,
                     },
                 );
             }
@@ -414,6 +424,7 @@ pub fn parse_vocabulary(raw: &Value) -> Loaded<Vocabulary> {
                 contexts: strings(entry.get("contexts"), &format!("kinds.{name}.contexts"))?,
                 description: text(entry, "description"),
                 within,
+                calls: entry.get("calls") != Some(&Value::Bool(false)),
             },
         );
     }
@@ -505,6 +516,13 @@ pub fn parse_vocabulary(raw: &Value) -> Loaded<Vocabulary> {
             return Err(format!(
                 "vocabulary.json: function {name} is in no function namespace"
             ));
+        }
+        if let Some(needs) = &parsed.needs {
+            if !data_roots.iter().any(|root| root == needs) {
+                return Err(format!(
+                    "vocabulary.json: function {name} needs {needs:?}, which is no root"
+                ));
+            }
         }
         functions.insert(name.clone(), parsed);
     }

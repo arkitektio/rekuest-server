@@ -125,6 +125,10 @@ fn mount_of(mount: &Value) -> BlokScope {
                 .map(|a| a.as_str().expect("an arg key").to_owned())
                 .collect()
         }),
+        port: mount
+            .get("port")
+            .filter(|port| port.is_object())
+            .map(typed::<rekuest_core::inputs::PortMatchInputModel>),
         ..BlokScope::default()
     }
 }

@@ -11,6 +11,7 @@ interface_types = [
     types.ChoiceReturnWidget,
     types.StringAssignWidget,
     types.CustomAssignWidget,
+    types.BlokAssignWidget,
     types.CustomEffect,
     types.MessageEffect,
     types.ProxyWidget,

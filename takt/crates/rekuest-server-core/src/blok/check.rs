@@ -51,6 +51,10 @@ const DEPENDENCY_KEY_PROPS: [(&str, &str); 2] = [("Placed", "dep"), ("Route", "t
 /// The kinds that have a run's dependencies: an action's own bloks, for a run and for starting one.
 const RUN_KINDS: [&str; 2] = ["action", "assign"];
 const ASSIGN_KIND: &str = "assign";
+/// The root of a port blok: the port it is the widget of.
+const PORT_ROOT: &str = "port";
+/// The one field of `port` a control writes.
+const PORT_VALUE_FIELD: &str = "value";
 /// The field of `assign` that holds one flag per argument the caller decided.
 const GIVEN_FIELD: &str = "given";
 /// The one field of an agent that is no string: whether it is connected right now.
@@ -133,6 +137,9 @@ pub struct BlokScope {
     /// The full arg ports of the actions this side knows (an agent's own): what a local passed
     /// to one whole, or borrowing one (`like`), takes its port from.
     pub arg_ports: ArgPorts,
+    /// The port a port blok is the widget of, as a match: what `port.value` is typed as. None
+    /// leaves the value open.
+    pub port: Option<PortMatchInputModel>,
 }
 
 impl BlokScope {
@@ -1225,12 +1232,31 @@ impl<'a> Checker<'a> {
                 self.not_in_kind(&node.id, &operation, "task");
             }
         }
+        // An effect that is a root's own (port.set) belongs to the kinds that read that root.
+        let needed = prop
+            .util_call
+            .as_ref()
+            .and_then(|call| vocabulary.functions.get(&call.operation))
+            .and_then(|function| Some((function.name.clone(), function.needs.clone()?)));
+        if let Some((operation, root)) = needed {
+            if !self.kind.roots.contains(&root) {
+                self.not_in_kind(&node.id, &operation, &root);
+            }
+        }
         if prop.key == BIND_PROP {
             match prop.dynamic_value.as_ref().and_then(|d| d.path.as_deref()) {
                 None => self.add("local.bind", at, &[("what", s(what(prop)))]),
                 Some(path) => {
                     let root = path.split('.').next().unwrap_or_default();
                     match scope.get(root) {
+                        // The one thing besides a local a control writes: the value of the port
+                        // a port blok stands for (and what is below it), never what the form
+                        // says of it.
+                        None if root == PORT_ROOT && self.kind.roots.contains(PORT_ROOT) => {
+                            if path.split('.').nth(1) != Some(PORT_VALUE_FIELD) {
+                                self.add("port.bind", at, &[("path", s(path))]);
+                            }
+                        }
                         Some(Bound::Local { node: local, .. }) => {
                             self.bound_locals.insert(local.clone());
                         }
@@ -1343,6 +1369,20 @@ impl<'a> Checker<'a> {
     fn visit_agent_call(&mut self, call: &AgentProbeInputModel, where_: &Where<'_>, scope: &Scope) {
         let owner = where_.text();
         let action = action_key_for(call).to_owned();
+        if !self.kind.calls {
+            let called = if call.dependency == "self" {
+                format!("self.{action}(...)")
+            } else {
+                format!("deps.{}.{action}(...)", call.dependency)
+            };
+            let fields = [
+                ("path", s(called)),
+                ("n", s(article(self.kind_name()))),
+                ("kind", s(self.kind_name())),
+            ];
+            self.add("calls.not_in_kind", Some(&where_.node.id), &fields);
+            return;
+        }
         if call.dependency == "self" {
             if !self.kind.roots.contains("self") {
                 self.not_in_kind(&where_.node.id, &format!("self.{action}(...)"), "self");
@@ -1939,6 +1979,15 @@ impl<'a> Checker<'a> {
                 let shape = record_shape("assign", &vocabulary.records["assign"].fields, &[]);
                 self.descend(Some(shape), rest, path, &node_id)
             }
+            PORT_ROOT => {
+                // `port.value` is the port's own type where the mount says it; the rest is the record.
+                let value = self.scope.port.as_ref().map(Shape::of_match);
+                let overrides: Vec<(&str, Shape)> =
+                    value.into_iter().map(|v| (PORT_VALUE_FIELD, v)).collect();
+                let shape =
+                    record_shape(PORT_ROOT, &vocabulary.records[PORT_ROOT].fields, &overrides);
+                self.descend(Some(shape), rest, path, &node_id)
+            }
             "viewer" => {
                 let shape = record_shape("viewer", &vocabulary.records["viewer"].fields, &[]);
                 self.descend(Some(shape), rest, path, &node_id)
@@ -2352,7 +2401,7 @@ pub fn check_blok_tree(tree: &ComponentNodeInputModel, scope: &BlokScope) -> Vec
 /// - an agent blok has none: ``agent bloks read only `self` ``.
 pub fn dependency_hint(key: &str, kind: &str) -> String {
     match kind {
-        "action" | "assign" => {
+        "action" | "assign" | "port" => {
             format!("add a dependency parameter `{key}` to the action")
         }
         "agent" => "agent bloks read only `self`".to_string(),

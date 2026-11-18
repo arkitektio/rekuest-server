@@ -44,6 +44,15 @@ class CustomAssignWidgetModel(AssignWidgetModel):
     fallback: Optional["AssignWidgetModelUnion"] = None
 
 
+class BlokAssignWidgetModel(AssignWidgetModel):
+    """A port blok as the port's widget: BSX the form draws where the port's control would be."""
+
+    kind: Literal["BLOK"]
+    source: str
+    vocab: int = 2
+    fallback: Optional["AssignWidgetModelUnion"] = None
+
+
 class SearchAssignWidgetModel(AssignWidgetModel):
     kind: Literal["SEARCH"]
     query: str  # TODO: Validators
@@ -90,6 +99,7 @@ AssignWidgetModelUnion = Union[
     StateChoiceAssignWidgetModel,
     StringWidgetModel,
     CustomAssignWidgetModel,
+    BlokAssignWidgetModel,
     ProxyWidgetModel,
 ]
 

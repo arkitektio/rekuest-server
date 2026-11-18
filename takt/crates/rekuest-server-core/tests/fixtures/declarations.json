@@ -14924,6 +14924,144 @@
    "5c6181e9cc1dc3a8751ed1915ef2d951e78b0a5cffce97147c94b18c62fefc22"
   ]
  },
+ "port blok widget": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "limit",
+        "kind": "FLOAT"
+       },
+       {
+        "key": "f",
+        "kind": "FLOAT",
+        "widget": {
+         "kind": "BLOK",
+         "source": "<Blok kind=\"port\" context=\"panel\"><Slider bind={port.value} max={args.limit} /><Button onClick={port.set(args.limit)}>Longest</Button><message /></Blok>",
+         "fallback": {
+          "kind": "SLIDER",
+          "min": 0,
+          "max": 1
+         }
+        }
+       }
+      ],
+      "returns": []
+     }
+    }
+   ]
+  },
+  "dump": {
+   "name": null,
+   "description": null,
+   "states": null,
+   "implementations": [
+    {
+     "definition": {
+      "key": "act",
+      "version": "1",
+      "description": null,
+      "collections": [],
+      "name": "Act",
+      "stateful": false,
+      "pure": false,
+      "idempotent": false,
+      "allow_probe": false,
+      "port_groups": [],
+      "args": [
+       {
+        "key": "limit",
+        "label": null,
+        "kind": "FLOAT",
+        "description": null,
+        "identifier": null,
+        "nullable": false,
+        "effects": null,
+        "choices": null,
+        "reference_unit": null,
+        "proposed_units": null,
+        "dimension": null,
+        "children": null,
+        "validators": null,
+        "default": null,
+        "widget": null,
+        "requires": null
+       },
+       {
+        "key": "f",
+        "label": null,
+        "kind": "FLOAT",
+        "description": null,
+        "identifier": null,
+        "nullable": false,
+        "effects": null,
+        "choices": null,
+        "reference_unit": null,
+        "proposed_units": null,
+        "dimension": null,
+        "children": null,
+        "validators": null,
+        "default": null,
+        "widget": {
+         "follow_value": null,
+         "kind": "BLOK",
+         "source": "<Blok kind=\"port\" context=\"panel\"><Slider bind={port.value} max={args.limit} /><Button onClick={port.set(args.limit)}>Longest</Button><message /></Blok>",
+         "vocab": 2,
+         "fallback": {
+          "follow_value": null,
+          "kind": "SLIDER",
+          "min": 0.0,
+          "max": 1.0,
+          "step": null
+         }
+        },
+        "requires": null
+       }
+      ],
+      "returns": [],
+      "kind": "FUNCTION",
+      "is_test_for": [],
+      "is_dev": false,
+      "catalogs": [],
+      "protocols": []
+     },
+     "dependencies": [],
+     "interface": "act",
+     "params": null,
+     "instance_id": null,
+     "locks": null,
+     "optimistics": null,
+     "manipulates": null,
+     "needs_token": true,
+     "provenance_audience": null,
+     "effects": "UNKNOWN",
+     "execution": "PLAIN",
+     "code_hash": null,
+     "logo": null,
+     "asks": null,
+     "informs": null,
+     "dynamic_asks": null,
+     "dynamic_calls": null,
+     "dynamic_informs": null,
+     "estimated_runtime": null,
+     "fits": null
+    }
+   ],
+   "locks": null,
+   "bloks": null,
+   "assets": null,
+   "hash": null
+  },
+  "hashes": [
+   "a3a1dc50f1b2aaf1722da05c63a40d9ba095c0fe4e986ea03809873c4d196cea"
+  ]
+ },
  "rich widgets": {
   "input": {
    "implementations": [
@@ -15363,6 +15501,60 @@
   "hashes": [
    "580ede4538af921dfddfc2424f180fff17ccc3219f99d7a65d39b01f17a18200"
   ]
+ },
+ "port blok widget without source": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "f",
+        "kind": "FLOAT",
+        "widget": {
+         "kind": "BLOK"
+        }
+       }
+      ],
+      "returns": []
+     }
+    }
+   ]
+  },
+  "error": "Field required",
+  "error_type": "missing"
+ },
+ "port blok widget of another language": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "f",
+        "kind": "FLOAT",
+        "widget": {
+         "kind": "BLOK",
+         "vocab": 3,
+         "source": "<Blok kind=\"port\" context=\"panel\"><control /></Blok>"
+        }
+       }
+      ],
+      "returns": []
+     }
+    }
+   ]
+  },
+  "error": "Input should be 2",
+  "error_type": "literal_error"
  },
  "reserved key": {
   "input": {

@@ -133,3 +133,63 @@ fn a_blok_sent_as_its_source_reads_only_what_its_agent_declares() {
     assert!(error.contains("[deps.unknown_state]"), "{error}");
     assert!(error.contains("'stage'"), "{error}");
 }
+
+/// A port's own blok is a field of its action's form: it is checked where it is mounted, against
+/// its port, the action's arguments, and what the agent declares.
+#[test]
+fn a_port_blok_is_checked_on_the_port_it_is_the_widget_of() {
+    let registering_as = |inner: &str, states: Value, stateful: bool| {
+        let source = format!("<Blok kind=\"port\" context=\"panel\">{inner}</Blok>");
+        validate(
+            &serde_json::json!({"states": states, "implementations": [{"interface": "acquire",
+            "definition": {"key": "acquire", "name": "Acquire", "kind": "FUNCTION", "returns": [], "stateful": stateful,
+                "args": [{"key": "limit", "kind": "FLOAT"},
+                         {"key": "exposure", "kind": "FLOAT", "widget": {"kind": "BLOK", "source": source}}]}}]}),
+        )
+    };
+    let camera = serde_json::json!([{"interface": "Camera", "definition": {"name": "Camera",
+        "ports": [{"key": "exposure", "kind": "FLOAT"}]}}]);
+    let registering = |inner: &str, states: Value| registering_as(inner, states, true);
+
+    // Reading the agent that runs it is a stateful action's: a stateless one runs anywhere.
+    let error =
+        registering_as("<Text>{self.Camera.exposure}</Text>", camera.clone(), false).unwrap_err();
+    assert!(error.contains("not stateful"), "{error}");
+    registering_as(
+        "<Slider bind={port.value} max={args.limit} />",
+        camera.clone(),
+        false,
+    )
+    .unwrap();
+
+    registering(
+        "<Slider bind={port.value} max={args.limit} /><Button onClick={port.set(self.Camera.exposure)}>Now</Button>",
+        camera.clone(),
+    )
+    .unwrap();
+    for (inner, code) in [
+        (
+            "<Button onClick={self.acquire(exposure: 1)}>Go</Button>",
+            "[calls.not_in_kind]",
+        ),
+        ("<Text>{args.gain}</Text>", "[args.unknown]"),
+        ("<Slider bind={port.error} />", "[port.bind]"),
+        ("<Text>{port.value.x}</Text>", "[path.unknown]"),
+        ("<Text>{self.Stage.x}</Text>", "[deps.unknown_state]"),
+    ] {
+        let error = registering(inner, camera.clone()).unwrap_err();
+        assert!(error.contains(code), "{inner}: {error}");
+        assert!(error.contains("port 'exposure'"), "{error}");
+    }
+    let error = validate(
+        &serde_json::json!({"implementations": [{"interface": "acquire",
+        "definition": {"key": "acquire", "name": "Acquire", "kind": "FUNCTION", "returns": [],
+            "args": [{"key": "exposure", "kind": "FLOAT", "widget": {"kind": "BLOK",
+                "source": "<Blok kind=\"agent\" context=\"panel\"><Card /></Blok>"}}]}}]}),
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("not a agent blok") || error.contains("not an agent blok"),
+        "{error}"
+    );
+}
