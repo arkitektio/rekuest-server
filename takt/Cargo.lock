@@ -57,9 +57,9 @@ dependencies = [
 
 [[package]]
 name = "arkitekt-spec"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7374f78592aff0a183e5ab1d6e08a52bea4427aed8198063dad7f09af5ca4e0a"
+checksum = "ec12704f2cf3fc4908ccfa84ed9640d60e3ed44ded57cbd6bef2b9afb05978a3"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1982,9 +1982,9 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "rekuest-protocol"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df8f639a82df2e3b5603474fd9f1d0a1eced875221da45b6604819df46851e84"
+checksum = "8ab0b11d7acf897576ba2cd8f5fefa4100f3374e61208ae4f2ef75ef57b80dee"
 dependencies = [
  "arkitekt-spec",
  "serde",

@@ -38,3 +38,60 @@ impl From<sqlx::Error> for PersistError {
 }
 
 pub type PersistResult<T> = Result<T, PersistError>;
+
+/// Why a frame projected inside a transaction of its caller's did not go through.
+///
+/// Unlike [`PersistError`], a database error stays one: after it the transaction is lost,
+/// whatever the error was, and only whoever owns the transaction can decide what that means
+/// for the frames it held.
+#[derive(Debug, thiserror::Error)]
+pub enum InTxError {
+    /// Refused on purpose, before anything was written: the transaction goes on, and a numbered
+    /// frame counts as handled.
+    #[error("{0}")]
+    Refused(String),
+    #[error("database: {0}")]
+    Database(#[from] sqlx::Error),
+}
+
+impl From<InTxError> for PersistError {
+    fn from(e: InTxError) -> Self {
+        match e {
+            InTxError::Refused(reason) => PersistError::Refused(reason),
+            InTxError::Database(e) => e.into(),
+        }
+    }
+}
+
+pub type InTxResult<T> = Result<T, InTxError>;
+
+/// What a projection inside a transaction leaves to do once that transaction is committed:
+/// telling whoever follows. Never before: a subscriber told of a row reads it at once.
+#[derive(Debug, Clone, PartialEq)]
+pub enum After {
+    /// A task event was recorded (`signals::task_event_created`).
+    Event(i64),
+    /// A `PROGRESS` was recorded: fanned out at most once per interval (`progress_gate`).
+    Progress { task: i64, event: i64 },
+    /// A task's row changed (`signals::task_saved`).
+    TaskSaved(i64),
+    /// A patch was recorded (`signals::patch_created`).
+    Patch(i64),
+    /// An agent's locks changed (`signals::agent_saved`).
+    AgentSaved(i64),
+}
+
+/// Tell whoever follows, in the order things were written.
+pub async fn run_after(ctx: &crate::context::Context, after: Vec<After>) {
+    for step in after {
+        match step {
+            After::Event(event) => crate::signals::task_event_created(ctx, event).await,
+            After::Progress { task, event } => {
+                crate::progress_gate::progress_recorded(ctx, task, event).await
+            }
+            After::TaskSaved(task) => crate::signals::task_saved(ctx, task, false).await,
+            After::Patch(patch) => crate::signals::patch_created(ctx, patch).await,
+            After::AgentSaved(agent) => crate::signals::agent_saved(ctx, agent, false).await,
+        }
+    }
+}

@@ -36,9 +36,10 @@ The first frame must be a `Register` (anything else closes the socket):
 | `force` | take over the agent's existing live connection (the singleton rule) |
 | `session_id` | the per-process reclaim signal for in-flight work |
 
-The server replies with `Init{ agent, inquiries }` — `agent` is your Agent id; `inquiries` lists
-work that was left pending while you were away. After `Init` you may start sending assign and
-lifecycle requests.
+The server replies with `Init{ agent, hash, diagnostics, nonce, positions }` (see
+[agent-protocol.md](agent-protocol.md)). After `Init` you may start sending assign and lifecycle
+requests. They are numbered like reports (`pos`), so one the server took is never lost and one
+sent again is skipped.
 
 ## 2. Assign dependent work — `AssignRequest`
 
@@ -77,8 +78,10 @@ tasks (fields mirror the server's `AssignInputModel`):
 - `task` is the durable id you will key all subsequent mirrors on.
 - `created=false` means a duplicate returned the existing task: the same `reference`, or the same
   `(parent, call_key)` / `(parent, parent_step)` for a child call. The child's events so far follow
-  the response, as mirrors with their own `seq` (live ones may overlap; drop duplicates by `seq`), so
-  a call re-issued by a resumed workflow gets a finished child's result.
+  the response, as mirrors (live ones may overlap; drop duplicates by `event`), so a call re-issued
+  by a resumed workflow gets a finished child's result.
+- The response is a command (it carries `pos` and is kept until your `COMMAND_ACK` covers it), and
+  it is numbered ahead of the events of the child it names.
 - A bad request **NACKs** (`task=null`, `error` set — e.g. a missing `parent`) — it
   **never tears down the socket**, which would kill the agent's other work.
 
@@ -101,16 +104,16 @@ The op **resolves only on the agent's confirmation** — a request alone is not 
 | `PauseRequest{ task }` | `Pause` | `PausedEvent` | `PAUSED` | no (suspended) |
 | `ResumeRequest{ task, step? }` | `Resume` | `ResumedEvent` | `RESUMED` | no (running) |
 
-**Ack — `ControlResponse`:**
+**Ack.** Over the socket a control request is not answered: it is numbered and kept until the
+server has it, and what became of the task arrives as its `…Event` mirrors. A request that is
+refused (not owned by you, unknown, already terminal) is logged and changes nothing, **without**
+closing the socket. Over the HTTP intake, where there is no stream to wait on, the response is a
+`ControlResponse`:
 
 ```jsonc
-{ "type": "CALLER_CONTROL_RESULT", "request": "<request.id>",
+{ "type": "CONTROL_RESPONSE", "request": "<request.id>",
   "task": "1234", "accepted": true, "error": null }
 ```
-
-`accepted=true` means the request was persisted + broadcast; `accepted=false` (with `error`) means
-it was rejected — not owned by you, unknown, or already terminal — again **without** closing the
-socket. The *outcome* (CANCELLED / PAUSED / …) arrives later as a `…Event` mirror, not in this ack.
 
 **Cancel vs interrupt.** `cancel` is the *nice* path — sent only to the mother, which winds its own
 children down. `interrupt` is *forceful* — propagated to every still-running descendant. Both are
@@ -141,12 +144,21 @@ Every mirror carries (`ExecutionEvent` base):
 
 - `task` — the correlation key you learned from `AssignResponse`.
 - `event` — the originating `TaskEvent` id (a stable dedup handle).
-- `seq` — its monotonic PK (an ordering / gap-detection key).
 
-**Delivery is best-effort.** Mirrors are fanned out over the `task_caller_{caller_id}` channel-layer
-group (see [realtime.md](../../docs/design/realtime.md)). On a brief disconnect, events emitted while you were away are
-**missed** — the durable source of truth is the persisted `TaskEvent` log, which you can read
-back via GraphQL. Use `seq` to detect gaps.
+**A socket agent's mirrors are commands.** The mirror of a child's event is written with the event
+itself, carries `pos`, and is kept until your `COMMAND_ACK` covers it: what a child did while you
+were away is there when you are back, in order. Two things are not kept for an agent that is away,
+because they are only worth something to one that listens: `LOG`, and `PROGRESS`, whose fan-out is
+also thinned to the newest per interval. A new process is not sent its predecessor's mirrors; a
+workflow that finds its child again gets the child's events behind the `AssignResponse`.
+
+A caller that waits and hears nothing may ask (`INQUIRE_REQUEST`, see
+[agent-protocol.md](agent-protocol.md)); if the task has ended, its events are sent again.
+
+Mirrors for anyone else (a probe's events, a caller that is not a socket agent running the parent)
+are fanned out over the `task_caller_{caller_id}` channel-layer group (see
+[realtime.md](../../docs/design/realtime.md)), best effort; the persisted `TaskEvent` log is the
+durable source there.
 
 ```mermaid
 sequenceDiagram
@@ -230,14 +242,14 @@ Set it to `strict` once your HookAgents sign V1.
 
 | Send (FromAgent) | Get back (ToAgent) | Then observe (mirrors) |
 | --- | --- | --- |
-| `Register{token, session_id, name, hash, implementations, states, locks, bloks}` | `Init{agent, hash, diagnostics, inquiries}` (or `ProtocolError` + close) | — |
+| `Register{token, session_id, name, hash, implementations, states, locks, bloks}` | `Init{agent, hash, diagnostics, nonce, positions}` (or `ProtocolError` + close) | — |
 | `Shelve{ref, identifier, resource_id, label?, description?}` | nothing | `Collect{drawers}` when the server wants them dropped |
 | `Unshelve{ref, drawer}` | nothing | — |
 | `AssignRequest{reference, parent, …targeting…, args}` | `AssignResponse{task, created, error}` | `BoundEvent/Queued/Assigned/Progress/Yield/Log/…` then `CompletedEvent/Error/Critical` |
-| `CancelRequest{task, auto_interrupt?}` | `ControlResponse{accepted, error}` | `CancellingEvent` → `CancelledEvent` (or escalated → `InterruptedEvent`) |
-| `InterruptRequest{task}` | `ControlResponse` | `InterruptingEvent` → `InterruptedEvent` |
-| `PauseRequest{task}` | `ControlResponse` | `PausingEvent` → `PausedEvent` |
-| `ResumeRequest{task, step?}` | `ControlResponse` | `ResumingEvent` → `ResumedEvent` |
+| `CancelRequest{task, auto_interrupt?}` | nothing (HTTP: `ControlResponse`) | `CancellingEvent` → `CancelledEvent` (or escalated → `InterruptedEvent`) |
+| `InterruptRequest{task}` | nothing (HTTP: `ControlResponse`) | `InterruptingEvent` → `InterruptedEvent` |
+| `PauseRequest{task}` | nothing (HTTP: `ControlResponse`) | `PausingEvent` → `PausedEvent` |
+| `ResumeRequest{task, step?}` | nothing (HTTP: `ControlResponse`) | `ResumingEvent` → `ResumedEvent` |
 
 ### Signals from hub services
 
@@ -260,6 +272,6 @@ a resend with the same `id` is a no-op. Matching it to triggers and firing them 
 `PROBE_REQUEST` fires an ephemeral probe under the requesting agent's own identity
 (the socket twin of the GraphQL `probe` mutation); the backend answers with
 `PROBE_RESPONSE` (`probe` id or `error`). The probe's events then stream back as the
-usual `…Event` mirrors whose `task` is the `p-…` probe id and whose `event`/`seq` come
+usual `…Event` mirrors whose `task` is the `p-…` probe id and whose `event` comes
 from the per-probe counter. Probe frames (Assign/Cancel/Pause/Resume) ride a priority
-lane: they jump the agent's queued task backlog and are LIFO among themselves.
+lane: they jump the agent's commands, carry no position, and go in the order they were given.

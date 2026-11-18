@@ -104,6 +104,32 @@ fn level(level: Option<&str>) -> LogLevel {
     }
 }
 
+/// The kinds [`build_execution_event`] has a mirror for: what a caller is told of. Whoever
+/// keeps an event for its caller (`persist::transitions::insert_event`) keeps only these.
+pub const MIRRORED_KINDS: &[&str] = &[
+    "PROGRESS",
+    "YIELD",
+    "LOG",
+    "FAILED",
+    "CRITICAL",
+    "LOST",
+    "COMPLETED",
+    "BOUND",
+    "QUEUED",
+    "STARTED",
+    "DELEGATE",
+    "CANCELLING",
+    "CANCELLED",
+    "INTERRUPTING",
+    "INTERRUPTED",
+    "PAUSING",
+    "PAUSED",
+    "RESUMING",
+    "RESUMED",
+    "HELD",
+    "DENIED",
+];
+
 /// The mirror of `event`, or `None` for a kind that is not forwarded (`UNASSIGN`, unknown).
 pub fn build_execution_event(event: &EventLike) -> Option<ToAgent> {
     let base = ExecutionEvent {
@@ -244,6 +270,22 @@ mod tests {
             ..event
         };
         assert!(build_execution_event(&unassign).is_none());
+    }
+
+    #[test]
+    fn every_kind_kept_for_a_caller_has_a_mirror() {
+        for kind in MIRRORED_KINDS {
+            let event = EventLike {
+                id: 1,
+                task: "1".into(),
+                kind: (*kind).into(),
+                ..EventLike::default()
+            };
+            assert!(
+                build_execution_event(&event).is_some(),
+                "{kind} has no mirror"
+            );
+        }
     }
 
     #[test]

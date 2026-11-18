@@ -32,16 +32,15 @@ pub struct StateUpdateEvent {
     pub state: i64,
 }
 
-/// `PatchEvent`: the whole patch, so subscribers need not re-fetch it.
+/// `PatchEvent`: one update of a state, whole, so subscribers need not re-fetch it. `ops` are
+/// its RFC 6902 operations, to be applied in order and together.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PatchEvent {
     pub create: i64,
     pub state: i64,
     pub agent: Option<i64>,
     pub interface: String,
-    pub op: String,
-    pub path: String,
-    pub value: Value,
+    pub ops: Value,
     pub global_rev: i64,
     pub session: Option<i64>,
     #[serde(serialize_with = "optional_datetime")]

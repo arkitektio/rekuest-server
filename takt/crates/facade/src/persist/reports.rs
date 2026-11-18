@@ -7,13 +7,13 @@
 //! stream events (log / yield / progress) never move `latest_event_kind`.
 
 use chrono::Utc;
-use serde_json::Value;
+use sqlx::PgConnection;
 
 use crate::context::Context;
 use crate::messages::{AgentFrame, FromAgent, LogLevel};
 use crate::persist::positions::{is_numbered, position_stamp};
 use crate::persist::transitions::{self, Claim, NewEvent, TaskRow, TASK_ROW};
-use crate::persist::PersistResult;
+use crate::persist::{run_after, After, InTxResult, PersistResult};
 use crate::signals;
 
 /// Whether an Assign for this task is still worth delivering (`is_task_open`): only a task that
@@ -34,6 +34,16 @@ pub async fn is_task_open(ctx: &Context, task: &str) -> bool {
 /// The task, if it is this agent's; the first report stamps `picked_up_at` (`_agent_task`).
 /// `None` for an unknown task or another agent's: the frame is dropped, the transport stays.
 pub async fn agent_task(ctx: &Context, agent: i64, task: &str) -> PersistResult<Option<TaskRow>> {
+    let mut conn = ctx.db.acquire().await?;
+    Ok(agent_task_in(&mut conn, agent, task).await?)
+}
+
+/// [`agent_task`] on a connection of the caller's (inside its transaction).
+pub async fn agent_task_in(
+    conn: &mut PgConnection,
+    agent: i64,
+    task: &str,
+) -> Result<Option<TaskRow>, sqlx::Error> {
     let Ok(id) = task.parse::<i64>() else {
         tracing::warn!(
             agent,
@@ -47,7 +57,7 @@ pub async fn agent_task(ctx: &Context, agent: i64, task: &str) -> PersistResult<
     ))
     .bind(id)
     .bind(agent)
-    .fetch_optional(&ctx.db)
+    .fetch_optional(&mut *conn)
     .await?;
     let Some(mut row) = row else {
         tracing::warn!(
@@ -64,7 +74,7 @@ pub async fn agent_task(ctx: &Context, agent: i64, task: &str) -> PersistResult<
         )
         .bind(id)
         .bind(now)
-        .execute(&ctx.db)
+        .execute(&mut *conn)
         .await?;
         row.picked_up_at = Some(now);
     }
@@ -274,8 +284,26 @@ async fn record_event(
     kind: &str,
     event: NewEvent,
 ) -> PersistResult<bool> {
-    let Some(row) = agent_task(ctx, agent, task).await? else {
-        return Ok(false);
+    let mut tx = ctx.db.begin().await?;
+    let mut after = vec![];
+    let recorded = record_event_in(&mut tx, &mut after, agent, task, kind, event).await?;
+    tx.commit().await?;
+    run_after(ctx, after).await;
+    Ok(recorded.is_some())
+}
+
+/// [`record_event`] inside a transaction of the caller's: the task's row when the event was
+/// recorded. What to tell whoever follows is left in `after`, for once that is committed.
+async fn record_event_in(
+    conn: &mut PgConnection,
+    after: &mut Vec<After>,
+    agent: i64,
+    task: &str,
+    kind: &str,
+    event: NewEvent,
+) -> Result<Option<TaskRow>, sqlx::Error> {
+    let Some(row) = agent_task_in(&mut *conn, agent, task).await? else {
+        return Ok(None);
     };
     if row.is_done {
         if row.latest_event_kind == "LOST" && kind == "YIELD" {
@@ -283,25 +311,125 @@ async fn record_event(
                 message: Some("A result the agent reported after the task was lost.".into()),
                 ..event
             };
-            let id = transitions::insert_event(&ctx.db, row.id, "LATE_REPORT", &late).await?;
-            signals::task_event_created(ctx, id).await;
-            return Ok(false);
+            let id = transitions::insert_event(&mut *conn, row.id, "LATE_REPORT", &late).await?;
+            after.push(After::Event(id));
+            return Ok(None);
         }
         tracing::debug!(
             task,
             kind,
             "dropping an event for a task that is already done"
         );
-        return Ok(false);
+        return Ok(None);
     }
-    let id = transitions::insert_event(&ctx.db, row.id, kind, &event).await?;
-    if kind == "PROGRESS" {
+    let id = transitions::insert_event(&mut *conn, row.id, kind, &event).await?;
+    after.push(if kind == "PROGRESS" {
         // Recorded always; fanned out at most once per interval per task.
-        crate::progress_gate::progress_recorded(ctx, row.id, id).await;
+        After::Progress {
+            task: row.id,
+            event: id,
+        }
     } else {
-        signals::task_event_created(ctx, id).await;
+        After::Event(id)
+    });
+    Ok(Some(row))
+}
+
+/// Whether a frame is one of the reports a running task streams (`LOG`, `PROGRESS`, `YIELD`,
+/// `EFFECT`): what [`on_stream_report`] projects inside a transaction of its caller's.
+pub fn is_stream_report<D>(message: &FromAgent<D>) -> bool {
+    matches!(
+        message,
+        FromAgent::Log { .. }
+            | FromAgent::Progress { .. }
+            | FromAgent::Yield { .. }
+            | FromAgent::Effect { .. }
+    )
+}
+
+/// Project one of a running task's stream reports inside a transaction of the caller's, so it
+/// is recorded with the position that counts it (`message_router`). What to tell whoever
+/// follows is left in `after`.
+pub async fn on_stream_report(
+    conn: &mut PgConnection,
+    after: &mut Vec<After>,
+    agent: i64,
+    frame: &AgentFrame,
+) -> InTxResult<()> {
+    let stamp = position_stamp(frame);
+    match &frame.message {
+        FromAgent::Log {
+            task,
+            message,
+            level,
+        } => {
+            let event = NewEvent {
+                message: Some(message.clone()),
+                level: Some(level_name(*level)),
+                ..NewEvent::stamped(stamp)
+            };
+            record_event_in(conn, after, agent, task, "LOG", event).await?;
+        }
+        FromAgent::Progress {
+            task,
+            progress,
+            message,
+        } => {
+            let event = NewEvent {
+                progress: progress.map(i64::from),
+                message: message.clone(),
+                ..NewEvent::stamped(stamp)
+            };
+            record_event_in(conn, after, agent, task, "PROGRESS", event).await?;
+        }
+        FromAgent::Yield { task, returns } => {
+            let event = NewEvent {
+                returns: Some(returns.clone()),
+                ..NewEvent::stamped(stamp)
+            };
+            let recorded = record_event_in(&mut *conn, after, agent, task, "YIELD", event).await?;
+            // A higher-order child's yield is its wrapper's too, written with it.
+            if let Some(row) = recorded.filter(|row| row.is_higher_order_child) {
+                if let Some((wrapper, event)) =
+                    transitions::unfold_yield_in(conn, row.id, returns).await?
+                {
+                    after.push(After::TaskSaved(wrapper));
+                    after.extend(event.map(After::Event));
+                }
+            }
+        }
+        FromAgent::Effect {
+            task,
+            effect,
+            value,
+            key,
+        } => {
+            // The value already recorded under a key stands.
+            if let (Some(key), Ok(task_id)) = (key.as_deref(), task.parse::<i64>()) {
+                let recorded: bool = sqlx::query_scalar(
+                    "SELECT EXISTS (SELECT 1 FROM facade_taskevent WHERE task_id = $1 AND kind = 'EFFECT' AND key = $2)",
+                )
+                .bind(task_id)
+                .bind(key)
+                .fetch_one(&mut *conn)
+                .await?;
+                if recorded {
+                    return Ok(());
+                }
+            }
+            let event = NewEvent {
+                effect: serde_json::to_value(effect)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_owned)),
+                value: Some(value.clone()),
+                key: key.clone(),
+                ..NewEvent::stamped(stamp)
+            };
+            record_event_in(conn, after, agent, task, "EFFECT", event).await?;
+        }
+        _ => {}
     }
-    Ok(true)
+    Ok(())
 }
 
 fn level_name(level: LogLevel) -> String {
@@ -396,91 +524,14 @@ pub async fn on_report(ctx: &Context, agent: i64, frame: &AgentFrame) -> Persist
         FromAgent::Critical { task, error } => {
             finalize_from_agent(ctx, agent, frame, task, "CRITICAL", Some(error.clone())).await?
         }
-        FromAgent::Log {
-            task,
-            message,
-            level,
-        } => {
-            let event = NewEvent {
-                message: Some(message.clone()),
-                level: Some(level_name(*level)),
-                ..NewEvent::stamped(stamp)
-            };
-            record_event(ctx, agent, task, "LOG", event).await?;
+        message if is_stream_report(message) => {
+            let mut tx = ctx.db.begin().await?;
+            let mut after = vec![];
+            on_stream_report(&mut tx, &mut after, agent, frame).await?;
+            tx.commit().await?;
+            run_after(ctx, after).await;
         }
-        FromAgent::Progress {
-            task,
-            progress,
-            message,
-        } => {
-            let event = NewEvent {
-                progress: progress.map(i64::from),
-                message: message.clone(),
-                ..NewEvent::stamped(stamp)
-            };
-            record_event(ctx, agent, task, "PROGRESS", event).await?;
-        }
-        FromAgent::Yield { task, returns } => {
-            let event = NewEvent {
-                returns: Some(returns.clone()),
-                ..NewEvent::stamped(stamp)
-            };
-            if record_event(ctx, agent, task, "YIELD", event).await? {
-                transitions::unfold_to_higher_order(
-                    ctx,
-                    task.parse().unwrap_or_default(),
-                    "YIELD",
-                    Some(returns),
-                    None,
-                    None,
-                )
-                .await?;
-            }
-        }
-        FromAgent::Effect {
-            task,
-            effect,
-            value,
-            key,
-        } => on_agent_effect(ctx, agent, task, effect, value, key.as_deref(), stamp).await?,
         _ => return Ok(false),
     }
     Ok(true)
-}
-
-/// A value the task took from outside itself, kept at its step for a later replay
-/// (`on_agent_effect`): the value already recorded under a key stands.
-async fn on_agent_effect(
-    ctx: &Context,
-    agent: i64,
-    task: &str,
-    effect: &crate::messages::EffectKind,
-    value: &Value,
-    key: Option<&str>,
-    stamp: crate::persist::positions::Stamp,
-) -> PersistResult<()> {
-    if let (Some(key), Ok(task_id)) = (key, task.parse::<i64>()) {
-        let recorded: bool = sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM facade_taskevent WHERE task_id = $1 AND kind = 'EFFECT' AND key = $2)",
-        )
-        .bind(task_id)
-        .bind(key)
-        .fetch_one(&ctx.db)
-        .await?;
-        if recorded {
-            return Ok(());
-        }
-    }
-    let event = NewEvent {
-        effect: serde_json::to_value(effect)
-            .ok()
-            .and_then(|v| v.as_str().map(str::to_owned)),
-        value: Some(value.clone()),
-        key: key.map(str::to_owned),
-        ..NewEvent::stamped(stamp)
-    };
-    match record_event(ctx, agent, task, "EFFECT", event).await {
-        Err(crate::persist::PersistError::Refused(_)) => Ok(()), // another backend recorded it first
-        other => other.map(|_| ()),
-    }
 }

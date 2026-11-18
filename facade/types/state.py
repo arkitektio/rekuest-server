@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING, cast
 
 import strawberry
 import strawberry_django
@@ -52,20 +53,31 @@ class State:
         return build_prescoped_queryset(info, queryset, field="agent__organization")
 
 
-@strawberry.type
+@strawberry.type(description="One RFC 6902 operation of a state update.")
 class JSONPatch:
     op: enums.JSONPatchOperation
     path: str
-    value: scalars.Args
+    value: scalars.Args | None = strawberry.field(default=None, description="What the operation sets; nothing for a `remove`.")
+
+    @classmethod
+    def of(cls, ops: "Sequence[Mapping[str, object]]") -> "list[JSONPatch]":
+        """The operations of an update as it is stored."""
+        return [
+            cls(
+                op=enums.JSONPatchOperation(str(op.get("op"))),
+                path=str(op.get("path") or ""),
+                value=cast("scalars.Args | None", op.get("value")),
+            )
+            for op in ops
+        ]
 
 
-@strawberry_django.type(models.Patch)
+@strawberry_django.type(
+    models.Patch,
+    description="One update of a state: what takes it from one revision to the next. Its operations are applied in order and together.",
+)
 class Patch:
     id: strawberry.ID
-    op: str
-    path: str
-    value: scalars.Args
-    old_value: scalars.Args | None = strawberry_django.field(description="The value the patch replaced, when the agent reported it.")
     timestamp: datetime.datetime
     lifecycle: str | None = strawberry_django.field(
         description="Where in a task's or the agent's life the change was made, when not in its ordinary course: `cleanup` (a task being stopped, on its way out) or `shutdown` (the agent's shutdown hooks). Said by the agent's runtime."
@@ -98,9 +110,10 @@ class Patch:
     state: State
     interface: str
 
-    @strawberry.field
-    def patch(self) -> JSONPatch:
-        return JSONPatch(op=enums.JSONPatchOperation(self.op), path=self.path, value=self.value)
+    @strawberry.field(description="What the update does, as RFC 6902 operations: apply them in order, and all of them before showing the state.")
+    def ops(self) -> list[JSONPatch]:
+        row = row_of(self, models.Patch)
+        return JSONPatch.of(row.ops)
 
     @classmethod
     def get_queryset(cls, queryset: QuerySet[models.Patch], info: Info, **kwargs: object) -> QuerySet[models.Patch]:

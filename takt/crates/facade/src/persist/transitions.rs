@@ -8,7 +8,7 @@
 
 use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{PgConnection, PgPool};
 
 use crate::context::Context;
 use crate::signals;
@@ -107,6 +107,13 @@ impl NewEvent {
 ///
 /// A report is one event: the event of a report sent again (same task, journal session and
 /// position) is the one already there, and its id is what comes back. Nothing is written then.
+///
+/// And the same statement keeps the event for the agent that asked for the task, when a socket
+/// agent's running task did: a row in its commands that names the event
+/// (`consumers::agent_queue`). An event and its way to whoever waits for it are one write, so
+/// no caller is left waiting for an end that was recorded. `PROGRESS` is the exception: its
+/// fan-out is thinned (`progress_gate`), and what is thinned is decided after the commit
+/// (`signals::task_event_created`). A `LOG` is only kept for an agent that listens.
 pub async fn insert_event(
     executor: impl sqlx::PgExecutor<'_>,
     task: i64,
@@ -130,6 +137,18 @@ pub async fn insert_event(
                    latest_returns = CASE WHEN event.kind = 'YIELD' THEN event.returns ELSE t.latest_returns END
               FROM event
              WHERE t.id = event.task_id
+         ), mirrored AS (
+            INSERT INTO facade_command (agent_id, kind, task, event)
+            SELECT pa.id, 'EVENT', event.task_id, event.id
+              FROM event
+              JOIN facade_task t ON t.id = event.task_id
+              JOIN facade_task p ON p.id = t.parent_id AND p.is_done = false
+              JOIN facade_caller c ON c.id = t.caller_id
+              JOIN facade_agent pa ON pa.id = p.agent_id AND pa.kind <> 'WEBHOOK'
+                   AND pa.client_id = c.client_id AND pa.user_id = c.user_id
+                   AND pa.organization_id = c.organization_id
+             WHERE event.kind = ANY($15) AND event.kind <> 'PROGRESS'
+               AND (event.kind <> 'LOG' OR pa.connected)
          )
          SELECT id FROM event
          UNION ALL
@@ -156,6 +175,7 @@ pub async fn insert_event(
     .bind(event.value.as_ref().map(sqlx::types::Json))
     .bind(event.delegated_to)
     .bind(&event.agent_session)
+    .bind(crate::caller_events::MIRRORED_KINDS)
     .fetch_one(executor)
     .await
 }
@@ -163,7 +183,7 @@ pub async fn insert_event(
 /// Move a task's `latest_event_kind` (and, `done`, finish it), bumping `revision` and
 /// `updated_at` in the database, as every `Task.save()` does.
 pub async fn update_task_kind(
-    tx: &mut Transaction<'_, Postgres>,
+    conn: &mut PgConnection,
     task: i64,
     kind: &str,
     done: bool,
@@ -179,7 +199,7 @@ pub async fn update_task_kind(
     .bind(task)
     .bind(kind)
     .bind(done)
-    .execute(&mut **tx)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }
@@ -220,41 +240,8 @@ impl<'a> Claim<'a> {
 /// else handled it. On a win, the task and its event are fanned out after the commit.
 pub async fn claim(ctx: &Context, task: i64, claim: Claim<'_>) -> Result<bool, sqlx::Error> {
     let mut tx = ctx.db.begin().await?;
-    let lock = if claim.skip_locked {
-        "FOR UPDATE SKIP LOCKED"
-    } else {
-        "FOR UPDATE"
-    };
-    let row: Option<TaskRow> = sqlx::query_as(&format!(
-        "SELECT {TASK_ROW} FROM facade_task WHERE id = $1 {lock}"
-    ))
-    .bind(task)
-    .fetch_optional(&mut *tx)
-    .await?;
-    let Some(row) = row else {
+    let Some(event) = claim_in(&mut tx, task, &claim).await? else {
         return Ok(false);
-    };
-    if row.is_done
-        || claim
-            .skip_if_kind
-            .is_some_and(|kind| row.latest_event_kind == kind)
-    {
-        return Ok(false);
-    }
-    if claim.only_if.is_some_and(|only_if| !only_if(&row)) {
-        return Ok(false);
-    }
-    update_task_kind(&mut tx, task, claim.to_kind, claim.mark_done).await?;
-    if let Some(extra) = claim.extra {
-        sqlx::query(&format!("UPDATE facade_task SET {extra} WHERE id = $1"))
-            .bind(task)
-            .bind(Utc::now())
-            .execute(&mut *tx)
-            .await?;
-    }
-    let event = match &claim.event {
-        Some(event) => Some(insert_event(&mut *tx, task, claim.to_kind, event).await?),
-        None => None,
     };
     tx.commit().await?;
     signals::task_saved(ctx, task, false).await;
@@ -265,6 +252,51 @@ pub async fn claim(ctx: &Context, task: i64, claim: Claim<'_>) -> Result<bool, s
         crate::holds::settle_held_children(ctx, task).await?;
     }
     Ok(true)
+}
+
+/// [`claim`] inside a transaction of the caller's: `None` when the claim was lost, else the
+/// event it wrote (if it writes one). Whoever commits fans the task and that event out.
+pub async fn claim_in(
+    conn: &mut PgConnection,
+    task: i64,
+    claim: &Claim<'_>,
+) -> Result<Option<Option<i64>>, sqlx::Error> {
+    let lock = if claim.skip_locked {
+        "FOR UPDATE SKIP LOCKED"
+    } else {
+        "FOR UPDATE"
+    };
+    let row: Option<TaskRow> = sqlx::query_as(&format!(
+        "SELECT {TASK_ROW} FROM facade_task WHERE id = $1 {lock}"
+    ))
+    .bind(task)
+    .fetch_optional(&mut *conn)
+    .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    if row.is_done
+        || claim
+            .skip_if_kind
+            .is_some_and(|kind| row.latest_event_kind == kind)
+    {
+        return Ok(None);
+    }
+    if claim.only_if.is_some_and(|only_if| !only_if(&row)) {
+        return Ok(None);
+    }
+    update_task_kind(&mut *conn, task, claim.to_kind, claim.mark_done).await?;
+    if let Some(extra) = claim.extra {
+        sqlx::query(&format!("UPDATE facade_task SET {extra} WHERE id = $1"))
+            .bind(task)
+            .bind(Utc::now())
+            .execute(&mut *conn)
+            .await?;
+    }
+    Ok(Some(match &claim.event {
+        Some(event) => Some(insert_event(&mut *conn, task, claim.to_kind, event).await?),
+        None => None,
+    }))
 }
 
 /// The wrapper's returns for a child's (`higher_order.project_returns`).
@@ -365,6 +397,44 @@ pub async fn unfold_to_higher_order(
     )
     .await?;
     Ok(())
+}
+
+/// A higher-order child yielded: re-emit the mapped yield on its wrapper, inside the transaction
+/// that recorded the child's ([`unfold_to_higher_order`] for a `YIELD`, without a commit of its
+/// own). The wrapper and the event to fan out once that transaction commits, if there is one.
+pub async fn unfold_yield_in(
+    conn: &mut PgConnection,
+    child: i64,
+    returns: &Map<String, Value>,
+) -> Result<Option<(i64, Option<i64>)>, sqlx::Error> {
+    let parent: Option<(i64, Option<i64>, Option<sqlx::types::Json<Value>>)> = sqlx::query_as(
+        "SELECT p.id, i.higher_order_for_id, i.higher_order_config
+           FROM facade_task c JOIN facade_task p ON p.id = c.parent_id
+           LEFT JOIN facade_implementation i ON i.id = p.implementation_id
+          WHERE c.id = $1",
+    )
+    .bind(child)
+    .fetch_optional(&mut *conn)
+    .await?;
+    let Some((parent, Some(_), config)) = parent else {
+        return Ok(None); // not a higher-order child
+    };
+    let config = config.map(|c| c.0).unwrap_or(Value::Null);
+    let event = NewEvent {
+        delegated_to: Some(child),
+        returns: project_returns(&config, Some(returns)),
+        ..NewEvent::default()
+    };
+    let claimed = claim_in(
+        conn,
+        parent,
+        &Claim {
+            event: Some(event),
+            ..Claim::to("YIELD")
+        },
+    )
+    .await?;
+    Ok(claimed.map(|event| (parent, event)))
 }
 
 /// How [`finalize_terminal`] may lose its claim, and what else it sets (its keyword arguments).

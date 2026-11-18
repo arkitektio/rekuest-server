@@ -128,66 +128,57 @@ async fn latest(ctx: &Context, task: i64) -> (String, bool, i64) {
 }
 
 #[tokio::test]
-async fn positions_claim_once_skip_resends_and_release_on_failure() {
+async fn a_position_moves_with_its_transaction_and_only_in_order() {
     let Some(ctx) = context().await else { return };
     let (agent, _) = agent(&ctx).await;
-    let session = format!("js-{}", uuid::Uuid::new_v4());
-
-    assert_eq!(
-        positions::claim_position(&ctx.db, agent, &session, 1)
-            .await
-            .unwrap(),
-        Position::Project
-    );
-    positions::confirm_position(&ctx.db, agent, &session, 1)
+    let name = format!("js-{}", uuid::Uuid::new_v4());
+    let mut conn = ctx.db.acquire().await.unwrap();
+    let session = positions::session_row(&mut conn, agent, &name)
         .await
         .unwrap();
+
     assert_eq!(
-        positions::claim_position(&ctx.db, agent, &session, 1)
-            .await
-            .unwrap(),
+        positions::advance(&mut conn, session, 1).await.unwrap(),
+        Position::Project
+    );
+    assert_eq!(
+        positions::advance(&mut conn, session, 1).await.unwrap(),
         Position::Duplicate
     );
 
     // A gap: 3 arrives before 2 and is not taken. Only the agent saying 2 is gone passes it over.
     assert_eq!(
-        positions::claim_position(&ctx.db, agent, &session, 3)
-            .await
-            .unwrap(),
+        positions::advance(&mut conn, session, 3).await.unwrap(),
         Position::Gap { expected: 2 }
     );
-    assert!(!positions::skip_positions(&ctx.db, agent, &session, 3, 3)
+    assert!(!positions::skip_positions(&mut conn, agent, &name, 3, 3)
         .await
         .unwrap());
-    assert!(positions::skip_positions(&ctx.db, agent, &session, 2, 2)
+    assert!(positions::skip_positions(&mut conn, agent, &name, 2, 2)
         .await
         .unwrap());
+
+    // A projection that fails takes the position back with it: the resend projects it.
+    let mut tx = ctx.db.begin().await.unwrap();
     assert_eq!(
-        positions::claim_position(&ctx.db, agent, &session, 3)
-            .await
-            .unwrap(),
+        positions::advance(&mut tx, session, 3).await.unwrap(),
         Position::Project
     );
-    positions::release_position(&ctx.db, agent, &session, 3)
-        .await
-        .unwrap();
+    tx.rollback().await.unwrap();
     assert_eq!(
-        positions::projected_position(&ctx.db, agent, &session)
+        positions::projected_position(&ctx.db, agent, &name)
             .await
             .unwrap(),
         2
     );
+    let mut tx = ctx.db.begin().await.unwrap();
     assert_eq!(
-        positions::claim_position(&ctx.db, agent, &session, 3)
-            .await
-            .unwrap(),
+        positions::advance(&mut tx, session, 3).await.unwrap(),
         Position::Project
     );
-    positions::confirm_position(&ctx.db, agent, &session, 3)
-        .await
-        .unwrap();
+    tx.commit().await.unwrap();
     assert_eq!(
-        positions::projected_position(&ctx.db, agent, &session)
+        positions::projected_position(&ctx.db, agent, &name)
             .await
             .unwrap(),
         3

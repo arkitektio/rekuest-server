@@ -305,10 +305,11 @@ fn is_kept_for_its_caller(kind: &str) -> bool {
     kind != "PROGRESS" && kind != "LOG"
 }
 
-/// Hand a child's event to the agent that asked for it through that agent's own queue: kept
+/// A child's event reaches the agent that asked for it through that agent's own commands: kept
 /// while the agent is away, delivered in order, acknowledged (`consumers/agent_queue.rs`). The
-/// caller group is best effort, and whoever waits for a child that ended must hear of it.
-/// Whether the queue took it; if not, the event goes the group's way.
+/// row was written with the event (`persist::transitions::insert_event`); a `PROGRESS` that
+/// passed the gate is written here. What is left to do is wake the agent's connection.
+/// Whether the event went that way; if not, it goes the caller group's.
 async fn queue_for_calling_agent(
     ctx: &Context,
     agent: CallingAgent,
@@ -317,22 +318,19 @@ async fn queue_for_calling_agent(
     if !agent.connected && !is_kept_for_its_caller(&payload.kind) {
         return false;
     }
-    let Some(mirror) = crate::caller_events::build_execution_event(
-        &crate::caller_events::EventLike::from(payload),
-    ) else {
-        return true; // a kind no caller is told of: the group would drop it too
-    };
-    let mut redis = ctx.redis.clone();
-    let frame = crate::transport::frame_text(mirror);
-    match crate::consumers::agent_queue::push(&mut redis, &ctx.settings, agent.id, &frame, false)
-        .await
-    {
-        Ok(()) => true,
-        Err(e) => {
-            tracing::error!(agent = agent.id, event = %payload.id, "queueing a child's event for its caller failed: {e}");
-            false
+    if payload.kind == "PROGRESS" {
+        let (Ok(task), Ok(event)) = (payload.task.parse::<i64>(), payload.id.parse::<i64>()) else {
+            return false;
+        };
+        if let Err(e) =
+            crate::consumers::agent_queue::push_event(&ctx.db, agent.id, task, event).await
+        {
+            tracing::error!(agent = agent.id, event = %payload.id, "keeping a child's progress for its caller failed: {e}");
+            return false;
         }
     }
+    crate::consumers::agent_queue::wake(ctx, agent.id).await;
+    true
 }
 
 /// A task event was recorded (`task_event_post_save` → `publish_task_event`): it reaches its
@@ -445,9 +443,7 @@ struct PatchRow {
     state_id: i64,
     agent_id: Option<i64>,
     interface: String,
-    op: String,
-    path: String,
-    value: Value,
+    ops: Value,
     global_rev: i32,
     session_id: Option<i64>,
     timestamp: DateTime<Utc>,
@@ -456,10 +452,11 @@ struct PatchRow {
     qualifiers: Option<sqlx::types::Json<Vec<String>>>,
 }
 
-/// A patch was recorded (`patch_post_save`, created only): its state's and its agent's patch feeds.
+/// An update of a state was recorded (`patch_post_save`, created only): its state's and its
+/// agent's patch feeds, whole, so whoever follows applies its operations together.
 pub async fn patch_created(ctx: &Context, patch_id: i64) {
     let patch: PatchRow = match sqlx::query_as(
-        "SELECT id, state_id, agent_id, interface, op, path, value, global_rev, session_id, timestamp,
+        "SELECT id, state_id, agent_id, interface, ops, global_rev, session_id, timestamp,
                 task_id, lifecycle, qualifiers
            FROM facade_patch WHERE id = $1",
     )
@@ -485,9 +482,7 @@ pub async fn patch_created(ctx: &Context, patch_id: i64) {
             state: patch.state_id,
             agent: patch.agent_id,
             interface: patch.interface,
-            op: patch.op,
-            path: patch.path,
-            value: patch.value,
+            ops: patch.ops,
             global_rev: i64::from(patch.global_rev),
             session: patch.session_id,
             timestamp: Some(patch.timestamp),

@@ -4,33 +4,30 @@
 //! A numbering agent stamps each frame with `pos` (1, 2, 3, … per session) and `journal_session`,
 //! keeps it until a `JOURNAL_ACK` covers it, and re-sends the rest in order after a reconnect. The
 //! server keeps one watermark per session, `Session.projected_pos`: a frame at or below it is a
-//! resend and is skipped. Handling one frame is claim → project → confirm:
+//! resend and is skipped.
 //!
-//! * **claim**: a conditional UPDATE that moves `claimed_pos` to `pos` only while nothing else is
-//!   in flight (`claimed_pos = projected_pos`). Two backends that got the same frame cannot both
-//!   win; the loser waits, and a claim older than [`CLAIM_TIMEOUT`] is taken over.
-//! * **project**: the router routes the frame.
-//! * **confirm**: `projected_pos = pos`. A projection that failed releases the claim instead.
+//! **The watermark moves in the transaction that projects the frame** ([`advance`]): one
+//! conditional UPDATE, `projected_pos = pos WHERE projected_pos = pos - 1`, first in that
+//! transaction. It takes the session's row lock, so two backends that got the same frame cannot
+//! both project it: the second waits for the first to commit and then finds the position taken.
+//! A projection that fails rolls the watermark back with everything else it wrote, so the resend
+//! projects it again; one that commits is never projected twice. There is no claim to keep
+//! between the two, and nothing to take over from a backend that died in the middle.
 //!
 //! A frame beyond `projected_pos + 1` is a gap: it is not taken, and the agent is told which
 //! position is expected (`JOURNAL_NACK`). Only the agent's `JOURNAL_SKIP` moves the watermark
 //! past positions it no longer holds.
 
-use std::time::Duration;
-
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
+use sqlx::{PgConnection, PgPool};
 
 use crate::messages::{is_probe_task, AgentFrame};
-
-/// How long a claim may stay unconfirmed before another backend takes the frame over.
-pub const CLAIM_TIMEOUT: Duration = Duration::from_secs(30);
-const WAIT_POLL: Duration = Duration::from_millis(50);
 
 /// What to do with a numbered frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Position {
-    /// Claimed: project it, then [`confirm_position`] (or [`release_position`] if it failed).
+    /// The watermark is on this frame now, in the transaction it was asked in: project it there
+    /// and commit, or roll back.
     Project,
     /// At or below the watermark: already handled. Skip it; ack again.
     Duplicate,
@@ -38,12 +35,19 @@ pub enum Position {
     /// (`JOURNAL_NACK`); only its own `JOURNAL_SKIP` passes a position over.
     Gap { expected: i64 },
 }
-
 /// Whether a frame carries a session position (and is not a probe's).
+///
+/// A state update a probe caused is numbered like any other: the revisions of a state must
+/// have no holes, and neither may the positions, or every frame behind it would arrive ahead
+/// of a position that is never counted.
 pub fn is_numbered(frame: &AgentFrame) -> bool {
+    use crate::messages::FromAgent;
     frame.pos.is_some()
         && frame.journal_session.is_some()
-        && !frame.message.task().is_some_and(is_probe_task)
+        && (matches!(
+            frame.message,
+            FromAgent::StateUpdate { .. } | FromAgent::StatePatch { .. }
+        ) || !frame.message.task().is_some_and(is_probe_task))
 }
 
 /// The frame's `agent_ts` (epoch seconds) as a timestamp, if it carries one.
@@ -96,67 +100,65 @@ pub async fn get_or_create_session(
     .await
 }
 
-/// Claim the frame's position for projection, or report it a duplicate. Waits (polling) while
-/// another backend projects the preceding position or this one.
-pub async fn claim_position(
-    db: &PgPool,
+/// The id of the session row of `(agent, session_id)`, created if it does not exist. A read
+/// where the row is there, which it is for every frame but a session's first.
+pub async fn session_row(
+    conn: &mut PgConnection,
     agent: i64,
-    journal_session: &str,
+    session_id: &str,
+) -> Result<i64, sqlx::Error> {
+    let known: Option<i64> =
+        sqlx::query_scalar("SELECT id FROM facade_session WHERE agent_id = $1 AND session_id = $2")
+            .bind(agent)
+            .bind(session_id)
+            .fetch_optional(&mut *conn)
+            .await?;
+    match known {
+        Some(id) => Ok(id),
+        None => get_or_create_session(&mut *conn, agent, session_id).await,
+    }
+}
+
+/// Move the session's watermark onto `pos`, inside the transaction that will project the frame:
+/// [`Position::Project`] when it moved (the row is locked until that transaction ends), else
+/// why not. Waits while another backend's transaction holds the row.
+pub async fn advance(
+    conn: &mut PgConnection,
+    session: i64,
     pos: i64,
 ) -> Result<Position, sqlx::Error> {
-    let session = get_or_create_session(db, agent, journal_session).await?;
-    loop {
-        let current: Option<(i64, i64, Option<DateTime<Utc>>)> = sqlx::query_as(
-            "SELECT projected_pos, claimed_pos, claimed_at FROM facade_session WHERE id = $1",
-        )
-        .bind(session)
-        .fetch_optional(db)
-        .await?;
-        let Some((projected, claimed, claimed_at)) = current else {
-            return Ok(Position::Duplicate); // the agent (and its sessions) was deleted underneath us
-        };
-        if pos <= projected {
-            return Ok(Position::Duplicate);
-        }
-        let now = Utc::now();
-        let stale =
-            claimed_at.is_none_or(|at| (now - at).to_std().unwrap_or_default() > CLAIM_TIMEOUT);
-        let idle = claimed <= projected;
-        if !idle && !stale {
-            tokio::time::sleep(WAIT_POLL).await; // another backend is projecting; wait for it
-            continue;
-        }
-        if pos > projected + 1 {
-            return Ok(Position::Gap {
-                expected: projected + 1,
-            });
-        }
-        // Conditional on exactly what we read: a concurrent claim or confirm changes one of them.
-        let won = sqlx::query(
-            "UPDATE facade_session SET projected_pos = $5, claimed_pos = $6, claimed_at = $7
-              WHERE id = $1 AND projected_pos = $2 AND claimed_pos = $3 AND claimed_at IS NOT DISTINCT FROM $4",
-        )
-        .bind(session)
-        .bind(projected)
-        .bind(claimed)
-        .bind(claimed_at)
-        .bind(pos - 1)
-        .bind(pos)
-        .bind(now)
-        .execute(db)
-        .await?
-        .rows_affected();
-        if won == 1 {
-            return Ok(Position::Project);
-        }
+    let moved = sqlx::query(
+        "UPDATE facade_session SET projected_pos = $2, updated_at = now()
+          WHERE id = $1 AND projected_pos = $2 - 1",
+    )
+    .bind(session)
+    .bind(pos)
+    .execute(&mut *conn)
+    .await?
+    .rows_affected();
+    if moved == 1 {
+        return Ok(Position::Project);
     }
+    let projected: Option<i64> =
+        sqlx::query_scalar("SELECT projected_pos FROM facade_session WHERE id = $1")
+            .bind(session)
+            .fetch_optional(&mut *conn)
+            .await?;
+    Ok(match projected {
+        // The agent (and its sessions) was deleted underneath us.
+        None => Position::Duplicate,
+        Some(projected) if pos <= projected => Position::Duplicate,
+        Some(projected) => Position::Gap {
+            expected: projected + 1,
+        },
+    })
 }
 
 /// The agent no longer holds `from..=to` (`JOURNAL_SKIP`): move the watermark past them, when
 /// they cover the next position (what of them is already projected stays so); whether it did.
 /// A skip that starts beyond the next position would pass over frames nobody declared gone.
 pub async fn skip_positions(
-    db: &PgPool,
+    conn: &mut PgConnection,
     agent: i64,
     journal_session: &str,
     from: i64,
@@ -165,15 +167,15 @@ pub async fn skip_positions(
     if to < from {
         return Ok(false);
     }
-    let session = get_or_create_session(db, agent, journal_session).await?;
+    let session = session_row(&mut *conn, agent, journal_session).await?;
     let moved = sqlx::query(
-        "UPDATE facade_session SET projected_pos = $3, claimed_pos = $3, claimed_at = NULL
+        "UPDATE facade_session SET projected_pos = $3
           WHERE id = $1 AND projected_pos >= $2 AND projected_pos < $3",
     )
     .bind(session)
     .bind(from - 1)
     .bind(to)
-    .execute(db)
+    .execute(&mut *conn)
     .await?
     .rows_affected();
     Ok(moved == 1)
@@ -202,44 +204,6 @@ pub async fn projected_positions(
         positions.insert(session, projected.max(0) as u64);
     }
     Ok(positions)
-}
-
-/// The claimed frame is projected: move the watermark onto it.
-pub async fn confirm_position(
-    db: &PgPool,
-    agent: i64,
-    journal_session: &str,
-    pos: i64,
-) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "UPDATE facade_session SET projected_pos = claimed_pos
-          WHERE agent_id = $1 AND session_id = $2 AND claimed_pos = $3",
-    )
-    .bind(agent)
-    .bind(journal_session)
-    .bind(pos)
-    .execute(db)
-    .await?;
-    Ok(())
-}
-
-/// The claimed frame's projection failed: give the claim back, so the resend projects it.
-pub async fn release_position(
-    db: &PgPool,
-    agent: i64,
-    journal_session: &str,
-    pos: i64,
-) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "UPDATE facade_session SET claimed_pos = projected_pos, claimed_at = NULL
-          WHERE agent_id = $1 AND session_id = $2 AND claimed_pos = $3",
-    )
-    .bind(agent)
-    .bind(journal_session)
-    .bind(pos)
-    .execute(db)
-    .await?;
-    Ok(())
 }
 
 /// The session's watermark: what a `JOURNAL_ACK` may claim.

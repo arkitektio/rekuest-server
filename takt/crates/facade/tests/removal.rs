@@ -7,7 +7,6 @@ use std::sync::Arc;
 
 use authentikate::base_models::StaticToken;
 use facade::backend::BackendError;
-use facade::consumers::agent_queue::commands_key;
 use facade::consumers::connections::Connections;
 use facade::removal::{cleanup_actions, delete_agent, delete_implementation};
 use facade::settings::Settings;
@@ -178,10 +177,13 @@ async fn an_agent_goes_with_everything_below_it_and_only_within_its_organization
     work(&ctx, agent).await;
     let kept = work(&ctx, neighbour).await;
     // Away, with work queued for a socket that will never drain it.
-    let mut redis = ctx.redis.clone();
-    facade::consumers::agent_queue::push(&mut redis, &ctx.settings, agent, "{}", false)
-        .await
-        .unwrap();
+    facade::consumers::agent_queue::push(
+        &ctx.db,
+        agent,
+        &facade::consumers::agent_queue::NewCommand::of("{}".to_owned()),
+    )
+    .await
+    .unwrap();
     assert!(
         remains(&ctx, agent).await.len() >= 8,
         "the fixture reaches the cascade"
@@ -208,9 +210,9 @@ async fn an_agent_goes_with_everything_below_it_and_only_within_its_organization
         vec![],
         "nothing of the agent is left"
     );
-    let queued: i64 = redis::cmd("EXISTS")
-        .arg(commands_key(&ctx.settings, agent))
-        .query_async(&mut redis)
+    let queued: i64 = sqlx::query_scalar("SELECT count(*) FROM facade_command WHERE agent_id = $1")
+        .bind(agent)
+        .fetch_one(&ctx.db)
         .await
         .unwrap();
     assert_eq!(queued, 0, "its queue is dropped");

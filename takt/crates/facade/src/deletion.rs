@@ -60,6 +60,13 @@ pub async fn delete_tasks(conn: &mut PgConnection, tasks: &[i64]) -> Result<(), 
         &all,
     )
     .await?;
+    // What was kept for an agent about a task that is gone has nothing left to say.
+    exec(
+        conn,
+        "DELETE FROM facade_command WHERE task = ANY($1)",
+        &all,
+    )
+    .await?;
     exec(
         conn,
         "UPDATE facade_signal SET causing_task_id = NULL WHERE causing_task_id = ANY($1)",
@@ -612,6 +619,8 @@ pub async fn delete_agent(
         "DELETE FROM facade_snapshot WHERE agent_id = ANY($1)
             OR session_id IN (SELECT id FROM facade_session WHERE agent_id = ANY($1))",
         "DELETE FROM facade_session WHERE agent_id = ANY($1)",
+        "DELETE FROM facade_command WHERE agent_id = ANY($1)",
+        "DELETE FROM facade_commandcursor WHERE agent_id = ANY($1)",
         "DELETE FROM facade_implementation_required_locks
           WHERE lock_id IN (SELECT id FROM facade_lock WHERE agent_id = ANY($1))",
         "DELETE FROM facade_lock WHERE agent_id = ANY($1)",

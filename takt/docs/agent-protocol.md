@@ -52,7 +52,7 @@ sequenceDiagram
     participant P as register / run_session
     participant AU as authentikate
     participant PB as registration + persist::leases
-    participant Q as Redis agent queue
+    participant Q as the agent's commands (database)
 
     AG->>S: WebSocket connect
     S->>P: first_frame (connection_id)
@@ -81,11 +81,11 @@ sequenceDiagram
     end
     P-->>AG: Init{agent, hash, diagnostics, nonce, positions}
     par session tasks
-        P->>Q: drain: read after commands_seen → send at pos (COMMAND_ACK trims)
+        P->>Q: drain: number what waits, read after commands_seen → send at pos (COMMAND_ACK forgets)
         P-->>AG: heartbeat: periodic Heartbeat
     end
     loop while connected
-        AG->>P: HeartbeatAnswer / Yield / Completed / StatePatch ...
+        AG->>P: HeartbeatAnswer / Yield / Completed / StateUpdate ...
         P->>PB: message_router::route(frame)
         opt after each answered Heartbeat
             P->>PB: renew_agent_lease(agent, connection_id)
@@ -105,7 +105,8 @@ is not JSON or a frame that does not match the schema is rejected with a specifi
 
 `Register` carries `token` (identity), `force` (take over an existing connection), `session_id`
 (the per-process reclaim signal: same id on reconnect ⇒ the process survived, reclaim its in-flight
-work; a different id ⇒ a fresh process, fail-and-cascade) and the agent's **declaration** —
+work; a different id ⇒ a fresh process, fail-and-cascade), optionally `tasks` (every task the
+process holds, see "Pickup, and asking") and the agent's **declaration** —
 `name`, `hash`, `implementations`, `states`, `locks`, `bloks`, the same shapes as
 `ImplementAgentInput`. Registering *is* implementing (see the lifecycle below); a `Register`
 without a declaration only ensures the agent exists.
@@ -155,7 +156,7 @@ Register{token, force, session_id, supervisor, name, hash, implementations, stat
   → (declaration carried, hash differs) one atomic registration
       ↳ refused: ProtocolError{error} + close(AGENT_REGISTRATION_REJECTED)
   → Init{agent, hash, diagnostics, nonce, positions}
-  → SessionInit{session_id, states} → StatePatch / StateSnapshot / Lock / Unlock / … as before
+  → SessionInit{session_id, states} → StateUpdate / StateSnapshot / Lock / Unlock / … as before
 ```
 
 The declaration a `Register` carries is the socket twin of the `implementAgent` mutation and runs
@@ -165,7 +166,7 @@ undeclared ones reaped, bloks materialized. It runs *before* the lease is claime
 registration strands no lease. When `Register.hash` equals the hash the backend already holds
 nothing is reconciled (the reconnect fast path); a `Register` with no declaration at all only
 ensures the agent exists. Its `State` rows are what the state stream (`SessionInit`,
-`StatePatch`) needs, so an agent that has never registered over GraphQL can stream state.
+`StateUpdate`) needs, so an agent that has never registered over GraphQL can stream state.
 `Init.diagnostics` carries the non-fatal findings (unknown catalog operations and the like); a
 catalog mismatch or an ownership conflict aborts the whole registration and refuses the
 connection — the agent is told why in a `ProtocolError` and closed with
@@ -259,14 +260,17 @@ cannot clobber the live one's state.
 ## Heartbeats and the write-lease
 
 `heartbeat` loops: sleep the heartbeat interval (10 s), arm a waiter, send `Heartbeat`, then wait
-for the answer within the response timeout (5 s). A timeout closes the socket
-(`HEARTBEAT_NOT_RESPONDED`, 3001) — which is what handles half-open sockets, so the residual
-causes of a stuck `connected` are displacement and hard worker death, not hung TCP. Both values
-are constants (`takt/crates/rekuest-server/src/settings.rs`), not configuration.
+to hear from the agent within the response timeout (5 s). **Any frame is an answer**: a heartbeat
+asks whether the agent's loop reads and writes, and a report says so as well as a
+`HeartbeatAnswer` does. A frame that finished arriving within that same timeout before the ping counts too, since
+an agent in the middle of writing a large frame cannot answer until it is through. Only silence
+closes the socket (`HEARTBEAT_NOT_RESPONDED`, 3001), which is what handles half-open sockets, so
+the residual causes of a stuck `connected` are displacement and hard worker death, not hung TCP.
+Both values are constants (`takt/crates/rekuest-server/src/settings.rs`), not configuration.
 
-The read loop resolves the waiter itself, as soon as the `HeartbeatAnswer` is read: the answer
-does not queue behind the reports the worker is still persisting. The heartbeat task then renews
-the lease (`renew_agent_lease`, `persist/leases.rs`):
+The read loop notes every frame itself, as soon as it is read: liveness does not queue behind the
+reports the worker is still persisting. The heartbeat task then renews the lease
+(`renew_agent_lease`, `persist/leases.rs`):
 
 ```sql
 UPDATE facade_agent SET last_seen = $now
@@ -314,58 +318,63 @@ listed in [task-lifecycle.md](task-lifecycle.md).
 
 ## Task delivery — the agent's commands (kept until acknowledged)
 
-The path to a socket agent is redis (`consumers/agent_queue.rs`), **not** the channel layer, on
-purpose: a command pushed while the agent is away persists and survives the reconnect, whereas a
-group send to an empty group would be dropped. The contract is in [journal.md](journal.md)
-("Commands: the other direction"); this is how the server keeps it.
+An agent's commands are kept **in the database** (`facade_command`, `consumers/agent_queue.rs`),
+not in the channel layer and not in redis: a command written while the agent is away persists and
+survives the reconnect, and it is written in the transaction that makes it true. The contract is in
+[journal.md](journal.md) ("Commands: the other direction"); this is how the server keeps it.
 
 - **Producer:** `transport::deliver_to_agent` (`transport.rs`) is the one place that knows how to
-  reach an agent. For a WEBSOCKET agent it appends the serialized frame to the stream
-  `{prefix}:agent:{agent_id}:commands` at the next position (`agent_queue::push`: one script takes the
-  position from `…:command_pos` and appends at it, so positions are given out in the order frames are
-  appended). A probe's frame goes to `…:priority` instead, without a position. A WEBHOOK agent gets a
-  signed POST (`hooks.rs`). Every key is built by `redis_keys.rs` under `redis.key_prefix`.
-- **Consumer:** `drain` reads both streams from where the connection stands (the `commands_seen` of
-  its `REGISTER`, then the last position it sent), a probe's frames first, stamps each command's `pos`
-  and writes it to the socket. Sending removes nothing: the agent's `COMMAND_ACK {through}` trims the
-  stream (`work` → `agent_queue::ack`). A probe's frame is forgotten once sent.
+  reach an agent. For a WEBSOCKET agent it inserts the command (`agent_queue::push`) and wakes the
+  agent's connection. The mirror of a task event is written by the statement that inserts the event
+  (`persist::transitions::insert_event`), and the answer to a numbered request with the request's
+  position (`message_router`). A probe's frame, a question and an order to a connection go to the
+  redis stream `{prefix}:agent:{id}:priority` instead, without a position. A WEBHOOK agent gets a
+  signed POST (`hooks.rs`).
+- **Consumer:** `drain` numbers what waits (`agent_queue::number`: only the connection holding the
+  lease gives positions), reads the commands after where the connection stands (the
+  `commands_seen` of its `REGISTER`, then the last position it sent), stamps each command's `pos`
+  and writes it to the socket; what is on the priority lane goes first. Sending removes nothing:
+  the agent's `COMMAND_ACK {through}` deletes what it covers (`agent_queue::ack`). When nothing
+  waits it blocks on redis for a wake (`…:wake`, written after a command's commit); a wake that got
+  lost, or a redis that is down, costs a few seconds, never a command.
 
 So a command is delivered **at least once on the wire and handled once by the agent**, which skips a
-position it has seen. What the old list-and-processing-list pair could not do: a frame written into a
-half-dead connection is still there, because only the agent's word removes it.
+position it has seen.
 
 The drain is the *only* way work reaches an agent, while liveness is decided by the heartbeat loop
 next to it, so it must never stop on its own:
 
-- a **redis failure** is survived: reopen, back off, continue from the same position (and make sure
-  numbering has not fallen behind what the agent has seen, should redis have lost its data);
+- a **database or redis failure** is survived: back off, continue from the same position;
 - a **socket write failure** closes the connection (`AGENT_TRANSPORT_FAILED_CODE`, 3005); nothing was
   forgotten, so the next connection sends it again;
 - a **displaced** connection stops draining the moment it is told (`Control::Displace`), and asks
-  `holds_lease(agent, connection_id)` before every send: what it has not sent is the new holder's;
-- an Assign whose task the server has **already finalized** (`is_stale_assign` →
-  `reports::is_task_open`) is not sent; the next acknowledgement trims it with the rest.
+  `holds_lease(agent, connection_id)` before every round: what it has not sent is the new holder's;
+- an Assign whose task the server has **already finalized** is passed over at its position; the
+  next acknowledgement forgets it with the rest.
 
-A process that registers anew (`commands_seen` 0) is sent every command its predecessor never
-acknowledged, behind the same fences. A task sent again has the assign it was first given
-withdrawn (`agent_queue::withdraw_assigns`), so only the one that says how to go on arrives.
+A process that registers anew (`commands_seen` 0, another `session_id`) is sent only the work its
+predecessor never picked up, and what steers that: the rest was its predecessor's alone and is
+dropped at the takeover (`agent_queue::trim_for_new_process`). A task sent again has the assign it
+was first given withdrawn (`agent_queue::withdraw_assigns`), so only the one that says how to go on
+arrives.
 
 `BOUNCE` and `KICK` are not commands: they are orders to the connection there is now
-(`transport::order_connection`), sent on the probes' lane without a position, and dropped by a
+(`transport::order_connection`), sent on the priority lane without a position, and dropped by a
 drain that began after they were given.
 
 An acknowledgement is acted on only by the connection that holds the lease, and the pickup it
-means is recorded before the stream is trimmed. So an assign that is neither picked up nor in the
-stream never arrived (the push was lost, or redis's data was), and its task ends `LOST`
-(`reconcile_unreachable_assigns`): it would wait for ever otherwise.
+means is recorded in the statement that forgets the command. So an assign that is neither picked up
+nor among the commands never was written (the process died between the task's commit and the
+command's), and its task ends `LOST` (`reconcile_unreachable_assigns`): it would wait for ever
+otherwise.
 
 ### Pickup, and asking
 
 For a socket agent the **acknowledgement is the pickup**: when a `COMMAND_ACK` covers an `ASSIGN`,
-the task's `picked_up_at` is set (`agent_protocol.rs`, `picked_up`). Nothing is ever sent a second
-time as a new command, and there is no deadline on a socket agent's pickup: the assign waits in
-the stream until the agent has it. An assign that cannot be queued at all (redis failed) ends the
-task `LOST` there and then (`backend::dispatch`). Trying again is the caller's to decide, never the
+the task's `picked_up_at` is set (`agent_queue::ack`). Nothing is ever sent a second
+time as a new command, and there is no deadline on a socket agent's pickup: the assign waits
+among the commands until the agent has it. An assign that cannot be kept at all (the database
+failed) ends the task `LOST` there and then (`backend::dispatch`). Trying again is the caller's to decide, never the
 server's.
 
 What became of an acknowledged task is the agent's to report and the caller's to **ask**
@@ -385,8 +394,15 @@ What became of an acknowledged task is the agent's to report and the caller's to
 - One answer is acted on: **`UNKNOWN` from the agent the task was given to ends the task `LOST`**,
   unless the task was given anew while the question was out. Everything else goes back to whoever
   asked, untouched.
-- An agent that comes back with the session it had is asked about what it had under way, the same
-  way (`ask_about`). `INIT` carries no list of inquiries any more.
+- **A task that ended while its caller still asks is told again.** When the answer to an
+  `INQUIRE_REQUEST` is `ENDED`, the end did not reach whoever assigned the task: the events the
+  task recorded are kept for that agent again (`agent_queue::push_events_of`), and it drops the
+  ones it has.
+- **An agent that comes back says what it holds.** `REGISTER.tasks` lists every task of the
+  process, in whatever state (waiting, under way, ended with its report still to come). What the
+  server had under way for that process and does not find there, the agent lost: it ends `LOST`
+  during the handshake, before anything is sent. An agent that leaves `tasks` out is asked about
+  each task instead, the same way as any other question (`ask_about`).
 
 **Cancel does not escalate by itself.** A cancel arms no deadline: turning an unconfirmed cancel
 into an interrupt is the caller's decision, asked for with the cancel (`CANCEL_REQUEST`'s
@@ -423,12 +439,12 @@ socket and the HookAgent HTTP intake:
 | `Resumed` | `persist::reports::on_report` | non-terminal — confirms a `Resume` (→ `RESUMED`) |
 | `Held` | `holds::on_self_hold` | non-terminal — the task waits for a decision (→ `HELD`); under `AUTO` the server answers `Decide` at once (→ `DECIDED`) |
 | `Failed` / `Critical` | `persist::reports::on_report` | terminal with message |
-| `StatePatch` / `StateSnapshot` / `SessionInit` / `Lock` / `Unlock` | `persist::state::on_state` | append a `Patch`, write `Snapshot`s, initialize a `Session`, record the lock report |
+| `StateUpdate` (`StatePatch` from older agents) / `StateSnapshot` / `SessionInit` / `Lock` / `Unlock` | `persist::state::on_state_in` | append one `Patch` row for the update, write `Snapshot`s, initialize a `Session`, record the lock report |
 | `Shelve` | `registration::shelve` | upsert a `MemoryDrawer` on the agent's shelve, agent-minted; no reply |
 | `Unshelve` | `registration::unshelve` | drop the drawer if it is the agent's, by `resource_id`, else by pk; no reply |
 | `Effect` | `persist::reports::on_report` | `TaskEvent(EFFECT)`: a value the task took from outside, kept for replay (see [journal.md](journal.md)) |
 | `Inform` | `holds` | a blok shown to a person while the task goes on |
-| `CommandAck` | the worker (`agent_queue`) | records the pickup of the assigns it covers, then trims the command stream |
+| `CommandAck` | the worker (`agent_queue`) | forgets the commands it covers and records the pickup of the assigns among them, as one statement |
 | `JournalSkip` | `persist::positions` | passes over positions the agent no longer holds |
 | `InquiryAnswer` | `inquiry` | resolves the question it answers; `UNKNOWN` ends the task `LOST` |
 | `InquireRequest` | `inquiry` | asks about a task this agent assigned; answered with `InquireResponse` |
@@ -468,8 +484,8 @@ sends the close frame:
 - the fenced-lease path (`AGENT_REPLACED`), from the heartbeat's renewal or a displacement, and
 - the unanswered-heartbeat path (`HEARTBEAT_NOT_RESPONDED`).
 
-Otherwise a connection the server has just declared dead could keep popping Assigns off the
-redis queue and acking them — the exact behaviour the liveness model exists to prevent.
+Otherwise a connection the server has just declared dead could keep sending Assigns — the exact
+behaviour the liveness model exists to prevent.
 
 ## Workflows (resume, holds, guards)
 

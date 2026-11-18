@@ -121,21 +121,27 @@ pub async fn ensure(
 /// `_abandon_socket_queue`: drop what was queued for a socket that will never drain it, and let
 /// the watchdog redeliver the unpicked work over the hook (its order is gone, its tokens stale).
 async fn abandon_socket_queue(ctx: &Context, agent: i64) -> Result<(), Refusal> {
+    match agent_queue::drop_commands(&ctx.db, agent).await {
+        Ok(0) => {}
+        Ok(_) => tracing::warn!(
+            agent,
+            "Agent {agent} became a HookAgent: dropped its socket queue"
+        ),
+        Err(e) => tracing::error!(
+            agent,
+            "Could not drop the socket queue of agent {agent}: {e}"
+        ),
+    }
     let mut redis = ctx.redis.clone();
     let dropped: Result<i64, _> = redis::cmd("DEL")
         .arg(&agent_queue::keys(&ctx.settings, agent)[..])
         .query_async(&mut redis)
         .await;
-    match dropped {
-        Ok(n) if n > 0 => tracing::warn!(
+    if let Err(e) = dropped {
+        tracing::error!(
             agent,
-            "Agent {agent} became a HookAgent: dropped its socket queue"
-        ),
-        Ok(_) => {}
-        Err(e) => tracing::error!(
-            agent,
-            "Could not drop the socket queue of agent {agent}: {e}"
-        ),
+            "Could not drop the priority lane of agent {agent}: {e}"
+        );
     }
     sqlx::query("UPDATE facade_task SET dispatched_at = NULL WHERE agent_id = $1 AND NOT is_done AND picked_up_at IS NULL")
         .bind(agent)

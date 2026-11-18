@@ -19,9 +19,9 @@ class StateUpdateEvent(BaseModel):
 
 
 class PatchEvent(BaseModel):
-    """A payload-carrying patch event.
+    """A payload-carrying patch event: one update of a state.
 
-    Carries the full patch so the watch subscriptions can relay it without re-fetching
+    Carries the full update so the watch subscriptions can relay it without re-fetching
     the row per subscriber (the same treatment the task feeds got). ``create``/``state``/
     ``agent`` keep their historic id shape for consumers that still fetch.
     """
@@ -30,9 +30,7 @@ class PatchEvent(BaseModel):
     state: int = Field(..., description="The state ID related to the patch.")
     agent: int | None = Field(default=None, description="The agent ID related to the patch.")
     interface: str = Field(default="", description="The interface of the state in the agent.")
-    op: str = Field(default="", description="The patch operation (add, remove, replace, …).")
-    path: str = Field(default="", description="The path the patch applies to.")
-    value: JSON = Field(default=None, description="The patch value.")
+    ops: list[dict[str, JSON]] = Field(default_factory=list, description="The update's RFC 6902 operations (op, path, value), to be applied in order and together.")
     global_rev: int = Field(default=0, description="The global revision after this patch.")
     session: Optional[int] = Field(default=None, description="The session ID related to the patch.")
     timestamp: Optional[datetime.datetime] = Field(default=None, description="When the patch was created.")
@@ -47,9 +45,7 @@ class PatchEvent(BaseModel):
             state=p.state_id,
             agent=p.agent_id,
             interface=p.interface,
-            op=p.op,
-            path=p.path,
-            value=p.value,
+            ops=list(p.ops),
             global_rev=p.global_rev,
             session=p.session_id,
             timestamp=p.timestamp,

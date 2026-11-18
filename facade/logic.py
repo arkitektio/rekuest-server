@@ -151,12 +151,9 @@ def get_latest_state(
             latest_timestamp = snapshot.timestamp
 
         for patch in patches_qs.order_by("global_rev", "id"):
-            # Handle 'remove' operations which shouldn't have a 'value' key
-            patch_doc = {"op": patch.op, "path": patch.path}
-            if patch.op != "remove":
-                patch_doc["value"] = patch.value
+            # An update's operations apply together: all of them, or (a broken history) none.
             try:
-                current_value = jsonpatch.JsonPatch([patch_doc]).apply(current_value)
+                current_value = jsonpatch.JsonPatch(models.Patch.document(patch.ops)).apply(current_value)
             except (jsonpatch.JsonPatchException, jsonpatch.JsonPointerException, KeyError, IndexError, TypeError) as e:
                 # A patch that does not apply means the recorded history is broken (a lost or
                 # out-of-order patch). Skip it so the rest of the state still materializes, but

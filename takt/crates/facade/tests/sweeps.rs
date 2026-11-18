@@ -247,10 +247,7 @@ async fn state(ctx: &Context, task: i64) -> (String, bool) {
 
 /// The frames waiting in the agent's queue, oldest first.
 async fn queued(ctx: &Context, agent: i64) -> Vec<Value> {
-    let mut redis = ctx.redis.clone();
-    let frames = agent_queue::pending(&mut redis, &ctx.settings, agent)
-        .await
-        .unwrap();
+    let frames = agent_queue::pending(&ctx.db, agent).await.unwrap();
     frames
         .iter()
         .map(|frame| serde_json::from_str(frame).unwrap())
@@ -534,8 +531,8 @@ async fn a_socket_agents_assign_is_never_sent_a_second_time() {
 
 #[tokio::test]
 async fn an_assign_that_never_reached_the_agents_stream_ends_lost() {
-    // The push follows the task's commit, and redis may lose what it held: a task whose assign
-    // is not in its agent's stream would wait for ever. One that is there waits as long as it takes.
+    // The command follows the task's commit: a task whose assign is not among its agent's
+    // commands would wait for ever. One that is there waits as long as it takes.
     let _serial = serial().await;
     let Some(ctx) = context(settings()).await else {
         return;
@@ -545,13 +542,12 @@ async fn an_assign_that_never_reached_the_agents_stream_ends_lost() {
     let implementation = implementation(&ctx, agent, action, "PLAIN").await;
     let never_pushed = assignable(&ctx, agent, action, implementation).await;
     let waiting = assignable(&ctx, agent, action, implementation).await;
-    let mut redis = ctx.redis.clone();
     facade::consumers::agent_queue::push(
-        &mut redis,
-        &ctx.settings,
+        &ctx.db,
         agent,
-        &serde_json::json!({"type": "ASSIGN", "task": waiting.to_string()}).to_string(),
-        false,
+        &facade::consumers::agent_queue::NewCommand::of(
+            serde_json::json!({"type": "ASSIGN", "task": waiting.to_string()}).to_string(),
+        ),
     )
     .await
     .unwrap();

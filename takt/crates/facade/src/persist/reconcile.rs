@@ -407,10 +407,7 @@ async fn send_again(ctx: &Context, task: i64, again: Again) -> Result<bool, sqlx
     .await?;
     if won {
         // The assign it was first given may still wait unacknowledged: only the new one counts.
-        let mut redis = ctx.redis.clone();
-        if let Err(e) =
-            crate::consumers::agent_queue::withdraw_assigns(&mut redis, &ctx.settings, agent, task)
-                .await
+        if let Err(e) = crate::consumers::agent_queue::withdraw_assigns(&ctx.db, agent, task).await
         {
             tracing::error!(task, "withdrawing the task's earlier assign failed: {e}");
         }
@@ -737,14 +734,15 @@ pub async fn reconcile_unpicked_tasks(ctx: &Context, limit: i64) -> Result<usize
     Ok(acted)
 }
 
-/// A socket agent's assign waits in its command stream until the agent acknowledges it, however
-/// long that takes. One that is not there cannot arrive: the push after the task's commit never
-/// happened (this process died in between), or redis lost what it held. Such a task ends LOST,
-/// so that it is an outcome somebody hears of and not a wait without end
-/// (`reconcile_unreachable_assigns`). Nothing is sent again: that is its caller's to decide.
+/// A socket agent's assign waits among its commands until the agent acknowledges it, however
+/// long that takes. One that is not there cannot arrive: this process died between the task's
+/// commit and the command's. Such a task ends LOST, so that it is an outcome somebody hears of
+/// and not a wait without end (`reconcile_unreachable_assigns`). Nothing is sent again: that is
+/// its caller's to decide.
 ///
-/// Sound because a `COMMAND_ACK` records the pickup before it trims the stream: a task that is
-/// neither picked up nor in the stream was never acknowledged. Returns the number ended.
+/// Sound because a `COMMAND_ACK` records the pickup in the statement that forgets the command:
+/// a task that is neither picked up nor among the commands was never acknowledged. Returns the
+/// number ended.
 pub async fn reconcile_unreachable_assigns(
     ctx: &Context,
     limit: i64,
@@ -753,20 +751,20 @@ pub async fn reconcile_unreachable_assigns(
         return Ok(0);
     }
     let cutoff = ago(Utc::now(), ctx.settings.pickup_deadline);
-    let candidates: Vec<(i64, i64)> = sqlx::query_as(&format!(
-        "SELECT t.id, t.agent_id FROM facade_task t JOIN facade_agent a ON a.id = t.agent_id
+    let candidates: Vec<i64> = sqlx::query_scalar(&format!(
+        "SELECT t.id FROM facade_task t JOIN facade_agent a ON a.id = t.agent_id
           WHERE t.is_done = false AND t.picked_up_at IS NULL AND t.latest_event_kind = 'QUEUED'
             AND (t.dispatched_at < $1 OR (t.dispatched_at IS NULL AND t.created_at < $1))
             AND a.kind = 'WEBSOCKET'
             AND NOT {HIGHER_ORDER} AND NOT {WAITING}
+            AND NOT EXISTS (SELECT 1 FROM facade_command c
+                             WHERE c.task = t.id AND c.kind = 'ASSIGN' AND c.agent_id = t.agent_id)
           ORDER BY t.id LIMIT $2",
     ))
     .bind(cutoff)
     .bind(limit)
     .fetch_all(&ctx.db)
     .await?;
-    let mut waiting: std::collections::HashMap<i64, Option<std::collections::HashSet<i64>>> =
-        Default::default();
     let unreachable = move |row: &TaskRow| {
         row.picked_up_at.is_none()
             && row.latest_event_kind == "QUEUED"
@@ -774,21 +772,11 @@ pub async fn reconcile_unreachable_assigns(
             && row.pickup_clock() < cutoff
     };
     let mut ended = 0;
-    for (task, agent) in candidates {
-        if let std::collections::hash_map::Entry::Vacant(unread) = waiting.entry(agent) {
-            unread.insert(assigns_waiting(ctx, agent).await);
-        }
-        // A stream that could not be read says nothing: the next sweep asks again.
-        let Some(Some(assigns)) = waiting.get(&agent) else {
-            continue;
-        };
-        if assigns.contains(&task) {
-            continue;
-        }
+    for task in candidates {
         if transitions::finalize_lost(
             ctx,
             task,
-            "Its assign never reached its agent's queue, so the agent could not have been given it.",
+            "Its assign never reached its agent's commands, so the agent could not have been given it.",
             false,
             Some(&unreachable),
             true,
@@ -799,32 +787,6 @@ pub async fn reconcile_unreachable_assigns(
         }
     }
     Ok(ended)
-}
-
-/// The tasks whose `ASSIGN` waits in an agent's command stream; `None` when redis did not say.
-async fn assigns_waiting(ctx: &Context, agent: i64) -> Option<std::collections::HashSet<i64>> {
-    let mut redis = ctx.redis.clone();
-    let frames =
-        match crate::consumers::agent_queue::pending(&mut redis, &ctx.settings, agent).await {
-            Ok(frames) => frames,
-            Err(e) => {
-                tracing::error!(agent, "reading the agent's command stream failed: {e}");
-                return None;
-            }
-        };
-    Some(
-        frames
-            .iter()
-            .filter(|frame| frame.contains("\"ASSIGN\""))
-            .filter_map(|frame| serde_json::from_str::<serde_json::Value>(frame).ok())
-            .filter(|raw| raw.get("type").and_then(serde_json::Value::as_str) == Some("ASSIGN"))
-            .filter_map(|raw| match raw.get("task") {
-                Some(serde_json::Value::String(task)) => task.parse().ok(),
-                Some(serde_json::Value::Number(task)) => task.as_i64(),
-                _ => None,
-            })
-            .collect(),
-    )
 }
 
 /// Claim one due delayed task for its first dispatch, under the row lock (`_claim_due_sync`):

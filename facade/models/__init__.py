@@ -16,6 +16,8 @@ from .action import (
 )
 from .agent import (
     Agent,
+    Command,
+    CommandCursor,
     Lock,
     MemoryDrawer,
     MemoryShelve,
@@ -102,6 +104,8 @@ __all__ = [
     # agent
     "Lock",
     "Agent",
+    "Command",
+    "CommandCursor",
     "MemoryShelve",
     "MemoryDrawer",
     # implementation

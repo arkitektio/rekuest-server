@@ -16,7 +16,7 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
 use futures::{SinkExt, StreamExt};
@@ -25,15 +25,15 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::caller_events::{build_execution_event, mirror_of_channel_message, EventLike};
 use crate::codes;
-use crate::consumers::agent_queue::{self, AgentQueue, Queued};
+use crate::consumers::agent_queue::{self, Lane};
 use crate::consumers::connections::Control;
 use crate::context::Context;
 use crate::message_router;
 use crate::messages::{
     AgentFrame, Diagnostic, FromAgent, ToAgent, ToAgentFrame, FEATURE_PROTOCOL_2,
 };
+use crate::persist::positions;
 use crate::persist::{caller_ops, leases, reconcile};
-use crate::persist::{positions, reports};
 use crate::probes;
 use crate::registration;
 use rekuest_core::inputs::ImplementAgentInputModel;
@@ -111,8 +111,8 @@ pub struct Registered {
     pub session_id: Option<String>,
     /// The highest command position the agent's process has handled.
     pub commands_seen: u64,
-    /// The tasks the agent had under way when its last connection ended: asked about, now
-    /// that it is back.
+    /// The tasks the agent had under way when its last connection ended, for an agent that
+    /// did not say what it holds: asked about, now that it is back.
     pub inquiries: Vec<i64>,
     /// This connection's channel in the caller group, and what arrives on it.
     pub mirror: Mirror,
@@ -231,6 +231,7 @@ async fn first_frame(
         nonce,
         commands_seen,
         sessions,
+        tasks,
         declaration,
     } = frame.message
     else {
@@ -250,6 +251,8 @@ async fn first_frame(
             nonce,
             commands_seen,
             sessions,
+            // Probes are not tasks the server keeps: only what it could have under way.
+            tasks: tasks.map(|tasks| tasks.iter().filter_map(|task| task.parse().ok()).collect()),
         },
         &declaration,
     )
@@ -261,6 +264,9 @@ struct Handshake {
     nonce: Option<String>,
     commands_seen: u64,
     sessions: Vec<String>,
+    /// Every task the process holds, in whatever state (waiting, running, ended with its
+    /// report still to come). None from an agent that does not say: it is asked instead.
+    tasks: Option<Vec<i64>>,
 }
 
 /// Parse a frame, refusing what is not JSON (3002) or not a frame (3003, with the reason).
@@ -417,13 +423,50 @@ async fn register(
     if claim.displaced_incumbent {
         ctx.connections.kick_others(agent, connection_id);
     }
-    // A fresh process took over: its predecessor's in-flight work is orphaned. It ends LOST (a
-    // workflow is sent again, into the queue the drain is about to deliver) before `INIT`.
+    // A fresh process took over. What its predecessor was owed and only it could use (answers,
+    // the events of what it assigned, what steered the tasks it had) is not for this one.
+    if leases::fresh_process(claim.prior_session.as_deref(), session_id.as_deref()) {
+        match agent_queue::trim_for_new_process(&ctx.db, agent).await {
+            Ok(0) => {}
+            Ok(gone) => tracing::info!(
+                agent,
+                gone,
+                "a new process took over: dropped the commands only its predecessor could use"
+            ),
+            Err(e) => tracing::error!(agent, "dropping a previous process's commands failed: {e}"),
+        }
+    }
+    // Its predecessor's in-flight work is orphaned. It ends LOST (a workflow is sent again,
+    // among the commands the drain is about to deliver) before `INIT`.
     if let Err(e) = reconcile::fail_and_cascade_inflight(ctx, &claim.orphaned).await {
         tracing::error!(
             agent,
             "failing the orphaned work of a previous process failed: {e}"
         );
+    }
+
+    // The same process came back and says what it holds. What it had under way and does not
+    // name, it lost: nobody else can have it, so that is how it ended, here and at once.
+    // One that does not say is asked task by task, once it is listening (`ask_about`).
+    let mut inquiries = claim.inquiries;
+    if let Some(held) = &handshake.tasks {
+        for task in inquiries.drain(..).filter(|task| !held.contains(task)) {
+            let as_claimed = move |row: &crate::persist::transitions::TaskRow| {
+                row.agent_id == agent && row.picked_up_at.is_some()
+            };
+            if let Err(e) = crate::persist::transitions::finalize_lost(
+                ctx,
+                task,
+                "Its agent came back without it.",
+                true,
+                Some(&as_claimed),
+                false,
+            )
+            .await
+            {
+                tracing::error!(agent, task, "ending a task its agent lost failed: {e}");
+            }
+        }
     }
 
     // Before INIT: an agent assigns dependent work, and the first event of it must find us.
@@ -462,7 +505,7 @@ async fn register(
         caller,
         session_id,
         commands_seen: handshake.commands_seen,
-        inquiries: claim.inquiries,
+        inquiries,
         mirror,
     })
 }
@@ -510,8 +553,11 @@ async fn implement(
 /// by the mirror and the drain while they forward one event.
 type Turn = Arc<tokio::sync::Mutex<()>>;
 
-/// The pending heartbeat: resolved by the read loop when the answer arrives.
+/// The pending heartbeat: resolved by the read loop when the agent is heard from.
 type HeartbeatWaiter = Arc<Mutex<Option<oneshot::Sender<()>>>>;
+
+/// When the agent last sent a frame, of any kind.
+type Heard = Arc<Mutex<Instant>>;
 
 async fn run_session(
     ctx: &Context,
@@ -525,6 +571,7 @@ async fn run_session(
     ctx.connections.join(agent, connection_id, control_tx);
 
     let waiter: HeartbeatWaiter = Arc::default();
+    let heard: Heard = Arc::new(Mutex::new(Instant::now()));
     // One turn per connection, as a Channels consumer handles one message at a time: what a
     // request publishes (the QUEUED of the child it created, the CANCELLING of the task it
     // cancelled) reaches this caller only after the request's own response, whether it comes
@@ -544,6 +591,7 @@ async fn run_session(
         connection_id.to_owned(),
         sender.clone(),
         waiter.clone(),
+        heard.clone(),
         drain.abort_handle(),
     ));
     let mirror_channel = registered.mirror.channel.clone();
@@ -581,13 +629,13 @@ async fn run_session(
                     }
                     _ => break,
                 };
+                // Whatever it is, the agent wrote it: that is what a heartbeat asks.
+                *heard.lock().expect("heard lock") = Instant::now();
+                if let Some(answered) = waiter.lock().expect("heartbeat lock").take() {
+                    let _ = answered.send(());
+                }
                 match parse(&text).map(|frame| (matches!(frame.message, FromAgent::HeartbeatAnswer {}), frame)) {
-                    Ok((true, _)) => {
-                        match waiter.lock().expect("heartbeat lock").take() {
-                            Some(answered) => { let _ = answered.send(()); }
-                            None => tracing::warn!(agent, "received a heartbeat answer nobody waited for"),
-                        }
-                    }
+                    Ok((true, _)) => {}
                     Ok((false, frame)) if matches!(frame.message, FromAgent::Register { .. }) => {
                         sender.close(codes::FROM_AGENT_MESSAGE_DOES_NOT_MATCH_SCHEMA_CODE);
                         break;
@@ -629,6 +677,27 @@ async fn run_session(
 pub const JOURNAL_ACK_EVERY: u32 = 50;
 pub const JOURNAL_ACK_DELAY: Duration = Duration::from_millis(200);
 
+/// How many frames the worker takes at once when they are already waiting: a run of light
+/// frames among them is one transaction (`message_router::route_light`).
+pub const BURST: usize = 128;
+
+/// What the worker of one connection keeps between frames.
+struct Worker {
+    ctx: Context,
+    agent: i64,
+    caller: i64,
+    session_id: Option<String>,
+    connection_id: String,
+    sender: Sender,
+    turn: Turn,
+    /// Per session, the frames handled since its last JOURNAL_ACK.
+    unacked: HashMap<String, u32>,
+    /// Per session, the position last asked for again: one JOURNAL_NACK per gap, not one per
+    /// frame that arrives behind it.
+    nacked: HashMap<String, u64>,
+    deadline: Option<tokio::time::Instant>,
+}
+
 /// Route the agent's frames in order, send their replies, and acknowledge the numbered ones
 /// (`dispatch`, `on_numbered_handled`). A frame the router fails on closes the connection, as
 /// the Python consumer does.
@@ -643,53 +712,148 @@ async fn work(
     mut frames: mpsc::UnboundedReceiver<AgentFrame>,
     turn: Turn,
 ) {
-    let mut unacked: HashMap<String, u32> = HashMap::new();
-    // Per session, the position last asked for again: one JOURNAL_NACK per gap, not one per
-    // frame that arrives behind it.
-    let mut nacked: HashMap<String, u64> = HashMap::new();
-    let mut deadline: Option<tokio::time::Instant> = None;
+    let mut worker = Worker {
+        ctx,
+        agent,
+        caller,
+        session_id,
+        connection_id,
+        sender,
+        turn,
+        unacked: HashMap::new(),
+        nacked: HashMap::new(),
+        deadline: None,
+    };
     loop {
-        let next = match deadline {
+        let next = match worker.deadline {
             Some(at) => tokio::select! {
                 frame = frames.recv() => frame,
                 _ = tokio::time::sleep_until(at) => {
-                    deadline = None;
-                    flush_journal_acks(&ctx, agent, &sender, &mut unacked).await;
+                    worker.flush().await;
                     continue;
                 }
             },
             None => frames.recv().await,
         };
-        let Some(frame) = next else {
-            flush_journal_acks(&ctx, agent, &sender, &mut unacked).await;
+        let Some(first) = next else {
+            worker.flush().await;
             return;
         };
+        // Whatever is already waiting is taken with it.
+        let mut burst = vec![first];
+        while burst.len() < BURST {
+            match frames.try_recv() {
+                Ok(frame) => burst.push(frame),
+                Err(_) => break,
+            }
+        }
+        let mut at = 0;
+        while at < burst.len() {
+            let light = burst[at..]
+                .iter()
+                .take_while(|frame| message_router::is_light(frame))
+                .count();
+            let went_on = if light > 0 {
+                let run: Vec<&AgentFrame> = burst[at..at + light].iter().collect();
+                at += light;
+                worker.light(&run).await
+            } else {
+                at += 1;
+                worker.one(&burst[at - 1]).await
+            };
+            if !went_on {
+                return;
+            }
+        }
+    }
+}
+
+impl Worker {
+    /// Close for a frame the router failed on. What the agent sent is at fault only when it was
+    /// refused. A database or redis that failed says nothing about the frame: the agent comes
+    /// back and sends it again, where the schema code would end it for good.
+    fn failed(&self, e: &message_router::RouteError) {
+        tracing::error!(agent = self.agent, "error handling agent message: {e}");
+        self.sender.close(match e {
+            message_router::RouteError::Refused(_) => {
+                codes::FROM_AGENT_MESSAGE_DOES_NOT_MATCH_SCHEMA_CODE
+            }
+            _ => codes::AGENT_TRANSPORT_FAILED_CODE,
+        });
+    }
+
+    /// A frame arrived ahead of its turn: ask for the position expected, once per gap.
+    fn nack(&mut self, journal_session: String, expected: u64) {
+        if self.nacked.insert(journal_session.clone(), expected) != Some(expected) {
+            self.sender.send(ToAgent::JournalNack {
+                journal_session,
+                expected,
+            });
+        }
+    }
+
+    /// A numbered frame is handled (projected now, or before): it counts towards the next ack.
+    async fn counted(&mut self, frame: &AgentFrame) {
+        if !positions::is_numbered(frame) {
+            return;
+        }
+        let Some(journal_session) = frame.journal_session.clone() else {
+            return;
+        };
+        self.nacked.remove(&journal_session);
+        let count = self.unacked.entry(journal_session).or_default();
+        *count += 1;
+        if frame.message.is_terminal() || *count >= JOURNAL_ACK_EVERY {
+            self.flush().await;
+        } else if self.deadline.is_none() {
+            self.deadline = Some(tokio::time::Instant::now() + JOURNAL_ACK_DELAY);
+        }
+    }
+
+    async fn flush(&mut self) {
+        self.deadline = None;
+        flush_journal_acks(&self.ctx, self.agent, &self.sender, &mut self.unacked).await;
+    }
+
+    /// A run of light frames: one transaction. Whether the connection goes on.
+    async fn light(&mut self, run: &[&AgentFrame]) -> bool {
+        let routed = match message_router::route_light(&self.ctx, self.agent, run, false).await {
+            Ok(routed) => routed,
+            Err(e) => {
+                self.failed(&e);
+                return false;
+            }
+        };
+        for (frame, routed) in run.iter().zip(routed) {
+            match routed {
+                message_router::Routed::Gap {
+                    journal_session,
+                    expected,
+                } => self.nack(journal_session, expected),
+                _ => self.counted(frame).await,
+            }
+        }
+        true
+    }
+
+    /// One frame of any other kind. Whether the connection goes on.
+    async fn one(&mut self, frame: &AgentFrame) -> bool {
+        let (ctx, agent) = (self.ctx.clone(), self.agent);
         match &frame.message {
             FromAgent::CommandAck { through } => {
                 // An acknowledgement still waiting here when another connection took the
                 // agent over is not acted on: what it covers was given out anew since.
-                if !leases::holds_lease(&ctx.db, agent, &connection_id)
+                if !leases::holds_lease(&ctx.db, agent, &self.connection_id)
                     .await
                     .unwrap_or(false)
                 {
-                    continue;
+                    return true;
                 }
-                let mut redis = ctx.redis.clone();
-                // The pickup is recorded before the command is forgotten: an assign that is
-                // neither in the stream nor picked up never arrived (the sweep ends it lost).
-                let forgotten =
-                    match agent_queue::covered(&mut redis, &ctx.settings, agent, *through).await {
-                        Ok(acknowledged) => {
-                            picked_up(&ctx, agent, &acknowledged).await;
-                            agent_queue::forget(&mut redis, &ctx.settings, agent, *through).await
-                        }
-                        Err(e) => Err(e),
-                    };
-                // Kept a little longer: the next ack covers them too.
-                if let Err(e) = forgotten {
+                // Kept a little longer when this fails: the next ack covers them too.
+                if let Err(e) = agent_queue::ack(&ctx.db, agent, *through).await {
                     tracing::error!(agent, "forgetting acknowledged commands failed: {e}")
                 }
-                continue;
+                return true;
             }
             FromAgent::InquiryAnswer {
                 status,
@@ -710,34 +874,40 @@ async fn work(
                 if let Err(e) = crate::inquiry::answered(&ctx, request, &answer).await {
                     tracing::error!(agent, "keeping an inquiry's answer failed: {e}");
                 }
-                continue;
+                return true;
             }
-            FromAgent::InquiryAnswer { .. } => continue, // answers no question
+            FromAgent::InquiryAnswer { .. } => return true, // answers no question
             FromAgent::InquireRequest { task } => {
                 // Asking waits for the task's agent: beside the frames, never in their way.
                 tokio::spawn(answer_inquiry(
                     ctx.clone(),
-                    caller,
+                    agent,
+                    self.caller,
                     frame.id.clone(),
                     task.clone(),
-                    sender.clone(),
+                    self.sender.clone(),
                 ));
-                continue;
+                return true;
             }
             FromAgent::JournalSkip {
                 session,
                 first,
                 last,
             } => {
-                match positions::skip_positions(
-                    &ctx.db,
-                    agent,
-                    session,
-                    *first as i64,
-                    *last as i64,
-                )
-                .await
-                {
+                let skipped = match ctx.db.acquire().await {
+                    Ok(mut conn) => {
+                        positions::skip_positions(
+                            &mut conn,
+                            agent,
+                            session,
+                            *first as i64,
+                            *last as i64,
+                        )
+                        .await
+                    }
+                    Err(e) => Err(e),
+                };
+                match skipped {
                     Ok(true) => tracing::error!(
                         agent,
                         journal_session = %session,
@@ -750,24 +920,20 @@ async fn work(
                     ),
                     Err(e) => tracing::error!(agent, "recording a JOURNAL_SKIP failed: {e}"),
                 }
-                nacked.remove(session);
-                continue;
+                self.nacked.remove(session);
+                return true;
             }
             _ => {}
         }
+        let turn = self.turn.clone();
         let _turn = turn.lock().await;
-        match message_router::route_socket(&ctx, agent, &frame, session_id.as_deref()).await {
+        match message_router::route_socket(&ctx, agent, frame, self.session_id.as_deref()).await {
             Ok(Some(ToAgent::JournalNack {
                 journal_session,
                 expected,
             })) => {
-                if nacked.insert(journal_session.clone(), expected) != Some(expected) {
-                    sender.send(ToAgent::JournalNack {
-                        journal_session,
-                        expected,
-                    });
-                }
-                continue;
+                self.nack(journal_session, expected);
+                return true;
             }
             Ok(Some(reply)) => {
                 // The answer to a request that carries no position: it has no command to be.
@@ -779,41 +945,20 @@ async fn work(
                     } => Some(task.clone()),
                     _ => None,
                 };
-                sender.send(reply);
+                self.sender.send(reply);
                 if let Some(task) = replay {
-                    replay_child_events(&ctx, &task, &sender).await;
+                    replay_child_events(&ctx, &task, &self.sender).await;
                 }
             }
             Ok(None) => {}
             Err(e) => {
-                tracing::error!(agent, "error handling agent message: {e}");
-                // What the agent sent is at fault only when it was refused. A database or
-                // redis that failed says nothing about the frame: the agent comes back and
-                // sends it again, where the schema code would end it for good.
-                sender.close(match e {
-                    message_router::RouteError::Refused(_) => {
-                        codes::FROM_AGENT_MESSAGE_DOES_NOT_MATCH_SCHEMA_CODE
-                    }
-                    _ => codes::AGENT_TRANSPORT_FAILED_CODE,
-                });
-                return;
+                self.failed(&e);
+                return false;
             }
         }
-        if !positions::is_numbered(&frame) {
-            continue;
-        }
-        let Some(journal_session) = frame.journal_session.clone() else {
-            continue;
-        };
-        nacked.remove(&journal_session);
-        let count = unacked.entry(journal_session).or_default();
-        *count += 1;
-        if frame.message.is_terminal() || *count >= JOURNAL_ACK_EVERY {
-            deadline = None;
-            flush_journal_acks(&ctx, agent, &sender, &mut unacked).await;
-        } else if deadline.is_none() {
-            deadline = Some(tokio::time::Instant::now() + JOURNAL_ACK_DELAY);
-        }
+        drop(_turn);
+        self.counted(frame).await;
+        true
     }
 }
 
@@ -841,36 +986,6 @@ async fn flush_journal_acks(
     }
 }
 
-/// The assigns among acknowledged commands arrived: that is the pickup. From here on the task
-/// is the agent's, and nothing is ever sent for it a second time.
-async fn picked_up(ctx: &Context, agent: i64, acknowledged: &[String]) {
-    let tasks: Vec<i64> = acknowledged
-        .iter()
-        .filter(|frame| frame.contains("\"ASSIGN\""))
-        .filter_map(|frame| serde_json::from_str::<Value>(frame).ok())
-        .filter(|raw| raw.get("type").and_then(Value::as_str) == Some("ASSIGN"))
-        .filter_map(|raw| match raw.get("task") {
-            Some(Value::String(task)) => task.parse().ok(),
-            Some(Value::Number(task)) => task.as_i64(),
-            _ => None,
-        })
-        .collect();
-    if tasks.is_empty() {
-        return;
-    }
-    if let Err(e) = sqlx::query(
-        "UPDATE facade_task SET picked_up_at = now()
-          WHERE id = ANY($1) AND agent_id = $2 AND picked_up_at IS NULL",
-    )
-    .bind(&tasks)
-    .bind(agent)
-    .execute(&ctx.db)
-    .await
-    {
-        tracing::error!(agent, "recording acknowledged assigns failed: {e}");
-    }
-}
-
 /// Ask a returning agent about what it had under way, one task after the other.
 async fn ask_about(ctx: Context, agent: i64, tasks: Vec<i64>) {
     for task in tasks {
@@ -882,7 +997,14 @@ async fn ask_about(ctx: Context, agent: i64, tasks: Vec<i64>) {
 }
 
 /// Answer an agent asking about a task it assigned (`INQUIRE_REQUEST`).
-async fn answer_inquiry(ctx: Context, caller: i64, request: String, task: String, sender: Sender) {
+async fn answer_inquiry(
+    ctx: Context,
+    agent: i64,
+    caller: i64,
+    request: String,
+    task: String,
+    sender: Sender,
+) {
     let refused = |error: String| ToAgent::InquireResponse {
         request: request.clone(),
         task: task.clone(),
@@ -897,18 +1019,35 @@ async fn answer_inquiry(ctx: Context, caller: i64, request: String, task: String
     };
     let response = match crate::inquiry::caller_of(&ctx, &task).await {
         Ok(Some(owner)) if owner == caller => match crate::inquiry::inquire(&ctx, &task).await {
-            Ok(inquiry) => ToAgent::InquireResponse {
-                request: request.clone(),
-                task: inquiry.task,
-                status: inquiry.status,
-                asked: inquiry.asked,
-                detail: inquiry.detail,
-                step: inquiry.step,
-                reported_at: inquiry.reported_at,
-                progress: inquiry.progress,
-                message: inquiry.message,
-                error: None,
-            },
+            Ok(inquiry) => {
+                // It ended, and whoever assigned it still asks: the end did not reach them.
+                // What the task recorded is kept for them again; they drop what they have.
+                if inquiry.status == Some(crate::messages::TaskStatus::Ended) {
+                    if let Ok(id) = task.parse::<i64>() {
+                        match agent_queue::push_events_of(&ctx.db, agent, id).await {
+                            Ok(0) => {}
+                            Ok(_) => agent_queue::wake(&ctx, agent).await,
+                            Err(e) => tracing::error!(
+                                agent,
+                                task,
+                                "keeping an ended task's events for its caller failed: {e}"
+                            ),
+                        }
+                    }
+                }
+                ToAgent::InquireResponse {
+                    request: request.clone(),
+                    task: inquiry.task,
+                    status: inquiry.status,
+                    asked: inquiry.asked,
+                    detail: inquiry.detail,
+                    step: inquiry.step,
+                    reported_at: inquiry.reported_at,
+                    progress: inquiry.progress,
+                    message: inquiry.message,
+                    error: None,
+                }
+            }
             Err(e) => refused(e.to_string()),
         },
         Ok(_) => refused("Not a task this agent assigned.".into()),
@@ -1030,26 +1169,34 @@ async fn leave_caller_group(ctx: &Context, caller: i64, channel: &str) {
     ctx.channel_layer.unsubscribe(channel);
 }
 
-/// Ping, wait for the answer, renew the lease. No answer: close `HEARTBEAT_NOT_RESPONDED`; a
-/// renewal that finds the lease gone: close `AGENT_REPLACED`. Either way, stop executing first.
+/// Ping, wait to hear from the agent, renew the lease. Any frame is an answer: a heartbeat asks
+/// whether the agent's loop reads and writes, and a report says so as well as a
+/// `HEARTBEAT_ANSWER` does. Nothing heard: close `HEARTBEAT_NOT_RESPONDED`; a renewal that
+/// finds the lease gone: close `AGENT_REPLACED`. Either way, stop executing first.
 async fn heartbeat(
     ctx: Context,
     agent: i64,
     connection_id: String,
     sender: Sender,
     waiter: HeartbeatWaiter,
+    heard: Heard,
     drain: tokio::task::AbortHandle,
 ) {
+    let interval = ctx.settings.agent_heartbeat_interval;
+    let patience = ctx.settings.agent_heartbeat_response_timeout;
     loop {
-        tokio::time::sleep(ctx.settings.agent_heartbeat_interval).await;
+        tokio::time::sleep(interval).await;
         let (answered_tx, answered_rx) = oneshot::channel();
         *waiter.lock().expect("heartbeat lock") = Some(answered_tx);
         sender.send(ToAgent::Heartbeat {});
-        if tokio::time::timeout(ctx.settings.agent_heartbeat_response_timeout, answered_rx)
+        let silent = tokio::time::timeout(patience, answered_rx)
             .await
             .map(|r| r.is_err())
-            .unwrap_or(true)
-        {
+            .unwrap_or(true);
+        // A frame that finished arriving shortly before the ping counts too (as long before
+        // it as the answer may take after it): an agent in the middle of writing a large one
+        // cannot answer until it is through.
+        if silent && heard.lock().expect("heard lock").elapsed() > patience * 2 {
             tracing::error!(agent, "timeout on client for heartbeat");
             drain.abort();
             sender.close(codes::HEARTBEAT_NOT_RESPONDED_CODE);
@@ -1072,40 +1219,6 @@ async fn heartbeat(
     }
 }
 
-/// Whether a queued frame is an `ASSIGN` for a task the server already closed (`_is_stale_assign`).
-/// Probe Assigns carry no task row and are never fenced; anything unparseable is delivered.
-async fn is_stale_assign(ctx: &Context, frame: &str) -> bool {
-    if !frame.contains("\"ASSIGN\"") {
-        return false;
-    }
-    let Ok(raw) = serde_json::from_str::<Value>(frame) else {
-        return false;
-    };
-    if raw.get("type").and_then(Value::as_str) != Some("ASSIGN")
-        || raw.get("probe").and_then(Value::as_bool) == Some(true)
-    {
-        return false;
-    }
-    let task = match raw.get("task") {
-        Some(Value::String(task)) => task.clone(),
-        Some(Value::Number(task)) => task.to_string(),
-        _ => return false,
-    };
-    !reports::is_task_open(ctx, &task).await
-}
-
-/// Whether a queued frame mirrors an event of work this agent asked for (`…_EVENT`).
-fn is_caller_event(frame: &str) -> bool {
-    serde_json::from_str::<Value>(frame)
-        .ok()
-        .and_then(|raw| {
-            raw.get("type")
-                .and_then(Value::as_str)
-                .map(|kind| kind.ends_with("_EVENT"))
-        })
-        .unwrap_or(false)
-}
-
 /// Stamp a command's position on its serialized frame.
 fn at_position(frame: &str, pos: u64) -> String {
     match serde_json::from_str::<Value>(frame) {
@@ -1118,9 +1231,10 @@ fn at_position(frame: &str, pos: u64) -> String {
 }
 
 /// Deliver what the server has for the agent (`listen_for_tasks`): its commands after the last
-/// one it has seen, each at its position, and a probe's frames ahead of them. Nothing is
-/// forgotten by being sent: the agent's `COMMAND_ACK` does that (`work`). A redis failure is
-/// survived with a backoff; a socket that cannot be written closes so the agent reconnects.
+/// one it has seen, each at its position, and what is urgent ahead of them. Nothing is
+/// forgotten by being sent: the agent's `COMMAND_ACK` does that (`work`). A database or redis
+/// failure is survived with a backoff; a socket that cannot be written closes so the agent
+/// reconnects.
 async fn drain(
     ctx: Context,
     agent: i64,
@@ -1130,36 +1244,22 @@ async fn drain(
     commands_seen: u64,
 ) {
     let mut backoff = Duration::from_millis(500);
-    // Where this connection stands: it outlives a redis connection that has to be made anew.
+    // Where this connection stands: it outlives whatever has to be opened anew.
     let mut cursor = Cursor {
         sent: commands_seen,
-        probes_after: "0".to_owned(),
+        resumed: false,
+        urgent_after: "0".to_owned(),
+        woken_after: "0".to_owned(),
         since: None,
     };
     loop {
-        let mut queue = match AgentQueue::open(&ctx.redis_client, &ctx.settings, agent).await {
-            Ok(queue) => queue,
-            Err(e) => {
-                tracing::error!(agent, "task queue unavailable: {e}; retrying");
-                tokio::time::sleep(backoff).await;
-                backoff = (backoff * 2).min(Duration::from_secs(5));
-                continue;
-            }
-        };
-        match drain_once(
-            &ctx,
-            agent,
-            &connection_id,
-            &sender,
-            &mut queue,
-            &turn,
-            &mut cursor,
-        )
-        .await
-        {
+        match drain_once(&ctx, agent, &connection_id, &sender, &turn, &mut cursor).await {
             Ok(()) => return,
             Err(e) => {
-                tracing::error!(agent, "task queue failed: {e}; retrying");
+                tracing::error!(
+                    agent,
+                    "delivering the agent's commands failed: {e}; retrying"
+                );
                 tokio::time::sleep(backoff).await;
                 backoff = (backoff * 2).min(Duration::from_secs(5));
             }
@@ -1167,83 +1267,133 @@ async fn drain(
     }
 }
 
-/// How far a connection has sent: the last command position, and the last probe frame.
+/// How far a connection has sent: the last command position, and the last urgent frame.
 struct Cursor {
     sent: u64,
-    probes_after: String,
+    /// Whether numbering was brought up to what the agent has seen (once per connection).
+    resumed: bool,
+    urgent_after: String,
+    woken_after: String,
     /// When this connection began to drain, on redis's clock: an order to leave given before
     /// it was for the connection there was then.
     since: Option<u64>,
 }
+
+/// How long a connection without redis waits before it looks for commands again.
+const WITHOUT_REDIS: Duration = Duration::from_secs(1);
 
 async fn drain_once(
     ctx: &Context,
     agent: i64,
     connection_id: &str,
     sender: &Sender,
-    queue: &mut AgentQueue,
     turn: &Turn,
     cursor: &mut Cursor,
 ) -> Result<(), anyhow::Error> {
-    // Numbering never falls behind what the agent has handled, whatever redis remembers.
-    queue.resume(cursor.sent).await?;
-    let since = match cursor.since {
-        Some(since) => since,
-        None => *cursor.since.insert(queue.now_millis().await?),
-    };
+    if !cursor.resumed {
+        // Numbering never falls behind what the agent has handled, whatever is remembered here.
+        agent_queue::resume(&ctx.db, agent, cursor.sent).await?;
+        cursor.resumed = true;
+    }
+    // Commands are in the database: redis only carries what is urgent, and the wake. Without
+    // it the commands still go out, a little later.
+    let mut lane: Option<Lane> = None;
+    let mut idle = false;
     loop {
-        for queued in queue.read(cursor.sent, &cursor.probes_after).await? {
-            if !leases::holds_lease(&ctx.db, agent, connection_id).await? {
-                tracing::warn!(
+        if lane.is_none() {
+            match Lane::open(&ctx.redis_client, &ctx.settings, agent).await {
+                Ok(mut opened) => {
+                    if cursor.since.is_none() {
+                        cursor.since = opened.now_millis().await.ok();
+                    }
+                    lane = Some(opened);
+                }
+                Err(e) => tracing::error!(agent, "the priority lane is unavailable: {e}"),
+            }
+        }
+        let urgent = match lane.as_mut() {
+            Some(open) => {
+                match open
+                    .read(&cursor.urgent_after, &cursor.woken_after, idle)
+                    .await
+                {
+                    Ok((urgent, woken)) => {
+                        if let Some(woken) = woken {
+                            cursor.woken_after = woken;
+                        }
+                        urgent
+                    }
+                    Err(e) => {
+                        tracing::error!(agent, "reading the priority lane failed: {e}");
+                        lane = None;
+                        vec![]
+                    }
+                }
+            }
+            None => {
+                if idle {
+                    tokio::time::sleep(WITHOUT_REDIS).await;
+                }
+                vec![]
+            }
+        };
+        // Once per round, not once per frame: a connection that lost the lease between this
+        // and a send writes into a process that hands a position on once.
+        if !leases::holds_lease(&ctx.db, agent, connection_id).await? {
+            tracing::warn!(
+                agent,
+                connection_id,
+                "lost the lease: leaving what is unsent to the new holder and closing"
+            );
+            sender.close(codes::AGENT_REPLACED_CODE);
+            return Ok(());
+        }
+        idle = urgent.is_empty();
+        for agent_queue::Urgent { id, frame } in urgent {
+            // At most once: forgotten whether or not the socket took it.
+            if let Some(open) = lane.as_mut() {
+                if let Err(e) = open.forget(&id).await {
+                    tracing::error!(agent, "forgetting an urgent frame failed: {e}");
+                }
+            }
+            let stale = agent_queue::is_connection_order(&frame)
+                && cursor
+                    .since
+                    .zip(agent_queue::pushed_at(&id))
+                    .is_some_and(|(since, at)| at < since);
+            cursor.urgent_after = id;
+            if stale {
+                tracing::info!(
                     agent,
-                    connection_id,
-                    "lost the lease: leaving what is unsent to the new holder and closing"
+                    "not sending an order to leave given before this connection"
                 );
-                sender.close(codes::AGENT_REPLACED_CODE);
+                continue;
+            }
+            if !sender.send_text(frame).await {
+                sender.close(codes::AGENT_TRANSPORT_FAILED_CODE);
                 return Ok(());
             }
-            match queued {
-                Queued::Probe { id, frame } => {
-                    // At most once: forgotten whether or not the socket took it.
-                    queue.forget_probe(&id).await?;
-                    let stale = agent_queue::is_connection_order(&frame)
-                        && agent_queue::pushed_at(&id).is_some_and(|at| at < since);
-                    cursor.probes_after = id;
-                    if stale {
-                        tracing::info!(
-                            agent,
-                            "not sending an order to leave given before this connection"
-                        );
-                        continue;
-                    }
-                    if !sender.send_text(frame).await {
+        }
+        {
+            // Not in the middle of a request: its answer takes its place ahead of the events
+            // of the child it made, which were written before it.
+            let _turn = turn.lock().await;
+            agent_queue::number(&ctx.db, agent).await?;
+        }
+        let commands = agent_queue::read(&ctx.db, agent, cursor.sent).await?;
+        idle = idle && commands.is_empty();
+        for command in commands {
+            match command.frame {
+                // Nothing to send at this position (an assign whose task ended meanwhile).
+                None => tracing::debug!(agent, pos = command.pos, "a command is passed over"),
+                Some(frame) => {
+                    if !sender.send_text(at_position(&frame, command.pos)).await {
                         sender.close(codes::AGENT_TRANSPORT_FAILED_CODE);
                         return Ok(());
                     }
-                }
-                Queued::Command { pos, frame } => {
-                    if is_stale_assign(ctx, &frame).await {
-                        tracing::info!(
-                            agent,
-                            pos,
-                            "not sending an Assign for an already finalized task"
-                        );
-                        cursor.sent = pos;
-                        continue;
-                    }
-                    // The event of a child waits for the turn: never in the middle of the
-                    // handling of the request that caused it.
-                    let _turn = match is_caller_event(&frame) {
-                        true => Some(turn.lock().await),
-                        false => None,
-                    };
-                    if !sender.send_text(at_position(&frame, pos)).await {
-                        sender.close(codes::AGENT_TRANSPORT_FAILED_CODE);
-                        return Ok(());
-                    }
-                    cursor.sent = pos;
                 }
             }
+            cursor.sent = command.pos;
         }
     }
 }

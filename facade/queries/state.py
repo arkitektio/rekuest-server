@@ -95,10 +95,7 @@ def _get_state_at_revision(
     last_patch: models.Patch | None = None
 
     for patch in patch_qs:
-        patch_doc = {"op": patch.op, "path": patch.path}
-        if patch.op != "remove":
-            patch_doc["value"] = patch.value
-        patch_docs.append(patch_doc)
+        patch_docs.extend(models.Patch.document(patch.ops))
         last_patch = patch
 
     if last_patch is not None:

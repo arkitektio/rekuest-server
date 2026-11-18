@@ -147,8 +147,7 @@ fn frame(value: Value) -> AgentFrame {
 
 /// The frames queued for an agent, oldest first.
 async fn queued(ctx: &Context, agent: i64) -> Vec<Value> {
-    let mut redis = ctx.redis.clone();
-    let frames = facade::consumers::agent_queue::waiting(&mut redis, &ctx.settings, agent)
+    let frames = facade::consumers::agent_queue::waiting(ctx, agent)
         .await
         .unwrap();
     frames

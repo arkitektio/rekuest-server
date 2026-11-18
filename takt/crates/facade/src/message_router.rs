@@ -4,30 +4,57 @@
 //! sending it, so each transport delivers it its own way. A report is never replied to.
 //!
 //! A **numbered** frame (`pos` + `journal_session`) is handled once per session position: a
-//! resend at or below the watermark is skipped; the next position is claimed, projected and
-//! confirmed; one ahead of it is not taken, and the reply is a `JOURNAL_NACK` naming the position
-//! expected. The cumulative `JOURNAL_ACK` confirms what was projected.
+//! resend at or below the watermark is skipped; the next position is taken and projected; one
+//! ahead of it is not taken, and the reply is a `JOURNAL_NACK` naming the position expected.
+//! The cumulative `JOURNAL_ACK` confirms what was projected.
+//!
+//! **The watermark moves in a transaction with what it counts** (`persist::positions::advance`).
+//! Frames come in two kinds:
+//!
+//! * A **light** frame's whole projection is a few writes: the reports a running task streams
+//!   (`LOG`, `PROGRESS`, `YIELD`, `EFFECT`) and the agent's state and locks. It is projected
+//!   inside the watermark's transaction, so it is recorded exactly when its position is
+//!   counted, and a run of them shares one transaction ([`route_light`]).
+//! * Any other frame (the end of a task, a hold, a request) runs through the task machinery,
+//!   which commits on its own. The watermark's transaction is held open around it: its row
+//!   lock keeps a second backend from projecting the same frame, the answer to a request is
+//!   kept for the agent in that same transaction, and a projection that fails rolls the
+//!   watermark back, so the resend projects it again. What such a projection writes is
+//!   idempotent on the report's own key, for the one case left: this process dying between
+//!   the projection's commit and the watermark's.
 //!
 //! The answer to a numbered request of a socket agent ([`route_socket`]) is a command: it is
-//! queued for the agent before the request's position is confirmed, so a request that was
-//! projected is never left without its answer, and a resend of it is skipped.
+//! kept for the agent with the request's position, so a request that was projected is never
+//! left without its answer, and a resend of it is skipped.
 //! A refusal (unknown state, another agent's task, a duplicate revision) is logged and counts as
 //! handled, or a frame refused on every delivery would hold the watermark back forever. Anything
-//! else releases the claim and fails, so the resend projects it again.
+//! else rolls back and fails, so the resend projects it again.
 //!
 //! The agent's requests (`ASSIGN_REQUEST`, `STATE_REVISION_REQUEST`, `PROBE_REQUEST` and the
 //! `CANCEL`/`INTERRUPT`/`PAUSE`/`RESUME` requests) are answered, never fatal: a refusal of any
 //! kind is the reply's `error`. Frames whose task is a probe (`p-…`) go to the redis-held probe
 //! handlers (`_route_probe_message`), never to the database.
 
+use std::collections::HashMap;
+use std::sync::LazyLock;
+
+use sqlx::PgConnection;
+use tokio::sync::Semaphore;
+
 use crate::backend::{BackendError, Control};
+use crate::consumers::agent_queue;
 use crate::context::Context;
 use crate::guards;
 use crate::messages::{is_probe_task, AgentFrame, FromAgent, ToAgent};
 use crate::persist::positions::{self, is_numbered, Position};
-use crate::persist::{caller_ops, reports, state, PersistError};
+use crate::persist::{caller_ops, reports, run_after, state, After, InTxError, PersistError};
 use crate::probes;
 use crate::registration;
+
+/// How many frames may hold a watermark's transaction open around a projection that commits on
+/// connections of its own. Each holds one connection of the pool while its projection takes
+/// others: unbounded, a burst of them would hold every connection and wait for one more.
+static HELD_OPEN: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(8));
 
 /// A frame the router could not handle: the transport closes, as the Python consumer does when
 /// the router raises. A numbered frame's refusal never gets here (it counts as handled).
@@ -58,7 +85,7 @@ pub async fn route(
     route_with(ctx, agent, frame, session_id, false).await
 }
 
-/// [`route`] for a socket agent: the answer to a numbered request is queued for it as a command
+/// [`route`] for a socket agent: the answer to a numbered request is kept for it as a command
 /// (and, for a child found again, the child's events so far behind it) rather than returned.
 pub async fn route_socket(
     ctx: &Context,
@@ -69,12 +96,33 @@ pub async fn route_socket(
     route_with(ctx, agent, frame, session_id, true).await
 }
 
+/// Whether a numbered frame's whole projection is a few writes of its own: projected inside
+/// the watermark's transaction, and with its neighbours ([`route_light`]).
+pub fn is_light(frame: &AgentFrame) -> bool {
+    is_numbered(frame)
+        && (reports::is_stream_report(&frame.message) || state::is_state_report(&frame.message))
+}
+
+/// What became of a numbered frame.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Routed {
+    /// Projected (or refused, which counts): its position is counted.
+    Handled,
+    /// At or below the watermark: a resend.
+    Duplicate,
+    /// Ahead of its turn: not taken.
+    Gap {
+        journal_session: String,
+        expected: u64,
+    },
+}
+
 async fn route_with(
     ctx: &Context,
     agent: i64,
     frame: &AgentFrame,
     session_id: Option<&str>,
-    answers_are_commands: bool,
+    socket: bool,
 ) -> Result<Option<ToAgent>, RouteError> {
     let (Some(pos), Some(journal_session)) = (frame.pos, frame.journal_session.as_deref()) else {
         return project(ctx, agent, frame, session_id).await;
@@ -82,90 +130,245 @@ async fn route_with(
     if !is_numbered(frame) {
         return project(ctx, agent, frame, session_id).await;
     }
+    if is_light(frame) {
+        // Over HTTP there is no one to ask again: a gap is passed over there.
+        let routed = route_light(ctx, agent, &[frame], !socket).await?;
+        return Ok(match routed.into_iter().next() {
+            Some(Routed::Gap {
+                journal_session,
+                expected,
+            }) if socket => Some(ToAgent::JournalNack {
+                journal_session,
+                expected,
+            }),
+            _ => None,
+        });
+    }
     let pos = pos as i64;
-    loop {
-        match positions::claim_position(&ctx.db, agent, journal_session, pos).await? {
-            Position::Project => break,
-            Position::Duplicate => {
-                tracing::debug!(journal_session, pos, "resend skipped");
-                return Ok(None);
-            }
-            Position::Gap { expected } if answers_are_commands => {
-                tracing::warn!(
-                    agent,
-                    journal_session,
-                    pos,
-                    expected,
-                    "a frame arrived ahead of its turn: not taken"
-                );
-                return Ok(Some(ToAgent::JournalNack {
-                    journal_session: journal_session.to_owned(),
-                    expected: expected as u64,
-                }));
-            }
-            Position::Gap { expected } => {
-                // Over HTTP there is no one to ask again: each report is its own request, and
-                // what did not arrive will not. Passed over, as it always was there.
-                tracing::warn!(
-                    agent,
-                    journal_session,
-                    "positions {expected}..{} never arrived; continuing at {pos}",
-                    pos - 1
-                );
-                positions::skip_positions(&ctx.db, agent, journal_session, expected, pos - 1)
-                    .await?;
-            }
+    let _held_open = HELD_OPEN.acquire().await;
+    let mut tx = ctx.db.begin().await?;
+    let session = positions::session_row(&mut tx, agent, journal_session).await?;
+    match take_position(&mut tx, agent, session, journal_session, pos, !socket).await? {
+        Position::Project => {}
+        Position::Duplicate => {
+            tracing::debug!(journal_session, pos, "resend skipped");
+            return Ok(None);
+        }
+        Position::Gap { expected } => {
+            tracing::warn!(
+                agent,
+                journal_session,
+                pos,
+                expected,
+                "a frame arrived ahead of its turn: not taken"
+            );
+            return Ok(socket.then(|| ToAgent::JournalNack {
+                journal_session: journal_session.to_owned(),
+                expected: expected as u64,
+            }));
         }
     }
-    let projected = match project(ctx, agent, frame, session_id).await {
+    // Dropping `tx` on any error below rolls the watermark back: the resend projects it again.
+    let reply = match project(ctx, agent, frame, session_id).await? {
         // Nobody reads the answer to a control request over the socket: the request is kept
         // until acknowledged, and what became of the task arrives as its events.
-        Ok(Some(ToAgent::ControlResponse {
+        Some(ToAgent::ControlResponse {
             accepted, error, ..
-        })) if answers_are_commands => {
+        }) if socket => {
             if !accepted {
                 tracing::info!(agent, "a control request was refused: {error:?}");
             }
-            Ok(None)
+            None
         }
-        Ok(Some(answer)) if answers_are_commands && answer.is_command() => {
-            answer_as_command(ctx, agent, answer).await.map(|_| None)
+        Some(answer) if socket && answer.is_command() => {
+            answer_as_command(&mut tx, agent, answer).await?;
+            tx.commit().await?;
+            agent_queue::wake(ctx, agent).await;
+            return Ok(None);
         }
         other => other,
     };
-    match projected {
-        Ok(reply) => {
-            positions::confirm_position(&ctx.db, agent, journal_session, pos).await?;
-            Ok(reply)
+    tx.commit().await?;
+    Ok(reply)
+}
+
+/// Move the watermark onto `pos` in `conn`'s transaction. With `pass_gaps` (the HTTP intake,
+/// where each report is its own request and what did not arrive will not) the positions before
+/// it that never arrived are passed over, with a warning, as they always were there.
+async fn take_position(
+    conn: &mut PgConnection,
+    agent: i64,
+    session: i64,
+    journal_session: &str,
+    pos: i64,
+    pass_gaps: bool,
+) -> Result<Position, sqlx::Error> {
+    match positions::advance(&mut *conn, session, pos).await? {
+        Position::Gap { expected } if pass_gaps => {
+            tracing::warn!(
+                agent,
+                journal_session,
+                "positions {expected}..{} never arrived; continuing at {pos}",
+                pos - 1
+            );
+            positions::skip_positions(&mut *conn, agent, journal_session, expected, pos - 1)
+                .await?;
+            positions::advance(&mut *conn, session, pos).await
         }
-        Err(e) => {
-            positions::release_position(&ctx.db, agent, journal_session, pos).await?;
-            Err(e)
-        }
+        position => Ok(position),
     }
 }
 
-/// Queue the answer to a numbered request for its agent. A child found again
-/// (`created = false`) made its events for an earlier process: they follow the answer, as the
-/// same mirrors, and the caller drops the ones it has.
-async fn answer_as_command(ctx: &Context, agent: i64, answer: ToAgent) -> Result<(), RouteError> {
+/// Project a run of light frames ([`is_light`]) in one transaction: each frame's position and
+/// what it records are committed together, and a run costs one commit. What became of each, in
+/// order. `pass_gaps` as in [`take_position`].
+///
+/// A frame the database itself refuses (a constraint) takes the whole transaction with it. The
+/// run is then projected again frame by frame, and the one frame that is refused is passed
+/// over alone: logged, counted as handled, as a refusal always was.
+pub async fn route_light(
+    ctx: &Context,
+    agent: i64,
+    frames: &[&AgentFrame],
+    pass_gaps: bool,
+) -> Result<Vec<Routed>, RouteError> {
+    match light_in_one(ctx, agent, frames, pass_gaps).await {
+        Err(e) if is_refusal_by_the_database(&e) => {}
+        done => return Ok(done?),
+    }
+    let mut routed = Vec::with_capacity(frames.len());
+    for frame in frames {
+        match light_in_one(ctx, agent, &[frame], pass_gaps).await {
+            Ok(one) => routed.extend(one),
+            Err(e) if is_refusal_by_the_database(&e) => {
+                tracing::info!("numbered {} refused: {e}", frame_kind(frame));
+                routed.extend(pass_over(ctx, agent, frame, pass_gaps).await?);
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Ok(routed)
+}
+
+/// What `PersistError` calls a refusal when it comes from the database: a constraint said no.
+fn is_refusal_by_the_database(e: &sqlx::Error) -> bool {
+    matches!(e, sqlx::Error::Database(db)
+        if db.is_unique_violation() || db.is_foreign_key_violation() || db.is_check_violation())
+}
+
+async fn light_in_one(
+    ctx: &Context,
+    agent: i64,
+    frames: &[&AgentFrame],
+    pass_gaps: bool,
+) -> Result<Vec<Routed>, sqlx::Error> {
+    let mut tx = ctx.db.begin().await?;
+    let mut after: Vec<After> = vec![];
+    let mut sessions: HashMap<&str, i64> = HashMap::new();
+    let mut routed = Vec::with_capacity(frames.len());
+    for frame in frames {
+        let (Some(pos), Some(journal_session)) = (frame.pos, frame.journal_session.as_deref())
+        else {
+            continue;
+        };
+        let session = match sessions.get(journal_session) {
+            Some(session) => *session,
+            None => {
+                let session = positions::session_row(&mut tx, agent, journal_session).await?;
+                sessions.insert(journal_session, session);
+                session
+            }
+        };
+        let position = take_position(
+            &mut tx,
+            agent,
+            session,
+            journal_session,
+            pos as i64,
+            pass_gaps,
+        )
+        .await?;
+        routed.push(match position {
+            Position::Duplicate => Routed::Duplicate,
+            Position::Gap { expected } => Routed::Gap {
+                journal_session: journal_session.to_owned(),
+                expected: expected as u64,
+            },
+            Position::Project => {
+                let projected = if reports::is_stream_report(&frame.message) {
+                    reports::on_stream_report(&mut tx, &mut after, agent, frame).await
+                } else {
+                    state::on_state_in(&mut tx, &mut after, agent, frame).await
+                };
+                match projected {
+                    Ok(()) => {}
+                    // Refused before anything was written: the transaction goes on.
+                    Err(InTxError::Refused(reason)) => {
+                        tracing::info!("numbered {} refused: {reason}", frame_kind(frame))
+                    }
+                    Err(InTxError::Database(e)) => return Err(e),
+                }
+                Routed::Handled
+            }
+        });
+    }
+    tx.commit().await?;
+    run_after(ctx, after).await;
+    Ok(routed)
+}
+
+/// Count a frame's position without projecting it: the database refused what it would write.
+async fn pass_over(
+    ctx: &Context,
+    agent: i64,
+    frame: &AgentFrame,
+    pass_gaps: bool,
+) -> Result<Vec<Routed>, sqlx::Error> {
+    let (Some(pos), Some(journal_session)) = (frame.pos, frame.journal_session.as_deref()) else {
+        return Ok(vec![]);
+    };
+    let mut tx = ctx.db.begin().await?;
+    let session = positions::session_row(&mut tx, agent, journal_session).await?;
+    let position = take_position(
+        &mut tx,
+        agent,
+        session,
+        journal_session,
+        pos as i64,
+        pass_gaps,
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(vec![match position {
+        Position::Project => Routed::Handled,
+        Position::Duplicate => Routed::Duplicate,
+        Position::Gap { expected } => Routed::Gap {
+            journal_session: journal_session.to_owned(),
+            expected: expected as u64,
+        },
+    }])
+}
+
+/// Keep the answer to a numbered request for its agent, in the transaction that counts the
+/// request. A child found again (`created = false`) made its events for an earlier process:
+/// they follow the answer, as the same mirrors, and the caller drops the ones it has.
+async fn answer_as_command(
+    conn: &mut PgConnection,
+    agent: i64,
+    answer: ToAgent,
+) -> Result<(), sqlx::Error> {
     let found_again = match &answer {
         ToAgent::AssignResponse {
             created: false,
             task: Some(task),
             ..
-        } => Some(task.clone()),
+        } => task.parse::<i64>().ok(),
         _ => None,
     };
-    let mut redis = ctx.redis.clone();
-    let mut frames = vec![crate::transport::frame_text(answer)];
+    let command = agent_queue::NewCommand::of(crate::transport::frame_text(answer));
+    agent_queue::push(&mut *conn, agent, &command).await?;
     if let Some(task) = found_again {
-        let mirrors = crate::consumers::agent_protocol::child_mirrors(ctx, &task).await?;
-        frames.extend(mirrors.into_iter().map(crate::transport::frame_text));
-    }
-    for frame in frames {
-        crate::consumers::agent_queue::push(&mut redis, &ctx.settings, agent, &frame, false)
-            .await?;
+        agent_queue::push_events_of(&mut *conn, agent, task).await?;
     }
     Ok(())
 }
@@ -174,7 +377,7 @@ async fn answer_as_command(ctx: &Context, agent: i64, answer: ToAgent) -> Result
 /// changing task is its `task_id`, which does not count.
 fn named_task<D>(message: &FromAgent<D>) -> Option<&str> {
     match message {
-        FromAgent::StatePatch { .. } => None,
+        FromAgent::StatePatch { .. } | FromAgent::StateUpdate { .. } => None,
         FromAgent::CancelRequest { task, .. }
         | FromAgent::InterruptRequest { task }
         | FromAgent::PauseRequest { task }
@@ -290,18 +493,8 @@ async fn project(
                 caller_ops::caller_control(ctx, agent, task, Control::Resume { step: *step }).await;
             return Ok(Some(control_response(frame, task, result)));
         }
-        FromAgent::StatePatch {
-            task_id: Some(task_id),
-            ..
-        } if is_probe_task(task_id) => {
-            // `Patch.task` is a real foreign key: keep the patch, drop the probe's link.
-            let mut unlinked = frame.clone();
-            if let FromAgent::StatePatch { task_id, .. } = &mut unlinked.message {
-                *task_id = None;
-            }
-            state::on_state(ctx, agent, &unlinked).await.map(|_| None)
-        }
-        FromAgent::StatePatch { .. }
+        FromAgent::StateUpdate { .. }
+        | FromAgent::StatePatch { .. }
         | FromAgent::StateSnapshot { .. }
         | FromAgent::SessionInit { .. }
         | FromAgent::Lock { .. }

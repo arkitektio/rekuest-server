@@ -1,13 +1,14 @@
 //! The one place that knows how to reach an agent (`facade/transport.py`'s `deliver_to_agent`).
 //!
-//! A WEBSOCKET agent's commands go into its redis queue, which also holds them while it is
-//! offline; the connection holding its lease drains it (`consumers::agent_queue`). A WEBHOOK
-//! agent is reached by a signed POST ([`crate::hooks`]); one that fails is reported undelivered,
-//! so a dispatch leaves `dispatched_at` NULL and the pickup watchdog owns the retry.
+//! A WEBSOCKET agent's commands are kept in the database until it acknowledges them, which
+//! also holds them while it is offline; the connection holding its lease sends them
+//! (`consumers::agent_queue`). A WEBHOOK agent is reached by a signed POST ([`crate::hooks`]);
+//! one that fails is reported undelivered, so a dispatch leaves `dispatched_at` NULL and the
+//! pickup watchdog owns the retry.
 //!
 //! The publishing half of `transport.py` (`publish_task_event`) is `signals::task_event_created`.
 //! Routing is read fresh on every delivery, never cached: an agent that flipped WEBSOCKET →
-//! WEBHOOK must not have its commands pushed into a list no socket drains any more.
+//! WEBHOOK must not have its commands kept for a socket that reads them no more.
 
 use crate::consumers::agent_queue;
 use std::collections::HashMap;
@@ -26,7 +27,7 @@ pub const WEBHOOK: &str = "WEBHOOK";
 pub enum DeliveryError {
     #[error("agent lookup: {0}")]
     Database(#[from] sqlx::Error),
-    #[error("agent queue: {0}")]
+    #[error("priority lane: {0}")]
     Redis(#[from] redis::RedisError),
 }
 
@@ -50,7 +51,8 @@ pub fn frame_text(message: ToAgent) -> String {
 }
 
 /// Send one message to `agent` over its transport (`deliver_to_agent`). Whether the transport
-/// accepted it; a redis failure is an error. `priority` (probe traffic) jumps the queued backlog.
+/// accepted it; a command that could not be kept is an error. `priority` (a probe's frame, a
+/// question, an order to a connection) jumps the backlog and is kept by nobody.
 pub async fn deliver_to_agent(
     ctx: &Context,
     agent: i64,
@@ -66,15 +68,14 @@ pub async fn deliver_to_agent(
         let target = hook_target(ctx, agent).await?;
         return Ok(hooks::deliver_to_hook(&ctx.settings, &target, &frame_text(message)).await);
     }
-    let mut redis = ctx.redis.clone();
-    agent_queue::push(
-        &mut redis,
-        &ctx.settings,
-        agent,
-        &frame_text(message),
-        priority,
-    )
-    .await?;
+    if priority {
+        let mut redis = ctx.redis.clone();
+        agent_queue::push_priority(&mut redis, &ctx.settings, agent, &frame_text(message)).await?;
+        return Ok(true);
+    }
+    let command = agent_queue::NewCommand::of(frame_text(message));
+    agent_queue::push(&ctx.db, agent, &command).await?;
+    agent_queue::wake(ctx, agent).await;
     Ok(true)
 }
 

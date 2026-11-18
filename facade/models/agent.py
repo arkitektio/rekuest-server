@@ -252,3 +252,36 @@ class MemoryDrawer(models.Model):
                 name="drawer_unique_resource_per_shelve",
             ),
         ]
+
+
+class Command(models.Model):
+    """What the server has for a socket agent and must not lose: an ``ASSIGN``, what steers it,
+    the answer to a request, an event of a task the agent assigned (takt/docs/journal.md,
+    "Commands: the other direction").
+
+    Written in the transaction that makes it true and deleted when the agent's ``COMMAND_ACK``
+    covers it. ``pos`` is given by the connection that sends it, not by whoever writes it: a
+    row that commits late is numbered late, so an agent never sees a position below one it
+    already handled. takt reads and writes this table; the Python server never does.
+    """
+
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="commands")
+    pos = models.PositiveBigIntegerField(null=True, blank=True, help_text="The command's position in the agent's stream. NULL until the connection holding the agent's lease numbers it.")
+    kind = models.CharField(max_length=64, help_text="The frame's type (ASSIGN, CANCEL, ASSIGN_RESPONSE, ...), or EVENT for the mirror of a task event.")
+    task = models.BigIntegerField(null=True, blank=True, help_text="The id of the task the command is about, if it is about one. Not a foreign key: takt deletes tasks with SQL of its own.")
+    event = models.BigIntegerField(null=True, blank=True, help_text="For an EVENT: the id of the TaskEvent it mirrors. The frame is built from that row when it is sent.")
+    frame = models.TextField(null=True, blank=True, help_text="The serialized frame, without its position. NULL for an EVENT.")
+    created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["agent", "pos"], name="command_agent_pos"),
+            models.Index(fields=["task", "kind"], name="command_task_kind"),
+        ]
+
+
+class CommandCursor(models.Model):
+    """The last position given out in an agent's command stream. Only ever raised."""
+
+    agent = models.OneToOneField(Agent, on_delete=models.CASCADE, related_name="command_cursor")
+    numbered = models.PositiveBigIntegerField(default=0, db_default=0, help_text="The highest position a command of this agent was given.")

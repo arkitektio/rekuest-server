@@ -44,9 +44,7 @@ def _seed_history(prefix, context):
             agent=agent,
             session=session,
             interface=state.interface,
-            op="replace",
-            path="/count",
-            value=count,
+            ops=[{"op": "replace", "path": "/count", "value": count}],
             global_rev=rev,
         )
     return {"state": state, "session": session, "agent": agent}

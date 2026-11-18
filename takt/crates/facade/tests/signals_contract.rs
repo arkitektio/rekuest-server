@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use facade::consumers::connections::Connections;
+use facade::persist::transitions::{insert_event, NewEvent};
 use facade::settings::Settings;
 use serde_json::Value;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -26,7 +27,7 @@ root = _build_task_for_agent_caller(agent.pk, prefix + "-root")
 child = _build_task_for_agent_caller(agent.pk, prefix + "-child", parent=root, root=root)
 event = models.TaskEvent.objects.create(task=root, kind="YIELD", message="half way", progress=50, returns={"return0": [1, 2.5, "x", True, None]})
 state = _build_state_for_agent(agent.pk, prefix + "-state", prefix)
-patch = models.Patch.objects.create(state=state, agent=agent, interface=state.interface, op="replace", path="/barcode", value={"n": 1}, global_rev=3)
+patch = models.Patch.objects.create(state=state, agent=agent, interface=state.interface, ops=[{"op": "replace", "path": "/barcode", "value": {"n": 1}}], global_rev=3)
 log = models.TaskEvent.objects.create(task=root, kind="LOG", message="noise")
 orphan = models.Task.objects.create(action=root.action, agent=agent, implementation=root.implementation, latest_event_kind=root.latest_event_kind, latest_instruct_kind=root.latest_instruct_kind)
 progress = models.TaskEvent.objects.create(task=orphan, kind="PROGRESS", progress=30, message="nobody called this")
@@ -246,10 +247,9 @@ async fn the_rust_fan_out_is_the_python_fan_out() {
 
 /// The frames waiting in an agent's own queue, oldest first.
 async fn queued(ctx: &facade::Context, agent: i64) -> Vec<Value> {
-    let frames =
-        facade::consumers::agent_queue::pending(&mut ctx.redis.clone(), &ctx.settings, agent)
-            .await
-            .unwrap();
+    let frames = facade::consumers::agent_queue::pending(&ctx.db, agent)
+        .await
+        .unwrap();
     frames
         .iter()
         .map(|frame| serde_json::from_str(frame).unwrap())
@@ -271,6 +271,13 @@ async fn what_a_child_reports_is_kept_for_the_agent_that_asked_for_it() {
     let id = |key: &str| seed[key].as_i64().unwrap();
     let agent = id("agent");
     let child = id("child").to_string();
+    // An event is kept for the agent that asked by the statement that records it: these are
+    // recorded here, the way a report is, and not taken from the seed.
+    let record = |kind: &'static str, event: NewEvent| {
+        let db = ctx.db.clone();
+        let task = id("child");
+        async move { insert_event(&db, task, kind, &event).await.unwrap() }
+    };
     let mut group = listen(&ctx, &[format!("task_caller_{}", id("caller"))]).await;
     let kinds = |frames: &[Value]| -> Vec<String> {
         frames
@@ -293,11 +300,19 @@ async fn what_a_child_reports_is_kept_for_the_agent_that_asked_for_it() {
     assert!(queued(&ctx, agent).await.is_empty());
 
     // What it cannot do without waits in its queue, and nothing of it is on the group.
-    facade::signals::task_event_created(&ctx, id("yield")).await;
+    let yielded = record(
+        "YIELD",
+        NewEvent {
+            returns: serde_json::json!({"return0": 7}).as_object().cloned(),
+            ..NewEvent::default()
+        },
+    )
+    .await;
+    facade::signals::task_event_created(&ctx, yielded).await;
     let frames = queued(&ctx, agent).await;
     assert_eq!(kinds(&frames), ["YIELD_EVENT"]);
     assert_eq!(frames[0]["task"], child.as_str());
-    assert_eq!(frames[0]["event"], id("yield").to_string());
+    assert_eq!(frames[0]["event"], yielded.to_string());
     assert_eq!(frames[0]["returns"]["return0"], 7);
 
     // Back again, it gets everything through the queue, in the order it was reported.
@@ -307,7 +322,8 @@ async fn what_a_child_reports_is_kept_for_the_agent_that_asked_for_it() {
         .await
         .unwrap();
     facade::signals::task_event_created(&ctx, id("progress_here")).await;
-    facade::signals::task_event_created(&ctx, id("completed")).await;
+    let completed = record("COMPLETED", NewEvent::default()).await;
+    facade::signals::task_event_created(&ctx, completed).await;
     assert_eq!(
         kinds(&queued(&ctx, agent).await),
         ["YIELD_EVENT", "PROGRESS_EVENT", "COMPLETED_EVENT"]
@@ -325,8 +341,14 @@ async fn what_a_child_reports_is_kept_for_the_agent_that_asked_for_it() {
         .execute(&ctx.db)
         .await
         .unwrap();
-    facade::signals::task_event_created(&ctx, id("late")).await;
-    facade::signals::task_event_created(&ctx, id("late_end")).await;
+    let late = record(
+        "LOG",
+        NewEvent::default().with_message(Some("after the end".into())),
+    )
+    .await;
+    facade::signals::task_event_created(&ctx, late).await;
+    let late_end = record("CANCELLED", NewEvent::default()).await;
+    facade::signals::task_event_created(&ctx, late_end).await;
     assert_eq!(next(&mut group).await["message"]["event"]["kind"], "LOG");
     assert_eq!(
         next(&mut group).await["message"]["event"]["kind"],

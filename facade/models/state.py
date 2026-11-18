@@ -1,3 +1,5 @@
+from collections.abc import Mapping, Sequence
+
 from django.db import models
 from django.db.models.functions import Now
 
@@ -85,12 +87,6 @@ class Session(models.Model):
         help_text="Every numbered frame of this session up to this position is handled: a resend at or below it is skipped, and JOURNAL_ACK claims it (docs/design/journal.md).",
         db_default=0,
     )
-    claimed_pos = models.PositiveBigIntegerField(
-        default=0,
-        help_text="The position a backend is projecting right now (claimed_pos = projected_pos + 1 while one is in flight, else equal). Another backend waits for it, or takes it over once claimed_at is stale.",
-        db_default=0,
-    )
-    claimed_at = models.DateTimeField(null=True, blank=True, help_text="When claimed_pos was claimed")
 
     class Meta:
         constraints = [
@@ -103,7 +99,15 @@ class Session(models.Model):
 
 
 class Patch(models.Model):
-    """A Patch is a representation of a change to a state. Patches are used to represent the changes that happen to a state over time. They are stored as a log of changes to a state and can be used to reconstruct the state at any point in time."""
+    """One update of a state: what takes it from one revision to the next.
+
+    An update is the unit a state changes by. ``ops`` are the RFC 6902 operations that describe it, applied in order and together: nobody who follows the state is shown it between two of them. The updates of a state are its log, from which it can be reconstructed at any revision.
+    """
+
+    @staticmethod
+    def document(ops: "Sequence[Mapping[str, object]]") -> list[dict[str, object]]:
+        """``ops`` as an RFC 6902 patch document: a ``remove`` carries no value."""
+        return [{key: value for key, value in op.items() if key != "value" or op.get("op") != "remove"} for op in ops]
 
     # Declared for the type checker: Django adds these (a foreign key's id column, a
     # reverse relation's manager) without saying so in a way it can read.
@@ -116,13 +120,10 @@ class Patch(models.Model):
     agent = models.ForeignKey("Agent", on_delete=models.CASCADE, related_name="patches_created", null=True, blank=True)
     interface = models.CharField(max_length=1000, help_text="The interface of the state in the agent")
     session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name="patches", null=True, blank=True)
-    op = models.CharField(max_length=1000, help_text="The operation of this patch (e.g. add, remove, replace)")
-    path = models.CharField(max_length=1000, help_text="The path of this patch (e.g. the path to the value that is being changed)")
-    value = models.JSONField(help_text="The value of this patch (e.g. the new value that is being set)")
+    ops = models.JSONField(help_text="The update's operations, as RFC 6902 objects (op, path, value), applied in order and together.")
     timestamp = models.DateTimeField(auto_now_add=True, help_text="The time this patch was created", db_default=Now())
     global_rev = models.IntegerField(help_text="The current revision of the state in the global context (e.g. considering all patches that have been applied to this state)")
     task = models.ForeignKey("Task", on_delete=models.CASCADE, null=True, blank=True, help_text="The task that caused this patch (e.g. to be able to track changes by task)", related_name="patches")
-    old_value = models.JSONField(null=True, blank=True, help_text="The value the patch replaced, when the agent reported it (debugging and tracing only; never used to reconstruct state)")
     agent_pos = models.PositiveBigIntegerField(null=True, blank=True, help_text="The session position (pos) of the frame that carried this patch. NULL for agents without numbering.")
     agent_ts = models.DateTimeField(null=True, blank=True, help_text="When the agent recorded the patch (the frame's agent_ts). NULL for agents without numbering.")
     step = models.PositiveBigIntegerField(null=True, blank=True, help_text="The changing task's step (the frame's task_step). NULL for agents without numbering and patches outside a task.")
@@ -131,8 +132,8 @@ class Patch(models.Model):
 
     class Meta:
         constraints = [
-            # One patch per revision of a state in a session: ``global_rev`` is bumped once per
-            # patch by the agent, so a second row is a resend. Without it a resent patch was
+            # One update per revision of a state in a session: ``global_rev`` is bumped once per
+            # update by the agent, so a second row is a resend. Without it a resent update was
             # applied twice on reconstruction. NULL sessions stay distinct in Postgres.
             models.UniqueConstraint(fields=["session", "global_rev", "state"], name="patch_unique_rev_per_session_state"),
         ]

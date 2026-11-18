@@ -21,7 +21,7 @@ sequenceDiagram
     participant C as Caller (GraphQL, the server)
     participant BE as backend::assign_with_status (takt)
     participant DB as PostgreSQL
-    participant Q as Redis agent queue
+    participant Q as the agent's commands (database)
     participant AG as Agent (WebSocket)
     participant PB as persist::reports (takt)
     participant CH as channel layer / subscription
@@ -120,8 +120,8 @@ dispatch(ctx, task, agent, Assign {
 })
 ```
 
-`dispatch` calls `transport::deliver_to_agent`, which pushes onto the Redis **agent queue** (not
-the channel layer) so a message survives if the agent is momentarily offline — see
+`dispatch` calls `transport::deliver_to_agent`, which keeps the command in the database (not
+the channel layer) so it survives if the agent is momentarily offline — see
 [agent-protocol.md](agent-protocol.md) — or, for a WEBHOOK agent, POSTs it signed. Any `INIT`
 lifecycle hooks on the input are assigned as child tasks.
 
@@ -306,7 +306,7 @@ stuck-connected agent is what makes its work visible to the task sweeps of the s
 | triggers | `triggers::fire_triggers` | claims unprocessed signals, assigns every applying trigger's action and logs what became of each listening trigger |
 | due tasks | `reconcile::dispatch_due_tasks` | dispatches tasks whose `not_before` has passed |
 | unpicked tasks | `reconcile::reconcile_unpicked_tasks` | for HookAgents: redelivers once, then ends `LOST`, a task its endpoint never reported on |
-| unreachable assigns | `reconcile::reconcile_unreachable_assigns` | ends `LOST` a socket agent's task whose assign is neither acknowledged nor in its command stream |
+| unreachable assigns | `reconcile::reconcile_unreachable_assigns` | ends `LOST` a socket agent's task whose assign is neither acknowledged nor among its commands |
 | due controls | `reconcile::escalate_due_controls` | escalates an unconfirmed cancel to an interrupt, finalizes an unconfirmed interrupt |
 | expired tasks | `reconcile::expire_disconnected_tasks` | ends `LOST` the undelivered work of an agent that never came back |
 

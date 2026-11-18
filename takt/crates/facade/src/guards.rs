@@ -78,13 +78,16 @@ pub async fn state_revision(
         .collect();
     let tree = call_tree(db, parent_id).await?;
     let change: Option<(String, Option<i64>)> = sqlx::query_as(
-        "SELECT p.path, p.task_id FROM facade_patch p JOIN facade_session s ON s.id = p.session_id
+        "SELECT o.op ->> 'path', p.task_id
+           FROM facade_patch p JOIN facade_session s ON s.id = p.session_id
+          CROSS JOIN LATERAL jsonb_array_elements(p.ops) WITH ORDINALITY AS o(op, n)
           WHERE p.state_id = $1 AND s.session_id = $2 AND p.global_rev > $3
             AND (p.task_id IS NULL OR NOT p.task_id = ANY($4))
             AND (cardinality($5::text[]) = 0
                  OR EXISTS (SELECT 1 FROM unnest($5::text[]) AS w(pointer)
-                             WHERE p.path = w.pointer OR starts_with(p.path, w.pointer || '/')))
-          ORDER BY p.global_rev, p.id LIMIT 1",
+                             WHERE o.op ->> 'path' = w.pointer
+                                OR starts_with(o.op ->> 'path', w.pointer || '/')))
+          ORDER BY p.global_rev, p.id, o.n LIMIT 1",
     )
     .bind(state_id)
     .bind(&session)

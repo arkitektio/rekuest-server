@@ -6,6 +6,7 @@ from asgiref.sync import sync_to_async
 from kante.types import Info
 
 from facade import logic, models, scalars, types
+from facade.types.state import JSONPatch
 from facade.channels import (
     patch_channel,
     state_update_channel,
@@ -39,14 +40,12 @@ class StateSnapshotEvent:
     timestamp: datetime.datetime | None
 
 
-@strawberry.type(description="A plain patch event with no model cross-references.")
+@strawberry.type(description="One update of a state, with no model cross-references. Its operations are applied in order and together: the state is at `globalRevision` once all of them are.")
 class StatePatchEvent:
     state_id: strawberry.ID
     agent_id: strawberry.ID
     interface: str
-    op: str
-    path: str
-    value: scalars.Args
+    ops: list[JSONPatch]
     global_revision: int
     session_id: str | None
     timestamp: datetime.datetime | None
@@ -97,9 +96,7 @@ async def watch_state(
         yield StatePatchEvent(
             state_id=strawberry.ID(str(message.state)),
             agent_id=strawberry.ID(str(message.agent)) if message.agent else strawberry.ID(""),
-            op=message.op,
-            path=message.path,
-            value=scalars.Args(message.value),
+            ops=JSONPatch.of(message.ops),
             global_revision=message.global_rev,
             session_id=str(message.session) if message.session is not None else None,
             timestamp=message.timestamp,
@@ -149,9 +146,7 @@ async def watch_agent(
         yield StatePatchEvent(
             state_id=strawberry.ID(str(message.state)),
             agent_id=strawberry.ID(str(message.agent)),
-            op=message.op,
-            path=message.path,
-            value=scalars.Args(message.value),
+            ops=JSONPatch.of(message.ops),
             global_revision=message.global_rev,
             session_id=str(message.session) if message.session is not None else None,
             timestamp=message.timestamp,

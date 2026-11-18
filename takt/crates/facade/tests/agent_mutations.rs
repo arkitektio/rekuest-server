@@ -87,10 +87,13 @@ async fn an_agent_is_ensured_configured_and_turned_into_a_hook() {
     );
 
     // Work queued for its socket, one task not picked up yet.
-    let mut redis = ctx.redis.clone();
-    facade::consumers::agent_queue::push(&mut redis, &ctx.settings, agent, "{}", false)
-        .await
-        .unwrap();
+    facade::consumers::agent_queue::push(
+        &ctx.db,
+        agent,
+        &facade::consumers::agent_queue::NewCommand::of("{}".to_owned()),
+    )
+    .await
+    .unwrap();
     facade::registration::shelve(&ctx.db, agent, "@x/y", "r1", None, None, false)
         .await
         .unwrap();
@@ -121,7 +124,7 @@ async fn an_agent_is_ensured_configured_and_turned_into_a_hook() {
         ),
         ("WEBHOOK", Some("http://hook"), None, Some("a hook"))
     );
-    let queued = facade::consumers::agent_queue::pending(&mut redis, &ctx.settings, agent)
+    let queued = facade::consumers::agent_queue::pending(&ctx.db, agent)
         .await
         .unwrap();
     assert!(queued.is_empty(), "no socket will drain it any more");
