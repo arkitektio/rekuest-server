@@ -20,6 +20,7 @@ from rekuest_core.objects import types as rtypes
 if TYPE_CHECKING:
     # Named in annotations only: strawberry resolves them when it builds the schema.
     from facade.types.action import Action
+    from facade.types.agent import Agent
     from facade.types.auth import User
     from facade.types.implementation import Implementation
 
@@ -65,6 +66,8 @@ class Shortcut:
     description: str | None = strawberry_django.field(description="Optional description.")
     action: "Action" = strawberry_django.field(description="The associated action.")
     implementation: Optional["Implementation"] = strawberry_django.field(description="Implementation of the action.")
+    agent: Optional["Agent"] = strawberry_django.field(description="The agent the shortcut is pinned to (with `interface`): it runs there. Null when it is not pinned, or its agent is gone.")
+    interface: str | None = strawberry_django.field(description="The implementation interface on the pinned agent.")
     toolbox: "Toolbox" = strawberry_django.field(description="The toolbox this shortcut belongs to.")
     saved_args: rscalars.AnyDefault = strawberry_django.field(description="Saved arguments for the shortcut.")
     allow_quick: bool = strawberry_django.field(description="Allow quick execution without modification.")

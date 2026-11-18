@@ -169,6 +169,18 @@ class Shortcut(models.Model):
     toolbox = models.ForeignKey(Toolbox, on_delete=models.CASCADE, related_name="shortcuts")
     action = models.ForeignKey("Action", on_delete=models.CASCADE, related_name="shortcuts", null=True)
     implementation = models.ForeignKey("Implementation", on_delete=models.CASCADE, related_name="shortcuts", null=True)
+    # The pin, as a schedule keeps it: an agent with one of its interfaces. Not the implementation
+    # row, which is made again when the agent registers again. Without the agent the shortcut
+    # is still there, unpinned.
+    agent = models.ForeignKey(
+        "Agent",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shortcuts",
+        help_text="Run the shortcut on this agent (with ``interface``); null = whoever runs it says where, or the server picks",
+    )
+    interface = models.CharField(max_length=1000, null=True, blank=True, help_text="The implementation interface on the pinned agent")
     saved_args = models.JSONField(default=dict, db_default={})
     creator = models.ForeignKey(
         get_user_model(),

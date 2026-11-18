@@ -263,3 +263,36 @@ async def test_a_rule_without_users_is_one_binding(backend_stack: Deployment) ->
         bound = await schema.execute(RULE, variable_values={"shortcut": ids["c-everywhere"], "app": APP}, context_value=_as("test"))
         assert bound.errors is None, bound.errors
     assert bound.data["bindShortcut"]["bindings"] == [{"user": None, "app": APP, "client": None, "device": None}]
+
+
+CREATE_PINNED = """
+    mutation Create($action: ID!, $agent: ID, $interface: String) {
+        createShortcut(input: {name: "run here", action: $action, args: {}, agent: $agent, interface: $interface}) {
+            id interface agent { id }
+        }
+    }
+"""
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_shortcut_names_the_agent_it_runs_on(backend_stack: Deployment) -> None:
+    """A shortcut keeps an agent with one of its interfaces, as a schedule does: what a stateful
+    action needs to be run from a shortcut without asking. A pin that names no implementation of
+    the action is refused, and a shortcut whose agent is gone is still there, unpinned."""
+    from tests.factories import _build_implementation_for_agent, seed_agent
+
+    agent = await seed_agent("shortcut-pin", token="test")
+    implementation = await sync_to_async(_build_implementation_for_agent)(agent.pk, "shortcut-pin")
+    target = {"action": str(implementation.action_id), "agent": str(agent.pk)}
+
+    created = await schema.execute(CREATE_PINNED, variable_values={**target, "interface": implementation.interface}, context_value=_as("test"))
+    assert created.errors is None, created.errors
+    assert created.data["createShortcut"] == {"id": created.data["createShortcut"]["id"], "interface": implementation.interface, "agent": {"id": str(agent.pk)}}
+
+    refused = await schema.execute(CREATE_PINNED, variable_values={**target, "interface": "another"}, context_value=_as("test"))
+    assert refused.errors and "has no implementation 'another'" in refused.errors[0].message
+
+    await agent.adelete()
+    shortcut = await models.Shortcut.objects.aget(pk=created.data["createShortcut"]["id"])
+    assert shortcut.agent_id is None

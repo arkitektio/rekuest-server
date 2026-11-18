@@ -579,7 +579,7 @@ pub async fn gc_action_bloks(
 /// An agent and everything below it. CASCADE: its tasks, implementations, states, sessions,
 /// patches and snapshots, locks, shelve and drawers, schedules and triggers, signal
 /// declarations, the bloks it declared with their mappings and placements, and its pins; the
-/// provided templates no other agent holds go with them. SET_NULL: the tasks its schedules and triggers fired. Refused like an implementation delete
+/// provided templates no other agent holds go with them. SET_NULL: the tasks its schedules and triggers fired, and the shortcuts pinned to it. Refused like an implementation delete
 /// while another agent's resolution still depends on one of its implementations (PROTECT).
 pub async fn delete_agent(
     conn: &mut PgConnection,
@@ -630,6 +630,7 @@ pub async fn delete_agent(
         "UPDATE facade_task SET schedule_id = NULL
           WHERE schedule_id IN (SELECT id FROM facade_schedule WHERE agent_id = ANY($1))",
         "DELETE FROM facade_schedule WHERE agent_id = ANY($1)",
+        "UPDATE facade_shortcut SET agent_id = NULL WHERE agent_id = ANY($1)",
         "UPDATE facade_task SET trigger_id = NULL
           WHERE trigger_id IN (SELECT id FROM facade_trigger WHERE agent_id = ANY($1))",
         "DELETE FROM facade_firing

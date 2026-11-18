@@ -47,6 +47,8 @@ class CreateShortcutInputModel(BaseModel):
     name: str = Field(description="The name of the shortcut. This is used to identify the shortcut in the system.")
     description: str | None = Field(default=None, description="The description of the shortcut.This can described the shortcut and its purpose.")
     action: str = Field(description="The action ID to create a shortcut for")
+    agent: str | None = Field(default=None, description="Pin the shortcut to this agent (with `interface`): it then runs there. What a shortcut to a stateful action needs to run without asking.")
+    interface: str | None = Field(default=None, description="The implementation interface on the pinned agent.")
     args: dict[str, JSON] = Field(description="The arguments to pre-pass to the shortcut. This is used to identify the shortcut in the system.")
     allow_quick: bool = Field(default=False, description="Whether to allow quick shortcuts. Quick shorts are shortcuts that can be autorun without scpeific assignment")
     use_returns: bool = Field(default=False, description="Whether when running the short the returns should be used further. Allows to create mini pipelines")
@@ -58,6 +60,8 @@ class CreateShortcutInputModel(BaseModel):
 @pydantic.input(CreateShortcutInputModel, description="The input for creating a shortcut.")
 class CreateShortcutInput:
     action: strawberry.ID
+    agent: strawberry.ID | None = None
+    interface: str | None = None
     name: str
     toolbox: strawberry.ID | None = None
     description: str | None = None

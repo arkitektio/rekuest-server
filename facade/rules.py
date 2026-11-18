@@ -12,16 +12,26 @@ from django.conf import settings
 from facade import models
 
 
-def check_pin(action: models.Action, agent: models.Agent | None, interface: str | None) -> None:
+def check_pin_names_an_implementation(action: models.Action, agent: models.Agent | None, interface: str | None) -> None:
     """A pin is an agent together with one of its interfaces, implementing ``action``."""
     if (agent is None) != (interface is None):
         raise ValueError("Pin an agent with both agent and interface, or give neither")
+    if agent is not None and not models.Implementation.objects.filter(agent=agent, interface=interface, action=action).exists():
+        raise ValueError(f"Agent {agent.pk} has no implementation {interface!r} of this action")
+
+
+def check_pin(action: models.Action, agent: models.Agent | None, interface: str | None) -> None:
+    """The pin of a rule: an implementation of ``action``, and there for a stateful action.
+
+    Nobody is asked when a rule fires, so a stateful action's rule says where it runs. (A
+    shortcut is run by a person, who can still be asked: it only has to name an implementation
+    when it names one, see ``check_pin_names_an_implementation``.)
+    """
+    check_pin_names_an_implementation(action, agent, interface)
     if agent is None and action.stateful:
         # Its runs would be refused one by one: a stateful action reads or changes the state of
         # the agent that runs it, so a rule says which agent that is.
         raise ValueError(f"A stateful action is assigned to a named agent: pin {action.name} to an agent and one of its interfaces")
-    if agent is not None and not models.Implementation.objects.filter(agent=agent, interface=interface, action=action).exists():
-        raise ValueError(f"Agent {agent.pk} has no implementation {interface!r} of this action")
 
 
 def check_provenance(action: models.Action, agent: models.Agent | None, interface: str | None, why: str) -> None:

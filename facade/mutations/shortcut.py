@@ -11,7 +11,7 @@ from django.db import transaction
 from graphql import GraphQLError
 from kante.types import Info
 
-from facade import inputs, models, types
+from facade import inputs, models, rules, types
 from facade.types.base import scoped_get
 from rekuest.contract import ADMIN
 
@@ -59,6 +59,11 @@ def create_shortcut(info: Info, input: inputs.CreateShortcutInput) -> types.Shor
     )
 
     action = models.Action.objects.get(id=data.action)
+    agent = scoped_get(models.Agent, info, data.agent) if data.agent is not None else None
+    try:
+        rules.check_pin_names_an_implementation(action, agent, data.interface)
+    except ValueError as refused:
+        raise GraphQLError(str(refused)) from refused
 
     args = [arg for arg in action.args if arg["key"] not in data.args]
     returns = [arg for arg in action.returns if arg["key"] not in []]
@@ -68,6 +73,8 @@ def create_shortcut(info: Info, input: inputs.CreateShortcutInput) -> types.Shor
             name=data.name,
             description=data.description,
             action_id=data.action,
+            agent=agent,
+            interface=data.interface,
             creator=info.context.request.user,
             saved_args=data.args,
             toolbox=toolbox,

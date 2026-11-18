@@ -2668,6 +2668,14 @@ input CreateShortcutInput {
   action: ID!
 
   """
+  Pin the shortcut to this agent (with `interface`): it then runs there. What a shortcut to a stateful action needs to run without asking.
+  """
+  agent: ID = null
+
+  """The implementation interface on the pinned agent."""
+  interface: String = null
+
+  """
   The arguments to pre-pass to the shortcut. This is used to identify the shortcut in the system.
   """
   args: Args!
@@ -6655,6 +6663,14 @@ type Shortcut {
 
   """Implementation of the action."""
   implementation: Implementation
+
+  """
+  The agent the shortcut is pinned to (with `interface`): it runs there. Null when it is not pinned, or its agent is gone.
+  """
+  agent: Agent
+
+  """The implementation interface on the pinned agent."""
+  interface: String
 
   """The toolbox this shortcut belongs to."""
   toolbox: Toolbox!
