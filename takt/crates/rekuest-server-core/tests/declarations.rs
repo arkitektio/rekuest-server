@@ -134,6 +134,26 @@ fn a_blok_sent_as_its_source_reads_only_what_its_agent_declares() {
     assert!(error.contains("'stage'"), "{error}");
 }
 
+/// A local borrowing one of its agent's action arguments finds the `self` the server names: the
+/// tree is checked with it, not before.
+#[test]
+fn a_blok_sent_as_its_source_borrows_its_own_actions_argument() {
+    let declaration = serde_json::json!({
+        "implementations": [{"interface": "set_exposure",
+            "definition": {"key": "set_exposure", "name": "Set Exposure", "kind": "FUNCTION", "returns": [],
+                "args": [{"key": "exposure_ms", "kind": "FLOAT", "nullable": false, "default": 50.0}]}}],
+        "bloks": [{"key": "panel", "vocab": 2,
+            "source": "<Blok kind=\"agent\" context=\"panel\"><local name=\"exposure\" like=\"self.set_exposure.exposure_ms\" /><Slider bind={exposure} /></Blok>"}]});
+    let validated = validate(&declaration).unwrap();
+    let blok = &validated.bloks.unwrap()[0];
+    assert_eq!(blok.dependencies[0].key, "self");
+
+    let error = validate(&serde_json::json!({"bloks": [{"key": "panel", "vocab": 2,
+        "source": "<Blok kind=\"agent\" context=\"panel\"><local name=\"exposure\" like=\"self.set_exposure.exposure_ms\" /><Slider bind={exposure} /></Blok>"}]}))
+    .unwrap_err();
+    assert!(error.contains("[deps.unknown_action]"), "{error}");
+}
+
 /// A port's own blok is a field of its action's form: it is checked where it is mounted, against
 /// its port, the action's arguments, and what the agent declares.
 #[test]

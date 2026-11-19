@@ -1183,8 +1183,9 @@ impl BlokImplementationInputModel {
 
     /// The `self` dependency of an agent's blok that names none: what its tree reads of the
     /// agent declaring `implementations` and `states` (`self_dependency`), added to its
-    /// dependencies, and its tree checked again mounted with it. Refused when it reads a state
-    /// or names an action the agent does not declare.
+    /// dependencies. Named before its tree is checked (`validate`), so that a local borrowing
+    /// an action's argument (`like="self.<action>.<arg>"`) finds it. Refused when it reads a
+    /// state or names an action the agent does not declare.
     pub fn name_self(
         &mut self,
         implementations: &[ImplementationInputModel],
@@ -1206,12 +1207,6 @@ impl BlokImplementationInputModel {
             return Ok(());
         };
         self.dependencies.insert(0, dependency);
-        let (kinds, mount) = self.agent_mount();
-        check_blok_manifest(
-            self.components.as_deref(),
-            &self.scope(kinds, &mount),
-            self.context(),
-        )?;
         Ok(())
     }
 
@@ -1795,8 +1790,10 @@ impl ImplementAgentInputModel {
             }
         }
         for blok in self.bloks.iter_mut().flatten() {
-            blok.validate()?;
+            // Its tree (a source is parsed first) is checked with the `self` it reads.
+            blok.read_source()?;
             blok.name_self(implementations, states)?;
+            blok.validate()?;
         }
         // An implementation's logo is an action logo blok the agent declares (`check_logos`): a
         // logo blok whose `<Blok>` says kind action.
