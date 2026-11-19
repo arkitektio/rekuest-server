@@ -196,6 +196,7 @@ mod tests {
             action: "h".into(),
             implementation: "2".into(),
             token: None,
+            traceparent: None,
             resume: None,
             state_requires: vec![],
         })));

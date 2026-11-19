@@ -17,6 +17,7 @@ use rand::seq::IndexedRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use sqlx::{PgConnection, PgPool};
+use tracing::Instrument;
 
 use rekuest_core::inputs::{ActionDemandInputModel, ArgPortInputModel, StateDemandInputModel};
 use rekuest_core::pyjson;
@@ -167,6 +168,11 @@ pub struct AssignInput {
     /// the action's overlay. Only a UI reads it (`Task.space`); a child's is ignored.
     #[serde(default)]
     pub space: Option<String>,
+    /// Where in a trace the assign was made, as a W3C `traceparent` (an agent's
+    /// `ASSIGN_REQUEST` names it). Unset, a child continues its parent's, and a root the trace
+    /// its request arrived in.
+    #[serde(default)]
+    pub traceparent: Option<String>,
     /// A child the server makes itself (an init hook, a trigger's run): never held. With
     /// `policy`, it runs under that instead of its parent's. Not on the wire.
     #[serde(skip)]
@@ -1357,6 +1363,8 @@ struct NewTask {
     state_requires: Vec<StateRequirement>,
     /// The space a root run was started in (the assign's `space`).
     space: Option<i64>,
+    /// Where in a trace the task was assigned (see [`crate::trace`]).
+    traceparent: Option<String>,
 }
 
 impl NewTask {
@@ -1396,6 +1404,7 @@ impl NewTask {
             held: false,
             state_requires: vec![],
             space: None,
+            traceparent: None,
         }
     }
 
@@ -1407,10 +1416,10 @@ impl NewTask {
                  dependency_method, resolution_id, is_higher_order_child, latest_event_kind,
                  latest_instruct_kind, dependencies, caller_id, dispatched_at, dispatch_attempts,
                  not_before, schedule_id, ephemeral, signal_id, trigger_id, trigger_depth, revision,
-                 policy, state_requires, space_id, on_lost, max_resumes)
+                 policy, state_requires, space_id, on_lost, max_resumes, traceparent)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
                      $18, CASE WHEN $30 THEN 'HELD' ELSE 'QUEUED' END, 'ASSIGN', $19, $20, $21,
-                     $22, $23, $24, $25, $26, $27, $28, 1, $29, $31, $32, $33, $34)
+                     $22, $23, $24, $25, $26, $27, $28, 1, $29, $31, $32, $33, $34, $35)
              RETURNING id",
         )
         .bind(self.action)
@@ -1447,6 +1456,7 @@ impl NewTask {
         .bind(self.space)
         .bind(self.on_lost)
         .bind(self.max_resumes)
+        .bind(&self.traceparent)
         .fetch_one(conn)
         .await
     }
@@ -1599,6 +1609,37 @@ pub async fn assign_with_status(
     principal: &CallerContext,
     input: &AssignInput,
     origin: AssignOrigin,
+) -> BackendResult<Assigned> {
+    // Where in a trace the assign is made: where its caller says, else where its parent was
+    // assigned. An assign is a span of its own, which the task then continues from.
+    let given = match crate::trace::valid(input.traceparent.as_deref()) {
+        Some(given) => Some(given.to_owned()),
+        None => match input.parent.as_deref().and_then(|p| parse_id(p).ok()) {
+            Some(parent) => sqlx::query_scalar::<_, Option<String>>(
+                "SELECT traceparent FROM facade_task WHERE id = $1",
+            )
+            .bind(parent)
+            .fetch_optional(&ctx.db)
+            .await?
+            .flatten(),
+            None => None,
+        },
+    };
+    let span = tracing::info_span!("assign", task = tracing::field::Empty);
+    crate::trace::continue_in(&span, given.as_deref());
+    let traceparent = span.in_scope(|| crate::trace::here(given.as_deref()));
+    assign_traced(ctx, principal, input, origin, traceparent)
+        .instrument(span)
+        .await
+}
+
+/// [`assign_with_status`], at `traceparent` in a trace.
+async fn assign_traced(
+    ctx: &Context,
+    principal: &CallerContext,
+    input: &AssignInput,
+    origin: AssignOrigin,
+    traceparent: Option<String>,
 ) -> BackendResult<Assigned> {
     let Some(organization) = principal.organization else {
         return Err(BackendError::Refused(
@@ -1800,6 +1841,7 @@ pub async fn assign_with_status(
         held,
         state_requires: state_requires.clone(),
         space,
+        traceparent: traceparent.clone(),
         ..NewTask::new(
             action.id,
             implementation.id,
@@ -1819,6 +1861,8 @@ pub async fn assign_with_status(
         }
         Err(e) => return Err(e.into()),
     };
+    tracing::Span::current().record("task", task);
+    crate::trace::measures::assigned();
     let token = mint_token_for_task(
         &mut tx,
         &ctx.settings,
@@ -1892,6 +1936,7 @@ pub async fn assign_with_status(
             action: action.hash.clone(),
             implementation: implementation.id.to_string(),
             token,
+            traceparent,
             resume: None,
             state_requires,
         },
@@ -2139,6 +2184,8 @@ async fn assign_higher_order(
             action: lower_action.hash.clone(),
             implementation: lower.id.to_string(),
             token,
+            // A higher-order pair is in no trace yet.
+            traceparent: None,
             resume: None,
             // Refused on a higher-order assign (see `assign_with_status`).
             state_requires: vec![],

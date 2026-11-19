@@ -60,6 +60,7 @@ pub fn assign_input(message: &FromAgent<impl Sized>) -> Option<BackendResult<Ass
         state_requires,
         on_lost,
         max_resumes,
+        traceparent,
     } = message
     else {
         return None;
@@ -101,6 +102,7 @@ pub fn assign_input(message: &FromAgent<impl Sized>) -> Option<BackendResult<Ass
         state_requires: (!state_requires.is_empty()).then(|| state_requires.clone()),
         // An agent's child runs in its root's space.
         space: None,
+        traceparent: traceparent.clone(),
         unheld: false,
     }))
 }

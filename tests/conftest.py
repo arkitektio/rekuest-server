@@ -113,7 +113,7 @@ def takt_stack(backend_stack: Deployment, django_db_setup: None) -> Iterator[str
     Started only now: takt needs the database to exist, and waits until it is migrated. Stopped
     before pytest-django drops that database again.
     """
-    backend_stack.up(services=["takt"], build=not os.environ.get("TAKT_IMAGE"))
+    backend_stack.up(services=["jaeger", "takt"], build=not os.environ.get("TAKT_IMAGE"))
     url = f"http://localhost:{os.environ['REKUEST_TEST_TAKT_PORT']}"
     _wait("takt answering", lambda: httpx.get(f"{url}/ht", timeout=2).status_code == 200, 180)
 
@@ -128,7 +128,7 @@ def takt_stack(backend_stack: Deployment, django_db_setup: None) -> Iterator[str
     if os.environ.get("REKUEST_TEST_TAKT_LOG"):
         with open(os.environ["REKUEST_TEST_TAKT_LOG"], "w") as log:
             log.write("\n".join(str(line) for line in backend_stack.logs(services=["takt"], tail="400")))
-    backend_stack.kill(services=["takt"])
+    backend_stack.kill(services=["takt", "jaeger"])
 
 
 @pytest.fixture

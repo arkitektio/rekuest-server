@@ -8,6 +8,7 @@
 pub mod configuration;
 pub mod internal;
 pub mod settings;
+pub mod telemetry;
 pub mod urls;
 
 pub use configuration::Configuration;

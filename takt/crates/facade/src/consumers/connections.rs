@@ -34,6 +34,11 @@ impl Connections {
             .insert(connection.to_owned(), control);
     }
 
+    /// How many agents have a connection in this process.
+    pub fn agents(&self) -> usize {
+        self.inner.lock().expect("connections lock").len()
+    }
+
     /// Leave it again (on disconnect).
     pub fn leave(&self, agent: i64, connection: &str) {
         let mut inner = self.inner.lock().expect("connections lock");

@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 
 import httpx
+from arkitekt_service import telemetry
 from django.conf import settings
 
 from facade import inputs, models, takt_api
@@ -50,7 +51,8 @@ def post(path: str, body: bytes) -> JSON:
         raise TaktUnavailable("rekuest.takt_url is not configured: takt serves this")
     url = f"{base.rstrip('/')}/internal/{path}"
     try:
-        response = _client.post(url, content=body, headers={"Content-Type": "application/json"})
+        # The trace the request is served in goes with it: takt assigns from inside it.
+        response = _client.post(url, content=body, headers={"Content-Type": "application/json", **telemetry.headers()})
     except httpx.HTTPError as error:
         raise TaktUnavailable(f"takt is unreachable at {url}: {error}") from error
     try:

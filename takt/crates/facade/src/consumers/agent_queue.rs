@@ -334,19 +334,23 @@ pub async fn read(db: &PgPool, agent: i64, after: u64) -> Result<Vec<Stored>, sq
 /// the assigns among them are picked up, as one statement. From here on such a task is the
 /// agent's, and an assign that is neither picked up nor kept here never was written.
 pub async fn ack(db: &PgPool, agent: i64, through: u64) -> Result<(), sqlx::Error> {
-    sqlx::query(
+    let waited_since: Vec<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
         "WITH gone AS (
             DELETE FROM facade_command WHERE agent_id = $1 AND pos <= $2 RETURNING kind, task
          )
          UPDATE facade_task t SET picked_up_at = now()
            FROM gone
           WHERE gone.kind = 'ASSIGN' AND t.id = gone.task AND t.agent_id = $1
-            AND t.picked_up_at IS NULL",
+            AND t.picked_up_at IS NULL
+         RETURNING coalesce(t.dispatched_at, t.created_at)",
     )
     .bind(agent)
     .bind(through as i64)
-    .execute(db)
+    .fetch_all(db)
     .await?;
+    for dispatched in waited_since {
+        crate::trace::measures::picked_up(dispatched);
+    }
     Ok(())
 }
 

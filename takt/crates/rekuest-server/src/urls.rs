@@ -38,7 +38,9 @@ fn prefixed(state: Shared, routes: Router<Shared>) -> Router {
     } else {
         Router::new().nest(&format!("/{prefix}"), routes)
     };
-    routes.with_state(state)
+    routes
+        .with_state(state)
+        .layer(axum::middleware::from_fn(crate::telemetry::traced))
 }
 
 /// The internal listener's routes: the internal API, and health for the server's own `ht`.

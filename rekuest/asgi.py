@@ -10,7 +10,14 @@ https://docs.djangoproject.com/en/4.2/howto/deployment/asgi/
 import os
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "rekuest.settings")
-from django.core.asgi import get_asgi_application
+
+# Before Django's application is built: what it connects with is traced from the start. Off,
+# and costing nothing, unless the config names a collector (`telemetry.endpoint`).
+from arkitekt_service import telemetry  # noqa: E402
+
+telemetry.setup()
+
+from django.core.asgi import get_asgi_application  # noqa: E402
 
 # Initialize Django ASGI application early to ensure the AppRegistry
 # is populated before importing code that may import ORM models.
@@ -33,8 +40,10 @@ from facade.schema import schema  # noqa: E402
 from kante.router import router  # noqa: E402
 # The agent protocol (``/agi``: sockets, HookAgent intake, signals) is takt's; this serves
 # GraphQL and its subscriptions only.
-application = router(
-    django_asgi_app=django_asgi_app,
-    schema=schema,
-    schema_path="schema",
+application = telemetry.wrap(
+    router(
+        django_asgi_app=django_asgi_app,
+        schema=schema,
+        schema_path="schema",
+    )
 )

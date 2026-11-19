@@ -27,7 +27,7 @@ dependencies = [
     "pint>=0.24",
     "pgvector>=0.5",
     "model2vec>=0.9",
-    "arkitekt-service>=9.0.0",
+    "arkitekt-service[telemetry]>=9.3.0",
     "arkitekt-datalayer>=3.0.0",
 ]
 

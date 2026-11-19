@@ -293,6 +293,9 @@ pub async fn claim_in(
             .execute(&mut *conn)
             .await?;
     }
+    if claim.mark_done {
+        crate::trace::measures::ended(row.created_at, claim.to_kind);
+    }
     Ok(Some(match &claim.event {
         Some(event) => Some(insert_event(&mut *conn, task, claim.to_kind, event).await?),
         None => None,

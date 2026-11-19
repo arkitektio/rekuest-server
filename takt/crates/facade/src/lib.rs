@@ -51,6 +51,7 @@ pub mod signals;
 pub mod state_requires;
 pub mod task_bloks;
 pub mod timing;
+pub mod trace;
 pub mod transport;
 pub mod triggers;
 pub mod unique;

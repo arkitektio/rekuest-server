@@ -153,6 +153,7 @@ pub async fn probe(
                 action: action.hash.clone(),
                 implementation: implementation.id.to_string(),
                 token,
+                traceparent: None,
                 resume: None,
                 state_requires: vec![],
             })),

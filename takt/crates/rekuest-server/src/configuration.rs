@@ -25,6 +25,38 @@ pub struct Configuration {
     pub instance: Option<InstanceBlock>,
     #[serde(default)]
     pub embeddings: EmbeddingsBlock,
+    /// Where traces and metrics go (`arkitekt_service`'s `TelemetrySettings`): the server's
+    /// own block, which takt follows.
+    #[serde(default)]
+    pub telemetry: TelemetryBlock,
+}
+
+/// `telemetry`: off, and costing nothing, until an endpoint is set.
+#[derive(Debug, Clone, Deserialize)]
+pub struct TelemetryBlock {
+    /// An OTLP collector's HTTP address (`http://collector:4318`).
+    #[serde(default)]
+    pub endpoint: Option<String>,
+    /// The share of traces started here that are recorded.
+    #[serde(default = "default_sample_ratio")]
+    pub sample_ratio: f64,
+    /// Send metrics beside the traces.
+    #[serde(default = "default_true")]
+    pub metrics: bool,
+}
+
+fn default_sample_ratio() -> f64 {
+    1.0
+}
+
+impl Default for TelemetryBlock {
+    fn default() -> Self {
+        Self {
+            endpoint: None,
+            sample_ratio: 1.0,
+            metrics: true,
+        }
+    }
 }
 
 /// `embeddings`: the one key of it takt reads. The model is not configuration: it is the
@@ -289,7 +321,7 @@ impl Configuration {
 }
 
 /// The sections of the file the environment may set a key of.
-const SECTIONS: [&str; 7] = [
+const SECTIONS: [&str; 8] = [
     "django",
     "postgres",
     "redis",
@@ -297,6 +329,7 @@ const SECTIONS: [&str; 7] = [
     "rekuest",
     "provenance",
     "instance",
+    "telemetry",
 ];
 
 /// Keys whose value is text whatever it looks like: a password of digits is still a password.

@@ -1,21 +1,18 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use rekuest_server::{settings, urls, Configuration};
-use tracing_subscriber::EnvFilter;
+use rekuest_server::{settings, telemetry, urls, Configuration};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
-        .init();
-
     // The server's own file: `ARKITEKT_CONFIG_FILE` names it for both, `TAKT_CONFIG` for
     // takt alone.
     let path = std::env::var("TAKT_CONFIG")
         .or_else(|_| std::env::var("ARKITEKT_CONFIG_FILE"))
         .unwrap_or_else(|_| "config.yaml".into());
     let configuration = Configuration::load(&path)?;
+    // Logging, and with a collector named in the config, traces and metrics.
+    let telemetry = telemetry::start(&configuration.telemetry)?;
     // takt signs what it asks of the server (the upkeep job) and of HookAgents with the
     // instance key: without one, none of that would be accepted.
     anyhow::ensure!(
@@ -88,6 +85,7 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(facade::schedule_notices::run_forever(facade.clone()));
     // Action.live_implementations: the server's triggers mark, every replica drains on the notice.
     tokio::spawn(facade::live_implementations::run_forever(facade.clone()));
+    telemetry.observe(&facade.connections);
     let state = Arc::new(urls::AppState {
         configuration,
         facade,
@@ -101,6 +99,7 @@ async fn main() -> anyhow::Result<()> {
         served = axum::serve(listener, urls::router(state)) => served?,
         () = shutdown_signal() => tracing::info!("takt stopping"),
     }
+    telemetry.stop();
     Ok(())
 }
 

@@ -277,6 +277,23 @@ run and handles "run now" (`triggerSchedule`).
 - Across a daylight-saving change, a slot in the skipped hour runs at the first instant after
   it, and a fixed-time job in the repeated hour of a fall-back night runs once.
 
+### `telemetry` — traces and metrics (optional)
+
+Off by default. With an `endpoint`, the server and takt (which reads the same block) send traces
+and metrics over OTLP/HTTP to that collector, and nowhere else: a span per HTTP request, GraphQL
+operation, database statement and outgoing request here, and per request and assign in takt
+(`rekuest-takt`). A task remembers where in a trace it was assigned (`Task.traceparent`) and its
+agent is told with every dispatch, so one trace follows a task from the request that assigned it
+to the agent and its children. Without an endpoint nothing is recorded; a trace a request arrives
+in is still passed on. A collector that wants credentials reads them from
+`OTEL_EXPORTER_OTLP_HEADERS`.
+
+| Key | Env var | Type | Default | Description |
+|---|---|---|---|---|
+| `endpoint` | `TELEMETRY__ENDPOINT` | str | `null` | An OTLP collector's HTTP address (`http://collector:4318`). Unset: off. |
+| `sample_ratio` | `TELEMETRY__SAMPLE_RATIO` | float | `1.0` | The share of traces started here that are recorded (0–1). |
+| `metrics` | `TELEMETRY__METRICS` | bool | `true` | Send metrics beside the traces. |
+
 ## Running more than one replica
 
 Nothing needs to be configured to scale either program: state lives in Postgres and redis, no

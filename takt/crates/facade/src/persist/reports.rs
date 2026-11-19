@@ -76,6 +76,7 @@ pub async fn agent_task_in(
         .bind(now)
         .execute(&mut *conn)
         .await?;
+        crate::trace::measures::picked_up(row.pickup_clock());
         row.picked_up_at = Some(now);
     }
     Ok(Some(row))

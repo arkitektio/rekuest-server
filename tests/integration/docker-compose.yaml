@@ -41,7 +41,17 @@ services:
          # One sweep at start, then none: a test's rows are only touched by what the test asks
          # for. A schedule is planned when its notice arrives, as in production.
          REKUEST__SWEEP_INTERVAL: "86400"
+         # takt records, as on a hub whose operator named a collector (tests/graphql/test_task_traces.py).
+         TELEMETRY__ENDPOINT: http://jaeger:4318
+         TELEMETRY__METRICS: "false"
       ports:
          - "${REKUEST_TEST_TAKT_PORT:-7777}:8081"
       volumes:
          - ../../config.yaml:/workspace/config.yaml:ro
+   jaeger:
+      # Where takt's traces go, and where a test reads them back from (the query API).
+      image: jaegertracing/all-in-one:1.76.0
+      environment:
+         COLLECTOR_OTLP_ENABLED: "true"
+      ports:
+         - "${REKUEST_TEST_JAEGER_PORT:-16686}:16686"

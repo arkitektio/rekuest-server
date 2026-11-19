@@ -10,7 +10,7 @@ repository = "https://github.com/jhnnsrs/rekuest-server-next"
 
 [workspace.dependencies]
 # The wire types, shared with the agents (arkirust).
-rekuest-protocol = "0.22"
+rekuest-protocol = "0.26"
 facade = { path = "crates/facade", package = "rekuest-server-facade" }
 authentikate = { path = "crates/authentikate" }
 rekuest-core = { path = "crates/rekuest-server-core", package = "rekuest-server-core" }
@@ -40,3 +40,9 @@ hmac = "0.12"
 regex = "1"
 ring = "0.17"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# Telemetry, when the config names a collector (`rekuest-server`'s `telemetry.rs`): spans are
+# `tracing`'s, sent over OTLP/HTTP.
+opentelemetry = "0.33"
+opentelemetry_sdk = "0.33"
+opentelemetry-otlp = { version = "0.33", default-features = false, features = ["http-proto", "reqwest-blocking-client", "trace", "metrics"] }
+tracing-opentelemetry = { version = "0.34", default-features = false }

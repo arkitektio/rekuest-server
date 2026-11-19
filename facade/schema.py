@@ -6,6 +6,7 @@ import strawberry_django
 from arkitekt_datalayer import mutations as datalayer_mutations
 from arkitekt_datalayer.datalayer import load_config
 from arkitekt_datalayer.scalars import SCALAR_MAP as dscalar_map
+from arkitekt_service.graphql import TelemetryExtension
 from authentikate.catch_alls import declare_catch_alls
 from authentikate.strawberry import AuthentikateExtension, AuthExtension, AuthSubscribeExtension
 from django.db.models import Q
@@ -405,6 +406,7 @@ schema = Schema(
     subscription=Subscription,
     mutation=Mutation,
     extensions=[
+        TelemetryExtension,
         DjangoOptimizerExtension,
         AuthentikateExtension,
     ],

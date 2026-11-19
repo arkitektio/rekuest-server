@@ -138,6 +138,7 @@ struct AssignSource {
     user_sub: Option<String>,
     org_identifier: Option<String>,
     state_requires: Option<Json<Vec<StateRequirement>>>,
+    traceparent: Option<String>,
 }
 
 /// Rebuild the Assign of a task sent again, or `None` (`_build_redispatch_assign_sync`): when it
@@ -150,7 +151,8 @@ pub async fn build_redispatch_assign(
     let source: Option<AssignSource> = sqlx::query_as(
         "SELECT t.args, t.reference, t.capture, t.step, t.resolution_id, t.parent_id, t.root_id,
                 t.implementation_id, i.interface, i.execution, a.hash AS action_hash,
-                u.sub AS user_sub, o.identifier AS org_identifier, t.state_requires
+                u.sub AS user_sub, o.identifier AS org_identifier, t.state_requires,
+                t.traceparent
            FROM facade_task t
            JOIN facade_action a ON a.id = t.action_id
            LEFT JOIN facade_implementation i ON i.id = t.implementation_id
@@ -205,6 +207,8 @@ pub async fn build_redispatch_assign(
         action: source.action_hash,
         implementation: implementation.to_string(),
         token,
+        // Sent again as it was first: a redelivered task stays in the trace it was assigned in.
+        traceparent: source.traceparent,
         resume,
         // Sent again with every dispatch: a held, delayed or redelivered task is tested as
         // its first send would have been.
