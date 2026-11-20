@@ -49,7 +49,8 @@ def test_an_agent_blok_reads_self_and_calls_its_declared_actions() -> None:
         _blok([{"id": "", "component": "Button", "props": [{"key": "onClick", "agent_call": {"dependency": "self", "operation": "fly"}}]}], dependencies=[SELF])
     with pytest.raises(ValidationError, match=r"deps\.unknown_state"):
         _blok(_text("self.legs"), dependencies=[SELF])
-    with pytest.raises(ValidationError, match=r"roots\.not_in_kind"):
+    # Another agent is read through the dependencies the blok declares itself, never as given.
+    with pytest.raises(ValidationError, match=r"deps\.unknown"):
         _blok(_text("deps.robot.arm"), dependencies=[{"key": "robot"}])
 
 
