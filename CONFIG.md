@@ -288,11 +288,16 @@ to the agent and its children. Without an endpoint nothing is recorded; a trace 
 in is still passed on. A collector that wants credentials reads them from
 `OTEL_EXPORTER_OTLP_HEADERS`.
 
+On a hub, `konstruktor hub features add telemetry` turns it on for every service at once: the
+hub names its collector and this block is written from it, so it is only set by hand for a
+server run on its own.
+
 | Key | Env var | Type | Default | Description |
 |---|---|---|---|---|
 | `endpoint` | `TELEMETRY__ENDPOINT` | str | `null` | An OTLP collector's HTTP address (`http://collector:4318`). Unset: off. |
 | `sample_ratio` | `TELEMETRY__SAMPLE_RATIO` | float | `1.0` | The share of traces started here that are recorded (0–1). |
 | `metrics` | `TELEMETRY__METRICS` | bool | `true` | Send metrics beside the traces. |
+| `statements` | `TELEMETRY__STATEMENTS` | bool | `true` | A span per database statement of the server (takt records none). `false` for far fewer spans. |
 
 ## Running more than one replica
 
