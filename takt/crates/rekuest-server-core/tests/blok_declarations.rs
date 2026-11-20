@@ -59,11 +59,11 @@ fn a_blok_is_a_blok_element_saying_the_context_it_is_sent_as() {
 }
 
 #[test]
-fn an_agent_blok_reads_self_not_deps() {
+fn an_agent_blok_reads_only_the_dependencies_it_declares() {
     let mut fields = panel("<Text text={deps.robot.arm} />");
     fields["dependencies"] = json!([{"key": "robot"}]);
     let error = blok(fields).unwrap_err();
-    assert!(error.contains("[roots.not_in_kind]"), "{error}");
+    assert!(error.contains("[deps.unknown]"), "{error}");
 }
 
 #[test]

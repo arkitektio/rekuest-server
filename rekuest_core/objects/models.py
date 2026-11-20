@@ -265,6 +265,7 @@ class AgentCallModel(BaseModel):
     dependency: str
     operation: str
     arguments: Optional[List["ActionArgumentModel"]] = None
+    given: Optional[str] = None
 
 
 class UtilCallModel(BaseModel):

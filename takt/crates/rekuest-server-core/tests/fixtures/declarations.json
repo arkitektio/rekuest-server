@@ -20125,7 +20125,7 @@
     }
    ]
   },
-  "error": "Text[0]: deps.robot.arm: an agent blok has no 'deps' (it reads args, queries, self, subscriptions, then, viewer). [roots.not_in_kind]",
+  "error": "Text[0]: deps.robot.arm: 'robot' is not a dependency of the blok (its dependencies: none). Fix: declare it in the blok: <dependencies key=\"robot\" like=\"self.<action>\" />, then read robot.<dependency>. [deps.unknown]",
   "error_type": "value_error"
  },
  "blok reading its own state": {

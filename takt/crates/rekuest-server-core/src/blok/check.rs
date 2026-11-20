@@ -29,13 +29,15 @@ use regex::Regex;
 use serde_json::Value;
 
 use super::declared::{
-    blok_header, content, declaration_problem, declared_queries, declared_subscriptions,
-    header_problem, iter_with_parents, local_declared, local_name, local_problem, BlokHeader,
-    LIKE_PROP, LOCAL_COMPONENT, NAME_PROP, QUERY_COMPONENT, SUBSCRIPTION_COMPONENT, VAR_COMPONENT,
+    blok_header, content, declaration_problem, declared_dependencies, declared_queries,
+    declared_subscriptions, header_problem, iter_with_parents, local_declared, local_name,
+    local_problem, BlokHeader, DeclaredDependencies, DEPENDENCIES_COMPONENT, KEY_PROP, LIKE_PROP,
+    LOCAL_COMPONENT, NAME_PROP, QUERY_COMPONENT, SUBSCRIPTION_COMPONENT, VAR_COMPONENT,
 };
-use super::expr::s;
+use super::expr::{s, PICK_VERB, REFERENCE_SEPARATOR};
 use super::infer::{resolve_locals, ArgPorts, ResolvedLocal};
 use super::vocabulary::{vocabulary, Finding, Kind, RecordField, Vocabulary};
+use crate::bsx::PICK_FUNCTION;
 use crate::enums::PortKind;
 use crate::inputs::{
     is_field_path, is_name, operation_keyword, ActionArgumentInputModel, AgentDependencyInputModel,
@@ -140,6 +142,85 @@ pub struct BlokScope {
     /// The port a port blok is the widget of, as a match: what `port.value` is typed as. None
     /// leaves the value open.
     pub port: Option<PortMatchInputModel>,
+    /// Per action of the blok's own agent, that action's dependencies: what an agent blok's
+    /// `<dependencies key="cells" like="self.<action>" />` declares as `cells.<dependency>`.
+    /// None: not known here, they are then taken as written.
+    pub workflows: Option<HashMap<String, Vec<AgentDependencyInputModel>>>,
+}
+
+const PICKER_COMPONENT: &str = "deppicker";
+/// `cells.options.<dependency>`: the agents that fit a declared dependency, to pick among.
+const OPTIONS_SEGMENT: &str = "options";
+
+/// The dependency `<key>.<name>` of declared dependencies, as it is stored.
+fn reference_key(key: &str, name: &str) -> String {
+    format!("{key}{REFERENCE_SEPARATOR}{name}")
+}
+
+/// The dependencies `declared` borrows, each keyed `<key>__<dependency>`; or what is wrong with
+/// its `like`.
+pub fn borrowed_dependencies(
+    declared: &DeclaredDependencies,
+    workflows: &HashMap<String, Vec<AgentDependencyInputModel>>,
+) -> Result<Vec<AgentDependencyInputModel>, String> {
+    let Some(action) = declared.action() else {
+        return Err("is not self.<action>".to_owned());
+    };
+    let Some(dependencies) = workflows.get(action) else {
+        return Err(format!("names no action of the app ({})", repr(&s(action))));
+    };
+    if dependencies.is_empty() {
+        return Err(format!(
+            "names an action with no dependencies ({})",
+            repr(&s(action))
+        ));
+    }
+    let taken = dependencies.iter().find(|dependency| {
+        dependency.key == OPTIONS_SEGMENT
+            || dependency.key == PICK_VERB
+            || dependency.key.contains(REFERENCE_SEPARATOR)
+    });
+    if let Some(taken) = taken {
+        return Err(format!(
+            "names an action with a dependency called {}, which cannot be read through a reference: rename that parameter of {action}",
+            repr(&s(taken.key.clone()))
+        ));
+    }
+    Ok(dependencies
+        .iter()
+        .map(|dependency| AgentDependencyInputModel {
+            key: reference_key(&declared.key, &dependency.key),
+            ..dependency.clone()
+        })
+        .collect())
+}
+
+/// `scope` with the dependencies an agent blok declares itself (`<dependencies>`) among its
+/// dependencies, keyed `<key>__<dependency>` and demanded as their action demands them. A
+/// declaration whose `like` does not resolve is left out (the checker says why), as is every
+/// one where the app's actions are not known (`workflows` none).
+pub fn bound_scope(tree: &ComponentNodeInputModel, scope: &BlokScope) -> BlokScope {
+    let mut bound = scope.clone();
+    let Some(workflows) = &scope.workflows else {
+        return bound;
+    };
+    if blok_header(tree).ok().map(|header| header.kind).as_deref() != Some("agent") {
+        return bound;
+    }
+    let mut dependencies = scope.dependencies.clone().unwrap_or_default();
+    let mut added = false;
+    for declared in declared_dependencies(tree) {
+        for dependency in borrowed_dependencies(&declared, workflows).unwrap_or_default() {
+            if !dependencies.iter().any(|known| known.key == dependency.key) {
+                dependencies.push(dependency);
+                added = true;
+            }
+        }
+    }
+    if added {
+        bound.dependencies = Some(dependencies);
+    }
+    bound
 }
 
 impl BlokScope {
@@ -533,9 +614,264 @@ struct Checker<'a> {
     asks: bool,
     /// The id of the root that says `chrome="none"`, when it does.
     chromeless: Option<String>,
+    /// The dependencies an agent blok declares itself, by key.
+    declared: Vec<DeclaredDependencies>,
 }
 
 impl<'a> Checker<'a> {
+    fn declaration(&self, key: &str) -> Option<&DeclaredDependencies> {
+        self.declared.iter().find(|declared| declared.key == key)
+    }
+
+    /// Whether the dependencies declared as `key` are known here: its action is one of the
+    /// app's, so what is read through it is held to that action's dependencies.
+    fn typed(&self, key: &str) -> bool {
+        match (self.declaration(key), &self.scope.workflows) {
+            (Some(declared), Some(workflows)) => borrowed_dependencies(declared, workflows).is_ok(),
+            _ => false,
+        }
+    }
+
+    /// Whether `dependency` (stored `<key>__<name>`) is none this agent blok declares: its
+    /// dependencies are the ones in its own tree, mounted or not.
+    fn undeclared(&self, dependency: &str) -> bool {
+        if self.kind_name() != "agent" || dependency == "self" {
+            return false;
+        }
+        let Some((key, name)) = dependency.split_once(REFERENCE_SEPARATOR) else {
+            return true;
+        };
+        if self.declaration(key).is_none() {
+            return true;
+        }
+        self.typed(key) && name != OPTIONS_SEGMENT && !self.dependencies.contains_key(dependency)
+    }
+
+    /// What `key` may read through, for a message: the dependencies declared under it, else
+    /// the keys the blok declares.
+    fn dependency_known(&self, key: &str) -> String {
+        if self.typed(key) {
+            let prefix = reference_key(key, "");
+            let names: Vec<String> = self
+                .dependencies
+                .keys()
+                .filter_map(|name| name.strip_prefix(prefix.as_str()))
+                .map(|name| format!("{key}.{name}"))
+                .collect();
+            return sorted_keys(names.iter().map(String::as_str));
+        }
+        sorted_keys(self.declared.iter().map(|declared| declared.key.as_str()))
+    }
+
+    fn unknown_dependency(&mut self, at: &str, path: &str, shown: &str, key: &str) {
+        let fields = [
+            ("path", s(path)),
+            ("key", s(shown)),
+            ("keys", s(self.dependency_known(key))),
+            ("hint", s(dependency_hint(key, self.kind_name()))),
+        ];
+        self.add("deps.unknown", Some(at), &fields);
+    }
+
+    /// `<key>.options.<dependency>`: the agents that fit it, each `{id, name, connected, picked}`.
+    fn options(&mut self, key: &str, rest: &[&str], path: &str, node_id: &str) -> Resolved {
+        let Some(name) = rest.first() else {
+            let root = format!("{key}.{OPTIONS_SEGMENT}");
+            self.add(
+                "roots.whole",
+                Some(node_id),
+                &[("path", s(path)), ("root", s(root))],
+            );
+            return None;
+        };
+        if self.typed(key)
+            && !self
+                .dependencies
+                .contains_key(reference_key(key, name).as_str())
+        {
+            self.unknown_dependency(node_id, path, &format!("{key}.{name}"), key);
+            return None;
+        }
+        let field = |key: &str, kind: PortKind| Shape::typed(key, Some(kind));
+        let option = Shape {
+            key: Some("...".to_owned()),
+            kind: Some(PortKind::DICT),
+            open: false,
+            children: Some(vec![
+                field("id", PortKind::STRING),
+                field("name", PortKind::STRING),
+                field("connected", PortKind::BOOL),
+                field("picked", PortKind::BOOL),
+            ]),
+        };
+        let listed = Shape {
+            key: Some((*name).to_owned()),
+            kind: Some(PortKind::LIST),
+            open: false,
+            children: Some(vec![option]),
+        };
+        self.descend(Some(listed), &rest[1..], path, node_id)
+    }
+
+    /// `<key>.pick(<dependency>: <agent id>)`: declared dependencies, and dependencies of them.
+    fn check_pick(&mut self, call: &UtilCallInputModel, where_: &Where<'_>) {
+        let argument = |key: &str| {
+            call.arguments
+                .iter()
+                .flatten()
+                .find(|argument| argument.key.as_deref() == Some(key))
+        };
+        let key = argument("key")
+            .and_then(|named| named.value_literal.as_ref())
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let Some(key) = key.filter(|key| self.declaration(key).is_some()) else {
+            let shown = argument("key")
+                .and_then(|named| named.value_literal.as_ref())
+                .and_then(Value::as_str)
+                .unwrap_or("?")
+                .to_owned();
+            let path = format!("{shown}.{PICK_VERB}(...)");
+            self.unknown_dependency(&where_.node.id, &path, &shown, &shown);
+            return;
+        };
+        if !self.typed(&key) {
+            return;
+        }
+        let picked: Vec<String> = argument("picks")
+            .and_then(|picks| picks.value_dict.as_ref())
+            .into_iter()
+            .flatten()
+            .filter_map(|pick| pick.key.clone())
+            .collect();
+        for name in picked {
+            if !self
+                .dependencies
+                .contains_key(reference_key(&key, &name).as_str())
+            {
+                let path = format!("{key}.{PICK_VERB}(...)");
+                self.unknown_dependency(&where_.node.id, &path, &format!("{key}.{name}"), &key);
+            }
+        }
+    }
+
+    /// `<deppicker key="cells" />` or `key="cells.microscope"`: declared dependencies.
+    fn check_picker(&mut self, node: &ComponentNodeInputModel) {
+        let written = node
+            .props
+            .iter()
+            .flatten()
+            .find(|prop| prop.key == KEY_PROP)
+            .and_then(|prop| prop.static_value.as_ref())
+            .and_then(Value::as_str);
+        let Some(written) = written else {
+            return; // a catalog says a key is needed
+        };
+        let (key, name) = written.split_once('.').unwrap_or((written, ""));
+        let known = self.declaration(key).is_some()
+            && (name.is_empty()
+                || !self.typed(key)
+                || self
+                    .dependencies
+                    .contains_key(reference_key(key, name).as_str()));
+        if !known {
+            let path = format!("{}.key", node.component);
+            self.unknown_dependency(&node.id, &path, written, key);
+        }
+    }
+
+    /// A `<dependencies>` is a child of an agent blok's `<Blok>`, keyed once, and names one of
+    /// the app's own actions that has dependencies.
+    fn check_dependencies(&mut self, tree: &ComponentNodeInputModel) {
+        for (node, ancestors) in iter_with_parents(tree) {
+            if node.component != DEPENDENCIES_COMPONENT {
+                continue;
+            }
+            let literal = |key: &str| {
+                node.props
+                    .iter()
+                    .flatten()
+                    .find(|prop| prop.key == key)
+                    .and_then(|prop| prop.static_value.as_ref())
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            };
+            let key = literal(KEY_PROP);
+            if ancestors.len() != 1 || self.kind_name() != "agent" {
+                let at = match ancestors.last() {
+                    Some(parent) if ancestors.len() != 1 => parent.id.clone(),
+                    _ => format!("a{} {} blok", article(self.kind_name()), self.kind_name()),
+                };
+                let fields = [
+                    ("key", s(key.unwrap_or_else(|| "?".to_owned()))),
+                    ("at", s(at)),
+                ];
+                self.add("dependencies.position", Some(&node.id), &fields);
+                continue;
+            }
+            let Some(key) = key.filter(|key| is_name(key)) else {
+                let fields = [
+                    ("node", s(node.id.clone())),
+                    ("problem", s("has no plain key")),
+                ];
+                self.add("dependencies.key", Some(&node.id), &fields);
+                continue;
+            };
+            if key == "self" || self.declaration(&key).is_some() {
+                let problem = if key == "self" {
+                    "is keyed self, which is the blok's own agent".to_owned()
+                } else {
+                    format!("declares {} a second time", repr(&s(key.clone())))
+                };
+                let fields = [("node", s(node.id.clone())), ("problem", s(problem))];
+                self.add("dependencies.key", Some(&node.id), &fields);
+                continue;
+            }
+            let declared = DeclaredDependencies {
+                key: key.clone(),
+                node: node.id.clone(),
+                like: literal(LIKE_PROP),
+            };
+            let problem = if declared.action().is_none() {
+                Some("is not self.<action>".to_owned())
+            } else {
+                self.scope
+                    .workflows
+                    .as_ref()
+                    .and_then(|workflows| borrowed_dependencies(&declared, workflows).err())
+            };
+            self.declared.push(declared.clone());
+            if let Some(problem) = problem {
+                let fields = [
+                    ("key", s(key)),
+                    ("like", s(declared.like.unwrap_or_default())),
+                    ("problem", s(problem)),
+                ];
+                self.add("dependencies.like", Some(&node.id), &fields);
+            }
+        }
+    }
+
+    /// `with <key>`: dependencies the blok declares, of the action that is called.
+    fn check_with(&mut self, call: &AgentProbeInputModel, where_: &Where<'_>) {
+        let given = call.given.clone().unwrap_or_default();
+        let action = action_key_for(call).to_owned();
+        let Some(declared) = self.declaration(&given).cloned() else {
+            let path = format!("with {given}");
+            self.unknown_dependency(&where_.node.id, &path, &given, &given);
+            return;
+        };
+        if let Some(of) = declared.action().filter(|of| *of != action) {
+            let fields = [
+                ("path", s(where_.text())),
+                ("key", s(given)),
+                ("action", s(action)),
+                ("of", s(of)),
+            ];
+            self.add("with.mismatch", Some(&where_.node.id), &fields);
+        }
+    }
+
     fn add(&mut self, code: &str, at: Option<&str>, fields: &[(&str, Value)]) {
         self.findings.push(Finding::of(code, at, fields));
     }
@@ -637,6 +973,7 @@ impl<'a> Checker<'a> {
                 self.add("blok.content", Some(&tree.id), &fields);
             }
         }
+        self.check_dependencies(tree);
         self.check_local_positions(tree);
         self.check_queries(tree);
         for (name, sites) in into_sites(tree) {
@@ -1139,6 +1476,9 @@ impl<'a> Checker<'a> {
         scope: &Scope,
     ) {
         self.check_host_part(node, ancestors);
+        if node.component == PICKER_COMPONENT {
+            self.check_picker(node);
+        }
         for prop in node.props.iter().flatten() {
             self.check_prop(node, prop, scope);
         }
@@ -1396,8 +1736,31 @@ impl<'a> Checker<'a> {
             );
             return;
         }
-        let Some(dependency) = self.dependencies.get(call.dependency.as_str()).copied() else {
-            if call.dependency != "self" && self.mounted {
+        if call.given.is_some() {
+            self.check_with(call, where_);
+        }
+        let undeclared = self.undeclared(&call.dependency);
+        let known = if undeclared {
+            None
+        } else {
+            self.dependencies.get(call.dependency.as_str()).copied()
+        };
+        let Some(dependency) = known else {
+            let unknown = if self.kind_name() == "agent" {
+                undeclared
+            } else {
+                self.mounted
+            };
+            if call.dependency != "self" && unknown && self.kind_name() == "agent" {
+                let shown = call.dependency.replace(REFERENCE_SEPARATOR, ".");
+                let written = call
+                    .dependency
+                    .split(REFERENCE_SEPARATOR)
+                    .next()
+                    .unwrap_or_default()
+                    .to_owned();
+                self.unknown_dependency(&where_.node.id, &owner, &shown, &written);
+            } else if call.dependency != "self" && unknown {
                 let fields = [
                     ("path", s(owner)),
                     ("key", s(call.dependency.clone())),
@@ -1549,6 +1912,9 @@ impl<'a> Checker<'a> {
             if let Some(verb) = query_verb(&call.operation) {
                 self.check_query_effect(call, verb, where_);
             }
+        }
+        if call.operation == PICK_FUNCTION {
+            self.check_pick(call, where_);
         }
         let keys: HashSet<&str> = call
             .arguments
@@ -1922,9 +2288,34 @@ impl<'a> Checker<'a> {
                 let Some(key) = rest.first() else {
                     return whole(self, "deps");
                 };
-                let Some(dependency) = self.dependencies.get(key).copied() else {
-                    if !self.mounted {
+                // An agent blok's dependencies are in its own tree (`cells.microscope`, stored
+                // `deps.cells__microscope`): one it does not declare is unknown, mounted or
+                // not; one it declares and this side cannot type is open.
+                if self.kind_name() == "agent" {
+                    if let Some((reference, OPTIONS_SEGMENT)) = key.split_once(REFERENCE_SEPARATOR)
+                    {
+                        if self.declaration(reference).is_some() {
+                            return self.options(reference, &rest[1..], path, &node_id);
+                        }
+                    }
+                }
+                let undeclared = self.undeclared(key);
+                let known = if undeclared {
+                    None
+                } else {
+                    self.dependencies.get(key).copied()
+                };
+                let Some(dependency) = known else {
+                    if !undeclared && (!self.mounted || self.kind_name() == "agent") {
                         return Some(Shape::open(Some(path)));
+                    }
+                    if self.kind_name() == "agent" {
+                        let (reference, shown) = match key.split_once(REFERENCE_SEPARATOR) {
+                            Some((reference, name)) => (reference, format!("{reference}.{name}")),
+                            None => (*key, (*key).to_owned()),
+                        };
+                        self.unknown_dependency(&node_id, path, &shown, reference);
+                        return None;
                     }
                     let fields = [
                         ("path", s(path)),
@@ -2344,6 +2735,8 @@ pub fn check_blok(
         return (vec![problem], vec![]);
     }
     let header = blok_header(tree).expect("a readable header");
+    let bound = bound_scope(tree, scope);
+    let scope = &bound;
     let resolved = resolve_locals(tree, scope.dependencies.as_deref(), &scope.arg_ports);
     let vocabulary = vocabulary();
     let kind = vocabulary
@@ -2372,6 +2765,7 @@ pub fn check_blok(
         into: HashSet::new(),
         asks: false,
         chromeless,
+        declared: vec![],
     };
     checker.check_declarations(tree);
     let mut root_scope = Scope::new();
@@ -2398,13 +2792,15 @@ pub fn check_blok_tree(tree: &ComponentNodeInputModel, scope: &BlokScope) -> Vec
 /// What a blok of `kind` that reads an undeclared `deps.<key>` does about it:
 /// - custom and task bloks declare it, to copy as it is: `dependencies=[AgentDependencyInput(key="laser")]`;
 /// - an action blok's dependencies are its action's: ``add a dependency parameter `laser` to the action``;
-/// - an agent blok has none: ``agent bloks read only `self` ``.
+/// - an agent blok declares it in its own tree: `<dependencies key="laser" like="self.<action>" />`.
 pub fn dependency_hint(key: &str, kind: &str) -> String {
     match kind {
         "action" | "assign" | "port" => {
             format!("add a dependency parameter `{key}` to the action")
         }
-        "agent" => "agent bloks read only `self`".to_string(),
+        "agent" => format!(
+            "declare it in the blok: <dependencies key=\"{key}\" like=\"self.<action>\" />, then read {key}.<dependency>"
+        ),
         _ => format!("dependencies=[AgentDependencyInput(key=\"{key}\")]"),
     }
 }

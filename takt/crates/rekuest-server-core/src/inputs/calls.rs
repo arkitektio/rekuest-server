@@ -101,6 +101,11 @@ pub struct AgentProbeInputModel {
     pub operation: String,
     #[serde(default)]
     pub arguments: Option<Vec<ActionArgumentInputModel>>,
+    /// `with <key>`, on a call to `self` only: the dependencies the blok declares under that
+    /// key, whose agents the run gets. Left out when not written, so a call without it is
+    /// stored as it always was.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub given: Option<String>,
 }
 
 impl AgentProbeInputModel {

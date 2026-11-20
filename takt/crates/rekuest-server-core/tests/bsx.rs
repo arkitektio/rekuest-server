@@ -5,6 +5,7 @@
 //! catalog read), mounted as the case's `mount` says. The corpus is written by the spec
 //! (`arkitekt_spec.blok.corpus`, see `tests/fixtures/generate_bsx.py`).
 
+use rekuest_core::blok::check::bound_scope;
 use rekuest_core::blok::infer::{resolve_locals, ArgPorts};
 use rekuest_core::blok::{check_blok_tree, BlokScope};
 use rekuest_core::bsx::{parse_bsx, parse_bsx_default, MAX_SOURCE_BYTES};
@@ -129,6 +130,20 @@ fn mount_of(mount: &Value) -> BlokScope {
             .get("port")
             .filter(|port| port.is_object())
             .map(typed::<rekuest_core::inputs::PortMatchInputModel>),
+        workflows: mount
+            .get("workflows")
+            .and_then(Value::as_object)
+            .map(|workflows| {
+                workflows
+                    .iter()
+                    .map(|(action, dependencies)| {
+                        (
+                            action.clone(),
+                            typed::<Vec<AgentDependencyInputModel>>(dependencies),
+                        )
+                    })
+                    .collect()
+            }),
         ..BlokScope::default()
     }
 }
@@ -158,7 +173,7 @@ fn every_checked_source_resolves_its_locals_as_the_spec_does() {
     for case in cases().iter().filter(|c| c.get("resolved").is_some()) {
         count += 1;
         let tree: ComponentNodeInputModel = typed(&case["tree"]);
-        let scope = mount_of(&case["mount"]);
+        let scope = bound_scope(&tree, &mount_of(&case["mount"]));
         let resolved = resolve_locals(&tree, scope.dependencies.as_deref(), &ArgPorts::new());
         let got = serde_json::json!({
             "locals": Value::Object(
@@ -329,15 +344,15 @@ fn the_deps_unknown_hint_says_what_the_kind_does() {
             findings[0].message
         );
     }
-    // An agent blok has no `deps` root: the kind refuses it before any key is looked up.
+    // An agent blok's dependencies are in its own tree: one it does not declare is unknown.
     let scope = BlokScope::mounted(&[], "", vec![]);
     let codes: Vec<String> = check_blok_tree(&blok("agent"), &scope)
         .into_iter()
         .map(|f| f.code)
         .collect();
-    assert_eq!(codes, ["roots.not_in_kind"]);
+    assert_eq!(codes, ["deps.unknown"]);
     assert_eq!(
         rekuest_core::blok::check::dependency_hint("laser", "agent"),
-        "agent bloks read only `self`"
+        r#"declare it in the blok: <dependencies key="laser" like="self.<action>" />, then read laser.<dependency>"#
     );
 }

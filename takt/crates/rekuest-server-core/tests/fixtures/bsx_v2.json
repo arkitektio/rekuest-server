@@ -1,6 +1,6 @@
 {
  "vocab": 2,
- "minor": 5,
+ "minor": 6,
  "catalogs": {
   "base": "https://arkitekt.live/catalogs/base/v4",
   "bundled": {
@@ -82,6 +82,335 @@
     ]
    },
    "printed": "<Card className=\"p-4\">\n  <Text text=\"@fff\" />\n</Card>"
+  },
+  {
+   "name": "declared dependencies",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" like=\"self.analyze\" /><Text>{cells.microscope.stage.position}</Text><Button onClick={cells.microscope.jog(dx: 1) into moved}>Right</Button></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.analyze"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Text[0]",
+      "component": "Text",
+      "children": [
+       {
+        "id": "Blok[0]/Text[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "deps.cells__microscope.stage.position"
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Button[0]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "onClick",
+        "declares_value": "moved",
+        "agent_call": {
+         "dependency": "cells__microscope",
+         "operation": "jog",
+         "arguments": [
+          {
+           "key": "dx",
+           "value_literal": 1
+          }
+         ]
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Blok[0]/Button[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "Right"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "printed": "<Blok kind=\"agent\" context=\"panel\">\n  <dependencies key=\"cells\" like=\"self.analyze\" />\n  <Text>{cells.microscope.stage.position}</Text>\n  <Button onClick={cells.microscope.jog(dx: 1) into moved}>Right</Button>\n</Blok>"
+  },
+  {
+   "name": "a call with its dependencies",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" like=\"self.analyze\" /><Button onClick={self.analyze(tiles: 3) with cells}>Go</Button><Button onClick={self.analyze() with cells into run}>Again</Button></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.analyze"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Button[0]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "onClick",
+        "agent_call": {
+         "dependency": "self",
+         "operation": "analyze",
+         "arguments": [
+          {
+           "key": "tiles",
+           "value_literal": 3
+          }
+         ],
+         "given": "cells"
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Blok[0]/Button[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "Go"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Button[1]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "onClick",
+        "declares_value": "run",
+        "agent_call": {
+         "dependency": "self",
+         "operation": "analyze",
+         "given": "cells"
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Blok[0]/Button[1]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "static_value": "Again"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "printed": "<Blok kind=\"agent\" context=\"panel\">\n  <dependencies key=\"cells\" like=\"self.analyze\" />\n  <Button onClick={self.analyze(tiles: 3) with cells}>Go</Button>\n  <Button onClick={self.analyze() with cells into run}>Again</Button>\n</Blok>"
+  },
+  {
+   "name": "the options of a dependency, and a pick",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" like=\"self.analyze\" /><foreach items={cells.options.microscope} let=\"o\" key={o.id}><Button variant={o.picked ? \"default\" : \"outline\"} onClick={cells.pick(microscope: o.id)}>{o.name}</Button></foreach></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.analyze"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/foreach[0]",
+      "component": "foreach",
+      "props": [
+       {
+        "key": "items",
+        "dynamic_value": {
+         "path": "deps.cells__options.microscope"
+        }
+       },
+       {
+        "key": "let",
+        "static_value": "o",
+        "declares_value": "o"
+       },
+       {
+        "key": "key",
+        "dynamic_value": {
+         "path": "o.id"
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Blok[0]/foreach[0]/Button[0]",
+        "component": "Button",
+        "props": [
+         {
+          "key": "variant",
+          "util_call": {
+           "operation": "logic.choose",
+           "arguments": [
+            {
+             "key": "cond",
+             "value_path": "o.picked"
+            },
+            {
+             "key": "then",
+             "value_literal": "default"
+            },
+            {
+             "key": "otherwise",
+             "value_literal": "outline"
+            }
+           ]
+          }
+         },
+         {
+          "key": "onClick",
+          "util_call": {
+           "operation": "deps.pick",
+           "arguments": [
+            {
+             "key": "key",
+             "value_literal": "cells"
+            },
+            {
+             "key": "picks",
+             "value_dict": [
+              {
+               "key": "microscope",
+               "value_path": "o.id"
+              }
+             ]
+            }
+           ]
+          }
+         }
+        ],
+        "children": [
+         {
+          "id": "Blok[0]/foreach[0]/Button[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "dynamic_value": {
+             "path": "o.name"
+            }
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "printed": "<Blok kind=\"agent\" context=\"panel\">\n  <dependencies key=\"cells\" like=\"self.analyze\" />\n  <foreach items={cells.options.microscope} let=\"o\" key={o.id}>\n    <Button variant={o.picked ? \"default\" : \"outline\"} onClick={cells.pick(microscope: o.id)}>{o.name}</Button>\n  </foreach>\n</Blok>"
+  },
+  {
+   "name": "a name that is no reference reads as written",
+   "source": "<Card><Text>{cells.microscope.stage}</Text></Card>",
+   "tree": {
+    "id": "Card[0]",
+    "component": "Card",
+    "children": [
+     {
+      "id": "Card[0]/Text[0]",
+      "component": "Text",
+      "children": [
+       {
+        "id": "Card[0]/Text[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "cells.microscope.stage"
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "printed": "<Card>\n  <Text>{cells.microscope.stage}</Text>\n</Card>"
   },
   {
    "name": "a structure identifier",
@@ -3254,6 +3583,60 @@
    }
   },
   {
+   "name": "with on a path",
+   "source": "<Button onClick={task.status with cells} />",
+   "error": {
+    "code": "callback.with",
+    "line": 1,
+    "column": 30
+   }
+  },
+  {
+   "name": "with on a function",
+   "source": "<Button onClick={str.upper(value: x) with cells} />",
+   "error": {
+    "code": "callback.with",
+    "line": 1,
+    "column": 18
+   }
+  },
+  {
+   "name": "with on a dependency's call",
+   "source": "<Button onClick={deps.stage.move(x: 1) with cells} />",
+   "error": {
+    "code": "callback.with",
+    "line": 1,
+    "column": 18
+   }
+  },
+  {
+   "name": "with no key",
+   "source": "<Button onClick={self.run() with} />",
+   "error": {
+    "code": "callback.with",
+    "line": 1,
+    "column": 29
+   }
+  },
+  {
+   "name": "with an object",
+   "source": "<Button onClick={self.run() with {a: deps.b}} />",
+   "error": {
+    "code": "callback.with",
+    "line": 1,
+    "column": 29
+   }
+  },
+  {
+   "name": "a pick of nothing",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" like=\"self.analyze\" /><Button onClick={cells.pick()} /></Blok>",
+   "error": {
+    "code": "expr.arguments",
+    "line": 1,
+    "column": 101
+   }
+  },
+  {
    "name": "into on a function",
    "source": "<Button onClick={str.upper(x) into run} />",
    "error": {
@@ -3533,6 +3916,3003 @@
    }
   },
   {
+   "name": "an agent blok reads, calls and hands over the dependencies it declares",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" like=\"self.analyze\" /><Card><Text>{cells.microscope.stage.position}</Text><Text>{cells.microscope.connected ? \"on\" : \"off\"}</Text><Button onClick={cells.microscope.jog(dx: 100) into moved}>Right</Button><Button onClick={cells.camera.snap()}>Snap</Button><Button onClick={self.analyze() with cells into run}>Analyze</Button></Card></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.analyze"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card",
+      "children": [
+       {
+        "id": "Blok[0]/Card[0]/Text[0]",
+        "component": "Text",
+        "children": [
+         {
+          "id": "Blok[0]/Card[0]/Text[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "dynamic_value": {
+             "path": "deps.cells__microscope.stage.position"
+            }
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/Text[1]",
+        "component": "Text",
+        "children": [
+         {
+          "id": "Blok[0]/Card[0]/Text[1]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "util_call": {
+             "operation": "logic.choose",
+             "arguments": [
+              {
+               "key": "cond",
+               "value_path": "deps.cells__microscope.connected"
+              },
+              {
+               "key": "then",
+               "value_literal": "on"
+              },
+              {
+               "key": "otherwise",
+               "value_literal": "off"
+              }
+             ]
+            }
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/Button[0]",
+        "component": "Button",
+        "props": [
+         {
+          "key": "onClick",
+          "declares_value": "moved",
+          "agent_call": {
+           "dependency": "cells__microscope",
+           "operation": "jog",
+           "arguments": [
+            {
+             "key": "dx",
+             "value_literal": 100
+            }
+           ]
+          }
+         }
+        ],
+        "children": [
+         {
+          "id": "Blok[0]/Card[0]/Button[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "static_value": "Right"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/Button[1]",
+        "component": "Button",
+        "props": [
+         {
+          "key": "onClick",
+          "agent_call": {
+           "dependency": "cells__camera",
+           "operation": "snap"
+          }
+         }
+        ],
+        "children": [
+         {
+          "id": "Blok[0]/Card[0]/Button[1]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "static_value": "Snap"
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/Button[2]",
+        "component": "Button",
+        "props": [
+         {
+          "key": "onClick",
+          "declares_value": "run",
+          "agent_call": {
+           "dependency": "self",
+           "operation": "analyze",
+           "given": "cells"
+          }
+         }
+        ],
+        "children": [
+         {
+          "id": "Blok[0]/Card[0]/Button[2]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "static_value": "Analyze"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": {
+     "analyze": [
+      {
+       "key": "microscope",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "key": "camera",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "snap",
+         "demand": {}
+        }
+       ]
+      }
+     ],
+     "scan": [
+      {
+       "key": "stage",
+       "app": "thorlabs",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ],
+     "plain": [],
+     "awkward": [
+      {
+       "key": "options",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "custom pickers of declared dependencies",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" like=\"self.analyze\" /><Card><foreach items={cells.options.microscope} let=\"o\" key={o.id}><Button disabled={!o.connected} variant={o.picked ? \"default\" : \"outline\"} onClick={cells.pick(microscope: o.id)}>{o.name}</Button></foreach><deppicker key=\"cells.camera\" /><deppicker key=\"cells\" /></Card></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.analyze"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card",
+      "children": [
+       {
+        "id": "Blok[0]/Card[0]/foreach[0]",
+        "component": "foreach",
+        "props": [
+         {
+          "key": "items",
+          "dynamic_value": {
+           "path": "deps.cells__options.microscope"
+          }
+         },
+         {
+          "key": "let",
+          "static_value": "o",
+          "declares_value": "o"
+         },
+         {
+          "key": "key",
+          "dynamic_value": {
+           "path": "o.id"
+          }
+         }
+        ],
+        "children": [
+         {
+          "id": "Blok[0]/Card[0]/foreach[0]/Button[0]",
+          "component": "Button",
+          "props": [
+           {
+            "key": "disabled",
+            "util_call": {
+             "operation": "logic.negate",
+             "arguments": [
+              {
+               "key": "a",
+               "value_path": "o.connected"
+              }
+             ]
+            }
+           },
+           {
+            "key": "variant",
+            "util_call": {
+             "operation": "logic.choose",
+             "arguments": [
+              {
+               "key": "cond",
+               "value_path": "o.picked"
+              },
+              {
+               "key": "then",
+               "value_literal": "default"
+              },
+              {
+               "key": "otherwise",
+               "value_literal": "outline"
+              }
+             ]
+            }
+           },
+           {
+            "key": "onClick",
+            "util_call": {
+             "operation": "deps.pick",
+             "arguments": [
+              {
+               "key": "key",
+               "value_literal": "cells"
+              },
+              {
+               "key": "picks",
+               "value_dict": [
+                {
+                 "key": "microscope",
+                 "value_path": "o.id"
+                }
+               ]
+              }
+             ]
+            }
+           }
+          ],
+          "children": [
+           {
+            "id": "Blok[0]/Card[0]/foreach[0]/Button[0]/#0",
+            "component": "#text",
+            "props": [
+             {
+              "key": "value",
+              "dynamic_value": {
+               "path": "o.name"
+              }
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/deppicker[0]",
+        "component": "deppicker",
+        "props": [
+         {
+          "key": "key",
+          "static_value": "cells.camera"
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/deppicker[1]",
+        "component": "deppicker",
+        "props": [
+         {
+          "key": "key",
+          "static_value": "cells"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": {
+     "analyze": [
+      {
+       "key": "microscope",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "key": "camera",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "snap",
+         "demand": {}
+        }
+       ]
+      }
+     ],
+     "scan": [
+      {
+       "key": "stage",
+       "app": "thorlabs",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ],
+     "plain": [],
+     "awkward": [
+      {
+       "key": "options",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "declared dependencies, their action not known here",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" like=\"self.analyze\" /><Card><Text>{cells.anything.at_all}</Text><Text>{list.len(value: cells.options.whatever)}</Text><Button onClick={cells.pick(whatever: \"1\")} /><Button onClick={self.analyze() with cells} /><deppicker key=\"cells.whatever\" /></Card></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.analyze"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card",
+      "children": [
+       {
+        "id": "Blok[0]/Card[0]/Text[0]",
+        "component": "Text",
+        "children": [
+         {
+          "id": "Blok[0]/Card[0]/Text[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "dynamic_value": {
+             "path": "deps.cells__anything.at_all"
+            }
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/Text[1]",
+        "component": "Text",
+        "children": [
+         {
+          "id": "Blok[0]/Card[0]/Text[1]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "util_call": {
+             "operation": "list.len",
+             "arguments": [
+              {
+               "key": "value",
+               "value_path": "deps.cells__options.whatever"
+              }
+             ]
+            }
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/Button[0]",
+        "component": "Button",
+        "props": [
+         {
+          "key": "onClick",
+          "util_call": {
+           "operation": "deps.pick",
+           "arguments": [
+            {
+             "key": "key",
+             "value_literal": "cells"
+            },
+            {
+             "key": "picks",
+             "value_dict": [
+              {
+               "key": "whatever",
+               "value_literal": "1"
+              }
+             ]
+            }
+           ]
+          }
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/Button[1]",
+        "component": "Button",
+        "props": [
+         {
+          "key": "onClick",
+          "agent_call": {
+           "dependency": "self",
+           "operation": "analyze",
+           "given": "cells"
+          }
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/deppicker[0]",
+        "component": "deppicker",
+        "props": [
+         {
+          "key": "key",
+          "static_value": "cells.whatever"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": null,
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "declared dependencies are held to their action",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" like=\"self.analyze\" /><Card><Text>{cells.microscope.camera.live}</Text><Button onClick={cells.microscope.fly()} /><Text>{cells.laser.power}</Text><Button onClick={cells.laser.fire()} /></Card></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.analyze"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card",
+      "children": [
+       {
+        "id": "Blok[0]/Card[0]/Text[0]",
+        "component": "Text",
+        "children": [
+         {
+          "id": "Blok[0]/Card[0]/Text[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "dynamic_value": {
+             "path": "deps.cells__microscope.camera.live"
+            }
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/Button[0]",
+        "component": "Button",
+        "props": [
+         {
+          "key": "onClick",
+          "agent_call": {
+           "dependency": "cells__microscope",
+           "operation": "fly"
+          }
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/Text[1]",
+        "component": "Text",
+        "children": [
+         {
+          "id": "Blok[0]/Card[0]/Text[1]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "dynamic_value": {
+             "path": "deps.cells__laser.power"
+            }
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/Button[1]",
+        "component": "Button",
+        "props": [
+         {
+          "key": "onClick",
+          "agent_call": {
+           "dependency": "cells__laser",
+           "operation": "fire"
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": {
+     "analyze": [
+      {
+       "key": "microscope",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "key": "camera",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "snap",
+         "demand": {}
+        }
+       ]
+      }
+     ],
+     "scan": [
+      {
+       "key": "stage",
+       "app": "thorlabs",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ],
+     "plain": [],
+     "awkward": [
+      {
+       "key": "options",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "deps.unknown_state",
+    "deps.unknown_action",
+    "deps.unknown",
+    "deps.unknown"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "deps.unknown_state",
+     "deps.unknown_action",
+     "deps.unknown",
+     "deps.unknown"
+    ]
+   }
+  },
+  {
+   "name": "an option has four fields",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" like=\"self.analyze\" /><foreach items={cells.options.microscope} let=\"o\" key={o.id}><Text>{o.stage}</Text></foreach></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.analyze"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/foreach[0]",
+      "component": "foreach",
+      "props": [
+       {
+        "key": "items",
+        "dynamic_value": {
+         "path": "deps.cells__options.microscope"
+        }
+       },
+       {
+        "key": "let",
+        "static_value": "o",
+        "declares_value": "o"
+       },
+       {
+        "key": "key",
+        "dynamic_value": {
+         "path": "o.id"
+        }
+       }
+      ],
+      "children": [
+       {
+        "id": "Blok[0]/foreach[0]/Text[0]",
+        "component": "Text",
+        "children": [
+         {
+          "id": "Blok[0]/foreach[0]/Text[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "dynamic_value": {
+             "path": "o.stage"
+            }
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": {
+     "analyze": [
+      {
+       "key": "microscope",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "key": "camera",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "snap",
+         "demand": {}
+        }
+       ]
+      }
+     ],
+     "scan": [
+      {
+       "key": "stage",
+       "app": "thorlabs",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ],
+     "plain": [],
+     "awkward": [
+      {
+       "key": "options",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "path.unknown"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "path.unknown"
+    ]
+   }
+  },
+  {
+   "name": "options and a pick of no dependency",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" like=\"self.analyze\" /><Card><Text>{list.len(value: cells.options.laser)}</Text><Button onClick={cells.pick(laser: \"1\")} /><deppicker key=\"cells.laser\" /><deppicker key=\"other\" /></Card></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.analyze"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card",
+      "children": [
+       {
+        "id": "Blok[0]/Card[0]/Text[0]",
+        "component": "Text",
+        "children": [
+         {
+          "id": "Blok[0]/Card[0]/Text[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "util_call": {
+             "operation": "list.len",
+             "arguments": [
+              {
+               "key": "value",
+               "value_path": "deps.cells__options.laser"
+              }
+             ]
+            }
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/Button[0]",
+        "component": "Button",
+        "props": [
+         {
+          "key": "onClick",
+          "util_call": {
+           "operation": "deps.pick",
+           "arguments": [
+            {
+             "key": "key",
+             "value_literal": "cells"
+            },
+            {
+             "key": "picks",
+             "value_dict": [
+              {
+               "key": "laser",
+               "value_literal": "1"
+              }
+             ]
+            }
+           ]
+          }
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/deppicker[0]",
+        "component": "deppicker",
+        "props": [
+         {
+          "key": "key",
+          "static_value": "cells.laser"
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/deppicker[1]",
+        "component": "deppicker",
+        "props": [
+         {
+          "key": "key",
+          "static_value": "other"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": {
+     "analyze": [
+      {
+       "key": "microscope",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "key": "camera",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "snap",
+         "demand": {}
+        }
+       ]
+      }
+     ],
+     "scan": [
+      {
+       "key": "stage",
+       "app": "thorlabs",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ],
+     "plain": [],
+     "awkward": [
+      {
+       "key": "options",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "deps.unknown",
+    "deps.unknown",
+    "deps.unknown",
+    "deps.unknown"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "deps.unknown",
+     "deps.unknown",
+     "deps.unknown",
+     "deps.unknown"
+    ]
+   }
+  },
+  {
+   "name": "dependencies like no action of the app",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" like=\"self.nothing\" /><Text>{cells.microscope.stage.position}</Text></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.nothing"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Text[0]",
+      "component": "Text",
+      "children": [
+       {
+        "id": "Blok[0]/Text[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "deps.cells__microscope.stage.position"
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": {
+     "analyze": [
+      {
+       "key": "microscope",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "key": "camera",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "snap",
+         "demand": {}
+        }
+       ]
+      }
+     ],
+     "scan": [
+      {
+       "key": "stage",
+       "app": "thorlabs",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ],
+     "plain": [],
+     "awkward": [
+      {
+       "key": "options",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "dependencies.like"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "dependencies.like"
+    ]
+   }
+  },
+  {
+   "name": "dependencies like an action with none",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" like=\"self.plain\" /><Card /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.plain"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card"
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": {
+     "analyze": [
+      {
+       "key": "microscope",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "key": "camera",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "snap",
+         "demand": {}
+        }
+       ]
+      }
+     ],
+     "scan": [
+      {
+       "key": "stage",
+       "app": "thorlabs",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ],
+     "plain": [],
+     "awkward": [
+      {
+       "key": "options",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "dependencies.like"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "dependencies.like"
+    ]
+   }
+  },
+  {
+   "name": "dependencies like an action with one called options",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" like=\"self.awkward\" /><Card /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.awkward"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card"
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": {
+     "analyze": [
+      {
+       "key": "microscope",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "key": "camera",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "snap",
+         "demand": {}
+        }
+       ]
+      }
+     ],
+     "scan": [
+      {
+       "key": "stage",
+       "app": "thorlabs",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ],
+     "plain": [],
+     "awkward": [
+      {
+       "key": "options",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "dependencies.like"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "dependencies.like"
+    ]
+   }
+  },
+  {
+   "name": "dependencies like something else",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" like=\"self.analyze.microscope\" /><Card /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.analyze.microscope"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card"
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": null,
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "dependencies.like"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "dependencies.like"
+    ]
+   }
+  },
+  {
+   "name": "dependencies without a like",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" /><Card /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card"
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": null,
+    "args": null,
+    "catalog": false,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "dependencies.like"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "dependencies.like"
+    ]
+   }
+  },
+  {
+   "name": "dependencies declared twice",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" like=\"self.analyze\" /><dependencies key=\"cells\" like=\"self.scan\" /><Card /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.analyze"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/dependencies[1]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.scan"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card"
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": {
+     "analyze": [
+      {
+       "key": "microscope",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "key": "camera",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "snap",
+         "demand": {}
+        }
+       ]
+      }
+     ],
+     "scan": [
+      {
+       "key": "stage",
+       "app": "thorlabs",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ],
+     "plain": [],
+     "awkward": [
+      {
+       "key": "options",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "dependencies.key"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "dependencies.key"
+    ]
+   }
+  },
+  {
+   "name": "dependencies keyed self",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"self\" like=\"self.analyze\" /><Card /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "self"
+       },
+       {
+        "key": "like",
+        "static_value": "self.analyze"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card"
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": {
+     "analyze": [
+      {
+       "key": "microscope",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "key": "camera",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "snap",
+         "demand": {}
+        }
+       ]
+      }
+     ],
+     "scan": [
+      {
+       "key": "stage",
+       "app": "thorlabs",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ],
+     "plain": [],
+     "awkward": [
+      {
+       "key": "options",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "dependencies.key"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "dependencies.key"
+    ]
+   }
+  },
+  {
+   "name": "dependencies below the top",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><Card><dependencies key=\"cells\" like=\"self.analyze\" /></Card></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card",
+      "children": [
+       {
+        "id": "Blok[0]/Card[0]/dependencies[0]",
+        "component": "dependencies",
+        "props": [
+         {
+          "key": "key",
+          "static_value": "cells"
+         },
+         {
+          "key": "like",
+          "static_value": "self.analyze"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": false,
+    "port": null,
+    "workflows": {
+     "analyze": [
+      {
+       "key": "microscope",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "key": "camera",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "snap",
+         "demand": {}
+        }
+       ]
+      }
+     ],
+     "scan": [
+      {
+       "key": "stage",
+       "app": "thorlabs",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ],
+     "plain": [],
+     "awkward": [
+      {
+       "key": "options",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "dependencies.position"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "dependencies.position"
+    ]
+   }
+  },
+  {
+   "name": "dependencies in an action blok",
+   "source": "<Blok kind=\"action\" context=\"panel\"><dependencies key=\"cells\" like=\"self.analyze\" /><Card /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "action"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.analyze"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card"
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": false,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "dependencies.position"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "dependencies.position"
+    ]
+   }
+  },
+  {
+   "name": "with the dependencies of another action",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" like=\"self.analyze\" /><Button onClick={self.scan() with cells} /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.analyze"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Button[0]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "onClick",
+        "agent_call": {
+         "dependency": "self",
+         "operation": "scan",
+         "given": "cells"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": {
+     "analyze": [
+      {
+       "key": "microscope",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "key": "camera",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "snap",
+         "demand": {}
+        }
+       ]
+      }
+     ],
+     "scan": [
+      {
+       "key": "stage",
+       "app": "thorlabs",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ],
+     "plain": [],
+     "awkward": [
+      {
+       "key": "options",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "with.mismatch"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "with.mismatch"
+    ]
+   }
+  },
+  {
+   "name": "with dependencies the blok does not declare",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" like=\"self.analyze\" /><Button onClick={self.analyze() with other} /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.analyze"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Button[0]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "onClick",
+        "agent_call": {
+         "dependency": "self",
+         "operation": "analyze",
+         "given": "other"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": {
+     "analyze": [
+      {
+       "key": "microscope",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "key": "camera",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "snap",
+         "demand": {}
+        }
+       ]
+      }
+     ],
+     "scan": [
+      {
+       "key": "stage",
+       "app": "thorlabs",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ],
+     "plain": [],
+     "awkward": [
+      {
+       "key": "options",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "deps.unknown"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "deps.unknown"
+    ]
+   }
+  },
+  {
    "name": "a clean agent blok",
    "source": "<Blok kind=\"agent\" context=\"panel\"><Card><Text>{self.arm.mode}</Text><Button onClick={self.move_to(position: 1) into move}>Go</Button><Progress value={move.progress} /></Card></Blok>",
    "tree": {
@@ -3662,7 +7042,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -3676,7 +7057,7 @@
    }
   },
   {
-   "name": "deps in an agent blok",
+   "name": "an undeclared dependency in an agent blok",
    "source": "<Blok kind=\"agent\" context=\"panel\"><Text text={deps.robot.arm.mode} /></Blok>",
    "tree": {
     "id": "Blok[0]",
@@ -3749,20 +7130,21 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
    },
    "codes": [
-    "roots.not_in_kind"
+    "deps.unknown"
    ],
    "language": {
     "resolved": {
      "locals": {}
     },
     "codes": [
-     "roots.not_in_kind"
+     "deps.unknown"
     ]
    }
   },
@@ -3840,7 +7222,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -3893,7 +7276,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -3976,7 +7360,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -4029,7 +7414,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -4082,7 +7468,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -4135,7 +7522,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -4188,7 +7576,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -4248,7 +7637,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -4322,7 +7712,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -4396,7 +7787,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -4495,7 +7887,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -4604,7 +7997,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -4679,7 +8073,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -4804,7 +8199,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -4895,7 +8291,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -4973,7 +8370,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -5084,7 +8482,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -5173,7 +8572,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -5264,7 +8664,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -5356,7 +8757,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -5447,7 +8849,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -5538,7 +8941,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -5651,7 +9055,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -5706,7 +9111,8 @@
      "dataset"
     ],
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -5759,7 +9165,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -5812,7 +9219,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -5907,7 +9315,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -5962,7 +9371,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -6052,7 +9462,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -6125,7 +9536,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -6184,7 +9596,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -6243,7 +9656,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -6318,7 +9732,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -6367,7 +9782,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -6416,7 +9832,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -6524,7 +9941,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -6614,7 +10032,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -6691,7 +10110,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -6744,7 +10164,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -6803,7 +10224,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -6875,7 +10297,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -6928,7 +10351,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -6975,7 +10399,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -7071,7 +10496,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -7167,7 +10593,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -7256,7 +10683,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -7326,7 +10754,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -7414,7 +10843,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -7498,7 +10928,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -7586,7 +11017,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -7670,7 +11102,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -7754,7 +11187,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -7840,7 +11274,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -7926,7 +11361,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -8039,7 +11475,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -8147,7 +11584,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -8268,7 +11706,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -8385,7 +11824,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -8506,7 +11946,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -8627,7 +12068,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -8748,7 +12190,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -8799,7 +12242,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -8846,7 +12290,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -8895,7 +12340,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -8980,7 +12426,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -9035,7 +12482,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -9096,7 +12544,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -9147,7 +12596,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -9246,7 +12696,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -9296,7 +12747,8 @@
     "dependencies": [],
     "args": null,
     "catalog": false,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -9425,7 +12877,8 @@
      "slides"
     ],
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -9522,7 +12975,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -9577,7 +13031,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -9646,7 +13101,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -9833,7 +13289,8 @@
      "key": "exposure",
      "kind": "FLOAT",
      "nullable": false
-    }
+    },
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -9933,7 +13390,8 @@
      "key": "exposure",
      "kind": "FLOAT",
      "nullable": false
-    }
+    },
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -10061,7 +13519,8 @@
      "key": "exposure",
      "kind": "FLOAT",
      "nullable": false
-    }
+    },
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -10134,7 +13593,8 @@
      "key": "exposure",
      "kind": "FLOAT",
      "nullable": false
-    }
+    },
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -10193,7 +13653,8 @@
      "key": "exposure",
      "kind": "FLOAT",
      "nullable": false
-    }
+    },
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -10273,7 +13734,8 @@
      "key": "exposure",
      "kind": "FLOAT",
      "nullable": false
-    }
+    },
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -10385,7 +13847,8 @@
        "kind": "INT"
       }
      ]
-    }
+    },
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -10448,7 +13911,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -10523,7 +13987,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -10571,7 +14036,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -10616,7 +14082,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -10665,7 +14132,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -10708,7 +14176,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -10807,7 +14276,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -10860,7 +14330,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -10921,7 +14392,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -10990,7 +14462,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -11051,7 +14524,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -11128,7 +14602,8 @@
     "dependencies": [],
     "args": null,
     "catalog": false,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -11169,7 +14644,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -11230,7 +14706,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -11281,7 +14758,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -11403,7 +14881,8 @@
      "slides"
     ],
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -11510,7 +14989,8 @@
      "slides"
     ],
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -11571,7 +15051,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -11631,7 +15112,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -11790,7 +15272,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -11839,7 +15322,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -11888,7 +15372,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -11947,7 +15432,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -11992,7 +15478,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -12101,7 +15588,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -12148,7 +15636,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -12215,7 +15704,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -12331,7 +15821,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -12441,7 +15932,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -12502,7 +15994,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -12566,7 +16059,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -12613,7 +16107,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -12660,7 +16155,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -12713,7 +16209,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -12786,7 +16283,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -12917,7 +16415,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -12980,7 +16479,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -13058,7 +16558,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -13167,7 +16668,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -13274,7 +16776,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -13350,7 +16853,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -13432,7 +16936,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -13554,7 +17059,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -13699,7 +17205,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -13833,7 +17340,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -13915,7 +17423,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -13993,7 +17502,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -14112,7 +17622,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -14190,7 +17701,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -14301,7 +17813,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -14379,7 +17892,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -14506,7 +18020,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -14629,7 +18144,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -14742,7 +18258,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -14807,7 +18324,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -14871,7 +18389,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -14957,7 +18476,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -15027,7 +18547,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -15080,7 +18601,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -15171,7 +18693,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -15233,7 +18756,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -15368,7 +18892,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -15415,7 +18940,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -15476,7 +19002,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -15607,7 +19134,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -15632,7 +19160,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -15673,7 +19202,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -15718,7 +19248,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -15763,7 +19294,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -15808,7 +19340,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -15853,7 +19386,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -15902,7 +19436,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -15957,7 +19492,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -16008,7 +19544,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -16123,7 +19660,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -16171,7 +19709,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -16219,7 +19758,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -16293,7 +19833,8 @@
     "dependencies": null,
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -16352,7 +19893,8 @@
     "dependencies": null,
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -16366,7 +19908,7 @@
    }
   },
   {
-   "name": "unmounted, the kind's roots still hold",
+   "name": "unmounted, an agent blok still reads only the dependencies it declares",
    "source": "<Blok kind=\"agent\" context=\"panel\"><Text>{deps.robot.arm.mode}</Text></Blok>",
    "tree": {
     "id": "Blok[0]",
@@ -16407,20 +19949,21 @@
     "dependencies": null,
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
    },
    "codes": [
-    "roots.not_in_kind"
+    "deps.unknown"
    ],
    "language": {
     "resolved": {
      "locals": {}
     },
     "codes": [
-     "roots.not_in_kind"
+     "deps.unknown"
     ]
    }
   },
@@ -16479,7 +20022,8 @@
     "dependencies": null,
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -16573,7 +20117,8 @@
     "dependencies": null,
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -16681,7 +20226,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -16785,7 +20331,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -16875,7 +20422,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -17008,7 +20556,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -17111,7 +20660,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -17205,7 +20755,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -17283,7 +20834,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -17398,7 +20950,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -17509,7 +21062,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -17618,7 +21172,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -17692,7 +21247,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -17748,7 +21304,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -17809,7 +21366,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -17919,7 +21477,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -18033,7 +21592,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -18134,7 +21694,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -18239,7 +21800,8 @@
     ],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {
@@ -18318,7 +21880,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -18395,7 +21958,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -18450,7 +22014,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -18510,7 +22075,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -18569,7 +22135,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -18632,7 +22199,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -18687,7 +22255,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {}
@@ -18798,7 +22367,8 @@
     "dependencies": [],
     "args": null,
     "catalog": true,
-    "port": null
+    "port": null,
+    "workflows": null
    },
    "resolved": {
     "locals": {

@@ -3,7 +3,7 @@
 //! and held to one corpus:
 //!
 //! ```text
-//! callback   := expression ('into' name)?
+//! callback   := expression ('with' name)? ('into' name)?
 //! expression := ternary
 //! ternary    := coalesce ('?' expression ':' expression)?
 //! coalesce   := or ('??' or)*
@@ -16,6 +16,8 @@
 //! ```
 //!
 //! Every offset is a Unicode code point into the whole source, as the spec counts them.
+
+use std::collections::HashSet;
 
 use serde_json::{Number, Value};
 
@@ -99,6 +101,9 @@ pub struct CallExpr {
     pub callee: Vec<String>,
     pub arguments: Vec<Argument>,
     pub offset: usize,
+    /// `with cells` on a task call: the dependencies the blok declares under that key
+    /// (`<dependencies key="cells" />`), whose agents the run gets.
+    pub given: Option<String>,
 }
 
 impl CallExpr {
@@ -492,21 +497,35 @@ impl Lexer<'_> {
     }
 }
 
+/// How a read through a declared `<dependencies key="cells" />` is stored: `cells.microscope`
+/// is the dependency `cells__microscope` of the blok (`deps.cells__microscope`), one segment.
+pub const REFERENCE_SEPARATOR: &str = "__";
+/// `cells.pick(microscope: id)`: the one call a reference itself takes.
+pub const PICK_VERB: &str = "pick";
+
 struct Parser<'a> {
     tokens: Vec<Token>,
     index: usize,
     locate: &'a Locator,
+    /// The keys of the `<dependencies>` read so far: what a path may read through.
+    references: &'a HashSet<String>,
 }
 
 type Parsed<T> = Result<T, BsxError>;
 
 impl<'a> Parser<'a> {
-    fn new(text: &'a [char], base: usize, locate: &'a Locator) -> Parsed<Parser<'a>> {
+    fn new(
+        text: &'a [char],
+        base: usize,
+        locate: &'a Locator,
+        references: &'a HashSet<String>,
+    ) -> Parsed<Parser<'a>> {
         let tokens = Lexer { text, base, locate }.tokens()?;
         Ok(Parser {
             tokens,
             index: 0,
             locate,
+            references,
         })
     }
 
@@ -606,7 +625,18 @@ impl<'a> Parser<'a> {
         if self.is_name("await") {
             return Err(self.fail("callback.await", None, &[]));
         }
-        let expression = self.expression()?;
+        let mut expression = self.expression()?;
+        if self.is_name("with") {
+            let with = self.advance();
+            let Expr::Call(mut call) = expression else {
+                return Err(self.fail("callback.with", Some(with.offset), &[]));
+            };
+            if self.token().kind != TokenKind::Name || self.token().value == "into" {
+                return Err(self.fail("callback.with", Some(with.offset), &[]));
+            }
+            call.given = Some(self.advance().value);
+            expression = Expr::Call(call);
+        }
         if self.is_name("into") {
             let into = self.advance();
             let Expr::Call(call) = expression else {
@@ -849,6 +879,13 @@ impl<'a> Parser<'a> {
         if self.is_op(&["=>"]) {
             return Err(self.fail("expr.lambda", None, &[]));
         }
+        // A read or a call through declared dependencies (`cells.microscope.stage`) is one of
+        // the blok's dependencies, `deps.cells__microscope`; `cells.pick(...)` stays as written.
+        let picks = self.is_op(&["("]) && segments.len() == 2 && segments[1] == PICK_VERB;
+        if segments.len() > 1 && self.references.contains(&segments[0]) && !picks {
+            let key = format!("{}{REFERENCE_SEPARATOR}{}", segments[0], segments[1]);
+            segments.splice(0..2, ["deps".to_owned(), key]);
+        }
         if !self.is_op(&["("]) {
             return Ok(Expr::Path {
                 segments,
@@ -869,6 +906,7 @@ impl<'a> Parser<'a> {
             callee: segments,
             arguments,
             offset: first.offset,
+            given: None,
         }))
     }
 
@@ -946,8 +984,13 @@ impl<'a> Parser<'a> {
 
 /// Parse a value expression (no `into`); `base` is where `text` starts in the source `locate`
 /// reads.
-pub fn parse_expression(text: &[char], base: usize, locate: &Locator) -> Parsed<Expr> {
-    let mut parser = Parser::new(text, base, locate)?;
+pub fn parse_expression(
+    text: &[char],
+    base: usize,
+    locate: &Locator,
+    references: &HashSet<String>,
+) -> Parsed<Expr> {
+    let mut parser = Parser::new(text, base, locate, references)?;
     if parser.token().kind == TokenKind::End {
         return Err(parser.fail(
             "expr.syntax",
@@ -961,8 +1004,13 @@ pub fn parse_expression(text: &[char], base: usize, locate: &Locator) -> Parsed<
 }
 
 /// Parse an attribute's expression: a value, or a callback (`<call> into <name>`).
-pub fn parse_attribute(text: &[char], base: usize, locate: &Locator) -> Parsed<Expr> {
-    let mut parser = Parser::new(text, base, locate)?;
+pub fn parse_attribute(
+    text: &[char],
+    base: usize,
+    locate: &Locator,
+    references: &HashSet<String>,
+) -> Parsed<Expr> {
+    let mut parser = Parser::new(text, base, locate, references)?;
     if parser.token().kind == TokenKind::End {
         return Err(parser.fail(
             "expr.syntax",

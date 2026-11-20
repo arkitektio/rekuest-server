@@ -25,7 +25,7 @@ use regex::Regex;
 use serde_json::{Map, Value};
 
 use crate::blok::check::{FETCH_MORE_FUNCTION, QUERY_SUGAR, REFETCH_FUNCTION};
-use crate::blok::expr::{parse_attribute, parse_expression, s, CallExpr, Expr, Locator};
+use crate::blok::expr::{parse_attribute, parse_expression, s, CallExpr, Expr, Locator, PICK_VERB};
 use crate::blok::vocabulary::vocabulary;
 use crate::inputs::{
     ActionArgumentInputModel, AgentProbeInputModel, ComponentNodeInputModel,
@@ -112,9 +112,28 @@ struct Markup<'a> {
     source: &'a [char],
     locate: &'a Locator,
     index: usize,
+    /// The keys of the `<dependencies>` read so far: what a later expression may read through.
+    references: HashSet<String>,
 }
 
+/// What `<key>.pick(<dependency>: <agent id>)` is stored as.
+pub const PICK_FUNCTION: &str = "deps.pick";
+const DEPENDENCIES: &str = "dependencies";
+
 impl Markup<'_> {
+    /// A `<dependencies key="cells" />` is read through from here on (`cells.microscope`).
+    fn declares(&mut self, element: &Element) {
+        if element.name != DEPENDENCIES {
+            return;
+        }
+        let key = element.attributes.iter().find(|a| a.name == "key");
+        if let Some(AttributeValue::Text(key)) = key.map(|a| &a.value) {
+            if is_local(key) {
+                self.references.insert(key.clone());
+            }
+        }
+    }
+
     fn fail(&self, code: &str, offset: Option<usize>, fields: &[(&str, Value)]) -> BsxError {
         self.locate.fail(code, offset.unwrap_or(self.index), fields)
     }
@@ -244,10 +263,12 @@ impl Markup<'_> {
             }
             if self.at("/>") {
                 self.index += 2;
+                self.declares(&element);
                 return Ok(element);
             }
             if self.at(">") {
                 self.index += 1;
+                self.declares(&element);
                 self.content(&mut element)?;
                 return Ok(element);
             }
@@ -318,7 +339,7 @@ impl Markup<'_> {
                     &[("detail", s(format!("the value of {name} is empty")))],
                 ));
             }
-            let expression = parse_attribute(inner, start, self.locate)?;
+            let expression = parse_attribute(inner, start, self.locate, &self.references)?;
             return Ok(Attribute {
                 name,
                 value: AttributeValue::Expression(expression),
@@ -423,7 +444,7 @@ impl Markup<'_> {
                 if stripped.is_empty() || (stripped.starts_with("/*") && stripped.ends_with("*/")) {
                     continue;
                 }
-                let expression = parse_expression(inner, start, self.locate)?;
+                let expression = parse_expression(inner, start, self.locate, &self.references)?;
                 element
                     .children
                     .push(Child::Container { expression, offset });
@@ -909,7 +930,11 @@ impl Lowering<'_> {
                         ..prop(key)
                     });
                 }
-                if let Some(effect) = self.query_effect(call)? {
+                let effect = match self.pick_effect(call)? {
+                    Some(effect) => Some(effect),
+                    None => self.query_effect(call)?,
+                };
+                if let Some(effect) = effect {
                     return Ok(ComponentPropInputModel {
                         util_call: Some(effect),
                         ..prop(key)
@@ -937,8 +962,14 @@ impl Lowering<'_> {
         } else if callee[0] == "deps" && callee.len() == 3 {
             (callee[1].clone(), callee[2].clone())
         } else {
+            if call.given.is_some() {
+                return Err(self.fail("callback.with", call.offset, &[]));
+            }
             return Ok(None);
         };
+        if call.given.is_some() && dependency != "self" {
+            return Err(self.fail("callback.with", call.offset, &[]));
+        }
         let mut arguments = vec![];
         let mut seen = HashSet::new();
         for given in &call.arguments {
@@ -962,6 +993,62 @@ impl Lowering<'_> {
             dependency,
             operation,
             arguments: some_if_any(arguments),
+            given: call.given.clone(),
+        }))
+    }
+
+    /// `cells.pick(microscope: id, ...)` as its effect (`deps.pick`), or none.
+    fn pick_effect(&self, call: &CallExpr) -> Parsed<Option<UtilCallInputModel>> {
+        let callee = &call.callee;
+        if callee.len() != 2
+            || callee[1] != PICK_VERB
+            || !self.markup.references.contains(&callee[0])
+        {
+            return Ok(None);
+        }
+        let mut picks = vec![];
+        let mut seen = HashSet::new();
+        for given in &call.arguments {
+            let Some(name) = &given.name else {
+                return Err(self.fail(
+                    "callback.positional",
+                    given.offset,
+                    &[("call", s(call.name()))],
+                ));
+            };
+            if !seen.insert(name.clone()) {
+                return Err(self.fail(
+                    "expr.duplicate_key",
+                    given.offset,
+                    &[("key", s(name.clone()))],
+                ));
+            }
+            picks.push(self.argument(Some(name), &given.value)?);
+        }
+        if picks.is_empty() {
+            return Err(self.fail(
+                "expr.arguments",
+                call.offset,
+                &[
+                    ("function", s(call.name())),
+                    (
+                        "detail",
+                        s("pick names the dependency to bind: pick(<dependency>: <agent id>)"),
+                    ),
+                ],
+            ));
+        }
+        let named = ActionArgumentInputModel {
+            value_literal: Some(s(callee[0].clone())),
+            ..argument(Some("key"))
+        };
+        let given = ActionArgumentInputModel {
+            value_dict: Some(picks),
+            ..argument(Some("picks"))
+        };
+        Ok(Some(UtilCallInputModel {
+            operation: PICK_FUNCTION.to_owned(),
+            arguments: Some(vec![named, given]),
         }))
     }
 
@@ -1356,6 +1443,7 @@ pub fn parse_bsx(source: &str) -> Result<ComponentNodeInputModel, BsxError> {
         source: &chars,
         locate: &locate,
         index: 0,
+        references: HashSet::new(),
     };
     let root = markup.document()?;
     let mut lowering = Lowering {
@@ -1375,11 +1463,12 @@ pub fn parse_bsx_default(source: &str) -> Result<ComponentNodeInputModel, BsxErr
 pub fn parse_argument(key: Option<&str>, text: &str) -> Result<ActionArgumentInputModel, BsxError> {
     let chars: Vec<char> = text.chars().collect();
     let locate = Locator::new(&chars);
-    let expression = parse_expression(&chars, 0, &locate)?;
+    let expression = parse_expression(&chars, 0, &locate, &HashSet::new())?;
     let markup = Markup {
         source: &chars,
         locate: &locate,
         index: 0,
+        references: HashSet::new(),
     };
     let lowering = Lowering {
         locate: &locate,

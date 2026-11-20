@@ -1118,6 +1118,11 @@ pub struct BlokImplementationInputModel {
     pub catalogs: Vec<String>,
     #[serde(default)]
     pub demo: Option<BlokDemoInputModel>,
+    /// Per action of the agent declaring it, that action's dependencies: what its
+    /// `<dependencies>` nodes declare. Filled in where it is registered (`name_self`),
+    /// never sent or stored.
+    #[serde(skip)]
+    pub workflows: Option<HashMap<String, Vec<AgentDependencyInputModel>>>,
 }
 
 /// A blok that decorates a model names it by reference, and is a panel blok (`check_blok_target`).
@@ -1191,22 +1196,34 @@ impl BlokImplementationInputModel {
         implementations: &[ImplementationInputModel],
         states: &[StateImplementationInputModel],
     ) -> Result<(), ValidationError> {
-        if self.blok_kind().as_deref() != Some("agent")
-            || self.dependencies.iter().any(|d| d.key == SELF_DEPENDENCY)
-        {
+        if self.blok_kind().as_deref() != Some("agent") {
             return Ok(());
         }
         let Some([tree]) = self.components.as_deref() else {
             return Ok(());
         };
-        let dependency =
+        // What its `<dependencies like="self.<action>" />` declare: each action's own
+        // dependencies. They are the viewer's to bind, so none of them joins its own.
+        let workflows: HashMap<String, Vec<AgentDependencyInputModel>> = implementations
+            .iter()
+            .map(|implementation| {
+                (
+                    implementation.interface.clone(),
+                    implementation.dependencies.clone(),
+                )
+            })
+            .collect();
+        self.workflows = Some(workflows);
+        let own = if self.dependencies.iter().any(|d| d.key == SELF_DEPENDENCY) {
+            None
+        } else {
             self_dependency(&self_reads(tree), implementations, states).map_err(|finding| {
                 ValidationError(format!("Blok {}: {finding}", repr_str(&self.key)))
-            })?;
-        let Some(dependency) = dependency else {
-            return Ok(());
+            })?
         };
-        self.dependencies.insert(0, dependency);
+        if let Some(own) = own {
+            self.dependencies.insert(0, own);
+        }
         Ok(())
     }
 
@@ -1217,6 +1234,7 @@ impl BlokImplementationInputModel {
             args: (!self.args.is_empty())
                 .then(|| self.args.iter().map(|a| a.key.clone()).collect()),
             demo: self.demo.clone(),
+            workflows: self.workflows.clone(),
             ..BlokScope::mounted(kinds, mount, self.dependencies.clone())
         }
     }
@@ -1359,6 +1377,7 @@ impl AskBlokInputModel {
             vocab: self.vocab,
             catalogs: self.catalogs.clone(),
             demo: self.demo.clone(),
+            workflows: None,
         }
     }
 }

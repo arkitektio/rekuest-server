@@ -36,7 +36,15 @@ SUBSCRIPTION_COMPONENT = "subscription"
 VAR_COMPONENT = "var"
 TEXT_NODE = "#text"
 """The component a run of text is stored as."""
-DECLARATION_COMPONENTS = frozenset({LOCAL_COMPONENT, QUERY_COMPONENT, SUBSCRIPTION_COMPONENT, VAR_COMPONENT})
+DEPENDENCIES_COMPONENT = "dependencies"
+DECLARATION_COMPONENTS = frozenset({LOCAL_COMPONENT, QUERY_COMPONENT, SUBSCRIPTION_COMPONENT, VAR_COMPONENT, DEPENDENCIES_COMPONENT})
+REFERENCE_SEPARATOR = "__"
+"""How a read through a declared ``<dependencies key="cells" />`` is stored: ``cells.microscope``
+is the dependency ``cells__microscope`` of the blok (``deps.cells__microscope``), one segment."""
+PICK_VERB = "pick"
+"""``cells.pick(microscope: id)``: the one call a reference itself takes."""
+PICK_FUNCTION = "deps.pick"
+"""What it is stored as."""
 """The components that declare what a blok owns and draw nothing."""
 NAME_PROP = "name"
 """The name a local, a query or a subscription is read by."""
@@ -292,6 +300,37 @@ def _declared(node: ComponentNodeInputModel) -> BlokQueryInputModel | BlokSubscr
         first = error.errors()[0]
         where = ".".join(str(part) for part in first["loc"])
         raise BlokError("query.declaration", component=node.component, problem=f"{where}: {first['msg']}") from None
+
+
+@dataclass(frozen=True)
+class DeclaredDependencies:
+    """A ``<dependencies key="cells" like="self.<action>" />`` of an agent blok: the
+    dependencies of one of the app's own actions, each read and called as
+    ``deps.<key>.<dependency>`` and handed to a run of that action with ``with <key>``."""
+
+    key: str
+    node: str
+    like: str | None
+    """As written; None when it is missing or no literal."""
+
+    @property
+    def action(self) -> str | None:
+        """The action when ``like`` reads ``self.<action>``."""
+        parts = self.like.split(".") if self.like else []
+        return parts[1] if len(parts) == 2 and parts[0] == "self" and parts[1] else None
+
+
+def declared_dependencies(tree: ComponentNodeInputModel) -> tuple[DeclaredDependencies, ...]:
+    """The keyed ``<dependencies>`` children of a blok's ``<Blok>``, in order."""
+    declared: list[DeclaredDependencies] = []
+    for child in tree.children or ():
+        if child.component != DEPENDENCIES_COMPONENT:
+            continue
+        literals = {prop.key: prop.static_value for prop in child.props or ()}
+        key, like = literals.get(KEY_PROP), literals.get(LIKE_PROP)
+        if isinstance(key, str) and key:
+            declared.append(DeclaredDependencies(key=key, node=child.id, like=like if isinstance(like, str) else None))
+    return tuple(declared)
 
 
 def declared_queries(tree: ComponentNodeInputModel) -> tuple[BlokQueryInputModel, ...]:

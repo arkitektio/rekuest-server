@@ -5,7 +5,7 @@ import re
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Iterator, List, Literal, Optional, Union
 from rekuest_core import enums, units
 from rekuest_core.values import value_mismatch
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, SerializerFunctionWrapHandler, field_validator, model_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, JsonValue, model_serializer, model_validator, SerializerFunctionWrapHandler
 from typing_extensions import Self
 from strawberry.types.unset import UnsetType
 
@@ -1316,12 +1316,21 @@ class AgentProbeInputModel(BaseModel):
     dependency: str = Field(min_length=1, description="`self`, or the dependency key the task goes to (`deps.<key>`).")
     operation: str = Field(min_length=1, description="The action called, by its key in the dependency's action demands.")
     arguments: Optional[List["ActionArgumentInputModel"]] = Field(default=None, description="Its arguments, each named.")
+    given: Optional[str] = Field(default=None, description="`with <key>`: the dependencies the blok declares under that key (`<dependencies key=... />`), whose agents the run gets. Only on a call to `self`.")
 
     @model_validator(mode="after")
     def check_argument_keys(self) -> Self:
         """Call arguments are a map: every entry needs a unique key."""
         _check_keyed(self.arguments, f"arguments of agent call {self.operation}")
         return self
+
+    @model_serializer(mode="wrap")
+    def leave_out_an_unwritten_given(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """A call without `with` is stored as it always was: `given` is left out, not null."""
+        dumped: dict[str, Any] = handler(self)
+        if dumped.get("given") is None:
+            dumped.pop("given", None)
+        return dumped
 
 
 class UtilCallInputModel(BaseModel):

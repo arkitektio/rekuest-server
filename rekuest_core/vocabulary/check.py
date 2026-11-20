@@ -47,6 +47,7 @@ path below it is taken as written. The walk and its scoping rules are :mod:`.wal
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from dataclasses import replace as dataclass_replace
 
 from rekuest_core import enums
 from rekuest_core.inputs.models import (
@@ -65,6 +66,12 @@ from rekuest_core.inputs.models import (
     UtilCallInputModel,
 )
 from rekuest_core.vocabulary.declared import (
+    DEPENDENCIES_COMPONENT,
+    PICK_FUNCTION,
+    PICK_VERB,
+    REFERENCE_SEPARATOR,
+    DeclaredDependencies,
+    declared_dependencies,
     LIKE_PROP,
     LOCAL_COMPONENT,
     NAME_PROP,
@@ -202,6 +209,10 @@ class BlokScope:
     query_values: Mapping[str, PortMatchInputModel] = field(default_factory=dict[str, PortMatchInputModel])
     assets: frozenset[str] | None = None
     port: PortMatchInputModel | None = None
+    workflows: Mapping[str, Sequence[AgentDependencyInputModel]] | None = None
+    """Per action of the blok's own agent, that action's dependencies: what an agent blok's
+    ``<dependencies key="cells" like="self.<action>" />`` declares as ``cells.<dependency>``.
+    None: not known here, they are then taken as written."""
 
     @property
     def mounted(self) -> bool:
@@ -261,6 +272,59 @@ DEPENDENCY_KEY_PROPS = frozenset({("Placed", "dep"), ("Route", "through")})
 """Props whose value is the blok's dependency keys, written out (not paths): each must be a dependency."""
 
 
+PICKER_COMPONENT = "deppicker"
+OPTIONS_SEGMENT = "options"
+"""``cells.options.<dependency>``: the agents that fit a declared dependency, to pick among."""
+OPTION_FIELDS: tuple[Mapping[str, object], ...] = (
+    {"key": "id", "kind": "STRING"},
+    {"key": "name", "kind": "STRING", "nullable": True},
+    {"key": "connected", "kind": "BOOL"},
+    {"key": "picked", "kind": "BOOL"},
+)
+"""What one of them reads as."""
+
+
+def reference_key(key: str, name: str) -> str:
+    """The dependency ``<key>.<name>`` of declared dependencies, as it is stored."""
+    return f"{key}{REFERENCE_SEPARATOR}{name}"
+
+
+def borrowed_dependencies(declared: DeclaredDependencies, workflows: Mapping[str, Sequence[AgentDependencyInputModel]]) -> tuple[AgentDependencyInputModel, ...] | str:
+    """The dependencies ``declared`` borrows, each keyed ``<key>__<dependency>``; or what is
+    wrong with its ``like``."""
+    action = declared.action
+    if action is None:
+        return "is not self.<action>"
+    if action not in workflows:
+        return f"names no action of the app ({action!r})"
+    if not workflows[action]:
+        return f"names an action with no dependencies ({action!r})"
+    taken = next((d.key for d in workflows[action] if d.key in (OPTIONS_SEGMENT, PICK_VERB) or REFERENCE_SEPARATOR in d.key), None)
+    if taken is not None:
+        return f"names an action with a dependency called {taken!r}, which cannot be read through a reference: rename that parameter of {action}"
+    return tuple(dependency.model_copy(update={"key": reference_key(declared.key, dependency.key)}) for dependency in workflows[action])
+
+
+def bound_scope(tree: ComponentNodeInputModel, scope: BlokScope) -> BlokScope:
+    """``scope`` with the dependencies an agent blok declares itself (``<dependencies>``)
+    among its dependencies, keyed ``<key>__<dependency>`` and demanded as their action demands
+    them. A declaration whose ``like`` does not resolve is left out (the checker says why), as
+    is every one where the app's actions are not known (``workflows`` None)."""
+    if scope.workflows is None or blok_header(tree).kind != "agent":
+        return scope
+    known = {dependency.key for dependency in scope.dependencies or ()}
+    borrowed: list[AgentDependencyInputModel] = []
+    for declared in declared_dependencies(tree):
+        found = borrowed_dependencies(declared, scope.workflows)
+        if isinstance(found, str):
+            continue
+        for dependency in found:
+            if dependency.key not in known:
+                known.add(dependency.key)
+                borrowed.append(dependency)
+    return dataclass_replace(scope, dependencies=(*(scope.dependencies or ()), *borrowed)) if borrowed else scope
+
+
 class _Checker:
     """Walks a tree with a :class:`BlokScope` and collects findings."""
 
@@ -285,6 +349,8 @@ class _Checker:
         self.chromeless: str | None = header.node if header.chrome == CHROME_NONE else None
         """The id of the root that says ``chrome="none"``, when it does."""
         self.colour = _colour_pattern(self.vocabulary)
+        self.declared: dict[str, DeclaredDependencies] = {}
+        """The dependencies an agent blok declares itself, by key."""
 
     def add(self, code: str, at: str | None, /, **fields: object) -> None:
         self.findings.append(Finding.of(code, at, **fields))
@@ -313,6 +379,7 @@ class _Checker:
             if len(drawn) != 1 or drawn[0].component not in allowed:
                 found = ", ".join(f"<{node.component}>" if node.component != TEXT_NODE else "text" for node in drawn) or "nothing"
                 self.add("blok.content", tree.id, context=context_name, expected=" or ".join(f"one <{name}>" for name in allowed), found=found)
+        self.check_dependencies(tree)
         self.check_local_positions(tree)
         self.check_queries(tree)
         for name, sites in into_sites(tree).items():
@@ -363,6 +430,106 @@ class _Checker:
                 loop = next((ancestor for ancestor in reversed(ancestors) if ancestor.component == FOREACH_COMPONENT), None)
                 if loop is not None and not any(prop.key == FOREACH_KEY_PROP for prop in loop.props or ()):
                     self.add("local.persist_id", node.id, name=name)
+
+    def check_dependencies(self, tree: ComponentNodeInputModel) -> None:
+        """A ``<dependencies>`` is a child of an agent blok's ``<Blok>``, keyed once, and names
+        one of the app's own actions that has dependencies."""
+        for node, ancestors in iter_with_parents(tree):
+            if node.component != DEPENDENCIES_COMPONENT:
+                continue
+            literals = {prop.key: prop.static_value for prop in node.props or ()}
+            key = literals.get("key")
+            if len(ancestors) != 1 or self.kind_name != "agent":
+                at = ancestors[-1].id if len(ancestors) != 1 and ancestors else f"a{_article(self.kind_name)} {self.kind_name} blok"
+                self.add("dependencies.position", node.id, key=key if isinstance(key, str) else "?", at=at)
+                continue
+            if not isinstance(key, str) or declared_name_problem(key):
+                self.add("dependencies.key", node.id, node=node.id, problem="has no plain key")
+                continue
+            if key == "self" or key in self.declared:
+                problem = "is keyed self, which is the blok's own agent" if key == "self" else f"declares {key!r} a second time"
+                self.add("dependencies.key", node.id, node=node.id, problem=problem)
+                continue
+            like = literals.get("like")
+            declared = DeclaredDependencies(key=key, node=node.id, like=like if isinstance(like, str) else None)
+            self.declared[key] = declared
+            if declared.action is None:
+                self.add("dependencies.like", node.id, key=key, like=declared.like or "", problem="is not self.<action>")
+            elif self.scope.workflows is not None:
+                borrowed = borrowed_dependencies(declared, self.scope.workflows)
+                if isinstance(borrowed, str):
+                    self.add("dependencies.like", node.id, key=key, like=declared.like or "", problem=borrowed)
+
+    def typed(self, key: str) -> bool:
+        """Whether the dependencies declared as ``key`` are known here: its action is one of
+        the app's, so what is read through it is held to that action's dependencies."""
+        declared = self.declared.get(key)
+        return declared is not None and self.scope.workflows is not None and not isinstance(borrowed_dependencies(declared, self.scope.workflows), str)
+
+    def undeclared(self, dependency: str) -> bool:
+        """Whether ``dependency`` (stored ``<key>__<name>``) is none this agent blok declares:
+        its dependencies are the ones in its own tree, mounted or not."""
+        if self.kind_name != "agent" or dependency == "self":
+            return False
+        key, separator, name = dependency.partition(REFERENCE_SEPARATOR)
+        if not separator or key not in self.declared:
+            return True
+        return self.typed(key) and name != OPTIONS_SEGMENT and dependency not in self.dependencies
+
+    def options(self, key: str, rest: Sequence[str], path: str, node_id: str) -> Match:
+        """``<key>.options.<dependency>``: the agents that fit it, each ``{id, name, connected, picked}``."""
+        if not rest:
+            self.add("roots.whole", node_id, path=path, root=f"{key}.{OPTIONS_SEGMENT}")
+            return None
+        if self.typed(key) and reference_key(key, rest[0]) not in self.dependencies:
+            self.add("deps.unknown", node_id, path=path, key=f"{key}.{rest[0]}", keys=self.dependency_known(key), hint=dependency_hint(key, self.kind_name))
+            return None
+        listed = PortMatchInputModel.model_validate({"key": rest[0], "kind": "LIST", "children": [{"key": "...", "kind": "DICT", "children": list(OPTION_FIELDS)}]})
+        return self.descend(listed, rest[1:], path, node_id)
+
+    def check_pick(self, call: UtilCallInputModel, where: Where) -> None:
+        """``<key>.pick(<dependency>: <agent id>)``: declared dependencies, and dependencies of them."""
+        arguments = {argument.key: argument for argument in call.arguments or ()}
+        named, picks = arguments.get("key"), arguments.get("picks")
+        key = named.value_literal if named is not None else None
+        if not isinstance(key, str) or key not in self.declared:
+            shown = key if isinstance(key, str) else "?"
+            self.add("deps.unknown", where.node.id, path=f"{shown}.{PICK_VERB}(...)", key=shown, keys=self.dependency_known(shown), hint=dependency_hint(shown, self.kind_name))
+            return
+        if not self.typed(key):
+            return
+        for pick in (picks.value_dict if picks is not None else None) or ():
+            if pick.key is not None and reference_key(key, pick.key) not in self.dependencies:
+                self.add("deps.unknown", where.node.id, path=f"{key}.{PICK_VERB}(...)", key=f"{key}.{pick.key}", keys=self.dependency_known(key), hint=dependency_hint(key, self.kind_name))
+
+    def check_picker(self, node: ComponentNodeInputModel) -> None:
+        """``<deppicker key="cells" />`` or ``key="cells.microscope"``: declared dependencies."""
+        written = next((prop.static_value for prop in node.props or () if prop.key == "key"), None)
+        if not isinstance(written, str):
+            return  # catalog.prop says a key is needed
+        key, _, name = written.partition(".")
+        known = key in self.declared and (not name or not self.typed(key) or reference_key(key, name) in self.dependencies)
+        if not known:
+            self.add("deps.unknown", node.id, path=f"{node.component}.key", key=written, keys=self.dependency_known(key), hint=dependency_hint(key, self.kind_name))
+
+    def check_with(self, call: AgentProbeInputModel, where: Where) -> None:
+        """``with <key>``: dependencies the blok declares, of the action that is called."""
+        given, action = call.given or "", action_key_for(call)
+        declared = self.declared.get(given)
+        if declared is None:
+            self.add("deps.unknown", where.node.id, path=f"with {given}", key=given, keys=", ".join(sorted(self.declared)) or "none", hint=dependency_hint(given, self.kind_name))
+        elif declared.action is not None and declared.action != action:
+            self.add("with.mismatch", where.node.id, path=where.text, key=given, action=action, of=declared.action)
+
+    def dependency_known(self, key: str) -> str:
+        """What ``key`` may read through, for a message: the dependencies declared under it,
+        else the keys the blok declares."""
+        if self.kind_name != "agent":
+            return ", ".join(sorted(self.dependencies)) or "none"
+        if key in self.declared and self.typed(key):
+            prefix = f"{key}{REFERENCE_SEPARATOR}"
+            return ", ".join(sorted(f"{key}.{name.removeprefix(prefix)}" for name in self.dependencies if name.startswith(prefix))) or "none"
+        return ", ".join(sorted(self.declared)) or "none"
 
     def check_queries(self, tree: ComponentNodeInputModel) -> None:
         """Queries and subscriptions are children of the ``<Blok>``, each declared once and
@@ -454,6 +621,8 @@ class _Checker:
 
     def visit_component(self, node: ComponentNodeInputModel, ancestors: tuple[ComponentNodeInputModel, ...], scope: Mapping[str, Binding]) -> None:
         self.check_host_part(node, ancestors)
+        if node.component == PICKER_COMPONENT:
+            self.check_picker(node)
         for prop in node.props or ():
             self.check_prop(node, prop, scope)
 
@@ -562,11 +731,15 @@ class _Checker:
         elif "deps" not in kind.roots:
             self.add("roots.not_in_kind", where.node.id, path=f"deps.{call.dependency}.{action}(...)", n=_article(self.kind_name), kind=self.kind_name, root="deps", roots=self.roots())
             return
-        dependency = self.dependencies.get(call.dependency)
+        if call.given is not None:
+            self.check_with(call, where)
+        dependency = None if self.undeclared(call.dependency) else self.dependencies.get(call.dependency)
         if dependency is None:
-            if call.dependency != "self" and self.mounted:
-                self.add("deps.unknown", where.node.id, path=owner, key=call.dependency, keys=", ".join(sorted(self.dependencies)) or "none", hint=dependency_hint(call.dependency, self.kind_name))
+            if call.dependency != "self" and (self.undeclared(call.dependency) if self.kind_name == "agent" else self.mounted):
+                written = call.dependency.partition(REFERENCE_SEPARATOR)[0]
+                self.add("deps.unknown", where.node.id, path=owner, key=call.dependency.replace(REFERENCE_SEPARATOR, "."), keys=self.dependency_known(written), hint=dependency_hint(written, self.kind_name))
             return
+
         actions = dependency.action_dependencies
         if actions is not None and action not in {demand.key for demand in actions}:
             self.add("deps.unknown_action", where.node.id, path=owner, key=call.dependency, action=action, actions=", ".join(sorted(demand.key for demand in actions)) or "none")
@@ -610,6 +783,8 @@ class _Checker:
             self.add("callback.nested", where.node.id, what=call.operation)
         if call.operation in _VERBS and top:
             self.check_query_effect(call, where)
+        if call.operation == PICK_FUNCTION:
+            self.check_pick(call, where)
         keys = {argument.key for argument in call.arguments or ()}
         unknown = sorted(key for key in keys if key is not None and key not in function.keys and not key.isdigit())
         if unknown:
@@ -734,9 +909,22 @@ class _Checker:
             if not rest:
                 self.add("roots.whole", node_id, path=path, root="deps")
                 return None
+            # An agent blok's dependencies are in its own tree (`cells.microscope`, stored
+            # `deps.cells__microscope`): one it does not declare is unknown, mounted or not;
+            # one it declares and this side cannot type is open.
+            if self.kind_name == "agent" and rest[0] != "self":
+                key, separator, name = rest[0].partition(REFERENCE_SEPARATOR)
+                shown = f"{key}.{name}" if separator else rest[0]
+                if separator and key in self.declared and name == OPTIONS_SEGMENT:
+                    return self.options(key, rest[1:], path, node_id)
+                if self.undeclared(rest[0]):
+                    self.add("deps.unknown", node_id, path=path, key=shown, keys=self.dependency_known(key), hint=dependency_hint(key, self.kind_name))
+                    return None
+                found = self.dependencies.get(rest[0])
+                return self.agent(found, rest[0], rest[1:], path, node_id) if found is not None else open_match(path)
             dependency = self.dependencies.get(rest[0])
             if dependency is None:
-                if not self.mounted:
+                if not self.mounted or self.kind_name == "agent":
                     return open_match(path)
                 self.add("deps.unknown", node_id, path=path, key=rest[0], keys=", ".join(sorted(self.dependencies)) or "none", hint=dependency_hint(rest[0], self.kind_name))
                 return None
@@ -906,12 +1094,12 @@ def dependency_hint(key: str, kind: str) -> str:
 
     - custom and task bloks declare it, to copy as it is: ``dependencies=[AgentDependencyInput(key="laser")]``;
     - an action blok's dependencies are its action's: ``add a dependency parameter `laser` to the action``;
-    - an agent blok has none: ``agent bloks read only `self```.
+    - an agent blok declares it in its own tree: ``<dependencies key="laser" like="self.<action>" />``.
     """
     if kind in ("action", "assign", "port"):
         return f"add a dependency parameter `{key}` to the action"
     if kind == "agent":
-        return "agent bloks read only `self`"
+        return f'declare it in the blok: <dependencies key="{key}" like="self.<action>" />, then read {key}.<dependency>'
     return f'dependencies=[AgentDependencyInput(key="{key}")]'
 
 
@@ -1050,6 +1238,7 @@ def check_blok_tree(tree: ComponentNodeInputModel, scope: BlokScope | None = Non
     if problem is not None:
         return [problem]
     header = blok_header(tree)
+    scope = bound_scope(tree, scope)
     checker = _Checker(header, scope, resolve_locals(tree, scope.dependencies))
     checker.check_declarations(tree)
     walk_tree(tree, checker)

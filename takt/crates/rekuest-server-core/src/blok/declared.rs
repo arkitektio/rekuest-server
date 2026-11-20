@@ -26,12 +26,14 @@ pub const LOCAL_COMPONENT: &str = "local";
 pub const QUERY_COMPONENT: &str = "query";
 pub const SUBSCRIPTION_COMPONENT: &str = "subscription";
 pub const VAR_COMPONENT: &str = "var";
+pub const DEPENDENCIES_COMPONENT: &str = "dependencies";
 /// The components that declare what a blok owns and draw nothing.
-pub const DECLARATION_COMPONENTS: [&str; 4] = [
+pub const DECLARATION_COMPONENTS: [&str; 5] = [
     LOCAL_COMPONENT,
     QUERY_COMPONENT,
     SUBSCRIPTION_COMPONENT,
     VAR_COMPONENT,
+    DEPENDENCIES_COMPONENT,
 ];
 /// The name a local, a query or a subscription is read by.
 pub const NAME_PROP: &str = "name";
@@ -305,6 +307,42 @@ pub fn declared_local(node: &ComponentNodeInputModel) -> Result<BlokLocalInputMo
         .validate()
         .map_err(|error| refused(format!("is no valid port: Value error, {error}")))?;
     Ok(local)
+}
+
+/// A `<dependencies key="cells" like="self.<action>" />` of an agent blok: the dependencies of
+/// one of the app's own actions, each read and called as `cells.<dependency>` and handed to a
+/// run of that action with `with cells`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeclaredDependencies {
+    pub key: String,
+    pub node: String,
+    /// As written; none when it is missing or no literal.
+    pub like: Option<String>,
+}
+
+impl DeclaredDependencies {
+    /// The action when `like` reads `self.<action>`.
+    pub fn action(&self) -> Option<&str> {
+        let parts: Vec<&str> = self.like.as_deref()?.split('.').collect();
+        (parts.len() == 2 && parts[0] == "self" && !parts[1].is_empty()).then(|| parts[1])
+    }
+}
+
+/// The keyed `<dependencies>` children of a blok's `<Blok>`, in order.
+pub fn declared_dependencies(tree: &ComponentNodeInputModel) -> Vec<DeclaredDependencies> {
+    tree.children
+        .iter()
+        .flatten()
+        .filter(|child| child.component == DEPENDENCIES_COMPONENT)
+        .filter_map(|child| {
+            let key = literal_text(child, KEY_PROP).filter(|key| !key.is_empty())?;
+            Some(DeclaredDependencies {
+                key: key.to_owned(),
+                node: child.id.clone(),
+                like: literal_text(child, LIKE_PROP).map(str::to_owned),
+            })
+        })
+        .collect()
 }
 
 /// Every node of `tree` with its ancestors, depth first.

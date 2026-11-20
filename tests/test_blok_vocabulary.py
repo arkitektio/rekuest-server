@@ -15,7 +15,7 @@ import pytest
 
 from rekuest_core.inputs import models as rimodels
 from rekuest_core.vocabulary import BlokScope, check_blok_tree, load_vocabulary, resolve_locals
-from rekuest_core.vocabulary.check import dependency_hint
+from rekuest_core.vocabulary.check import bound_scope, dependency_hint
 from rekuest_core.vocabulary.vocabulary import JSON
 
 FIXTURES = Path(__file__).parent.parent / "takt" / "crates" / "rekuest-server-core" / "tests" / "fixtures"
@@ -38,11 +38,19 @@ def _scope(raw: dict[str, JSON]) -> BlokScope:
     kinds = raw.get("kinds")
     args = raw.get("args")
     port = raw.get("port")
+    workflows = raw.get("workflows")
     return BlokScope(
         kinds=tuple(str(kind) for kind in kinds) if isinstance(kinds, list) else (),
         dependencies=_dependencies(raw),
         args=tuple(str(arg) for arg in args) if isinstance(args, list) else None,
         port=rimodels.PortMatchInputModel.model_validate(port) if isinstance(port, dict) else None,
+        workflows={
+            str(action): tuple(rimodels.AgentDependencyInputModel.model_validate(entry) for entry in entries if isinstance(entry, dict))
+            for action, entries in workflows.items()
+            if isinstance(entries, list)
+        }
+        if isinstance(workflows, dict)
+        else None,
     )
 
 
@@ -70,7 +78,7 @@ def test_a_checked_tree_finds_what_the_spec_finds(case: dict[str, JSON]) -> None
 @pytest.mark.parametrize("case", _cases("mount"), ids=lambda case: str(case["name"]))
 def test_a_checked_tree_resolves_its_locals_as_the_spec_does(case: dict[str, JSON]) -> None:
     tree = rimodels.ComponentNodeInputModel.model_validate(case["tree"])
-    resolved = resolve_locals(tree, _dependencies(_mount(case)))
+    resolved = resolve_locals(tree, bound_scope(tree, _scope(_mount(case))).dependencies)
     locals_ = {node: each.local.model_dump(mode="json", exclude_none=True) for node, each in resolved.items()}
     assert {"locals": locals_} == _language(case)["resolved"]
 
@@ -112,10 +120,10 @@ def test_the_deps_unknown_hint_says_what_the_kind_does(kind: str, hint: str) -> 
     assert findings[0].message.endswith(f"Fix: {hint}.")
 
 
-def test_an_agent_blok_reads_no_deps_at_all() -> None:
+def test_an_agent_blok_reads_only_the_dependencies_it_declares() -> None:
     tree = _reads_the_laser("agent")
-    assert [finding.code for finding in check_blok_tree(tree, BlokScope(dependencies=()))] == ["roots.not_in_kind"]
-    assert dependency_hint("laser", "agent") == "agent bloks read only `self`"
+    assert [finding.code for finding in check_blok_tree(tree, BlokScope(dependencies=()))] == ["deps.unknown"]
+    assert dependency_hint("laser", "agent") == 'declare it in the blok: <dependencies key="laser" like="self.<action>" />, then read laser.<dependency>'
 
 
 def test_a_left_out_kind_stays_left_out_until_resolved() -> None:
