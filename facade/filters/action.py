@@ -86,9 +86,9 @@ class ActionOrder:
 class ActionFilter:
     name: Optional[FilterLookup[str]]
 
-    @filter_field(description="Search by name: a case-insensitive substring, or semantic similarity of the query to the action's name and description. Substring matches rank first, then by similarity; an explicit `ordering` replaces that ranking.")
+    @filter_field(description="Search by name: a case-insensitive substring, or semantic similarity of the query to the action's name and description. Ranked: an exact match, then a prefix, then other textual matches by trigram similarity, then by meaning; an explicit `ordering` replaces that ranking.")
     def search(self, info: Info, queryset: QuerySet[models.Action], value: str, prefix: str) -> tuple[QuerySet[models.Action], Q]:
-        return hybrid_search(queryset, prefix, value, Q(**{f"{prefix}name__icontains": value}))
+        return hybrid_search(queryset, prefix, value, Q(**{f"{prefix}name__icontains": value}), "name")
 
     @filter_field
     def ids(self, info: Info, queryset: QuerySet[models.Action], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[models.Action], Q]:

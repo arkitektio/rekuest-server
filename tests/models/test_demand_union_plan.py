@@ -76,7 +76,7 @@ def _actions(catalog: SimpleNamespace) -> QuerySet[models.Action]:
 
 def _searched(queryset: QuerySet[models.Action], value: str) -> QuerySet[models.Action]:
     """``ActionFilter.search`` as strawberry_django applies it: the annotated queryset, filtered by its Q."""
-    queryset, q = hybrid_search(queryset, "", value, Q(name__icontains=value))
+    queryset, q = hybrid_search(queryset, "", value, Q(name__icontains=value), "name")
     return queryset.filter(q)
 
 

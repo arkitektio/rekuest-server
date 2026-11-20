@@ -17,8 +17,8 @@ The contract, in one place:
 * **The server loads the model at start**, not at the first row or query, and no management
   command loads it (the service's ``asgi.py``).
 * **Search is hybrid.** :func:`embeddings.search.hybrid_search` ORs the existing lexical
-  predicate with "cosine distance below the threshold", ranks lexical hits first and then by
-  distance, and degrades to lexical-only whenever embeddings are off or unavailable.
+  predicate with "cosine distance below the threshold", ranks an exact name, then a prefix, then other
+  lexical hits by trigram similarity (``pg_trgm``), then semantic hits by distance, and degrades to lexical-only whenever embeddings are off or unavailable.
 """
 
 from embeddings.engine import (

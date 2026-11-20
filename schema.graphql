@@ -471,7 +471,7 @@ input ActionFilter {
   DISTINCT: Boolean
 
   """
-  Search by name: a case-insensitive substring, or semantic similarity of the query to the action's name and description. Substring matches rank first, then by similarity; an explicit `ordering` replaces that ranking.
+  Search by name: a case-insensitive substring, or semantic similarity of the query to the action's name and description. Ranked: an exact match, then a prefix, then other textual matches by trigram similarity, then by meaning; an explicit `ordering` replaces that ranking.
   """
   search: String
   ids: [ID!]
@@ -3621,7 +3621,7 @@ input HostedStructureFilter {
   ids: [ID!]
 
   """
-  Keep structures whose identifier, label or description contains this text, or whose label and description mean something close to it. Substring matches rank first, then by similarity; an explicit `ordering` replaces that ranking.
+  Keep structures whose identifier, label or description contains this text, or whose label and description mean something close to it. Ranked: an exact match, then a prefix, then other textual matches by trigram similarity, then by meaning; an explicit `ordering` replaces that ranking.
   """
   search: String
 
@@ -5886,7 +5886,7 @@ type Query {
     identifier: String = null
 
     """
-    Keep signals whose identifier or description contains this text, or whose description means something close to it; substring matches first, then by similarity
+    Keep signals whose identifier or description contains this text, or whose description means something close to it; ranked: an exact identifier, then a prefix, then other substring matches by trigram similarity, then by meaning
     """
     search: String = null
   ): [SignalDeclaration!]! @auth(required_scopes: ["rekuest_read"])
@@ -7478,7 +7478,7 @@ input StructureDescriptorFilter {
   ids: [ID!]
 
   """
-  Keep descriptors whose key or description contains this text, or whose description means something close to it. Substring matches rank first, then by similarity; an explicit `ordering` replaces that ranking.
+  Keep descriptors whose key or description contains this text, or whose description means something close to it. Ranked: an exact match, then a prefix, then other textual matches by trigram similarity, then by meaning; an explicit `ordering` replaces that ranking.
   """
   search: String
 

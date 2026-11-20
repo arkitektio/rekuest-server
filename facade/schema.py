@@ -226,13 +226,13 @@ class Query:
         self,
         info: Info,
         identifier: str | None = None,
-        search: Annotated[str | None, strawberry.argument(description="Keep signals whose identifier or description contains this text, or whose description means something close to it; substring matches first, then by similarity")] = None,
+        search: Annotated[str | None, strawberry.argument(description="Keep signals whose identifier or description contains this text, or whose description means something close to it; ranked: an exact identifier, then a prefix, then other substring matches by trigram similarity, then by meaning")] = None,
     ) -> list[types.SignalDeclaration]:
         declarations = models.SignalDeclaration.objects.select_related("service").order_by("identifier", "kind")
         if identifier is not None:
             declarations = declarations.filter(identifier=identifier)
         if search is not None:
-            declarations, matches = hybrid_search(declarations, "", search, Q(identifier__icontains=search) | Q(description__icontains=search))
+            declarations, matches = hybrid_search(declarations, "", search, Q(identifier__icontains=search) | Q(description__icontains=search), "identifier")
             declarations = declarations.filter(matches)
         return cast(list[types.SignalDeclaration], list(declarations))
 

@@ -111,6 +111,18 @@ class TestActionSearch:
 
         assert await _names(authenticated_context, QUERY) == ["Detect cells (substring)", "Near"]
 
+    async def test_name_tiers_rank_before_distance(self, authenticated_context: HttpContext) -> None:
+        """Exact name, then prefix, then substring hits by trigram similarity, then semantic-only; distance never lifts a tier."""
+        await _warm(authenticated_context)
+        e0 = np.asarray(engine.embed_query(QUERY))
+        await sync_to_async(_seed)(authenticated_context, "tier-sem", "Near", distance=0.01, e0=e0)
+        await sync_to_async(_seed)(authenticated_context, "tier-long", "Fast detect cells in 3D stacks", distance=0.05, e0=e0)
+        await sync_to_async(_seed)(authenticated_context, "tier-short", "Do detect cells", distance=0.3, e0=e0)
+        await sync_to_async(_seed)(authenticated_context, "tier-prefix", "Detect cells in stacks", distance=0.4, e0=e0)
+        await sync_to_async(_seed)(authenticated_context, "tier-exact", "Detect Cells", distance=0.5, e0=e0)
+
+        assert await _names(authenticated_context, QUERY) == ["Detect Cells", "Detect cells in stacks", "Do detect cells", "Fast detect cells in 3D stacks", "Near"]
+
     async def test_threshold_excludes_far_rows(self, authenticated_context: HttpContext) -> None:
         """A vector beyond the threshold is not a hit."""
         await _warm(authenticated_context)
