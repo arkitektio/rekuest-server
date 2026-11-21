@@ -143,7 +143,7 @@ def update_materialized_blok(info: Info, input: inputs.UpdateMaterializedBlokInp
 
 
 @transaction.atomic
-def pin_materialized_blok(info: Info, input: inputs.PinMaterializedBlokInput) -> types.MaterializedBlok:
+def pin_materialized_blok_revision(info: Info, input: inputs.PinMaterializedBlokRevisionInput) -> types.MaterializedBlok:
     """Keep a materialization at one revision of its blok, or let it follow the head again."""
     mblok = scoped_get(models.MaterializedBlok, info, input.id, field="blok__organization")
     _refuse_declared(mblok)
@@ -155,4 +155,16 @@ def pin_materialized_blok(info: Info, input: inputs.PinMaterializedBlokInput) ->
         except models.BlokRevision.DoesNotExist:
             raise ValueError(f"Blok '{mblok.blok.name}' has no revision {input.revision}.")
     mblok.save(update_fields=["pinned_revision", "updated_at"])
+    return cast("types.MaterializedBlok", mblok)
+
+
+def pin_materialized_blok(info: Info, input: inputs.PinInput) -> types.MaterializedBlok:
+    """Pin a materialization of any kind for the caller, or unpin it."""
+    data = input.to_pydantic()
+    mblok = scoped_get(models.MaterializedBlok, info, data.id, field="blok__organization")
+    user = CallerContext.from_info(info).user
+    if data.pin:
+        mblok.pinned_by.add(user)
+    else:
+        mblok.pinned_by.remove(user)
     return cast("types.MaterializedBlok", mblok)

@@ -242,6 +242,6 @@ class RevertBlokInput:
 
 
 @strawberry.input(description="Keep a materialization at one revision of its blok, or let it follow the head.")
-class PinMaterializedBlokInput:
+class PinMaterializedBlokRevisionInput:
     id: strawberry.ID = strawberry.field(description="The materialization.")
     revision: strawberry.ID | None = strawberry.field(default=None, description="The revision to stay at; null follows the head again.")

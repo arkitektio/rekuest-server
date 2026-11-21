@@ -82,8 +82,8 @@ REVERT_BLOK = f"""
 """
 
 PIN = """
-    mutation Pin($input: PinMaterializedBlokInput!) {
-        pinMaterializedBlok(input: $input) { id pinnedRevision { id } }
+    mutation Pin($input: PinMaterializedBlokRevisionInput!) {
+        pinMaterializedBlokRevision(input: $input) { id pinnedRevision { id } }
     }
 """
 

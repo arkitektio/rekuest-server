@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, cast
 
 import strawberry
 import strawberry_django
-from django.db.models import QuerySet
+from django.db.models import Exists, OuterRef, QuerySet
 from kante.types import Info
 from strawberry_django.fields.field import StrawberryDjangoField
 
@@ -72,6 +72,20 @@ V2_FIELD_DOCS = {
 }
 
 
+def _pinned_by_caller(model: type[models.Blok] | type[models.MaterializedBlok], info: Info) -> Exists:
+    """Whether the caller pinned the outer row."""
+    through = model.pinned_by.through
+    column = "blok_id" if model is models.Blok else "materializedblok_id"
+    return Exists(through.objects.filter(**{column: OuterRef("pk"), "user_id": info.context.request.user.id}))
+
+
+def _pinned(row: object, model: type[models.Blok] | type[models.MaterializedBlok], info: Info) -> bool:
+    annotated = getattr(row, "pinned_by_caller", None)
+    if annotated is not None:
+        return bool(annotated)
+    return model.objects.filter(pk=row.pk).filter(_pinned_by_caller(model, info)).exists()  # pyright: ignore[reportAttributeAccessIssue]
+
+
 class ListedMaterializationsField(StrawberryDjangoField):
     """The materializations a list shows: not the ones made for a message or shown by a task, which only their message or task opens."""
 
@@ -102,6 +116,10 @@ class Blok:
         return row_of(self, models.Blok).app_id is not None
 
     held_by_action: bool = strawberry_django.field(description="Whether this blok is an action's own (`Action.bloks`): declared with the action, never listed, materialized or edited on its own.")
+
+    @strawberry_django.field(description="Whether the caller pinned this blok.")
+    def pinned(self, info: Info) -> bool:
+        return _pinned(self, models.Blok, info)
 
     @strawberry_django.field(description="The agents that currently provide this blok, each through its own materialization.")
     def providers(self, info: Info) -> list[Agent]:
@@ -179,7 +197,7 @@ class Blok:
 
     @classmethod
     def get_queryset(cls, queryset: QuerySet[models.Blok], info: Info, **kwargs: object) -> QuerySet[models.Blok]:
-        return build_prescoped_queryset(info, queryset, field="organization")
+        return build_prescoped_queryset(info, queryset, field="organization").annotate(pinned_by_caller=_pinned_by_caller(models.Blok, info))
 
 
 @strawberry_django.type(
@@ -334,6 +352,10 @@ class MaterializedBlok:
     )
     pinned_revision: BlokRevision | None = strawberry_django.field(description="The revision this materialization stays at; null when it follows its blok's head.")
 
+    @strawberry_django.field(description="Whether the caller pinned this materialization (not `pinnedRevision`, which holds its content).")
+    def pinned(self, info: Info) -> bool:
+        return _pinned(self, models.MaterializedBlok, info)
+
     @strawberry_django.field(description="Where it lives: DASHBOARD, MESSAGE when it was made for one chat message to show inline, or TASK when a task showed it.")
     def scope(self) -> enums.MaterializationScope:
         return enums.MaterializationScope(row_of(self, models.MaterializedBlok).scope)
@@ -362,7 +384,7 @@ class MaterializedBlok:
 
     @classmethod
     def get_queryset(cls, queryset: QuerySet[models.MaterializedBlok], info: Info, **kwargs: object) -> QuerySet[models.MaterializedBlok]:
-        return build_prescoped_queryset(info, queryset, field="blok__organization")
+        return build_prescoped_queryset(info, queryset, field="blok__organization").annotate(pinned_by_caller=_pinned_by_caller(models.MaterializedBlok, info))
 
 
 @strawberry_django.type(models.BlokAgentMapping)

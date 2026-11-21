@@ -122,6 +122,18 @@ def delete_blok(info: Info, input: inputs.DeleteBlokInput) -> bool:
     return deleted > 0
 
 
+def pin_blok(info: Info, input: inputs.PinInput) -> types.Blok:
+    """Pin a blok of any kind for the caller, or unpin it."""
+    data = input.to_pydantic()
+    blok = scoped_get(models.Blok, info, data.id, field="organization")
+    user = CallerContext.from_info(info).user
+    if data.pin:
+        blok.pinned_by.add(user)
+    else:
+        blok.pinned_by.remove(user)
+    return cast("types.Blok", blok)
+
+
 def _fork(provided: models.Blok, name: str, user: User) -> models.Blok:
     """A custom copy of a provided blok, its first revision the provided content."""
     if models.Blok.objects.filter(organization=provided.organization, name=name, app__isnull=True).exists():

@@ -356,7 +356,9 @@ class Mutation:
     revert_blok = mutation(scope="rekuest_write", resolver=mutations.revert_blok, description="Make an earlier revision's content a custom blok's head again, as a new revision.")
     delete_materialized_blok = mutation(scope="rekuest_write", resolver=mutations.delete_materialized_blok, description="Delete a materialized blok by ID.")
     update_materialized_blok = mutation(scope="rekuest_write", resolver=mutations.update_materialized_blok, description="Update properties of a materialized blok such as its agent mappings.")
-    pin_materialized_blok = mutation(scope="rekuest_write", resolver=mutations.pin_materialized_blok, description="Keep a materialization at one revision of its blok, or let it follow the head again.")
+    pin_materialized_blok_revision = mutation(scope="rekuest_write", resolver=mutations.pin_materialized_blok_revision, description="Keep a materialization at one revision of its blok, or let it follow the head again.")
+    pin_materialized_blok = mutation(scope="rekuest_write", resolver=mutations.pin_materialized_blok, description="Pin a materialization of any kind for the caller, or unpin it.")
+    pin_blok = mutation(scope="rekuest_write", resolver=mutations.pin_blok, description="Pin a blok of any kind for the caller, or unpin it.")
     register_module = mutation(scope="rekuest_agent", resolver=mutations.register_module, description="Register a module: the components and operations a UI app can render and evaluate beyond the spec's catalogs, and the catalogs it implements whole (upsert by name in the caller's organization). Bloks (`module`) and definitions (`catalogs`) that name it are validated against it.")
     # Implement Agent
     implement_agent = mutation(scope="rekuest_agent", resolver=mutations.implement_agent, description="Implement an agent with given states and implementations. This is used to set up an agent with its initial configuration and capabilities.")

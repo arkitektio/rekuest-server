@@ -10,9 +10,9 @@ from .shortcut import bind_shortcut, create_shortcut, delete_shortcut, unbind_sh
 from .schedule import create_schedule, update_schedule, delete_schedule, trigger_schedule
 from .wiregram import delete_wiregram, export_wiregram, import_wiregram
 from .trigger import create_trigger, update_trigger, delete_trigger, fire_trigger
-from .blok import create_blok, delete_blok, edit_blok, fork_blok, revert_blok, update_blok
+from .blok import create_blok, delete_blok, edit_blok, fork_blok, pin_blok, revert_blok, update_blok
 from .catalog import register_module
-from .materialized_blok import materialize_blok, delete_materialized_blok, pin_materialized_blok, update_materialized_blok
+from .materialized_blok import materialize_blok, delete_materialized_blok, pin_materialized_blok, pin_materialized_blok_revision, update_materialized_blok
 from .action import cleanup_actions
 from .resolution import auto_resolve
 from .space import reset_placement, save_placement
@@ -42,6 +42,8 @@ __all__ = [
     "delete_materialized_blok",
     "update_materialized_blok",
     "pin_materialized_blok",
+    "pin_materialized_blok_revision",
+    "pin_blok",
     "update_agent",
     "bounce",
     "delete_dashboard",

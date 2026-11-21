@@ -100,6 +100,12 @@ class Blok(models.Model):
         related_name="+",
         help_text="The revision this custom Blok's columns and dependency rows are a copy of. NULL for a provided Blok, which its declaration hash versions instead.",
     )
+    pinned_by = models.ManyToManyField(
+        get_user_model(),
+        related_name="pinned_bloks",
+        blank=True,
+        help_text="The users that pinned this Blok. Rows go with the Blok in the database (ON DELETE CASCADE), as takt deletes bloks in SQL.",
+    )
 
     class Meta:
         # createBlok upserts a custom blok on (organization, name); registration upserts a provided
@@ -310,6 +316,12 @@ class MaterializedBlok(models.Model):
     )
     task_role = models.CharField(max_length=16, null=True, blank=True, choices=enums.TaskBlokRoleChoices.choices, help_text="Why its task showed it: ASK (the task holds until a person answers through it) or INFORM.")
     args = models.JSONField(default=dict, db_default={}, help_text="What it is opened on, by arg key (read under `@args.<key>`). Empty for a materialization opened by whoever shows it.")
+    pinned_by = models.ManyToManyField(
+        get_user_model(),
+        related_name="pinned_materialized_bloks",
+        blank=True,
+        help_text="The users that pinned this materialization. Rows go with it in the database (ON DELETE CASCADE), as takt deletes materializations in SQL.",
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
 

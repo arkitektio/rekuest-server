@@ -37,6 +37,10 @@ class BlokFilter:
     def search(self, info: Info, queryset: QuerySet[models.Blok], value: str | None, prefix: str) -> tuple[QuerySet[models.Blok], Q]:
         return queryset.filter(**{f"{prefix}name__icontains": value}), Q()
 
+    @filter_field(description="Only bloks the caller pinned (true) or did not (false).")
+    def pinned(self, info: Info, queryset: QuerySet[models.Blok], value: bool, prefix: str) -> tuple[QuerySet[models.Blok], Q]:
+        return queryset, Q(**{f"{prefix}pinned_by__id": info.context.request.user.id}) if value else ~Q(**{f"{prefix}pinned_by__id": info.context.request.user.id})
+
     @filter_field(description="Only bloks installed from an origin (true) or only ones made here (false).")
     def has_origin(self, info: Info, queryset: QuerySet[models.Blok], value: bool, prefix: str) -> tuple[QuerySet[models.Blok], Q]:
         return queryset.filter(**{f"{prefix}origin__isnull": not value}), Q()
@@ -73,6 +77,10 @@ class MaterializedBlokFilter:
     @filter_field(description="Search by name")
     def search(self, info: Info, queryset: QuerySet[models.MaterializedBlok], value: str | None, prefix: str) -> tuple[QuerySet[models.MaterializedBlok], Q]:
         return queryset.filter(**{f"{prefix}name__icontains": value}), Q()
+
+    @filter_field(description="Only materializations the caller pinned (true) or did not (false).")
+    def pinned(self, info: Info, queryset: QuerySet[models.MaterializedBlok], value: bool, prefix: str) -> tuple[QuerySet[models.MaterializedBlok], Q]:
+        return queryset, Q(**{f"{prefix}pinned_by__id": info.context.request.user.id}) if value else ~Q(**{f"{prefix}pinned_by__id": info.context.request.user.id})
 
     @filter_field(description="Only bloks that render in one of these contexts: PANEL and SCENE are interfaces to open, LOGO draws an agent or an action.")
     def contexts(self, info: Info, queryset: QuerySet[models.MaterializedBlok], value: list[renums.ComponentContext], prefix: str) -> tuple[QuerySet[models.MaterializedBlok], Q]:
