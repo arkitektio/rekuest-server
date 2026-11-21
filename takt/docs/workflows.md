@@ -73,7 +73,8 @@ When a workflow's agent dies, the server claims the task back to `QUEUED` and se
 again with `resume`:
 
 ```json
-{"last_step": 5, "effects": [{"key": "NOW:1", "effect": "NOW", "value": 1790715513.22}]}
+{"last_step": 5, "effects": [{"key": "NOW:1", "effect": "NOW", "value": 1790715513.22}],
+ "calls": ["7:3f2b6a9c:1"], "code_changed": false}
 ```
 
 - Each effect helper looks its key up first. A recorded value comes back instead of a new one (a
@@ -92,9 +93,11 @@ again with `resume`:
   a second value.
 
 **Limits.**
-- **Code pin.** `Task.code_hash` is the implementation's `code_hash` at dispatch (a hash of its
-  source). If it changed, the workflow is not resumed but ends LOST ("code changed"). Only the
-  function's own source is hashed: an edit to a helper it calls is not seen.
+- **No code pin.** A workflow is resumed whatever its code is now. `resume.calls` lists the call
+  keys of the children it has, and the agent refuses a resumed run that makes another call
+  while those are outstanding, or ends without making them (`NonDeterministicWorkflow`).
+  `Task.code_hash` (the implementation's `code_hash` at dispatch) only tells that error whether
+  the code changed (`resume.code_changed`).
 - **Resume cap.** `Task.resumes` counts resumes; after `MAX_RESUMES` (3, `persist/reconcile.rs`)
   the task ends LOST.
 - A resent workflow whose agent never comes back ends LOST with `started: true`.

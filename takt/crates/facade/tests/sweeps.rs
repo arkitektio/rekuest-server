@@ -835,8 +835,13 @@ async fn a_workflow_whose_agent_dies_is_sent_again_with_its_journal() {
     assert_eq!(frames[0]["task"], task.to_string());
     assert_eq!(
         frames[0]["resume"],
-        json!({"last_step": 3, "effects": [{"key": "NOW:1", "effect": "NOW", "value": 1790000000.5}]}),
-        "the call's step counts too"
+        json!({
+            "last_step": 3,
+            "effects": [{"key": "NOW:1", "effect": "NOW", "value": 1790000000.5}],
+            "calls": ["7:3f2b6a9c:1"],
+            "code_changed": false,
+        }),
+        "the call's step counts too, and its key is listed"
     );
 
     // ...and the new process dies too, before it picks the workflow up: it did start once.
@@ -850,7 +855,7 @@ async fn a_workflow_whose_agent_dies_is_sent_again_with_its_journal() {
 }
 
 #[tokio::test]
-async fn a_workflow_is_not_resumed_onto_changed_code_nor_too_often() {
+async fn a_workflow_is_resumed_onto_changed_code_but_not_too_often() {
     let _serial = serial().await;
     let Some(ctx) = context(Settings {
         grace: Duration::from_secs(30),
@@ -862,13 +867,12 @@ async fn a_workflow_is_not_resumed_onto_changed_code_nor_too_often() {
     };
     let (agent, changed) = workflow(&ctx, "h0").await;
     take_over(&ctx, agent).await;
-    assert_eq!(state(&ctx, changed).await, ("LOST".into(), true));
-    assert!(event(&ctx, changed, "LOST")
-        .await
-        .0
-        .unwrap()
-        .contains("code changed"));
-    assert!(queued(&ctx, agent).await.is_empty());
+    // Resumed all the same: the agent refuses a run that takes another path, and is told.
+    assert_eq!(state(&ctx, changed).await, ("QUEUED".into(), false));
+    assert_eq!(
+        queued(&ctx, agent).await[0]["resume"]["code_changed"],
+        json!(true)
+    );
 
     let (agent, tired) = workflow(&ctx, "h1").await;
     sqlx::query("UPDATE facade_task SET resumes = $2 WHERE id = $1")

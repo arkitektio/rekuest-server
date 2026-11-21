@@ -216,8 +216,11 @@ pub async fn build_redispatch_assign(
     }))
 }
 
-/// What a workflow recorded (`_journal_sync`): its effects by key, in the order recorded, and
-/// the last step it took, counting the steps its calls were made at.
+/// What a workflow recorded (`_journal_sync`): its effects by key, in the order recorded, the
+/// keys of the calls it made, in the order of their steps, and the last step it took, counting
+/// the steps its calls were made at. `code_changed` says whether its implementation's code is
+/// still the code this run started on: information for the agent, which refuses a run that
+/// takes another path whatever the code is.
 pub async fn journal(ctx: &Context, task: i64) -> Result<Journal, sqlx::Error> {
     let last_event_step: i64 = sqlx::query_scalar(
         "SELECT COALESCE(MAX(step), 0) FROM facade_taskevent WHERE task_id = $1",
@@ -238,8 +241,25 @@ pub async fn journal(ctx: &Context, task: i64) -> Result<Journal, sqlx::Error> {
     .bind(task)
     .fetch_all(&ctx.db)
     .await?;
+    let calls: Vec<String> = sqlx::query_scalar(
+        "SELECT call_key FROM facade_task
+          WHERE parent_id = $1 AND call_key IS NOT NULL ORDER BY parent_step, id",
+    )
+    .bind(task)
+    .fetch_all(&ctx.db)
+    .await?;
+    let code_changed: bool = sqlx::query_scalar(
+        "SELECT t.code_hash IS DISTINCT FROM i.code_hash
+           FROM facade_task t LEFT JOIN facade_implementation i ON i.id = t.implementation_id
+          WHERE t.id = $1",
+    )
+    .bind(task)
+    .fetch_one(&ctx.db)
+    .await?;
     Ok(Journal {
         last_step: last_event_step.max(last_call_step).max(0) as u64,
+        calls,
+        code_changed,
         effects: effects
             .into_iter()
             .map(|(key, effect, value)| RecordedEffect {
@@ -347,41 +367,20 @@ enum Again {
 /// Send a task whose agent died again (`_aresume_workflow`): a workflow with its journal, to go
 /// on; a task its caller asked to be restarted, as it was first sent.
 ///
-/// A workflow is resumed only by the code it ran: replaying the journal onto changed code could
-/// take another path, so it ends LOST instead. Either ends LOST after [`MAX_RESUMES`]. Returns
-/// whether it was handled (sent again, or lost for one of those reasons); `false` leaves it to
+/// A workflow is resumed whatever its code is now: its journal lists the calls it made, and the
+/// agent refuses a resumed run that makes another. Either ends LOST after [`MAX_RESUMES`].
+/// Returns whether it was handled (sent again, or lost for that reason); `false` leaves it to
 /// the plain LOST.
 async fn send_again(ctx: &Context, task: i64, again: Again) -> Result<bool, sqlx::Error> {
-    let (pinned, current, resumes, agent, limit): (
-        Option<String>,
-        Option<String>,
-        i32,
-        i64,
-        Option<i32>,
-    ) = sqlx::query_as(
-        "SELECT t.code_hash, i.code_hash, t.resumes, t.agent_id, t.max_resumes
-               FROM facade_task t LEFT JOIN facade_implementation i ON i.id = t.implementation_id
-              WHERE t.id = $1",
-    )
-    .bind(task)
-    .fetch_one(&ctx.db)
-    .await?;
+    let (resumes, agent, limit): (i32, i64, Option<i32>) =
+        sqlx::query_as("SELECT resumes, agent_id, max_resumes FROM facade_task WHERE id = $1")
+            .bind(task)
+            .fetch_one(&ctx.db)
+            .await?;
     // What the assign allowed; unasked, the server's own limit.
     if resumes >= limit.unwrap_or(MAX_RESUMES) {
         let reason = format!("Sent again {resumes} times, and its agent died each time.");
         transitions::finalize_lost(ctx, task, &reason, true, None, false).await?;
-        return Ok(true);
-    }
-    if again == Again::Resume && pinned != current {
-        transitions::finalize_lost(
-            ctx,
-            task,
-            "Its agent died, and the workflow's code changed since this run started, so it cannot be resumed.",
-            true,
-            None,
-            false,
-        )
-        .await?;
         return Ok(true);
     }
     let Some(assign) = build_redispatch_assign(ctx, task).await? else {

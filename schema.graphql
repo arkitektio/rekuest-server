@@ -3770,7 +3770,7 @@ type Implementation {
   execution: Execution!
 
   """
-  A hash of the implementation's code; a workflow is only resumed by an implementation with the same hash.
+  A hash of the implementation's code; a resumed workflow is told whether it changed since its run started.
   """
   codeHash: String
 
@@ -3992,7 +3992,7 @@ input ImplementationInput {
   execution: Execution! = PLAIN
 
   """
-  A hash of the implementation's code. A workflow is only resumed by an implementation with the same hash.
+  A hash of the implementation's code. A resumed workflow is told whether it changed since its run started.
   """
   codeHash: String = null
 

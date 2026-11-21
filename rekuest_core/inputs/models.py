@@ -1156,7 +1156,7 @@ class ImplementationInputModel(BaseModel):
     provenance_audience: list[str] | None = Field(default=None, description="The downstream service(s) the provenance token should be scoped to (the token's `aud`). If omitted, Rekuest derives the audience from the structures the assignment acts on.")
     effects: enums.Effects = Field(default=enums.Effects.UNKNOWN, description="What running this implementation again would do to the world. Informational: shown to whoever decides about a lost task.")
     execution: enums.Execution = Field(default=enums.Execution.PLAIN, description="How this implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies.")
-    code_hash: str | None = Field(default=None, description="A hash of the implementation's code. A workflow is only resumed by an implementation with the same hash.")
+    code_hash: str | None = Field(default=None, description="A hash of the implementation's code. A resumed workflow is told whether it changed since its run started.")
     logo: str | None = Field(default=None, description="The key of the agent's action logo blok (`<Blok kind=\"action\" context=\"logo\">`) that draws this action.")
     asks: list["AskBlokInputModel"] | None = Field(default=None, description="The bloks this implementation asks a person through, declared up front: a task asks one by its key.")
     informs: list["InformBlokInputModel"] | None = Field(default=None, description="The bloks this implementation shows a person while a task goes on, declared up front: a task shows one by its key.")
