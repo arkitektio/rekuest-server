@@ -497,6 +497,8 @@ impl Lexer<'_> {
     }
 }
 
+/// How a custom blok writes an agent it is bound to: `agents.<key>`, stored `deps.<key>`.
+pub const AGENTS_ROOT: &str = "agents";
 /// How a read through a declared `<dependencies key="cells" />` is stored: `cells.microscope`
 /// is the dependency `cells__microscope` of the blok (`deps.cells__microscope`), one segment.
 pub const REFERENCE_SEPARATOR: &str = "__";
@@ -509,6 +511,8 @@ struct Parser<'a> {
     locate: &'a Locator,
     /// The keys of the `<dependencies>` read so far: what a path may read through.
     references: &'a HashSet<String>,
+    /// In a custom blok: its bound agents are written `agents.<key>` (stored `deps.<key>`).
+    custom: bool,
 }
 
 type Parsed<T> = Result<T, BsxError>;
@@ -519,6 +523,7 @@ impl<'a> Parser<'a> {
         base: usize,
         locate: &'a Locator,
         references: &'a HashSet<String>,
+        custom: bool,
     ) -> Parsed<Parser<'a>> {
         let tokens = Lexer { text, base, locate }.tokens()?;
         Ok(Parser {
@@ -526,6 +531,7 @@ impl<'a> Parser<'a> {
             index: 0,
             locate,
             references,
+            custom,
         })
     }
 
@@ -885,6 +891,14 @@ impl<'a> Parser<'a> {
         if segments.len() > 1 && self.references.contains(&segments[0]) && !picks {
             let key = format!("{}{REFERENCE_SEPARATOR}{}", segments[0], segments[1]);
             segments.splice(0..2, ["deps".to_owned(), key]);
+        } else if self.custom && segments[0] == AGENTS_ROOT {
+            segments[0] = "deps".to_owned();
+        } else if self.custom && segments[0] == "deps" {
+            return Err(self.fail(
+                "roots.custom_deps",
+                Some(first.offset),
+                &[("path", s(segments.join(".")))],
+            ));
         }
         if !self.is_op(&["("]) {
             return Ok(Expr::Path {
@@ -989,8 +1003,9 @@ pub fn parse_expression(
     base: usize,
     locate: &Locator,
     references: &HashSet<String>,
+    custom: bool,
 ) -> Parsed<Expr> {
-    let mut parser = Parser::new(text, base, locate, references)?;
+    let mut parser = Parser::new(text, base, locate, references, custom)?;
     if parser.token().kind == TokenKind::End {
         return Err(parser.fail(
             "expr.syntax",
@@ -1009,8 +1024,9 @@ pub fn parse_attribute(
     base: usize,
     locate: &Locator,
     references: &HashSet<String>,
+    custom: bool,
 ) -> Parsed<Expr> {
-    let mut parser = Parser::new(text, base, locate, references)?;
+    let mut parser = Parser::new(text, base, locate, references, custom)?;
     if parser.token().kind == TokenKind::End {
         return Err(parser.fail(
             "expr.syntax",

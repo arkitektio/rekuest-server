@@ -76,7 +76,8 @@ class TestProvidedBloks:
         assert fork["provided"] is False
         # The copy is a custom blok: its <Blok> says so.
         assert fork["componentTree"] == [blok_tree("custom", "panel", node("Box"))]
-        assert fork["dependencies"] == [{"key": "self"}]
+        # The app's own agent is one the copy is bound to, under the app's name.
+        assert fork["dependencies"] == [{"key": "viewer"}]
 
         # The copy is the user's: editable, and it outlives the provided one.
         updated = await schema.execute(UPDATE_BLOK, context_value=authenticated_context, variable_values={"input": {"id": fork["id"], "description": "mine"}})
@@ -86,6 +87,38 @@ class TestProvidedBloks:
 
         again = await schema.execute(FORK_BLOK, context_value=authenticated_context, variable_values={"input": {"id": fork["id"]}})
         assert again.errors, "a custom blok is not forked"
+
+    async def test_a_fork_reads_its_apps_agent_as_one_it_is_bound_to(self, authenticated_context: HttpContext) -> None:
+        """``self`` becomes the binding (stored ``deps.viewer``); the dependencies it declares for an action stay."""
+        env = await _provided(authenticated_context)
+        call = {"key": "onClick", "agent_call": {"dependency": "self", "operation": "analyze", "given": "cells"}}
+        tree = blok_tree(
+            "agent",
+            "panel",
+            node("dependencies", key="cells", like="self.analyze"),
+            node("Text", text={"path": "self.arm.mode"}),
+            node("Text", text={"path": "deps.cells__microscope.stage.x"}),
+            {"id": "", "component": "Button", "props": [call]},
+        )
+        await sync_to_async(Blok.objects.filter(id=env["blok"].id).update)(components=[tree])
+        await sync_to_async(BlokDependency.objects.filter(blok=env["blok"]).update)(
+            action_demands=[{"key": "analyze", "demand": {}}],
+            state_demands=[{"key": "arm", "demand": {"matches": [{"key": "mode", "kind": "STRING"}]}}],
+        )
+
+        forked = await schema.execute(FORK_BLOK, context_value=authenticated_context, variable_values={"input": {"id": str(env["blok"].id), "name": "station"}})
+        assert not forked.errors, forked.errors
+
+        fork = await sync_to_async(lambda: Blok.objects.get(id=forked.data["forkBlok"]["id"]).head.components)()
+        expected = blok_tree(
+            "custom",
+            "panel",
+            node("dependencies", key="cells", like="deps.viewer.analyze"),
+            node("Text", text={"path": "deps.viewer.arm.mode"}),
+            node("Text", text={"path": "deps.cells__microscope.stage.x"}),
+            {"id": "", "component": "Button", "props": [{"key": "onClick", "agent_call": {"dependency": "viewer", "operation": "analyze", "given": "cells"}}]},
+        )
+        assert fork == [expected]
 
     async def test_provided_tells_the_two_apart(self, authenticated_context: HttpContext) -> None:
         env = await _provided(authenticated_context)

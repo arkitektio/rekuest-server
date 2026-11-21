@@ -321,10 +321,27 @@ pub struct DeclaredDependencies {
 }
 
 impl DeclaredDependencies {
-    /// The action when `like` reads `self.<action>`.
-    pub fn action(&self) -> Option<&str> {
+    /// Whose action it names: `("self", action)` for `self.<action>`, `(key, action)` for a
+    /// custom blok's `agents.<key>.<action>` (stored `deps.<key>.<action>`).
+    pub fn target(&self) -> Option<(&str, &str)> {
         let parts: Vec<&str> = self.like.as_deref()?.split('.').collect();
-        (parts.len() == 2 && parts[0] == "self" && !parts[1].is_empty()).then(|| parts[1])
+        match parts[..] {
+            ["self", action] if !action.is_empty() => Some(("self", action)),
+            ["deps", key, action] if !key.is_empty() && key != "self" && !action.is_empty() => {
+                Some((key, action))
+            }
+            _ => None,
+        }
+    }
+
+    /// The dependency whose action it names: `self`, or a custom blok's bound agent.
+    pub fn owner(&self) -> Option<&str> {
+        self.target().map(|(owner, _)| owner)
+    }
+
+    /// The action `like` names.
+    pub fn action(&self) -> Option<&str> {
+        self.target().map(|(_, action)| action)
     }
 }
 

@@ -130,7 +130,7 @@ fn a_checked_blok_carries_its_resolved_locals() {
 #[test]
 fn a_custom_blok_must_declare_the_dependencies_it_reads() {
     let tree = vec![parse_bsx_default(
-        r#"<Blok kind="custom" context="panel"><Text text={deps.robot.arm.mode} /></Blok>"#,
+        r#"<Blok kind="custom" context="panel"><Text text={agents.robot.arm.mode} /></Blok>"#,
     )
     .unwrap()];
     let scope = BlokScope::mounted(&["custom"], "a custom blok", vec![]);

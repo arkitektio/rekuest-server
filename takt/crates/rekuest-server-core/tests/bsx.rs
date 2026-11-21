@@ -317,8 +317,10 @@ fn a_finding_is_json_as_the_spec_writes_it() {
 #[test]
 fn the_deps_unknown_hint_says_what_the_kind_does() {
     let blok = |kind: &str| {
+        // A custom blok writes its bound agents `agents.<key>` (stored `deps.<key>`).
+        let root = if kind == "custom" { "agents" } else { "deps" };
         parse_bsx_default(&format!(
-            "<Blok kind=\"{kind}\" context=\"panel\"><Text text={{deps.laser.power}} /></Blok>"
+            "<Blok kind=\"{kind}\" context=\"panel\"><Text text={{{root}.laser.power}} /></Blok>"
         ))
         .expect("parses")
     };

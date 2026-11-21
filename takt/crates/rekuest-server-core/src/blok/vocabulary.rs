@@ -69,6 +69,12 @@ pub struct Kind {
 }
 
 impl Kind {
+    /// Whether a blok of this kind holds the stored `root`: a custom blok's `agents` is
+    /// stored `deps`.
+    pub fn reads(&self, root: &str) -> bool {
+        self.roots.contains(root) || (root == "deps" && self.roots.contains("agents"))
+    }
+
     /// The row of this kind in `context`: its own, or the narrower one it has there.
     pub fn drawn_in(&self, context: &str) -> &Kind {
         self.within.get(context).unwrap_or(self)

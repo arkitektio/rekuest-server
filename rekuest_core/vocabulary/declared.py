@@ -314,10 +314,25 @@ class DeclaredDependencies:
     """As written; None when it is missing or no literal."""
 
     @property
-    def action(self) -> str | None:
-        """The action when ``like`` reads ``self.<action>``."""
+    def target(self) -> tuple[str, str] | None:
+        """Whose action it names: ``("self", action)`` for ``self.<action>``, ``(key, action)``
+        for a custom blok's ``agents.<key>.<action>`` (stored ``deps.<key>.<action>``)."""
         parts = self.like.split(".") if self.like else []
-        return parts[1] if len(parts) == 2 and parts[0] == "self" and parts[1] else None
+        if len(parts) == 2 and parts[0] == "self" and parts[1]:
+            return "self", parts[1]
+        if len(parts) == 3 and parts[0] == "deps" and parts[1] and parts[1] != "self" and parts[2]:
+            return parts[1], parts[2]
+        return None
+
+    @property
+    def owner(self) -> str | None:
+        """The dependency whose action it names: ``self``, or a custom blok's bound agent."""
+        return self.target[0] if self.target else None
+
+    @property
+    def action(self) -> str | None:
+        """The action ``like`` names."""
+        return self.target[1] if self.target else None
 
 
 def declared_dependencies(tree: ComponentNodeInputModel) -> tuple[DeclaredDependencies, ...]:

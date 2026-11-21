@@ -25,7 +25,9 @@ use regex::Regex;
 use serde_json::{Map, Value};
 
 use crate::blok::check::{FETCH_MORE_FUNCTION, QUERY_SUGAR, REFETCH_FUNCTION};
-use crate::blok::expr::{parse_attribute, parse_expression, s, CallExpr, Expr, Locator, PICK_VERB};
+use crate::blok::expr::{
+    parse_attribute, parse_expression, s, CallExpr, Expr, Locator, AGENTS_ROOT, PICK_VERB,
+};
 use crate::blok::vocabulary::vocabulary;
 use crate::inputs::{
     ActionArgumentInputModel, AgentProbeInputModel, ComponentNodeInputModel,
@@ -114,15 +116,25 @@ struct Markup<'a> {
     index: usize,
     /// The keys of the `<dependencies>` read so far: what a later expression may read through.
     references: HashSet<String>,
+    /// Whether the root is a custom blok: its bound agents are written `agents.<key>`.
+    custom: bool,
 }
 
 /// What `<key>.pick(<dependency>: <agent id>)` is stored as.
 pub const PICK_FUNCTION: &str = "deps.pick";
 const DEPENDENCIES: &str = "dependencies";
+const BLOK: &str = "Blok";
+const LIKE: &str = "like";
 
 impl Markup<'_> {
     /// A `<dependencies key="cells" />` is read through from here on (`cells.microscope`).
     fn declares(&mut self, element: &Element) {
+        if element.name == BLOK {
+            self.custom = element.attributes.iter().any(|a| {
+                a.name == "kind"
+                    && matches!(&a.value, AttributeValue::Text(kind) if kind == "custom")
+            });
+        }
         if element.name != DEPENDENCIES {
             return;
         }
@@ -339,7 +351,8 @@ impl Markup<'_> {
                     &[("detail", s(format!("the value of {name} is empty")))],
                 ));
             }
-            let expression = parse_attribute(inner, start, self.locate, &self.references)?;
+            let expression =
+                parse_attribute(inner, start, self.locate, &self.references, self.custom)?;
             return Ok(Attribute {
                 name,
                 value: AttributeValue::Expression(expression),
@@ -444,7 +457,8 @@ impl Markup<'_> {
                 if stripped.is_empty() || (stripped.starts_with("/*") && stripped.ends_with("*/")) {
                     continue;
                 }
-                let expression = parse_expression(inner, start, self.locate, &self.references)?;
+                let expression =
+                    parse_expression(inner, start, self.locate, &self.references, self.custom)?;
                 element
                     .children
                     .push(Child::Container { expression, offset });
@@ -860,12 +874,22 @@ impl Lowering<'_> {
                 static_value: Some(Value::Bool(true)),
                 ..prop(key)
             }),
-            AttributeValue::Text(text) => Ok(ComponentPropInputModel {
-                static_value: Some(s(text.clone())),
-                declares_value: ((key == "let" || key == "index") && component == FOREACH)
-                    .then(|| text.clone()),
-                ..prop(key)
-            }),
+            AttributeValue::Text(text) => {
+                let custom_like = key == LIKE
+                    && (component == LOCAL || component == DEPENDENCIES)
+                    && self.markup.custom;
+                let text = if custom_like {
+                    self.custom_like(text, attribute.offset)?
+                } else {
+                    text.clone()
+                };
+                Ok(ComponentPropInputModel {
+                    static_value: Some(s(text.clone())),
+                    declares_value: ((key == "let" || key == "index") && component == FOREACH)
+                        .then_some(text),
+                    ..prop(key)
+                })
+            }
             AttributeValue::Expression(_) if key == "let" && component == FOREACH => {
                 Err(self.fail("bsx.let", attribute.offset, &[("let", s("{...}"))]))
             }
@@ -874,6 +898,19 @@ impl Lowering<'_> {
             }
             AttributeValue::Expression(expression) => self.value(key, expression, attribute.offset),
         }
+    }
+
+    /// A custom blok's `like="agents.<key>..."` as it is stored: `deps.<key>...`.
+    fn custom_like(&self, like: &str, offset: usize) -> Parsed<String> {
+        let (root, rest) = like.split_once('.').unwrap_or((like, ""));
+        if root == "deps" {
+            return Err(self.fail("roots.custom_deps", offset, &[("path", s(like))]));
+        }
+        Ok(if root == AGENTS_ROOT && !rest.is_empty() {
+            format!("deps.{rest}")
+        } else {
+            like.to_owned()
+        })
     }
 
     fn value(
@@ -954,7 +991,8 @@ impl Lowering<'_> {
 
     // -- calls
 
-    /// A task call (`self.<action>(...)`, `deps.<key>.<action>(...)`), or none.
+    /// A task call (`self.<action>(...)`, `deps.<key>.<action>(...)`; a custom blok's
+    /// `agents.<key>` was read as the latter), or none.
     fn agent_call(&self, call: &CallExpr) -> Parsed<Option<AgentProbeInputModel>> {
         let callee = &call.callee;
         let (dependency, operation) = if callee[0] == "self" && callee.len() == 2 {
@@ -967,9 +1005,6 @@ impl Lowering<'_> {
             }
             return Ok(None);
         };
-        if call.given.is_some() && dependency != "self" {
-            return Err(self.fail("callback.with", call.offset, &[]));
-        }
         let mut arguments = vec![];
         let mut seen = HashSet::new();
         for given in &call.arguments {
@@ -1444,6 +1479,7 @@ pub fn parse_bsx(source: &str) -> Result<ComponentNodeInputModel, BsxError> {
         locate: &locate,
         index: 0,
         references: HashSet::new(),
+        custom: false,
     };
     let root = markup.document()?;
     let mut lowering = Lowering {
@@ -1463,12 +1499,13 @@ pub fn parse_bsx_default(source: &str) -> Result<ComponentNodeInputModel, BsxErr
 pub fn parse_argument(key: Option<&str>, text: &str) -> Result<ActionArgumentInputModel, BsxError> {
     let chars: Vec<char> = text.chars().collect();
     let locate = Locator::new(&chars);
-    let expression = parse_expression(&chars, 0, &locate, &HashSet::new())?;
+    let expression = parse_expression(&chars, 0, &locate, &HashSet::new(), false)?;
     let markup = Markup {
         source: &chars,
         locate: &locate,
         index: 0,
         references: HashSet::new(),
+        custom: false,
     };
     let lowering = Lowering {
         locate: &locate,

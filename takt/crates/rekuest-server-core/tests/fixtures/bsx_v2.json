@@ -1,6 +1,6 @@
 {
  "vocab": 2,
- "minor": 6,
+ "minor": 7,
  "catalogs": {
   "base": "https://arkitekt.live/catalogs/base/v4",
   "bundled": {
@@ -17,6 +17,95 @@
     "component": "Card"
    },
    "printed": "<Card />"
+  },
+  {
+   "name": "a custom blok's agents",
+   "source": "<Blok kind=\"custom\" context=\"panel\">\n  <local name=\"to\" like=\"agents.robot.move_to.position\" />\n  <dependencies key=\"cells\" like=\"agents.robot.move_to\" />\n  <Text>{agents.robot.arm.mode}</Text>\n  <Button onClick={agents.robot.move_to(position: to) with cells into run} />\n</Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "custom"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/local[0]",
+      "component": "local",
+      "props": [
+       {
+        "key": "name",
+        "static_value": "to",
+        "declares_value": "to"
+       },
+       {
+        "key": "like",
+        "static_value": "deps.robot.move_to.position"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "deps.robot.move_to"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Text[0]",
+      "component": "Text",
+      "children": [
+       {
+        "id": "Blok[0]/Text[0]/#0",
+        "component": "#text",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "deps.robot.arm.mode"
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Button[0]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "onClick",
+        "declares_value": "run",
+        "agent_call": {
+         "dependency": "robot",
+         "operation": "move_to",
+         "arguments": [
+          {
+           "key": "position",
+           "value_path": "to"
+          }
+         ],
+         "given": "cells"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "printed": "<Blok kind=\"custom\" context=\"panel\">\n  <local name=\"to\" like=\"agents.robot.move_to.position\" />\n  <dependencies key=\"cells\" like=\"agents.robot.move_to\" />\n  <Text>{agents.robot.arm.mode}</Text>\n  <Button onClick={agents.robot.move_to(position: to) with cells into run} />\n</Blok>"
   },
   {
    "name": "an explicit id",
@@ -3601,12 +3690,21 @@
    }
   },
   {
-   "name": "with on a dependency's call",
-   "source": "<Button onClick={deps.stage.move(x: 1) with cells} />",
+   "name": "deps in a custom blok",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><Text text={deps.robot.arm.mode} /></Blok>",
    "error": {
-    "code": "callback.with",
+    "code": "roots.custom_deps",
     "line": 1,
-    "column": 18
+    "column": 49
+   }
+  },
+  {
+   "name": "a like through deps in a custom blok",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><dependencies key=\"cells\" like=\"deps.robot.analyze\" /><Card /></Blok>",
+   "error": {
+    "code": "roots.custom_deps",
+    "line": 1,
+    "column": 63
    }
   },
   {
@@ -7149,6 +7247,702 @@
    }
   },
   {
+   "name": "a custom blok declares the dependencies of a bound agent's action",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><dependencies key=\"cells\" like=\"agents.robot.move_to\" /><Card><Text>{cells.microscope.stage.position}</Text><deppicker key=\"cells\" /><Button onClick={agents.robot.move_to(position: 1) with cells into run} /><Button onClick={cells.microscope.jog(dx: 1)} /></Card></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "custom"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "deps.robot.move_to"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card",
+      "children": [
+       {
+        "id": "Blok[0]/Card[0]/Text[0]",
+        "component": "Text",
+        "children": [
+         {
+          "id": "Blok[0]/Card[0]/Text[0]/#0",
+          "component": "#text",
+          "props": [
+           {
+            "key": "value",
+            "dynamic_value": {
+             "path": "deps.cells__microscope.stage.position"
+            }
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/deppicker[0]",
+        "component": "deppicker",
+        "props": [
+         {
+          "key": "key",
+          "static_value": "cells"
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/Button[0]",
+        "component": "Button",
+        "props": [
+         {
+          "key": "onClick",
+          "declares_value": "run",
+          "agent_call": {
+           "dependency": "robot",
+           "operation": "move_to",
+           "arguments": [
+            {
+             "key": "position",
+             "value_literal": 1
+            }
+           ],
+           "given": "cells"
+          }
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/Button[1]",
+        "component": "Button",
+        "props": [
+         {
+          "key": "onClick",
+          "agent_call": {
+           "dependency": "cells__microscope",
+           "operation": "jog",
+           "arguments": [
+            {
+             "key": "dx",
+             "value_literal": 1
+            }
+           ]
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [
+     {
+      "key": "robot",
+      "action_dependencies": [
+       {
+        "key": "move_to",
+        "demand": {
+         "arg_matches": [
+          {
+           "key": "position"
+          }
+         ],
+         "return_matches": [
+          {
+           "key": "arrived"
+          }
+         ]
+        }
+       }
+      ],
+      "state_dependencies": [
+       {
+        "key": "arm",
+        "demand": {
+         "matches": [
+          {
+           "key": "joints",
+           "kind": "LIST"
+          },
+          {
+           "key": "mode",
+           "kind": "STRING"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "dependencies like an agent a custom blok is not bound to",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><dependencies key=\"cells\" like=\"agents.stage.scan\" /><Card /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "custom"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "deps.stage.scan"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card"
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [
+     {
+      "key": "robot",
+      "action_dependencies": [
+       {
+        "key": "move_to",
+        "demand": {
+         "arg_matches": [
+          {
+           "key": "position"
+          }
+         ],
+         "return_matches": [
+          {
+           "key": "arrived"
+          }
+         ]
+        }
+       }
+      ],
+      "state_dependencies": [
+       {
+        "key": "arm",
+        "demand": {
+         "matches": [
+          {
+           "key": "joints",
+           "kind": "LIST"
+          },
+          {
+           "key": "mode",
+           "kind": "STRING"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "dependencies.like"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "dependencies.like"
+    ]
+   }
+  },
+  {
+   "name": "dependencies like self in a custom blok",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><dependencies key=\"cells\" like=\"self.analyze\" /><Card /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "custom"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "self.analyze"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card"
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [
+     {
+      "key": "robot",
+      "action_dependencies": [
+       {
+        "key": "move_to",
+        "demand": {
+         "arg_matches": [
+          {
+           "key": "position"
+          }
+         ],
+         "return_matches": [
+          {
+           "key": "arrived"
+          }
+         ]
+        }
+       }
+      ],
+      "state_dependencies": [
+       {
+        "key": "arm",
+        "demand": {
+         "matches": [
+          {
+           "key": "joints",
+           "kind": "LIST"
+          },
+          {
+           "key": "mode",
+           "kind": "STRING"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "dependencies.like"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "dependencies.like"
+    ]
+   }
+  },
+  {
+   "name": "dependencies like a bound agent in an agent blok",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><dependencies key=\"cells\" like=\"deps.robot.analyze\" /><Card /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "deps.robot.analyze"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card"
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": {
+     "analyze": [
+      {
+       "key": "microscope",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "key": "camera",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "snap",
+         "demand": {}
+        }
+       ]
+      }
+     ],
+     "scan": [
+      {
+       "key": "stage",
+       "app": "thorlabs",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ],
+     "plain": [],
+     "awkward": [
+      {
+       "key": "options",
+       "app": "openuc",
+       "action_dependencies": [
+        {
+         "key": "jog",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "dx",
+            "kind": "FLOAT"
+           }
+          ]
+         }
+        }
+       ],
+       "state_dependencies": [
+        {
+         "key": "stage",
+         "demand": {
+          "matches": [
+           {
+            "key": "position",
+            "kind": "STRING"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "dependencies.like"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "dependencies.like"
+    ]
+   }
+  },
+  {
+   "name": "with the dependencies of another action",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><dependencies key=\"cells\" like=\"agents.robot.scan\" /><Button onClick={agents.robot.move_to(position: 1) with cells} /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "custom"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/dependencies[0]",
+      "component": "dependencies",
+      "props": [
+       {
+        "key": "key",
+        "static_value": "cells"
+       },
+       {
+        "key": "like",
+        "static_value": "deps.robot.scan"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Button[0]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "onClick",
+        "agent_call": {
+         "dependency": "robot",
+         "operation": "move_to",
+         "arguments": [
+          {
+           "key": "position",
+           "value_literal": 1
+          }
+         ],
+         "given": "cells"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [
+     {
+      "key": "robot",
+      "action_dependencies": [
+       {
+        "key": "move_to",
+        "demand": {
+         "arg_matches": [
+          {
+           "key": "position"
+          }
+         ],
+         "return_matches": [
+          {
+           "key": "arrived"
+          }
+         ]
+        }
+       }
+      ],
+      "state_dependencies": [
+       {
+        "key": "arm",
+        "demand": {
+         "matches": [
+          {
+           "key": "joints",
+           "kind": "LIST"
+          },
+          {
+           "key": "mode",
+           "kind": "STRING"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "with.mismatch"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "with.mismatch"
+    ]
+   }
+  },
+  {
+   "name": "agents in an agent blok",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><Text text={agents.robot.arm.mode} /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/Text[0]",
+      "component": "Text",
+      "props": [
+       {
+        "key": "text",
+        "dynamic_value": {
+         "path": "agents.robot.arm.mode"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "roots.not_in_kind"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "roots.not_in_kind"
+    ]
+   }
+  },
+  {
    "name": "self in a custom blok",
    "source": "<Blok kind=\"custom\" context=\"panel\"><Text text={self.arm.mode} /></Blok>",
    "tree": {
@@ -8219,7 +9013,7 @@
   },
   {
    "name": "an unknown dependency",
-   "source": "<Blok kind=\"custom\" context=\"panel\"><Text text={deps.nope.x} /></Blok>",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><Text text={agents.nope.x} /></Blok>",
    "tree": {
     "id": "Blok[0]",
     "component": "Blok",
@@ -8311,7 +9105,7 @@
   },
   {
    "name": "a custom blok reading an undeclared dependency",
-   "source": "<Blok kind=\"custom\" context=\"panel\"><Card><Text text={deps.robot.arm.mode} /><Button onClick={deps.stage.move(x: 1)} /></Card></Blok>",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><Card><Text text={agents.robot.arm.mode} /><Button onClick={agents.stage.move(x: 1)} /></Card></Blok>",
    "tree": {
     "id": "Blok[0]",
     "component": "Blok",
@@ -8392,7 +9186,7 @@
   },
   {
    "name": "an undeclared dependency beside a declared one",
-   "source": "<Blok kind=\"custom\" context=\"panel\"><Card><Text text={deps.robot.arm.mode} /><Text text={deps.camera.frame} /></Card></Blok>",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><Card><Text text={agents.robot.arm.mode} /><Text text={agents.camera.frame} /></Card></Blok>",
    "tree": {
     "id": "Blok[0]",
     "component": "Blok",
@@ -8502,7 +9296,7 @@
   },
   {
    "name": "a query variable reading an undeclared dependency",
-   "source": "<Blok kind=\"custom\" context=\"panel\"><query name=\"positions\" service=\"mikro\" document=\"query { positions { id } }\"><var key=\"agent\" value={deps.stage.id} /></query><Text text={queries.positions.status} /></Blok>",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><query name=\"positions\" service=\"mikro\" document=\"query { positions { id } }\"><var key=\"agent\" value={agents.stage.id} /></query><Text text={queries.positions.status} /></Blok>",
    "tree": {
     "id": "Blok[0]",
     "component": "Blok",
@@ -8592,7 +9386,7 @@
   },
   {
    "name": "an unknown state",
-   "source": "<Blok kind=\"custom\" context=\"panel\"><Text text={deps.robot.legs} /></Blok>",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><Text text={agents.robot.legs} /></Blok>",
    "tree": {
     "id": "Blok[0]",
     "component": "Blok",
@@ -8684,7 +9478,7 @@
   },
   {
    "name": "an unknown action",
-   "source": "<Blok kind=\"custom\" context=\"panel\"><Button onClick={deps.robot.fly()} /></Blok>",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><Button onClick={agents.robot.fly()} /></Blok>",
    "tree": {
     "id": "Blok[0]",
     "component": "Blok",
@@ -8777,7 +9571,7 @@
   },
   {
    "name": "an unknown field",
-   "source": "<Blok kind=\"custom\" context=\"panel\"><Text text={deps.robot.arm.speed} /></Blok>",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><Text text={agents.robot.arm.speed} /></Blok>",
    "tree": {
     "id": "Blok[0]",
     "component": "Blok",
@@ -8869,7 +9663,7 @@
   },
   {
    "name": "a task record field",
-   "source": "<Blok kind=\"custom\" context=\"panel\"><Text text={deps.robot.tasks.move_to.returns.arrived} /></Blok>",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><Text text={agents.robot.tasks.move_to.returns.arrived} /></Blok>",
    "tree": {
     "id": "Blok[0]",
     "component": "Blok",
@@ -10611,7 +11405,7 @@
   },
   {
    "name": "bind to no local",
-   "source": "<Blok kind=\"custom\" context=\"panel\"><Slider bind={deps.robot.arm} /></Blok>",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><Slider bind={agents.robot.arm} /></Blok>",
    "tree": {
     "id": "Blok[0]",
     "component": "Blok",
@@ -15496,7 +16290,7 @@
   },
   {
    "name": "an agent says whether it is connected",
-   "source": "<Blok kind=\"custom\" context=\"panel\"><Text>{deps.robot.connected ? \"Online\" : \"Offline\"}</Text></Blok>",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><Text>{agents.robot.connected ? \"Online\" : \"Offline\"}</Text></Blok>",
    "tree": {
     "id": "Blok[0]",
     "component": "Blok",
@@ -17922,7 +18716,7 @@
   },
   {
    "name": "a foreach of objects without key",
-   "source": "<Blok kind=\"custom\" context=\"panel\"><foreach items={deps.shelf.inventory.slots} let=\"s\"><Text>{s.id}</Text></foreach></Blok>",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><foreach items={agents.shelf.inventory.slots} let=\"s\"><Text>{s.id}</Text></foreach></Blok>",
    "tree": {
     "id": "Blok[0]",
     "component": "Blok",
@@ -18040,7 +18834,7 @@
   },
   {
    "name": "a keyed foreach of objects",
-   "source": "<Blok kind=\"custom\" context=\"panel\"><foreach items={deps.shelf.inventory.slots} let=\"s\" key={s.id}><Text>{s.id}</Text></foreach></Blok>",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><foreach items={agents.shelf.inventory.slots} let=\"s\" key={s.id}><Text>{s.id}</Text></foreach></Blok>",
    "tree": {
     "id": "Blok[0]",
     "component": "Blok",
@@ -18160,7 +18954,7 @@
   },
   {
    "name": "a foreach of scalars without key",
-   "source": "<Blok kind=\"custom\" context=\"panel\"><foreach items={deps.shelf.inventory.names} let=\"n\"><Text>{n}</Text></foreach></Blok>",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><foreach items={agents.shelf.inventory.names} let=\"n\"><Text>{n}</Text></foreach></Blok>",
    "tree": {
     "id": "Blok[0]",
     "component": "Blok",
@@ -18621,7 +19415,7 @@
   },
   {
    "name": "a named return",
-   "source": "<Blok kind=\"custom\" context=\"panel\"><Text text={deps.robot.tasks.move_to.returns.arrived} /></Blok>",
+   "source": "<Blok kind=\"custom\" context=\"panel\"><Text text={agents.robot.tasks.move_to.returns.arrived} /></Blok>",
    "tree": {
     "id": "Blok[0]",
     "component": "Blok",

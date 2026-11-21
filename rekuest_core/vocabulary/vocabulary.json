@@ -1,11 +1,12 @@
 {
  "vocab": 2,
- "minor": 6,
+ "minor": 7,
  "description": "The blok language, version 2: what a blok may read, call and store. The spec's parser, the server (rekuest_core, takt) and the renderer (orkestrator) load this file or are generated from it. The design is the blok-vocab-v2 proposal of 2026-10-25. Three layers, each versioned on its own: this language (vocab, and minor for what it gained since); the base catalog, everything every renderer draws; and the app catalogs that extend it with what one frontend draws beyond (see catalogs). A server holds a blok to the language alone, never to a catalog: whoever draws a blok checks it against the catalog it has, and an author's tooling checks it when asked.",
  "roots": {
   "data": {
    "self": "The agent the blok belongs to: the declaring agent (agent blok), the sending agent (task blok), the executing agent (action blok). Shorthand for deps.self.",
-   "deps": "deps.<key>: an agent bound to a dependency of the blok: a custom blok's, an action's, or one an agent blok declares with <dependencies> (read through its key: cells.<dependency>, stored deps.cells__<dependency>).",
+   "deps": "deps.<key>: an agent a run of an action uses: the action's own dependencies (task, action and assign bloks), or the ones a blok declares for an action with <dependencies> (read through its key: cells.<dependency>, stored deps.cells__<dependency>). A custom blok's bound agents are written agents.<key> and stored deps.<key>.",
+   "agents": "agents.<key>: an agent a custom blok is bound to where it is materialized. Only a custom blok writes it; it is stored deps.<key>.",
    "queries": "queries.<name>: a declared query's record (status, value, error, refetching, fetching_more).",
    "subscriptions": "subscriptions.<name>: a declared subscription's record (status, value, error); value is the latest payload, or the last `keep` payloads.",
    "args": "args.<key>: what the blok is opened on: the item for an agent or custom blok, the task's args for a task or action blok, the form's other arguments as they are filled in for a port blok (read only).",
@@ -23,9 +24,9 @@
   "functions": ["cmp", "logic", "math", "str", "list", "obj", "val", "fmt", "time", "ui", "query"],
   "future": ["mutations"]
  },
- "reserved": ["self", "deps", "queries", "subscriptions", "args", "task", "assign", "port", "event", "viewer", "then", "error", "cmp", "logic", "math", "str", "list", "obj", "val", "fmt", "time", "ui", "query", "mutations"],
+ "reserved": ["self", "deps", "agents", "queries", "subscriptions", "args", "task", "assign", "port", "event", "viewer", "then", "error", "cmp", "logic", "math", "str", "list", "obj", "val", "fmt", "time", "ui", "query", "mutations"],
  "agent_segments": {
-  "description": "What follows an agent (self or deps.<key>): .<state>.<field> is state, .tasks.<action> the latest task of that action, .assets.<name> one of the agent's assets; deps.<key>.<action>(...) calls it.",
+  "description": "What follows an agent (self, deps.<key> or agents.<key>): .<state>.<field> is state, .tasks.<action> the latest task of that action, .assets.<name> one of the agent's assets; deps.<key>.<action>(...) calls it.",
   "tasks": "tasks",
   "assets": "assets",
   "fields": {"id": "The agent's id (a query variable: deps.robot.id).", "name": "The agent's name.", "connected": "Whether the agent is connected right now (true or false)."},
@@ -39,8 +40,8 @@
    "contexts": ["PANEL", "SCENE", "LOGO"]
   },
   "custom": {
-   "description": "Built by a user and materialized onto agents.",
-   "roots": ["deps", "args", "queries", "subscriptions", "viewer", "then"],
+   "description": "Built by a user and materialized onto agents, each read as agents.<key>. What a run of one of their actions uses it may declare with <dependencies key like=\"agents.<key>.<action>\" />.",
+   "roots": ["agents", "args", "queries", "subscriptions", "viewer", "then"],
    "locals": true,
    "contexts": ["PANEL", "SCENE"]
   },
@@ -94,10 +95,10 @@
   "chrome": ["PANEL", "SCENE"],
   "declarations": {
    "description": "What a blok owns, declared in its tree. Each is stored as a node of its own and draws nothing.",
-   "local": "<local name=\"x\" default={...} persist kind=... />: a local (see locals). It comes before every other child of its parent and is in scope in its parent's subtree only; inside a foreach there is one per item. Every attribute but name is a literal: a port field (kind, identifier, nullable, choices, children, label, description, default, ...), persist, or like=\"self.<action>.<arg>\" / like=\"deps.<key>.<action>.<arg>\" (the port of that argument, resolved where the blok is mounted).",
+   "local": "<local name=\"x\" default={...} persist kind=... />: a local (see locals). It comes before every other child of its parent and is in scope in its parent's subtree only; inside a foreach there is one per item. Every attribute but name is a literal: a port field (kind, identifier, nullable, choices, children, label, description, default, ...), persist, or like=\"self.<action>.<arg>\" / like=\"deps.<key>.<action>.<arg>\" (the port of that argument, resolved where the blok is mounted; a custom blok writes like=\"agents.<key>.<action>.<arg>\").",
    "query": "<query name=\"x\" service=\"mikro\" document=\"query (...) {...}\" poll={5} more=\"items\"><var key=\"k\" value={...} /></query>: a declared read, queries.<name>. A child of <Blok>, before its content.",
    "subscription": "<subscription name=\"x\" service=\"mikro\" document=\"subscription (...) {...}\" keep={10} history=\"q\"><var key=\"k\" value={...} /></subscription>: a declared stream, subscriptions.<name>. A child of <Blok>, before its content.",
-   "dependencies": "<dependencies key=\"cells\" like=\"self.<action>\" />: the dependencies of one of the app's own actions, for an agent blok to read, call and hand to a run of it. Each is read through the key, bare: cells.<dependency>.<state>.<field>, cells.<dependency>.<action>(...), cells.<dependency>.connected (stored as the blok's dependency deps.cells__<dependency>). cells.options.<dependency> lists the agents that fit one ({id, name, connected, picked}) and cells.pick(<dependency>: <agent id>) binds it; <deppicker key=\"cells.<dependency>\" /> is the ready-made picker. Which agent each is bound to is the viewer's own choice, kept on their device and never on a server; until they choose it is seeded once, with the agent the latest run of the action had, else the only one that fits. A child of <Blok>, after its locals and before what reads through it; an agent blok only. An action whose dependency is called options or pick cannot be read through one.",
+   "dependencies": "<dependencies key=\"cells\" like=\"self.<action>\" />: the dependencies of one of the app's own actions, for an agent blok to read, call and hand to a run of it. A custom blok declares those of an action of an agent it is bound to: like=\"agents.<name>.<action>\" (stored deps.<name>.<action>). Each is read through the key, bare: cells.<dependency>.<state>.<field>, cells.<dependency>.<action>(...), cells.<dependency>.connected (stored as the blok's dependency deps.cells__<dependency>). cells.options.<dependency> lists the agents that fit one ({id, name, connected, picked}) and cells.pick(<dependency>: <agent id>) binds it; <deppicker key=\"cells.<dependency>\" /> is the ready-made picker. Which agent each is bound to is the viewer's own choice, kept on their device and never on a server; until they choose it is seeded once, with the agent the latest run of the action had, else the only one that fits. A child of <Blok>, after its locals and before what reads through it; an agent blok only. An action whose dependency is called options or pick cannot be read through one.",
    "var": "<var key=\"k\" value={expression or literal} />: one variable of a query or subscription; an expression over args, blok-level locals and agents."
   }
  },
@@ -360,7 +361,7 @@
  "calls": {
   "description": "What a prop or an argument may hold besides a literal, a path or a util call.",
   "kinds": {
-   "agent_call": "A task call: self.<action>(...) or deps.<key>.<action>(...), only as a callback's one thing, optionally named with `into <name>` (stored as the prop's declares_value). A call to self may say `with <key>` before `into`: the run gets the agents the blok's <dependencies key=\"<key>\" /> are bound to (stored as the call's given: <key>); a dependency nobody bound resolves as it always does. A kind that says calls: false (a port blok) holds none.",
+   "agent_call": "A task call: self.<action>(...) or deps.<key>.<action>(...) (in a custom blok agents.<key>.<action>(...)), only as a callback's one thing, optionally named with `into <name>` (stored as the prop's declares_value). A call to the agent a <dependencies> names may say `with <key>` before `into`: the run gets the agents the blok's <dependencies key=\"<key>\" /> are bound to (stored as the call's given: <key>); a dependency nobody bound resolves as it always does. A kind that says calls: false (a port blok) holds none.",
    "util_call": "A pure function, or an effect (ui.copy, task.answer, assign.start, port.set, query.refetch, query.fetch_more) as a callback's one thing."
   },
   "reserved_kinds": {
@@ -476,21 +477,22 @@
   "callback.await": {"level": "error", "message": "A callback does not await; a control is busy while its call's task runs."},
   "callback.nested": {"level": "error", "message": "{what} runs only as a callback's one thing, not inside an expression.", "hint": "Move {what} into a callback prop of its own (onClick={{...}}); an expression only reads."},
   "callback.positional": {"level": "error", "message": "{call}: a task call names its arguments (name: value)."},
-  "callback.with": {"level": "error", "message": "with hands a task call to self the dependencies the blok declares: `self.<action>(...) with <key>`.", "hint": "Write `self.<action>(name: value) with cells into run`, where the blok declares <dependencies key=\"cells\" like=\"self.<action>\" />."},
+  "callback.with": {"level": "error", "message": "with hands a task call the dependencies the blok declares for that action: `self.<action>(...) with <key>`, in a custom blok `agents.<name>.<action>(...) with <key>`.", "hint": "Write `self.<action>(name: value) with cells into run`, where the blok declares <dependencies key=\"cells\" like=\"self.<action>\" />."},
   "callback.into": {"level": "error", "message": "into names the record of a task call: `<call> into <name>`.", "hint": "Write `deps.<key>.<action>(name: value) into run`, then read run.running, run.returns.<port>."},
   "callback.not_callback": {"level": "error", "message": "{key} of <{component}> is not a callback prop, so it cannot hold {what}.", "hint": "Use a callback prop of <{component}> (the catalog lists them as CALLBACK), or compute {key} without a call."},
   "callback.unbound": {"level": "error", "message": "{key} of <{component}> is a callback prop: it holds one task call or one effect (queries.<name>.refetch(), queries.<name>.fetch_more(...), ui.copy, task.answer, assign.start, port.set).", "hint": "Give {key} a task call (deps.<key>.<action>(name: value)) or one effect, not a value."},
   "callback.event_field": {"level": "error", "message": "event has no field {field!r} in {key} of <{component}> (its fields: {fields}).", "hint": "Read one of the fields listed for {key}: {fields}."},
   "roots.unknown": {"level": "error", "message": "{path} reads {root!r}, which is no root, local, loop variable or record of this blok.", "hint": "Read a root this blok has (deps.<key>, args.<key>, queries.<name>, ...), a declared local, a foreach let or index, or an into record."},
   "roots.not_in_kind": {"level": "error", "message": "{path}: a{n} {kind} blok has no {root!r} (it reads {roots}).", "hint": "Read one of {roots} instead."},
+  "roots.custom_deps": {"level": "error", "message": "{path}: a custom blok reads an agent it is bound to as agents.<key>, not deps.<key>.", "hint": "Write agents.<key> instead: the same path, from agents."},
   "roots.reserved": {"level": "error", "message": "{name!r} is reserved: no local, let, index or into may use it."},
   "roots.shadow": {"level": "error", "message": "{name!r} is declared twice: as {first} and as {second}."},
   "roots.event_outside_callback": {"level": "error", "message": "{path} reads event outside a callback.", "hint": "Read event only inside a callback prop; outside one, bind a control to a local and read the local."},
   "roots.error_outside_boundary": {"level": "error", "message": "{path} reads error outside an <error> slot.", "hint": "Read error only inside the <error> slot of a <suspense>."},
   "roots.whole": {"level": "error", "message": "{path} reads {root!r} whole; read one of it ({root}.<name>).", "hint": "Read a field of it, as {root}.<name>."},
-  "dependencies.position": {"level": "error", "message": "<dependencies> {key!r} is declared at {at}: dependencies are declared as a child of the <Blok> of an agent blok.", "hint": "Move it to the top of the <Blok>, after its locals; an action's or a custom blok's dependencies are declared where it is mounted."},
+  "dependencies.position": {"level": "error", "message": "<dependencies> {key!r} is declared at {at}: dependencies are declared as a child of the <Blok> of an agent or custom blok.", "hint": "Move it to the top of the <Blok>, after its locals; an action's dependencies are declared where it is mounted."},
   "dependencies.key": {"level": "error", "message": "<dependencies> ({node}) {problem}.", "hint": "Write <dependencies key=\"cells\" like=\"self.<action>\" />: a plain key, declared once."},
-  "dependencies.like": {"level": "error", "message": "<dependencies> {key!r}: like={like!r} {problem}.", "hint": "like names one of the app's own actions that has dependencies: self.<action>."},
+  "dependencies.like": {"level": "error", "message": "<dependencies> {key!r}: like={like!r} {problem}.", "hint": "like names an action that has dependencies: one of the app's own (self.<action>), in a custom blok one of an agent it is bound to (agents.<name>.<action>)."},
   "with.mismatch": {"level": "error", "message": "{path}: {key!r} is the dependencies of {of}, not of {action}.", "hint": "Declare <dependencies key=... like=\"self.{action}\" /> and hand that over."},
   "deps.unknown": {"level": "error", "message": "{path}: {key!r} is not a dependency of the blok (its dependencies: {keys}). Fix: {hint}."},
   "deps.unknown_state": {"level": "error", "message": "{path}: {key!r} has no state {state!r} (its states: {states}).", "hint": "Read one of the states listed, or add the agent that has it as a dependency."},

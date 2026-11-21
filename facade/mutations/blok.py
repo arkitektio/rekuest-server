@@ -15,7 +15,7 @@ from django.db import transaction
 from kante.types import Info
 
 from facade import inputs, models, takt, takt_api, types
-from facade.blok_revisions import BlokContent, StaleRevisionError, commit_revision, content_of_blok, content_of_revision, lock_blok, tree_context, with_kind
+from facade.blok_revisions import SELF_KEY, BlokContent, as_custom, binding_key, StaleRevisionError, commit_revision, content_of_blok, content_of_revision, lock_blok, tree_context
 from facade.caller_context import CallerContext
 from facade.catalog_validation import blok_findings_against_module, validate_blok_against_module
 from facade.mutations.materialized_blok import check_agent_mappings, organization_of, write_mappings
@@ -147,7 +147,9 @@ def _fork(provided: models.Blok, name: str, user: User) -> models.Blok:
         port.save()
         copies[source_id] = port
     content = content_of_blok(provided)
-    content = content.but(components=with_kind(content.components, "custom"))
+    app = provided.app
+    key = binding_key(app.identifier if app is not None else provided.name, (dependency.key for dependency in content.dependencies if dependency.key != SELF_KEY))
+    content = as_custom(content, key)
     commit_revision(blok, content, base=None, author=user, message=f"Forked from the blok '{provided.name}' its agents provide")
     return blok
 

@@ -12,7 +12,9 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import re
 from collections.abc import Iterable
+from typing import cast
 
 from authentikate.models import User
 from django.db import transaction
@@ -158,17 +160,70 @@ def tree_context(components: list[JSONObject]) -> renums.ComponentContext | None
         return None
 
 
-def with_kind(components: list[JSONObject], kind: str) -> list[JSONObject]:
-    """A stored tree whose ``<Blok>`` says ``kind``: what a fork of a provided blok becomes."""
-    if not components:
-        return components
-    root = dict(components[0])
-    props = [dict(prop) for prop in root.get("props") or []]
-    for prop in props:
-        if prop.get("key") == "kind":
-            prop["static_value"] = kind
-    root["props"] = props
-    return [json_object(root), *components[1:]]
+SELF_KEY = "self"
+"""The dependency an agent blok's own agent is: what a fork turns into a binding."""
+
+
+def binding_key(identifier: str, taken: Iterable[str]) -> str:
+    """The key a fork binds its app's agent under: the last segment of the app's identifier as a
+    name (``live.arkitekt.gallery-app`` -> ``gallery_app``), numbered when the blok has it already."""
+    name = re.sub(r"_+", "_", re.sub(r"[^A-Za-z0-9_]", "_", identifier.rsplit(".", 1)[-1])).strip("_") or "agent"
+    if name[0].isdigit():
+        name = f"_{name}"
+    used = {SELF_KEY, *taken}
+    key, number = name, 2
+    while key in used:
+        key, number = f"{name}{number}", number + 1
+    return key
+
+
+def _unselfed_path(path: str, key: str) -> str:
+    """A stored path of an agent blok as its fork holds it: ``self.x`` and ``deps.self.x`` read ``deps.<key>.x``."""
+    parts = path.split(".")
+    if parts[0] == SELF_KEY:
+        return ".".join(("deps", key, *parts[1:]))
+    if parts[:2] == ["deps", SELF_KEY]:
+        return ".".join(("deps", key, *parts[2:]))
+    return path
+
+
+def _unselfed(value: object, key: str) -> object:
+    """A stored tree (or a part of it) with every read and call of ``self`` on the binding ``key``."""
+    if isinstance(value, list):
+        return [_unselfed(item, key) for item in value]
+    if not isinstance(value, dict):
+        return value
+    changed: dict[str, object] = {}
+    for name, item in value.items():
+        if name in ("path", "value_path") and isinstance(item, str):
+            changed[name] = _unselfed_path(item, key)
+        elif name == "dependency" and item == SELF_KEY and "operation" in value:
+            changed[name] = key
+        else:
+            changed[name] = _unselfed(item, key)
+    if value.get("component") in ("local", "dependencies"):
+        # `like` is a literal: `self.<action>[.<arg>]` names the app's own action.
+        changed["props"] = [
+            {**prop, "static_value": _unselfed_path(prop["static_value"], key)} if isinstance(prop, dict) and prop.get("key") == "like" and isinstance(prop.get("static_value"), str) else prop
+            for prop in cast("list[object]", changed.get("props") or [])
+        ]
+    return changed
+
+
+def as_custom(content: BlokContent, key: str) -> BlokContent:
+    """What a fork of a provided blok holds: a custom blok, its app's own agent (``self``) one
+    it is bound to as ``key`` (written ``agents.<key>``, stored ``deps.<key>``). Nothing else of
+    the tree changes: the dependencies it declares for an action stay the viewer's to pick."""
+    components = [json_object(cast("dict[str, object]", _unselfed(component, key))) for component in content.components]
+    if components:
+        root = dict(components[0])
+        root["props"] = [{**prop, "static_value": "custom"} if prop.get("key") == "kind" else prop for prop in cast("list[dict[str, object]]", root.get("props") or [])]
+        components = [json_object(root), *components[1:]]
+    dependencies = [dependency.model_copy(update={"key": key}) if dependency.key == SELF_KEY else dependency for dependency in content.dependencies]
+    demo = content.demo
+    if demo is not None and isinstance(demo.deps, dict) and SELF_KEY in demo.deps:
+        demo = demo.model_copy(update={"deps": {(key if name == SELF_KEY else name): value for name, value in demo.deps.items()}})
+    return content.but(components=components, dependencies=dependencies, demo=demo)
 
 
 def rendering_of(

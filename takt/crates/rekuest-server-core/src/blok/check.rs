@@ -34,7 +34,7 @@ use super::declared::{
     local_problem, BlokHeader, DeclaredDependencies, DEPENDENCIES_COMPONENT, KEY_PROP, LIKE_PROP,
     LOCAL_COMPONENT, NAME_PROP, QUERY_COMPONENT, SUBSCRIPTION_COMPONENT, VAR_COMPONENT,
 };
-use super::expr::{s, PICK_VERB, REFERENCE_SEPARATOR};
+use super::expr::{s, AGENTS_ROOT, PICK_VERB, REFERENCE_SEPARATOR};
 use super::infer::{resolve_locals, ArgPorts, ResolvedLocal};
 use super::vocabulary::{vocabulary, Finding, Kind, RecordField, Vocabulary};
 use crate::bsx::PICK_FUNCTION;
@@ -151,6 +151,18 @@ pub struct BlokScope {
 const PICKER_COMPONENT: &str = "deppicker";
 /// `cells.options.<dependency>`: the agents that fit a declared dependency, to pick among.
 const OPTIONS_SEGMENT: &str = "options";
+
+const CUSTOM_KIND: &str = "custom";
+/// The kinds whose blok may declare an action's dependencies itself (`<dependencies>`).
+const DECLARING_KINDS: [&str; 2] = ["agent", CUSTOM_KIND];
+
+/// `text` (a path, a call) as a custom blok writes it: a bound agent stored `deps.<key>`
+/// reads `agents.<key>`; one through declared dependencies is left.
+fn as_written(text: &str) -> Option<String> {
+    let rest = text.strip_prefix("deps.")?;
+    let key = rest.split(['.', '(']).next().unwrap_or_default();
+    (!key.contains(REFERENCE_SEPARATOR)).then(|| format!("{AGENTS_ROOT}.{rest}"))
+}
 
 /// The dependency `<key>.<name>` of declared dependencies, as it is stored.
 fn reference_key(key: &str, name: &str) -> String {
@@ -627,15 +639,30 @@ impl<'a> Checker<'a> {
     /// app's, so what is read through it is held to that action's dependencies.
     fn typed(&self, key: &str) -> bool {
         match (self.declaration(key), &self.scope.workflows) {
-            (Some(declared), Some(workflows)) => borrowed_dependencies(declared, workflows).is_ok(),
+            // A bound agent's actions are known only where the blok runs.
+            (Some(declared), Some(workflows)) if declared.owner() == Some("self") => {
+                borrowed_dependencies(declared, workflows).is_ok()
+            }
             _ => false,
         }
+    }
+
+    /// Whether the kind reads the stored `root`: a custom blok's `agents` is stored `deps`.
+    fn reads(&self, root: &str) -> bool {
+        self.kind.reads(root)
+    }
+
+    /// Whether `dependency` (as stored) is one the blok declares in its own tree: every
+    /// dependency of an agent blok, a `<key>__<name>` one of a custom blok.
+    fn declares(&self, dependency: &str) -> bool {
+        self.kind_name() == "agent"
+            || (self.kind_name() == CUSTOM_KIND && dependency.contains(REFERENCE_SEPARATOR))
     }
 
     /// Whether `dependency` (stored `<key>__<name>`) is none this agent blok declares: its
     /// dependencies are the ones in its own tree, mounted or not.
     fn undeclared(&self, dependency: &str) -> bool {
-        if self.kind_name() != "agent" || dependency == "self" {
+        if !self.declares(dependency) || dependency == "self" {
             return false;
         }
         let Some((key, name)) = dependency.split_once(REFERENCE_SEPARATOR) else {
@@ -650,6 +677,9 @@ impl<'a> Checker<'a> {
     /// What `key` may read through, for a message: the dependencies declared under it, else
     /// the keys the blok declares.
     fn dependency_known(&self, key: &str) -> String {
+        if self.kind_name() != "agent" && self.declaration(key).is_none() {
+            return self.dependency_keys();
+        }
         if self.typed(key) {
             let prefix = reference_key(key, "");
             let names: Vec<String> = self
@@ -797,7 +827,7 @@ impl<'a> Checker<'a> {
                     .map(str::to_owned)
             };
             let key = literal(KEY_PROP);
-            if ancestors.len() != 1 || self.kind_name() != "agent" {
+            if ancestors.len() != 1 || !DECLARING_KINDS.contains(&self.kind_name()) {
                 let at = match ancestors.last() {
                     Some(parent) if ancestors.len() != 1 => parent.id.clone(),
                     _ => format!("a{} {} blok", article(self.kind_name()), self.kind_name()),
@@ -832,7 +862,19 @@ impl<'a> Checker<'a> {
                 node: node.id.clone(),
                 like: literal(LIKE_PROP),
             };
-            let problem = if declared.action().is_none() {
+            let owner = declared.owner();
+            let problem = if self.kind_name() == CUSTOM_KIND {
+                match owner {
+                    None | Some("self") => Some("is not agents.<name>.<action>".to_owned()),
+                    Some(owner) if self.mounted && !self.dependencies.contains_key(owner) => {
+                        Some(format!(
+                            "names the agent {}, which the blok is not bound to",
+                            repr(&s(owner))
+                        ))
+                    }
+                    Some(_) => None,
+                }
+            } else if owner != Some("self") {
                 Some("is not self.<action>".to_owned())
             } else {
                 self.scope
@@ -857,11 +899,18 @@ impl<'a> Checker<'a> {
         let given = call.given.clone().unwrap_or_default();
         let action = action_key_for(call).to_owned();
         let Some(declared) = self.declaration(&given).cloned() else {
-            let path = format!("with {given}");
-            self.unknown_dependency(&where_.node.id, &path, &given, &given);
+            let keys = sorted_keys(self.declared.iter().map(|declared| declared.key.as_str()));
+            let fields = [
+                ("path", s(format!("with {given}"))),
+                ("key", s(given.clone())),
+                ("keys", s(keys)),
+                ("hint", s(dependency_hint(&given, self.kind_name()))),
+            ];
+            self.add("deps.unknown", Some(&where_.node.id), &fields);
             return;
         };
-        if let Some(of) = declared.action().filter(|of| *of != action) {
+        let called = (call.dependency.as_str(), action.as_str());
+        if let Some((_, of)) = declared.target().filter(|target| *target != called) {
             let fields = [
                 ("path", s(where_.text())),
                 ("key", s(given)),
@@ -873,7 +922,18 @@ impl<'a> Checker<'a> {
     }
 
     fn add(&mut self, code: &str, at: Option<&str>, fields: &[(&str, Value)]) {
-        self.findings.push(Finding::of(code, at, fields));
+        if self.kind_name() != CUSTOM_KIND {
+            self.findings.push(Finding::of(code, at, fields));
+            return;
+        }
+        let written: Vec<(&str, Value)> = fields
+            .iter()
+            .map(|(key, value)| {
+                let rewritten = value.as_str().and_then(as_written).map(s);
+                (*key, rewritten.unwrap_or_else(|| value.clone()))
+            })
+            .collect();
+        self.findings.push(Finding::of(code, at, &written));
     }
 
     fn kind_name(&self) -> &str {
@@ -1579,7 +1639,7 @@ impl<'a> Checker<'a> {
             .and_then(|call| vocabulary.functions.get(&call.operation))
             .and_then(|function| Some((function.name.clone(), function.needs.clone()?)));
         if let Some((operation, root)) = needed {
-            if !self.kind.roots.contains(&root) {
+            if !self.reads(&root) {
                 self.not_in_kind(&node.id, &operation, &root);
             }
         }
@@ -1728,7 +1788,7 @@ impl<'a> Checker<'a> {
                 self.not_in_kind(&where_.node.id, &format!("self.{action}(...)"), "self");
                 return;
             }
-        } else if !self.kind.roots.contains("deps") {
+        } else if !self.reads("deps") {
             self.not_in_kind(
                 &where_.node.id,
                 &format!("deps.{}.{action}(...)", call.dependency),
@@ -1746,12 +1806,9 @@ impl<'a> Checker<'a> {
             self.dependencies.get(call.dependency.as_str()).copied()
         };
         let Some(dependency) = known else {
-            let unknown = if self.kind_name() == "agent" {
-                undeclared
-            } else {
-                self.mounted
-            };
-            if call.dependency != "self" && unknown && self.kind_name() == "agent" {
+            let declares = self.declares(&call.dependency);
+            let unknown = if declares { undeclared } else { self.mounted };
+            if call.dependency != "self" && unknown && declares {
                 let shown = call.dependency.replace(REFERENCE_SEPARATOR, ".");
                 let written = call
                     .dependency
@@ -2251,7 +2308,8 @@ impl<'a> Checker<'a> {
             );
             return None;
         }
-        if !self.kind.roots.contains(root) {
+        // `agents` is how a custom blok writes `deps`: a stored tree never holds it.
+        if !self.reads(root) || root == AGENTS_ROOT {
             self.not_in_kind(&node_id, path, root);
             return None;
         }
@@ -2291,7 +2349,7 @@ impl<'a> Checker<'a> {
                 // An agent blok's dependencies are in its own tree (`cells.microscope`, stored
                 // `deps.cells__microscope`): one it does not declare is unknown, mounted or
                 // not; one it declares and this side cannot type is open.
-                if self.kind_name() == "agent" {
+                if self.declares(key) {
                     if let Some((reference, OPTIONS_SEGMENT)) = key.split_once(REFERENCE_SEPARATOR)
                     {
                         if self.declaration(reference).is_some() {
@@ -2306,10 +2364,10 @@ impl<'a> Checker<'a> {
                     self.dependencies.get(key).copied()
                 };
                 let Some(dependency) = known else {
-                    if !undeclared && (!self.mounted || self.kind_name() == "agent") {
+                    if !undeclared && (!self.mounted || self.declares(key)) {
                         return Some(Shape::open(Some(path)));
                     }
-                    if self.kind_name() == "agent" {
+                    if self.declares(key) {
                         let (reference, shown) = match key.split_once(REFERENCE_SEPARATOR) {
                             Some((reference, name)) => (reference, format!("{reference}.{name}")),
                             None => (*key, (*key).to_owned()),

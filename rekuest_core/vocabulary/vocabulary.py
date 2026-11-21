@@ -107,6 +107,11 @@ class Kind:
     """Whether a blok of this kind may call an agent (``self.<action>(...)``). A port blok may
     not: it is a field of a form, and reads the agents it reads."""
 
+    def reads(self, root: str) -> bool:
+        """Whether a blok of this kind holds the stored ``root``: a custom blok's ``agents`` is
+        stored ``deps``."""
+        return root in self.roots or (root == "deps" and "agents" in self.roots)
+
     def drawn_in(self, context: str) -> "Kind":
         """The row of this kind in ``context``: its own, or the narrower one it has there."""
         return self.within.get(context, self)
