@@ -298,15 +298,19 @@ class TestMyFeature:
 #### Linting and Formatting
 
 ```bash
-# Check code style
-ruff check .
-
-# Format code
-ruff format .
-
-# Type checking
-mypy facade/
+uv run ruff check .          # lint       (CI: required)
+uv run ruff format --check . # format     (CI: required, line length 88)
+uv run basedpyright          # type check (CI: required, against .basedpyright/baseline.json)
 ```
+
+These follow the arkitekt Python standard (arkitektio/.github, `python/`): `ruff.shared.toml`
+and `pyright.shared.json` are synced copies, never edited here; `ruff.toml` and
+`pyrightconfig.json` extend them with this repo's own settings (`takt/` and migrations
+excluded, `reportExplicitAny` kept). Every argument and return is annotated, tests included,
+and `Any` is not written (`**kwargs: Any` in a pass-through is the one exception). CI is the
+shared `python-quality` workflow (`.github/workflows/quality.yaml`). The baseline holds the
+type errors that predate the standard; fix one, run `uv run basedpyright --writebaseline`, and
+it shrinks.
 
 #### Pre-commit Hooks
 
