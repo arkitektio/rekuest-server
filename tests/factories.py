@@ -11,7 +11,6 @@ Two groups live here:
 """
 
 from asgiref.sync import sync_to_async
-
 from authentikate.expand import (
     aexpand_client_from_token,
     aexpand_organization_from_token,
@@ -24,12 +23,12 @@ from facade import enums
 from facade.models import (
     Action,
     Agent,
-    Task,
-    TaskEvent,
     Caller,
     Implementation,
     State,
     StateDefinition,
+    Task,
+    TaskEvent,
 )
 
 TEST_TOKEN = "test"
@@ -46,8 +45,12 @@ def create_registry_bundle(prefix: str) -> tuple[User, Client, Organization, Cal
     return user, client, org, caller
 
 
-def create_agent_for_registry(registry: Caller, user: User, organization: Organization, prefix: str, **overrides) -> Agent:
-    release = Release.objects.create(app=App.objects.create(identifier=f"{prefix}-app"), version="1.0.0")
+def create_agent_for_registry(
+    registry: Caller, user: User, organization: Organization, prefix: str, **overrides
+) -> Agent:
+    release = Release.objects.create(
+        app=App.objects.create(identifier=f"{prefix}-app"), version="1.0.0"
+    )
     device = Device.objects.create(device_id=f"{prefix}-device")
     registry.client.device = device
     registry.client.save()
@@ -65,7 +68,9 @@ def create_agent_for_registry(registry: Caller, user: User, organization: Organi
     return Agent.objects.create(**agent_data)
 
 
-def create_action_for_organization(organization: Organization, prefix: str, **overrides) -> Action:
+def create_action_for_organization(
+    organization: Organization, prefix: str, **overrides
+) -> Action:
     app = App.objects.create(identifier=f"{prefix}-app")
     action_data = {
         "app": app,
@@ -119,7 +124,15 @@ async def seed_agent(instance_id, token=TEST_TOKEN, blocked=False):
 # --------------------------------------------------------------------------- #
 # Object-graph builders (run synchronously, wrapped via sync_to_async)
 # --------------------------------------------------------------------------- #
-def _build_task(prefix, *, effects="UNKNOWN", idempotent=False, pure=False, parent=None, agent_pk=None):
+def _build_task(
+    prefix,
+    *,
+    effects="UNKNOWN",
+    idempotent=False,
+    pure=False,
+    parent=None,
+    agent_pk=None,
+):
     """Create a standalone Action -> Implementation -> Task graph.
 
     ``effect`` sets the implementation's effect class; ``parent`` wires the tree shape.
@@ -130,7 +143,9 @@ def _build_task(prefix, *, effects="UNKNOWN", idempotent=False, pure=False, pare
     work. Omitting it yields a task owned by a throwaway agent, which is right for tests that
     never report over a socket.
     """
-    user = User.objects.create(username=f"{prefix}-user", password="x", sub=f"{prefix}-sub")
+    user = User.objects.create(
+        username=f"{prefix}-user", password="x", sub=f"{prefix}-sub"
+    )
     device = Device.objects.create(device_id=f"{prefix}-device")
     client = Client.objects.create(client_id=f"{prefix}-client", device=device)
     org = Organization.objects.create(identifier=f"{prefix}-org")
@@ -219,8 +234,12 @@ def _build_task_for_agent_caller(agent_pk, prefix, parent=None, root=None):
     for a direct child, or ``parent=child, root=root_task`` for a deeper descendant. Leaving
     both ``None`` builds a root task (``root_id IS NULL``).
     """
-    agent = Agent.objects.select_related("user", "client", "organization").get(pk=agent_pk)
-    caller, _ = Caller.objects.get_or_create(client=agent.client, user=agent.user, organization=agent.organization)
+    agent = Agent.objects.select_related("user", "client", "organization").get(
+        pk=agent_pk
+    )
+    caller, _ = Caller.objects.get_or_create(
+        client=agent.client, user=agent.user, organization=agent.organization
+    )
 
     app = App.objects.create(identifier=f"{prefix}-app")
     release = Release.objects.create(app=app, version="1.0.0")
@@ -257,7 +276,13 @@ def _touch_agent(agent_pk):
     return agent
 
 
-def _build_task_event(task_pk, kind=enums.TaskEventChoices.COMPLETED, message=None, progress=None, returns=None):
+def _build_task_event(
+    task_pk,
+    kind=enums.TaskEventChoices.COMPLETED,
+    message=None,
+    progress=None,
+    returns=None,
+):
     """Persist a ``TaskEvent`` on a task, firing the same ``post_save`` fan-out as real dispatch.
 
     On a root task this drives a ``mytasks`` / ``tasks`` ``event`` over the change feeds.
@@ -272,13 +297,17 @@ def _build_task_event(task_pk, kind=enums.TaskEventChoices.COMPLETED, message=No
     )
 
 
-def _build_implementation_for_agent(agent_pk, prefix, needs_token=True, allow_probe=True):
+def _build_implementation_for_agent(
+    agent_pk, prefix, needs_token=True, allow_probe=True
+):
     """An Action + Implementation owned by ``agent`` (connectable assign target).
 
     ``allow_probe`` defaults True so the call tests can target it; the flag only
     gates the ``call`` mutation and is invisible to the task paths.
     """
-    agent = Agent.objects.select_related("app", "release", "organization").get(pk=agent_pk)
+    agent = Agent.objects.select_related("app", "release", "organization").get(
+        pk=agent_pk
+    )
     action = Action.objects.create(
         app=agent.app,
         key=f"{prefix}-key",
@@ -303,13 +332,22 @@ def _seed_throwaway_agent_graph(prefix):
     For tests that only need *an* agent to hang rows off (locks, sessions, bloks), where
     ``seed_agent`` would tie them to the shared static-token identity and to each other.
     """
-    user = User.objects.create(username=f"{prefix}-user", password="x", sub=f"{prefix}-sub")
+    user = User.objects.create(
+        username=f"{prefix}-user", password="x", sub=f"{prefix}-sub"
+    )
     device = Device.objects.create(device_id=f"{prefix}-device")
     client = Client.objects.create(client_id=f"{prefix}-client", device=device)
     organization = Organization.objects.create(identifier=f"{prefix}-org")
     app = App.objects.create(identifier=f"{prefix}-app")
     release = Release.objects.create(app=app, version="1.0.0")
-    return Agent.objects.create(app=app, hash=f"{prefix}-hash", release=release, user=user, client=client, organization=organization)
+    return Agent.objects.create(
+        app=app,
+        hash=f"{prefix}-hash",
+        release=release,
+        user=user,
+        client=client,
+        organization=organization,
+    )
 
 
 def _build_state_for_agent(agent_pk, interface, prefix):
@@ -322,12 +360,16 @@ def _build_state_for_agent(agent_pk, interface, prefix):
         description=f"{prefix} state def",
         organization=agent.organization,
     )
-    return State.objects.create(definition=definition, interface=interface, agent_id=agent_pk)
+    return State.objects.create(
+        definition=definition, interface=interface, agent_id=agent_pk
+    )
 
 
 def _build_webhook_agent(prefix, secret="s3cr3t", hook_url="https://hook.example/in"):
     """A HookAgent (kind=WEBHOOK) with a hook_url + shared secret, plus its identity graph."""
-    user = User.objects.create(username=f"{prefix}-user", password="x", sub=f"{prefix}-sub")
+    user = User.objects.create(
+        username=f"{prefix}-user", password="x", sub=f"{prefix}-sub"
+    )
     device = Device.objects.create(device_id=f"{prefix}-device")
     client = Client.objects.create(client_id=f"{prefix}-client", device=device)
     org = Organization.objects.create(identifier=f"{prefix}-org")

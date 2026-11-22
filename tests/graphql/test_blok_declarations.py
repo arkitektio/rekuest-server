@@ -43,13 +43,36 @@ mutation EditBlok($input: EditBlokInput!) {{
 
 DOCUMENT = "query($slide: ID!) { positions(slide: $slide) { id } }"
 ITERATIONS = local("iterations", kind="INT", default=15, persist=True)
-POSITIONS = query("positions", "mikro", DOCUMENT, ("slide", {"path": "args.slide"}), poll=10, more="positions")
-EVENTS = query("events", "rekuest", "subscription { events { id } }", component="subscription", keep=20, history="positions")
+POSITIONS = query(
+    "positions",
+    "mikro",
+    DOCUMENT,
+    ("slide", {"path": "args.slide"}),
+    poll=10,
+    more="positions",
+)
+EVENTS = query(
+    "events",
+    "rekuest",
+    "subscription { events { id } }",
+    component="subscription",
+    keep=20,
+    history="positions",
+)
 
 
 def _tree(*declarations: dict, reads: str = "queries.positions.status") -> list[dict]:
     """A custom blok declaring ``declarations`` (the three above by default) that shows ``reads``."""
-    return [gql(blok("custom", "panel", *(declarations or (ITERATIONS, POSITIONS, EVENTS)), node("Text", text={"path": reads})))]
+    return [
+        gql(
+            blok(
+                "custom",
+                "panel",
+                *(declarations or (ITERATIONS, POSITIONS, EVENTS)),
+                node("Text", text={"path": reads}),
+            )
+        )
+    ]
 
 
 TREE = _tree()
@@ -61,22 +84,57 @@ DECLARATIONS = {
 EXPECTED = {
     "vocab": 2,
     "catalogs": ["ui@1"],
-    "resolvedLocals": [{"node": "Blok[0]/local[0]", "key": "iterations", "kind": "INT", "default": 15, "persist": True}],
-    "demo": {"deps": None, "args": {"slide": "1"}, "task": None, "queries": {"positions": [{"id": "p"}]}, "subscriptions": None},
-    "queries": [{"key": "positions", "service": "mikro", "document": DOCUMENT, "variables": [{"key": "slide", "valuePath": "args.slide"}], "poll": 10.0, "more": "positions"}],
-    "subscriptions": [{"key": "events", "service": "rekuest", "document": "subscription { events { id } }", "keep": 20, "history": "positions"}],
+    "resolvedLocals": [
+        {
+            "node": "Blok[0]/local[0]",
+            "key": "iterations",
+            "kind": "INT",
+            "default": 15,
+            "persist": True,
+        }
+    ],
+    "demo": {
+        "deps": None,
+        "args": {"slide": "1"},
+        "task": None,
+        "queries": {"positions": [{"id": "p"}]},
+        "subscriptions": None,
+    },
+    "queries": [
+        {
+            "key": "positions",
+            "service": "mikro",
+            "document": DOCUMENT,
+            "variables": [{"key": "slide", "valuePath": "args.slide"}],
+            "poll": 10.0,
+            "more": "positions",
+        }
+    ],
+    "subscriptions": [
+        {
+            "key": "events",
+            "service": "rekuest",
+            "document": "subscription { events { id } }",
+            "keep": 20,
+            "history": "positions",
+        }
+    ],
 }
 
 
 async def _run(context: HttpContext, operation: str, variables: dict) -> dict:
-    result = await schema.execute(operation, context_value=context, variable_values=variables)
+    result = await schema.execute(
+        operation, context_value=context, variable_values=variables
+    )
     assert not result.errors, result.errors
     assert result.data is not None
     return result.data
 
 
 async def _refused(context: HttpContext, operation: str, variables: dict) -> str:
-    result = await schema.execute(operation, context_value=context, variable_values=variables)
+    result = await schema.execute(
+        operation, context_value=context, variable_values=variables
+    )
     assert result.errors, "expected the write to be refused"
     return result.errors[0].message
 
@@ -88,43 +146,175 @@ def _declared(blok: dict) -> dict:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 class TestBlokDeclarations:
-    async def test_declarations_are_stored_read_back_and_kept(self, authenticated_context: HttpContext) -> None:
-        created = (await _run(authenticated_context, CREATE, {"input": {"name": "positions", "components": TREE, **DECLARATIONS}}))["createBlok"]
+    async def test_declarations_are_stored_read_back_and_kept(
+        self, authenticated_context: HttpContext
+    ) -> None:
+        created = (
+            await _run(
+                authenticated_context,
+                CREATE,
+                {"input": {"name": "positions", "components": TREE, **DECLARATIONS}},
+            )
+        )["createBlok"]
         assert _declared(created) == EXPECTED
         assert _declared(created["head"]) == EXPECTED
 
         # An edit of the tree keeps everything said beside it; what the tree declares follows the tree.
         tree = _tree(local("iterations", kind="INT", default=3), reads="iterations")
-        edited = (await _run(authenticated_context, EDIT, {"input": {"blok": created["id"], "base": created["head"]["id"], "components": tree}}))["editBlok"]
+        edited = (
+            await _run(
+                authenticated_context,
+                EDIT,
+                {
+                    "input": {
+                        "blok": created["id"],
+                        "base": created["head"]["id"],
+                        "components": tree,
+                    }
+                },
+            )
+        )["editBlok"]
         assert edited["applied"] is True
         assert edited["revision"]["number"] == 2
-        kept = {**EXPECTED, "resolvedLocals": [{"node": "Blok[0]/local[0]", "key": "iterations", "kind": "INT", "default": 3, "persist": False}], "queries": [], "subscriptions": []}
+        kept = {
+            **EXPECTED,
+            "resolvedLocals": [
+                {
+                    "node": "Blok[0]/local[0]",
+                    "key": "iterations",
+                    "kind": "INT",
+                    "default": 3,
+                    "persist": False,
+                }
+            ],
+            "queries": [],
+            "subscriptions": [],
+        }
         assert _declared(edited["revision"]) == kept
         assert _declared(edited["blok"]) == kept
 
-    async def test_malformed_declarations_are_refused(self, authenticated_context: HttpContext) -> None:
+    async def test_malformed_declarations_are_refused(
+        self, authenticated_context: HttpContext
+    ) -> None:
         for changed, message in (
-            ({"components": _tree(local("task", kind="STRING"), POSITIONS, EVENTS)}, "'task' is reserved: no local, let, index or into may use it."),
-            ({"components": _tree(ITERATIONS, query("positions", "mikro", "mutation { delete }"))}, "is a mutation: a blok reads, and writes only through a task"),
-            ({"components": _tree(ITERATIONS, POSITIONS, query("events", "rekuest", "subscription { events { id } }", component="subscription", history="nope"))}, "replays from 'nope', which is no declared query."),
-            ({"components": _tree(ITERATIONS, query("positions", "mikro", DOCUMENT, more="positions[0]"))}, "is not a field path into its data (positions, images.items)."),
-            ({"catalogs": ["ui"]}, "nor the name of one registered in the organization. [manifest.catalog]"),
+            (
+                {"components": _tree(local("task", kind="STRING"), POSITIONS, EVENTS)},
+                "'task' is reserved: no local, let, index or into may use it.",
+            ),
+            (
+                {
+                    "components": _tree(
+                        ITERATIONS, query("positions", "mikro", "mutation { delete }")
+                    )
+                },
+                "is a mutation: a blok reads, and writes only through a task",
+            ),
+            (
+                {
+                    "components": _tree(
+                        ITERATIONS,
+                        POSITIONS,
+                        query(
+                            "events",
+                            "rekuest",
+                            "subscription { events { id } }",
+                            component="subscription",
+                            history="nope",
+                        ),
+                    )
+                },
+                "replays from 'nope', which is no declared query.",
+            ),
+            (
+                {
+                    "components": _tree(
+                        ITERATIONS,
+                        query("positions", "mikro", DOCUMENT, more="positions[0]"),
+                    )
+                },
+                "is not a field path into its data (positions, images.items).",
+            ),
+            (
+                {"catalogs": ["ui"]},
+                "nor the name of one registered in the organization. [manifest.catalog]",
+            ),
             ({"vocab": 1}, "2"),
         ):
-            message_got = await _refused(authenticated_context, CREATE, {"input": {"name": "broken", "components": TREE, **DECLARATIONS, **changed}})
+            message_got = await _refused(
+                authenticated_context,
+                CREATE,
+                {
+                    "input": {
+                        "name": "broken",
+                        "components": TREE,
+                        **DECLARATIONS,
+                        **changed,
+                    }
+                },
+            )
             assert message in message_got, (changed, message_got)
 
-    async def test_a_dry_run_reports_vocabulary_codes_and_keeps_nothing(self, authenticated_context: HttpContext) -> None:
-        created = (await _run(authenticated_context, CREATE, {"input": {"name": "positions", "components": TREE, **DECLARATIONS}}))["createBlok"]
-        tree = [gql(blok("custom", "panel", node("Card", node("Text", text={"path": "nothing.here"}), className="bg-red-500")))]
-        checked = (await _run(authenticated_context, EDIT, {"input": {"blok": created["id"], "base": created["head"]["id"], "components": tree, "dryRun": True}}))["editBlok"]
+    async def test_a_dry_run_reports_vocabulary_codes_and_keeps_nothing(
+        self, authenticated_context: HttpContext
+    ) -> None:
+        created = (
+            await _run(
+                authenticated_context,
+                CREATE,
+                {"input": {"name": "positions", "components": TREE, **DECLARATIONS}},
+            )
+        )["createBlok"]
+        tree = [
+            gql(
+                blok(
+                    "custom",
+                    "panel",
+                    node(
+                        "Card",
+                        node("Text", text={"path": "nothing.here"}),
+                        className="bg-red-500",
+                    ),
+                )
+            )
+        ]
+        checked = (
+            await _run(
+                authenticated_context,
+                EDIT,
+                {
+                    "input": {
+                        "blok": created["id"],
+                        "base": created["head"]["id"],
+                        "components": tree,
+                        "dryRun": True,
+                    }
+                },
+            )
+        )["editBlok"]
         assert checked["applied"] is False
         assert checked["revision"] is None
-        codes = {(finding["level"], finding["code"]) for finding in checked["diagnostics"]}
+        codes = {
+            (finding["level"], finding["code"]) for finding in checked["diagnostics"]
+        }
         assert ("ERROR", "roots.unknown") in codes, checked["diagnostics"]
         assert ("WARNING", "palette.raw_colour") in codes, checked["diagnostics"]
-        assert await sync_to_async(BlokRevision.objects.filter(blok_id=created["id"]).count)() == 1
+        assert (
+            await sync_to_async(
+                BlokRevision.objects.filter(blok_id=created["id"]).count
+            )()
+            == 1
+        )
 
         # The same edit for real is refused on the error.
-        message = await _refused(authenticated_context, EDIT, {"input": {"blok": created["id"], "base": created["head"]["id"], "components": tree}})
+        message = await _refused(
+            authenticated_context,
+            EDIT,
+            {
+                "input": {
+                    "blok": created["id"],
+                    "base": created["head"]["id"],
+                    "components": tree,
+                }
+            },
+        )
         assert "reads 'nothing'" in message

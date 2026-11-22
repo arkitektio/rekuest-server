@@ -37,7 +37,15 @@ VAR_COMPONENT = "var"
 TEXT_NODE = "#text"
 """The component a run of text is stored as."""
 DEPENDENCIES_COMPONENT = "dependencies"
-DECLARATION_COMPONENTS = frozenset({LOCAL_COMPONENT, QUERY_COMPONENT, SUBSCRIPTION_COMPONENT, VAR_COMPONENT, DEPENDENCIES_COMPONENT})
+DECLARATION_COMPONENTS = frozenset(
+    {
+        LOCAL_COMPONENT,
+        QUERY_COMPONENT,
+        SUBSCRIPTION_COMPONENT,
+        VAR_COMPONENT,
+        DEPENDENCIES_COMPONENT,
+    }
+)
 REFERENCE_SEPARATOR = "__"
 """How a read through a declared ``<dependencies key="cells" />`` is stored: ``cells.microscope``
 is the dependency ``cells__microscope`` of the blok (``deps.cells__microscope``), one segment."""
@@ -82,7 +90,11 @@ def _static(node: ComponentNodeInputModel, key: str) -> ComponentPropInputModel 
 
 
 def _is_literal(prop: ComponentPropInputModel) -> bool:
-    return prop.dynamic_value is None and prop.util_call is None and prop.agent_call is None
+    return (
+        prop.dynamic_value is None
+        and prop.util_call is None
+        and prop.agent_call is None
+    )
 
 
 def header_problem(tree: ComponentNodeInputModel) -> Finding | None:
@@ -94,13 +106,25 @@ def header_problem(tree: ComponentNodeInputModel) -> Finding | None:
     for key in (KIND_ATTRIBUTE, CONTEXT_ATTRIBUTE):
         prop = _static(tree, key)
         if prop is None:
-            return Finding.of("blok.attribute", tree.id, problem=f'needs {key}="..."', kinds=kinds)
+            return Finding.of(
+                "blok.attribute", tree.id, problem=f'needs {key}="..."', kinds=kinds
+            )
         if not _is_literal(prop) or not isinstance(prop.static_value, str):
-            return Finding.of("blok.attribute", tree.id, problem=f"takes {key} as a literal string", kinds=kinds)
+            return Finding.of(
+                "blok.attribute",
+                tree.id,
+                problem=f"takes {key} as a literal string",
+                kinds=kinds,
+            )
     kind = _static(tree, KIND_ATTRIBUTE)
     assert kind is not None
     if kind.static_value not in vocabulary.kinds:
-        return Finding.of("blok.attribute", tree.id, problem=f"has no kind {kind.static_value!r}", kinds=kinds)
+        return Finding.of(
+            "blok.attribute",
+            tree.id,
+            problem=f"has no kind {kind.static_value!r}",
+            kinds=kinds,
+        )
     context = _static(tree, CONTEXT_ATTRIBUTE)
     assert context is not None
     if context.static_value not in vocabulary.blok.contexts:
@@ -112,8 +136,15 @@ def header_problem(tree: ComponentNodeInputModel) -> Finding | None:
         )
     for key in (CATALOG_ATTRIBUTE, CHROME_ATTRIBUTE):
         prop = _static(tree, key)
-        if prop is not None and (not _is_literal(prop) or not isinstance(prop.static_value, str)):
-            return Finding.of("blok.attribute", tree.id, problem=f"takes {key} as a literal string", kinds=kinds)
+        if prop is not None and (
+            not _is_literal(prop) or not isinstance(prop.static_value, str)
+        ):
+            return Finding.of(
+                "blok.attribute",
+                tree.id,
+                problem=f"takes {key} as a literal string",
+                kinds=kinds,
+            )
     return None
 
 
@@ -131,7 +162,11 @@ def blok_header(tree: ComponentNodeInputModel) -> BlokHeader:
 
     def text(key: str) -> str | None:
         prop = _static(tree, key)
-        return prop.static_value if prop is not None and isinstance(prop.static_value, str) else None
+        return (
+            prop.static_value
+            if prop is not None and isinstance(prop.static_value, str)
+            else None
+        )
 
     return BlokHeader(
         kind=text(KIND_ATTRIBUTE) or "",
@@ -155,20 +190,34 @@ def content(node: ComponentNodeInputModel) -> tuple[ComponentNodeInputModel, ...
 def local_name(node: ComponentNodeInputModel) -> str | None:
     """The name a ``<local>`` declares, or None when it has none."""
     prop = _static(node, NAME_PROP)
-    return prop.static_value if prop is not None and isinstance(prop.static_value, str) else None
+    return (
+        prop.static_value
+        if prop is not None and isinstance(prop.static_value, str)
+        else None
+    )
 
 
 def local_like(node: ComponentNodeInputModel) -> str | None:
     """The argument a ``<local>`` borrows its port from (``self.move.to``), or None."""
     prop = _static(node, LIKE_PROP)
-    return prop.static_value if prop is not None and isinstance(prop.static_value, str) else None
+    return (
+        prop.static_value
+        if prop is not None and isinstance(prop.static_value, str)
+        else None
+    )
 
 
 def local_problem(node: ComponentNodeInputModel) -> Finding | None:
     """Why a ``<local>`` declares nothing readable, or None: ``local.attribute``."""
     name = local_name(node) or "?"
     if local_name(node) is None:
-        return Finding.of("local.attribute", node.id, name=name, key="name", problem='is missing: write name="x"')
+        return Finding.of(
+            "local.attribute",
+            node.id,
+            name=name,
+            key="name",
+            problem='is missing: write name="x"',
+        )
     for prop in node.props or ():
         if prop.key in (NAME_PROP, LIKE_PROP):
             continue
@@ -181,13 +230,31 @@ def local_problem(node: ComponentNodeInputModel) -> Finding | None:
                 problem=f"is no field of a local ({', '.join(sorted(_LOCAL_FIELDS))}, like)",
             )
         if not _is_literal(prop):
-            return Finding.of("local.attribute", node.id, name=name, key=prop.key, problem="is not a literal")
+            return Finding.of(
+                "local.attribute",
+                node.id,
+                name=name,
+                key=prop.key,
+                problem="is not a literal",
+            )
     if node.children:
-        return Finding.of("local.attribute", node.id, name=name, key="children", problem="are not elements: a local holds nothing")
+        return Finding.of(
+            "local.attribute",
+            node.id,
+            name=name,
+            key="children",
+            problem="are not elements: a local holds nothing",
+        )
     try:
         declared_local(node)
     except BlokError as error:
-        return Finding.of("local.attribute", node.id, name=name, key="its port", problem=f"is no valid port ({error})")
+        return Finding.of(
+            "local.attribute",
+            node.id,
+            name=name,
+            key="its port",
+            problem=f"is no valid port ({error})",
+        )
     return None
 
 
@@ -200,7 +267,12 @@ def declared_local(node: ComponentNodeInputModel) -> BlokLocalInputModel:
     """
     name = local_name(node)
     if name is None:
-        raise BlokError("local.attribute", name="?", key="name", problem='is missing: write name="x"')
+        raise BlokError(
+            "local.attribute",
+            name="?",
+            key="name",
+            problem='is missing: write name="x"',
+        )
     fields: dict[str, object] = {"key": name}
     for prop in node.props or ():
         if prop.key in (NAME_PROP, LIKE_PROP) or prop.key not in _LOCAL_FIELDS:
@@ -210,13 +282,22 @@ def declared_local(node: ComponentNodeInputModel) -> BlokLocalInputModel:
     try:
         return BlokLocalInputModel.model_validate(fields)
     except ValidationError as error:
-        raise BlokError("local.attribute", name=name, key="its port", problem=f"is no valid port: {error.errors()[0]['msg']}") from None
+        raise BlokError(
+            "local.attribute",
+            name=name,
+            key="its port",
+            problem=f"is no valid port: {error.errors()[0]['msg']}",
+        ) from None
 
 
 def local_node(local: BlokLocalInputModel, node_id: str) -> ComponentNodeInputModel:
     """``local`` as the ``<local>`` node that declares it: every field it sets a literal prop."""
     fields = local.model_dump(mode="json", exclude_none=True, exclude={"key"})
-    props = [ComponentPropInputModel(key=NAME_PROP, static_value=local.key, declares_value=local.key)]
+    props = [
+        ComponentPropInputModel(
+            key=NAME_PROP, static_value=local.key, declares_value=local.key
+        )
+    ]
     props.extend(
         ComponentPropInputModel(key=key, static_value=value)
         for key, value in fields.items()
@@ -255,51 +336,100 @@ def var_argument(node: ComponentNodeInputModel) -> ActionArgumentInputModel | No
     if key is None or not isinstance(key.static_value, str):
         return None
     value = _static(node, VALUE_PROP)
-    if value is None or (value.static_value is None and value.dynamic_value is None and value.util_call is None):
+    if value is None or (
+        value.static_value is None
+        and value.dynamic_value is None
+        and value.util_call is None
+    ):
         return ActionArgumentInputModel(key=key.static_value)
     if value.agent_call is not None:
         return None
     if value.dynamic_value is not None and value.dynamic_value.path is not None:
-        return ActionArgumentInputModel(key=key.static_value, value_path=value.dynamic_value.path)
+        return ActionArgumentInputModel(
+            key=key.static_value, value_path=value.dynamic_value.path
+        )
     if value.util_call is not None:
         return ActionArgumentInputModel(key=key.static_value, util_call=value.util_call)
-    return ActionArgumentInputModel(key=key.static_value, value_literal=value.static_value)
+    return ActionArgumentInputModel(
+        key=key.static_value, value_literal=value.static_value
+    )
 
 
 def declaration_problem(node: ComponentNodeInputModel) -> Finding | None:
     """Why a ``<query>`` or ``<subscription>`` declares nothing readable, or None: ``query.declaration``."""
     for key in (NAME_PROP, "service", "document"):
         prop = _static(node, key)
-        if prop is None or not _is_literal(prop) or not isinstance(prop.static_value, str) or not prop.static_value:
-            return Finding.of("query.declaration", node.id, component=node.component, problem=f'needs {key}="..." as a literal string')
+        if (
+            prop is None
+            or not _is_literal(prop)
+            or not isinstance(prop.static_value, str)
+            or not prop.static_value
+        ):
+            return Finding.of(
+                "query.declaration",
+                node.id,
+                component=node.component,
+                problem=f'needs {key}="..." as a literal string',
+            )
     for prop in node.props or ():
         if prop.key not in (NAME_PROP, "service", "document") and not _is_literal(prop):
-            return Finding.of("query.declaration", node.id, component=node.component, problem=f"takes {prop.key} as a literal")
+            return Finding.of(
+                "query.declaration",
+                node.id,
+                component=node.component,
+                problem=f"takes {prop.key} as a literal",
+            )
     for child in node.children or ():
         if child.component != VAR_COMPONENT:
-            return Finding.of("query.declaration", child.id, component=node.component, problem=f"holds only <var> children, not <{child.component}>")
+            return Finding.of(
+                "query.declaration",
+                child.id,
+                component=node.component,
+                problem=f"holds only <var> children, not <{child.component}>",
+            )
         if var_argument(child) is None:
-            return Finding.of("query.declaration", child.id, component=node.component, problem='has a <var> without key="..." or with a task call as its value')
+            return Finding.of(
+                "query.declaration",
+                child.id,
+                component=node.component,
+                problem='has a <var> without key="..." or with a task call as its value',
+            )
     try:
         _declared(node)
     except BlokError as error:
-        return Finding.of("query.declaration", node.id, component=node.component, problem=str(error))
+        return Finding.of(
+            "query.declaration", node.id, component=node.component, problem=str(error)
+        )
     return None
 
 
-def _declared(node: ComponentNodeInputModel) -> BlokQueryInputModel | BlokSubscriptionInputModel:
+def _declared(
+    node: ComponentNodeInputModel,
+) -> BlokQueryInputModel | BlokSubscriptionInputModel:
     fields: dict[str, object] = {}
     for prop in node.props or ():
         if prop.static_value is not None:
             fields["key" if prop.key == NAME_PROP else prop.key] = prop.static_value
-    fields["variables"] = [argument for child in node.children or () if (argument := var_argument(child)) is not None]
-    model = BlokQueryInputModel if node.component == QUERY_COMPONENT else BlokSubscriptionInputModel
+    fields["variables"] = [
+        argument
+        for child in node.children or ()
+        if (argument := var_argument(child)) is not None
+    ]
+    model = (
+        BlokQueryInputModel
+        if node.component == QUERY_COMPONENT
+        else BlokSubscriptionInputModel
+    )
     try:
         return model.model_validate(fields)
     except ValidationError as error:
         first = error.errors()[0]
         where = ".".join(str(part) for part in first["loc"])
-        raise BlokError("query.declaration", component=node.component, problem=f"{where}: {first['msg']}") from None
+        raise BlokError(
+            "query.declaration",
+            component=node.component,
+            problem=f"{where}: {first['msg']}",
+        ) from None
 
 
 @dataclass(frozen=True)
@@ -320,7 +450,13 @@ class DeclaredDependencies:
         parts = self.like.split(".") if self.like else []
         if len(parts) == 2 and parts[0] == "self" and parts[1]:
             return "self", parts[1]
-        if len(parts) == 3 and parts[0] == "deps" and parts[1] and parts[1] != "self" and parts[2]:
+        if (
+            len(parts) == 3
+            and parts[0] == "deps"
+            and parts[1]
+            and parts[1] != "self"
+            and parts[2]
+        ):
             return parts[1], parts[2]
         return None
 
@@ -335,7 +471,9 @@ class DeclaredDependencies:
         return self.target[1] if self.target else None
 
 
-def declared_dependencies(tree: ComponentNodeInputModel) -> tuple[DeclaredDependencies, ...]:
+def declared_dependencies(
+    tree: ComponentNodeInputModel,
+) -> tuple[DeclaredDependencies, ...]:
     """The keyed ``<dependencies>`` children of a blok's ``<Blok>``, in order."""
     declared: list[DeclaredDependencies] = []
     for child in tree.children or ():
@@ -344,7 +482,11 @@ def declared_dependencies(tree: ComponentNodeInputModel) -> tuple[DeclaredDepend
         literals = {prop.key: prop.static_value for prop in child.props or ()}
         key, like = literals.get(KEY_PROP), literals.get(LIKE_PROP)
         if isinstance(key, str) and key:
-            declared.append(DeclaredDependencies(key=key, node=child.id, like=like if isinstance(like, str) else None))
+            declared.append(
+                DeclaredDependencies(
+                    key=key, node=child.id, like=like if isinstance(like, str) else None
+                )
+            )
     return tuple(declared)
 
 
@@ -359,12 +501,15 @@ def declared_queries(tree: ComponentNodeInputModel) -> tuple[BlokQueryInputModel
     )
 
 
-def declared_subscriptions(tree: ComponentNodeInputModel) -> tuple[BlokSubscriptionInputModel, ...]:
+def declared_subscriptions(
+    tree: ComponentNodeInputModel,
+) -> tuple[BlokSubscriptionInputModel, ...]:
     """The readable ``<subscription>`` children of a blok's ``<Blok>``, in order."""
     return tuple(
         subscription
         for child in tree.children or ()
-        if child.component == SUBSCRIPTION_COMPONENT and declaration_problem(child) is None
+        if child.component == SUBSCRIPTION_COMPONENT
+        and declaration_problem(child) is None
         for subscription in (_declared(child),)
         if isinstance(subscription, BlokSubscriptionInputModel)
     )

@@ -17,7 +17,9 @@ def _caller(info: Info) -> models.Caller:
 
 
 def assign(info: Info, input: inputs.AssignInput) -> types.Task:
-    return cast("types.Task", takt.assign(CallerContext.from_info(info), input.to_pydantic()))
+    return cast(
+        "types.Task", takt.assign(CallerContext.from_info(info), input.to_pydantic())
+    )
 
 
 def pause(info: Info, input: inputs.PauseInput) -> types.Task:
@@ -29,7 +31,9 @@ def resume(info: Info, input: inputs.ResumeInput) -> types.Task:
 
 
 def decide(info: Info, input: inputs.DecideInput) -> types.Task:
-    return cast("types.Task", takt.decide(CallerContext.from_info(info), input.to_pydantic()))
+    return cast(
+        "types.Task", takt.decide(CallerContext.from_info(info), input.to_pydantic())
+    )
 
 
 def inquire(info: Info, input: inputs.InquireInput) -> types.TaskInquiry:
@@ -40,7 +44,9 @@ def inquire(info: Info, input: inputs.InquireInput) -> types.TaskInquiry:
         asked=answer.asked,
         detail=answer.detail,
         step=answer.step,
-        reported_at=datetime.datetime.fromtimestamp(answer.reported_at, datetime.UTC) if answer.reported_at is not None else None,
+        reported_at=datetime.datetime.fromtimestamp(answer.reported_at, datetime.UTC)
+        if answer.reported_at is not None
+        else None,
         progress=answer.progress,
         message=answer.message,
     )
@@ -59,16 +65,24 @@ def collect(info: Info, input: inputs.CollectInput) -> list[str]:
 
 
 def bounce(info: Info, input: inputs.BounceInput) -> types.Agent:
-    return cast("types.Agent", takt.bounce(CallerContext.from_info(info), input.to_pydantic()))
+    return cast(
+        "types.Agent", takt.bounce(CallerContext.from_info(info), input.to_pydantic())
+    )
 
 
 def kick(info: Info, input: inputs.KickInput) -> types.Agent:
-    return cast("types.Agent", takt.kick(CallerContext.from_info(info), input.to_pydantic()))
+    return cast(
+        "types.Agent", takt.kick(CallerContext.from_info(info), input.to_pydantic())
+    )
 
 
 def block(info: Info, input: inputs.BlockInput) -> types.Agent:
-    return cast("types.Agent", takt.block(CallerContext.from_info(info), input.to_pydantic()))
+    return cast(
+        "types.Agent", takt.block(CallerContext.from_info(info), input.to_pydantic())
+    )
 
 
 def unblock(info: Info, input: inputs.UnblockInput) -> types.Agent:
-    return cast("types.Agent", takt.unblock(CallerContext.from_info(info), input.to_pydantic()))
+    return cast(
+        "types.Agent", takt.unblock(CallerContext.from_info(info), input.to_pydantic())
+    )

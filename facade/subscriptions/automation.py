@@ -6,7 +6,7 @@ and by takt (its bookkeeping: failures, counts), and both publish on the same ch
 """
 
 import datetime
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import strawberry
 from kante.types import Info
@@ -23,13 +23,19 @@ class SignalChange:
     identifier: str
     object: str
     received_at: datetime.datetime
-    processed_at: datetime.datetime | None = strawberry.field(description="When triggers were matched against it; null = not yet.")
-    fired: int = strawberry.field(description="How many triggers fired a run for it so far.")
+    processed_at: datetime.datetime | None = strawberry.field(
+        description="When triggers were matched against it; null = not yet."
+    )
+    fired: int = strawberry.field(
+        description="How many triggers fired a run for it so far."
+    )
 
     @classmethod
     async def load(cls, pk: int) -> "SignalChange":
         signal = await models.Signal.objects.aget(pk=pk)
-        fired = await models.Firing.objects.filter(signal=signal, outcome=enums.FiringOutcomeChoices.FIRED).acount()
+        fired = await models.Firing.objects.filter(
+            signal=signal, outcome=enums.FiringOutcomeChoices.FIRED
+        ).acount()
         return cls(
             id=strawberry.ID(str(signal.pk)),
             service=signal.service,
@@ -42,13 +48,17 @@ class SignalChange:
         )
 
 
-@strawberry.type(description="A signal arrived (create), or triggers were matched against it (update).")
+@strawberry.type(
+    description="A signal arrived (create), or triggers were matched against it (update)."
+)
 class SignalChangeEvent:
     create: SignalChange | None = None
     update: SignalChange | None = None
 
 
-@strawberry.type(description="Slim snapshot of a schedule or trigger for the change feeds.")
+@strawberry.type(
+    description="Slim snapshot of a schedule or trigger for the change feeds."
+)
 class RuleChange:
     id: strawberry.ID
     name: str
@@ -73,7 +83,9 @@ class RuleChange:
         )
 
 
-@strawberry.type(description="A schedule or trigger was created, changed (by a user, or by its runs) or deleted.")
+@strawberry.type(
+    description="A schedule or trigger was created, changed (by a user, or by its runs) or deleted."
+)
 class RuleChangeEvent:
     create: RuleChange | None = None
     update: RuleChange | None = None
@@ -83,7 +95,9 @@ class RuleChangeEvent:
 async def signals(self: object, info: Info) -> AsyncGenerator[SignalChangeEvent, None]:
     """Subscribe to the signals services send about the organization's objects."""
     organization = info.context.request.organization
-    async for message in signal_channel.listen(info, [f"signals_org_{organization.id}"]):
+    async for message in signal_channel.listen(
+        info, [f"signals_org_{organization.id}"]
+    ):
         try:
             if message.create is not None:
                 yield SignalChangeEvent(create=await SignalChange.load(message.create))
@@ -93,7 +107,9 @@ async def signals(self: object, info: Info) -> AsyncGenerator[SignalChangeEvent,
             continue  # gone again (retention) before this subscriber got to it
 
 
-async def _rules(info: Info, model: type[models.Schedule] | type[models.Trigger]) -> AsyncGenerator[RuleChangeEvent, None]:
+async def _rules(
+    info: Info, model: type[models.Schedule] | type[models.Trigger]
+) -> AsyncGenerator[RuleChangeEvent, None]:
     organization = info.context.request.organization
     async for message in rule_channel.listen(info, [f"rules_org_{organization.id}"]):
         # The feed carries both kinds of rule; a message names the one it is about.
@@ -107,7 +123,11 @@ async def _rules(info: Info, model: type[models.Schedule] | type[models.Trigger]
             snapshot = RuleChange.from_model(await model.objects.aget(pk=pk))
         except model.DoesNotExist:
             continue
-        yield RuleChangeEvent(create=snapshot) if message.change == "create" else RuleChangeEvent(update=snapshot)
+        yield (
+            RuleChangeEvent(create=snapshot)
+            if message.change == "create"
+            else RuleChangeEvent(update=snapshot)
+        )
 
 
 async def schedules(self: object, info: Info) -> AsyncGenerator[RuleChangeEvent, None]:

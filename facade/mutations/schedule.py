@@ -29,9 +29,19 @@ def _schedule(info: Info, id: strawberry.ID) -> models.Schedule:
 
 def create_schedule(info: Info, input: inputs.CreateScheduleInput) -> types.Schedule:
     action = scoped_get(models.Action, info, input.action)
-    agent = scoped_get(models.Agent, info, input.agent) if input.agent is not None else None
+    agent = (
+        scoped_get(models.Agent, info, input.agent) if input.agent is not None else None
+    )
     args = json_object(input.args or {})
-    schedules.validate(action=action, agent=agent, interface=input.interface, args=args, interval_seconds=input.interval_seconds, cron=input.cron, tz=input.timezone)
+    schedules.validate(
+        action=action,
+        agent=agent,
+        interface=input.interface,
+        args=args,
+        interval_seconds=input.interval_seconds,
+        cron=input.cron,
+        tz=input.timezone,
+    )
 
     rules.check_policies(max_runs=input.max_runs)
     with transaction.atomic():
@@ -70,14 +80,24 @@ def update_schedule(info: Info, input: inputs.UpdateScheduleInput) -> types.Sche
             schedule.action = action
             changed.append("action")
     if input.agent is not strawberry.UNSET:
-        agent = scoped_get(models.Agent, info, input.agent) if input.agent is not None else None
+        agent = (
+            scoped_get(models.Agent, info, input.agent)
+            if input.agent is not None
+            else None
+        )
         if schedule.agent != agent:
             schedule.agent = agent
             changed.append("agent")
-    if input.interface is not strawberry.UNSET and schedule.interface != input.interface:
+    if (
+        input.interface is not strawberry.UNSET
+        and schedule.interface != input.interface
+    ):
         schedule.interface = input.interface
         changed.append("interface")
-    if input.ephemeral_runs is not None and schedule.ephemeral_runs != input.ephemeral_runs:
+    if (
+        input.ephemeral_runs is not None
+        and schedule.ephemeral_runs != input.ephemeral_runs
+    ):
         schedule.ephemeral_runs = input.ephemeral_runs
         changed.append("ephemeral_runs")
     if input.args is not None and schedule.args != input.args:
@@ -99,7 +119,10 @@ def update_schedule(info: Info, input: inputs.UpdateScheduleInput) -> types.Sche
     if input.enabled is not None and schedule.enabled != input.enabled:
         schedule.enabled = input.enabled
         changed.append("enabled")
-    if input.description is not strawberry.UNSET and schedule.description != input.description:
+    if (
+        input.description is not strawberry.UNSET
+        and schedule.description != input.description
+    ):
         schedule.description = input.description
         changed.append("description")
     if input.ends_at is not strawberry.UNSET and schedule.ends_at != input.ends_at:
@@ -125,8 +148,24 @@ def update_schedule(info: Info, input: inputs.UpdateScheduleInput) -> types.Sche
     # What it runs and when is checked only when that changed, and then as a whole. A schedule
     # that broke since it was written (its implementation re-registered away) can still be
     # renamed, limited or switched off.
-    if set(changed) & {"action", "agent", "interface", "args", "interval_seconds", "cron", "timezone"}:
-        schedules.validate(action=schedule.action, agent=schedule.agent, interface=schedule.interface, args=schedule.args, interval_seconds=schedule.interval_seconds, cron=schedule.cron, tz=schedule.timezone)
+    if set(changed) & {
+        "action",
+        "agent",
+        "interface",
+        "args",
+        "interval_seconds",
+        "cron",
+        "timezone",
+    }:
+        schedules.validate(
+            action=schedule.action,
+            agent=schedule.agent,
+            interface=schedule.interface,
+            args=schedule.args,
+            interval_seconds=schedule.interval_seconds,
+            cron=schedule.cron,
+            tz=schedule.timezone,
+        )
 
     with transaction.atomic():
         # Only what changed: the run bookkeeping on the row (backoff, failures) is takt's.

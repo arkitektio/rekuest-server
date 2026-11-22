@@ -33,7 +33,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "basedpyright>=1.39.8",
+    "basedpyright==1.40.2",
     "django-stubs>=6.0.1",
     "dokker>=2.8",
     "moto>=5.1.22",
@@ -42,48 +42,14 @@ dev = [
     "pytest-cov>=7.1.0",
     "pytest-django>=4.12.0",
     "python-semantic-release>=9.21.0",
+    "ruff==0.17.6",
 ]
 
-
-[tool.django-stubs]
-django_settings_module = "rekuest.settings"
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "rekuest.settings_test"
 # takt/ carries its own suites (cargo test, takt/conformance).
 testpaths = ["tests"]
-
-[tool.ruff]
-line-length = 300
-target-version = "py312"
-extend-exclude = ["takt"]
-
-[tool.ruff.lint]
-# Updated Ruff config format (new versions of Ruff prefer tool.ruff.lint)
-extend-select = ["ANN", "D1", "I"] # Added 'I' for import sorting (speedup)
-extend-ignore = ["ANN002", "ANN003", "D100"]
-
-[tool.ruff.lint.isort]
-known-first-party = ["rekuest", "embeddings"]
-
-# The type gate. Run: `basedpyright`. It covers the whole server. Writing `Any` is an error
-# (`reportExplicitAny`), and so is an attribute a type does not declare. An `Any` that is only
-# inferred is not reported: Django's settings, `pk` and JSON fields and strawberry's decorators
-# and `UNSET` are all `Any` in their own stubs, which is theirs to fix and fires on every line
-# that touches them. The "unknown" rules stay off for the same reason.
-[tool.basedpyright]
-typeCheckingMode = "standard"
-pythonVersion = "3.12"
-include = ["facade", "rekuest"]
-exclude = ["**/migrations", "**/__pycache__", ".venv", "tests"]
-reportAny = false
-reportExplicitAny = true
-reportAttributeAccessIssue = true
-reportUnknownMemberType = false
-reportUnknownVariableType = false
-reportUnknownArgumentType = false
-reportUnusedCallResult = false
-reportMissingTypeStubs = false
 
 [tool.semantic_release]
 # This server is deployed as Docker images, not a PyPI package — so a release

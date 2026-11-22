@@ -18,17 +18,42 @@ from django.db.models.functions import Now
 class Wiregram(models.Model):
     """One imported automation document, and the owner of the rules it created."""
 
-    organization = models.ForeignKey("authentikate.Organization", on_delete=models.CASCADE, related_name="wiregrams", help_text="The organization that imported it")
-    caller = models.ForeignKey("Caller", on_delete=models.CASCADE, related_name="wiregrams", help_text="Who imported it last: the runs of its rules are assigned as this identity")
-    key = models.CharField(max_length=200, help_text="What the document calls itself; importing the same key again updates this wiregram")
+    organization = models.ForeignKey(
+        "authentikate.Organization",
+        on_delete=models.CASCADE,
+        related_name="wiregrams",
+        help_text="The organization that imported it",
+    )
+    caller = models.ForeignKey(
+        "Caller",
+        on_delete=models.CASCADE,
+        related_name="wiregrams",
+        help_text="Who imported it last: the runs of its rules are assigned as this identity",
+    )
+    key = models.CharField(
+        max_length=200,
+        help_text="What the document calls itself; importing the same key again updates this wiregram",
+    )
     name = models.CharField(max_length=200, help_text="A human-readable name")
-    description = models.TextField(null=True, blank=True, help_text="What the document says it is for")
-    document = models.JSONField(default=dict, blank=True, help_text="The document as it was last imported", db_default={})
+    description = models.TextField(
+        null=True, blank=True, help_text="What the document says it is for"
+    )
+    document = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="The document as it was last imported",
+        db_default={},
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["organization", "key"], name="wiregram_unique_key_per_organization")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "key"],
+                name="wiregram_unique_key_per_organization",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.key})"

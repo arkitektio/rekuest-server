@@ -8,7 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from strawberry.experimental import pydantic
 
 from facade import enums, scalars
-from facade.inputs.dependency import ResolvedDependencyInput, ResolvedDependencyInputModel
+from facade.inputs.dependency import (
+    ResolvedDependencyInput,
+    ResolvedDependencyInputModel,
+)
 from facade.json_types import JSON
 from rekuest_core import enums as rcenums
 from rekuest_core import scalars as rscalars
@@ -22,8 +25,12 @@ class HookInputModel(BaseModel):
         hash: Hash identifier for the hook action
     """
 
-    kind: enums.HookKind = Field(description="The kind of the hook. This is used to identify the hook in the system.")
-    hash: str = Field(description="The hash of the hook. This is used to identify the hook in the system.")
+    kind: enums.HookKind = Field(
+        description="The kind of the hook. This is used to identify the hook in the system."
+    )
+    hash: str = Field(
+        description="The hash of the hook. This is used to identify the hook in the system."
+    )
 
 
 @pydantic.input(
@@ -45,9 +52,17 @@ class StateRequirementInputModel(BaseModel):
     """
 
     state: str = Field(min_length=1, description="The state's interface on the agent.")
-    path: str = Field(pattern=r"^/", description="An RFC 6901 pointer into the state's value, e.g. '/busy' or '/stage/position/0'.")
-    operator: rcenums.DescriptorOperator = Field(description="How the value at `path` is compared with `value`.")
-    value: JSON = Field(default=None, description="What the value is compared with: IN/NOT_IN take a list, LTE/GTE a number, EXISTS true or false.")
+    path: str = Field(
+        pattern=r"^/",
+        description="An RFC 6901 pointer into the state's value, e.g. '/busy' or '/stage/position/0'.",
+    )
+    operator: rcenums.DescriptorOperator = Field(
+        description="How the value at `path` is compared with `value`."
+    )
+    value: JSON = Field(
+        default=None,
+        description="What the value is compared with: IN/NOT_IN take a list, LTE/GTE a number, EXISTS true or false.",
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -55,12 +70,28 @@ class StateRequirementInputModel(BaseModel):
     def check_operator_value(self) -> Self:
         """Operator and value agree, as for a port's requires."""
         operator, value, where = self.operator, self.value, f"{self.state}{self.path}"
-        if operator in (rcenums.DescriptorOperator.IN, rcenums.DescriptorOperator.NOT_IN) and not isinstance(value, list):
-            raise ValueError(f"state requirement {where!r}: {operator.value} needs a list value")
-        if operator in (rcenums.DescriptorOperator.LTE, rcenums.DescriptorOperator.GTE) and (isinstance(value, bool) or not isinstance(value, (int, float))):
-            raise ValueError(f"state requirement {where!r}: {operator.value} needs a numeric value")
-        if operator == rcenums.DescriptorOperator.EXISTS and value is not None and not isinstance(value, bool):
-            raise ValueError(f"state requirement {where!r}: EXISTS takes no value or a boolean")
+        if operator in (
+            rcenums.DescriptorOperator.IN,
+            rcenums.DescriptorOperator.NOT_IN,
+        ) and not isinstance(value, list):
+            raise ValueError(
+                f"state requirement {where!r}: {operator.value} needs a list value"
+            )
+        if operator in (
+            rcenums.DescriptorOperator.LTE,
+            rcenums.DescriptorOperator.GTE,
+        ) and (isinstance(value, bool) or not isinstance(value, (int, float))):
+            raise ValueError(
+                f"state requirement {where!r}: {operator.value} needs a numeric value"
+            )
+        if (
+            operator == rcenums.DescriptorOperator.EXISTS
+            and value is not None
+            and not isinstance(value, bool)
+        ):
+            raise ValueError(
+                f"state requirement {where!r}: EXISTS takes no value or a boolean"
+            )
         return self
 
 
@@ -92,7 +123,10 @@ class AssignInputModel(BaseModel):
     """
 
     action: str | None = Field(default=None, description="The action ID to assign to")
-    dependency: str | None = Field(default=None, description="The dependency key.method to assign when running inside a resolved task")
+    dependency: str | None = Field(
+        default=None,
+        description="The dependency key.method to assign when running inside a resolved task",
+    )
     resolution: str | None = Field(
         default=None,
         description="The resolution ID to assign to when assining to a implementation with dependencies",
@@ -109,7 +143,10 @@ class AssignInputModel(BaseModel):
         default=None,
         description="The hash of the action. This is used to identify the action in the system.",
     )
-    method: str | None = Field(default=None, description="The method key to assign when running inside a resolved task")
+    method: str | None = Field(
+        default=None,
+        description="The method key to assign when running inside a resolved task",
+    )
     interface: str | None = Field(
         default=None,
         description="The interface of the implementation. Only ussable if you also set agent",
@@ -118,7 +155,9 @@ class AssignInputModel(BaseModel):
         default=None,
         description="The hooks of the task. This is used to identify the task in the system.",
     )
-    args: dict[str, JSON] = Field(description="The args of the task. Its a dictionary of ports and values")
+    args: dict[str, JSON] = Field(
+        description="The args of the task. Its a dictionary of ports and values"
+    )
     reference: str | None = Field(
         default=None,
         description="The reference of the task. This is used to identify the task in the system.",
@@ -135,12 +174,17 @@ class AssignInputModel(BaseModel):
         default=None,
         description="What the parent calls this child. Idempotent on (parent, call_key), checked before (parent, parent_step). Agent-socket assigns only.",
     )
-    capture: bool | None = Field(default=None, description="Whether to capture the task.")
+    capture: bool | None = Field(
+        default=None, description="Whether to capture the task."
+    )
     dependencies: list[ResolvedDependencyInputModel] | None = Field(
         default=None,
         description="The dependencies of the task. This maps dependency keys to implementation IDs.",
     )
-    step: bool | None = Field(default=None, description="Whether the task should step. Ie. go to the next breakpoint")
+    step: bool | None = Field(
+        default=None,
+        description="Whether the task should step. Ie. go to the next breakpoint",
+    )
     not_before: datetime.datetime | None = Field(
         default=None,
         description="Hold the task back until then: it is persisted now but only dispatched once due. A time in the past (or none) dispatches immediately.",
@@ -230,7 +274,9 @@ class CollectInputModel(BaseModel):
         drawers: List of drawer IDs to collect from
     """
 
-    drawers: list[str] = Field(description="The drawers to collect: each an ID or a resource ID (as agent-minted drawers are referenced), within the caller's organization")
+    drawers: list[str] = Field(
+        description="The drawers to collect: each an ID or a resource ID (as agent-minted drawers are referenced), within the caller's organization"
+    )
 
 
 @pydantic.input(
@@ -250,7 +296,10 @@ class ResumeInputModel(BaseModel):
     """
 
     task: str = Field(description="The task ID to resume")
-    step: bool = Field(default=False, description="Resume only until the next breakpoint instead of running on freely.")
+    step: bool = Field(
+        default=False,
+        description="Resume only until the next breakpoint instead of running on freely.",
+    )
 
 
 @pydantic.input(ResumeInputModel, description="The input for resuming a task.")
@@ -283,11 +332,24 @@ class DecideInputModel(BaseModel):
         answer: what the person says along with it
     """
 
-    task: str = Field(description="The held task: a child an agent asked for, or a task that holds itself")
-    approved: bool = Field(description="Approve (the child runs; a task's own hold carries on approved) or deny (the child ends DENIED without running; a task's own hold carries on denied)")
-    answer: str | None = Field(default=None, description="What the person says with the decision. A child gets it as its Assign's message; a task's own hold gets it back.")
-    values: dict[str, JSON] | None = Field(default=None, description="The answer through the blok a task asks with (a hold on a blok), by the blok's returns, and checked against them. Only an approved ask takes them.")
-    remember: enums.HoldRemember | None = Field(default=None, description="Keep the approval as an allowance on the user's auto list, so the action is not asked for again: for the rest of this run (RUN), whenever the same action asks (ASKER), or whoever asks (ALWAYS). Only the approval of a child an agent asked for takes it. What else of the run waits for the same answer is released.")
+    task: str = Field(
+        description="The held task: a child an agent asked for, or a task that holds itself"
+    )
+    approved: bool = Field(
+        description="Approve (the child runs; a task's own hold carries on approved) or deny (the child ends DENIED without running; a task's own hold carries on denied)"
+    )
+    answer: str | None = Field(
+        default=None,
+        description="What the person says with the decision. A child gets it as its Assign's message; a task's own hold gets it back.",
+    )
+    values: dict[str, JSON] | None = Field(
+        default=None,
+        description="The answer through the blok a task asks with (a hold on a blok), by the blok's returns, and checked against them. Only an approved ask takes them.",
+    )
+    remember: enums.HoldRemember | None = Field(
+        default=None,
+        description="Keep the approval as an allowance on the user's auto list, so the action is not asked for again: for the rest of this run (RUN), whenever the same action asks (ASKER), or whoever asks (ALWAYS). Only the approval of a child an agent asked for takes it. What else of the run waits for the same answer is released.",
+    )
 
 
 @pydantic.input(DecideInputModel, description="The input for deciding a held task.")
@@ -302,11 +364,19 @@ class DecideInput:
 class AllowActionInputModel(BaseModel):
     """Base model for putting an action on the caller's auto list."""
 
-    action: str = Field(description="The action that runs without asking, in every version of it")
-    asker: str | None = Field(default=None, description="The action that may ask for it, in every version of it; none for whoever asks")
+    action: str = Field(
+        description="The action that runs without asking, in every version of it"
+    )
+    asker: str | None = Field(
+        default=None,
+        description="The action that may ask for it, in every version of it; none for whoever asks",
+    )
 
 
-@pydantic.input(AllowActionInputModel, description="Put an action on your auto list: under your runs an agent that asks for it gets it without a hold.")
+@pydantic.input(
+    AllowActionInputModel,
+    description="Put an action on your auto list: under your runs an agent that asks for it gets it without a hold.",
+)
 class AllowActionInput:
     action: strawberry.ID
     asker: strawberry.ID | None = None
@@ -318,7 +388,10 @@ class RevokeAllowanceInputModel(BaseModel):
     id: str = Field(description="The allowance to remove")
 
 
-@pydantic.input(RevokeAllowanceInputModel, description="Take an allowance off your auto list: the action is asked for again.")
+@pydantic.input(
+    RevokeAllowanceInputModel,
+    description="Take an allowance off your auto list: the action is asked for again.",
+)
 class RevokeAllowanceInput:
     id: strawberry.ID
 

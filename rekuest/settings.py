@@ -117,7 +117,10 @@ INSTANCE = {
     "TRUST_JWKS": conf.instance.trust.jwks,
 }
 REKUEST_IDENTIFIER = conf.rekuest.identifier
-TAKT_URL = conf.rekuest.takt_url or f"http://takt:8081/{conf.django.force_script_name.strip('/')}".rstrip("/")
+TAKT_URL = (
+    conf.rekuest.takt_url
+    or f"http://takt:8081/{conf.django.force_script_name.strip('/')}".rstrip("/")
+)
 # takt's internal listener as a unix socket both containers mount. With it, only the path of
 # TAKT_URL is used.
 TAKT_SOCKET = conf.rekuest.takt_socket

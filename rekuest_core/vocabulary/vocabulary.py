@@ -266,7 +266,9 @@ class Vocabulary:
         """
         kind = self.kinds.get(name)
         if kind is None:
-            raise ValueError(f"no blok kind {name!r} (kinds: {', '.join(sorted(self.kinds))})")
+            raise ValueError(
+                f"no blok kind {name!r} (kinds: {', '.join(sorted(self.kinds))})"
+            )
         return kind
 
     def is_explicit_id(self, node_id: str) -> bool:
@@ -285,8 +287,12 @@ def _record_fields(raw: JSON, where: str) -> tuple[RecordField, ...]:
                 key=_string(entry.get("key"), f"{where}.key"),
                 kind=_string(entry.get("kind"), f"{where}.kind"),
                 nullable=_flag(entry, "nullable"),
-                choices=_strings(choices, f"{where}.choices") if choices is not None else (),
-                children=_record_fields(children, f"{where}.children") if children is not None else (),
+                choices=_strings(choices, f"{where}.choices")
+                if choices is not None
+                else (),
+                children=_record_fields(children, f"{where}.children")
+                if children is not None
+                else (),
             )
         )
     return tuple(fields)
@@ -318,7 +324,9 @@ def _function(name: str, raw: JSON) -> Function:
         sees_status=_flag(entry, "sees_status"),
         task_operation=_flag(entry, "task_operation"),
         command=_flag(entry, "command"),
-        needs=_string(entry.get("needs"), f"functions.{name}.needs") if entry.get("needs") is not None else None,
+        needs=_string(entry.get("needs"), f"functions.{name}.needs")
+        if entry.get("needs") is not None
+        else None,
     )
 
 
@@ -338,7 +346,9 @@ def parse_vocabulary(raw: JSON) -> Vocabulary:
     reserved = frozenset(_strings(top.get("reserved"), "reserved"))
     expected = {*data_roots, *scoped_roots, *namespaces, *future}
     if reserved != frozenset(expected):
-        raise ValueError(f"vocabulary.json: reserved differs from the roots by {sorted(reserved ^ expected)}")
+        raise ValueError(
+            f"vocabulary.json: reserved differs from the roots by {sorted(reserved ^ expected)}"
+        )
 
     segments = _object(top.get("agent_segments"), "agent_segments")
 
@@ -348,15 +358,28 @@ def parse_vocabulary(raw: JSON) -> Vocabulary:
         kind_roots = frozenset(_strings(entry.get("roots"), f"kinds.{name}.roots"))
         unknown = sorted(kind_roots - set(data_roots))
         if unknown:
-            raise ValueError(f"vocabulary.json: kind {name} reads unknown roots {unknown}")
+            raise ValueError(
+                f"vocabulary.json: kind {name} reads unknown roots {unknown}"
+            )
         description = entry.get("description", "")
         within: dict[str, Kind] = {}
-        for context_name, narrower in _object(entry.get("in", {}), f"kinds.{name}.in").items():
+        for context_name, narrower in _object(
+            entry.get("in", {}), f"kinds.{name}.in"
+        ).items():
             row = _object(narrower, f"kinds.{name}.in.{context_name}")
-            narrower_roots = frozenset(_strings(row.get("roots"), f"kinds.{name}.in.{context_name}.roots"))
+            narrower_roots = frozenset(
+                _strings(row.get("roots"), f"kinds.{name}.in.{context_name}.roots")
+            )
             if not narrower_roots <= kind_roots:
-                raise ValueError(f"vocabulary.json: kind {name} reads more in {context_name} than it reads")
-            within[context_name] = Kind(name=name, roots=narrower_roots, locals=_flag(row, "locals"), contexts=(context_name,))
+                raise ValueError(
+                    f"vocabulary.json: kind {name} reads more in {context_name} than it reads"
+                )
+            within[context_name] = Kind(
+                name=name,
+                roots=narrower_roots,
+                locals=_flag(row, "locals"),
+                contexts=(context_name,),
+            )
         kinds[name] = Kind(
             name=name,
             roots=kind_roots,
@@ -376,24 +399,44 @@ def parse_vocabulary(raw: JSON) -> Vocabulary:
     blok = BlokElement(
         component=_string(blok_entry.get("component"), "blok.component"),
         attributes=tuple(_object(blok_entry.get("attributes"), "blok.attributes")),
-        contexts={spelled: _string(context, f"blok.contexts.{spelled}") for spelled, context in _object(blok_entry.get("contexts"), "blok.contexts").items()},
-        content={context: _strings(components, f"blok.content.{context}") for context, components in content_entry.items() if context != "description"},
+        contexts={
+            spelled: _string(context, f"blok.contexts.{spelled}")
+            for spelled, context in _object(
+                blok_entry.get("contexts"), "blok.contexts"
+            ).items()
+        },
+        content={
+            context: _strings(components, f"blok.content.{context}")
+            for context, components in content_entry.items()
+            if context != "description"
+        },
         chrome=frozenset(_strings(blok_entry.get("chrome"), "blok.chrome")),
-        declarations=tuple(name for name in _object(blok_entry.get("declarations"), "blok.declarations") if name != "description"),
+        declarations=tuple(
+            name
+            for name in _object(blok_entry.get("declarations"), "blok.declarations")
+            if name != "description"
+        ),
     )
     unknown_contexts = sorted({*blok.contexts.values(), *blok.content} - set(contexts))
     if unknown_contexts:
-        raise ValueError(f"vocabulary.json: blok names unknown contexts {unknown_contexts}")
+        raise ValueError(
+            f"vocabulary.json: blok names unknown contexts {unknown_contexts}"
+        )
     for kind in kinds.values():
         unknown = sorted(set(kind.contexts) - set(contexts))
         if unknown:
-            raise ValueError(f"vocabulary.json: kind {kind.name} is drawn in unknown contexts {unknown}")
+            raise ValueError(
+                f"vocabulary.json: kind {kind.name} is drawn in unknown contexts {unknown}"
+            )
 
     records: dict[str, Record] = {}
     idle_task: dict[str, JSON] = {}
     for name, item in _object(top.get("records"), "records").items():
         entry = _object(item, f"records.{name}")
-        records[name] = Record(name=name, fields=_record_fields(entry.get("fields"), f"records.{name}.fields"))
+        records[name] = Record(
+            name=name,
+            fields=_record_fields(entry.get("fields"), f"records.{name}.fields"),
+        )
         if name == "task":
             idle_task = _object(entry.get("idle"), "records.task.idle")
 
@@ -404,10 +447,16 @@ def parse_vocabulary(raw: JSON) -> Vocabulary:
         namespace = name.split(".", 1)[0]
         function = _function(name, item)
         # A root's own operations (task.answer, assign.start) are effects named after the root.
-        if namespace not in namespaces and not (function.effect and namespace in data_roots):
-            raise ValueError(f"vocabulary.json: function {name} is in no function namespace")
+        if namespace not in namespaces and not (
+            function.effect and namespace in data_roots
+        ):
+            raise ValueError(
+                f"vocabulary.json: function {name} is in no function namespace"
+            )
         if function.needs is not None and function.needs not in data_roots:
-            raise ValueError(f"vocabulary.json: function {name} needs {function.needs!r}, which is no root")
+            raise ValueError(
+                f"vocabulary.json: function {name} needs {function.needs!r}, which is no root"
+            )
         functions[name] = function
 
     operators = {
@@ -421,17 +470,26 @@ def parse_vocabulary(raw: JSON) -> Vocabulary:
     hints = _object(theme.get("palette_role_hints"), "theme.palette_role_hints")
     limits = _object(top.get("limits"), "limits")
     catalogs = _object(top.get("catalogs"), "catalogs")
-    bundled = {key: _string(value, "catalogs.bundled") for key, value in _object(catalogs.get("bundled"), "catalogs.bundled").items()}
+    bundled = {
+        key: _string(value, "catalogs.bundled")
+        for key, value in _object(catalogs.get("bundled"), "catalogs.bundled").items()
+    }
     base_catalog = _string(catalogs.get("base"), "catalogs.base")
     if base_catalog not in bundled:
-        raise ValueError("vocabulary.json: the base catalog is not among the bundled ones")
+        raise ValueError(
+            "vocabulary.json: the base catalog is not among the bundled ones"
+        )
     host_parts = _object(catalogs.get("host_parts"), "catalogs.host_parts")
     classes = _object(top.get("classes"), "classes")
     local_rules = _object(top.get("locals"), "locals")
 
     def kind_table(name: str) -> dict[str, frozenset[str]]:
         table = _object(local_rules.get(name), f"locals.{name}")
-        return {key: frozenset(_strings(value, f"locals.{name}.{key}")) for key, value in table.items() if key != "description"}
+        return {
+            key: frozenset(_strings(value, f"locals.{name}.{key}"))
+            for key, value in table.items()
+            if key != "description"
+        }
 
     def number(value: JSON, where: str) -> int:
         if not isinstance(value, int) or isinstance(value, bool):
@@ -451,7 +509,9 @@ def parse_vocabulary(raw: JSON) -> Vocabulary:
             level="error" if level == "error" else "warning",
             message=_string(entry.get("message"), f"diagnostics.{code}.message"),
             runtime=_flag(entry, "runtime"),
-            hint=_string(entry["hint"], f"diagnostics.{code}.hint") if entry.get("hint") is not None else None,
+            hint=_string(entry["hint"], f"diagnostics.{code}.hint")
+            if entry.get("hint") is not None
+            else None,
         )
 
     return Vocabulary(
@@ -464,7 +524,9 @@ def parse_vocabulary(raw: JSON) -> Vocabulary:
         reserved=reserved,
         tasks_segment=_string(segments.get("tasks"), "agent_segments.tasks"),
         assets_segment=_string(segments.get("assets"), "agent_segments.assets"),
-        reserved_state_names=frozenset(_strings(segments.get("reserved_state_names"), "agent_segments")),
+        reserved_state_names=frozenset(
+            _strings(segments.get("reserved_state_names"), "agent_segments")
+        ),
         agent_fields=tuple(_object(segments.get("fields"), "agent_segments.fields")),
         kinds=kinds,
         contexts=contexts,
@@ -473,35 +535,68 @@ def parse_vocabulary(raw: JSON) -> Vocabulary:
         idle_task=idle_task,
         functions=functions,
         operators=operators,
-        explicit_id=re.compile(_string(stored.get("explicit_id"), "stored_tree.explicit_id")),
+        explicit_id=re.compile(
+            _string(stored.get("explicit_id"), "stored_tree.explicit_id")
+        ),
         theme=Theme(
             colour_roles=_strings(theme.get("colour_roles"), "theme.colour_roles"),
             status_roles=_strings(theme.get("status_roles"), "theme.status_roles"),
-            spectral_roles=_strings(theme.get("spectral_roles"), "theme.spectral_roles"),
-            colour_utilities=_strings(theme.get("colour_utilities"), "theme.colour_utilities"),
-            palette_colours=_strings(theme.get("palette_colours"), "theme.palette_colours"),
-            palette_role_hints={key: _string(value, "theme.palette_role_hints") for key, value in hints.items()},
+            spectral_roles=_strings(
+                theme.get("spectral_roles"), "theme.spectral_roles"
+            ),
+            colour_utilities=_strings(
+                theme.get("colour_utilities"), "theme.colour_utilities"
+            ),
+            palette_colours=_strings(
+                theme.get("palette_colours"), "theme.palette_colours"
+            ),
+            palette_role_hints={
+                key: _string(value, "theme.palette_role_hints")
+                for key, value in hints.items()
+            },
             logo_pens=_strings(theme.get("logo_pens"), "theme.logo_pens"),
-            logo_paint_props=_strings(theme.get("logo_paint_props"), "theme.logo_paint_props"),
-            scene_paint_props=_strings(theme.get("scene_paint_props"), "theme.scene_paint_props"),
-            custom_variants=_strings(theme.get("custom_variants"), "theme.custom_variants"),
-            data_attributes=tuple(_object(theme.get("data_attributes"), "theme.data_attributes")),
+            logo_paint_props=_strings(
+                theme.get("logo_paint_props"), "theme.logo_paint_props"
+            ),
+            scene_paint_props=_strings(
+                theme.get("scene_paint_props"), "theme.scene_paint_props"
+            ),
+            custom_variants=_strings(
+                theme.get("custom_variants"), "theme.custom_variants"
+            ),
+            data_attributes=tuple(
+                _object(theme.get("data_attributes"), "theme.data_attributes")
+            ),
         ),
         limits=Limits(
-            logo_max_nodes=number(limits.get("logo_max_nodes"), "limits.logo_max_nodes"),
-            logo_max_depth=number(limits.get("logo_max_depth"), "limits.logo_max_depth"),
-            logo_max_path_data=number(limits.get("logo_max_path_data"), "limits.logo_max_path_data"),
-            logo_max_foreach_items=number(limits.get("logo_max_foreach_items"), "limits.logo_max_foreach_items"),
-            logo_path_data_props=_strings(limits.get("logo_path_data_props"), "limits.logo_path_data_props"),
+            logo_max_nodes=number(
+                limits.get("logo_max_nodes"), "limits.logo_max_nodes"
+            ),
+            logo_max_depth=number(
+                limits.get("logo_max_depth"), "limits.logo_max_depth"
+            ),
+            logo_max_path_data=number(
+                limits.get("logo_max_path_data"), "limits.logo_max_path_data"
+            ),
+            logo_max_foreach_items=number(
+                limits.get("logo_max_foreach_items"), "limits.logo_max_foreach_items"
+            ),
+            logo_path_data_props=_strings(
+                limits.get("logo_path_data_props"), "limits.logo_path_data_props"
+            ),
         ),
         base_catalog=base_catalog,
         bundled_catalogs=bundled,
         catalog_id=re.compile(_string(catalogs.get("id"), "catalogs.id")),
         catalog_name=re.compile(_string(catalogs.get("name"), "catalogs.name")),
         host_parts=_strings(host_parts.get("parts"), "catalogs.host_parts.parts"),
-        unportable_variants=frozenset(_strings(classes.get("variants"), "classes.variants")),
+        unportable_variants=frozenset(
+            _strings(classes.get("variants"), "classes.variants")
+        ),
         unportable_utilities=_strings(classes.get("utilities"), "classes.utilities"),
-        arbitrary_values=frozenset(_strings(classes.get("arbitrary_values"), "classes.arbitrary_values")),
+        arbitrary_values=frozenset(
+            _strings(classes.get("arbitrary_values"), "classes.arbitrary_values")
+        ),
         bind_kinds=kind_table("bind_kinds"),
         arg_kinds=kind_table("arg_kinds"),
         diagnostics=diagnostics,
@@ -510,7 +605,11 @@ def parse_vocabulary(raw: JSON) -> Vocabulary:
 
 def vocabulary_text() -> str:
     """``vocabulary.json`` as shipped, for a party that vendors it."""
-    return resources.files(__package__ or "arkitekt_spec.blok").joinpath("vocabulary.json").read_text(encoding="utf-8")
+    return (
+        resources.files(__package__ or "arkitekt_spec.blok")
+        .joinpath("vocabulary.json")
+        .read_text(encoding="utf-8")
+    )
 
 
 @functools.lru_cache(maxsize=1)
@@ -561,7 +660,9 @@ class Finding:
     path: str | None = None
     hint: str | None = field(default=None, compare=False)
     """How to fix it, filled like the message."""
-    fields: Mapping[str, object] = field(default_factory=dict[str, object], compare=False, hash=False)
+    fields: Mapping[str, object] = field(
+        default_factory=dict[str, object], compare=False, hash=False
+    )
     """What the message was filled with (``component``, ``key``, ...)."""
     line: int | None = field(default=None, compare=False)
     """1-based, in the BSX source the tree was parsed from, when known."""
@@ -580,7 +681,9 @@ class Finding:
             level=spec.level,
             message=spec.message.format_map(_Fields(fields)),
             path=at,
-            hint=spec.hint.format_map(_Fields(fields)) if spec.hint is not None else None,
+            hint=spec.hint.format_map(_Fields(fields))
+            if spec.hint is not None
+            else None,
             fields=dict(fields),
         )
 
@@ -590,7 +693,11 @@ class Finding:
 
     def to_json(self) -> dict[str, JSON]:
         """The finding as JSON: ``{code, level, message, path?}``."""
-        out: dict[str, JSON] = {"code": self.code, "level": self.level, "message": self.message}
+        out: dict[str, JSON] = {
+            "code": self.code,
+            "level": self.level,
+            "message": self.message,
+        }
         if self.path is not None:
             out["path"] = self.path
         return out
@@ -605,7 +712,14 @@ class BlokError(ValueError):
 
     node: str | None = None
 
-    def __init__(self, code: str, *, line: int | None = None, column: int | None = None, **fields: object) -> None:
+    def __init__(
+        self,
+        code: str,
+        *,
+        line: int | None = None,
+        column: int | None = None,
+        **fields: object,
+    ) -> None:
         """Refuse with ``code``, its message filled with ``fields``."""
         self.code = code
         self.line = line
@@ -613,7 +727,11 @@ class BlokError(ValueError):
         self.fields = fields
         self.hint = diagnostic_hint(code, **fields)
         message = diagnostic_message(code, **fields)
-        where = f"line {line}, column {column}: " if line is not None and column is not None else ""
+        where = (
+            f"line {line}, column {column}: "
+            if line is not None and column is not None
+            else ""
+        )
         super().__init__(f"{where}{message} [{code}]")
         self.message = message
 
@@ -625,7 +743,10 @@ class BlokError(ValueError):
         was cleared for that); otherwise it is ``finding.path``.
         """
         error = cls.__new__(cls)
-        ValueError.__init__(error, f"{finding.path + ': ' if finding.path else ''}{finding.message} [{finding.code}]")
+        ValueError.__init__(
+            error,
+            f"{finding.path + ': ' if finding.path else ''}{finding.message} [{finding.code}]",
+        )
         error.code = finding.code
         error.node = node if node is not None else finding.path
         error.line = finding.line
@@ -638,7 +759,11 @@ class BlokError(ValueError):
     def within(self, owner: str) -> "BlokError":
         """The same refusal, named after what it refuses (``Blok 'monitor'``): code, line and column kept."""
         error = BlokError.__new__(BlokError)
-        where = f"line {self.line}, column {self.column}: " if self.line is not None and self.column is not None else ""
+        where = (
+            f"line {self.line}, column {self.column}: "
+            if self.line is not None and self.column is not None
+            else ""
+        )
         ValueError.__init__(error, f"{owner}: {where}{self.message} [{self.code}]")
         error.code = self.code
         error.node = self.node

@@ -15,13 +15,15 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
-from django.contrib import admin
-from kante.path import dynamicpath
-from django.http import HttpRequest, JsonResponse
-from health_check.views import HealthCheckView
-from django.views.decorators.csrf import csrf_exempt
 from arkitekt_service.service.views import answers_challenge
+from django.contrib import admin
+from django.http import HttpRequest, JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from health_check.views import HealthCheckView
+from kante.path import dynamicpath
+
 from facade.upkeep import upkeep_view
+
 
 def jwks_view(request: HttpRequest) -> JsonResponse:
     """Publish the provenance verifying key(s) for offline verification.
@@ -36,10 +38,11 @@ def jwks_view(request: HttpRequest) -> JsonResponse:
     return response
 
 
-
 urlpatterns = [
     dynamicpath("admin/", admin.site.urls),
-    dynamicpath(".well-known/jwks.json", csrf_exempt(jwks_view), name="provenance_jwks"),
+    dynamicpath(
+        ".well-known/jwks.json", csrf_exempt(jwks_view), name="provenance_jwks"
+    ),
     # takt's calls only (signed with the instance key); the edge does not route ``_rekuest``.
     dynamicpath("_rekuest/upkeep/<str:job>", upkeep_view, name="upkeep"),
     dynamicpath(

@@ -27,7 +27,15 @@ from rekuest_core.vocabulary.declared import (
     local_node,
 )
 from rekuest_core.vocabulary.infer import ResolvedLocal, resolve_local, resolve_locals
-from rekuest_core.vocabulary.vocabulary import JSON, VOCAB, BlokError, Finding, Vocabulary, diagnostic_message, load_vocabulary
+from rekuest_core.vocabulary.vocabulary import (
+    JSON,
+    VOCAB,
+    BlokError,
+    Finding,
+    Vocabulary,
+    diagnostic_message,
+    load_vocabulary,
+)
 
 __all__ = [
     "JSON",

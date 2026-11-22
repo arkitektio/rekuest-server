@@ -12,12 +12,15 @@ lowercase; what a UI draws is its own catalog's.
 import functools
 import json
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
-from typing_extensions import Self
 
-from rekuest_core.inputs.models import CatalogComponentInputModel, CatalogOperationInputModel, _check_unique
+from rekuest_core.inputs.models import (
+    CatalogComponentInputModel,
+    CatalogOperationInputModel,
+    _check_unique,
+)
 
 BASE_CATALOG_NAME = "base"
 BASE_CATALOG_VERSION = 1
@@ -33,6 +36,8 @@ def base_version_named(name: str) -> int | None:
     if name.startswith(prefix) and name[len(prefix) :].isdigit():
         return int(name[len(prefix) :])
     return None
+
+
 _MANIFEST = Path(__file__).with_name("base_v1.json")
 
 
@@ -56,7 +61,9 @@ class BaseCatalogModel(BaseModel):
 @functools.lru_cache(maxsize=1)
 def load_base_catalog() -> BaseCatalogModel:
     """The validated manifest (cached)."""
-    return BaseCatalogModel.model_validate(json.loads(_MANIFEST.read_text(encoding="utf-8")))
+    return BaseCatalogModel.model_validate(
+        json.loads(_MANIFEST.read_text(encoding="utf-8"))
+    )
 
 
 @functools.lru_cache(maxsize=1)

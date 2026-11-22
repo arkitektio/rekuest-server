@@ -17,6 +17,19 @@ APPS = ("datalayer", "facade")
 
 def test_takt_names_the_latest_migrations() -> None:
     """The file lists the leaf migration of each app takt depends on."""
-    leaves = sorted(f"{app} {name}" for app, name in MigrationLoader(None, ignore_no_migrations=True).graph.leaf_nodes() if app in APPS)
-    named = [line for line in REQUIRED.read_text().splitlines() if line and not line.startswith("#")]
-    assert named == leaves, "takt/schema-migrations.txt is behind: after checking takt's SQL against the new migration, list\n" + "\n".join(leaves)
+    leaves = sorted(
+        f"{app} {name}"
+        for app, name in MigrationLoader(
+            None, ignore_no_migrations=True
+        ).graph.leaf_nodes()
+        if app in APPS
+    )
+    named = [
+        line
+        for line in REQUIRED.read_text().splitlines()
+        if line and not line.startswith("#")
+    ]
+    assert named == leaves, (
+        "takt/schema-migrations.txt is behind: after checking takt's SQL against the new migration, list\n"
+        + "\n".join(leaves)
+    )

@@ -7,14 +7,13 @@ variants) now resolve ``PortUsage`` objects straight from the relational ArgPort
 
 import pytest
 from asgiref.sync import sync_to_async
+from authentikate.models import App, Release
 from kante.context import HttpContext
 
-from authentikate.models import App, Release
-from rekuest_core.inputs.models import ImplementationInputModel
-
 from facade import models
-from tests.registered import create_implementation as _create_implementation
 from facade.schema import schema
+from rekuest_core.inputs.models import ImplementationInputModel
+from tests.registered import create_implementation as _create_implementation
 
 USAGES_QUERY = """
     query StructureUsages {
@@ -36,13 +35,26 @@ def _masker_input():
                 "version": "1",
                 "name": "Masker",
                 "kind": "FUNCTION",
-                "args": [{"key": "image", "kind": "STRUCTURE", "identifier": "@mikro/image", "nullable": False}],
+                "args": [
+                    {
+                        "key": "image",
+                        "kind": "STRUCTURE",
+                        "identifier": "@mikro/image",
+                        "nullable": False,
+                    }
+                ],
                 "returns": [
                     {
                         "key": "masks",
                         "kind": "LIST",
                         "nullable": False,
-                        "children": [{"key": "mask", "kind": "STRUCTURE", "identifier": "@mikro/mask"}],
+                        "children": [
+                            {
+                                "key": "mask",
+                                "kind": "STRUCTURE",
+                                "identifier": "@mikro/mask",
+                            }
+                        ],
                     }
                 ],
             },
@@ -54,13 +66,22 @@ def _seed_masker(context):
     request = context.request
     app = App.objects.create(identifier="usages-app")
     release = Release.objects.create(app=app, version="1.0.0")
-    agent = models.Agent.objects.create(app=app, release=release, user=request.user, client=request.client, organization=request.organization, hash="usages-agent-hash")
+    agent = models.Agent.objects.create(
+        app=app,
+        release=release,
+        user=request.user,
+        client=request.client,
+        organization=request.organization,
+        hash="usages-agent-hash",
+    )
     return _create_implementation(_masker_input(), agent).action
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_structure_usages_resolved_from_port_rows(authenticated_context: HttpContext):
+async def test_structure_usages_resolved_from_port_rows(
+    authenticated_context: HttpContext,
+):
     # Warm-up execute so the seed lands in the org the executed query scopes to.
     await schema.execute("query { __typename }", context_value=authenticated_context)
     await sync_to_async(_seed_masker)(authenticated_context)
@@ -105,17 +126,35 @@ HOSTED_QUERY = """
 def _seed_hosted():
     """A service hosting a structure that no action port references — and no agent anywhere."""
     service = models.Service.objects.create(name="lab", description="The bench.")
-    sample = models.StructureDeclaration.objects.create(service=service, identifier="@lab/sample", label="Sample", description="A sample on the bench.")
-    models.Descriptor.objects.create(structure=sample, key="@lab/volume", type="FLOAT", description="Millilitres")
-    models.SignalDeclaration.objects.create(service=service, identifier="@lab/sample", kind="CREATED", descriptor_keys=["@lab/volume"])
+    sample = models.StructureDeclaration.objects.create(
+        service=service,
+        identifier="@lab/sample",
+        label="Sample",
+        description="A sample on the bench.",
+    )
+    models.Descriptor.objects.create(
+        structure=sample, key="@lab/volume", type="FLOAT", description="Millilitres"
+    )
+    models.SignalDeclaration.objects.create(
+        service=service,
+        identifier="@lab/sample",
+        kind="CREATED",
+        descriptor_keys=["@lab/volume"],
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_hosted_structure_is_listed_though_no_port_references_it(authenticated_context: HttpContext) -> None:
+async def test_a_hosted_structure_is_listed_though_no_port_references_it(
+    authenticated_context: HttpContext,
+) -> None:
     await sync_to_async(_seed_hosted)()
 
-    result = await schema.execute(HOSTED_QUERY, variable_values={"identifier": "@lab/sample"}, context_value=authenticated_context)
+    result = await schema.execute(
+        HOSTED_QUERY,
+        variable_values={"identifier": "@lab/sample"},
+        context_value=authenticated_context,
+    )
     assert result.errors is None, result.errors
 
     assert result.data["structure"] == {
@@ -123,13 +162,22 @@ async def test_a_hosted_structure_is_listed_though_no_port_references_it(authent
         "label": "Sample",
         "description": "A sample on the bench.",
         "service": {"name": "lab"},
-        "descriptors": [{"key": "@lab/volume", "type": "FLOAT", "description": "Millilitres"}],
+        "descriptors": [
+            {"key": "@lab/volume", "type": "FLOAT", "description": "Millilitres"}
+        ],
         "signals": [{"kind": "CREATED", "descriptorKeys": ["@lab/volume"]}],
         "package": {"key": "lab", "service": {"name": "lab"}},
         "inputUsages": [],
     }
-    assert {"identifier": "@lab/sample", "service": {"name": "lab"}} in result.data["structures"]
+    assert {"identifier": "@lab/sample", "service": {"name": "lab"}} in result.data[
+        "structures"
+    ]
     # The service is a thing of its own: it hosts and emits, and that is all it does.
     assert result.data["services"] == [
-        {"name": "lab", "description": "The bench.", "structures": [{"identifier": "@lab/sample"}], "signals": [{"identifier": "@lab/sample", "kind": "CREATED"}]}
+        {
+            "name": "lab",
+            "description": "The bench.",
+            "structures": [{"identifier": "@lab/sample"}],
+            "signals": [{"identifier": "@lab/sample", "kind": "CREATED"}],
+        }
     ]

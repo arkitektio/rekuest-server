@@ -1,5 +1,6 @@
-import strawberry
 from enum import Enum
+
+import strawberry
 
 
 @strawberry.enum(description="The kind of action.")
@@ -8,7 +9,9 @@ class ActionKind(str, Enum):
     GENERATOR = "GENERATOR"
 
 
-@strawberry.enum(description="The kind of a port: its structural type. Decides which of children, identifier and choices the port must, may or must not carry (see docs/design/ports.md).")
+@strawberry.enum(
+    description="The kind of a port: its structural type. Decides which of children, identifier and choices the port must, may or must not carry (see docs/design/ports.md)."
+)
 class PortKind(str, Enum):
     INT = "INT"
     STRING = "STRING"
@@ -49,7 +52,9 @@ for _port_kind_value in PortKind.__strawberry_definition__.values:
     _port_kind_value.description = _PORT_KIND_DESCRIPTIONS[_port_kind_value.name]
 
 
-@strawberry.enum(description="The kind of a blok local: a port kind, or ANY (an untyped value, which skips the bind and argument kind checks). No action port is ever ANY.")
+@strawberry.enum(
+    description="The kind of a blok local: a port kind, or ANY (an untyped value, which skips the bind and argument kind checks). No action port is ever ANY."
+)
 class LocalKind(str, Enum):
     INT = "INT"
     STRING = "STRING"
@@ -68,7 +73,10 @@ class LocalKind(str, Enum):
     ANY = "ANY"
 
 
-_LOCAL_KIND_DESCRIPTIONS = {**_PORT_KIND_DESCRIPTIONS, "ANY": "An untyped value: nothing gave the local a kind. A path below it is taken as written."}
+_LOCAL_KIND_DESCRIPTIONS = {
+    **_PORT_KIND_DESCRIPTIONS,
+    "ANY": "An untyped value: nothing gave the local a kind. A path below it is taken as written.",
+}
 for _local_kind_value in LocalKind.__strawberry_definition__.values:
     _local_kind_value.description = _LOCAL_KIND_DESCRIPTIONS[_local_kind_value.name]
 
@@ -98,7 +106,9 @@ class EffectKind(str, Enum):
     CUSTOM = "CUSTOM"
 
 
-@strawberry.enum(description="What running an implementation again would do to the world. Purely informational: shown to whoever decides about a lost task.")
+@strawberry.enum(
+    description="What running an implementation again would do to the world. Purely informational: shown to whoever decides about a lost task."
+)
 class Effects(str, Enum):
     NONE = "NONE"
     REPEATABLE = "REPEATABLE"
@@ -106,7 +116,9 @@ class Effects(str, Enum):
     IRREVERSIBLE = "IRREVERSIBLE"
 
 
-@strawberry.enum(description="How an implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies; a PLAIN one's task ends LOST.")
+@strawberry.enum(
+    description="How an implementation runs: a WORKFLOW may call other actions and is resumed from its journal when its agent dies; a PLAIN one's task ends LOST."
+)
 class Execution(str, Enum):
     PLAIN = "PLAIN"
     WORKFLOW = "WORKFLOW"
@@ -120,7 +132,9 @@ class ActionScope(str, Enum):
     BRIDGE_LOCAL_TO_GLOBAL = "BRIDGE_LOCAL_TO_GLOBAL"
 
 
-@strawberry.enum(description="The operator of a requires/provides descriptor: how a port's constraint compares the object's value at `key` with `value`.")
+@strawberry.enum(
+    description="The operator of a requires/provides descriptor: how a port's constraint compares the object's value at `key` with `value`."
+)
 class DescriptorOperator(str, Enum):
     MATCHES = "MATCHES"
     EXISTS = "EXISTS"
@@ -146,7 +160,9 @@ class OptionKey(str, Enum):
     VALUE = "VALUE"
 
 
-@strawberry.enum(description="The kind of value a catalog component prop accepts or a catalog operation argument/return carries.")
+@strawberry.enum(
+    description="The kind of value a catalog component prop accepts or a catalog operation argument/return carries."
+)
 class CatalogValueKind(str, Enum):
     STRING = "STRING"
     INT = "INT"
@@ -159,26 +175,34 @@ class CatalogValueKind(str, Enum):
     ASSET = "ASSET"
 
 
-@strawberry.enum(description="What a file an agent brings with it is: a 3D model (a binary glTF file) or an image (PNG, JPEG or WebP).")
+@strawberry.enum(
+    description="What a file an agent brings with it is: a 3D model (a binary glTF file) or an image (PNG, JPEG or WebP)."
+)
 class AssetKind(str, Enum):
     MODEL_3D = "MODEL_3D"
     IMAGE = "IMAGE"
 
 
-@strawberry.enum(description="When a client shows an action's own blok: RUN for a run of the action (it reads the run as `task`), ASSIGN before one, to start it (no `task`; `<args />` places the argument form, `assign.start()` starts the run).")
+@strawberry.enum(
+    description="When a client shows an action's own blok: RUN for a run of the action (it reads the run as `task`), ASSIGN before one, to start it (no `task`; `<args />` places the argument form, `assign.start()` starts the run)."
+)
 class ActionBlokPhase(str, Enum):
     RUN = "RUN"
     ASSIGN = "ASSIGN"
 
 
-@strawberry.enum(description="What draws a blok, as its `<Blok context=...>` says, and the renderer a catalog component lives in: PANEL (panels, dashboards, popouts), SCENE (a 3D view) or LOGO (an SVG drawing: an agent's logo, or an action's when the blok's kind is action).")
+@strawberry.enum(
+    description="What draws a blok, as its `<Blok context=...>` says, and the renderer a catalog component lives in: PANEL (panels, dashboards, popouts), SCENE (a 3D view) or LOGO (an SVG drawing: an agent's logo, or an action's when the blok's kind is action)."
+)
 class ComponentContext(str, Enum):
     PANEL = "PANEL"
     SCENE = "SCENE"
     LOGO = "LOGO"
 
 
-@strawberry.enum(description="Severity of a finding on a blok or a definition, as the blok vocabulary's diagnostic table levels it. An ERROR refuses a write, so only a blok rewritten by a migration (blok language v2) stores one; everything registered or written since stores WARNINGs.")
+@strawberry.enum(
+    description="Severity of a finding on a blok or a definition, as the blok vocabulary's diagnostic table levels it. An ERROR refuses a write, so only a blok rewritten by a migration (blok language v2) stores one; everything registered or written since stores WARNINGs."
+)
 class DiagnosticLevel(str, Enum):
     WARNING = "WARNING"
     ERROR = "ERROR"

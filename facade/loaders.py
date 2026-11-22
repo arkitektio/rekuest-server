@@ -23,7 +23,9 @@ async def load_agents_by_ids(ids: list[PKType]) -> list[models.Agent | None]:
     return [agent_map.get(str(i)) for i in ids]
 
 
-async def load_implementations_by_ids(ids: list[PKType]) -> list[models.Implementation | None]:
+async def load_implementations_by_ids(
+    ids: list[PKType],
+) -> list[models.Implementation | None]:
     # 1. Fetch all matching implementations in a single query (batching)
     impl_qs = models.Implementation.objects.filter(id__in=ids)
 
@@ -36,7 +38,11 @@ async def load_implementations_by_ids(ids: list[PKType]) -> list[models.Implemen
     return [impl_map.get(str(i)) for i in ids]
 
 
-def _loader[K, V](info: Info, name: str, load_fn: Callable[[list[K]], Awaitable[Sequence[V | BaseException]]]) -> DataLoader[K, V]:
+def _loader[K, V](
+    info: Info,
+    name: str,
+    load_fn: Callable[[list[K]], Awaitable[Sequence[V | BaseException]]],
+) -> DataLoader[K, V]:
     """A DataLoader scoped to this request, kept on kante's per-request ``_loaders`` store.
 
     These used to be module-level singletons with caching on. A ``DataLoader``'s cache is never
@@ -57,14 +63,18 @@ def _loader[K, V](info: Info, name: str, load_fn: Callable[[list[K]], Awaitable[
     return loader
 
 
-async def load_upcoming_slots(asked: list[tuple[models.Schedule, int]]) -> list[list[datetime.datetime] | ValueError]:
+async def load_upcoming_slots(
+    asked: list[tuple[models.Schedule, int]],
+) -> list[list[datetime.datetime] | ValueError]:
     """Every schedule a query asks ``upcoming`` of, in one request to takt."""
     from facade import schedules
 
     return await sync_to_async(schedules.upcoming)(asked)
 
 
-def upcoming_loader(info: Info) -> DataLoader[tuple[models.Schedule, int], list[datetime.datetime]]:
+def upcoming_loader(
+    info: Info,
+) -> DataLoader[tuple[models.Schedule, int], list[datetime.datetime]]:
     return _loader(info, "facade.upcoming", load_upcoming_slots)
 
 
@@ -72,5 +82,7 @@ def agent_loader(info: Info) -> DataLoader[PKType, models.Agent | None]:
     return _loader(info, "facade.agents", load_agents_by_ids)
 
 
-def implementation_loader(info: Info) -> DataLoader[PKType, models.Implementation | None]:
+def implementation_loader(
+    info: Info,
+) -> DataLoader[PKType, models.Implementation | None]:
     return _loader(info, "facade.implementations", load_implementations_by_ids)

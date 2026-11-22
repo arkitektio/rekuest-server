@@ -31,16 +31,29 @@ from django.core.management.commands.migrate import Command as DjangoMigrate
 from django.db import DEFAULT_DB_ALIAS, connections
 
 # Stable signed 64-bit key, derived rather than hand-picked so it cannot collide by accident.
-LOCK_KEY = int.from_bytes(hashlib.sha256(b"django:migrate").digest()[:8], "big", signed=True)
+LOCK_KEY = int.from_bytes(
+    hashlib.sha256(b"django:migrate").digest()[:8], "big", signed=True
+)
 
 
 class Command(DjangoMigrate):
-    help = DjangoMigrate.help + " Serialized across replicas by a Postgres advisory lock."
+    help = (
+        DjangoMigrate.help + " Serialized across replicas by a Postgres advisory lock."
+    )
 
     def add_arguments(self, parser) -> None:
         super().add_arguments(parser)
-        parser.add_argument("--no-lock", action="store_true", help="Do not take the cross-replica advisory lock.")
-        parser.add_argument("--lock-timeout", type=int, default=900, help="Seconds to wait for another replica's migrate before giving up (default 900).")
+        parser.add_argument(
+            "--no-lock",
+            action="store_true",
+            help="Do not take the cross-replica advisory lock.",
+        )
+        parser.add_argument(
+            "--lock-timeout",
+            type=int,
+            default=900,
+            help="Seconds to wait for another replica's migrate before giving up (default 900).",
+        )
 
     def handle(self, *args, **options):
         connection = connections[options.get("database") or DEFAULT_DB_ALIAS]
@@ -56,9 +69,13 @@ class Command(DjangoMigrate):
                 if cursor.fetchone()[0]:
                     break
             if time.monotonic() >= deadline:
-                raise CommandError("Timed out waiting for another replica to finish migrating.")
+                raise CommandError(
+                    "Timed out waiting for another replica to finish migrating."
+                )
             if waited % 10 == 0:
-                self.stdout.write("Another replica is migrating — waiting for it to finish…")
+                self.stdout.write(
+                    "Another replica is migrating — waiting for it to finish…"
+                )
             waited += 1
             time.sleep(1)
 

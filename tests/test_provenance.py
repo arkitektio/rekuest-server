@@ -13,17 +13,17 @@ contract depends only on attributes Rekuest reads off those objects.
 
 from __future__ import annotations
 
-
 from django.conf import settings
 
 from facade.provenance import canonical, keys
-
 
 # --- canonical args hash -------------------------------------------------
 
 
 def test_args_hash_is_order_independent() -> None:
-    assert canonical.args_hash({"a": 1, "b": 2}) == canonical.args_hash({"b": 2, "a": 1})
+    assert canonical.args_hash({"a": 1, "b": 2}) == canonical.args_hash(
+        {"b": 2, "a": 1}
+    )
 
 
 def test_args_hash_differs_on_different_args() -> None:
@@ -83,5 +83,3 @@ def test_jwks_document_publishes_signing_key() -> None:
 
 
 # --- predicate unit ------------------------------------------------------
-
-

@@ -39,12 +39,20 @@ class TestGraphQLAgents:
 
     async def test_single_agent_query(self, authenticated_context: HttpContext):
         """Test fetching a single agent by ID."""
-        create_result = await schema.execute(ENSURE_AGENT, context_value=authenticated_context, variable_values={"input": {"name": "Test Query Agent"}})
+        create_result = await schema.execute(
+            ENSURE_AGENT,
+            context_value=authenticated_context,
+            variable_values={"input": {"name": "Test Query Agent"}},
+        )
 
         assert create_result.data is not None
         agent_id = create_result.data["ensureAgent"]["id"]
 
-        result = await schema.execute(GET_AGENT, context_value=authenticated_context, variable_values={"id": agent_id})
+        result = await schema.execute(
+            GET_AGENT,
+            context_value=authenticated_context,
+            variable_values={"id": agent_id},
+        )
 
         assert result.data is not None
         assert "agent" in result.data
@@ -63,9 +71,15 @@ class TestGraphQLAgents:
         assert result.errors is not None
         assert len(result.errors) > 0
 
-    async def test_ensure_agent_mutation_with_name(self, authenticated_context: HttpContext):
+    async def test_ensure_agent_mutation_with_name(
+        self, authenticated_context: HttpContext
+    ):
         """Test creating an agent with custom name via ensureAgent mutation."""
-        result = await schema.execute(ENSURE_AGENT, context_value=authenticated_context, variable_values={"input": {"name": "Custom Test Agent"}})
+        result = await schema.execute(
+            ENSURE_AGENT,
+            context_value=authenticated_context,
+            variable_values={"input": {"name": "Custom Test Agent"}},
+        )
 
         assert result.data is not None, f"Errors: {result.errors}"
         assert "ensureAgent" in result.data
@@ -73,9 +87,15 @@ class TestGraphQLAgents:
         agent = result.data["ensureAgent"]
         assert agent["name"] == "Custom Test Agent"
 
-    async def test_ensure_agent_mutation_default_name(self, authenticated_context: HttpContext):
+    async def test_ensure_agent_mutation_default_name(
+        self, authenticated_context: HttpContext
+    ):
         """Test creating an agent with default name generation."""
-        result = await schema.execute(ENSURE_AGENT, context_value=authenticated_context, variable_values={"input": {}})
+        result = await schema.execute(
+            ENSURE_AGENT,
+            context_value=authenticated_context,
+            variable_values={"input": {}},
+        )
 
         assert result.data is not None, f"Errors: {result.errors}"
         assert "ensureAgent" in result.data
@@ -83,16 +103,26 @@ class TestGraphQLAgents:
         agent = result.data["ensureAgent"]
         assert agent["name"] is not None  # Should have auto-generated name
 
-    async def test_ensure_agent_mutation_is_idempotent_per_registry(self, authenticated_context: HttpContext):
+    async def test_ensure_agent_mutation_is_idempotent_per_registry(
+        self, authenticated_context: HttpContext
+    ):
         """ensureAgent is keyed on the registry, so repeated calls reuse the record."""
         # Create first agent
-        result1 = await schema.execute(ENSURE_AGENT, context_value=authenticated_context, variable_values={"input": {"name": "First Agent"}})
+        result1 = await schema.execute(
+            ENSURE_AGENT,
+            context_value=authenticated_context,
+            variable_values={"input": {"name": "First Agent"}},
+        )
 
         assert result1.data is not None
         first_agent_id = result1.data["ensureAgent"]["id"]
 
         # Ensure again with a different name hint.
-        result2 = await schema.execute(ENSURE_AGENT, context_value=authenticated_context, variable_values={"input": {"name": "Updated Agent"}})
+        result2 = await schema.execute(
+            ENSURE_AGENT,
+            context_value=authenticated_context,
+            variable_values={"input": {"name": "Updated Agent"}},
+        )
 
         assert result2.data is not None
         second_agent_id = result2.data["ensureAgent"]["id"]
@@ -102,7 +132,9 @@ class TestGraphQLAgents:
         assert result2.data["ensureAgent"]["name"] == "First Agent"
         assert await sync_to_async(Agent.objects.count)() == 1
 
-    async def test_ensure_agent_records_and_returns_a_description(self, authenticated_context: HttpContext):
+    async def test_ensure_agent_records_and_returns_a_description(
+        self, authenticated_context: HttpContext
+    ):
         """A name identifies an agent; a description is what tells two of them apart.
 
         Worth asserting on the *returned* payload and not just the row: the point of the field
@@ -111,13 +143,19 @@ class TestGraphQLAgents:
         result = await schema.execute(
             ENSURE_AGENT_WITH_DESCRIPTION,
             context_value=authenticated_context,
-            variable_values={"input": {"name": "Rig 4", "description": "The GPU box in the basement"}},
+            variable_values={
+                "input": {"name": "Rig 4", "description": "The GPU box in the basement"}
+            },
         )
 
         assert result.data is not None, f"Errors: {result.errors}"
-        assert result.data["ensureAgent"]["description"] == "The GPU box in the basement"
+        assert (
+            result.data["ensureAgent"]["description"] == "The GPU box in the basement"
+        )
 
-    async def test_ensure_agent_leaves_an_omitted_description_alone(self, authenticated_context: HttpContext):
+    async def test_ensure_agent_leaves_an_omitted_description_alone(
+        self, authenticated_context: HttpContext
+    ):
         """Omitting it means "unchanged", not "cleared".
 
         ``ensureAgent`` is called on every bootstrap, and most callers pass only a name -- if an
@@ -126,59 +164,112 @@ class TestGraphQLAgents:
         first = await schema.execute(
             ENSURE_AGENT_WITH_DESCRIPTION,
             context_value=authenticated_context,
-            variable_values={"input": {"name": "Rig 4", "description": "The GPU box in the basement"}},
+            variable_values={
+                "input": {"name": "Rig 4", "description": "The GPU box in the basement"}
+            },
         )
         assert first.data is not None, f"Errors: {first.errors}"
 
-        second = await schema.execute(ENSURE_AGENT_WITH_DESCRIPTION, context_value=authenticated_context, variable_values={"input": {"name": "Rig 4"}})
+        second = await schema.execute(
+            ENSURE_AGENT_WITH_DESCRIPTION,
+            context_value=authenticated_context,
+            variable_values={"input": {"name": "Rig 4"}},
+        )
 
         assert second.data is not None, f"Errors: {second.errors}"
         assert second.data["ensureAgent"]["id"] == first.data["ensureAgent"]["id"]
-        assert second.data["ensureAgent"]["description"] == "The GPU box in the basement"
+        assert (
+            second.data["ensureAgent"]["description"] == "The GPU box in the basement"
+        )
 
-    async def test_an_agent_that_never_declared_one_has_no_description(self, authenticated_context: HttpContext):
+    async def test_an_agent_that_never_declared_one_has_no_description(
+        self, authenticated_context: HttpContext
+    ):
         """Null, not an empty string: there is nothing to derive a description from.
 
         Every agent that predates the field reads this way too, which is the honest answer.
         """
-        result = await schema.execute(ENSURE_AGENT_WITH_DESCRIPTION, context_value=authenticated_context, variable_values={"input": {"name": "Undescribed"}})
+        result = await schema.execute(
+            ENSURE_AGENT_WITH_DESCRIPTION,
+            context_value=authenticated_context,
+            variable_values={"input": {"name": "Undescribed"}},
+        )
 
         assert result.data is not None, f"Errors: {result.errors}"
         assert result.data["ensureAgent"]["description"] is None
 
-    async def test_a_rename_is_the_users_and_leaves_the_declared_name(self, authenticated_context: HttpContext):
+    async def test_a_rename_is_the_users_and_leaves_the_declared_name(
+        self, authenticated_context: HttpContext
+    ):
         """updateAgent names the agent for its users; the declared name, which registration rewrites, stays the agent's."""
-        created = await schema.execute(ENSURE_AGENT, context_value=authenticated_context, variable_values={"input": {"name": "microscope:1.0"}})
+        created = await schema.execute(
+            ENSURE_AGENT,
+            context_value=authenticated_context,
+            variable_values={"input": {"name": "microscope:1.0"}},
+        )
         agent_id = created.data["ensureAgent"]["id"]
         rename = "mutation ($input: UpdateAgentInput!) { updateAgent(input: $input) { name declaredName } }"
 
-        renamed = await schema.execute(rename, context_value=authenticated_context, variable_values={"input": {"id": agent_id, "name": "Room 4 scope"}})
+        renamed = await schema.execute(
+            rename,
+            context_value=authenticated_context,
+            variable_values={"input": {"id": agent_id, "name": "Room 4 scope"}},
+        )
         assert renamed.errors is None, renamed.errors
-        assert renamed.data["updateAgent"] == {"name": "Room 4 scope", "declaredName": "microscope:1.0"}
+        assert renamed.data["updateAgent"] == {
+            "name": "Room 4 scope",
+            "declaredName": "microscope:1.0",
+        }
         # What a registration does: it rewrites the declared name and nothing else.
-        await sync_to_async(Agent.objects.filter(pk=agent_id).update)(name="microscope:1.1")
-        listed = await schema.execute('query { agents(filters: {search: "room 4"}) { id name declaredName } }', context_value=authenticated_context)
-        assert listed.data["agents"] == [{"id": agent_id, "name": "Room 4 scope", "declaredName": "microscope:1.1"}]
+        await sync_to_async(Agent.objects.filter(pk=agent_id).update)(
+            name="microscope:1.1"
+        )
+        listed = await schema.execute(
+            'query { agents(filters: {search: "room 4"}) { id name declaredName } }',
+            context_value=authenticated_context,
+        )
+        assert listed.data["agents"] == [
+            {"id": agent_id, "name": "Room 4 scope", "declaredName": "microscope:1.1"}
+        ]
 
-        taken_back = await schema.execute(rename, context_value=authenticated_context, variable_values={"input": {"id": agent_id, "name": " "}})
-        assert taken_back.data["updateAgent"] == {"name": "microscope:1.1", "declaredName": "microscope:1.1"}
+        taken_back = await schema.execute(
+            rename,
+            context_value=authenticated_context,
+            variable_values={"input": {"id": agent_id, "name": " "}},
+        )
+        assert taken_back.data["updateAgent"] == {
+            "name": "microscope:1.1",
+            "declaredName": "microscope:1.1",
+        }
 
     async def test_delete_agent_mutation(self, authenticated_context: HttpContext):
         """Test deleting an agent via mutation."""
         # First create an agent
-        create_result = await schema.execute(ENSURE_AGENT, context_value=authenticated_context, variable_values={"input": {"name": "Agent To Delete"}})
+        create_result = await schema.execute(
+            ENSURE_AGENT,
+            context_value=authenticated_context,
+            variable_values={"input": {"name": "Agent To Delete"}},
+        )
 
         assert create_result.data is not None
         agent_id = create_result.data["ensureAgent"]["id"]
 
         # Now delete the agent
-        delete_result = await schema.execute(DELETE_AGENT, context_value=authenticated_context, variable_values={"input": {"id": agent_id}})
+        delete_result = await schema.execute(
+            DELETE_AGENT,
+            context_value=authenticated_context,
+            variable_values={"input": {"id": agent_id}},
+        )
 
         assert delete_result.data is not None
         assert delete_result.data["deleteAgent"] == agent_id
 
         # Verify agent is deleted by trying to query it
-        query_result = await schema.execute(GET_AGENT, context_value=authenticated_context, variable_values={"id": agent_id})
+        query_result = await schema.execute(
+            GET_AGENT,
+            context_value=authenticated_context,
+            variable_values={"id": agent_id},
+        )
 
         assert query_result.data is None
         assert query_result.errors is not None
@@ -201,7 +292,11 @@ class TestGraphQLAgents:
             type="http",
         )
 
-        result = await schema.execute(ENSURE_AGENT, context_value=unauthenticated_context, variable_values={"input": {"name": "unauthorized-agent"}})
+        result = await schema.execute(
+            ENSURE_AGENT,
+            context_value=unauthenticated_context,
+            variable_values={"input": {"name": "unauthorized-agent"}},
+        )
 
         # Should fail due to lack of authentication
         assert result.data is None or result.errors is not None
@@ -222,19 +317,43 @@ class TestGraphQLAgents:
         # Should fail due to invalid input field
         assert result.errors is not None
 
-    async def test_an_agent_names_its_default_blok_per_context(self, authenticated_context: HttpContext):
+    async def test_an_agent_names_its_default_blok_per_context(
+        self, authenticated_context: HttpContext
+    ):
         """A client finds an agent's logo without listing every blok it declared."""
         from facade.models import Blok, MaterializedBlok, Module
 
-        ensured = await schema.execute(ENSURE_AGENT, context_value=authenticated_context, variable_values={"input": {"name": "Logo Agent"}})
+        ensured = await schema.execute(
+            ENSURE_AGENT,
+            context_value=authenticated_context,
+            variable_values={"input": {"name": "Logo Agent"}},
+        )
         agent_id = ensured.data["ensureAgent"]["id"]
 
         def declare() -> None:
             agent = Agent.objects.get(id=agent_id)
-            catalog, _ = Module.objects.get_or_create(organization=agent.organization, name="orkestrator")
-            for name, context, default in (("panel", "PANEL", True), ("logo", "LOGO", True), ("old-logo", "LOGO", False)):
-                blok = Blok.objects.create(organization=agent.organization, creator=agent.user, module=catalog, name=name, context=context)
-                MaterializedBlok.objects.create(blok=blok, declared_by=agent, name=name, description=name, is_default=default)
+            catalog, _ = Module.objects.get_or_create(
+                organization=agent.organization, name="orkestrator"
+            )
+            for name, context, default in (
+                ("panel", "PANEL", True),
+                ("logo", "LOGO", True),
+                ("old-logo", "LOGO", False),
+            ):
+                blok = Blok.objects.create(
+                    organization=agent.organization,
+                    creator=agent.user,
+                    module=catalog,
+                    name=name,
+                    context=context,
+                )
+                MaterializedBlok.objects.create(
+                    blok=blok,
+                    declared_by=agent,
+                    name=name,
+                    description=name,
+                    is_default=default,
+                )
 
         await sync_to_async(declare)()
 
@@ -247,27 +366,69 @@ class TestGraphQLAgents:
                 }
             }
         """
-        result = await schema.execute(query, context_value=authenticated_context, variable_values={"id": agent_id})
+        result = await schema.execute(
+            query, context_value=authenticated_context, variable_values={"id": agent_id}
+        )
         assert not result.errors, result.errors
-        assert result.data["agent"] == {"logo": {"name": "logo", "blok": {"context": "LOGO"}}, "panel": {"name": "panel"}, "scene": None}
+        assert result.data["agent"] == {
+            "logo": {"name": "logo", "blok": {"context": "LOGO"}},
+            "panel": {"name": "panel"},
+            "scene": None,
+        }
 
-    async def test_an_implementation_and_its_action_are_drawn_by_a_logo(self, authenticated_context: HttpContext):
+    async def test_an_implementation_and_its_action_are_drawn_by_a_logo(
+        self, authenticated_context: HttpContext
+    ):
         """`Implementation.logo` is the blok it named; `Action.logo` the logo of one of its implementations."""
         from facade.models import Action, Blok, Implementation, Module
-        from rekuest_core.inputs.models import DefinitionInputModel, ImplementationInputModel
+        from rekuest_core.inputs.models import (
+            DefinitionInputModel,
+            ImplementationInputModel,
+        )
         from tests import registered
 
-        ensured = await schema.execute(ENSURE_AGENT, context_value=authenticated_context, variable_values={"input": {"name": "Cropper"}})
+        ensured = await schema.execute(
+            ENSURE_AGENT,
+            context_value=authenticated_context,
+            variable_values={"input": {"name": "Cropper"}},
+        )
         agent_id = ensured.data["ensureAgent"]["id"]
 
         def implement() -> tuple[str, str, str]:
             agent = Agent.objects.get(id=agent_id)
-            definition = DefinitionInputModel(key="crop", name="Crop", kind="FUNCTION", args=[], returns=[])
-            implementation = registered.create_implementation(ImplementationInputModel(interface="crop", definition=definition), agent)
-            plain = registered.create_implementation(ImplementationInputModel(interface="plain", definition=DefinitionInputModel(key="plain", name="Plain", kind="FUNCTION", args=[], returns=[])), agent)
-            catalog, _ = Module.objects.get_or_create(organization=agent.organization, name="orkestrator")
-            components = [registered.blok("action", "logo", registered.node("Logo", registered.node("Path", d="M0 0")))]
-            logo = Blok.objects.create(organization=agent.organization, creator=agent.user, module=catalog, name="crop", context="LOGO", components=components)
+            definition = DefinitionInputModel(
+                key="crop", name="Crop", kind="FUNCTION", args=[], returns=[]
+            )
+            implementation = registered.create_implementation(
+                ImplementationInputModel(interface="crop", definition=definition), agent
+            )
+            plain = registered.create_implementation(
+                ImplementationInputModel(
+                    interface="plain",
+                    definition=DefinitionInputModel(
+                        key="plain", name="Plain", kind="FUNCTION", args=[], returns=[]
+                    ),
+                ),
+                agent,
+            )
+            catalog, _ = Module.objects.get_or_create(
+                organization=agent.organization, name="orkestrator"
+            )
+            components = [
+                registered.blok(
+                    "action",
+                    "logo",
+                    registered.node("Logo", registered.node("Path", d="M0 0")),
+                )
+            ]
+            logo = Blok.objects.create(
+                organization=agent.organization,
+                creator=agent.user,
+                module=catalog,
+                name="crop",
+                context="LOGO",
+                components=components,
+            )
             Implementation.objects.filter(id=implementation.id).update(logo=logo)
             # What takt writes as it links the logo.
             Action.objects.filter(id=implementation.action_id).update(latest_logo=logo)
@@ -282,12 +443,22 @@ class TestGraphQLAgents:
                 action(id: $action) { logo { name hash } }
             }
         """
-        result = await schema.execute(query, context_value=authenticated_context, variable_values={"drawn": implementation_id, "plain": plain_id, "action": action_id})
+        result = await schema.execute(
+            query,
+            context_value=authenticated_context,
+            variable_values={
+                "drawn": implementation_id,
+                "plain": plain_id,
+                "action": action_id,
+            },
+        )
         assert not result.errors, result.errors
         # An action logo is a LOGO blok whose <Blok> says kind action.
         drawn = result.data["drawn"]["logo"]
         assert (drawn["name"], drawn["context"]) == ("crop", "LOGO")
-        assert {"key": "kind", "static_value": "action"} in drawn["componentTree"][0]["props"]
+        assert {"key": "kind", "static_value": "action"} in drawn["componentTree"][0][
+            "props"
+        ]
         assert result.data["plain"] == {"logo": None, "action": {"logo": None}}
         assert result.data["action"]["logo"]["name"] == "crop"
         assert len(result.data["action"]["logo"]["hash"]) == 64

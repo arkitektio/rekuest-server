@@ -8,18 +8,17 @@ same physical dimension, while dimension-less demands keep matching on kind alon
 
 from types import SimpleNamespace
 
-from facade.managers import PortDemand
-
-from rekuest_core.inputs.models import ActionDemandInputModel, DescriptorInputModel, PortMatchInputModel, StateDemandInputModel
-
 import pytest
 
 from facade import managers
-from tests.registered import rebuild_relational_ports
+from facade.managers import PortDemand
 from rekuest_core.enums import PortKind
-from rekuest_core.inputs.models import DefinitionInputModel
-
+from rekuest_core.inputs.models import (
+    DefinitionInputModel,
+    PortMatchInputModel,
+)
 from tests.factories import create_action_for_organization, create_registry_bundle
+from tests.registered import rebuild_relational_ports
 
 VOLT_DIM = "[length] ** 2 * [mass] / [current] / [time] ** 3"
 FARAD_DIM = "[current] ** 2 * [time] ** 4 / [length] ** 2 / [mass]"
@@ -43,8 +42,22 @@ def make_quantity_action(org, prefix, arg_unit, return_unit):
             "version": "1",
             "name": prefix,
             "kind": "FUNCTION",
-            "args": [{"key": "level", "kind": "QUANTITY", "nullable": False, "reference_unit": arg_unit}],
-            "returns": [{"key": "reading", "kind": "QUANTITY", "nullable": False, "reference_unit": return_unit}],
+            "args": [
+                {
+                    "key": "level",
+                    "kind": "QUANTITY",
+                    "nullable": False,
+                    "reference_unit": arg_unit,
+                }
+            ],
+            "returns": [
+                {
+                    "key": "reading",
+                    "kind": "QUANTITY",
+                    "nullable": False,
+                    "reference_unit": return_unit,
+                }
+            ],
         }
     )
     action = create_action_for_organization(
@@ -61,8 +74,12 @@ def make_quantity_action(org, prefix, arg_unit, return_unit):
 def catalog(db):
     """Two quantity actions of different physical dimensions in one organization."""
     _, _, org, _ = create_registry_bundle("qmatch")
-    voltage = make_quantity_action(org, "qmatch-voltage", arg_unit="volt", return_unit="mV")
-    capacitance = make_quantity_action(org, "qmatch-capacitance", arg_unit="farad", return_unit="pF")
+    voltage = make_quantity_action(
+        org, "qmatch-voltage", arg_unit="volt", return_unit="mV"
+    )
+    capacitance = make_quantity_action(
+        org, "qmatch-capacitance", arg_unit="farad", return_unit="pF"
+    )
     return SimpleNamespace(org=org, voltage=voltage, capacitance=capacitance)
 
 

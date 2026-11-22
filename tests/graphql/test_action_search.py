@@ -40,7 +40,11 @@ def _unit_orthogonal(e0: np.ndarray) -> np.ndarray:
 def _vec(e0: np.ndarray, distance: float) -> list[float]:
     """A unit vector at cosine distance ``distance`` from ``e0``."""
     theta = math.acos(1.0 - distance)
-    return (math.cos(theta) * e0 + math.sin(theta) * _unit_orthogonal(e0)).astype(float).tolist()
+    return (
+        (math.cos(theta) * e0 + math.sin(theta) * _unit_orthogonal(e0))
+        .astype(float)
+        .tolist()
+    )
 
 
 async def _warm(context: HttpContext) -> None:
@@ -49,16 +53,35 @@ async def _warm(context: HttpContext) -> None:
     await schema.execute("query { __typename }", context_value=context)
 
 
-def _seed(context: HttpContext, prefix: str, name: str, description: str = "", *, distance: float | None = None, e0: np.ndarray | None = None) -> Action:
+def _seed(
+    context: HttpContext,
+    prefix: str,
+    name: str,
+    description: str = "",
+    *,
+    distance: float | None = None,
+    e0: np.ndarray | None = None,
+) -> Action:
     """An action in the request's org; optionally with a vector pinned at ``distance`` from ``e0``."""
-    action = create_action_for_organization(context.request.organization, prefix, name=name, description=description or f"{prefix} description")
+    action = create_action_for_organization(
+        context.request.organization,
+        prefix,
+        name=name,
+        description=description or f"{prefix} description",
+    )
     if distance is not None:
         Action.objects.filter(pk=action.pk).update(embedding=_vec(e0, distance))
     return action
 
 
-async def _names(context: HttpContext, search: str, ordering: list | None = None) -> list[str]:
-    result = await schema.execute(SEARCH, context_value=context, variable_values={"search": search, "ordering": ordering or []})
+async def _names(
+    context: HttpContext, search: str, ordering: list | None = None
+) -> list[str]:
+    result = await schema.execute(
+        SEARCH,
+        context_value=context,
+        variable_values={"search": search, "ordering": ordering or []},
+    )
     assert result.errors is None, result.errors
     return [a["name"] for a in result.data["actions"]]
 
@@ -68,101 +91,192 @@ async def _names(context: HttpContext, search: str, ordering: list | None = None
 class TestActionSearch:
     """The hybrid search filter, end to end."""
 
-    async def test_semantic_match_without_substring(self, authenticated_context: HttpContext) -> None:
+    async def test_semantic_match_without_substring(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """A description that means the query is found although no word of the query is in the name."""
         await _warm(authenticated_context)
-        await sync_to_async(_seed)(authenticated_context, "sem-a", "Segment nuclei", "Find cell nuclei in a fluorescence image and detect every cell")
-        await sync_to_async(_seed)(authenticated_context, "sem-b", "Export spreadsheet", "Write a table to an xlsx file on disk")
+        await sync_to_async(_seed)(
+            authenticated_context,
+            "sem-a",
+            "Segment nuclei",
+            "Find cell nuclei in a fluorescence image and detect every cell",
+        )
+        await sync_to_async(_seed)(
+            authenticated_context,
+            "sem-b",
+            "Export spreadsheet",
+            "Write a table to an xlsx file on disk",
+        )
 
         names = await _names(authenticated_context, QUERY)
 
         assert "Segment nuclei" in names
         assert "Export spreadsheet" not in names
 
-    async def test_substring_still_matches_when_disabled(self, authenticated_context: HttpContext) -> None:
+    async def test_substring_still_matches_when_disabled(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """With embeddings off the filter is exactly the old substring match."""
         await _warm(authenticated_context)
         await sync_to_async(_seed)(authenticated_context, "off-a", "Detect Cells", "")
-        await sync_to_async(_seed)(authenticated_context, "off-b", "Segment nuclei", "detect cells in an image")
+        await sync_to_async(_seed)(
+            authenticated_context, "off-b", "Segment nuclei", "detect cells in an image"
+        )
 
         with override_settings(EMBEDDINGS={**engine._settings(), "ENABLED": False}):
             names = await _names(authenticated_context, QUERY)
 
         assert names == ["Detect Cells"]
 
-    async def test_orders_closest_first(self, authenticated_context: HttpContext) -> None:
+    async def test_orders_closest_first(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """Semantic-only hits come back nearest first."""
         await _warm(authenticated_context)
         e0 = np.asarray(engine.embed_query(QUERY))
-        await sync_to_async(_seed)(authenticated_context, "ord-far", "Far", distance=0.5, e0=e0)
-        await sync_to_async(_seed)(authenticated_context, "ord-near", "Near", distance=0.1, e0=e0)
-        await sync_to_async(_seed)(authenticated_context, "ord-mid", "Mid", distance=0.3, e0=e0)
+        await sync_to_async(_seed)(
+            authenticated_context, "ord-far", "Far", distance=0.5, e0=e0
+        )
+        await sync_to_async(_seed)(
+            authenticated_context, "ord-near", "Near", distance=0.1, e0=e0
+        )
+        await sync_to_async(_seed)(
+            authenticated_context, "ord-mid", "Mid", distance=0.3, e0=e0
+        )
 
         assert await _names(authenticated_context, QUERY) == ["Near", "Mid", "Far"]
 
-    async def test_substring_ranks_before_semantic(self, authenticated_context: HttpContext) -> None:
+    async def test_substring_ranks_before_semantic(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """A substring hit precedes a semantic-only hit, even one far closer."""
         await _warm(authenticated_context)
         e0 = np.asarray(engine.embed_query(QUERY))
-        await sync_to_async(_seed)(authenticated_context, "rank-near", "Near", distance=0.05, e0=e0)
-        sub = await sync_to_async(_seed)(authenticated_context, "rank-sub", "Detect cells (substring)", distance=0.5, e0=e0)
+        await sync_to_async(_seed)(
+            authenticated_context, "rank-near", "Near", distance=0.05, e0=e0
+        )
+        sub = await sync_to_async(_seed)(
+            authenticated_context,
+            "rank-sub",
+            "Detect cells (substring)",
+            distance=0.5,
+            e0=e0,
+        )
         # A substring hit with no vector at all still ranks first.
         await sync_to_async(Action.objects.filter(pk=sub.pk).update)(embedding=None)
 
-        assert await _names(authenticated_context, QUERY) == ["Detect cells (substring)", "Near"]
+        assert await _names(authenticated_context, QUERY) == [
+            "Detect cells (substring)",
+            "Near",
+        ]
 
-    async def test_name_tiers_rank_before_distance(self, authenticated_context: HttpContext) -> None:
+    async def test_name_tiers_rank_before_distance(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """Exact name, then prefix, then substring hits by trigram similarity, then semantic-only; distance never lifts a tier."""
         await _warm(authenticated_context)
         e0 = np.asarray(engine.embed_query(QUERY))
-        await sync_to_async(_seed)(authenticated_context, "tier-sem", "Near", distance=0.01, e0=e0)
-        await sync_to_async(_seed)(authenticated_context, "tier-long", "Fast detect cells in 3D stacks", distance=0.05, e0=e0)
-        await sync_to_async(_seed)(authenticated_context, "tier-short", "Do detect cells", distance=0.3, e0=e0)
-        await sync_to_async(_seed)(authenticated_context, "tier-prefix", "Detect cells in stacks", distance=0.4, e0=e0)
-        await sync_to_async(_seed)(authenticated_context, "tier-exact", "Detect Cells", distance=0.5, e0=e0)
+        await sync_to_async(_seed)(
+            authenticated_context, "tier-sem", "Near", distance=0.01, e0=e0
+        )
+        await sync_to_async(_seed)(
+            authenticated_context,
+            "tier-long",
+            "Fast detect cells in 3D stacks",
+            distance=0.05,
+            e0=e0,
+        )
+        await sync_to_async(_seed)(
+            authenticated_context, "tier-short", "Do detect cells", distance=0.3, e0=e0
+        )
+        await sync_to_async(_seed)(
+            authenticated_context,
+            "tier-prefix",
+            "Detect cells in stacks",
+            distance=0.4,
+            e0=e0,
+        )
+        await sync_to_async(_seed)(
+            authenticated_context, "tier-exact", "Detect Cells", distance=0.5, e0=e0
+        )
 
-        assert await _names(authenticated_context, QUERY) == ["Detect Cells", "Detect cells in stacks", "Do detect cells", "Fast detect cells in 3D stacks", "Near"]
+        assert await _names(authenticated_context, QUERY) == [
+            "Detect Cells",
+            "Detect cells in stacks",
+            "Do detect cells",
+            "Fast detect cells in 3D stacks",
+            "Near",
+        ]
 
-    async def test_threshold_excludes_far_rows(self, authenticated_context: HttpContext) -> None:
+    async def test_threshold_excludes_far_rows(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """A vector beyond the threshold is not a hit."""
         await _warm(authenticated_context)
         e0 = np.asarray(engine.embed_query(QUERY))
-        await sync_to_async(_seed)(authenticated_context, "thr-in", "In", distance=0.4, e0=e0)
-        await sync_to_async(_seed)(authenticated_context, "thr-out", "Out", distance=0.7, e0=e0)
+        await sync_to_async(_seed)(
+            authenticated_context, "thr-in", "In", distance=0.4, e0=e0
+        )
+        await sync_to_async(_seed)(
+            authenticated_context, "thr-out", "Out", distance=0.7, e0=e0
+        )
 
         assert await _names(authenticated_context, QUERY) == ["In"]
 
-    async def test_a_row_without_a_vector_is_not_a_vector_hit(self, authenticated_context: HttpContext) -> None:
+    async def test_a_row_without_a_vector_is_not_a_vector_hit(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """A row that was saved without a vector is skipped by the vector leg, still found by substring."""
         await _warm(authenticated_context)
-        for prefix, name in (("null-a", "Unembedded near"), ("null-b", "Unembedded detect cells")):
+        for prefix, name in (
+            ("null-a", "Unembedded near"),
+            ("null-b", "Unembedded detect cells"),
+        ):
             action = await sync_to_async(_seed)(authenticated_context, prefix, name)
             await Action.objects.filter(pk=action.pk).aupdate(embedding=None)
 
         assert await _names(authenticated_context, QUERY) == ["Unembedded detect cells"]
 
-    async def test_explicit_ordering_replaces_the_ranking(self, authenticated_context: HttpContext) -> None:
+    async def test_explicit_ordering_replaces_the_ranking(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """A client's ``ordering`` wins over the distance ranking."""
         await _warm(authenticated_context)
         e0 = np.asarray(engine.embed_query(QUERY))
-        await sync_to_async(_seed)(authenticated_context, "exp-first", "First defined", distance=0.4, e0=e0)
-        await sync_to_async(_seed)(authenticated_context, "exp-second", "Second defined", distance=0.1, e0=e0)
+        await sync_to_async(_seed)(
+            authenticated_context, "exp-first", "First defined", distance=0.4, e0=e0
+        )
+        await sync_to_async(_seed)(
+            authenticated_context, "exp-second", "Second defined", distance=0.1, e0=e0
+        )
 
-        assert await _names(authenticated_context, QUERY) == ["Second defined", "First defined"]
-        assert await _names(authenticated_context, QUERY, ordering=[{"definedAt": "ASC"}]) == ["First defined", "Second defined"]
+        assert await _names(authenticated_context, QUERY) == [
+            "Second defined",
+            "First defined",
+        ]
+        assert await _names(
+            authenticated_context, QUERY, ordering=[{"definedAt": "ASC"}]
+        ) == ["First defined", "Second defined"]
 
-    async def test_blank_search_is_lexical(self, authenticated_context: HttpContext) -> None:
+    async def test_blank_search_is_lexical(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """A blank query keeps today's behaviour: ``icontains ''`` matches every action."""
         await _warm(authenticated_context)
         await sync_to_async(_seed)(authenticated_context, "blank-a", "Anything")
 
         assert await _names(authenticated_context, "") == ["Anything"]
 
-    async def test_unloadable_model_degrades_to_substring(self, authenticated_context: HttpContext, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_unloadable_model_degrades_to_substring(
+        self, authenticated_context: HttpContext, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """When the weights cannot be loaded the query still answers, substring-only."""
         await _warm(authenticated_context)
         e0 = np.asarray(engine.embed_query(QUERY))
-        await sync_to_async(_seed)(authenticated_context, "deg-near", "Near", distance=0.05, e0=e0)
+        await sync_to_async(_seed)(
+            authenticated_context, "deg-near", "Near", distance=0.05, e0=e0
+        )
         await sync_to_async(_seed)(authenticated_context, "deg-sub", "Detect cells")
 
         def unloadable() -> None:
@@ -171,7 +285,9 @@ class TestActionSearch:
         monkeypatch.setattr(engine, "_load_model_cached", unloadable)
         assert await _names(authenticated_context, QUERY) == ["Detect cells"]
 
-    async def test_nested_action_search_is_substring_only(self, authenticated_context: HttpContext) -> None:
+    async def test_nested_action_search_is_substring_only(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """``implementations(filters: { action: { search } })`` keeps its substring semantics."""
         await _warm(authenticated_context)
         result = await schema.execute(

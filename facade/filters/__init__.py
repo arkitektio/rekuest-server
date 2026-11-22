@@ -9,10 +9,8 @@ each submodule's namespace below, so nested filter references resolve at schema-
 from . import (
     action,
     agent,
-    automation,
-    structure,
-    task,
     auth,
+    automation,
     blok,
     common,
     dashboard,
@@ -20,24 +18,17 @@ from . import (
     implementation,
     session,
     shelve,
+    structure,
+    task,
     testcase,
     threed,
     toolbox,
 )
 from .action import ActionFilter, ActionOrder
-from .structure import HostedStructureFilter, HostedStructureOrder, StructureDescriptorFilter, StructureDescriptorOrder
-from .automation import FiringFilter, FiringOrder, ScheduleFilter, ScheduleOrder, SignalFilter, SignalOrder, TriggerFilter, TriggerOrder
 from .agent import (
     AgentFilter,
     AgentOrder,
     ImplementationAgentFilter,
-)
-from .task import (
-    TaskEventFilter,
-    TaskEventOrder,
-    TaskFilter,
-    TaskInstructFilter,
-    TaskOrder,
 )
 from .auth import (
     ClientFilter,
@@ -46,6 +37,16 @@ from .auth import (
     OrganizationOrder,
     UserFilter,
     UserOrder,
+)
+from .automation import (
+    FiringFilter,
+    FiringOrder,
+    ScheduleFilter,
+    ScheduleOrder,
+    SignalFilter,
+    SignalOrder,
+    TriggerFilter,
+    TriggerOrder,
 )
 from .blok import BlokFilter, MaterializedBlokFilter, MaterializedBlokOrder
 from .common import ParamPair
@@ -66,6 +67,19 @@ from .shelve import (
     MemoryDrawerFilter,
     MemoryShelveFilter,
     MemoryShelveOrder,
+)
+from .structure import (
+    HostedStructureFilter,
+    HostedStructureOrder,
+    StructureDescriptorFilter,
+    StructureDescriptorOrder,
+)
+from .task import (
+    TaskEventFilter,
+    TaskEventOrder,
+    TaskFilter,
+    TaskInstructFilter,
+    TaskOrder,
 )
 from .testcase import TestCaseFilter, TestResultFilter
 from .threed import (

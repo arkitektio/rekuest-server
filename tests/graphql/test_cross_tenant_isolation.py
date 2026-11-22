@@ -14,7 +14,11 @@ executable statement of the finding.
 
 import pytest
 from asgiref.sync import async_to_sync, sync_to_async
-from authentikate.expand import aexpand_client_from_token, aexpand_organization_from_token, aexpand_user_from_token
+from authentikate.expand import (
+    aexpand_client_from_token,
+    aexpand_organization_from_token,
+    aexpand_user_from_token,
+)
 from authentikate.models import Client, Membership, Organization, User
 from authentikate.utils import authenticate_token_or_none
 from kante.context import HttpContext, UniversalRequest
@@ -32,7 +36,9 @@ from tests.factories import (
 OTHER_TOKEN = "test-other"
 
 
-def tenant_context(token: str = TEST_TOKEN) -> tuple[HttpContext, User, Client, Organization]:
+def tenant_context(
+    token: str = TEST_TOKEN,
+) -> tuple[HttpContext, User, Client, Organization]:
     """An HttpContext authenticated by ``token`` plus the identity it resolves to.
 
     ``AuthentikateExtension`` overwrites the request's user/client/organization from the bearer
@@ -54,7 +60,17 @@ def tenant_context(token: str = TEST_TOKEN) -> tuple[HttpContext, User, Client, 
         _organization=org,  # type: ignore[arg-type]
     )
     request.set_membership(membership)  # type: ignore[attr-defined]
-    return HttpContext(request=request, response=TemporalResponse(), headers={"Authorization": f"Bearer {token}"}, type="http"), user, client, org
+    return (
+        HttpContext(
+            request=request,
+            response=TemporalResponse(),
+            headers={"Authorization": f"Bearer {token}"},
+            type="http",
+        ),
+        user,
+        client,
+        org,
+    )
 
 
 def _context_for(user, client, org):
@@ -73,7 +89,9 @@ def _context_for(user, client, org):
         _organization=org,  # type: ignore[arg-type]
     )
     request.set_membership(membership)  # type: ignore[attr-defined]
-    return HttpContext(request=request, response=TemporalResponse(), headers={}, type="http")
+    return HttpContext(
+        request=request, response=TemporalResponse(), headers={}, type="http"
+    )
 
 
 @sync_to_async
@@ -82,9 +100,13 @@ def _seed_two_tenants(prefix):
     tenants = {}
     for side, token in (("a", TEST_TOKEN), ("b", OTHER_TOKEN)):
         context, user, client, org = tenant_context(token)
-        caller, _ = Caller.objects.get_or_create(client=client, user=user, organization=org)
+        caller, _ = Caller.objects.get_or_create(
+            client=client, user=user, organization=org
+        )
         agent = create_agent_for_registry(caller, user, org, f"{prefix}-{side}")
-        state = _build_state_for_agent(agent.pk, f"{prefix}-{side}-iface", f"{prefix}-{side}")
+        state = _build_state_for_agent(
+            agent.pk, f"{prefix}-{side}-iface", f"{prefix}-{side}"
+        )
         action = create_action_for_organization(org, f"{prefix}-{side}-act")
         tenants[side] = {
             "context": context,
@@ -99,7 +121,9 @@ def _seed_two_tenants(prefix):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 class TestCrossTenantIsolation:
-    async def test_actions_are_scoped_to_the_callers_organization(self, authenticated_context):
+    async def test_actions_are_scoped_to_the_callers_organization(
+        self, authenticated_context
+    ):
         """Control: Action has a get_queryset scope, so this must pass.
 
         ``authenticated_context`` is requested only to pull in the ``db`` + ``backend_stack``
@@ -107,7 +131,9 @@ class TestCrossTenantIsolation:
         """
         t = await _seed_two_tenants("xt-actions")
 
-        result = await schema.execute("query { actions { id } }", context_value=t["a"]["context"])
+        result = await schema.execute(
+            "query { actions { id } }", context_value=t["a"]["context"]
+        )
 
         assert not result.errors, result.errors
         returned = {row["id"] for row in result.data["actions"]}
@@ -123,35 +149,65 @@ class TestCrossTenantIsolation:
             variable_values={"id": str(t["b"]["state"].id)},
         )
 
-        assert result.errors or result.data.get("state") is None, "org A fetched org B's State by id"
+        assert result.errors or result.data.get("state") is None, (
+            "org A fetched org B's State by id"
+        )
 
-    async def test_an_implementation_of_another_organization_cannot_be_deleted(self, authenticated_context, takt):
+    async def test_an_implementation_of_another_organization_cannot_be_deleted(
+        self, authenticated_context, takt
+    ):
         """deleteImplementation fetched by bare id: org A could delete org B's implementation."""
         from facade.models import Implementation
 
         t = await _seed_two_tenants("xt-impl-delete")
-        theirs = await sync_to_async(Implementation.objects.create)(agent=t["b"]["agent"], action=t["b"]["action"], interface="theirs")
-        mine = await sync_to_async(Implementation.objects.create)(agent=t["a"]["agent"], action=t["a"]["action"], interface="mine")
+        theirs = await sync_to_async(Implementation.objects.create)(
+            agent=t["b"]["agent"], action=t["b"]["action"], interface="theirs"
+        )
+        mine = await sync_to_async(Implementation.objects.create)(
+            agent=t["a"]["agent"], action=t["a"]["action"], interface="mine"
+        )
         delete = "mutation M($id: ID!) { deleteImplementation(input: {implementation: $id}) }"
 
-        refused = await schema.execute(delete, context_value=t["a"]["context"], variable_values={"id": str(theirs.pk)})
-        allowed = await schema.execute(delete, context_value=t["a"]["context"], variable_values={"id": str(mine.pk)})
+        refused = await schema.execute(
+            delete,
+            context_value=t["a"]["context"],
+            variable_values={"id": str(theirs.pk)},
+        )
+        allowed = await schema.execute(
+            delete,
+            context_value=t["a"]["context"],
+            variable_values={"id": str(mine.pk)},
+        )
 
         assert refused.errors, "org A deleted org B's implementation"
         assert await sync_to_async(Implementation.objects.filter(pk=theirs.pk).exists)()
         assert not allowed.errors, allowed.errors
-        assert not await sync_to_async(Implementation.objects.filter(pk=mine.pk).exists)()
+        assert not await sync_to_async(
+            Implementation.objects.filter(pk=mine.pk).exists
+        )()
 
-    async def test_cleanup_actions_asks_takt_for_the_callers_organization_only(self, authenticated_context, takt):
+    async def test_cleanup_actions_asks_takt_for_the_callers_organization_only(
+        self, authenticated_context, takt
+    ):
         """cleanupActions deletes takt-owned rows, so takt does it, told whose organization it is."""
-        t = await _seed_two_tenants("xt-cleanup")  # neither tenant's action is implemented
+        t = await _seed_two_tenants(
+            "xt-cleanup"
+        )  # neither tenant's action is implemented
 
-        result = await schema.execute("mutation { cleanupActions }", context_value=t["a"]["context"])
+        result = await schema.execute(
+            "mutation { cleanupActions }", context_value=t["a"]["context"]
+        )
 
         assert not result.errors, result.errors
         from facade.models import Action
 
         # takt deletes them, for the organization that asked and no other.
-        assert not await sync_to_async(Action.objects.filter(pk=t["a"]["action"].pk).exists)()
-        assert await sync_to_async(Action.objects.filter(pk=t["b"]["action"].pk).exists)()
-        assert await sync_to_async(Action.objects.filter(pk=t["b"]["action"].pk).exists)()
+        assert not await sync_to_async(
+            Action.objects.filter(pk=t["a"]["action"].pk).exists
+        )()
+        assert await sync_to_async(
+            Action.objects.filter(pk=t["b"]["action"].pk).exists
+        )()
+        assert await sync_to_async(
+            Action.objects.filter(pk=t["b"]["action"].pk).exists
+        )()

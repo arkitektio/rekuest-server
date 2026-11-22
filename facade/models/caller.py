@@ -17,7 +17,9 @@ class Caller(models.Model):
     client_id: int
     organization_id: int
 
-    client = models.ForeignKey(Client, on_delete=models.CASCADE, help_text="The Associated Client")
+    client = models.ForeignKey(
+        Client, on_delete=models.CASCADE, help_text="The Associated Client"
+    )
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,

@@ -38,13 +38,21 @@ def test_value_dict_entries_need_unique_keys() -> None:
     with pytest.raises(ValidationError, match="every entry must carry a key"):
         imodels.ActionArgumentInputModel(key="a", value_dict=[{"value_literal": 1}])
     with pytest.raises(ValidationError, match="duplicate key 'x'"):
-        imodels.ActionArgumentInputModel(key="a", value_dict=[{"key": "x", "value_literal": 1}, {"key": "x", "value_literal": 2}])
+        imodels.ActionArgumentInputModel(
+            key="a",
+            value_dict=[
+                {"key": "x", "value_literal": 1},
+                {"key": "x", "value_literal": 2},
+            ],
+        )
 
 
 def test_value_list_entries_must_not_carry_keys() -> None:
     """Value list entries must not carry keys."""
     with pytest.raises(ValidationError, match="must not carry a key"):
-        imodels.ActionArgumentInputModel(key="a", value_list=[{"key": "x", "value_literal": 1}])
+        imodels.ActionArgumentInputModel(
+            key="a", value_list=[{"key": "x", "value_literal": 1}]
+        )
 
 
 def test_call_arguments_need_unique_non_empty_keys() -> None:
@@ -52,5 +60,17 @@ def test_call_arguments_need_unique_non_empty_keys() -> None:
     with pytest.raises(ValidationError, match="every entry must carry a key"):
         imodels.UtilCallInputModel(operation="gt", arguments=[{"value_literal": 1}])
     with pytest.raises(ValidationError, match="duplicate key 'a'"):
-        imodels.UtilCallInputModel(operation="gt", arguments=[{"key": "a", "value_literal": 1}, {"key": "a", "value_literal": 2}])
-    imodels.UtilCallInputModel(operation="gt", arguments=[{"key": "a", "value_literal": 1}, {"key": "b", "value_path": "/value"}])
+        imodels.UtilCallInputModel(
+            operation="gt",
+            arguments=[
+                {"key": "a", "value_literal": 1},
+                {"key": "a", "value_literal": 2},
+            ],
+        )
+    imodels.UtilCallInputModel(
+        operation="gt",
+        arguments=[
+            {"key": "a", "value_literal": 1},
+            {"key": "b", "value_path": "/value"},
+        ],
+    )

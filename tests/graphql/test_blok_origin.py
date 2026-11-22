@@ -31,7 +31,11 @@ TREE = [gql(blok("custom", "panel", node("Slider")))]
 
 
 async def _create(context: HttpContext, **fields) -> dict:
-    result = await schema.execute(CREATE, context_value=context, variable_values={"input": {"vocab": 2, "components": TREE, **fields}})
+    result = await schema.execute(
+        CREATE,
+        context_value=context,
+        variable_values={"input": {"vocab": 2, "components": TREE, **fields}},
+    )
     assert not result.errors, result.errors
     return result.data["createBlok"]
 
@@ -39,27 +43,52 @@ async def _create(context: HttpContext, **fields) -> dict:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 class TestBlokOrigin:
-    async def test_installing_again_updates_in_place(self, authenticated_context: HttpContext) -> None:
-        first = await _create(authenticated_context, name="Layer picker", origin=ORIGIN, originHash="sha256:a")
-        second = await _create(authenticated_context, name="Layers", origin=ORIGIN, originHash="sha256:b")
+    async def test_installing_again_updates_in_place(
+        self, authenticated_context: HttpContext
+    ) -> None:
+        first = await _create(
+            authenticated_context,
+            name="Layer picker",
+            origin=ORIGIN,
+            originHash="sha256:a",
+        )
+        second = await _create(
+            authenticated_context, name="Layers", origin=ORIGIN, originHash="sha256:b"
+        )
 
         assert second["id"] == first["id"]
-        assert (second["name"], second["origin"], second["originHash"]) == ("Layers", ORIGIN, "sha256:b")
+        assert (second["name"], second["origin"], second["originHash"]) == (
+            "Layers",
+            ORIGIN,
+            "sha256:b",
+        )
         assert await sync_to_async(Blok.objects.filter(origin=ORIGIN).count)() == 1
 
-    async def test_a_blok_made_by_hand_is_never_replaced(self, authenticated_context: HttpContext) -> None:
+    async def test_a_blok_made_by_hand_is_never_replaced(
+        self, authenticated_context: HttpContext
+    ) -> None:
         mine = await _create(authenticated_context, name="Layer picker")
 
         result = await schema.execute(
             CREATE,
             context_value=authenticated_context,
-            variable_values={"input": {"name": "Layer picker", "vocab": 2, "components": TREE, "origin": ORIGIN, "originHash": "sha256:a"}},
+            variable_values={
+                "input": {
+                    "name": "Layer picker",
+                    "vocab": 2,
+                    "components": TREE,
+                    "origin": ORIGIN,
+                    "originHash": "sha256:a",
+                }
+            },
         )
 
         assert result.errors and "exists already" in result.errors[0].message
         assert (await sync_to_async(Blok.objects.get)(id=mine["id"])).origin is None
 
-    async def test_without_an_origin_it_is_still_by_name(self, authenticated_context: HttpContext) -> None:
+    async def test_without_an_origin_it_is_still_by_name(
+        self, authenticated_context: HttpContext
+    ) -> None:
         first = await _create(authenticated_context, name="Plain")
         second = await _create(authenticated_context, name="Plain")
 
@@ -67,11 +96,17 @@ class TestBlokOrigin:
         assert second["origin"] is None
 
     async def test_filters_by_origin(self, authenticated_context: HttpContext) -> None:
-        installed = await _create(authenticated_context, name="Installed", origin=ORIGIN)
+        installed = await _create(
+            authenticated_context, name="Installed", origin=ORIGIN
+        )
         await _create(authenticated_context, name="Mine")
 
         async def names(filters: dict) -> list[str]:
-            result = await schema.execute(BLOKS, context_value=authenticated_context, variable_values={"filters": filters})
+            result = await schema.execute(
+                BLOKS,
+                context_value=authenticated_context,
+                variable_values={"filters": filters},
+            )
             assert not result.errors, result.errors
             return sorted(blok["name"] for blok in result.data["bloks"])
 

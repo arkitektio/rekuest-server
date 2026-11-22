@@ -1,4 +1,4 @@
-from typing import Optional, cast
+from typing import cast
 
 from kante.types import Info
 
@@ -11,7 +11,7 @@ def reusable_task_for(
     info: Info,
     action_hash: str,
     args: scalars.Args,
-) -> Optional[types.Task]:
+) -> types.Task | None:
     """The latest completed run of a PURE action with these exact (canonical) args, or null.
 
     This is the replay primitive: the server only makes prior results discoverable — whether
@@ -20,7 +20,7 @@ def reusable_task_for(
     never offered for replay.
     """
     return cast(
-        "Optional[types.Task]",
+        "types.Task | None",
         (
             models.Task.objects.filter(
                 action__hash=action_hash,
@@ -41,6 +41,15 @@ def my_tasks(
     info: Info,
 ) -> list[types.Task]:
     """The root tasks this client created and which are NOT done.."""
-    caller, _ = models.Caller.objects.get_or_create(client=info.context.request.client, user=info.context.request.user, organization=info.context.request.organization)
+    caller, _ = models.Caller.objects.get_or_create(
+        client=info.context.request.client,
+        user=info.context.request.user,
+        organization=info.context.request.organization,
+    )
 
-    return cast("list[types.Task]", models.Task.objects.filter(caller=caller, root__isnull=True, is_done=False).order_by("-created_at"))
+    return cast(
+        "list[types.Task]",
+        models.Task.objects.filter(
+            caller=caller, root__isnull=True, is_done=False
+        ).order_by("-created_at"),
+    )

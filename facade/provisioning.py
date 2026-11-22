@@ -26,7 +26,9 @@ from facade import hook_agents, service_catalog
 # One provisioning pass at a time, across every replica: rows are found-or-created, and two
 # passes at once would both create them. A session-level advisory lock, not a transaction: a
 # pass asks takt to write rows that must see what this one already committed.
-PROVISION_LOCK_KEY = int.from_bytes(hashlib.sha256(b"rekuest:provisioning").digest()[:8], "big", signed=True)
+PROVISION_LOCK_KEY = int.from_bytes(
+    hashlib.sha256(b"rekuest:provisioning").digest()[:8], "big", signed=True
+)
 
 
 @contextmanager
@@ -58,7 +60,10 @@ def provision_all() -> Failed | None:
     with _locked() as held:
         if not held:
             return None
-        return Failed(services=service_catalog.catalogue_all(), hook_agents=hook_agents.provision_all())
+        return Failed(
+            services=service_catalog.catalogue_all(),
+            hook_agents=hook_agents.provision_all(),
+        )
 
 
 def catalogue_services() -> list[str] | None:

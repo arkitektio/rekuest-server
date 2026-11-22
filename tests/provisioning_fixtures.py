@@ -1,13 +1,13 @@
 """A hub with one service and one hook agent configured — two entries that share nothing."""
 
 import pytest
+from arkitekt_service.service import Descriptor
+from arkitekt_service.service.described import Described
 from authentikate.models import Organization
 from django.conf import settings as django_settings
 from django.test import override_settings
 
 from rekuest.configuration import HookAgentEntry, ServiceEntry
-from arkitekt_service.service import Descriptor
-from arkitekt_service.service.described import Described
 from tests.hook_urls import housekeeping, janitor
 
 
@@ -30,8 +30,19 @@ def declared():
         return {"acted": 3}
 
     janitor.action(interface="tidy_up", description="Tidy things up.")(tidy_up)
-    housekeeping.structure(Room, "@housekeeping/room", label="Room", description="A room to tidy.", descriptors=[Descriptor("@housekeeping/area", "FLOAT", "Square metres")])
-    housekeeping.signal("@housekeeping/room", kinds=["CREATED", "DELETED"], descriptors=["@housekeeping/area"], description="A room appeared or went.")
+    housekeeping.structure(
+        Room,
+        "@housekeeping/room",
+        label="Room",
+        description="A room to tidy.",
+        descriptors=[Descriptor("@housekeeping/area", "FLOAT", "Square metres")],
+    )
+    housekeeping.signal(
+        "@housekeeping/room",
+        kinds=["CREATED", "DELETED"],
+        descriptors=["@housekeeping/area"],
+        description="A room appeared or went.",
+    )
     yield tidy_up
     janitor._actions.clear()
     housekeeping._signals.clear()
@@ -40,10 +51,22 @@ def declared():
 
 @pytest.fixture
 def hub(live_server, settings, declared):
-    prefix = f"/{django_settings.MY_SCRIPT_NAME.strip('/')}" if django_settings.MY_SCRIPT_NAME else ""
+    prefix = (
+        f"/{django_settings.MY_SCRIPT_NAME.strip('/')}"
+        if django_settings.MY_SCRIPT_NAME
+        else ""
+    )
     settings.ROOT_URLCONF = "tests.hook_urls"
-    settings.SERVICES = [ServiceEntry(name="housekeeping", url=f"{live_server.url}{prefix}/_rekuest/service")]
-    settings.HOOK_AGENTS = [HookAgentEntry(name="janitor", hook_url=f"{live_server.url}{prefix}/_rekuest/hook")]
+    settings.SERVICES = [
+        ServiceEntry(
+            name="housekeeping", url=f"{live_server.url}{prefix}/_rekuest/service"
+        )
+    ]
+    settings.HOOK_AGENTS = [
+        HookAgentEntry(
+            name="janitor", hook_url=f"{live_server.url}{prefix}/_rekuest/hook"
+        )
+    ]
     settings.REKUEST_SERVICE = {"REKUEST_URL": f"{live_server.url}{prefix}"}
     settings.REKUEST_HOOK = {"REKUEST_URL": f"{live_server.url}{prefix}"}
     return settings

@@ -27,7 +27,12 @@ class Task(models.Model):
     trigger_id: int | None
     space_id: int | None
 
-    acted_on = ArrayField(base_field=models.CharField(max_length=1000), help_text="Which structures were acted on in this task", default=list, db_default=[])
+    acted_on = ArrayField(
+        base_field=models.CharField(max_length=1000),
+        help_text="Which structures were acted on in this task",
+        default=list,
+        db_default=[],
+    )
     implementation = models.ForeignKey(
         "Implementation",
         on_delete=models.SET_NULL,
@@ -46,7 +51,12 @@ class Task(models.Model):
         blank=True,
         null=True,
     )
-    action = models.ForeignKey("Action", on_delete=models.CASCADE, help_text="The action this was assigned to", related_name="tasks")
+    action = models.ForeignKey(
+        "Action",
+        on_delete=models.CASCADE,
+        help_text="The action this was assigned to",
+        related_name="tasks",
+    )
     ephemeral = models.BooleanField(
         default=False,
         help_text="Is this Task ephemeral (e.g. should it be deleted after its done or should it be kept for future reference)",
@@ -130,7 +140,9 @@ class Task(models.Model):
         help_text="The Root parent (the one that was created by the user (none if this is the root))",
         related_name="all_children",
     )
-    args = models.JSONField(blank=True, null=True, help_text="The Args", default=dict, db_default={})
+    args = models.JSONField(
+        blank=True, null=True, help_text="The Args", default=dict, db_default={}
+    )
     args_hash = models.CharField(
         max_length=64,
         null=True,
@@ -138,7 +150,9 @@ class Task(models.Model):
         db_index=True,
         help_text="Canonical sha256 of the assign args (provenance canonicalization v1) — the replay-discovery key",
     )
-    dependencies = models.JSONField(blank=True, null=True, help_text="The Args", default=dict, db_default={})
+    dependencies = models.JSONField(
+        blank=True, null=True, help_text="The Args", default=dict, db_default={}
+    )
     caller = models.ForeignKey(
         "Caller",
         on_delete=models.CASCADE,
@@ -308,7 +322,9 @@ class Task(models.Model):
             if update_fields is None or len(update_fields) > 0:
                 self.revision = models.F("revision") + 1
                 if update_fields is not None:
-                    kwargs["update_fields"] = list({*update_fields, "revision", "updated_at"})
+                    kwargs["update_fields"] = list(
+                        {*update_fields, "revision", "updated_at"}
+                    )
         super().save(*args, **kwargs)
 
     class Meta:
@@ -319,28 +335,41 @@ class Task(models.Model):
             # and without this both create a task and both dispatch it — the work runs twice.
             # NULL callers are distinct in Postgres, so caller-less rows are unaffected. The
             # constraint's own index serves the dedupe lookup.
-            models.UniqueConstraint(fields=["caller", "reference"], name="task_unique_reference_per_caller"),
+            models.UniqueConstraint(
+                fields=["caller", "reference"], name="task_unique_reference_per_caller"
+            ),
             # One child per step of a parent: a call re-issued after a restart (same parent, same
             # step, fresh reference) must find the child it already created, not run it again.
             # NULL parent_step (everything but numbered child calls) stays distinct.
-            models.UniqueConstraint(fields=["parent", "parent_step"], name="task_unique_step_per_parent"),
+            models.UniqueConstraint(
+                fields=["parent", "parent_step"], name="task_unique_step_per_parent"
+            ),
             # One child per key of a parent: the same, for concurrent calls, whose steps differ
             # from one run to the next. NULL call_key (roots, keyless agents) stays distinct.
-            models.UniqueConstraint(fields=["parent", "call_key"], name="task_unique_call_key_per_parent"),
+            models.UniqueConstraint(
+                fields=["parent", "call_key"], name="task_unique_call_key_per_parent"
+            ),
         ]
         indexes = [
             # The org-scoped ``tasks`` list. The org restriction lives on Agent (see
             # ``types.Task.get_queryset`` -> ``agent__organization``), so this is the Task-side
             # half of that join; it doubles as the ``agent`` filter and supplies the default
             # ``-created_at`` ordering and the created_before/after range without a sort node.
-            models.Index(fields=["agent", "-created_at"], name="task_agent_created_idx"),
+            models.Index(
+                fields=["agent", "-created_at"], name="task_agent_created_idx"
+            ),
             # "The task this implementation last ran as" (the ``latestTask`` feed's snapshot) and
             # the ``implementation`` filter with its default ordering: one probe, no sort node.
             # It stands in for the foreign key's own index, so the table carries no extra one.
-            models.Index(fields=["implementation", "-created_at"], name="task_impl_created_idx"),
+            models.Index(
+                fields=["implementation", "-created_at"], name="task_impl_created_idx"
+            ),
             # ``TaskFilter.state`` (latest_event_kind__in) org-wide, with the same ordering.
             # Leading with a ~16-value column is fine because the second column is the sort key.
-            models.Index(fields=["latest_event_kind", "-created_at"], name="task_state_created_idx"),
+            models.Index(
+                fields=["latest_event_kind", "-created_at"],
+                name="task_state_created_idx",
+            ),
             # ``TaskFilter.acted_on`` uses ``acted_on__overlap`` (``&&``) on an ArrayField. A btree
             # cannot answer overlap at all, so GIN is the only index type that avoids a seq scan.
             GinIndex(fields=["acted_on"], name="task_acted_on_gin_idx"),
@@ -356,7 +385,11 @@ class Task(models.Model):
             # from the Action-side hash/pure/organization predicate, ``-finished_at`` is the sort.
             models.Index(
                 fields=["args_hash", "action", "-finished_at"],
-                condition=models.Q(is_done=True, ephemeral=False, latest_event_kind=enums.TaskEventChoices.COMPLETED),
+                condition=models.Q(
+                    is_done=True,
+                    ephemeral=False,
+                    latest_event_kind=enums.TaskEventChoices.COMPLETED,
+                ),
                 name="task_replay_idx",
             ),
             # The pickup watchdog: open tasks no agent has reported on yet, by dispatch time.
@@ -366,11 +399,17 @@ class Task(models.Model):
                 name="task_unpicked_idx",
             ),
             # ``refill_schedules``: "does this schedule have an open run?" — at most one row each.
-            models.Index(fields=["schedule"], condition=models.Q(is_done=False, schedule__isnull=False), name="task_schedule_open_idx"),
+            models.Index(
+                fields=["schedule"],
+                condition=models.Q(is_done=False, schedule__isnull=False),
+                name="task_schedule_open_idx",
+            ),
             # ``dispatch_due_tasks``: delayed tasks that were never handed over, by due time.
             models.Index(
                 fields=["not_before"],
-                condition=models.Q(is_done=False, dispatch_attempts=0, not_before__isnull=False),
+                condition=models.Q(
+                    is_done=False, dispatch_attempts=0, not_before__isnull=False
+                ),
                 name="task_not_before_due_idx",
             ),
             # The cancel→interrupt escalation sweep: only rows with a pending deadline.
@@ -382,7 +421,11 @@ class Task(models.Model):
             # The agent-disconnect and orphaned-executor sweeps (``ModelPersistBackend``,
             # takt's ``reaper.rs``) all run filter(agent_id=, is_done=False). A partial index holds
             # only in-flight rows instead of walking that agent's whole history.
-            models.Index(fields=["agent"], condition=models.Q(is_done=False), name="task_agent_open_idx"),
+            models.Index(
+                fields=["agent"],
+                condition=models.Q(is_done=False),
+                name="task_agent_open_idx",
+            ),
             # The retention sweep: filter(is_done=True, root__isnull=True, finished_at__lt=cutoff).
             # Partial on exactly those constants so it only ever holds terminal roots.
             models.Index(
@@ -488,7 +531,9 @@ class TaskEvent(models.Model):
             # position never confirmed) must not be stored a second time.
             models.UniqueConstraint(
                 fields=["task", "agent_session", "agent_pos"],
-                condition=models.Q(agent_session__isnull=False, agent_pos__isnull=False),
+                condition=models.Q(
+                    agent_session__isnull=False, agent_pos__isnull=False
+                ),
                 name="task_event_one_per_report",
             ),
         ]
@@ -530,21 +575,66 @@ class ActionAllowance(models.Model):
     Only the user writes one, with a decision or by hand: never the agent that asks.
     """
 
-    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name="action_allowances", help_text="The user whose runs it is for")
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="action_allowances", help_text="The organization it holds in")
-    app = models.ForeignKey(App, on_delete=models.CASCADE, related_name="action_allowances", help_text="The app of the action that runs without asking")
-    key = models.CharField(max_length=2000, help_text="The key of the action that runs without asking, in its app (every version)")
-    asker_app = models.ForeignKey(App, on_delete=models.CASCADE, null=True, blank=True, related_name="asker_allowances", help_text="The app of the action that may ask for it; null for whoever asks")
-    asker_key = models.CharField(max_length=2000, null=True, blank=True, help_text="The key of the action that may ask for it; null for whoever asks")
+    user = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        related_name="action_allowances",
+        help_text="The user whose runs it is for",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="action_allowances",
+        help_text="The organization it holds in",
+    )
+    app = models.ForeignKey(
+        App,
+        on_delete=models.CASCADE,
+        related_name="action_allowances",
+        help_text="The app of the action that runs without asking",
+    )
+    key = models.CharField(
+        max_length=2000,
+        help_text="The key of the action that runs without asking, in its app (every version)",
+    )
+    asker_app = models.ForeignKey(
+        App,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="asker_allowances",
+        help_text="The app of the action that may ask for it; null for whoever asks",
+    )
+    asker_key = models.CharField(
+        max_length=2000,
+        null=True,
+        blank=True,
+        help_text="The key of the action that may ask for it; null for whoever asks",
+    )
     # Deleted with its run in the database too (0013): takt deletes tasks with its own SQL.
-    run = models.ForeignKey(Task, on_delete=models.CASCADE, null=True, blank=True, related_name="allowances", help_text="The root task it holds under; null for every run of the user")
+    run = models.ForeignKey(
+        Task,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="allowances",
+        help_text="The root task it holds under; null for every run of the user",
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
 
     class Meta:
         constraints = [
             # One rule of each shape: null ("whoever asks", "every run") counts as a value here.
             models.UniqueConstraint(
-                fields=["user", "organization", "app", "key", "asker_app", "asker_key", "run"],
+                fields=[
+                    "user",
+                    "organization",
+                    "app",
+                    "key",
+                    "asker_app",
+                    "asker_key",
+                    "run",
+                ],
                 name="one_allowance_per_rule",
                 nulls_distinct=False,
             ),

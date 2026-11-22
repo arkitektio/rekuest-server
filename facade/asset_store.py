@@ -48,7 +48,11 @@ class AssetPolicy:
 
     def max_size(self, kind: str) -> int:
         """The largest file of ``kind``."""
-        return self.model.max_size if kind == AssetKind.MODEL_3D.value else self.image.max_size
+        return (
+            self.model.max_size
+            if kind == AssetKind.MODEL_3D.value
+            else self.image.max_size
+        )
 
 
 def _overlaid[P](policy: type[P], setting: str) -> P:  # noqa: D103
@@ -64,31 +68,60 @@ def _overlaid[P](policy: type[P], setting: str) -> P:  # noqa: D103
 
 def asset_policy() -> AssetPolicy:
     """The deployment's policy: ``datalayer.kulisse_policy`` for models, ``settings.IMAGE_POLICY`` over the defaults for images."""
-    return AssetPolicy(model=load_config().kulisse_policy.policy(), image=_overlaid(ImagePolicy, "IMAGE_POLICY"))
+    return AssetPolicy(
+        model=load_config().kulisse_policy.policy(),
+        image=_overlaid(ImagePolicy, "IMAGE_POLICY"),
+    )
 
 
 def _check_ref(ref: str) -> None:
     try:
         check_ref(ref)
     except KulisseRefused as error:
-        raise AssetRefused("bad_reference", f"an asset reference is 'sha256:' and 64 lowercase hex characters, not {ref!r}") from error
+        raise AssetRefused(
+            "bad_reference",
+            f"an asset reference is 'sha256:' and 64 lowercase hex characters, not {ref!r}",
+        ) from error
 
 
-def declared_asset(*, organization_id: int, client_id: int | None, user_id: int, ref: str) -> models.AgentAsset:
+def declared_asset(
+    *, organization_id: int, client_id: int | None, user_id: int, ref: str
+) -> models.AgentAsset:
     """What the caller's own agent declares for ``ref``: the only files a caller may upload."""
     _check_ref(ref)
-    declared = models.AgentAsset.objects.filter(agent__organization_id=organization_id, agent__client_id=client_id, agent__user_id=user_id, ref=ref).order_by("id").first()
+    declared = (
+        models.AgentAsset.objects.filter(
+            agent__organization_id=organization_id,
+            agent__client_id=client_id,
+            agent__user_id=user_id,
+            ref=ref,
+        )
+        .order_by("id")
+        .first()
+    )
     if declared is None:
-        raise AssetRefused("not_declared", f"your agent declares no asset {ref}: an app uploads the files it registered, after it registered")
+        raise AssetRefused(
+            "not_declared",
+            f"your agent declares no asset {ref}: an app uploads the files it registered, after it registered",
+        )
     return declared
 
 
 def sourced_asset(*, organization_id: int, ref: str) -> models.AgentAsset:
     """What any agent of the organization declares for ``ref`` with a source: the files an admin may upload for it."""
     _check_ref(ref)
-    declared = models.AgentAsset.objects.filter(agent__organization_id=organization_id, ref=ref, source__isnull=False).order_by("id").first()
+    declared = (
+        models.AgentAsset.objects.filter(
+            agent__organization_id=organization_id, ref=ref, source__isnull=False
+        )
+        .order_by("id")
+        .first()
+    )
     if declared is None:
-        raise AssetRefused("not_sourced", f"no agent of your organization names a source for the asset {ref}: an admin uploads only the files an app says where to fetch")
+        raise AssetRefused(
+            "not_sourced",
+            f"no agent of your organization names a source for the asset {ref}: an admin uploads only the files an app says where to fetch",
+        )
     return declared
 
 
@@ -99,7 +132,10 @@ def upload_size(declared: models.AgentAsset, measured: int | None) -> int:
     if size is None or size <= 0:
         raise AssetRefused("bad_header", "an asset has a size")
     if size > limit:
-        raise AssetRefused("too_large", f"the asset '{declared.name}' is {size} bytes, over the limit of {limit}")
+        raise AssetRefused(
+            "too_large",
+            f"the asset '{declared.name}' is {size} bytes, over the limit of {limit}",
+        )
     return size
 
 
@@ -108,46 +144,82 @@ def _read_object(datalayer: Datalayer, store: MediaStore, limit: int) -> bytes:
     try:
         size = store.measure_bytes(datalayer)
     except FileNotFoundError as error:
-        raise AssetRefused("not_uploaded", f"nothing was uploaded to store {store.pk}") from error
+        raise AssetRefused(
+            "not_uploaded", f"nothing was uploaded to store {store.pk}"
+        ) from error
     if size > limit:
-        raise AssetRefused("too_large", f"the file is {size} bytes, over the limit of {limit}")
+        raise AssetRefused(
+            "too_large", f"the file is {size} bytes, over the limit of {limit}"
+        )
     return store.read_bytes(datalayer, max_bytes=limit + 1)
 
 
-def _finish_model(datalayer: Datalayer, store: DatalayerStore, ref: str) -> tuple[int, dict[str, Any]]:
+def _finish_model(
+    datalayer: Datalayer, store: DatalayerStore, ref: str
+) -> tuple[int, dict[str, Any]]:
     """Finish a model's kulisse store -- its reader checks the GLB and hashes it -- and hold it to ``ref``."""
     if not isinstance(store, KulisseStore):
-        raise AssetRefused("wrong_store", f"a 3D model is uploaded to a kulisse store (requestAssetUpload issues one), not to store {store.pk}")
+        raise AssetRefused(
+            "wrong_store",
+            f"a 3D model is uploaded to a kulisse store (requestAssetUpload issues one), not to store {store.pk}",
+        )
     try:
         store.fill_info(datalayer)
     except FileNotFoundError as error:
-        raise AssetRefused("not_uploaded", f"nothing was uploaded to store {store.pk}") from error
+        raise AssetRefused(
+            "not_uploaded", f"nothing was uploaded to store {store.pk}"
+        ) from error
     except KulisseRefused as error:
         raise AssetRefused(error.code, error.message) from error
     if store.ref != ref:
-        raise AssetRefused("hash_mismatch", f"the stored bytes are {store.ref}, not {ref}")
-    return int(store.size_bytes or 0), {"nodes": store.nodes or [], "stats": store.stats, "joints": store.joints or []}
+        raise AssetRefused(
+            "hash_mismatch", f"the stored bytes are {store.ref}, not {ref}"
+        )
+    return int(store.size_bytes or 0), {
+        "nodes": store.nodes or [],
+        "stats": store.stats,
+        "joints": store.joints or [],
+    }
 
 
-def _finish_image(datalayer: Datalayer, store: DatalayerStore, ref: str, policy: AssetPolicy) -> tuple[int, dict[str, Any]]:
+def _finish_image(
+    datalayer: Datalayer, store: DatalayerStore, ref: str, policy: AssetPolicy
+) -> tuple[int, dict[str, Any]]:
     """Read an image back and hold it to the image rules and ``ref``."""
     if not isinstance(store, MediaStore):
-        raise AssetRefused("wrong_store", f"an image is uploaded to a media store (requestAssetUpload issues one), not to store {store.pk}")
+        raise AssetRefused(
+            "wrong_store",
+            f"an image is uploaded to a media store (requestAssetUpload issues one), not to store {store.pk}",
+        )
     try:
-        image = validate_image(_read_object(datalayer, store, policy.image.max_size), ref, policy.image)
+        image = validate_image(
+            _read_object(datalayer, store, policy.image.max_size), ref, policy.image
+        )
     except ImageRefused as error:
         raise AssetRefused(error.code, error.message) from error
     store.fill_info(datalayer)
-    return image.size, {"format": image.format, "width": image.width, "height": image.height}
+    return image.size, {
+        "format": image.format,
+        "width": image.width,
+        "height": image.height,
+    }
 
 
-def create_asset(datalayer: Datalayer, *, declared: models.AgentAsset, user_id: int, store: DatalayerStore) -> models.Asset:
+def create_asset(
+    datalayer: Datalayer,
+    *,
+    declared: models.AgentAsset,
+    user_id: int,
+    store: DatalayerStore,
+) -> models.Asset:
     """Verify what was uploaded to ``store`` and record it; the existing record if the hash is stored already.
 
     A refused upload leaves nothing behind: the object and its store row are deleted.
     """
     organization_id = declared.agent.organization_id
-    existing = models.Asset.objects.filter(organization_id=organization_id, ref=declared.ref).first()
+    existing = models.Asset.objects.filter(
+        organization_id=organization_id, ref=declared.ref
+    ).first()
     if existing is not None:
         if existing.file_id != store.pk:
             store.delete()
@@ -165,8 +237,18 @@ def create_asset(datalayer: Datalayer, *, declared: models.AgentAsset, user_id: 
 
     try:
         with transaction.atomic():
-            return models.Asset.objects.create(organization_id=organization_id, ref=declared.ref, kind=declared.kind, file=store, size=size, meta=meta, uploaded_by_id=user_id)
+            return models.Asset.objects.create(
+                organization_id=organization_id,
+                ref=declared.ref,
+                kind=declared.kind,
+                file=store,
+                size=size,
+                meta=meta,
+                uploaded_by_id=user_id,
+            )
     except IntegrityError:
         # Two agents uploaded the same file at once: one record, the other upload is surplus.
         store.delete()
-        return models.Asset.objects.get(organization_id=organization_id, ref=declared.ref)
+        return models.Asset.objects.get(
+            organization_id=organization_id, ref=declared.ref
+        )

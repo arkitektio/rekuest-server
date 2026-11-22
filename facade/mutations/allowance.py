@@ -32,7 +32,9 @@ def revoke_allowance(info: Info, input: inputs.RevokeAllowanceInput) -> strawber
     data = input.to_pydantic()
     request = info.context.request
     try:
-        allowance = models.ActionAllowance.objects.get(id=data.id, user=request.user, organization=request.organization)
+        allowance = models.ActionAllowance.objects.get(
+            id=data.id, user=request.user, organization=request.organization
+        )
     except models.ActionAllowance.DoesNotExist:
         raise PermissionError(f"No allowance {data.id} on your auto list.")
     allowance.delete()

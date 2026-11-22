@@ -68,7 +68,15 @@ def create_bucket2(s3) -> None:
 
 
 def _test_db(dbname: str) -> psycopg.Connection:
-    return psycopg.connect(dbname=dbname, user="test", password="test", host="localhost", port=int(os.environ.get("REKUEST_TEST_DB_PORT", 5555)), connect_timeout=1, autocommit=True)
+    return psycopg.connect(
+        dbname=dbname,
+        user="test",
+        password="test",
+        host="localhost",
+        port=int(os.environ.get("REKUEST_TEST_DB_PORT", 5555)),
+        connect_timeout=1,
+        autocommit=True,
+    )
 
 
 def _wait(what: str, ready: Callable[[], bool], seconds: float) -> None:
@@ -88,7 +96,9 @@ def _wait(what: str, ready: Callable[[], bool], seconds: float) -> None:
 @pytest.fixture(scope="session")
 def backend_stack() -> Iterator[Deployment]:
     """Postgres and redis, up for the session. takt joins them later (``takt_stack``)."""
-    docker_compose_path = os.path.join(os.path.dirname(__file__), "integration", "docker-compose.yaml")
+    docker_compose_path = os.path.join(
+        os.path.dirname(__file__), "integration", "docker-compose.yaml"
+    )
 
     with testing(docker_compose_path) as e:
         e.inspect()
@@ -113,13 +123,24 @@ def takt_stack(backend_stack: Deployment, django_db_setup: None) -> Iterator[str
     Started only now: takt needs the database to exist, and waits until it is migrated. Stopped
     before pytest-django drops that database again.
     """
-    backend_stack.up(services=["jaeger", "takt"], build=not os.environ.get("TAKT_IMAGE"))
+    backend_stack.up(
+        services=["jaeger", "takt"], build=not os.environ.get("TAKT_IMAGE")
+    )
     url = f"http://localhost:{os.environ['REKUEST_TEST_TAKT_PORT']}"
-    _wait("takt answering", lambda: httpx.get(f"{url}/ht", timeout=2).status_code == 200, 180)
+    _wait(
+        "takt answering",
+        lambda: httpx.get(f"{url}/ht", timeout=2).status_code == 200,
+        180,
+    )
 
     def listening() -> bool:
         with _test_db("test_testdb") as connection:
-            return connection.execute("SELECT 1 FROM pg_stat_activity WHERE query ILIKE 'LISTEN%rekuest_schedule%'").fetchone() is not None
+            return (
+                connection.execute(
+                    "SELECT 1 FROM pg_stat_activity WHERE query ILIKE 'LISTEN%rekuest_schedule%'"
+                ).fetchone()
+                is not None
+            )
 
     # takt answers before its ear for schedule notices is in place.
     _wait("takt listening for schedule notices", listening, 30)
@@ -127,7 +148,12 @@ def takt_stack(backend_stack: Deployment, django_db_setup: None) -> Iterator[str
     # When a test against takt fails, what takt logged says why: REKUEST_TEST_TAKT_LOG names a file for it.
     if os.environ.get("REKUEST_TEST_TAKT_LOG"):
         with open(os.environ["REKUEST_TEST_TAKT_LOG"], "w") as log:
-            log.write("\n".join(str(line) for line in backend_stack.logs(services=["takt"], tail="400")))
+            log.write(
+                "\n".join(
+                    str(line)
+                    for line in backend_stack.logs(services=["takt"], tail="400")
+                )
+            )
     backend_stack.kill(services=["takt", "jaeger"])
 
 
@@ -146,8 +172,14 @@ class ScheduleNotices:
 
     def sent(self) -> list[dict[str, object]]:
         """The notices delivered since the last call (a notice is delivered when its transaction commits), without their ids."""
-        payloads = [json.loads(notice.payload) for notice in self._connection.notifies(timeout=0.5, stop_after=None)]
-        return [{key: value for key, value in payload.items() if key != "id"} for payload in payloads]
+        payloads = [
+            json.loads(notice.payload)
+            for notice in self._connection.notifies(timeout=0.5, stop_after=None)
+        ]
+        return [
+            {key: value for key, value in payload.items() if key != "id"}
+            for payload in payloads
+        ]
 
 
 @pytest.fixture
@@ -158,7 +190,9 @@ def schedule_notices(takt: str) -> Iterator[ScheduleNotices]:
         yield ScheduleNotices(connection)
 
 
-async def eventually[T](read: Callable[[], Awaitable[T | None]], seconds: float = 10.0) -> T:
+async def eventually[T](
+    read: Callable[[], Awaitable[T | None]], seconds: float = 10.0
+) -> T:
     """What takt does on a notice happens after the mutation answered: ask until it is there."""
     deadline = time.monotonic() + seconds
     while True:
@@ -181,8 +215,12 @@ def django_db_modify_db_settings(backend_stack):
     connection at the ports the stack actually came up on, before the test
     database is created.
     """
-    settings.DATABASES["default"]["PORT"] = int(os.environ.get("REKUEST_TEST_DB_PORT", settings.DATABASES["default"]["PORT"]))
-    settings.AGENT_REDIS_PORT = int(os.environ.get("REKUEST_TEST_REDIS_PORT", settings.AGENT_REDIS_PORT))
+    settings.DATABASES["default"]["PORT"] = int(
+        os.environ.get("REKUEST_TEST_DB_PORT", settings.DATABASES["default"]["PORT"])
+    )
+    settings.AGENT_REDIS_PORT = int(
+        os.environ.get("REKUEST_TEST_REDIS_PORT", settings.AGENT_REDIS_PORT)
+    )
     yield
 
 
@@ -214,7 +252,12 @@ def authenticated_context(db, backend_stack):
     )
     request.set_membership(membership)  # type: ignore
 
-    return HttpContext(request=request, response=TemporalResponse(), headers={"Authorization": "Bearer test"}, type="http")
+    return HttpContext(
+        request=request,
+        response=TemporalResponse(),
+        headers={"Authorization": "Bearer test"},
+        type="http",
+    )
 
 
 async def waiting_run(schedule: int | str, *, other_than: int | None = None) -> int:
@@ -225,7 +268,12 @@ async def waiting_run(schedule: int | str, *, other_than: int | None = None) -> 
     from facade import models
 
     async def planned() -> int | None:
-        return await models.Task.objects.filter(schedule_id=schedule, is_done=False).exclude(pk=other_than).values_list("pk", flat=True).afirst()
+        return (
+            await models.Task.objects.filter(schedule_id=schedule, is_done=False)
+            .exclude(pk=other_than)
+            .values_list("pk", flat=True)
+            .afirst()
+        )
 
     return await eventually(planned)
 

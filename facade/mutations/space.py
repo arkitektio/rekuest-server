@@ -16,8 +16,14 @@ from facade import inputs, models, types
 
 def _affine(matrix: list[list[float]]) -> list[list[float]]:
     """A pose: a 4x4 matrix of finite numbers."""
-    if len(matrix) != 4 or any(len(row) != 4 for row in matrix) or not all(math.isfinite(value) for row in matrix for value in row):
-        raise ValueError("A pose is 4 rows of 4 finite numbers, row-major, in meters with Y up.")
+    if (
+        len(matrix) != 4
+        or any(len(row) != 4 for row in matrix)
+        or not all(math.isfinite(value) for row in matrix for value in row)
+    ):
+        raise ValueError(
+            "A pose is 4 rows of 4 finite numbers, row-major, in meters with Y up."
+        )
     return matrix
 
 
@@ -51,7 +57,9 @@ def save_placement(info: Info, input: inputs.SavePlacementInput) -> types.Placem
     return cast("types.Placement", placement)
 
 
-def reset_placement(info: Info, input: inputs.ResetPlacementInput) -> strawberry.ID | None:
+def reset_placement(
+    info: Info, input: inputs.ResetPlacementInput
+) -> strawberry.ID | None:
     """Forget where an agent was left in a space; the id of the forgotten placement, if there was one."""
     data = input.to_pydantic()
     placement = models.Placement.objects.filter(

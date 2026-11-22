@@ -17,22 +17,43 @@ class TaskEventChoices(TextChoices):
     STARTED = "STARTED", "Started (Agent accepted and began the Task)"
     UNASSIGN = "UNASSIGN", "Unassign (Agent received the Task)"
     PROGRESS = "PROGRESS", "Progress (Agent is making progress on the Task)"
-    CANCELLING = "CANCELLING", "Cancelling (a cancel was requested; awaiting the agent's confirmation)"
+    CANCELLING = (
+        "CANCELLING",
+        "Cancelling (a cancel was requested; awaiting the agent's confirmation)",
+    )
     CANCELLED = "CANCELLED", "Cancelled (the agent cancelled the task)"
-    INTERRUPTING = "INTERRUPTING", "Interrupting (an interrupt was requested; awaiting the agent's confirmation)"
+    INTERRUPTING = (
+        "INTERRUPTING",
+        "Interrupting (an interrupt was requested; awaiting the agent's confirmation)",
+    )
     INTERRUPTED = "INTERRUPTED", "Interrupted (the agent interrupted the task)"
-    PAUSING = "PAUSING", "Pausing (a pause was requested; awaiting the agent's confirmation)"
+    PAUSING = (
+        "PAUSING",
+        "Pausing (a pause was requested; awaiting the agent's confirmation)",
+    )
     PAUSED = "PAUSED", "Paused (the agent suspended the task)"
-    RESUMING = "RESUMING", "Resuming (a resume was requested; awaiting the agent's confirmation)"
+    RESUMING = (
+        "RESUMING",
+        "Resuming (a resume was requested; awaiting the agent's confirmation)",
+    )
     RESUMED = "RESUMED", "Resumed (the agent resumed the task)"
-    HELD = "HELD", "Held (waits for a person to approve it: a child an agent asked for, or the task's own hold)"
+    HELD = (
+        "HELD",
+        "Held (waits for a person to approve it: a child an agent asked for, or the task's own hold)",
+    )
     DECIDED = "DECIDED", "Decided (a person, or auto-mode, answered a hold)"
-    DENIED = "DENIED", "Denied (a person refused to let a held child run; it never started)"
+    DENIED = (
+        "DENIED",
+        "Denied (a person refused to let a held child run; it never started)",
+    )
     DELEGATE = "DELEGATE", "Delegate (Task was delegated to another Task)"
     FAILED = "FAILED"
     CRITICAL = "CRITICAL"
     LOST = "LOST", "Lost (its agent died while it ran; its fate is unknown)"
-    LATE_REPORT = "LATE_REPORT", "Late report (the agent reported an outcome after the task was lost)"
+    LATE_REPORT = (
+        "LATE_REPORT",
+        "Late report (the agent reported an outcome after the task was lost)",
+    )
 
     YIELD = (
         "YIELD",
@@ -40,7 +61,10 @@ class TaskEventChoices(TextChoices):
     )  # One yield can be interpreted as a return
     COMPLETED = "COMPLETED", "Completed (Agent finished the Task)"
     LOG = "LOG", "Log (Agent logged a message)"
-    EFFECT = "EFFECT", "Effect (the task took a value from outside itself: the clock, randomness, a sleep deadline)"
+    EFFECT = (
+        "EFFECT",
+        "Effect (the task took a value from outside itself: the clock, randomness, a sleep deadline)",
+    )
     INFORM = "INFORM", "Inform (the task showed a person a blok while it carried on)"
 
 
@@ -119,23 +143,32 @@ class TaskPolicyChoices(TextChoices):
     """Whether the children an agent asks for wait for a person (persisted on ``Task.policy``)."""
 
     ASK = "ASK", "Ask (an agent's child waits until a person approves it)"
-    AUTO = "AUTO", "Auto (an agent's children run, and its own holds are approved, without asking)"
+    AUTO = (
+        "AUTO",
+        "Auto (an agent's children run, and its own holds are approved, without asking)",
+    )
 
 
-@strawberry.enum(description="Whether the work an agent asks for waits for a person. ASK: a child an agent assigns is held until a person approves it, and the task's own holds wait for a decision. AUTO: they are approved without asking (auto-mode). Set on a root assign; every child inherits its parent's.")
+@strawberry.enum(
+    description="Whether the work an agent asks for waits for a person. ASK: a child an agent assigns is held until a person approves it, and the task's own holds wait for a decision. AUTO: they are approved without asking (auto-mode). Set on a root assign; every child inherits its parent's."
+)
 class TaskPolicy(str, Enum):
     ASK = "ASK"
     AUTO = "AUTO"
 
 
-@strawberry.enum(description="What an assign asks for should its task's agent be lost while it runs. FAIL: it ends LOST. RESUME: a workflow is sent again with what it recorded and goes on (refused for anything else). RESTART: it is run again from the start (refused unless the action is declared idempotent or pure). Not set, a workflow resumes and anything else ends LOST.")
+@strawberry.enum(
+    description="What an assign asks for should its task's agent be lost while it runs. FAIL: it ends LOST. RESUME: a workflow is sent again with what it recorded and goes on (refused for anything else). RESTART: it is run again from the start (refused unless the action is declared idempotent or pure). Not set, a workflow resumes and anything else ends LOST."
+)
 class OnLost(str, Enum):
     FAIL = "FAIL"
     RESUME = "RESUME"
     RESTART = "RESTART"
 
 
-@strawberry.enum(description="What an agent says of a task it is asked about, from memory and at once. UNKNOWN: it has no such task (from the agent the task was given to, that ends the task LOST). WAITING: taken, not started yet. RUNNING: started, and at work. PAUSED: stopped at a pause point until it is resumed. HELD: waiting for a person's decision. ENDED: its end was reported. Not a column of a task: nothing sorts or filters by it.")
+@strawberry.enum(
+    description="What an agent says of a task it is asked about, from memory and at once. UNKNOWN: it has no such task (from the agent the task was given to, that ends the task LOST). WAITING: taken, not started yet. RUNNING: started, and at work. PAUSED: stopped at a pause point until it is resumed. HELD: waiting for a person's decision. ENDED: its end was reported. Not a column of a task: nothing sorts or filters by it."
+)
 class TaskStatus(str, Enum):
     UNKNOWN = "UNKNOWN"
     WAITING = "WAITING"
@@ -145,7 +178,9 @@ class TaskStatus(str, Enum):
     ENDED = "ENDED"
 
 
-@strawberry.enum(description="What an approval is remembered as: the allowance it leaves on the user's auto list. RUN: this action, whoever asks, for the rest of this run. ASKER: this action whenever the action that asked now asks again, in every run of the user. ALWAYS: this action, whoever asks, in every run of the user.")
+@strawberry.enum(
+    description="What an approval is remembered as: the allowance it leaves on the user's auto list. RUN: this action, whoever asks, for the rest of this run. ASKER: this action whenever the action that asked now asks again, in every run of the user. ALWAYS: this action, whoever asks, in every run of the user."
+)
 class HoldRemember(str, Enum):
     RUN = "RUN"
     ASKER = "ASKER"

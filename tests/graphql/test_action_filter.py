@@ -10,14 +10,13 @@ the optional ``descriptors`` on ``PortMatchInput``.
 
 import pytest
 from asgiref.sync import sync_to_async
+from authentikate.models import App, Client, Release
 from kante.context import HttpContext
 
-from authentikate.models import App, Client, Release
-from rekuest_core.inputs.models import ImplementationInputModel
-
 from facade import models
-from tests.registered import create_implementation as _create_implementation
 from facade.schema import schema
+from rekuest_core.inputs.models import ImplementationInputModel
+from tests.registered import create_implementation as _create_implementation
 
 FILTER_QUERY = """
     query FilterActions($demands: [PortDemandInput!]) {
@@ -44,7 +43,9 @@ def _implementation_input():
                         "kind": "STRUCTURE",
                         "identifier": "@mikro/image",
                         "nullable": False,
-                        "requires": [{"key": "axes", "operator": "EQUALS", "value": "c"}],
+                        "requires": [
+                            {"key": "axes", "operator": "EQUALS", "value": "c"}
+                        ],
                     }
                 ],
                 "returns": [],
@@ -65,7 +66,14 @@ def _seed_action_requiring_axes_c(context):
     org = request.organization
     app = App.objects.create(identifier="flt-app")
     release = Release.objects.create(app=app, version="1.0.0")
-    agent = models.Agent.objects.create(app=app, release=release, user=request.user, client=request.client, organization=org, hash="flt-agent-hash")
+    agent = models.Agent.objects.create(
+        app=app,
+        release=release,
+        user=request.user,
+        client=request.client,
+        organization=org,
+        hash="flt-agent-hash",
+    )
     return _create_implementation(_implementation_input(), agent).action
 
 
@@ -87,7 +95,9 @@ def _demands(descriptor_values):
             "matches": [
                 {
                     "identifier": "@mikro/image",
-                    "descriptors": [{"key": k, "value": v} for k, v in descriptor_values.items()],
+                    "descriptors": [
+                        {"key": k, "value": v} for k, v in descriptor_values.items()
+                    ],
                 }
             ],
         }
@@ -99,7 +109,9 @@ def _demands(descriptor_values):
 class TestActionObjectFilter:
     """Filtering the action catalog by a candidate object's runtime descriptors."""
 
-    async def test_filter_matches_when_descriptors_satisfied(self, authenticated_context: HttpContext):
+    async def test_filter_matches_when_descriptors_satisfied(
+        self, authenticated_context: HttpContext
+    ):
         await _seed_in_execution_org(authenticated_context)
 
         result = await schema.execute(
@@ -112,7 +124,9 @@ class TestActionObjectFilter:
         names = [a["name"] for a in result.data["actions"]]
         assert "Thresholder" in names
 
-    async def test_filter_excludes_when_descriptors_violated(self, authenticated_context: HttpContext):
+    async def test_filter_excludes_when_descriptors_violated(
+        self, authenticated_context: HttpContext
+    ):
         await _seed_in_execution_org(authenticated_context)
 
         result = await schema.execute(
@@ -141,7 +155,9 @@ def _seed_estimates(context: HttpContext) -> None:
     from django.utils import timezone
 
     organization = context.request.organization
-    release = Release.objects.create(app=App.objects.create(identifier="estimate-app"), version="1.0.0")
+    release = Release.objects.create(
+        app=App.objects.create(identifier="estimate-app"), version="1.0.0"
+    )
     for name, seconds in (("slow", 1000), ("fast", 10), ("none", None)):
         payload = _implementation_input().model_dump()
         payload["interface"] = name
@@ -149,30 +165,74 @@ def _seed_estimates(context: HttpContext) -> None:
         payload["definition"]["args"][0].pop("requires", None)
         # An agent per client: one client, user and organization has one agent.
         client = Client.objects.create(client_id=f"estimate-{name}", release=release)
-        agent = models.Agent.objects.create(app=release.app, release=release, user=context.request.user, client=client, organization=organization, hash=name, name=name, connected=True, last_seen=timezone.now(), hardware={"cpu_count": 1})
-        implementation = _create_implementation(ImplementationInputModel.model_validate(payload), agent)
+        agent = models.Agent.objects.create(
+            app=release.app,
+            release=release,
+            user=context.request.user,
+            client=client,
+            organization=organization,
+            hash=name,
+            name=name,
+            connected=True,
+            last_seen=timezone.now(),
+            hardware={"cpu_count": 1},
+        )
+        implementation = _create_implementation(
+            ImplementationInputModel.model_validate(payload), agent
+        )
         if seconds is not None:
-            models.Implementation.objects.filter(pk=implementation.pk).update(estimated_runtime_path=f"({seconds} / $agent.cpu_count)", estimated_runtime_port="image")
+            models.Implementation.objects.filter(pk=implementation.pk).update(
+                estimated_runtime_path=f"({seconds} / $agent.cpu_count)",
+                estimated_runtime_port="image",
+            )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_actions_filter_and_sort_by_their_estimate(authenticated_context: HttpContext):
+async def test_actions_filter_and_sort_by_their_estimate(
+    authenticated_context: HttpContext,
+):
     await schema.execute("query { __typename }", context_value=authenticated_context)
     await sync_to_async(_seed_estimates)(authenticated_context)
 
     def object_filter(**extra):
-        return {"estimatedRuntime": {"identifier": "@mikro/image", "descriptors": [{"key": "axes", "value": "c"}], **extra}}
+        return {
+            "estimatedRuntime": {
+                "identifier": "@mikro/image",
+                "descriptors": [{"key": "axes", "value": "c"}],
+                **extra,
+            }
+        }
 
-    ordered = await schema.execute(ESTIMATE_QUERY, variable_values={"filters": object_filter(), "ordering": [{"estimatedRuntime": "ASC_NULLS_LAST"}]}, context_value=authenticated_context)
+    ordered = await schema.execute(
+        ESTIMATE_QUERY,
+        variable_values={
+            "filters": object_filter(),
+            "ordering": [{"estimatedRuntime": "ASC_NULLS_LAST"}],
+        },
+        context_value=authenticated_context,
+    )
     assert ordered.errors is None, ordered.errors
-    assert [(action["name"], action["estimatedRuntimeSeconds"]) for action in ordered.data["actions"]] == [("fast", 10.0), ("slow", 1000.0), ("none", None)]
+    assert [
+        (action["name"], action["estimatedRuntimeSeconds"])
+        for action in ordered.data["actions"]
+    ] == [("fast", 10.0), ("slow", 1000.0), ("none", None)]
 
-    limited = await schema.execute(ESTIMATE_QUERY, variable_values={"filters": object_filter(lte=60)}, context_value=authenticated_context)
+    limited = await schema.execute(
+        ESTIMATE_QUERY,
+        variable_values={"filters": object_filter(lte=60)},
+        context_value=authenticated_context,
+    )
     assert limited.errors is None, limited.errors
     assert {action["name"] for action in limited.data["actions"]} == {"fast", "none"}
 
     # Without the filter there is nothing to order by.
-    plain = await schema.execute(ESTIMATE_QUERY, variable_values={"ordering": [{"estimatedRuntime": "ASC_NULLS_LAST"}]}, context_value=authenticated_context)
+    plain = await schema.execute(
+        ESTIMATE_QUERY,
+        variable_values={"ordering": [{"estimatedRuntime": "ASC_NULLS_LAST"}]},
+        context_value=authenticated_context,
+    )
     assert plain.errors is None, plain.errors
-    assert {action["estimatedRuntimeSeconds"] for action in plain.data["actions"]} == {None}
+    assert {action["estimatedRuntimeSeconds"] for action in plain.data["actions"]} == {
+        None
+    }

@@ -34,7 +34,9 @@ def test_embeddings_block_defaults_and_override(monkeypatch):
 
 def test_a_model_named_in_the_config_is_reported_as_unread():
     """The model is a constant of the release: a config that names one is told so."""
-    assert unread(Settings, {"embeddings": {"enabled": True, "model": "some/other-model"}}).unknown == ["embeddings.model"]
+    assert unread(
+        Settings, {"embeddings": {"enabled": True, "model": "some/other-model"}}
+    ).unknown == ["embeddings.model"]
 
 
 def test_the_services_own_config_is_read_as_written():
@@ -48,19 +50,39 @@ def test_a_key_of_another_release_is_reported_not_swallowed():
         Settings,
         {
             "rekuest": {
-                "service_agents": [{"service": "mikro", "hook_url": "http://mikro/_rekuest/hook"}],
+                "service_agents": [
+                    {"service": "mikro", "hook_url": "http://mikro/_rekuest/hook"}
+                ],
                 "agentd_url": "http://takt:8081/rekuest",
-                "hook_agents": [{"name": "mikro", "hook_url": "http://mikro/_rekuest/hook", "secret": "s"}],
+                "hook_agents": [
+                    {
+                        "name": "mikro",
+                        "hook_url": "http://mikro/_rekuest/hook",
+                        "secret": "s",
+                    }
+                ],
                 "server_url": "http://rekuest:80/rekuest",
             },
             "instance": {"private_key": "k", "trust": {"jwks_url": "http://lok/keys"}},
-        }
+        },
     )
-    assert found.unknown == ["rekuest.service_agents", "rekuest.hook_agents[0].secret", "instance.trust.jwks_url"]
+    assert found.unknown == [
+        "rekuest.service_agents",
+        "rekuest.hook_agents[0].secret",
+        "instance.trust.jwks_url",
+    ]
     assert found.renamed == [("rekuest.agentd_url", "rekuest.takt_url")]
 
 
 def test_open_blocks_and_the_top_level_are_not_reported():
     """Driver options in a connection block, and blocks other services read, are nobody's mistake."""
-    found = unread(Settings, {"postgres": {"sslmode": "require"}, "redis": {"db": 2}, "lok": {"url": "http://lok"}, "datalayer": {"media": {"bucket": "m", "acl": "private"}}})
+    found = unread(
+        Settings,
+        {
+            "postgres": {"sslmode": "require"},
+            "redis": {"db": 2},
+            "lok": {"url": "http://lok"},
+            "datalayer": {"media": {"bucket": "m", "acl": "private"}},
+        },
+    )
     assert not found

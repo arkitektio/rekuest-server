@@ -14,10 +14,26 @@ from tests.provisioning_fixtures import declared, hub  # noqa: F401  (fixtures)
 def _rows() -> dict:
     """Every catalog row a pass writes, in the order it is read back."""
     return {
-        "services": list(models.Service.objects.order_by("name").values_list("name", "identifier")),
-        "structures": list(models.StructureDeclaration.objects.order_by("identifier").values_list("service__name", "identifier", "label", "description")),
-        "descriptors": list(models.Descriptor.objects.order_by("structure__identifier", "position").values_list("structure__identifier", "key", "type", "description", "position")),
-        "signals": list(models.SignalDeclaration.objects.order_by("identifier", "kind").values_list("service__name", "identifier", "kind", "descriptor_keys", "description")),
+        "services": list(
+            models.Service.objects.order_by("name").values_list("name", "identifier")
+        ),
+        "structures": list(
+            models.StructureDeclaration.objects.order_by("identifier").values_list(
+                "service__name", "identifier", "label", "description"
+            )
+        ),
+        "descriptors": list(
+            models.Descriptor.objects.order_by(
+                "structure__identifier", "position"
+            ).values_list(
+                "structure__identifier", "key", "type", "description", "position"
+            )
+        ),
+        "signals": list(
+            models.SignalDeclaration.objects.order_by("identifier", "kind").values_list(
+                "service__name", "identifier", "kind", "descriptor_keys", "description"
+            )
+        ),
     }
 
 
@@ -31,12 +47,26 @@ class TestInlineDeclaration:
         (fetched,) = hub.SERVICES
         assert service_catalog.catalogue_all() == []
         from_manifest = _rows()
-        assert from_manifest["structures"] and from_manifest["descriptors"] and len(from_manifest["signals"]) == 2
+        assert (
+            from_manifest["structures"]
+            and from_manifest["descriptors"]
+            and len(from_manifest["signals"]) == 2
+        )
 
-        for model in (models.SignalDeclaration, models.StructureDeclaration, models.Service):
+        for model in (
+            models.SignalDeclaration,
+            models.StructureDeclaration,
+            models.Service,
+        ):
             model.objects.all().delete()
         # Nowhere to ask: the rows can only come from the entry.
-        hub.SERVICES = [ServiceEntry(name=fetched.name, url="http://127.0.0.1:9/_rekuest/service", hosts={"structures": said["structures"], "signals": said["signals"]})]
+        hub.SERVICES = [
+            ServiceEntry(
+                name=fetched.name,
+                url="http://127.0.0.1:9/_rekuest/service",
+                hosts={"structures": said["structures"], "signals": said["signals"]},
+            )
+        ]
         assert service_catalog.catalogue_all() == []
 
         assert _rows() == from_manifest
@@ -46,11 +76,23 @@ class TestInlineDeclaration:
         said = housekeeping.manifest()
         (fetched,) = hub.SERVICES
         service_catalog.catalogue_all()
-        assert models.Service.objects.get(name="housekeeping").description == "A test service."
+        assert (
+            models.Service.objects.get(name="housekeeping").description
+            == "A test service."
+        )
 
-        hub.SERVICES = [ServiceEntry(name=fetched.name, url=fetched.url, hosts={"structures": said["structures"], "signals": said["signals"]})]
+        hub.SERVICES = [
+            ServiceEntry(
+                name=fetched.name,
+                url=fetched.url,
+                hosts={"structures": said["structures"], "signals": said["signals"]},
+            )
+        ]
         service_catalog.catalogue_all()
-        assert models.Service.objects.get(name="housekeeping").description == "A test service."
+        assert (
+            models.Service.objects.get(name="housekeeping").description
+            == "A test service."
+        )
 
         models.Service.objects.all().delete()
         service_catalog.catalogue_all()
@@ -60,26 +102,44 @@ class TestInlineDeclaration:
         """Unlike a manifest that lists no structures (unknown), an inline declaration without any takes them away."""
         (fetched,) = hub.SERVICES
         service_catalog.catalogue_all()
-        assert models.StructureDeclaration.objects.filter(identifier="@housekeeping/room").exists()
+        assert models.StructureDeclaration.objects.filter(
+            identifier="@housekeeping/room"
+        ).exists()
 
         hub.SERVICES = [ServiceEntry(name=fetched.name, url=fetched.url, hosts={})]
         assert service_catalog.catalogue_all() == []
-        assert not models.StructureDeclaration.objects.exclude(service__name=service_catalog.SELF).exists() and not models.SignalDeclaration.objects.exists()
+        assert (
+            not models.StructureDeclaration.objects.exclude(
+                service__name=service_catalog.SELF
+            ).exists()
+            and not models.SignalDeclaration.objects.exists()
+        )
 
-    def test_the_catalogue_job_writes_what_the_config_says_and_does_not_fail_on_a_service_that_is_not_up(self, hub, capsys):
+    def test_the_catalogue_job_writes_what_the_config_says_and_does_not_fail_on_a_service_that_is_not_up(
+        self, hub, capsys
+    ):
         from django.core.management import call_command
 
         said = housekeeping.manifest()
         hub.SERVICES = [
-            ServiceEntry(name="housekeeping", url="http://127.0.0.1:9/_rekuest/service", hosts={"structures": said["structures"], "signals": said["signals"]}),
+            ServiceEntry(
+                name="housekeeping",
+                url="http://127.0.0.1:9/_rekuest/service",
+                hosts={"structures": said["structures"], "signals": said["signals"]},
+            ),
             ServiceEntry(name="offline", url="http://127.0.0.1:9/_rekuest/service"),
         ]
 
         call_command("catalogue")
 
         out = capsys.readouterr().out
-        assert "Catalogued housekeeping (from the config)." in out and "Could not reach offline" in out
-        assert models.StructureDeclaration.objects.filter(identifier="@housekeeping/room", service__name="housekeeping").exists()
+        assert (
+            "Catalogued housekeeping (from the config)." in out
+            and "Could not reach offline" in out
+        )
+        assert models.StructureDeclaration.objects.filter(
+            identifier="@housekeeping/room", service__name="housekeeping"
+        ).exists()
         assert not models.Service.objects.filter(name="offline").exists()
 
 
@@ -87,16 +147,22 @@ class TestInlineDeclaration:
 class TestRekuestsOwnStructures:
     """rekuest hosts ``@rekuest/agent`` itself: catalogued with every pass, peers or not."""
 
-    def test_the_agent_and_its_supervisor_descriptor_are_catalogued_without_any_peer(self, settings):
+    def test_the_agent_and_its_supervisor_descriptor_are_catalogued_without_any_peer(
+        self, settings
+    ):
         settings.SERVICES = []
 
         assert service_catalog.catalogue_all() == []
 
         agent = models.StructureDeclaration.objects.get(identifier="@rekuest/agent")
         assert agent.service.name == service_catalog.SELF
-        assert list(agent.descriptors.values_list("key", "type")) == [("@rekuest/supervisor", "STRING")]
+        assert list(agent.descriptors.values_list("key", "type")) == [
+            ("@rekuest/supervisor", "STRING")
+        ]
 
-    def test_the_catalogue_job_writes_them_with_no_services_configured(self, settings, capsys):
+    def test_the_catalogue_job_writes_them_with_no_services_configured(
+        self, settings, capsys
+    ):
         from django.core.management import call_command
 
         settings.SERVICES = []
@@ -104,4 +170,6 @@ class TestRekuestsOwnStructures:
         call_command("catalogue")
 
         assert "Catalogued rekuest's own structures." in capsys.readouterr().out
-        assert models.StructureDeclaration.objects.filter(identifier="@rekuest/agent", service__name=service_catalog.SELF).exists()
+        assert models.StructureDeclaration.objects.filter(
+            identifier="@rekuest/agent", service__name=service_catalog.SELF
+        ).exists()

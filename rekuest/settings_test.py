@@ -9,7 +9,14 @@ import os
 # grant care about its *shape*, not its credentials, so let them have the unscoped one.
 DATALAYER = {**DATALAYER, "allow_unscoped_fallback": True}
 
-DATABASES["default"] = {**DATABASES["default"], "NAME": "testdb", "PORT": int(os.environ.get("REKUEST_TEST_DB_PORT", 5555)), "HOST": "localhost", "USER": "test", "PASSWORD": "test"}
+DATABASES["default"] = {
+    **DATABASES["default"],
+    "NAME": "testdb",
+    "PORT": int(os.environ.get("REKUEST_TEST_DB_PORT", 5555)),
+    "HOST": "localhost",
+    "USER": "test",
+    "PASSWORD": "test",
+}
 #: What a test token is unless it says otherwise: rekuest's admin, through an app granted all of rekuest.
 ADMIN_WITH_EVERY_SCOPE = {"roles": ["rekuest_admin"], "scope": "openid rekuest_all"}
 
@@ -28,14 +35,35 @@ AUTHENTIKATE = {
             # A third identity in a *different* organization for cross-tenant tests. The auth
             # extension always derives the request's organization from the bearer token, so a
             # second tenant can only be expressed as a second token.
-            "test-other": {"sub": "3", "client_id": "oinsoins3", "app": "test-app", "org": "other_org"},
+            "test-other": {
+                "sub": "3",
+                "client_id": "oinsoins3",
+                "app": "test-app",
+                "org": "other_org",
+            },
             # A member of the default organization holding the role every member holds, not
             # rekuest's admin, for the mutations only an admin may run.
-            "test-member": {"sub": "4", "client_id": "oinsoins4", "app": "test-app", "roles": ["rekuest_editor"]},
+            "test-member": {
+                "sub": "4",
+                "client_id": "oinsoins4",
+                "app": "test-app",
+                "roles": ["rekuest_editor"],
+            },
             # The user of "test" through an app granted only what it reads (tests/test_scopes.py).
-            "readertest": {"sub": "1", "client_id": "oinsoins", "app": "test-app", "scope": "openid rekuest_read"},
+            "readertest": {
+                "sub": "1",
+                "client_id": "oinsoins",
+                "app": "test-app",
+                "scope": "openid rekuest_read",
+            },
             # A member's app granted what the plugin engine is: reading, and acting as an agent.
-            "agenttest": {"sub": "5", "client_id": "oinsoins5", "app": "test-app", "roles": ["rekuest_editor"], "scope": "openid rekuest_read rekuest_agent"},
+            "agenttest": {
+                "sub": "5",
+                "client_id": "oinsoins5",
+                "app": "test-app",
+                "roles": ["rekuest_editor"],
+                "scope": "openid rekuest_read rekuest_agent",
+            },
         }.items()
     },
 }
@@ -62,18 +90,27 @@ PROBE_MAX_INFLIGHT_PER_CALLER = 8
 
 # The hub trust bundle under test, inline: rekuest's own key plus one key per instance the tests
 # play (services and a hook agent, each with its own key, as separate processes would have).
-from joserfc.jwk import OKPKey as _TestOKPKey  # noqa: E402
 from arkitekt_service.trust import public_jwk as _public_jwk  # noqa: E402
+from joserfc.jwk import OKPKey as _TestOKPKey  # noqa: E402
 
 from .settings import INSTANCE, REKUEST_IDENTIFIER  # noqa: E402
 
-TEST_SERVICE_KEYS = {name: _TestOKPKey.generate_key("Ed25519") for name in ("mikro", "housekeeping", "bank", "janitor")}
+TEST_SERVICE_KEYS = {
+    name: _TestOKPKey.generate_key("Ed25519")
+    for name in ("mikro", "housekeeping", "bank", "janitor")
+}
 INSTANCE = {
     **INSTANCE,
     "TRUST_JWKS": {
         "keys": [
-            {**_public_jwk(_TestOKPKey.import_key(INSTANCE["PRIVATE_KEY"])), "service": REKUEST_IDENTIFIER},
-            *({**_public_jwk(key), "service": name} for name, key in TEST_SERVICE_KEYS.items()),
+            {
+                **_public_jwk(_TestOKPKey.import_key(INSTANCE["PRIVATE_KEY"])),
+                "service": REKUEST_IDENTIFIER,
+            },
+            *(
+                {**_public_jwk(key), "service": name}
+                for name, key in TEST_SERVICE_KEYS.items()
+            ),
         ]
     },
 }

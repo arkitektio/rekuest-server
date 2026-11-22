@@ -331,17 +331,17 @@ Enable in development settings for SQL query analysis and performance profiling.
 Configure logging in `settings.py`:
 ```python
 LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
         },
     },
-    'loggers': {
-        'facade': {
-            'handlers': ['console'],
-            'level': 'DEBUG',
+    "loggers": {
+        "facade": {
+            "handlers": ["console"],
+            "level": "DEBUG",
         },
     },
 }

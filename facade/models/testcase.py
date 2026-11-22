@@ -1,6 +1,5 @@
-
-from django.db.models.functions import Now
 from django.db import models
+from django.db.models.functions import Now
 
 
 class TestCase(models.Model):
@@ -32,7 +31,9 @@ class TestCase(models.Model):
 
 class TestResult(models.Model):
     case = models.ForeignKey(TestCase, on_delete=models.CASCADE, related_name="results")
-    implementation = models.ForeignKey("Implementation", on_delete=models.CASCADE, related_name="testresults")
+    implementation = models.ForeignKey(
+        "Implementation", on_delete=models.CASCADE, related_name="testresults"
+    )
     tester = models.ForeignKey(
         "Implementation",
         on_delete=models.CASCADE,

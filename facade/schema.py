@@ -8,7 +8,11 @@ from arkitekt_datalayer.datalayer import load_config
 from arkitekt_datalayer.scalars import SCALAR_MAP as dscalar_map
 from arkitekt_service.graphql import TelemetryExtension
 from authentikate.catch_alls import declare_catch_alls
-from authentikate.strawberry import AuthentikateExtension, AuthExtension, AuthSubscribeExtension
+from authentikate.strawberry import (
+    AuthentikateExtension,
+    AuthExtension,
+    AuthSubscribeExtension,
+)
 from django.db.models import Q
 from kante.types import Info
 from kante.unions import unionElementOf
@@ -36,7 +40,10 @@ def field(scope: str = "rekuest_read", **kwargs):  # noqa: ANN201  strawberry ty
 def mutation(scope: str, roles: list[str] | None = None, **kwargs):  # noqa: ANN201  as above
     """A write: an app needs ``scope`` for it, a member one of ``roles`` (``rekuest_editor`` unless it
     says otherwise; ``rekuest_admin`` holds every role)."""
-    return strawberry_django.mutation(extensions=[AuthExtension(scopes=[scope], any_role_of=roles or [EDITOR])], **kwargs)
+    return strawberry_django.mutation(
+        extensions=[AuthExtension(scopes=[scope], any_role_of=roles or [EDITOR])],
+        **kwargs,
+    )
 
 
 def automation(**kwargs):  # noqa: ANN201  as above
@@ -49,18 +56,24 @@ def automation(**kwargs):  # noqa: ANN201  as above
 
 def read_mutation(**kwargs):  # noqa: ANN201  as above
     """A mutation that changes nothing (it hands out read credentials, or writes a document down): a read."""
-    return strawberry_django.mutation(extensions=[AuthExtension(scopes=["rekuest_read"])], **kwargs)
+    return strawberry_django.mutation(
+        extensions=[AuthExtension(scopes=["rekuest_read"])], **kwargs
+    )
 
 
 def upload_mutation(**kwargs):  # noqa: ANN201  as above
     """A datalayer upload: an app needs ``rekuest_write``, a member one of the configured ``upload_roles``
     (``rekuest_editor`` when none are). Read once, at schema build."""
-    return mutation(scope="rekuest_write", roles=load_config().upload_roles or [EDITOR], **kwargs)
+    return mutation(
+        scope="rekuest_write", roles=load_config().upload_roles or [EDITOR], **kwargs
+    )
 
 
 def subscription(scope: str = "rekuest_read", **kwargs):  # noqa: ANN201  as above
     """A subscription: what it streams is read, so an app needs ``rekuest_read`` for it."""
-    return strawberry.subscription(extensions=[AuthSubscribeExtension(scopes=[scope])], **kwargs)
+    return strawberry.subscription(
+        extensions=[AuthSubscribeExtension(scopes=[scope])], **kwargs
+    )
 
 
 @strawberry.type(description="Root query type for fetching entities in the system.")
@@ -68,28 +81,65 @@ class Query:
     clients: list[types.Client] = field(description="List all registered clients.")
     agents: list[types.Agent] = field(description="Retrieve all compute agents.")
     actions: list[types.Action] = field(description="List of all available actions.")
-    protocols: list[types.Protocol] = field(description="Retrieve protocols grouping actions.")
-    implementations: list[types.Implementation] = field(description="All registered implementations.")
-    test_results: list[types.TestResult] = field(description="Test results associated with test cases.")
+    protocols: list[types.Protocol] = field(
+        description="Retrieve protocols grouping actions."
+    )
+    implementations: list[types.Implementation] = field(
+        description="All registered implementations."
+    )
+    test_results: list[types.TestResult] = field(
+        description="Test results associated with test cases."
+    )
     test_cases: list[types.TestCase] = field(description="All test cases.")
     shortcuts: list[types.Shortcut] = field(description="List of shortcuts.")
-    toolboxes: list[types.Toolbox] = field(description="List of toolboxes containing shortcuts.")
+    toolboxes: list[types.Toolbox] = field(
+        description="List of toolboxes containing shortcuts."
+    )
     action = field(resolver=queries.action, description="Fetch a specific action.")
     similar_actions = field(
         resolver=queries.similar_actions,
         description="Actions whose name and description mean roughly what this action's do, nearest first: the org's other actions ranked by cosine distance between their embeddings. `filters` narrows the candidates like `actions` does; `maxDistance` (0 identical, 1 unrelated) cuts the tail, otherwise the nearest `limit` come back. Empty while the action has no vector yet or embeddings are off.",
     )
-    my_allowances = field(resolver=queries.my_allowances, description="Your auto list in this organization: the actions that run under your runs without asking you, newest first. With `action`, the entries for that action. An allowance of a single run is not listed.")
-    my_tasks = field(resolver=queries.my_tasks, description="Fetch the root tasks this client created (caller-scoped).")
-    probe = field(resolver=queries.probe, description="Fetch a live (or lingering) probe by ID. Expired probes are gone — probes are never persisted.")
-    probe_stats = field(resolver=queries.probe_stats, description="Live probe counts: instance-wide total plus your in-flight count and cap.")
-    reusable_task_for = field(resolver=queries.reusable_task_for, description="The latest completed run of a PURE action with these exact args, or null — the replay primitive. Reuse decisions belong to the orchestrator.")
+    my_allowances = field(
+        resolver=queries.my_allowances,
+        description="Your auto list in this organization: the actions that run under your runs without asking you, newest first. With `action`, the entries for that action. An allowance of a single run is not listed.",
+    )
+    my_tasks = field(
+        resolver=queries.my_tasks,
+        description="Fetch the root tasks this client created (caller-scoped).",
+    )
+    probe = field(
+        resolver=queries.probe,
+        description="Fetch a live (or lingering) probe by ID. Expired probes are gone — probes are never persisted.",
+    )
+    probe_stats = field(
+        resolver=queries.probe_stats,
+        description="Live probe counts: instance-wide total plus your in-flight count and cap.",
+    )
+    reusable_task_for = field(
+        resolver=queries.reusable_task_for,
+        description="The latest completed run of a PURE action with these exact args, or null — the replay primitive. Reuse decisions belong to the orchestrator.",
+    )
     event = field(resolver=queries.event, description="Fetch a specific event.")
-    implementation_at = field(resolver=queries.implementation_at, description="Find implementation at given interface.")
-    my_implementation_at = field(resolver=queries.my_implementation_at, description="Find your implementation at a specific interface.")
-    checkout = field(resolver=queries.checkout, description="Materialize the latest state for a specific agent")
-    checkout_agent = field(resolver=queries.checkout_agent, description="Materialize the latest states for a specific agent")
-    dashboards: list[types.Dashboard] = field(pagination=True, description="All dashboards.")
+    implementation_at = field(
+        resolver=queries.implementation_at,
+        description="Find implementation at given interface.",
+    )
+    my_implementation_at = field(
+        resolver=queries.my_implementation_at,
+        description="Find your implementation at a specific interface.",
+    )
+    checkout = field(
+        resolver=queries.checkout,
+        description="Materialize the latest state for a specific agent",
+    )
+    checkout_agent = field(
+        resolver=queries.checkout_agent,
+        description="Materialize the latest states for a specific agent",
+    )
+    dashboards: list[types.Dashboard] = field(
+        pagination=True, description="All dashboards."
+    )
     bloks: list[types.Blok] = strawberry_django.field(
         field_cls=types.blok.ListedBloksField,
         extensions=[AuthExtension(scopes=["rekuest_read"])],
@@ -101,114 +151,247 @@ class Query:
         extensions=[AuthExtension(scopes=["rekuest_read"])],
         description="List of UI Blok. Leaves out the materializations made for a message: each is shown in its message and reached by its id.",
     )
-    modules: list[types.Module] = field(description="Modules registered in the caller's organization: the components and operations UI apps can render and evaluate beyond the spec's catalogs.")
-    base_catalog = field(resolver=types.dashboard.base_catalog, description="The built-in base catalog every definition and blok is validated against before any registered UI catalog (virtual: shipped with the server, not registered).")
+    modules: list[types.Module] = field(
+        description="Modules registered in the caller's organization: the components and operations UI apps can render and evaluate beyond the spec's catalogs."
+    )
+    base_catalog = field(
+        resolver=types.dashboard.base_catalog,
+        description="The built-in base catalog every definition and blok is validated against before any registered UI catalog (virtual: shipped with the server, not registered).",
+    )
     memory_shelves: list[types.MemoryShelve] = field(description="All memory shelves.")
     memory_drawers: list[types.MemoryDrawer] = field(description="All memory drawers.")
-    descriptors: list[types.StructureDescriptor] = field(description="The descriptors the hub's services declare for the objects of the structures they host: searchable by key and description. Hub-wide.")
-    hosted_structures: list[types.HostedStructure] = field(description="The structures the hub's services host, as rows: searchable, with their descriptors. Hub-wide.")
-    structures = field(resolver=types.structure.list_structures, description="All structures: those the org's action ports reference, and those a service of this hub hosts.")
-    structure_packages = field(resolver=types.structure.list_structure_packages, description="All structure packages referenced by the org's action ports (derived, not registered).")
-    interfaces = field(resolver=types.structure.list_interfaces, description="All interfaces referenced by the org's action ports (derived, not registered).")
+    descriptors: list[types.StructureDescriptor] = field(
+        description="The descriptors the hub's services declare for the objects of the structures they host: searchable by key and description. Hub-wide."
+    )
+    hosted_structures: list[types.HostedStructure] = field(
+        description="The structures the hub's services host, as rows: searchable, with their descriptors. Hub-wide."
+    )
+    structures = field(
+        resolver=types.structure.list_structures,
+        description="All structures: those the org's action ports reference, and those a service of this hub hosts.",
+    )
+    structure_packages = field(
+        resolver=types.structure.list_structure_packages,
+        description="All structure packages referenced by the org's action ports (derived, not registered).",
+    )
+    interfaces = field(
+        resolver=types.structure.list_interfaces,
+        description="All interfaces referenced by the org's action ports (derived, not registered).",
+    )
     tasks: list[types.Task] = field(description="All tasks.")
-    schedules: list[types.Schedule] = field(description="All schedules in the organization.")
-    triggers: list[types.Trigger] = field(description="All triggers in the organization.")
-    signals: list[types.Signal] = field(description="Signals services sent about the organization's objects, for inspection.")
-    wiregrams: list[types.Wiregram] = field(description="The automation documents the organization imported.")
-    firings: list[types.Firing] = field(description="The firing log: what became of each trigger for each signal it listened for.")
-    resolved_implementations = field(resolver=queries.resolved_implementations, description="Fetch resolved dependencies for a resolution.")
-    dependency_tree = field(resolver=queries.dependency_tree, description="What assigning an implementation with these overwrites would bind, level by level, and what is unmet: a dry run of the assign's dependency resolution.")
+    schedules: list[types.Schedule] = field(
+        description="All schedules in the organization."
+    )
+    triggers: list[types.Trigger] = field(
+        description="All triggers in the organization."
+    )
+    signals: list[types.Signal] = field(
+        description="Signals services sent about the organization's objects, for inspection."
+    )
+    wiregrams: list[types.Wiregram] = field(
+        description="The automation documents the organization imported."
+    )
+    firings: list[types.Firing] = field(
+        description="The firing log: what became of each trigger for each signal it listened for."
+    )
+    resolved_implementations = field(
+        resolver=queries.resolved_implementations,
+        description="Fetch resolved dependencies for a resolution.",
+    )
+    dependency_tree = field(
+        resolver=queries.dependency_tree,
+        description="What assigning an implementation with these overwrites would bind, level by level, and what is unmet: a dry run of the assign's dependency resolution.",
+    )
 
-    agent: types.Agent = field(resolver=queries.agent, description="Fetch a specific agent by ID or by app, version and device_id.")
+    agent: types.Agent = field(
+        resolver=queries.agent,
+        description="Fetch a specific agent by ID or by app, version and device_id.",
+    )
 
     spaces: list[types.Space] = field(description="List all spaces.")
-    space_by_reference = field(resolver=types.threed.space_by_reference, description="The space a blok's `room` names: where someone left each agent in it. Null until someone kept a pose there.")
+    space_by_reference = field(
+        resolver=types.threed.space_by_reference,
+        description="The space a blok's `room` names: where someone left each agent in it. Null until someone kept a pose there.",
+    )
     space: types.Space = field(description="Fetch a specific space by ID.")
     placements: list[types.Placement] = field(description="List all placements.")
     placement: types.Placement = field(description="Fetch a specific placement by ID.")
-    asset = field(resolver=mutations.asset, description="The stored asset of this reference ('sha256:...') in the caller's organization, or null if no agent has uploaded it.")
-    asset_policy = field(resolver=mutations.asset_policy, description="The limits each kind of asset is held to when it is added.")
-    bloks_for_model = field(resolver=mutations.bloks_for_model, description="The html bloks registered to decorate the model of this reference.")
-    bloks_for_models = field(resolver=mutations.bloks_for_models, description="The html bloks registered to decorate any of these models (each names its own in `forModel`): one request for every model a scene shows.")
+    asset = field(
+        resolver=mutations.asset,
+        description="The stored asset of this reference ('sha256:...') in the caller's organization, or null if no agent has uploaded it.",
+    )
+    asset_policy = field(
+        resolver=mutations.asset_policy,
+        description="The limits each kind of asset is held to when it is added.",
+    )
+    bloks_for_model = field(
+        resolver=mutations.bloks_for_model,
+        description="The html bloks registered to decorate the model of this reference.",
+    )
+    bloks_for_models = field(
+        resolver=mutations.bloks_for_models,
+        description="The html bloks registered to decorate any of these models (each names its own in `forModel`): one request for every model a scene shows.",
+    )
 
     sessions: list[types.Session] = field(description="List all sessions.")
     session: types.Session = field(description="Fetch a specific session by ID.")
 
     # Stats
-    actionStats: types.ActionStats = field(resolver=types.action_stats, description="Statistics about actions and their implementations.")
-    taskStats: types.TaskStats = field(resolver=types.task_stats, description="Statistics about tasks and their states.")
-    agentStats: types.AgentStats = field(resolver=types.agent_stats, description="Statistics about agents: how many (narrowed by filters, e.g. connected or kind) and when they registered or were last seen.")
+    actionStats: types.ActionStats = field(
+        resolver=types.action_stats,
+        description="Statistics about actions and their implementations.",
+    )
+    taskStats: types.TaskStats = field(
+        resolver=types.task_stats,
+        description="Statistics about tasks and their states.",
+    )
+    agentStats: types.AgentStats = field(
+        resolver=types.agent_stats,
+        description="Statistics about agents: how many (narrowed by filters, e.g. connected or kind) and when they registered or were last seen.",
+    )
 
-    state_for = field(resolver=queries.state_for, description="Retrieve state for a specific context.")
+    state_for = field(
+        resolver=queries.state_for, description="Retrieve state for a specific context."
+    )
 
-    task_boundaries: types.TaskBoundary | None = field(resolver=queries.task_boundaries, description="Get task boundaries.")
-    session_boundaries: types.SessionBoundary | None = field(resolver=queries.session_boundaries, description="Get session boundaries.")
-    state_at_global_rev: list[types.Snapshot] = field(resolver=queries.state_at_global_rev, description="Get state at global revision.")
-    forward_events_after_rev: list[types.Patch] = field(resolver=queries.forward_events_after_rev, description="Get forward events after revision.")
-    patch_events_between_global_revs: list[types.Patch] = field(resolver=queries.patch_events_between_global_revs, description="Get patch events between global revisions.")
-    snapshots_around_rev: list[types.Snapshot] = field(resolver=queries.snapshots_around_rev, description="Get snapshots around revision.")
+    task_boundaries: types.TaskBoundary | None = field(
+        resolver=queries.task_boundaries, description="Get task boundaries."
+    )
+    session_boundaries: types.SessionBoundary | None = field(
+        resolver=queries.session_boundaries, description="Get session boundaries."
+    )
+    state_at_global_rev: list[types.Snapshot] = field(
+        resolver=queries.state_at_global_rev,
+        description="Get state at global revision.",
+    )
+    forward_events_after_rev: list[types.Patch] = field(
+        resolver=queries.forward_events_after_rev,
+        description="Get forward events after revision.",
+    )
+    patch_events_between_global_revs: list[types.Patch] = field(
+        resolver=queries.patch_events_between_global_revs,
+        description="Get patch events between global revisions.",
+    )
+    snapshots_around_rev: list[types.Snapshot] = field(
+        resolver=queries.snapshots_around_rev,
+        description="Get snapshots around revision.",
+    )
 
     @field(description="Fetch a client by ID.")
     def resolution(self, info: Info, id: strawberry.ID) -> types.Resolution:
-        return cast(types.Resolution, scoped_get(models.Resolution, info, id, field="organization"))
+        return cast(
+            types.Resolution,
+            scoped_get(models.Resolution, info, id, field="organization"),
+        )
 
     @field(description="Get a specific state by ID.")
     def state(self, info: Info, id: strawberry.ID) -> types.State:
-        return cast(types.State, scoped_get(models.State, info, id, field="agent__organization"))
+        return cast(
+            types.State, scoped_get(models.State, info, id, field="agent__organization")
+        )
 
-    structure_package = field(resolver=types.structure.get_structure_package, description="Fetch a structure package by its key (derived from port identifiers).")
-    interface = field(resolver=types.structure.get_interface, description="Fetch an interface by its '@package/key' identifier (derived from port identifiers).")
-    structure = field(resolver=types.structure.get_structure, description="Fetch a structure by its '@package/key' identifier: one a port references or a service hosts.")
+    structure_package = field(
+        resolver=types.structure.get_structure_package,
+        description="Fetch a structure package by its key (derived from port identifiers).",
+    )
+    interface = field(
+        resolver=types.structure.get_interface,
+        description="Fetch an interface by its '@package/key' identifier (derived from port identifiers).",
+    )
+    structure = field(
+        resolver=types.structure.get_structure,
+        description="Fetch a structure by its '@package/key' identifier: one a port references or a service hosts.",
+    )
 
     @field(description="Fetch a memory shelve by ID.")
     def memory_shelve(self, info: Info, id: strawberry.ID) -> types.MemoryShelve:
-        return cast(types.MemoryShelve, scoped_get(models.MemoryShelve, info, id, field="organization"))
+        return cast(
+            types.MemoryShelve,
+            scoped_get(models.MemoryShelve, info, id, field="organization"),
+        )
 
     @field(description="Fetch a memory drawer by ID.")
     def memory_drawer(self, info: Info, id: strawberry.ID) -> types.MemoryDrawer:
-        return cast(types.MemoryDrawer, scoped_get(models.MemoryDrawer, info, id, field="shelve__organization"))
+        return cast(
+            types.MemoryDrawer,
+            scoped_get(models.MemoryDrawer, info, id, field="shelve__organization"),
+        )
 
     @field(description="Get a blok by ID.")
     def blok(self, info: Info, id: strawberry.ID) -> types.Blok:
         return cast(types.Blok, scoped_get(models.Blok, info, id, field="organization"))
 
     @field(description="Get a materialized blok by ID.")
-    def materialized_blok(self, info: Info, id: strawberry.ID) -> types.MaterializedBlok:
-        return cast(types.MaterializedBlok, scoped_get(models.MaterializedBlok, info, id, field="blok__organization"))
+    def materialized_blok(
+        self, info: Info, id: strawberry.ID
+    ) -> types.MaterializedBlok:
+        return cast(
+            types.MaterializedBlok,
+            scoped_get(models.MaterializedBlok, info, id, field="blok__organization"),
+        )
 
     @field(description="Get a module by ID.")
     def module(self, info: Info, id: strawberry.ID) -> types.Module:
-        return cast(types.Module, scoped_get(models.Module, info, id, field="organization"))
+        return cast(
+            types.Module, scoped_get(models.Module, info, id, field="organization")
+        )
 
     @field(description="Get toolbox by ID.")
     def toolbox(self, info: Info, id: strawberry.ID) -> types.Toolbox:
-        return cast(types.Toolbox, scoped_get(models.Toolbox, info, id, field="organization"))
+        return cast(
+            types.Toolbox, scoped_get(models.Toolbox, info, id, field="organization")
+        )
 
     @field(description="Retrieve shortcut by ID.")
     def shortcut(self, info: Info, id: strawberry.ID) -> types.Shortcut:
-        return cast(types.Shortcut, scoped_get(models.Shortcut, info, id, field="toolbox__organization"))
+        return cast(
+            types.Shortcut,
+            scoped_get(models.Shortcut, info, id, field="toolbox__organization"),
+        )
 
     @field(description="Get dashboard by ID.")
     def dashboard(self, info: Info, id: strawberry.ID) -> types.Dashboard:
-        return cast(types.Dashboard, scoped_get(models.Dashboard, info, id, field="organization"))
+        return cast(
+            types.Dashboard,
+            scoped_get(models.Dashboard, info, id, field="organization"),
+        )
 
     @field(description="Fetch a dependency by ID.")
     def dependency(self, info: Info, id: strawberry.ID) -> types.Dependency:
-        return cast(types.Dependency, scoped_get(models.Dependency, info, id, field="implementation__action__organization"))
+        return cast(
+            types.Dependency,
+            scoped_get(
+                models.Dependency,
+                info,
+                id,
+                field="implementation__action__organization",
+            ),
+        )
 
     @field(description="Retrieve test case by ID.")
     def test_case(self, info: Info, id: strawberry.ID) -> types.TestCase:
-        return cast(types.TestCase, scoped_get(models.TestCase, info, id, field="action__organization"))
+        return cast(
+            types.TestCase,
+            scoped_get(models.TestCase, info, id, field="action__organization"),
+        )
 
     @field(description="Get test result by ID.")
     def test_result(self, info: Info, id: strawberry.ID) -> types.TestResult:
-        return cast(types.TestResult, scoped_get(models.TestResult, info, id, field="case__action__organization"))
+        return cast(
+            types.TestResult,
+            scoped_get(models.TestResult, info, id, field="case__action__organization"),
+        )
 
     @field(description="Get implementation by ID.")
     def implementation(self, info: Info, id: strawberry.ID) -> types.Implementation:
-        return cast(types.Implementation, scoped_get(models.Implementation, info, id, field="action__organization"))
+        return cast(
+            types.Implementation,
+            scoped_get(models.Implementation, info, id, field="action__organization"),
+        )
 
-    @field(description="The services of this hub: what each hosts and emits. Hub-wide; a service is not an agent.")
+    @field(
+        description="The services of this hub: what each hosts and emits. Hub-wide; a service is not an agent."
+    )
     def services(self, info: Info, name: str | None = None) -> list[types.Service]:
         services = models.Service.objects.order_by("name")
         if name is not None:
@@ -217,24 +400,45 @@ class Query:
 
     @field(description="Fetch a descriptor by ID.")
     def descriptor(self, info: Info, id: strawberry.ID) -> types.StructureDescriptor:
-        return cast(types.StructureDescriptor, models.Descriptor.objects.select_related("structure__service").get(pk=id))
+        return cast(
+            types.StructureDescriptor,
+            models.Descriptor.objects.select_related("structure__service").get(pk=id),
+        )
 
     @field(description="Fetch a hosted structure by ID.")
     def hosted_structure(self, info: Info, id: strawberry.ID) -> types.HostedStructure:
-        return cast(types.HostedStructure, models.StructureDeclaration.objects.select_related("service").get(pk=id))
+        return cast(
+            types.HostedStructure,
+            models.StructureDeclaration.objects.select_related("service").get(pk=id),
+        )
 
-    @field(description="The signals this hub's services declare they emit — what triggers can wait for. Hub-wide.")
+    @field(
+        description="The signals this hub's services declare they emit — what triggers can wait for. Hub-wide."
+    )
     def signal_declarations(
         self,
         info: Info,
         identifier: str | None = None,
-        search: Annotated[str | None, strawberry.argument(description="Keep signals whose identifier or description contains this text, or whose description means something close to it; ranked: an exact identifier, then a prefix, then other substring matches by trigram similarity, then by meaning")] = None,
+        search: Annotated[
+            str | None,
+            strawberry.argument(
+                description="Keep signals whose identifier or description contains this text, or whose description means something close to it; ranked: an exact identifier, then a prefix, then other substring matches by trigram similarity, then by meaning"
+            ),
+        ] = None,
     ) -> list[types.SignalDeclaration]:
-        declarations = models.SignalDeclaration.objects.select_related("service").order_by("identifier", "kind")
+        declarations = models.SignalDeclaration.objects.select_related(
+            "service"
+        ).order_by("identifier", "kind")
         if identifier is not None:
             declarations = declarations.filter(identifier=identifier)
         if search is not None:
-            declarations, matches = hybrid_search(declarations, "", search, Q(identifier__icontains=search) | Q(description__icontains=search), "identifier")
+            declarations, matches = hybrid_search(
+                declarations,
+                "",
+                search,
+                Q(identifier__icontains=search) | Q(description__icontains=search),
+                "identifier",
+            )
             declarations = declarations.filter(matches)
         return cast(list[types.SignalDeclaration], list(declarations))
 
@@ -245,25 +449,60 @@ class Query:
 
     @field(description="Fetch a firing by ID.")
     def firing(self, info: Info, id: strawberry.ID) -> types.Firing:
-        return cast(types.Firing, scoped_get(models.Firing, info, id, field="signal__organization"))
+        return cast(
+            types.Firing,
+            scoped_get(models.Firing, info, id, field="signal__organization"),
+        )
 
     @field(description="Fetch a signal by ID.")
     def signal(self, info: Info, id: strawberry.ID) -> types.Signal:
-        return cast(types.Signal, scoped_get(models.Signal, info, id, field="organization"))
+        return cast(
+            types.Signal, scoped_get(models.Signal, info, id, field="organization")
+        )
 
-    @field(description="A dry run for a trigger not written yet: the organization's stored signals of this kind and structure whose descriptors satisfy the conditions, newest first. Fires nothing.")
-    def matching_signals(self, info: Info, kind: enums.SignalKind, identifier: str, conditions: rscalars.AnyDefault | None = None, limit: int = 20) -> list[types.Signal]:
+    @field(
+        description="A dry run for a trigger not written yet: the organization's stored signals of this kind and structure whose descriptors satisfy the conditions, newest first. Fires nothing."
+    )
+    def matching_signals(
+        self,
+        info: Info,
+        kind: enums.SignalKind,
+        identifier: str,
+        conditions: rscalars.AnyDefault | None = None,
+        limit: int = 20,
+    ) -> list[types.Signal]:
         from facade import triggers
 
         _, compiled = triggers.compile_conditions(json_value(conditions or []))
-        return cast(list[types.Signal], list(triggers.matching_signals(info.context.request.organization.id, kind.value, identifier, [compiled], limit)))
+        return cast(
+            list[types.Signal],
+            list(
+                triggers.matching_signals(
+                    info.context.request.organization.id,
+                    kind.value,
+                    identifier,
+                    [compiled],
+                    limit,
+                )
+            ),
+        )
 
-    @field(description="How many of the organization's stored signals of this kind and structure satisfy the conditions: the uncapped count behind `matchingSignals`. Fires nothing.")
-    def matching_signal_count(self, info: Info, kind: enums.SignalKind, identifier: str, conditions: rscalars.AnyDefault | None = None) -> int:
+    @field(
+        description="How many of the organization's stored signals of this kind and structure satisfy the conditions: the uncapped count behind `matchingSignals`. Fires nothing."
+    )
+    def matching_signal_count(
+        self,
+        info: Info,
+        kind: enums.SignalKind,
+        identifier: str,
+        conditions: rscalars.AnyDefault | None = None,
+    ) -> int:
         from facade import triggers
 
         _, compiled = triggers.compile_conditions(json_value(conditions or []))
-        return triggers.all_matching_signals(info.context.request.organization.id, kind.value, identifier, [compiled]).count()
+        return triggers.all_matching_signals(
+            info.context.request.organization.id, kind.value, identifier, [compiled]
+        ).count()
 
     @field(description="Fetch a wiregram by ID.")
     def wiregram(self, info: Info, id: strawberry.ID) -> types.Wiregram:
@@ -271,67 +510,259 @@ class Query:
 
     @field(description="Fetch a trigger by ID.")
     def trigger(self, info: Info, id: strawberry.ID) -> types.Trigger:
-        return cast(types.Trigger, scoped_get(models.Trigger, info, id, field="caller__organization"))
+        return cast(
+            types.Trigger,
+            scoped_get(models.Trigger, info, id, field="caller__organization"),
+        )
 
     @field(description="Fetch a schedule by ID.")
     def schedule(self, info: Info, id: strawberry.ID) -> types.Schedule:
-        return cast(types.Schedule, scoped_get(models.Schedule, info, id, field="caller__organization"))
+        return cast(
+            types.Schedule,
+            scoped_get(models.Schedule, info, id, field="caller__organization"),
+        )
 
     @field(description="Fetch task by ID.")
     def task(self, info: Info, id: strawberry.ID) -> types.Task:
-        return cast(types.Task, scoped_get(models.Task, info, id, field="agent__organization"))
+        return cast(
+            types.Task, scoped_get(models.Task, info, id, field="agent__organization")
+        )
 
 
-@strawberry.type(description="Root mutation type for executing write operations on the API.")
+@strawberry.type(
+    description="Root mutation type for executing write operations on the API."
+)
 class Mutation:
-    create_higher_order_implementation = mutation(scope="rekuest_agent", resolver=mutations.create_higher_order_implementation, description="Deploy a higher-order implementation: a wrapper onto the agent of the implementation it wraps, linked to it.")
-    bounce = mutation(scope="rekuest_root_call", resolver=mutations.bounce, description="Bounce an agent so it reconnects.")
-    kick = mutation(scope="rekuest_root_call", resolver=mutations.kick, description="Kick an agent to force disconnect. It will fail and not reconnect.")
-    assign = mutation(scope="rekuest_root_call", resolver=mutations.assign, description="Assign a task to an agent.")
-    probe = mutation(scope="rekuest_root_call", resolver=mutations.probe, description="Fire a probe at an agent — zero persistence, redis-held state under a TTL, never appears in task history. For high-frequency interactive work (previews, live parameter tweaks).")
-    cancel_probe = mutation(scope="rekuest_root_call", resolver=mutations.cancel_probe, description="Cancel a probe. Idempotent: cancelling a finished probe is a no-op returning its terminal state.")
-    pause_probe = mutation(scope="rekuest_root_call", resolver=mutations.pause_probe, description="Pause a probe. Idempotent on finished probes; the agent's Paused report settles the state.")
-    resume_probe = mutation(scope="rekuest_root_call", resolver=mutations.resume_probe, description="Resume a paused probe. Idempotent on finished probes; the agent's Resumed report settles the state.")
-    cancel = mutation(scope="rekuest_root_call", resolver=mutations.cancel, description="Cancel an active task.")
-    pause = mutation(scope="rekuest_root_call", resolver=mutations.pause, description="Pause an ongoing task.")
-    resume = mutation(scope="rekuest_root_call", resolver=mutations.resume, description="Resume a paused task.")
-    inquire = mutation(scope="rekuest_root_call", resolver=mutations.inquire, description="Ask the agent of a task you assigned whether it is still on it. It answers at once, from memory; nothing is done to the task and nothing is tried again. One answer has a consequence: an agent that does not know a task it was given has lost it, and the task ends LOST. While the agent is away, or has not acknowledged the assign yet, the server answers with what it knows.")
-    decide = mutation(scope="rekuest_root_call", resolver=mutations.decide, description="Answer a held task. A child an agent asked for runs once approved, or ends DENIED without running; a task that holds itself carries on with the decision. Only the user the task runs for may decide, and never from the client of the agent that asked. With `remember`, the approval of a child is kept as an allowance on their auto list.")
-    allow_action = mutation(scope="rekuest_root_call", resolver=mutations.allow_action, description="Put an action on your auto list: under your runs an agent that asks for it gets it without a hold. Optionally only when one action asks. Yours alone: it changes nothing for anyone else.")
-    revoke_allowance = mutation(scope="rekuest_root_call", resolver=mutations.revoke_allowance, description="Take an allowance off your auto list: the action is asked for again.")
-    collect = mutation(scope="rekuest_agent", resolver=mutations.collect, description="Collect results from a task.")
-    interrupt = mutation(scope="rekuest_root_call", resolver=mutations.interrupt, description="Interrupt the execution of a task.")
-    create_trigger = automation(resolver=mutations.create_trigger, description="Create a trigger: run an action when a service signals a matching object.")
-    update_trigger = automation(resolver=mutations.update_trigger, description="Change a trigger.")
-    delete_trigger = automation(resolver=mutations.delete_trigger, description="Delete a trigger; its runs are kept.")
-    fire_trigger = automation(resolver=mutations.fire_trigger, description="Fire a trigger on a stored signal by hand (a replay). The run is created whether or not the signal satisfies the trigger, and logged as a firing of its own.")
-    import_wiregram = automation(resolver=mutations.import_wiregram, description="Import a wiregram: one document of schedules and triggers. All or nothing; importing the same key again updates what it created and removes what it no longer lists.")
-    delete_wiregram = automation(resolver=mutations.delete_wiregram, description="Delete a wiregram and the rules it owns.")
-    export_wiregram = read_mutation(resolver=mutations.export_wiregram, description="Write existing schedules and triggers down as a wiregram document, to import elsewhere. Changes nothing.")
-    create_schedule = automation(resolver=mutations.create_schedule, description="Create a recurring assignment of an action. Its next run is planned immediately.")
-    update_schedule = automation(resolver=mutations.update_schedule, description="Change a schedule; a waiting run is re-planned.")
-    delete_schedule = automation(resolver=mutations.delete_schedule, description="Delete a schedule. Its waiting run is cancelled; history is kept.")
-    trigger_schedule = automation(resolver=mutations.trigger_schedule, description="Run a schedule now: its waiting run is moved to now. Refused while a run is executing.")
-    block = mutation(scope="rekuest_automate", resolver=mutations.block, description="Block an agent from connecting.")
-    unblock = mutation(scope="rekuest_automate", resolver=mutations.unblock, description="Unblock a previously blocked agent.")
-    delete_implementation = mutation(scope="rekuest_agent", resolver=mutations.delete_implementation, description="Delete a registered implementation.")
-    ensure_agent = mutation(scope="rekuest_agent", resolver=mutations.ensure_agent, description="Ensure agent record exists or is up to date.")
-    create_test_case = mutation(scope="rekuest_write", resolver=mutations.create_test_case, description="Create a new test case.")
-    create_test_result = mutation(scope="rekuest_write", resolver=mutations.create_test_result, description="Create a test result record.")
-    shelve_in_memory_drawer = mutation(scope="rekuest_agent", resolver=mutations.shelve_in_memory_drawer, description="Shelve data into a memory drawer.")
-    unshelve_memory_drawer = mutation(scope="rekuest_agent", resolver=mutations.unshelve_memory_drawer, description="Unshelve data from a memory drawer.")
-    create_dashboard = mutation(scope="rekuest_write", resolver=mutations.create_dashboard, description="Create a dashboard layout.")
-    create_blok = mutation(scope="rekuest_write", resolver=mutations.create_blok, description="Create a user interface panel.")
-    materialize_blok = mutation(scope="rekuest_write", resolver=mutations.materialize_blok, description="Materialize a UI blok into a concrete instance on a dashboard.")
-    pin_agent = mutation(scope="rekuest_agent", resolver=mutations.pin_agent, description="Pin an agent to the user.")
-    delete_agent = mutation(scope="rekuest_agent", resolver=mutations.delete_agent, description="Delete an agent record.")
-    update_agent = mutation(scope="rekuest_agent", resolver=mutations.update_agent, description="Update properties of an agent such as its name.")
-    create_shortcut = mutation(scope="rekuest_write", resolver=mutations.create_shortcut, description="Create a shortcut to an action.")
-    delete_shortcut = mutation(scope="rekuest_write", resolver=mutations.delete_shortcut, description="Delete a shortcut.")
-    bind_shortcut = mutation(scope="rekuest_write", roles=[ADMIN], resolver=mutations.bind_shortcut, description="Pin a shortcut for users, in one app or in every app. They cannot unpin it.")
-    unbind_shortcut = mutation(scope="rekuest_write", roles=[ADMIN], resolver=mutations.unbind_shortcut, description="Remove a shortcut's binding to a user.")
-    cleanup_actions = mutation(scope="rekuest_agent", resolver=mutations.cleanup_actions, description="Delete unreferenced actions from the system.")
-    auto_resolve = mutation(scope="rekuest_agent", resolver=mutations.auto_resolve, description="Automatically resolve dependencies for an implementation.")
+    create_higher_order_implementation = mutation(
+        scope="rekuest_agent",
+        resolver=mutations.create_higher_order_implementation,
+        description="Deploy a higher-order implementation: a wrapper onto the agent of the implementation it wraps, linked to it.",
+    )
+    bounce = mutation(
+        scope="rekuest_root_call",
+        resolver=mutations.bounce,
+        description="Bounce an agent so it reconnects.",
+    )
+    kick = mutation(
+        scope="rekuest_root_call",
+        resolver=mutations.kick,
+        description="Kick an agent to force disconnect. It will fail and not reconnect.",
+    )
+    assign = mutation(
+        scope="rekuest_root_call",
+        resolver=mutations.assign,
+        description="Assign a task to an agent.",
+    )
+    probe = mutation(
+        scope="rekuest_root_call",
+        resolver=mutations.probe,
+        description="Fire a probe at an agent — zero persistence, redis-held state under a TTL, never appears in task history. For high-frequency interactive work (previews, live parameter tweaks).",
+    )
+    cancel_probe = mutation(
+        scope="rekuest_root_call",
+        resolver=mutations.cancel_probe,
+        description="Cancel a probe. Idempotent: cancelling a finished probe is a no-op returning its terminal state.",
+    )
+    pause_probe = mutation(
+        scope="rekuest_root_call",
+        resolver=mutations.pause_probe,
+        description="Pause a probe. Idempotent on finished probes; the agent's Paused report settles the state.",
+    )
+    resume_probe = mutation(
+        scope="rekuest_root_call",
+        resolver=mutations.resume_probe,
+        description="Resume a paused probe. Idempotent on finished probes; the agent's Resumed report settles the state.",
+    )
+    cancel = mutation(
+        scope="rekuest_root_call",
+        resolver=mutations.cancel,
+        description="Cancel an active task.",
+    )
+    pause = mutation(
+        scope="rekuest_root_call",
+        resolver=mutations.pause,
+        description="Pause an ongoing task.",
+    )
+    resume = mutation(
+        scope="rekuest_root_call",
+        resolver=mutations.resume,
+        description="Resume a paused task.",
+    )
+    inquire = mutation(
+        scope="rekuest_root_call",
+        resolver=mutations.inquire,
+        description="Ask the agent of a task you assigned whether it is still on it. It answers at once, from memory; nothing is done to the task and nothing is tried again. One answer has a consequence: an agent that does not know a task it was given has lost it, and the task ends LOST. While the agent is away, or has not acknowledged the assign yet, the server answers with what it knows.",
+    )
+    decide = mutation(
+        scope="rekuest_root_call",
+        resolver=mutations.decide,
+        description="Answer a held task. A child an agent asked for runs once approved, or ends DENIED without running; a task that holds itself carries on with the decision. Only the user the task runs for may decide, and never from the client of the agent that asked. With `remember`, the approval of a child is kept as an allowance on their auto list.",
+    )
+    allow_action = mutation(
+        scope="rekuest_root_call",
+        resolver=mutations.allow_action,
+        description="Put an action on your auto list: under your runs an agent that asks for it gets it without a hold. Optionally only when one action asks. Yours alone: it changes nothing for anyone else.",
+    )
+    revoke_allowance = mutation(
+        scope="rekuest_root_call",
+        resolver=mutations.revoke_allowance,
+        description="Take an allowance off your auto list: the action is asked for again.",
+    )
+    collect = mutation(
+        scope="rekuest_agent",
+        resolver=mutations.collect,
+        description="Collect results from a task.",
+    )
+    interrupt = mutation(
+        scope="rekuest_root_call",
+        resolver=mutations.interrupt,
+        description="Interrupt the execution of a task.",
+    )
+    create_trigger = automation(
+        resolver=mutations.create_trigger,
+        description="Create a trigger: run an action when a service signals a matching object.",
+    )
+    update_trigger = automation(
+        resolver=mutations.update_trigger, description="Change a trigger."
+    )
+    delete_trigger = automation(
+        resolver=mutations.delete_trigger,
+        description="Delete a trigger; its runs are kept.",
+    )
+    fire_trigger = automation(
+        resolver=mutations.fire_trigger,
+        description="Fire a trigger on a stored signal by hand (a replay). The run is created whether or not the signal satisfies the trigger, and logged as a firing of its own.",
+    )
+    import_wiregram = automation(
+        resolver=mutations.import_wiregram,
+        description="Import a wiregram: one document of schedules and triggers. All or nothing; importing the same key again updates what it created and removes what it no longer lists.",
+    )
+    delete_wiregram = automation(
+        resolver=mutations.delete_wiregram,
+        description="Delete a wiregram and the rules it owns.",
+    )
+    export_wiregram = read_mutation(
+        resolver=mutations.export_wiregram,
+        description="Write existing schedules and triggers down as a wiregram document, to import elsewhere. Changes nothing.",
+    )
+    create_schedule = automation(
+        resolver=mutations.create_schedule,
+        description="Create a recurring assignment of an action. Its next run is planned immediately.",
+    )
+    update_schedule = automation(
+        resolver=mutations.update_schedule,
+        description="Change a schedule; a waiting run is re-planned.",
+    )
+    delete_schedule = automation(
+        resolver=mutations.delete_schedule,
+        description="Delete a schedule. Its waiting run is cancelled; history is kept.",
+    )
+    trigger_schedule = automation(
+        resolver=mutations.trigger_schedule,
+        description="Run a schedule now: its waiting run is moved to now. Refused while a run is executing.",
+    )
+    block = mutation(
+        scope="rekuest_automate",
+        resolver=mutations.block,
+        description="Block an agent from connecting.",
+    )
+    unblock = mutation(
+        scope="rekuest_automate",
+        resolver=mutations.unblock,
+        description="Unblock a previously blocked agent.",
+    )
+    delete_implementation = mutation(
+        scope="rekuest_agent",
+        resolver=mutations.delete_implementation,
+        description="Delete a registered implementation.",
+    )
+    ensure_agent = mutation(
+        scope="rekuest_agent",
+        resolver=mutations.ensure_agent,
+        description="Ensure agent record exists or is up to date.",
+    )
+    create_test_case = mutation(
+        scope="rekuest_write",
+        resolver=mutations.create_test_case,
+        description="Create a new test case.",
+    )
+    create_test_result = mutation(
+        scope="rekuest_write",
+        resolver=mutations.create_test_result,
+        description="Create a test result record.",
+    )
+    shelve_in_memory_drawer = mutation(
+        scope="rekuest_agent",
+        resolver=mutations.shelve_in_memory_drawer,
+        description="Shelve data into a memory drawer.",
+    )
+    unshelve_memory_drawer = mutation(
+        scope="rekuest_agent",
+        resolver=mutations.unshelve_memory_drawer,
+        description="Unshelve data from a memory drawer.",
+    )
+    create_dashboard = mutation(
+        scope="rekuest_write",
+        resolver=mutations.create_dashboard,
+        description="Create a dashboard layout.",
+    )
+    create_blok = mutation(
+        scope="rekuest_write",
+        resolver=mutations.create_blok,
+        description="Create a user interface panel.",
+    )
+    materialize_blok = mutation(
+        scope="rekuest_write",
+        resolver=mutations.materialize_blok,
+        description="Materialize a UI blok into a concrete instance on a dashboard.",
+    )
+    pin_agent = mutation(
+        scope="rekuest_agent",
+        resolver=mutations.pin_agent,
+        description="Pin an agent to the user.",
+    )
+    delete_agent = mutation(
+        scope="rekuest_agent",
+        resolver=mutations.delete_agent,
+        description="Delete an agent record.",
+    )
+    update_agent = mutation(
+        scope="rekuest_agent",
+        resolver=mutations.update_agent,
+        description="Update properties of an agent such as its name.",
+    )
+    create_shortcut = mutation(
+        scope="rekuest_write",
+        resolver=mutations.create_shortcut,
+        description="Create a shortcut to an action.",
+    )
+    delete_shortcut = mutation(
+        scope="rekuest_write",
+        resolver=mutations.delete_shortcut,
+        description="Delete a shortcut.",
+    )
+    bind_shortcut = mutation(
+        scope="rekuest_write",
+        roles=[ADMIN],
+        resolver=mutations.bind_shortcut,
+        description="Pin a shortcut for users, in one app or in every app. They cannot unpin it.",
+    )
+    unbind_shortcut = mutation(
+        scope="rekuest_write",
+        roles=[ADMIN],
+        resolver=mutations.unbind_shortcut,
+        description="Remove a shortcut's binding to a user.",
+    )
+    cleanup_actions = mutation(
+        scope="rekuest_agent",
+        resolver=mutations.cleanup_actions,
+        description="Delete unreferenced actions from the system.",
+    )
+    auto_resolve = mutation(
+        scope="rekuest_agent",
+        resolver=mutations.auto_resolve,
+        description="Automatically resolve dependencies for an implementation.",
+    )
 
     # Datalayer. These use the local wrappers, not ``kante.django_mutation``: the latter is plain
     # ``strawberry_django.mutation`` and so skips ``AuthExtension``, which left these as the only
@@ -354,50 +785,166 @@ class Mutation:
     )
 
     # Dashboard
-    delete_dashboard = mutation(scope="rekuest_write", resolver=mutations.delete_dashboard, description="Delete a dashboard by ID.")
-    update_dashboard = mutation(scope="rekuest_write", resolver=mutations.update_dashboard, description="Update properties of a dashboard such as its name, associated bloks, or organization.")
+    delete_dashboard = mutation(
+        scope="rekuest_write",
+        resolver=mutations.delete_dashboard,
+        description="Delete a dashboard by ID.",
+    )
+    update_dashboard = mutation(
+        scope="rekuest_write",
+        resolver=mutations.update_dashboard,
+        description="Update properties of a dashboard such as its name, associated bloks, or organization.",
+    )
 
     # Blok
-    delete_blok = mutation(scope="rekuest_write", resolver=mutations.delete_blok, description="Delete a blok by ID.")
-    fork_blok = mutation(scope="rekuest_write", resolver=mutations.fork_blok, description="Copy a blok an app provides into a custom blok, to edit it or bind other agents to it. The copy lives on whatever the providing agents do.")
-    update_blok = mutation(scope="rekuest_write", resolver=mutations.update_blok, description="Update properties of a blok such as its name, description, components, module, or dependencies.")
-    edit_blok = mutation(scope="rekuest_write", resolver=mutations.edit_blok, description="Edit a blok as one new revision on top of the head the editor read: on the blok itself (an editor of the blok), or through a materialization, with its bindings there (an assistant at a dashboard). A provided blok is forked first. With dryRun, every check runs and nothing is kept.")
-    revert_blok = mutation(scope="rekuest_write", resolver=mutations.revert_blok, description="Make an earlier revision's content a custom blok's head again, as a new revision.")
-    delete_materialized_blok = mutation(scope="rekuest_write", resolver=mutations.delete_materialized_blok, description="Delete a materialized blok by ID.")
-    update_materialized_blok = mutation(scope="rekuest_write", resolver=mutations.update_materialized_blok, description="Update properties of a materialized blok such as its agent mappings.")
-    pin_materialized_blok_revision = mutation(scope="rekuest_write", resolver=mutations.pin_materialized_blok_revision, description="Keep a materialization at one revision of its blok, or let it follow the head again.")
-    pin_materialized_blok = mutation(scope="rekuest_write", resolver=mutations.pin_materialized_blok, description="Pin a materialization of any kind for the caller, or unpin it.")
-    pin_blok = mutation(scope="rekuest_write", resolver=mutations.pin_blok, description="Pin a blok of any kind for the caller, or unpin it.")
-    register_module = mutation(scope="rekuest_agent", resolver=mutations.register_module, description="Register a module: the components and operations a UI app can render and evaluate beyond the spec's catalogs, and the catalogs it implements whole (upsert by name in the caller's organization). Bloks (`module`) and definitions (`catalogs`) that name it are validated against it.")
+    delete_blok = mutation(
+        scope="rekuest_write",
+        resolver=mutations.delete_blok,
+        description="Delete a blok by ID.",
+    )
+    fork_blok = mutation(
+        scope="rekuest_write",
+        resolver=mutations.fork_blok,
+        description="Copy a blok an app provides into a custom blok, to edit it or bind other agents to it. The copy lives on whatever the providing agents do.",
+    )
+    update_blok = mutation(
+        scope="rekuest_write",
+        resolver=mutations.update_blok,
+        description="Update properties of a blok such as its name, description, components, module, or dependencies.",
+    )
+    edit_blok = mutation(
+        scope="rekuest_write",
+        resolver=mutations.edit_blok,
+        description="Edit a blok as one new revision on top of the head the editor read: on the blok itself (an editor of the blok), or through a materialization, with its bindings there (an assistant at a dashboard). A provided blok is forked first. With dryRun, every check runs and nothing is kept.",
+    )
+    revert_blok = mutation(
+        scope="rekuest_write",
+        resolver=mutations.revert_blok,
+        description="Make an earlier revision's content a custom blok's head again, as a new revision.",
+    )
+    delete_materialized_blok = mutation(
+        scope="rekuest_write",
+        resolver=mutations.delete_materialized_blok,
+        description="Delete a materialized blok by ID.",
+    )
+    update_materialized_blok = mutation(
+        scope="rekuest_write",
+        resolver=mutations.update_materialized_blok,
+        description="Update properties of a materialized blok such as its agent mappings.",
+    )
+    pin_materialized_blok_revision = mutation(
+        scope="rekuest_write",
+        resolver=mutations.pin_materialized_blok_revision,
+        description="Keep a materialization at one revision of its blok, or let it follow the head again.",
+    )
+    pin_materialized_blok = mutation(
+        scope="rekuest_write",
+        resolver=mutations.pin_materialized_blok,
+        description="Pin a materialization of any kind for the caller, or unpin it.",
+    )
+    pin_blok = mutation(
+        scope="rekuest_write",
+        resolver=mutations.pin_blok,
+        description="Pin a blok of any kind for the caller, or unpin it.",
+    )
+    register_module = mutation(
+        scope="rekuest_agent",
+        resolver=mutations.register_module,
+        description="Register a module: the components and operations a UI app can render and evaluate beyond the spec's catalogs, and the catalogs it implements whole (upsert by name in the caller's organization). Bloks (`module`) and definitions (`catalogs`) that name it are validated against it.",
+    )
     # Implement Agent
-    implement_agent = mutation(scope="rekuest_agent", resolver=mutations.implement_agent, description="Implement an agent with given states and implementations. This is used to set up an agent with its initial configuration and capabilities.")
+    implement_agent = mutation(
+        scope="rekuest_agent",
+        resolver=mutations.implement_agent,
+        description="Implement an agent with given states and implementations. This is used to set up an agent with its initial configuration and capabilities.",
+    )
 
     # Assets
-    request_asset_upload = mutation(scope="rekuest_agent", resolver=mutations.request_asset_upload, description="A media upload grant for one asset. Issued for a file the caller's own agent declares (it registered with it), or, to an admin, for a file an agent of the organization names a source for; and only if its size passes the policy.")
-    create_asset = mutation(scope="rekuest_agent", resolver=mutations.create_asset, description="Verify an asset uploaded with a grant from `requestAssetUpload` (its hash and the rules of its kind) and record it. Returns the existing asset if the hash is stored already; a refusal carries its code in `extensions.code` and deletes the upload.")
+    request_asset_upload = mutation(
+        scope="rekuest_agent",
+        resolver=mutations.request_asset_upload,
+        description="A media upload grant for one asset. Issued for a file the caller's own agent declares (it registered with it), or, to an admin, for a file an agent of the organization names a source for; and only if its size passes the policy.",
+    )
+    create_asset = mutation(
+        scope="rekuest_agent",
+        resolver=mutations.create_asset,
+        description="Verify an asset uploaded with a grant from `requestAssetUpload` (its hash and the rules of its kind) and record it. Returns the existing asset if the hash is stored already; a refusal carries its code in `extensions.code` and deletes the upload.",
+    )
 
     # Space
 
-    save_placement = mutation(scope="rekuest_write", resolver=mutations.save_placement, description="Keep where an agent stands in a space (a room), for everyone: the space a blok's `room` names, made when none has it yet.")
-    reset_placement = mutation(scope="rekuest_write", resolver=mutations.reset_placement, description="Forget where an agent was left in a space, so the blok that places it decides again.")
+    save_placement = mutation(
+        scope="rekuest_write",
+        resolver=mutations.save_placement,
+        description="Keep where an agent stands in a space (a room), for everyone: the space a blok's `room` names, made when none has it yet.",
+    )
+    reset_placement = mutation(
+        scope="rekuest_write",
+        resolver=mutations.reset_placement,
+        description="Forget where an agent was left in a space, so the blok that places it decides again.",
+    )
 
 
-@strawberry.type(description="Root subscription type for real-time event streams from the system.")
+@strawberry.type(
+    description="Root subscription type for real-time event streams from the system."
+)
 class Subscription:
-    mytasks = subscription(resolver=subscriptions.mytasks, description="Subscribe to root tasks created by this client (caller-scoped).")
-    tasks = subscription(resolver=subscriptions.tasks, description="Subscribe to root task changes across the whole organization.")
-    agents = subscription(resolver=subscriptions.agents, description="Subscribe to updates on agent connections and statuses.")
-    assets = subscription(resolver=subscriptions.assets, description="The organization's assets as they are stored (only those of `refs`, if given): an agent's declared asset becomes available the moment one with its ref arrives.")
-    signals = subscription(resolver=subscriptions.signals, description="Subscribe to the signals services send about the organization's objects: one arrived, or triggers were matched against it.")
-    schedules = subscription(resolver=subscriptions.schedules, description="Subscribe to the organization's schedules being created, changed (by a user or by their runs) or deleted.")
-    triggers = subscription(resolver=subscriptions.triggers, description="Subscribe to the organization's triggers being created, changed (by a user or by their firings) or deleted.")
-    implementation_change = subscription(resolver=subscriptions.implementation_change, description="Subscribe to changes in implementations.")
-    implementations = subscription(resolver=subscriptions.implementations, description="Subscribe to creation or updates of implementations.")
-    state_update_events = subscription(resolver=subscriptions.state_update_events, description="Subscribe to updates of state values and patches.")
-    watch_state = subscription(resolver=subscriptions.watch_state, description="Watch a state: yields the current snapshot then streams patches.")
-    watch_agent = subscription(resolver=subscriptions.watch_agent, description="Watch an agent: yields snapshots for all states then streams patches.")
-    child_tasks = subscription(resolver=subscriptions.child_tasks, description="Subscribe to all descendant task changes of a task.")
-    agent_tasks = subscription(resolver=subscriptions.agent_tasks, description="Subscribe to task create/update for a specific agent.")
+    mytasks = subscription(
+        resolver=subscriptions.mytasks,
+        description="Subscribe to root tasks created by this client (caller-scoped).",
+    )
+    tasks = subscription(
+        resolver=subscriptions.tasks,
+        description="Subscribe to root task changes across the whole organization.",
+    )
+    agents = subscription(
+        resolver=subscriptions.agents,
+        description="Subscribe to updates on agent connections and statuses.",
+    )
+    assets = subscription(
+        resolver=subscriptions.assets,
+        description="The organization's assets as they are stored (only those of `refs`, if given): an agent's declared asset becomes available the moment one with its ref arrives.",
+    )
+    signals = subscription(
+        resolver=subscriptions.signals,
+        description="Subscribe to the signals services send about the organization's objects: one arrived, or triggers were matched against it.",
+    )
+    schedules = subscription(
+        resolver=subscriptions.schedules,
+        description="Subscribe to the organization's schedules being created, changed (by a user or by their runs) or deleted.",
+    )
+    triggers = subscription(
+        resolver=subscriptions.triggers,
+        description="Subscribe to the organization's triggers being created, changed (by a user or by their firings) or deleted.",
+    )
+    implementation_change = subscription(
+        resolver=subscriptions.implementation_change,
+        description="Subscribe to changes in implementations.",
+    )
+    implementations = subscription(
+        resolver=subscriptions.implementations,
+        description="Subscribe to creation or updates of implementations.",
+    )
+    state_update_events = subscription(
+        resolver=subscriptions.state_update_events,
+        description="Subscribe to updates of state values and patches.",
+    )
+    watch_state = subscription(
+        resolver=subscriptions.watch_state,
+        description="Watch a state: yields the current snapshot then streams patches.",
+    )
+    watch_agent = subscription(
+        resolver=subscriptions.watch_agent,
+        description="Watch an agent: yields snapshots for all states then streams patches.",
+    )
+    child_tasks = subscription(
+        resolver=subscriptions.child_tasks,
+        description="Subscribe to all descendant task changes of a task.",
+    )
+    agent_tasks = subscription(
+        resolver=subscriptions.agent_tasks,
+        description="Subscribe to task create/update for a specific agent.",
+    )
     latest_task = subscription(
         resolver=subscriptions.latest_task,
         description="The task an agent's action last ran as, whoever started it, kept current. Yields a `LatestTaskSnapshot` first, then that task's events (`TaskEventChange`: progress, results, its end) and, as a `TaskChange`, every task of the action that starts or ends: a started one with a higher id is the latest from then on. A snapshot without an implementation means the agent offers no action under that interface, and nothing follows.",
@@ -406,7 +953,10 @@ class Subscription:
         resolver=subscriptions.task_events,
         description="One task's events, whoever started it: those already recorded (all, or those newer than `after`), oldest first, then each new one as it is recorded, logs included. Replaces polling a task's event history.",
     )
-    probe_events = subscription(resolver=subscriptions.probe_events, description="Stream the events of one probe (caller-scoped, payload-carrying). Emits a state snapshot first when events already happened.")
+    probe_events = subscription(
+        resolver=subscriptions.probe_events,
+        description="Stream the events of one probe (caller-scoped, payload-carrying). Emits a state snapshot first when events already happened.",
+    )
 
 
 class Schema(QuietErrorsSchema, kante.Schema):

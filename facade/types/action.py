@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING, cast
 
 import strawberry
 import strawberry_django
@@ -36,40 +36,88 @@ def _phase_attr(phase: str) -> str:
 
 def _phase_bloks(phase: str) -> Prefetch[str, QuerySet[models.ActionBlok], str]:
     """One query for the bloks of one phase of every action in a list, kept on each row."""
-    return Prefetch("bloks", queryset=models.ActionBlok.objects.filter(phase=phase).order_by("context"), to_attr=_phase_attr(phase))
+    return Prefetch(
+        "bloks",
+        queryset=models.ActionBlok.objects.filter(phase=phase).order_by("context"),
+        to_attr=_phase_attr(phase),
+    )
 
 
-def _bloks_of(row: models.Action, phase: str) -> list["ActionBlok"]:
-    prefetched: list[models.ActionBlok] | None = getattr(row, _phase_attr(phase), None)  # set by the optimizer's prefetch
+def _bloks_of(row: models.Action, phase: str) -> list[ActionBlok]:
+    prefetched: list[models.ActionBlok] | None = getattr(
+        row, _phase_attr(phase), None
+    )  # set by the optimizer's prefetch
     if prefetched is None:
-        prefetched = list(models.ActionBlok.objects.filter(action_id=row.pk, phase=phase).order_by("context"))
+        prefetched = list(
+            models.ActionBlok.objects.filter(action_id=row.pk, phase=phase).order_by(
+                "context"
+            )
+        )
     return cast("list[ActionBlok]", prefetched)
 
 
-@strawberry_django.type(models.Action, filters=filters.ActionFilter, pagination=True, ordering=filters.ActionOrder, description="Represents an executable action in the system.")
+@strawberry_django.type(
+    models.Action,
+    filters=filters.ActionFilter,
+    pagination=True,
+    ordering=filters.ActionOrder,
+    description="Represents an executable action in the system.",
+)
 class Action:
     id: strawberry.ID = strawberry_django.field(description="Unique ID of the action.")
-    hash: rscalars.ActionHash = strawberry_django.field(description="Unique hash identifying the action definition.")
+    hash: rscalars.ActionHash = strawberry_django.field(
+        description="Unique hash identifying the action definition."
+    )
     name: str = strawberry_django.field(description="Name of the action.")
-    key: str = strawberry_django.field(description="Key of the action, used for grouping and identification.")
+    key: str = strawberry_django.field(
+        description="Key of the action, used for grouping and identification."
+    )
     app: App = strawberry_django.field(description="The app this action belongs to.")
     version: str = strawberry_django.field(description="Version string of the action.")
-    kind: renums.ActionKind = strawberry_django.field(description="The kind or category of the action.")
-    stateful: bool = strawberry_django.field(description="Indicates whether the action maintains state.")
-    pure: bool = strawberry_django.field(description="Whether the action is pure: same args always produce the same result, no side effects — replayable.")
-    idempotent: bool = strawberry_django.field(description="Whether the action is idempotent: safe to re-run with the same args — re-dispatchable on ambiguous executor loss.")
-    allow_probe: bool = strawberry_django.field(description="Whether the action may be invoked as a probe (zero persistence, no history/replay/recovery). Declared by the action author.")
-    description: str | None = strawberry_django.field(description="Optional description of the action.")
-    collections: list["Collection"] = strawberry_django.field(description="Collections to which this action belongs.")
-    implementations: list["Implementation"] = strawberry_django.field(description="List of implementations for this action.")
-    scope: enums.ActionScope = strawberry_django.field(description="Scope of the action, e.g., user or system.")
-    is_test_for: list["Action"] = strawberry_django.field(description="Actions for which this is a test.")
-    is_dev: bool = strawberry_django.field(description="Marks whether the action is in development.")
-    tests: list["Action"] = strawberry_django.field(description="List of tests associated with the action.")
-    protocols: list["Protocol"] = strawberry_django.field(description="Protocols associated with the action.")
-    defined_at: datetime.datetime = strawberry_django.field(description="Timestamp when the action was defined.")
+    kind: renums.ActionKind = strawberry_django.field(
+        description="The kind or category of the action."
+    )
+    stateful: bool = strawberry_django.field(
+        description="Indicates whether the action maintains state."
+    )
+    pure: bool = strawberry_django.field(
+        description="Whether the action is pure: same args always produce the same result, no side effects — replayable."
+    )
+    idempotent: bool = strawberry_django.field(
+        description="Whether the action is idempotent: safe to re-run with the same args — re-dispatchable on ambiguous executor loss."
+    )
+    allow_probe: bool = strawberry_django.field(
+        description="Whether the action may be invoked as a probe (zero persistence, no history/replay/recovery). Declared by the action author."
+    )
+    description: str | None = strawberry_django.field(
+        description="Optional description of the action."
+    )
+    collections: list[Collection] = strawberry_django.field(
+        description="Collections to which this action belongs."
+    )
+    implementations: list[Implementation] = strawberry_django.field(
+        description="List of implementations for this action."
+    )
+    scope: enums.ActionScope = strawberry_django.field(
+        description="Scope of the action, e.g., user or system."
+    )
+    is_test_for: list[Action] = strawberry_django.field(
+        description="Actions for which this is a test."
+    )
+    is_dev: bool = strawberry_django.field(
+        description="Marks whether the action is in development."
+    )
+    tests: list[Action] = strawberry_django.field(
+        description="List of tests associated with the action."
+    )
+    protocols: list[Protocol] = strawberry_django.field(
+        description="Protocols associated with the action."
+    )
+    defined_at: datetime.datetime = strawberry_django.field(
+        description="Timestamp when the action was defined."
+    )
 
-    logo: Optional["Blok"] = strawberry_django.field(
+    logo: Blok | None = strawberry_django.field(
         field_name="latest_logo",
         description="The action logo that draws this action: that of the implementation most recently registered with one (`Action.latest_logo`, kept by takt). Each implementation has its own (`Implementation.logo`); an action without one is drawn by its agent's default logo.",
     )
@@ -78,36 +126,50 @@ class Action:
         prefetch_related=[lambda info: _phase_bloks("RUN")],
         description="The action's own bloks, at most one per context (PANEL for a task panel, SCENE a 3D view, as a `Space` placing the run's dependencies): declared with the action, the latest registration's. Not part of its hash.",
     )
-    def bloks(self) -> list["ActionBlok"]:
+    def bloks(self) -> list[ActionBlok]:
         return _bloks_of(row_of(self, models.Action), "RUN")
 
     @strawberry_django.field(
         prefetch_related=[lambda info: _phase_bloks("ASSIGN")],
         description="The action's own bloks for starting a run of it, at most one per context (phase ASSIGN): shown before there is a task, with the arguments being filled in as `args` and the agents a run would get as `deps`.",
     )
-    def assign_bloks(self) -> list["ActionBlok"]:
+    def assign_bloks(self) -> list[ActionBlok]:
         return _bloks_of(row_of(self, models.Action), "ASSIGN")
 
     live_implementations: int = strawberry_django.field(
         description="How many of its implementations sit on an agent that can take work now (connected, or a webhook agent) — one per agent. Kept by the database as agents connect and leave, a moment behind (takt recomputes it on commit); a crashed agent counts until takt's stale sweep notices (seconds)."
     )
 
-    @strawberry_django.field(description="The estimate in seconds for the object named in the `estimatedRuntime` filter: its fastest live implementation that fits. Null without that filter, or when it cannot be computed for this object.")
+    @strawberry_django.field(
+        description="The estimate in seconds for the object named in the `estimatedRuntime` filter: its fastest live implementation that fits. Null without that filter, or when it cannot be computed for this object."
+    )
     def estimated_runtime_seconds(self) -> float | None:
         return getattr(row_of(self, models.Action), "estimated_seconds", None)
 
     @strawberry_django.field(
-        annotate={"has_fits_flag": lambda info: Exists(models.ImplementationFit.objects.filter(implementation__action=OuterRef("pk")))},
+        annotate={
+            "has_fits_flag": lambda info: Exists(
+                models.ImplementationFit.objects.filter(
+                    implementation__action=OuterRef("pk")
+                )
+            )
+        },
         description="Whether any implementation states a `Fits`, so which agent takes a task can matter.",
     )
     def has_fits(self) -> bool:
         row = row_of(self, models.Action)
-        flag = getattr(row, "has_fits_flag", None)  # annotated by the optimizer; absent on a row fetched without it
+        flag = getattr(
+            row, "has_fits_flag", None
+        )  # annotated by the optimizer; absent on a row fetched without it
         if isinstance(flag, bool):
             return flag
-        return models.ImplementationFit.objects.filter(implementation__action=row).exists()
+        return models.ImplementationFit.objects.filter(
+            implementation__action=row
+        ).exists()
 
-    assignable: bool = strawberry_django.field(description="Whether an agent that can take this action is connected (or is a webhook agent) right now: `liveImplementations > 0`.")
+    assignable: bool = strawberry_django.field(
+        description="Whether an agent that can take this action is connected (or is a webhook agent) right now: `liveImplementations > 0`."
+    )
 
     @strawberry_django.field(
         annotate={"availability_rank": lambda info: availability.rank()},
@@ -115,50 +177,102 @@ class Action:
     )
     def availability(self) -> enums.ActionAvailability:
         row = row_of(self, models.Action)
-        rank = getattr(row, "availability_rank", None)  # annotated by the optimizer; absent on a row fetched without it
+        rank = getattr(
+            row, "availability_rank", None
+        )  # annotated by the optimizer; absent on a row fetched without it
         if rank is None:
-            rank = models.Action.objects.filter(pk=row.pk).annotate(availability_rank=availability.rank()).values_list("availability_rank", flat=True).get()
+            rank = (
+                models.Action.objects.filter(pk=row.pk)
+                .annotate(availability_rank=availability.rank())
+                .values_list("availability_rank", flat=True)
+                .get()
+            )
         return availability.of_rank(rank)
 
-    test_cases: list["TestCase"] | None = strawberry_django.field(description="Test cases for this action.")
-    organization: "Organization" = strawberry_django.field(description="The organization that owns this action.")
-    tasks: list["Task"] = strawberry_django.field(description="Tasks created for this action.")
-    schedules: list["Schedule"] = strawberry_django.field(description="The schedules that run this action.")
-    triggers: list["Trigger"] = strawberry_django.field(description="The triggers that run this action.")
+    test_cases: list[TestCase] | None = strawberry_django.field(
+        description="Test cases for this action."
+    )
+    organization: Organization = strawberry_django.field(
+        description="The organization that owns this action."
+    )
+    tasks: list[Task] = strawberry_django.field(
+        description="Tasks created for this action."
+    )
+    schedules: list[Schedule] = strawberry_django.field(
+        description="The schedules that run this action."
+    )
+    triggers: list[Trigger] = strawberry_django.field(
+        description="The triggers that run this action."
+    )
 
-    @strawberry_django.field(description="This action's stored vector, as `<model id>:<floats>`. Null until it has been indexed.")
+    @strawberry_django.field(
+        description="This action's stored vector, as `<model id>:<floats>`. Null until it has been indexed."
+    )
     def embedding(self) -> Embedding | None:
         return embedding_of(self)
 
     @strawberry_django.field(
         description="Actions whose name and description mean roughly what this one's do, nearest first (cosine distance between embeddings, this action excluded). `filters` narrows the candidates like `actions` does; `maxDistance` (0 identical, 1 unrelated) cuts the tail, otherwise the nearest `limit` come back. Empty while this action has no vector yet or embeddings are off."
     )
-    def similar_actions(self, info: Info, filters: Optional[filters.ActionFilter] = None, limit: int = 10, max_distance: Optional[float] = None) -> list["Action"]:
+    def similar_actions(
+        self,
+        info: Info,
+        filters: filters.ActionFilter | None = None,
+        limit: int = 10,
+        max_distance: float | None = None,
+    ) -> list[Action]:
         row = row_of(self, models.Action)
         from facade.queries.action import similar_actions_queryset
 
-        return cast("list[Action]", list(similar_actions_queryset(info, row, filters, limit, max_distance)))
+        return cast(
+            "list[Action]",
+            list(similar_actions_queryset(info, row, filters, limit, max_distance)),
+        )
 
-    @strawberry_django.field(description="Get the latest completed task for this action.")
-    def latest_task(self) -> Optional["Task"]:
-        return cast("Optional[Task]", models.Task.objects.filter(action=self, is_done=True).order_by("-created_at").first())
+    @strawberry_django.field(
+        description="Get the latest completed task for this action."
+    )
+    def latest_task(self) -> Task | None:
+        return cast(
+            "Task | None",
+            models.Task.objects.filter(action=self, is_done=True)
+            .order_by("-created_at")
+            .first(),
+        )
 
     @strawberry_django.field(description="Retrieve tasks where this action has run.")
-    def runs(self) -> list["Task"] | None:
-        return cast("list[Task] | None", models.Task.objects.filter(action=self).order_by("-created_at"))
+    def runs(self) -> list[Task] | None:
+        return cast(
+            "list[Task] | None",
+            models.Task.objects.filter(action=self).order_by("-created_at"),
+        )
 
     @strawberry_django.field(description="Input arguments (ports) for the action.")
     def args(self) -> list[rtypes.ArgPort]:
-        return cast("list[rtypes.ArgPort]", [rmodels.ArgPortModel(**i) for i in self.args])
+        return cast(
+            "list[rtypes.ArgPort]", [rmodels.ArgPortModel(**i) for i in self.args]
+        )
 
-    @strawberry_django.field(description="Output values (ports) returned by the action.")
+    @strawberry_django.field(
+        description="Output values (ports) returned by the action."
+    )
     def returns(self) -> list[rtypes.ReturnPort]:
-        return cast("list[rtypes.ReturnPort]", [rmodels.ReturnPortModel(**i) for i in self.returns])
+        return cast(
+            "list[rtypes.ReturnPort]",
+            [rmodels.ReturnPortModel(**i) for i in self.returns],
+        )
 
-    @strawberry_django.field(description="Port groups used in the action for organizing ports.")
+    @strawberry_django.field(
+        description="Port groups used in the action for organizing ports."
+    )
     def port_groups(self) -> list[rtypes.PortGroup]:
-        return cast("list[rtypes.PortGroup]", [rmodels.PortGroupModel(**i) for i in self.port_groups])
+        return cast(
+            "list[rtypes.PortGroup]",
+            [rmodels.PortGroupModel(**i) for i in self.port_groups],
+        )
 
     @classmethod
-    def get_queryset(cls, queryset: QuerySet[models.Action], info: Info, **kwargs: object) -> QuerySet[models.Action]:
+    def get_queryset(
+        cls, queryset: QuerySet[models.Action], info: Info, **kwargs: object
+    ) -> QuerySet[models.Action]:
         return build_prescoped_queryset(info, queryset, field="organization")

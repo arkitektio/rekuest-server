@@ -11,26 +11,38 @@ from rekuest_core.inputs.models import ActionDemandInputModel
 logger = logging.getLogger(__name__)
 
 
-def auto_resolve(info: Info, implementation: models.Implementation, resolution: models.Resolution, visited_implementations: set[str] | None = None) -> None:
+def auto_resolve(
+    info: Info,
+    implementation: models.Implementation,
+    resolution: models.Resolution,
+    visited_implementations: set[str] | None = None,
+) -> None:
     if not visited_implementations:
         visited_implementations = set()
 
     for dependency in implementation.dependencies.all():
         logger.debug("Resolving dependency %s", dependency)
-        agentsqs = models.Agent.objects.filter(organization=info.context.request.organization)
+        agentsqs = models.Agent.objects.filter(
+            organization=info.context.request.organization
+        )
 
         matched_ids: dict[str, list[int]] = {}
 
         action_dependencies = dependency.get_action_dependencies()
         # An empty demand still hits the matcher's "No search params provided" guard.
         per_demand_ids = managers.get_action_ids_by_action_demands(
-            [action_dependency.demand or ActionDemandInputModel() for action_dependency in action_dependencies],
+            [
+                action_dependency.demand or ActionDemandInputModel()
+                for action_dependency in action_dependencies
+            ],
             organization_id=info.context.request.organization.id,
         )
 
         for action_dependency, new_ids in zip(action_dependencies, per_demand_ids):
             if len(new_ids) == 0:
-                raise ValueError(f"No actions found that match the given action demands {action_dependency}")
+                raise ValueError(
+                    f"No actions found that match the given action demands {action_dependency}"
+                )
 
             # Further logic to create resolution would go here.
             agentsqs = agentsqs.filter(implementations__action__id__in=new_ids)
@@ -44,16 +56,27 @@ def auto_resolve(info: Info, implementation: models.Implementation, resolution: 
 
             state_filters = managers.state_demand_state_filters(state_dependency.demand)
 
-            if "definition_id__in" in state_filters and not state_filters["definition_id__in"]:
-                raise ValueError(f"No state definitions found that match the given state demand {state_dependency}")
+            if (
+                "definition_id__in" in state_filters
+                and not state_filters["definition_id__in"]
+            ):
+                raise ValueError(
+                    f"No state definitions found that match the given state demand {state_dependency}"
+                )
 
-            agentsqs = agentsqs.filter(Exists(models.State.objects.filter(agent=OuterRef("pk"), **state_filters)))
+            agentsqs = agentsqs.filter(
+                Exists(
+                    models.State.objects.filter(agent=OuterRef("pk"), **state_filters)
+                )
+            )
 
         # todo: select best agent from agentsqs
         selected_agent = agentsqs.first()
 
         if not selected_agent:
-            raise ValueError(f"No agent found that can satisfy dependency {dependency.key}")
+            raise ValueError(
+                f"No agent found that can satisfy dependency {dependency.key}"
+            )
 
         for key, action_id_list in matched_ids.items():
             implementations = models.Implementation.objects.filter(
@@ -75,7 +98,12 @@ def auto_resolve(info: Info, implementation: models.Implementation, resolution: 
                             creator=info.context.request.user,
                             organization=info.context.request.organization,
                         )
-                        auto_resolve(info, impl, sresolution, visited_implementations=visited_implementations)
+                        auto_resolve(
+                            info,
+                            impl,
+                            sresolution,
+                            visited_implementations=visited_implementations,
+                        )
 
                         models.ResolvedDependency.objects.create(
                             key=key,
@@ -97,7 +125,10 @@ def auto_resolve(info: Info, implementation: models.Implementation, resolution: 
 
                     count += 1
                 # No preference means no limit: every viable instance is resolved.
-                if dependency.prefered_instances is not None and count >= dependency.prefered_instances:
+                if (
+                    dependency.prefered_instances is not None
+                    and count >= dependency.prefered_instances
+                ):
                     break
 
 
@@ -123,7 +154,14 @@ def get_latest_state(
         t = models.Session.objects.get(agent=agent, session_id=session_id)
 
     if t is None:
-        return {"states": {}, "global_revision": 0, "forward_patches": [], "backward_patches": [], "session_id": None, "timestamp": None}
+        return {
+            "states": {},
+            "global_revision": 0,
+            "forward_patches": [],
+            "backward_patches": [],
+            "session_id": None,
+            "timestamp": None,
+        }
 
     states_data = {}
     max_current_revision = 0
@@ -134,14 +172,18 @@ def get_latest_state(
         qs = qs.filter(id=state_id)
 
     for state in qs:
-        snapshot_qs = models.Snapshot.objects.filter(state=state, agent=agent, session=t)
+        snapshot_qs = models.Snapshot.objects.filter(
+            state=state, agent=agent, session=t
+        )
         if global_revision is not None:
             snapshot_qs = snapshot_qs.filter(global_rev__lte=global_revision)
         snapshot = snapshot_qs.order_by("-global_rev", "-id").first()
         if not snapshot:
             raise ValueError(f"No snapshot found for state {state_id or state.pk}")
 
-        patches_qs = models.Patch.objects.filter(state=state, session=t, global_rev__gt=snapshot.global_rev)
+        patches_qs = models.Patch.objects.filter(
+            state=state, session=t, global_rev__gt=snapshot.global_rev
+        )
         if global_revision is not None:
             patches_qs = patches_qs.filter(global_rev__lte=global_revision)
 
@@ -153,8 +195,16 @@ def get_latest_state(
         for patch in patches_qs.order_by("global_rev", "id"):
             # An update's operations apply together: all of them, or (a broken history) none.
             try:
-                current_value = jsonpatch.JsonPatch(models.Patch.document(patch.ops)).apply(current_value)
-            except (jsonpatch.JsonPatchException, jsonpatch.JsonPointerException, KeyError, IndexError, TypeError) as e:
+                current_value = jsonpatch.JsonPatch(
+                    models.Patch.document(patch.ops)
+                ).apply(current_value)
+            except (
+                jsonpatch.JsonPatchException,
+                jsonpatch.JsonPointerException,
+                KeyError,
+                IndexError,
+                TypeError,
+            ) as e:
                 # A patch that does not apply means the recorded history is broken (a lost or
                 # out-of-order patch). Skip it so the rest of the state still materializes, but
                 # say so: silently swallowing this is how corrupted states went unnoticed.
@@ -179,18 +229,35 @@ def get_latest_state(
         states_data[state.interface] = current_value
 
     # Use the requested target revision if provided, otherwise the max we just calculated
-    reference_rev = global_revision if global_revision is not None else max_current_revision
+    reference_rev = (
+        global_revision if global_revision is not None else max_current_revision
+    )
 
     # Fetch n-patches forward at the agent level (not scoped to state, but to the session:
     # revisions of different sessions are unrelated)
     forward_patches = []
     if forward_patch_count > 0:
-        forward_patches = list(models.Patch.objects.filter(agent=agent, session=t, global_rev__gt=reference_rev).order_by("global_rev")[:forward_patch_count])
+        forward_patches = list(
+            models.Patch.objects.filter(
+                agent=agent, session=t, global_rev__gt=reference_rev
+            ).order_by("global_rev")[:forward_patch_count]
+        )
 
     # Fetch n-patches backward at the agent level
     backward_patches = []
     if backward_patch_count > 0:
-        backward_patches = list(models.Patch.objects.filter(agent=agent, session=t, global_rev__lte=reference_rev).order_by("-global_rev")[:backward_patch_count][::-1])  # Reverse to maintain chronological order
+        backward_patches = list(
+            models.Patch.objects.filter(
+                agent=agent, session=t, global_rev__lte=reference_rev
+            ).order_by("-global_rev")[:backward_patch_count][::-1]
+        )  # Reverse to maintain chronological order
 
     # Return a structured payload since patches are now an agent-level property
-    return {"states": states_data, "global_revision": max_current_revision, "forward_patches": forward_patches, "backward_patches": backward_patches, "session_id": t.session_id, "timestamp": latest_timestamp}
+    return {
+        "states": states_data,
+        "global_revision": max_current_revision,
+        "forward_patches": forward_patches,
+        "backward_patches": backward_patches,
+        "session_id": t.session_id,
+        "timestamp": latest_timestamp,
+    }

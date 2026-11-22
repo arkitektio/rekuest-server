@@ -8,7 +8,13 @@ from pydantic import ValidationError
 from facade.inputs import ImplementAgentInputModel
 from tests.registered import blok, node
 
-DEFINITION = {"key": "crop", "name": "Crop", "kind": "FUNCTION", "args": [], "returns": []}
+DEFINITION = {
+    "key": "crop",
+    "name": "Crop",
+    "kind": "FUNCTION",
+    "args": [],
+    "returns": [],
+}
 
 
 def _logo(*shapes: dict, kind: str = "action") -> list[dict]:
@@ -21,8 +27,17 @@ def _path(**props: object) -> dict:
 
 
 LOGO = {"key": "crop", "vocab": 2, "context": "LOGO", "components": _logo()}
-AGENT_LOGO = {"key": "app", "vocab": 2, "context": "LOGO", "components": _logo(kind="agent")}
-PANEL = {"key": "panel", "vocab": 2, "components": [blok("agent", "panel", node("Card"))]}
+AGENT_LOGO = {
+    "key": "app",
+    "vocab": 2,
+    "context": "LOGO",
+    "components": _logo(kind="agent"),
+}
+PANEL = {
+    "key": "panel",
+    "vocab": 2,
+    "components": [blok("agent", "panel", node("Card"))],
+}
 
 
 def _agent(logo: str | None, *bloks: dict) -> ImplementAgentInputModel:
@@ -42,12 +57,17 @@ def test_an_implementation_names_an_action_logo_blok_its_agent_declares() -> Non
 @pytest.mark.parametrize("logo", ["nowhere", "panel", "app"])
 def test_a_logo_that_is_not_a_declared_action_logo_blok_is_refused(logo: str) -> None:
     """``app`` is a logo too, but its ``<Blok>`` says kind agent: only kind action draws an action."""
-    with pytest.raises(ValidationError, match=f"drawn by the logo '{logo}', which is not an action logo blok this agent declares"):
+    with pytest.raises(
+        ValidationError,
+        match=f"drawn by the logo '{logo}', which is not an action logo blok this agent declares",
+    ):
         _agent(logo, LOGO, PANEL, AGENT_LOGO)
 
 
 def test_a_logo_blok_sent_as_another_context_is_refused() -> None:
-    with pytest.raises(ValidationError, match="sent as a PANEL blok, but its <Blok> says LOGO"):
+    with pytest.raises(
+        ValidationError, match="sent as a PANEL blok, but its <Blok> says LOGO"
+    ):
         _agent(None, {**AGENT_LOGO, "context": "PANEL"})
 
 
@@ -61,7 +81,12 @@ def test_a_logo_paints_only_with_the_pens(paint: str, key: str) -> None:
 
 
 def test_pens_references_and_the_task_pass() -> None:
-    shapes = [_path(fill="brand-soft"), _path(stroke="ink"), _path(fill="url(#glow)"), _path(fill={"path": "task.message"})]
+    shapes = [
+        _path(fill="brand-soft"),
+        _path(stroke="ink"),
+        _path(fill="url(#glow)"),
+        _path(fill={"path": "task.message"}),
+    ]
     _agent("crop", {**LOGO, "components": _logo(*shapes)})
 
 

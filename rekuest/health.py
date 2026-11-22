@@ -28,7 +28,10 @@ class Takt(HealthCheck):
         """Ask takt's ``ht`` and for its internal API; unavailable unless both are there."""
         base = settings.TAKT_URL.rstrip("/")
         try:
-            async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS, transport=httpx.AsyncHTTPTransport(uds=takt.socket())) as client:
+            async with httpx.AsyncClient(
+                timeout=TIMEOUT_SECONDS,
+                transport=httpx.AsyncHTTPTransport(uds=takt.socket()),
+            ) as client:
                 health = await client.get(f"{base}/ht")
                 # A GET of a POST route: 405 where the route is, 404 where the internal API is not.
                 internal = await client.get(f"{base}/internal/assign")
@@ -37,4 +40,6 @@ class Takt(HealthCheck):
         if health.status_code != 200:
             raise ServiceUnavailable(f"takt is unhealthy ({health.status_code})")
         if internal.status_code == 404:
-            raise ServiceUnavailable("takt's internal API is not at rekuest.takt_url / rekuest.takt_socket: that is the address agents reach")
+            raise ServiceUnavailable(
+                "takt's internal API is not at rekuest.takt_url / rekuest.takt_socket: that is the address agents reach"
+            )

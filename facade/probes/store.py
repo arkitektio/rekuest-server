@@ -53,10 +53,10 @@ def _inflight_key(caller_pk: int | str) -> str:
 
 # One decoding pool per (host, port), mirroring the agent queue's pooling so the
 # short-lived per-request store objects don't churn TCP connections.
-_sync_pools: dict[tuple[str, int], "redis.ConnectionPool"] = {}
+_sync_pools: dict[tuple[str, int], redis.ConnectionPool] = {}
 
 
-def _sync_pool(host: str, port: int) -> "redis.ConnectionPool":
+def _sync_pool(host: str, port: int) -> redis.ConnectionPool:
     key = (host, port)
     pool = _sync_pools.get(key)
     if pool is None:
@@ -72,17 +72,19 @@ class ProbeStore:
         # Async clients are bound to the event loop they were created on, so cache one per
         # loop (weak keys: a finished loop — e.g. per-test loops — drops its client). In a
         # daphne worker there is exactly one loop, so this is a single long-lived client.
-        self._async_connections: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, aredis.Redis]" = weakref.WeakKeyDictionary()
+        self._async_connections: weakref.WeakKeyDictionary[
+            asyncio.AbstractEventLoop, aredis.Redis
+        ] = weakref.WeakKeyDictionary()
 
     @classmethod
-    def from_settings(cls) -> "ProbeStore":
+    def from_settings(cls) -> ProbeStore:
         return cls(host=settings.AGENT_REDIS_HOST, port=settings.AGENT_REDIS_PORT)
 
     # ------------------------------------------------------------------ #
     # sync — the GraphQL mutation path
     # ------------------------------------------------------------------ #
 
-    def _sync(self) -> "redis.Redis":
+    def _sync(self) -> redis.Redis:
         return redis.Redis(connection_pool=_sync_pool(self.host, self.port))
 
     def get(self, probe_id: str) -> ProbeState | None:
@@ -96,11 +98,13 @@ class ProbeStore:
     # async — the message-router handler path
     # ------------------------------------------------------------------ #
 
-    def _async(self) -> "aredis.Redis":
+    def _async(self) -> aredis.Redis:
         loop = asyncio.get_running_loop()
         connection = self._async_connections.get(loop)
         if connection is None:
-            connection = aredis.Redis(host=self.host, port=self.port, decode_responses=True)
+            connection = aredis.Redis(
+                host=self.host, port=self.port, decode_responses=True
+            )
             self._async_connections[loop] = connection
         return connection
 
@@ -124,7 +128,11 @@ class ProbeStore:
             total += 1
         raw = connection.get(_inflight_key(caller_pk))
         inflight = max(0, int(raw)) if isinstance(raw, (str, bytes, int)) else 0
-        return ProbeCounts(total_live=total, my_inflight=inflight, max_inflight=probe_max_inflight_per_caller())
+        return ProbeCounts(
+            total_live=total,
+            my_inflight=inflight,
+            max_inflight=probe_max_inflight_per_caller(),
+        )
 
 
 _default_store: ProbeStore | None = None

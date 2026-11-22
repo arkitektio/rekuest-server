@@ -1,7 +1,6 @@
 from rekuest_core.inputs.types import widget_input_types
 from rekuest_core.objects import types
 
-
 interface_types = [
     types.SliderAssignWidget,
     types.ChoiceAssignWidget,

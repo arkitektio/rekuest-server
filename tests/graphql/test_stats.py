@@ -34,17 +34,26 @@ STATS = """
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 class TestStats:
-    async def test_task_stats_aggregate_timestamps_as_epoch(self, authenticated_context):
+    async def test_task_stats_aggregate_timestamps_as_epoch(
+        self, authenticated_context
+    ):
         agent = await seed_agent("stats", token="test")
         first = await build_task_for_agent_caller(agent.pk, "stats-first")
         second = await build_task_for_agent_caller(agent.pk, "stats-second")
 
-        result = await schema.execute(STATS % "taskStats", context_value=authenticated_context)
+        result = await schema.execute(
+            STATS % "taskStats", context_value=authenticated_context
+        )
 
         assert not result.errors, result.errors
         stats = result.data["taskStats"]
         assert stats["count"] >= 2
-        assert stats["min"] <= first.created_at.timestamp() <= second.created_at.timestamp() <= stats["max"]
+        assert (
+            stats["min"]
+            <= first.created_at.timestamp()
+            <= second.created_at.timestamp()
+            <= stats["max"]
+        )
         assert stats["min"] <= stats["avg"] <= stats["max"]
         assert stats["sum"] is None
         assert sum(bucket["count"] for bucket in stats["series"]) == stats["count"]
@@ -54,7 +63,9 @@ class TestStats:
         # Action has no created_at column; CREATED_AT maps onto defined_at.
         await seed_agent("stats-action", token="test")
 
-        result = await schema.execute(STATS % "actionStats", context_value=authenticated_context)
+        result = await schema.execute(
+            STATS % "actionStats", context_value=authenticated_context
+        )
 
         assert not result.errors, result.errors
         assert result.data["actionStats"]["sum"] is None

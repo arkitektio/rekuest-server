@@ -8,8 +8,12 @@ from strawberry.experimental import pydantic
 
 
 class MappedAgentInputModel(BaseModel):
-    key: str = Field(description="The key of the agent to map. This is used to identify the agent in the system.")
-    agent: str = Field(description="The agent ID to map the actions to. This is used to identify the agent in the system.")
+    key: str = Field(
+        description="The key of the agent to map. This is used to identify the agent in the system."
+    )
+    agent: str = Field(
+        description="The agent ID to map the actions to. This is used to identify the agent in the system."
+    )
     # None, not []: the dump drops it, so an assign that pins nothing below reads as it always did.
     dependencies: list["ResolvedDependencyInputModel"] | None = Field(
         default=None,
@@ -18,8 +22,12 @@ class MappedAgentInputModel(BaseModel):
 
 
 class ResolvedDependencyInputModel(BaseModel):
-    key: str = Field(description="The key of the dependency to map. This is used to identify the dependency in the system.")
-    mapped_agents: list[MappedAgentInputModel] = Field(description="The list of mapped agents to map to implementations in agents. This is used to identify the mapped agents in the system.")
+    key: str = Field(
+        description="The key of the dependency to map. This is used to identify the dependency in the system."
+    )
+    mapped_agents: list[MappedAgentInputModel] = Field(
+        description="The list of mapped agents to map to implementations in agents. This is used to identify the mapped agents in the system."
+    )
     auto_resolve: bool = Field(
         default=False,
         description="Whether this dependency should be automatically resolved by the system. If true, the system will attempt to find a agent that can resolve this dependency and assign it to the action when the action is assigned. This is used to enable automatic resolution of dependencies without requiring the user to specify a specific agent for the dependency.",
@@ -36,7 +44,14 @@ MappedAgentInputModel.model_rebuild()
 class MappedAgentInput:
     key: str
     agent: strawberry.ID
-    dependencies: list[Annotated["ResolvedDependencyInput", strawberry.lazy("facade.inputs.dependency")]] | None = None
+    dependencies: (
+        list[
+            Annotated[
+                "ResolvedDependencyInput", strawberry.lazy("facade.inputs.dependency")
+            ]
+        ]
+        | None
+    ) = None
 
 
 @pydantic.input(
@@ -50,8 +65,12 @@ class ResolvedDependencyInput:
 
 
 class DependencyTreeInputModel(BaseModel):
-    implementation: str = Field(description="The implementation an assign would target.")
-    dependencies: list[ResolvedDependencyInputModel] | None = Field(default=None, description="The overwrites the assign would carry.")
+    implementation: str = Field(
+        description="The implementation an assign would target."
+    )
+    dependencies: list[ResolvedDependencyInputModel] | None = Field(
+        default=None, description="The overwrites the assign would carry."
+    )
 
 
 @pydantic.input(
@@ -79,8 +98,12 @@ class UpdateResolutionInputModel(BaseModel):
         url: URL associated with the resolution
     """
 
-    id: str = Field(description="The ID of the resolution. This is used to identify the resolution in the system.")
-    name: str = Field(description="The name of the resolution. This is used to identify the resolution in the system.")
+    id: str = Field(
+        description="The ID of the resolution. This is used to identify the resolution in the system."
+    )
+    name: str = Field(
+        description="The name of the resolution. This is used to identify the resolution in the system."
+    )
     resolved_dependencies: list[ResolvedDependencyInputModel] | None = Field(
         default=None,
         description="The resolved dependencies of the resolution. All other fields will be replaced.",
@@ -108,9 +131,15 @@ class CreateResolutionInputModel(BaseModel):
         url: URL associated with the resolution
     """
 
-    key: str = Field(description="The key of the resolution. This is used to identify the resolution in the system.")
-    implementation: str = Field(description="The implementation ID of the resolution. This is used to identify the resolution in the system.")
-    name: str = Field(description="The name of the resolution. This is used to identify the resolution in the system.")
+    key: str = Field(
+        description="The key of the resolution. This is used to identify the resolution in the system."
+    )
+    implementation: str = Field(
+        description="The implementation ID of the resolution. This is used to identify the resolution in the system."
+    )
+    name: str = Field(
+        description="The name of the resolution. This is used to identify the resolution in the system."
+    )
     resolved_dependencies: list[ResolvedDependencyInputModel] | None = Field(
         default=None,
         description="The resolved dependencies of the resolution. This is used to identify the resolution in the system.",

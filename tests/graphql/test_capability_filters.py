@@ -9,13 +9,12 @@ Declared asks and informs are written by takt at registration; here they are row
 import pytest
 import pytest_asyncio
 from asgiref.sync import sync_to_async
-from kante.context import HttpContext
-
 from authentikate.models import App, Client, Release
-from rekuest_core.inputs.models import ImplementationInputModel
+from kante.context import HttpContext
 
 from facade import models
 from facade.schema import schema
+from rekuest_core.inputs.models import ImplementationInputModel
 from tests.registered import create_blok, create_implementation
 
 ACTIONS = """
@@ -34,7 +33,15 @@ IMPLEMENTATIONS = """
     }
 """
 
-SEEDED = {"Asker", "Informer", "Caller", "DynamicCaller", "DynamicAsker", "Plain", "Twice"}
+SEEDED = {
+    "Asker",
+    "Informer",
+    "Caller",
+    "DynamicCaller",
+    "DynamicAsker",
+    "Plain",
+    "Twice",
+}
 
 
 def _input(name: str, dependencies: list | None = None) -> ImplementationInputModel:
@@ -42,7 +49,14 @@ def _input(name: str, dependencies: list | None = None) -> ImplementationInputMo
         {
             "interface": name.lower(),
             "dependencies": dependencies or [],
-            "definition": {"key": name.lower(), "version": "1", "name": name, "kind": "FUNCTION", "args": [], "returns": []},
+            "definition": {
+                "key": name.lower(),
+                "version": "1",
+                "name": name,
+                "kind": "FUNCTION",
+                "args": [],
+                "returns": [],
+            },
         }
     )
 
@@ -54,21 +68,48 @@ def _seed(context: HttpContext) -> None:
     release = Release.objects.create(app=app, version="1.0.0")
 
     def agent(name: str, client: Client) -> models.Agent:
-        return models.Agent.objects.create(app=app, release=release, user=request.user, client=client, organization=org, hash=f"capability-{name}", name=name)
+        return models.Agent.objects.create(
+            app=app,
+            release=release,
+            user=request.user,
+            client=client,
+            organization=org,
+            hash=f"capability-{name}",
+            name=name,
+        )
 
     # One agent per client, user and organization: the second runs on a client of its own.
     first = agent("first", request.client)
-    second = agent("second", Client.objects.create(client_id="capability-second", release=release))
+    second = agent(
+        "second", Client.objects.create(client_id="capability-second", release=release)
+    )
     blok = create_blok(org, request.user, "question")
 
-    def declare(implementation: models.Implementation, role: models.InteractionRole) -> None:
-        models.ImplementationInteraction.objects.create(implementation=implementation, key=f"ui.{role.value.lower()}", role=role, blok=blok)
+    def declare(
+        implementation: models.Implementation, role: models.InteractionRole
+    ) -> None:
+        models.ImplementationInteraction.objects.create(
+            implementation=implementation,
+            key=f"ui.{role.value.lower()}",
+            role=role,
+            blok=blok,
+        )
 
     declare(create_implementation(_input("Asker"), first), models.InteractionRole.ASK)
-    declare(create_implementation(_input("Informer"), first), models.InteractionRole.INFORM)
-    create_implementation(_input("Caller", [{"key": "segment", "action_dependencies": [], "state_dependencies": []}]), first)
+    declare(
+        create_implementation(_input("Informer"), first), models.InteractionRole.INFORM
+    )
+    create_implementation(
+        _input(
+            "Caller",
+            [{"key": "segment", "action_dependencies": [], "state_dependencies": []}],
+        ),
+        first,
+    )
     dynamic_caller = create_implementation(_input("DynamicCaller"), first)
-    models.Implementation.objects.filter(id=dynamic_caller.id).update(dynamic_calls=True)
+    models.Implementation.objects.filter(id=dynamic_caller.id).update(
+        dynamic_calls=True
+    )
     dynamic_asker = create_implementation(_input("DynamicAsker"), first)
     models.Implementation.objects.filter(id=dynamic_asker.id).update(dynamic_asks=True)
     create_implementation(_input("Plain"), first)
@@ -78,9 +119,13 @@ def _seed(context: HttpContext) -> None:
 
 
 async def _names(context: HttpContext, filters: dict) -> list[str]:
-    result = await schema.execute(ACTIONS, context_value=context, variable_values={"filters": filters})
+    result = await schema.execute(
+        ACTIONS, context_value=context, variable_values={"filters": filters}
+    )
     assert result.errors is None, result.errors
-    return [action["name"] for action in result.data["actions"] if action["name"] in SEEDED]
+    return [
+        action["name"] for action in result.data["actions"] if action["name"] in SEEDED
+    ]
 
 
 @pytest_asyncio.fixture
@@ -95,16 +140,30 @@ async def seeded(authenticated_context: HttpContext) -> HttpContext:
 @pytest.mark.asyncio
 class TestActionCapabilityFilters:
     async def test_asks_counts_declared_and_dynamic_asks(self, seeded: HttpContext):
-        assert sorted(await _names(seeded, {"asks": True})) == ["Asker", "DynamicAsker", "Twice"]
+        assert sorted(await _names(seeded, {"asks": True})) == [
+            "Asker",
+            "DynamicAsker",
+            "Twice",
+        ]
 
     async def test_asks_false_is_never_asks(self, seeded: HttpContext):
-        assert sorted(await _names(seeded, {"asks": False})) == ["Caller", "DynamicCaller", "Informer", "Plain"]
+        assert sorted(await _names(seeded, {"asks": False})) == [
+            "Caller",
+            "DynamicCaller",
+            "Informer",
+            "Plain",
+        ]
 
     async def test_informs(self, seeded: HttpContext):
         assert await _names(seeded, {"informs": True}) == ["Informer"]
 
-    async def test_calls_counts_dependencies_and_dynamic_calls(self, seeded: HttpContext):
-        assert sorted(await _names(seeded, {"calls": True})) == ["Caller", "DynamicCaller"]
+    async def test_calls_counts_dependencies_and_dynamic_calls(
+        self, seeded: HttpContext
+    ):
+        assert sorted(await _names(seeded, {"calls": True})) == [
+            "Caller",
+            "DynamicCaller",
+        ]
 
     async def test_dynamic_flags(self, seeded: HttpContext):
         assert await _names(seeded, {"dynamicCalls": True}) == ["DynamicCaller"]
@@ -112,19 +171,39 @@ class TestActionCapabilityFilters:
         assert await _names(seeded, {"dynamicInforms": True}) == []
 
     async def test_compose_under_or_and_not(self, seeded: HttpContext):
-        assert sorted(await _names(seeded, {"informs": True, "OR": {"calls": True}})) == ["Caller", "DynamicCaller", "Informer"]
-        assert sorted(await _names(seeded, {"NOT": {"asks": True}, "calls": False})) == ["Informer", "Plain"]
+        assert sorted(
+            await _names(seeded, {"informs": True, "OR": {"calls": True}})
+        ) == ["Caller", "DynamicCaller", "Informer"]
+        assert sorted(
+            await _names(seeded, {"NOT": {"asks": True}, "calls": False})
+        ) == ["Informer", "Plain"]
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 class TestImplementationCapabilityFilters:
     async def test_asks_lists_each_implementation(self, seeded: HttpContext):
-        result = await schema.execute(IMPLEMENTATIONS, context_value=seeded, variable_values={"filters": {"asks": True}})
+        result = await schema.execute(
+            IMPLEMENTATIONS,
+            context_value=seeded,
+            variable_values={"filters": {"asks": True}},
+        )
         assert result.errors is None, result.errors
-        assert sorted(i["interface"] for i in result.data["implementations"]) == ["asker", "dynamicasker", "twice", "twice"]
+        assert sorted(i["interface"] for i in result.data["implementations"]) == [
+            "asker",
+            "dynamicasker",
+            "twice",
+            "twice",
+        ]
 
     async def test_calls_false(self, seeded: HttpContext):
-        result = await schema.execute(IMPLEMENTATIONS, context_value=seeded, variable_values={"filters": {"calls": False, "asks": False}})
+        result = await schema.execute(
+            IMPLEMENTATIONS,
+            context_value=seeded,
+            variable_values={"filters": {"calls": False, "asks": False}},
+        )
         assert result.errors is None, result.errors
-        assert sorted(i["interface"] for i in result.data["implementations"]) == ["informer", "plain"]
+        assert sorted(i["interface"] for i in result.data["implementations"]) == [
+            "informer",
+            "plain",
+        ]

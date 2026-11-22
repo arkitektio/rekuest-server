@@ -24,7 +24,9 @@ IMPLEMENTATIONS = """
 """
 
 
-def _agent(context: HttpContext, name: str, hooks: dict[str, list[str]]) -> models.Agent:
+def _agent(
+    context: HttpContext, name: str, hooks: dict[str, list[str]]
+) -> models.Agent:
     """An agent offering one action per ``hooks`` entry, listed under its protocols.
 
     ``create_implementation`` writes no protocol rows (registration in takt does), so
@@ -49,18 +51,34 @@ def _agent(context: HttpContext, name: str, hooks: dict[str, list[str]]) -> mode
     for interface, protocols in hooks.items():
         implementation = create_implementation(
             ImplementationInputModel.model_validate(
-                {"interface": interface, "definition": {"key": f"{name}-{interface}", "version": "1", "name": interface, "kind": "FUNCTION", "args": [], "returns": []}}
+                {
+                    "interface": interface,
+                    "definition": {
+                        "key": f"{name}-{interface}",
+                        "version": "1",
+                        "name": interface,
+                        "kind": "FUNCTION",
+                        "args": [],
+                        "returns": [],
+                    },
+                }
             ),
             agent,
         )
         for protocol in protocols:
-            row, _ = models.Protocol.objects.get_or_create(organization=request.organization, name=protocol, defaults={"description": "test"})
+            row, _ = models.Protocol.objects.get_or_create(
+                organization=request.organization,
+                name=protocol,
+                defaults={"description": "test"},
+            )
             implementation.action.protocols.add(row)
     return agent
 
 
 async def _data(context: HttpContext, query: str, filters: dict) -> dict:
-    result = await schema.execute(query, context_value=context, variable_values={"filters": filters})
+    result = await schema.execute(
+        query, context_value=context, variable_values={"filters": filters}
+    )
     assert result.errors is None, result.errors
     return result.data
 
@@ -68,26 +86,53 @@ async def _data(context: HttpContext, query: str, filters: dict) -> dict:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 class TestImplementsProtocols:
-    async def test_only_the_agents_offering_a_hinted_action_and_each_once(self, authenticated_context: HttpContext):
+    async def test_only_the_agents_offering_a_hinted_action_and_each_once(
+        self, authenticated_context: HttpContext
+    ):
         def agents() -> tuple[models.Agent, models.Agent]:
-            scene = _agent(authenticated_context, "proto-scene", {"attach": ["on_scene_init"], "segment": ["on_scene_annotation", "on_scene_init"]})
+            scene = _agent(
+                authenticated_context,
+                "proto-scene",
+                {
+                    "attach": ["on_scene_init"],
+                    "segment": ["on_scene_annotation", "on_scene_init"],
+                },
+            )
             _agent(authenticated_context, "proto-other", {"work": ["predicate"]})
             plain = _agent(authenticated_context, "proto-plain", {"work": []})
             return scene, plain
 
         scene, _ = await sync_to_async(agents)()
 
-        data = await _data(authenticated_context, AGENTS, {"implementsProtocols": ["on_scene_init", "on_scene_leave"]})
+        data = await _data(
+            authenticated_context,
+            AGENTS,
+            {"implementsProtocols": ["on_scene_init", "on_scene_leave"]},
+        )
 
         assert [a["id"] for a in data["agents"]] == [str(scene.id)]
 
-    async def test_an_agent_s_hooks_narrow_by_protocol(self, authenticated_context: HttpContext):
-        scene = await sync_to_async(_agent)(authenticated_context, "proto-hooks", {"attach": ["on_scene_init"], "segment": ["on_scene_annotation"]})
+    async def test_an_agent_s_hooks_narrow_by_protocol(
+        self, authenticated_context: HttpContext
+    ):
+        scene = await sync_to_async(_agent)(
+            authenticated_context,
+            "proto-hooks",
+            {"attach": ["on_scene_init"], "segment": ["on_scene_annotation"]},
+        )
 
         data = await _data(
             authenticated_context,
             IMPLEMENTATIONS,
-            {"agent": {"ids": [str(scene.id)], "implementsProtocols": ["on_scene_annotation"]}, "action": {"protocols": ["on_scene_annotation"]}},
+            {
+                "agent": {
+                    "ids": [str(scene.id)],
+                    "implementsProtocols": ["on_scene_annotation"],
+                },
+                "action": {"protocols": ["on_scene_annotation"]},
+            },
         )
 
-        assert [(i["interface"], i["action"]["protocols"]) for i in data["implementations"]] == [("segment", [{"name": "on_scene_annotation"}])]
+        assert [
+            (i["interface"], i["action"]["protocols"]) for i in data["implementations"]
+        ] == [("segment", [{"name": "on_scene_annotation"}])]

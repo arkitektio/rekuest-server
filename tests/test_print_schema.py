@@ -35,7 +35,9 @@ def test_no_phantom_column_ordering_keys():
         for phantom in ("startedAt", "finishedAt", "status"):
             if input_name == "TaskOrder" and phantom == "finishedAt":
                 continue  # Task really does have finished_at
-            assert phantom not in block.group(0), f"{input_name}.{phantom} names a nonexistent column"
+            assert phantom not in block.group(0), (
+                f"{input_name}.{phantom} names a nonexistent column"
+            )
 
 
 def test_blok_dependency_has_no_phantom_implementation_field():
@@ -107,9 +109,10 @@ def test_the_model_id_is_never_its_own_field():
     assert "embeddingModel" not in str(schema)
 
 
-
 def test_checked_in_sdl_is_current():
     """schema.graphql at the repo root is the printed schema."""
     from pathlib import Path
 
-    assert Path(__file__).resolve().parents[1].joinpath("schema.graphql").read_text() == str(schema)
+    assert Path(__file__).resolve().parents[1].joinpath(
+        "schema.graphql"
+    ).read_text() == str(schema)

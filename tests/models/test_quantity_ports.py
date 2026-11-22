@@ -42,7 +42,9 @@ class TestQuantityValidation:
 
     def test_dimension_is_verified_and_canonicalized_when_provided(self):
         # An equivalent but non-canonical spelling must validate and be normalized.
-        port = ArgPortInputModel.model_validate(q(dimension="[mass] * [length] ** 2 / [time] ** 3 / [current]"))
+        port = ArgPortInputModel.model_validate(
+            q(dimension="[mass] * [length] ** 2 / [time] ** 3 / [current]")
+        )
         assert port.dimension == VOLT_DIM
 
     def test_canonical_dimension_is_a_fixed_point(self):
@@ -51,13 +53,19 @@ class TestQuantityValidation:
         from rekuest_core.units import dimensionality_of
 
         assert dimensionality_of(VOLT_DIM) == VOLT_DIM
-        assert dimensionality_of(dimensionality_of("farad")) == dimensionality_of("farad")
+        assert dimensionality_of(dimensionality_of("farad")) == dimensionality_of(
+            "farad"
+        )
 
     def test_dimensionless_quantities_are_supported(self):
-        port = ArgPortInputModel.model_validate(q(reference_unit="percent", proposed_units=["dimensionless"]))
+        port = ArgPortInputModel.model_validate(
+            q(reference_unit="percent", proposed_units=["dimensionless"])
+        )
         assert port.dimension == "dimensionless"
         # The sentinel itself must round-trip (pint cannot parse it natively).
-        again = ArgPortInputModel.model_validate(q(reference_unit="percent", dimension="dimensionless"))
+        again = ArgPortInputModel.model_validate(
+            q(reference_unit="percent", dimension="dimensionless")
+        )
         assert again.dimension == "dimensionless"
 
     def test_reciprocal_dimension_renders_with_unit_numerator(self):
@@ -83,11 +91,20 @@ class TestQuantityValidation:
         assert "[current] ** 2" in farad.dimension
 
     def test_nested_quantity_under_list(self):
-        port = ArgPortInputModel.model_validate({"key": "voltages", "kind": "LIST", "nullable": False, "children": [q(key="v")]})
+        port = ArgPortInputModel.model_validate(
+            {
+                "key": "voltages",
+                "kind": "LIST",
+                "nullable": False,
+                "children": [q(key="v")],
+            }
+        )
         assert port.children[0].dimension == VOLT_DIM
 
     def test_return_port_derives_dimension(self):
-        port = ReturnPortInputModel.model_validate(q(key="reading", proposed_units=PROPOSED))
+        port = ReturnPortInputModel.model_validate(
+            q(key="reading", proposed_units=PROPOSED)
+        )
         assert port.dimension == VOLT_DIM
         dumped = port.model_dump()
         assert dumped["reference_unit"] == "volt"
@@ -100,11 +117,15 @@ class TestQuantityRejections:
             ArgPortInputModel.model_validate(q(reference_unit=None))
 
     def test_bogus_reference_unit(self):
-        with pytest.raises(ValidationError, match="Unknown or unparseable unit 'blorbs'"):
+        with pytest.raises(
+            ValidationError, match="Unknown or unparseable unit 'blorbs'"
+        ):
             ArgPortInputModel.model_validate(q(reference_unit="blorbs"))
 
     def test_proposed_unit_of_wrong_dimension(self):
-        with pytest.raises(ValidationError, match="proposed unit 'kg' has dimensionality"):
+        with pytest.raises(
+            ValidationError, match="proposed unit 'kg' has dimensionality"
+        ):
             ArgPortInputModel.model_validate(q(proposed_units=["mV", "kg"]))
 
     def test_dimension_inconsistent_with_reference_unit(self):
@@ -121,24 +142,39 @@ class TestQuantityRejections:
     )
     def test_unit_fields_rejected_on_non_quantity_ports(self, kind, extra):
         with pytest.raises(ValidationError, match="must not set QUANTITY-only fields"):
-            ArgPortInputModel.model_validate({"key": "n", "kind": kind, "nullable": False, **extra})
+            ArgPortInputModel.model_validate(
+                {"key": "n", "kind": kind, "nullable": False, **extra}
+            )
 
     def test_quantity_under_list_is_validated_too(self):
         with pytest.raises(ValidationError, match="must declare a reference_unit"):
-            ArgPortInputModel.model_validate({"key": "voltages", "kind": "LIST", "nullable": False, "children": [q(reference_unit=None)]})
+            ArgPortInputModel.model_validate(
+                {
+                    "key": "voltages",
+                    "kind": "LIST",
+                    "nullable": False,
+                    "children": [q(reference_unit=None)],
+                }
+            )
 
     def test_list_without_children_raises_clean_error(self):
         with pytest.raises(ValidationError, match="exactly one child"):
-            ArgPortInputModel.model_validate({"key": "xs", "kind": "LIST", "nullable": False})
+            ArgPortInputModel.model_validate(
+                {"key": "xs", "kind": "LIST", "nullable": False}
+            )
         # Regression: the base model used to lack `children` entirely, so this raised
         # AttributeError from inside the validator instead of a ValidationError.
         with pytest.raises(ValidationError, match="exactly one child"):
-            PortInputModel.model_validate({"key": "xs", "kind": "LIST", "nullable": False})
+            PortInputModel.model_validate(
+                {"key": "xs", "kind": "LIST", "nullable": False}
+            )
 
 
 class TestRoundTrip:
     def test_non_quantity_ports_default_unit_fields_to_none(self):
-        port = ArgPortInputModel.model_validate({"key": "n", "kind": "INT", "nullable": False})
+        port = ArgPortInputModel.model_validate(
+            {"key": "n", "kind": "INT", "nullable": False}
+        )
         dumped = port.model_dump()
         assert dumped["reference_unit"] is None
         assert dumped["proposed_units"] is None
@@ -187,8 +223,8 @@ class TestRoundTrip:
 @pytest.mark.django_db
 def test_quantity_definition_persists_and_rehydrates():
     """Full write→read flow: definition model_dump into Action JSON, rebuild relational rows, hydrate back."""
-    from tests.registered import rebuild_relational_ports
     from tests.factories import create_action_for_organization, create_registry_bundle
+    from tests.registered import rebuild_relational_ports
 
     definition = DefinitionInputModel.model_validate(
         {

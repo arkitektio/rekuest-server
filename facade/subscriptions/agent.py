@@ -1,5 +1,5 @@
 import datetime
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import strawberry
 from kante.types import Info
@@ -8,7 +8,9 @@ from facade import enums, models
 from facade.channels import agent_updated_channel
 
 
-@strawberry.type(description="Slim, non-traversable snapshot of an agent for change feeds.")
+@strawberry.type(
+    description="Slim, non-traversable snapshot of an agent for change feeds."
+)
 class AgentChange:
     id: strawberry.ID
     name: str
@@ -54,11 +56,21 @@ async def agents(
 
     organization = info.context.request.organization
 
-    async for message in agent_updated_channel.listen(info, [f"agents_for_{organization.id}"]):
+    async for message in agent_updated_channel.listen(
+        info, [f"agents_for_{organization.id}"]
+    ):
         if message.create:
-            yield AgentChangeEvent(create=AgentChange.from_model(await models.Agent.objects.aget(id=message.create)))
+            yield AgentChangeEvent(
+                create=AgentChange.from_model(
+                    await models.Agent.objects.aget(id=message.create)
+                )
+            )
         elif message.update:
-            yield AgentChangeEvent(update=AgentChange.from_model(await models.Agent.objects.aget(id=message.update)))
+            yield AgentChangeEvent(
+                update=AgentChange.from_model(
+                    await models.Agent.objects.aget(id=message.update)
+                )
+            )
         elif message.delete:
             yield AgentChangeEvent(delete=strawberry.ID(str(message.delete)))
         else:

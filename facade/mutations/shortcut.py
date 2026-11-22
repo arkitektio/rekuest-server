@@ -26,18 +26,28 @@ def _user_of(sub: str, issuer: str | None) -> User:
     request finds this row instead of making a second one.
     """
     named = cast("JWTToken", SimpleNamespace(iss=issuer or "", sub=sub))
-    user, _ = User.objects.get_or_create(sub=sub, iss=issuer, defaults={"username": token_to_username(named)})
+    user, _ = User.objects.get_or_create(
+        sub=sub, iss=issuer, defaults={"username": token_to_username(named)}
+    )
     return user
 
 
-def _bind(info: Info, shortcut: models.Shortcut, rule: inputs.ShortcutBindingsInputModel) -> None:
+def _bind(
+    info: Info, shortcut: models.Shortcut, rule: inputs.ShortcutBindingsInputModel
+) -> None:
     """Pin ``shortcut`` for whoever ``rule`` matches: one binding per user (one for every user when
     it names none), each sharing its app, client and device. Binding again changes nothing."""
     admin = info.context.request.user
-    where = dict(app=rule.app or None, client=rule.client or None, device=rule.device or None)
-    users = [_user_of(sub, admin.iss) for sub in dict.fromkeys(rule.users or [])] or [None]
+    where = dict(
+        app=rule.app or None, client=rule.client or None, device=rule.device or None
+    )
+    users = [_user_of(sub, admin.iss) for sub in dict.fromkeys(rule.users or [])] or [
+        None
+    ]
     for user in users:
-        models.ShortcutBinding.objects.get_or_create(shortcut=shortcut, user=user, **where, defaults={"bound_by": admin})
+        models.ShortcutBinding.objects.get_or_create(
+            shortcut=shortcut, user=user, **where, defaults={"bound_by": admin}
+        )
 
 
 def create_shortcut(info: Info, input: inputs.CreateShortcutInput) -> types.Shortcut:
@@ -59,7 +69,9 @@ def create_shortcut(info: Info, input: inputs.CreateShortcutInput) -> types.Shor
     )
 
     action = models.Action.objects.get(id=data.action)
-    agent = scoped_get(models.Agent, info, data.agent) if data.agent is not None else None
+    agent = (
+        scoped_get(models.Agent, info, data.agent) if data.agent is not None else None
+    )
     try:
         rules.check_pin_names_an_implementation(action, agent, data.interface)
     except ValueError as refused:
@@ -102,7 +114,9 @@ def delete_shortcut(info: Info, input: inputs.DeleteShortcutInput) -> strawberry
 def bind_shortcut(info: Info, input: inputs.BindShortcutInput) -> types.Shortcut:
     """Pin a shortcut of the caller's organization for whoever the rule matches (users, app, client, device)."""
     data = input.to_pydantic()
-    shortcut = scoped_get(models.Shortcut, info, data.shortcut, field="toolbox__organization")
+    shortcut = scoped_get(
+        models.Shortcut, info, data.shortcut, field="toolbox__organization"
+    )
     with transaction.atomic():
         _bind(info, shortcut, data)
     return cast("types.Shortcut", shortcut)
@@ -111,6 +125,8 @@ def bind_shortcut(info: Info, input: inputs.BindShortcutInput) -> types.Shortcut
 def unbind_shortcut(info: Info, input: inputs.UnbindShortcutInput) -> strawberry.ID:
     """Remove one binding; the shortcut stays."""
     data = input.to_pydantic()
-    binding = scoped_get(models.ShortcutBinding, info, data.id, field="shortcut__toolbox__organization")
+    binding = scoped_get(
+        models.ShortcutBinding, info, data.id, field="shortcut__toolbox__organization"
+    )
     binding.delete()
     return strawberry.ID(data.id)

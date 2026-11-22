@@ -15,14 +15,25 @@ def implementation_at(
     demand: ritypes.ActionDemandInput | None = None,
 ) -> types.Implementation:
     if action_hash:
-        return cast("types.Implementation", models.Implementation.objects.get(agent_id=agent, action__hash=action_hash))
+        return cast(
+            "types.Implementation",
+            models.Implementation.objects.get(agent_id=agent, action__hash=action_hash),
+        )
 
     if demand:
         # Scoped: without the organization the demand is matched against every organization's actions.
-        action_ids = managers.get_action_ids_by_action_demands([demand.to_pydantic()], organization_id=info.context.request.organization.id)[0]
-        return cast("types.Implementation", models.Implementation.objects.get(agent_id=agent, action_id__in=action_ids))
+        action_ids = managers.get_action_ids_by_action_demands(
+            [demand.to_pydantic()], organization_id=info.context.request.organization.id
+        )[0]
+        return cast(
+            "types.Implementation",
+            models.Implementation.objects.get(agent_id=agent, action_id__in=action_ids),
+        )
 
-    return cast("types.Implementation", models.Implementation.objects.get(agent_id=agent, interface=interface))
+    return cast(
+        "types.Implementation",
+        models.Implementation.objects.get(agent_id=agent, interface=interface),
+    )
 
 
 async def my_implementation_at(
@@ -39,10 +50,16 @@ async def my_implementation_at(
     )
 
     if action_id:
-        return cast("types.Implementation", await models.Implementation.objects.aget(agent=agent, action_id=action_id))
+        return cast(
+            "types.Implementation",
+            await models.Implementation.objects.aget(agent=agent, action_id=action_id),
+        )
 
     if interface:
-        return cast("types.Implementation", await models.Implementation.objects.aget(agent=agent, interface=interface))
+        return cast(
+            "types.Implementation",
+            await models.Implementation.objects.aget(agent=agent, interface=interface),
+        )
 
     raise ValueError("Either action_id or interface must be provided")
 
@@ -62,10 +79,15 @@ def resolved_implementations(
     return [rd.implementation for rd in resolved_dependencies]
 
 
-def dependency_tree(info: Info, input: inputs.DependencyTreeInput) -> types.DependencyTree:
+def dependency_tree(
+    info: Info, input: inputs.DependencyTreeInput
+) -> types.DependencyTree:
     """What an assign would bind. takt resolves it exactly as it would for the assign."""
     from facade import takt
     from facade.caller_context import CallerContext
 
     model = input.to_pydantic()
-    return types.DependencyTree(_value=takt.resolve_dependencies(CallerContext.from_info(info), model), _implementation=model.implementation)
+    return types.DependencyTree(
+        _value=takt.resolve_dependencies(CallerContext.from_info(info), model),
+        _implementation=model.implementation,
+    )

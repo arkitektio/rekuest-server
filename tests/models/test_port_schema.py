@@ -46,7 +46,9 @@ def test_root_and_child_keys_are_unique_and_args_returns_do_not_overlap() -> Non
         _definition(args=[_port("a"), _port("a")])
     with pytest.raises(ValidationError, match="returns: duplicate key 'r'"):
         _definition(returns=[_port("r"), _port("r")])
-    with pytest.raises(ValidationError, match=r"args and returns share the keys \['a'\]"):
+    with pytest.raises(
+        ValidationError, match=r"args and returns share the keys \['a'\]"
+    ):
         _definition(args=[_port("a")], returns=[_port("a")])
     with pytest.raises(ValidationError, match="children: duplicate key 'f'"):
         _arg(key="m", kind="MODEL", children=[_port("f"), _port("f")])
@@ -68,7 +70,10 @@ def test_root_and_child_keys_are_unique_and_args_returns_do_not_overlap() -> Non
         ("MODEL", {"children": [_port("x", "INT")]}),
         ("MODEL", {"children": [_port("x", "INT")], "identifier": "@mikro/point"}),
         ("ENUM", {"choices": [{"value": "a", "label": "A"}]}),
-        ("ENUM", {"choices": [{"value": "a", "label": "A"}], "identifier": "@literal/a"}),
+        (
+            "ENUM",
+            {"choices": [{"value": "a", "label": "A"}], "identifier": "@literal/a"},
+        ),
         ("INT", {"choices": [{"value": 1, "label": "one"}]}),
         ("DATE", {}),
         ("BOOL", {}),
@@ -88,8 +93,16 @@ def test_well_formed_ports_are_accepted(kind: str, extra: dict) -> None:
         ("STRUCTURE", {"identifier": "mikro/image"}, "not of the form @package/key"),
         ("STRUCTURE", {"identifier": "@mikro"}, "not of the form @package/key"),
         ("INT", {"identifier": "@mikro/image"}, "must not declare an identifier"),
-        ("ENUM", {"choices": [{"value": "a", "label": "A"}], "identifier": "literal.a"}, "not of the form @package/key"),
-        ("STRUCTURE", {"identifier": "@mikro/image", "children": [_port("c")]}, "must not have children"),
+        (
+            "ENUM",
+            {"choices": [{"value": "a", "label": "A"}], "identifier": "literal.a"},
+            "not of the form @package/key",
+        ),
+        (
+            "STRUCTURE",
+            {"identifier": "@mikro/image", "children": [_port("c")]},
+            "must not have children",
+        ),
         ("LIST", {}, "exactly one child"),
         ("LIST", {"children": [_port("a"), _port("b")]}, "exactly one child"),
         ("DICT", {}, "at least 1 children"),
@@ -97,8 +110,16 @@ def test_well_formed_ports_are_accepted(kind: str, extra: dict) -> None:
         ("UNION", {"children": [_port("a")]}, "at least 2 children"),
         ("MODEL", {}, "at least 1 children"),
         ("ENUM", {}, "must declare choices"),
-        ("BOOL", {"choices": [{"value": True, "label": "yes"}]}, "must not declare choices"),
-        ("STRING", {"choices": [{"value": "a", "label": "A"}, {"value": "a", "label": "B"}]}, "choices: duplicate value 'a'"),
+        (
+            "BOOL",
+            {"choices": [{"value": True, "label": "yes"}]},
+            "must not declare choices",
+        ),
+        (
+            "STRING",
+            {"choices": [{"value": "a", "label": "A"}, {"value": "a", "label": "B"}]},
+            "choices: duplicate value 'a'",
+        ),
         ("STRING", {"colour": "red"}, "Extra inputs are not permitted"),
     ],
 )
@@ -124,7 +145,11 @@ def test_malformed_ports_are_rejected(kind: str, extra: dict, message: str) -> N
         ("LIST", {"children": [_port("...", "INT")]}, [1, 2]),
         ("DICT", {"children": [_port("...", "INT")]}, {"a": 1}),
         ("DICT", {"children": [_port("width", "INT")]}, {"width": 1, "other": "free"}),
-        ("MODEL", {"children": [_port("x", "INT"), _port("y", "STRING", nullable=True)]}, {"x": 1}),
+        (
+            "MODEL",
+            {"children": [_port("x", "INT"), _port("y", "STRING", nullable=True)]},
+            {"x": 1},
+        ),
         ("ENUM", {"choices": [{"value": "a", "label": "A"}]}, "a"),
         ("STRUCTURE", {"identifier": "@mikro/image"}, "42"),
         ("QUANTITY", {"reference_unit": "volt"}, 3.3),
@@ -132,7 +157,9 @@ def test_malformed_ports_are_rejected(kind: str, extra: dict, message: str) -> N
         ("UNION", {"children": [_port("a", "INT"), _port("b", "STRING")]}, "text"),
     ],
 )
-def test_defaults_that_fit_the_kind_are_accepted(kind: str, extra: dict, default: object) -> None:
+def test_defaults_that_fit_the_kind_are_accepted(
+    kind: str, extra: dict, default: object
+) -> None:
     """Defaults that fit the kind are accepted."""
     assert _arg(kind=kind, default=default, **extra).default == default
 
@@ -146,17 +173,59 @@ def test_defaults_that_fit_the_kind_are_accepted(kind: str, extra: dict, default
         ("STRING", {}, 3, "expected a STRING"),
         ("BOOL", {}, 1, "expected a BOOL"),
         ("DATE", {}, "yesterday", "not an ISO-8601 date"),
-        ("LIST", {"children": [_port("...", "INT")]}, [1, "x"], r"foo\[1\]: expected an INT"),
-        ("DICT", {"children": [_port("...", "INT")]}, {"a": "x"}, r"foo\['a'\]: expected an INT"),
-        ("MODEL", {"children": [_port("x", "INT")]}, {"y": 1}, r"unknown fields \['y'\]"),
-        ("MODEL", {"children": [_port("x", "INT")]}, {}, "foo.x: required field is missing"),
-        ("ENUM", {"choices": [{"value": "a", "label": "A"}]}, "b", "not one of the choices"),
-        ("STRUCTURE", {"identifier": "@mikro/image"}, {"id": 1}, "expected a STRUCTURE id"),
-        ("QUANTITY", {"reference_unit": "volt"}, {"unit": "mV"}, "needs a numeric `value`"),
-        ("UNION", {"children": [_port("a", "INT"), _port("b", "STRING")]}, 2.5, "matches none of the UNION variants"),
+        (
+            "LIST",
+            {"children": [_port("...", "INT")]},
+            [1, "x"],
+            r"foo\[1\]: expected an INT",
+        ),
+        (
+            "DICT",
+            {"children": [_port("...", "INT")]},
+            {"a": "x"},
+            r"foo\['a'\]: expected an INT",
+        ),
+        (
+            "MODEL",
+            {"children": [_port("x", "INT")]},
+            {"y": 1},
+            r"unknown fields \['y'\]",
+        ),
+        (
+            "MODEL",
+            {"children": [_port("x", "INT")]},
+            {},
+            "foo.x: required field is missing",
+        ),
+        (
+            "ENUM",
+            {"choices": [{"value": "a", "label": "A"}]},
+            "b",
+            "not one of the choices",
+        ),
+        (
+            "STRUCTURE",
+            {"identifier": "@mikro/image"},
+            {"id": 1},
+            "expected a STRUCTURE id",
+        ),
+        (
+            "QUANTITY",
+            {"reference_unit": "volt"},
+            {"unit": "mV"},
+            "needs a numeric `value`",
+        ),
+        (
+            "UNION",
+            {"children": [_port("a", "INT"), _port("b", "STRING")]},
+            2.5,
+            "matches none of the UNION variants",
+        ),
     ],
 )
-def test_defaults_that_do_not_fit_are_rejected(kind: str, extra: dict, default: object, message: str) -> None:
+def test_defaults_that_do_not_fit_are_rejected(
+    kind: str, extra: dict, default: object, message: str
+) -> None:
     """Defaults that do not fit are rejected."""
     with pytest.raises(ValidationError, match=message):
         _arg(kind=kind, default=default, **extra)
@@ -181,14 +250,27 @@ def test_port_groups_reference_root_args_once() -> None:
     with pytest.raises(ValidationError, match="lists unknown arg 'zzz'"):
         _definition(args=args, port_groups=[{"key": "g", "ports": ["zzz"]}])
     with pytest.raises(ValidationError, match="in both port groups 'g' and 'h'"):
-        _definition(args=args, port_groups=[{"key": "g", "ports": ["a"]}, {"key": "h", "ports": ["a"]}])
-    definition = _definition(args=args, port_groups=[{"key": "g", "ports": ["a"]}, {"key": "h", "ports": ["b"]}])
-    assert definition.port_groups[0].title is None and definition.port_groups[0].effects is None
+        _definition(
+            args=args,
+            port_groups=[{"key": "g", "ports": ["a"]}, {"key": "h", "ports": ["a"]}],
+        )
+    definition = _definition(
+        args=args,
+        port_groups=[{"key": "g", "ports": ["a"]}, {"key": "h", "ports": ["b"]}],
+    )
+    assert (
+        definition.port_groups[0].title is None
+        and definition.port_groups[0].effects is None
+    )
 
 
 def test_choice_values_are_json_and_typed_against_the_kind() -> None:
     """Choice values are JSON on every layer and checked against the kind through the default."""
-    port = _arg(kind="INT", choices=[{"value": 1, "label": "one"}, {"value": 2, "label": "two"}], default=2)
+    port = _arg(
+        kind="INT",
+        choices=[{"value": 1, "label": "one"}, {"value": 2, "label": "two"}],
+        default=2,
+    )
     out = omodels.ArgPortModel(**port.model_dump())
     assert [choice.value for choice in out.choices] == [1, 2]
     with pytest.raises(ValidationError, match="not one of its choices"):
@@ -218,29 +300,55 @@ def test_descriptor_operator_and_value_agree() -> None:
     imodels.RequiresInputModel(key="axes", operator="EXISTS")
     imodels.RequiresInputModel(key="axes", operator="EXISTS", value=False)
     imodels.RequiresInputModel(key="axes", operator="IN", value=["c", "z"])
-    assert imodels.RequiresInputModel(key="n", operator="LTE", value=3).operator.value == "LTE"
+    assert (
+        imodels.RequiresInputModel(key="n", operator="LTE", value=3).operator.value
+        == "LTE"
+    )
 
 
 def test_definition_hash_covers_kind_and_port_groups() -> None:
     """Changing only the kind or the port groups changes the definition hash."""
     base = _definition(args=[_port("a")])
-    assert _definition(args=[_port("a")], kind="GENERATOR").unique_hash != base.unique_hash
-    assert _definition(args=[_port("a")], port_groups=[{"key": "g", "ports": ["a"]}]).unique_hash != base.unique_hash
+    assert (
+        _definition(args=[_port("a")], kind="GENERATOR").unique_hash != base.unique_hash
+    )
+    assert (
+        _definition(
+            args=[_port("a")], port_groups=[{"key": "g", "ports": ["a"]}]
+        ).unique_hash
+        != base.unique_hash
+    )
 
 
 # --------------------------------------------------------------------------- assignment values
 
 
 def _ports(*ports: dict) -> list[omodels.ArgPortModel]:
-    return [omodels.ArgPortModel(**imodels.ArgPortInputModel(**port).model_dump()) for port in ports]
+    return [
+        omodels.ArgPortModel(**imodels.ArgPortInputModel(**port).model_dump())
+        for port in ports
+    ]
 
 
 def test_assignment_args_are_validated_against_the_ports() -> None:
     """Assignment args are validated against the ports."""
-    ports = _ports(_port("n", "INT"), _port("opt", "STRING", nullable=True), _port("d", "FLOAT", default=1.0), STRUCTURE)
+    ports = _ports(
+        _port("n", "INT"),
+        _port("opt", "STRING", nullable=True),
+        _port("d", "FLOAT", default=1.0),
+        STRUCTURE,
+    )
     ref = {"__identifier": "@mikro/image", "object": "7"}
     validate_assignment_args(ports, {"n": 1, "img": ref})
-    validate_assignment_args(ports, {"n": 1, "opt": None, "d": 2, "img": {"__identifier": "@mikro/image", "object": 7}})
+    validate_assignment_args(
+        ports,
+        {
+            "n": 1,
+            "opt": None,
+            "d": 2,
+            "img": {"__identifier": "@mikro/image", "object": 7},
+        },
+    )
     with pytest.raises(ValueError, match=r"Unknown arguments \['zzz'\]"):
         validate_assignment_args(ports, {"n": 1, "img": ref, "zzz": 1})
     with pytest.raises(ValueError, match="Argument 'n' is required and has no default"):
@@ -255,25 +363,45 @@ def test_assignment_structure_args_must_carry_the_reference_envelope() -> None:
     with pytest.raises(ValueError, match="expected a STRUCTURE reference"):
         validate_assignment_args(ports, {"n": 1, "img": "7"})
     with pytest.raises(ValueError, match="missing its `object` key"):
-        validate_assignment_args(ports, {"n": 1, "img": {"__identifier": "@mikro/image"}})
+        validate_assignment_args(
+            ports, {"n": 1, "img": {"__identifier": "@mikro/image"}}
+        )
     with pytest.raises(ValueError, match="missing its `__identifier` key"):
         validate_assignment_args(ports, {"n": 1, "img": {"object": "7"}})
     with pytest.raises(ValueError, match="identifier mismatch"):
-        validate_assignment_args(ports, {"n": 1, "img": {"__identifier": "@mikro/other", "object": "7"}})
+        validate_assignment_args(
+            ports, {"n": 1, "img": {"__identifier": "@mikro/other", "object": "7"}}
+        )
     with pytest.raises(ValueError, match="`object` must be a str or int id"):
-        validate_assignment_args(ports, {"n": 1, "img": {"__identifier": "@mikro/image", "object": {"a": 1}}})
+        validate_assignment_args(
+            ports, {"n": 1, "img": {"__identifier": "@mikro/image", "object": {"a": 1}}}
+        )
 
 
 def test_structure_port_default_is_still_a_bare_id() -> None:
     """A default is declared in the definition, not sent by a client, so it stays a bare id."""
     (port,) = _ports(STRUCTURE)
     assert value_mismatch(port, "7") is None
-    assert value_mismatch(port, {"__identifier": "@mikro/image", "object": "7"}) is not None
+    assert (
+        value_mismatch(port, {"__identifier": "@mikro/image", "object": "7"})
+        is not None
+    )
 
 
 def test_value_mismatch_recurses_into_containers() -> None:
     """Value mismatch recurses into containers."""
-    (port,) = _ports(_port("m", "MODEL", children=[_port("xs", "LIST", children=[_port("...", "INT")]), _port("s", "STRING", nullable=True)]))
+    (port,) = _ports(
+        _port(
+            "m",
+            "MODEL",
+            children=[
+                _port("xs", "LIST", children=[_port("...", "INT")]),
+                _port("s", "STRING", nullable=True),
+            ],
+        )
+    )
     assert value_mismatch(port, {"xs": [1, 2]}) is None
     assert value_mismatch(port, {"xs": [1, None]}) == "m.xs[1]: null is not allowed"
-    assert value_mismatch(port, {"xs": [1], "s": 3}) == "m.s: expected a STRING, got int"
+    assert (
+        value_mismatch(port, {"xs": [1], "s": 3}) == "m.s: expected a STRING, got int"
+    )

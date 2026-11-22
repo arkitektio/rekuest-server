@@ -45,7 +45,9 @@ def _declared(info: Info, ref: str) -> models.AgentAsset:
         return asset_store.sourced_asset(organization_id=organization_id, ref=ref)
 
 
-def request_asset_upload(info: Info, input: inputs.RequestAssetUploadInput) -> types.AssetUploadGrant:
+def request_asset_upload(
+    info: Info, input: inputs.RequestAssetUploadInput
+) -> types.AssetUploadGrant:
     """A grant for one asset -- a kulisse grant for a 3D model, a media grant for an image -- issued only if the caller may upload it and its size passes the policy."""
     try:
         declared = _declared(info, input.ref)
@@ -56,20 +58,39 @@ def request_asset_upload(info: Info, input: inputs.RequestAssetUploadInput) -> t
     datalayer = get_current_datalayer()
     file_name = f"{declared.name}-{declared.ref.removeprefix('sha256:')[:16]}"
     if declared.kind == AssetKind.MODEL_3D.value:
-        grant: base_models.BaseUploadGrant = datalayer.generate_kulisse_upload_grant(organization_id, base_models.RequestKulisseUploadInput(original_file_name=file_name, file_size=size), user=user)
+        grant: base_models.BaseUploadGrant = datalayer.generate_kulisse_upload_grant(
+            organization_id,
+            base_models.RequestKulisseUploadInput(
+                original_file_name=file_name, file_size=size
+            ),
+            user=user,
+        )
     else:
-        grant = datalayer.generate_media_upload_grant(organization_id, base_models.RequestMediaUploadInput(original_file_name=file_name, file_size=size), user=user)
+        grant = datalayer.generate_media_upload_grant(
+            organization_id,
+            base_models.RequestMediaUploadInput(
+                original_file_name=file_name, file_size=size
+            ),
+            user=user,
+        )
     return types.AssetUploadGrant(**grant.model_dump())
 
 
 def create_asset(info: Info, input: inputs.CreateAssetInput) -> types.Asset:
     """Verify an uploaded asset and record it; the existing record if its hash is stored already."""
     try:
-        store = DatalayerStore.objects.get(id=str(input.store), organization=info.context.request.organization)
+        store = DatalayerStore.objects.get(
+            id=str(input.store), organization=info.context.request.organization
+        )
     except DatalayerStore.DoesNotExist:
         raise PermissionError(f"No store {input.store} in your organization.") from None
     try:
-        asset = asset_store.create_asset(get_current_datalayer(), declared=_declared(info, input.ref), user_id=info.context.request.user.id, store=store)
+        asset = asset_store.create_asset(
+            get_current_datalayer(),
+            declared=_declared(info, input.ref),
+            user_id=info.context.request.user.id,
+            store=store,
+        )
     except AssetRefused as error:
         raise _refusal(error) from error
     return cast("types.Asset", asset)
@@ -77,7 +98,12 @@ def create_asset(info: Info, input: inputs.CreateAssetInput) -> types.Asset:
 
 def asset(info: Info, ref: str) -> types.Asset | None:
     """The organization's stored asset of this reference, or null. Another organization's copy is never revealed."""
-    return cast("types.Asset | None", models.Asset.objects.filter(organization=info.context.request.organization, ref=ref).first())
+    return cast(
+        "types.Asset | None",
+        models.Asset.objects.filter(
+            organization=info.context.request.organization, ref=ref
+        ).first(),
+    )
 
 
 def asset_policy(info: Info) -> types.AssetPolicy:
@@ -85,18 +111,31 @@ def asset_policy(info: Info) -> types.AssetPolicy:
     policy = asset_store.asset_policy()
     model = asdict(policy.model)
     return types.AssetPolicy(
-        model=types.ModelPolicy(**{**model, "extensions": sorted(model["extensions"])}, max_texture_size=asset_store.MAX_TEXTURE_SIZE, max_texture_memory=asset_store.MAX_TEXTURE_MEMORY),
+        model=types.ModelPolicy(
+            **{**model, "extensions": sorted(model["extensions"])},
+            max_texture_size=asset_store.MAX_TEXTURE_SIZE,
+            max_texture_memory=asset_store.MAX_TEXTURE_MEMORY,
+        ),
         image=types.ImagePolicy(**asdict(policy.image), formats=list(IMAGE_FORMATS)),
     )
 
 
 def bloks_for_model(info: Info, ref: str) -> list[types.Blok]:
     """The html bloks registered to decorate this model, by name."""
-    return cast("list[types.Blok]", list(models.Blok.objects.filter(organization=info.context.request.organization, for_model=ref).order_by("name")))
+    return cast(
+        "list[types.Blok]",
+        list(
+            models.Blok.objects.filter(
+                organization=info.context.request.organization, for_model=ref
+            ).order_by("name")
+        ),
+    )
 
 
 def bloks_for_models(info: Info, refs: list[str]) -> list[types.Blok]:
     """The html bloks registered to decorate any of these models, by model then name: one
     request for every model a scene shows (each blok says its own with `forModel`)."""
-    queryset = models.Blok.objects.filter(organization=info.context.request.organization, for_model__in=refs).order_by("for_model", "name")
+    queryset = models.Blok.objects.filter(
+        organization=info.context.request.organization, for_model__in=refs
+    ).order_by("for_model", "name")
     return cast("list[types.Blok]", queryset)

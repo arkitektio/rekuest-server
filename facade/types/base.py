@@ -17,7 +17,9 @@ def row_of[M: Model](self: object, model: type[M]) -> M:
     return self
 
 
-def build_prescoped_queryset[M: Model](info: Info, queryset: QuerySet[M], field: str = "organization") -> QuerySet[M]:
+def build_prescoped_queryset[M: Model](
+    info: Info, queryset: QuerySet[M], field: str = "organization"
+) -> QuerySet[M]:
     # ``filters`` may be absent, or given as null: both mean "no custom scope".
     if (info.variable_values.get("filters") or {}).get("scope") is None:
         queryset = queryset.filter(**{field: info.context.request.organization})
@@ -27,7 +29,9 @@ def build_prescoped_queryset[M: Model](info: Info, queryset: QuerySet[M], field:
         raise Exception("Custom scopes not implemented yet")
 
 
-def scoped_get[M: Model](model: type[M], info: Info, pk: str | int, *, field: str = "organization") -> M:
+def scoped_get[M: Model](
+    model: type[M], info: Info, pk: str | int, *, field: str = "organization"
+) -> M:
     """Fetch one row by id, scoped to the caller's organization.
 
     ``get_queryset`` only runs for queryset-producing fields, so a root resolver that returns a
@@ -39,6 +43,8 @@ def scoped_get[M: Model](model: type[M], info: Info, pk: str | int, *, field: st
     from a missing one.
     """
     try:
-        return model._default_manager.get(**{"id": pk, field: info.context.request.organization})
+        return model._default_manager.get(
+            **{"id": pk, field: info.context.request.organization}
+        )
     except model.DoesNotExist:
         raise PermissionError(f"No {model.__name__} {pk} in this organization.")

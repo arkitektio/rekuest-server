@@ -20,7 +20,12 @@ DELETE_SCHEDULE = 'mutation { deleteSchedule(input: {id: "1"}) }'
 
 
 def _as(token: str) -> HttpContext:
-    return HttpContext(request=UniversalRequest(_extensions={}), response=TemporalResponse(), headers={"Authorization": f"Bearer {token}"}, type="http")
+    return HttpContext(
+        request=UniversalRequest(_extensions={}),
+        response=TemporalResponse(),
+        headers={"Authorization": f"Bearer {token}"},
+        type="http",
+    )
 
 
 def _reason(result: ExecutionResult) -> str | None:
@@ -34,9 +39,13 @@ def test_every_root_field_asks_for_a_scope_rekuest_declares() -> None:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_app_granted_reads_reads_and_writes_nothing(backend_stack: Deployment) -> None:
+async def test_an_app_granted_reads_reads_and_writes_nothing(
+    backend_stack: Deployment,
+) -> None:
     """`rekuest_read` reads, and is refused a write for its scope, whatever the member's roles."""
-    assert (await schema.execute(DASHBOARDS, context_value=_as("readertest"))).errors is None
+    assert (
+        await schema.execute(DASHBOARDS, context_value=_as("readertest"))
+    ).errors is None
     refused = await schema.execute(MAKE_DASHBOARD, context_value=_as("readertest"))
     assert _reason(refused) == "INSUFFICIENT_SCOPE"
 
@@ -51,7 +60,9 @@ async def test_the_all_scope_writes(backend_stack: Deployment) -> None:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_agent_registers_and_builds_no_dashboards(backend_stack: Deployment) -> None:
+async def test_an_agent_registers_and_builds_no_dashboards(
+    backend_stack: Deployment,
+) -> None:
     """What the plugin engine is granted (`rekuest_read rekuest_agent`) is enough to be an agent."""
     registered = await schema.execute(REGISTER_MODULE, context_value=_as("agenttest"))
     assert registered.errors is None, registered.errors

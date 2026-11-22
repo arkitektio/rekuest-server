@@ -1,17 +1,25 @@
 import datetime
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import strawberry
 from asgiref.sync import sync_to_async
 from kante.types import Info
 
 from facade import channel_events, enums, models
-from facade.channels import agent_task_channel, child_task_channel, implementation_task_events, task_event_channel, task_events as task_events_group
+from facade.channels import (
+    agent_task_channel,
+    child_task_channel,
+    implementation_task_events,
+    task_event_channel,
+)
+from facade.channels import task_events as task_events_group
 from facade.types.base import scoped_get
 from rekuest_core import scalars as rscalars
 
 
-@strawberry.type(description="Slim, non-traversable snapshot of a task for change feeds.")
+@strawberry.type(
+    description="Slim, non-traversable snapshot of a task for change feeds."
+)
 class TaskChange:
     id: strawberry.ID
     reference: str | None
@@ -26,7 +34,9 @@ class TaskChange:
     created_at: datetime.datetime
     updated_at: datetime.datetime
     finished_at: datetime.datetime | None
-    revision: int = strawberry.field(description="Monotonic per-task version. Changes are produced by several backends and may arrive out of order: apply one only if its revision is greater than the last you applied.")
+    revision: int = strawberry.field(
+        description="Monotonic per-task version. Changes are produced by several backends and may arrive out of order: apply one only if its revision is greater than the last you applied."
+    )
 
     @classmethod
     def from_model(cls, t: models.Task) -> "TaskChange":
@@ -37,7 +47,9 @@ class TaskChange:
             latest_event_kind=enums.TaskEventKind(t.latest_event_kind),
             latest_instruct_kind=enums.TaskInstructKind(t.latest_instruct_kind),
             action=strawberry.ID(str(t.action_id)),
-            implementation=strawberry.ID(str(t.implementation_id)) if t.implementation_id else None,
+            implementation=strawberry.ID(str(t.implementation_id))
+            if t.implementation_id
+            else None,
             agent=strawberry.ID(str(t.agent_id)) if t.agent_id else None,
             root=strawberry.ID(str(t.root_id)) if t.root_id else None,
             parent=strawberry.ID(str(t.parent_id)) if t.parent_id else None,
@@ -56,7 +68,9 @@ class TaskChange:
             latest_event_kind=enums.TaskEventKind(p.latest_event_kind),
             latest_instruct_kind=enums.TaskInstructKind(p.latest_instruct_kind),
             action=strawberry.ID(p.action),
-            implementation=strawberry.ID(p.implementation) if p.implementation else None,
+            implementation=strawberry.ID(p.implementation)
+            if p.implementation
+            else None,
             agent=strawberry.ID(p.agent) if p.agent else None,
             root=strawberry.ID(p.root) if p.root else None,
             parent=strawberry.ID(p.parent) if p.parent else None,
@@ -75,7 +89,10 @@ class TaskEventChange:
     message: str | None
     progress: int | None
     returns: rscalars.AnyDefault | None
-    value: rscalars.AnyDefault | None = strawberry.field(default=None, description="EFFECT: the value taken. LOST: what is known (started, last_progress, effects, reason).")
+    value: rscalars.AnyDefault | None = strawberry.field(
+        default=None,
+        description="EFFECT: the value taken. LOST: what is known (started, last_progress, effects, reason).",
+    )
     created_at: datetime.datetime
 
     @classmethod
@@ -120,10 +137,14 @@ class ChildTaskEvent:
 def _build_change(message: channel_events.TaskEventCreatedEvent) -> TaskChangeEvent:
     """Build a slim TaskChangeEvent from a payload-carrying channel message — no lookups."""
     if message.create:
-        return TaskChangeEvent(create=TaskChange.from_payload(message.create), event=None)
+        return TaskChangeEvent(
+            create=TaskChange.from_payload(message.create), event=None
+        )
     if message.event is None:
         raise ValueError("A task feed message carries neither a new task nor an event")
-    return TaskChangeEvent(event=TaskEventChange.from_payload(message.event), create=None)
+    return TaskChangeEvent(
+        event=TaskEventChange.from_payload(message.event), create=None
+    )
 
 
 async def mytasks(
@@ -138,7 +159,9 @@ async def mytasks(
         organization=info.context.request.organization,
     )
 
-    async for message in task_event_channel.listen(info, [f"root_tasks_caller_{caller.pk}"]):
+    async for message in task_event_channel.listen(
+        info, [f"root_tasks_caller_{caller.pk}"]
+    ):
         yield _build_change(message)
 
 
@@ -150,7 +173,9 @@ async def tasks(
 
     organization = info.context.request.organization
 
-    async for message in task_event_channel.listen(info, [f"root_tasks_org_{organization.id}"]):
+    async for message in task_event_channel.listen(
+        info, [f"root_tasks_org_{organization.id}"]
+    ):
         yield _build_change(message)
 
 
@@ -169,9 +194,13 @@ async def agent_tasks(
 
     async for message in agent_task_channel.listen(info, [f"agent_tasks_{agent}"]):
         if message.create:
-            yield AgentTaskUpdate(create=TaskChange.from_payload(message.create), update=None)
+            yield AgentTaskUpdate(
+                create=TaskChange.from_payload(message.create), update=None
+            )
         elif message.update:
-            yield AgentTaskUpdate(create=None, update=TaskChange.from_payload(message.update))
+            yield AgentTaskUpdate(
+                create=None, update=TaskChange.from_payload(message.update)
+            )
 
 
 async def child_tasks(
@@ -185,12 +214,24 @@ async def child_tasks(
 
     async for message in child_task_channel.listen(info, [f"child_tasks_{task.pk}"]):
         if message.create:
-            yield ChildTaskEvent(create=TaskChange.from_payload(message.create), update=None)
+            yield ChildTaskEvent(
+                create=TaskChange.from_payload(message.create), update=None
+            )
         elif message.update:
-            yield ChildTaskEvent(update=TaskChange.from_payload(message.update), create=None)
+            yield ChildTaskEvent(
+                update=TaskChange.from_payload(message.update), create=None
+            )
 
 
-TERMINAL_KINDS = ("COMPLETED", "CANCELLED", "INTERRUPTED", "FAILED", "CRITICAL", "LOST", "DENIED")
+TERMINAL_KINDS = (
+    "COMPLETED",
+    "CANCELLED",
+    "INTERRUPTED",
+    "FAILED",
+    "CRITICAL",
+    "LOST",
+    "DENIED",
+)
 """The kinds that end a task (takt's ``TERMINAL_KINDS``)."""
 
 REPORTED_KINDS = ("PROGRESS", "YIELD", *TERMINAL_KINDS)
@@ -201,9 +242,15 @@ REPORTED_KINDS = ("PROGRESS", "YIELD", *TERMINAL_KINDS)
     description="The task an implementation last ran as, with what its record is made of. The first message of `latestTask`, and again whenever a newer task takes its place."
 )
 class LatestTaskSnapshot:
-    implementation: strawberry.ID | None = strawberry.field(description="The implementation the agent offers under the interface; null if it offers none, and nothing follows then.")
-    latest: TaskChange | None = strawberry.field(description="The task it last ran as, whoever started it and whether or not it has ended; null if it never ran. (Not `task`: beside `TaskEventChange.task`, an id, one selection could not ask for both.)")
-    events: list[TaskEventChange] = strawberry.field(description="The task's last PROGRESS, last YIELD and its terminal event, oldest first: enough to say how far it is, what it returned and how it ended.")
+    implementation: strawberry.ID | None = strawberry.field(
+        description="The implementation the agent offers under the interface; null if it offers none, and nothing follows then."
+    )
+    latest: TaskChange | None = strawberry.field(
+        description="The task it last ran as, whoever started it and whether or not it has ended; null if it never ran. (Not `task`: beside `TaskEventChange.task`, an id, one selection could not ask for both.)"
+    )
+    events: list[TaskEventChange] = strawberry.field(
+        description="The task's last PROGRESS, last YIELD and its terminal event, oldest first: enough to say how far it is, what it returned and how it ended."
+    )
 
 
 def read_latest_task(implementation: int) -> tuple[LatestTaskSnapshot, int]:
@@ -213,28 +260,48 @@ def read_latest_task(implementation: int) -> tuple[LatestTaskSnapshot, int]:
     each kind its record is made of.
     """
     reference = strawberry.ID(str(implementation))
-    task = models.Task.objects.filter(implementation_id=implementation).order_by("-created_at", "-id").first()
+    task = (
+        models.Task.objects.filter(implementation_id=implementation)
+        .order_by("-created_at", "-id")
+        .first()
+    )
     if task is None:
         return LatestTaskSnapshot(implementation=reference, latest=None, events=[]), 0
     events = sorted(
-        models.TaskEvent.objects.filter(task=task, kind__in=REPORTED_KINDS).order_by("kind", "-id").distinct("kind"),
+        models.TaskEvent.objects.filter(task=task, kind__in=REPORTED_KINDS)
+        .order_by("kind", "-id")
+        .distinct("kind"),
         key=lambda event: event.pk,
     )
     return (
-        LatestTaskSnapshot(implementation=reference, latest=TaskChange.from_model(task), events=[TaskEventChange.from_model(event) for event in events]),
+        LatestTaskSnapshot(
+            implementation=reference,
+            latest=TaskChange.from_model(task),
+            events=[TaskEventChange.from_model(event) for event in events],
+        ),
         max((event.pk for event in events), default=0),
     )
 
 
-def relay_latest_task(message: channel_events.TaskEventCreatedEvent, *, task: int, seen: int) -> TaskChange | TaskEventChange | None:
+def relay_latest_task(
+    message: channel_events.TaskEventCreatedEvent, *, task: int, seen: int
+) -> TaskChange | TaskEventChange | None:
     """What a message of the implementation's feed is to someone holding a snapshot, or None.
 
     ``task`` is the snapshot's task and ``seen`` its newest event (0 for none): a message
     published before the snapshot was read says nothing the snapshot did not.
     """
     if message.create is not None:
-        return None if int(message.create.id) < task else TaskChange.from_payload(message.create)
-    if message.event is None or int(message.event.task) < task or int(message.event.id) <= seen:
+        return (
+            None
+            if int(message.create.id) < task
+            else TaskChange.from_payload(message.create)
+        )
+    if (
+        message.event is None
+        or int(message.event.task) < task
+        or int(message.event.id) <= seen
+    ):
         return None
     return TaskEventChange.from_payload(message.event)
 
@@ -247,7 +314,9 @@ async def latest_task(
 ) -> AsyncGenerator[LatestTaskSnapshot | TaskChange | TaskEventChange, None]:
     """The task an agent's action last ran as, kept current: a snapshot, then what changes it."""
     found = await sync_to_async(scoped_get)(models.Agent, info, agent)
-    implementation = await models.Implementation.objects.filter(agent=found, interface=interface).afirst()
+    implementation = await models.Implementation.objects.filter(
+        agent=found, interface=interface
+    ).afirst()
     if implementation is None:
         yield LatestTaskSnapshot(implementation=None, latest=None, events=[])
         return
@@ -255,7 +324,8 @@ async def latest_task(
     # Joined before the snapshot is read, unlike ``task_event_channel.listen`` would: what is
     # published while the snapshot is read waits in the queue instead of being missed.
     async with info.context.consumer.listen_to_channel(  # type: ignore[union-attr]
-        task_event_channel.message_type, groups=[implementation_task_events(implementation.pk)]
+        task_event_channel.message_type,
+        groups=[implementation_task_events(implementation.pk)],
     ) as messages:
         snapshot, seen = await sync_to_async(read_latest_task)(implementation.pk)
         yield snapshot
@@ -263,15 +333,23 @@ async def latest_task(
 
         async for raw in messages:
             # Payload-carrying and already scoped by its group: no lookup per message.
-            relayed = relay_latest_task(task_event_channel.model.model_validate(raw.get("message")), task=task, seen=seen)
+            relayed = relay_latest_task(
+                task_event_channel.model.model_validate(raw.get("message")),
+                task=task,
+                seen=seen,
+            )
             if relayed is not None:
                 yield relayed
 
 
-
 def read_task_events(task: int, after: int) -> list[TaskEventChange]:
     """The task's recorded events newer than event ``after`` (0 for all), oldest first."""
-    return [TaskEventChange.from_model(event) for event in models.TaskEvent.objects.filter(task_id=task, id__gt=after).order_by("id")]
+    return [
+        TaskEventChange.from_model(event)
+        for event in models.TaskEvent.objects.filter(
+            task_id=task, id__gt=after
+        ).order_by("id")
+    ]
 
 
 async def task_events(
@@ -281,7 +359,9 @@ async def task_events(
     after: strawberry.ID | None = None,
 ) -> AsyncGenerator[TaskEventChange, None]:
     """One task's events: those already recorded (newer than ``after``), then each new one as it is recorded."""
-    found = await sync_to_async(scoped_get)(models.Task, info, task, field="agent__organization")
+    found = await sync_to_async(scoped_get)(
+        models.Task, info, task, field="agent__organization"
+    )
 
     # Joined before the history is read: what is recorded meanwhile waits in the queue, and is
     # dropped there if the history already had it.

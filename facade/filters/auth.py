@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import strawberry
 import strawberry_django
 from authentikate.models import Client, Organization, User
@@ -20,10 +18,16 @@ from rekuest_core import scalars as rscalars
 
 @strawberry_django.filter_type(User)
 class UserFilter:
-    name: Optional[FilterLookup[str]]
+    name: FilterLookup[str] | None
 
     @filter_field
-    def ids(self, info: Info, queryset: QuerySet[User], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[User], Q]:
+    def ids(
+        self,
+        info: Info,
+        queryset: QuerySet[User],
+        value: list[strawberry.ID],
+        prefix: str,
+    ) -> tuple[QuerySet[User], Q]:
         return queryset.filter(**{f"{prefix}id__in": value}), Q()
 
 
@@ -40,12 +44,20 @@ class OrganizationOrder:
     identifier: auto
 
 
-@strawberry_django.filter_type(Organization, description="A way to filter organizations")
+@strawberry_django.filter_type(
+    Organization, description="A way to filter organizations"
+)
 class OrganizationFilter:
-    identifier: Optional[FilterLookup[str]]
+    identifier: FilterLookup[str] | None
 
     @filter_field
-    def ids(self, info: Info, queryset: QuerySet[Organization], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[Organization], Q]:
+    def ids(
+        self,
+        info: Info,
+        queryset: QuerySet[Organization],
+        value: list[strawberry.ID],
+        prefix: str,
+    ) -> tuple[QuerySet[Organization], Q]:
         return queryset.filter(**{f"{prefix}id__in": value}), Q()
 
 
@@ -56,26 +68,52 @@ class ClientOrder:
 
 @strawberry_django.filter_type(Client, description="A way to filter apps")
 class ClientFilter:
-    interface: Optional[FilterLookup[str]]
+    interface: FilterLookup[str] | None
 
     @filter_field
-    def ids(self, info: Info, queryset: QuerySet[Client], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[Client], Q]:
+    def ids(
+        self,
+        info: Info,
+        queryset: QuerySet[Client],
+        value: list[strawberry.ID],
+        prefix: str,
+    ) -> tuple[QuerySet[Client], Q]:
         return queryset.filter(**{f"{prefix}id__in": value}), Q()
 
     @filter_field
-    def has_implementations_for(self, info: Info, queryset: QuerySet[Client], value: list[rscalars.ActionHash], prefix: str) -> tuple[QuerySet[Client], Q]:
-        return queryset.filter(**{f"{prefix}agents__implementations__action__hash__in": value}).distinct(), Q()
+    def has_implementations_for(
+        self,
+        info: Info,
+        queryset: QuerySet[Client],
+        value: list[rscalars.ActionHash],
+        prefix: str,
+    ) -> tuple[QuerySet[Client], Q]:
+        return queryset.filter(
+            **{f"{prefix}agents__implementations__action__hash__in": value}
+        ).distinct(), Q()
 
-    @filter_field(description="Search by OAuth client id, name, app identifier, release version or device id (case-insensitive substring).")
-    def search(self, info: Info, queryset: QuerySet[Client], value: str | None, prefix: str) -> tuple[QuerySet[Client], Q]:
+    @filter_field(
+        description="Search by OAuth client id, name, app identifier, release version or device id (case-insensitive substring)."
+    )
+    def search(
+        self, info: Info, queryset: QuerySet[Client], value: str | None, prefix: str
+    ) -> tuple[QuerySet[Client], Q]:
         if not value:
             return queryset, Q()
-        fields = ("client_id", "name", "release__app__identifier", "release__version", "device__device_id")
+        fields = (
+            "client_id",
+            "name",
+            "release__app__identifier",
+            "release__version",
+            "device__device_id",
+        )
         match = Q()
         for field in fields:
             match |= Q(**{f"{prefix}{field}__icontains": value})
         return queryset.filter(match), Q()
 
     @filter_field
-    def mine(self, info: Info, queryset: QuerySet[Client], value: bool, prefix: str) -> tuple[QuerySet[Client], Q]:
+    def mine(
+        self, info: Info, queryset: QuerySet[Client], value: bool, prefix: str
+    ) -> tuple[QuerySet[Client], Q]:
         return queryset.filter(**{f"{prefix}user_id": info.context.user.id}), Q()

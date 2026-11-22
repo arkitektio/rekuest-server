@@ -24,8 +24,13 @@ pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.asyncio]
 
 def _message(event: models.TaskEvent) -> dict:
     """An event as the channel layer hands it to a subscriber."""
-    payload = channel_events.TaskEventCreatedEvent(event=channel_events.TaskEventPayload.from_event(event))
-    return {"type": task_event_channel.message_type, "message": payload.model_dump(mode="json")}
+    payload = channel_events.TaskEventCreatedEvent(
+        event=channel_events.TaskEventPayload.from_event(event)
+    )
+    return {
+        "type": task_event_channel.message_type,
+        "message": payload.model_dump(mode="json"),
+    }
 
 
 class Consumer:
@@ -50,9 +55,13 @@ class Consumer:
         yield messages()
 
 
-async def _watch(task: models.Task, consumer: Consumer, token: str = "test", after: str | None = None):
+async def _watch(
+    task: models.Task, consumer: Consumer, token: str = "test", after: str | None = None
+):
     context = (await sync_to_async(tenant_context)(token))[0]
-    info = SimpleNamespace(context=SimpleNamespace(request=context.request, consumer=consumer))
+    info = SimpleNamespace(
+        context=SimpleNamespace(request=context.request, consumer=consumer)
+    )
     return task_events(None, info, str(task.pk), after)  # type: ignore[arg-type]
 
 
@@ -76,7 +85,11 @@ class TestTaskEvents:
         feed = await _watch(task, consumer := Consumer(on_join=published_meanwhile))
         history = [await anext(feed) for _ in range(3)]
         assert consumer.groups == [channels.task_events(task.pk)]
-        assert [(event.kind, event.progress) for event in history] == [(enums.TaskEventKind.LOG, None), (enums.TaskEventKind.PROGRESS, 50), (enums.TaskEventKind.PROGRESS, 60)]
+        assert [(event.kind, event.progress) for event in history] == [
+            (enums.TaskEventKind.LOG, None),
+            (enums.TaskEventKind.PROGRESS, 50),
+            (enums.TaskEventKind.PROGRESS, 60),
+        ]
 
         done = await build_task_event(task.pk, kind="COMPLETED")
         consumer.queue.put_nowait(_message(done))
@@ -113,8 +126,16 @@ class TestAssetFeed:
         await layer.group_add(channels.assets_org(theirs.pk), others)
 
         def store() -> models.Asset:
-            file = DatalayerStore.objects.create(organization=mine, key="assets/model.glb", bucket="media")
-            asset = models.Asset.objects.create(organization=mine, ref="sha256:" + "ab" * 32, kind="MODEL_3D", file=file, size=12)
+            file = DatalayerStore.objects.create(
+                organization=mine, key="assets/model.glb", bucket="media"
+            )
+            asset = models.Asset.objects.create(
+                organization=mine,
+                ref="sha256:" + "ab" * 32,
+                kind="MODEL_3D",
+                file=file,
+                size=12,
+            )
             asset.meta = {"nodes": 1}
             asset.save()  # a later save is no news
             return asset

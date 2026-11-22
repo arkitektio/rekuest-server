@@ -20,10 +20,15 @@ ORDER: tuple[enums.ActionAvailability, ...] = (
 
 def rank(prefix: str = "") -> Case:
     """The rank of the action at ``prefix`` (``""`` for an action queryset itself)."""
-    implementations = models.Implementation.objects.filter(action=OuterRef(f"{prefix}pk"))
+    implementations = models.Implementation.objects.filter(
+        action=OuterRef(f"{prefix}pk")
+    )
     return Case(
         When(**{f"{prefix}assignable": True}, then=Value(0)),
-        When(Exists(implementations.filter(liveness.agent_recent_q("agent__"))), then=Value(1)),
+        When(
+            Exists(implementations.filter(liveness.agent_recent_q("agent__"))),
+            then=Value(1),
+        ),
         When(Exists(implementations), then=Value(2)),
         default=Value(3),
         output_field=IntegerField(),

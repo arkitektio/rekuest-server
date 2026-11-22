@@ -7,8 +7,13 @@ from pydantic import BaseModel, Field, model_validator
 from strawberry.experimental import pydantic
 
 from rekuest_core import enums
-
-from rekuest_core.inputs.models import AssetInputModel, BlokImplementationInputModel, ImplementationInputModel, LockImplementationInputModel, StateImplementationInputModel
+from rekuest_core.inputs.models import (
+    AssetInputModel,
+    BlokImplementationInputModel,
+    ImplementationInputModel,
+    LockImplementationInputModel,
+    StateImplementationInputModel,
+)
 
 
 class PinInputModel(BaseModel):
@@ -52,7 +57,9 @@ class KickInputModel(BaseModel):
     """
 
     agent: str = Field(description="The agent ID to bounce.")
-    reason: str | None = Field(default=None, description="The reason for kicking the agent.")
+    reason: str | None = Field(
+        default=None, description="The reason for kicking the agent."
+    )
 
 
 @pydantic.input(KickInputModel, description="The input for bouncing an agent.")
@@ -69,7 +76,9 @@ class BlockInputModel(BaseModel):
     """
 
     agent: str = Field(description="The agent ID to bounce.")
-    reason: str | None = Field(default=None, description="The reason for kicking the agent.")
+    reason: str | None = Field(
+        default=None, description="The reason for kicking the agent."
+    )
 
 
 @pydantic.input(BlockInputModel, description="The input for bouncing an agent.")
@@ -112,13 +121,34 @@ class UpdateAgentInput:
 
 
 class ImplementAgentInputModel(BaseModel):
-    name: str | None = Field(default=None, description="The name of the agent. This is used to identify the agent in the system.")
-    description: str | None = Field(default=None, description="What this agent is, in a sentence. Omitting it leaves whatever the agent already has, unlike `name`, which falls back to the client id.")
-    states: list[StateImplementationInputModel] | None = Field(default=None, description="The states of the agent. This is used to specify the initial states of the agent")
-    implementations: list[ImplementationInputModel] | None = Field(default=None, description="The implementations of the agent. This is used to specify the initial implementations of the agent")
-    locks: list[LockImplementationInputModel] | None = Field(default=None, description="The locks of the agent. This is used to specify which resources the agent needs to run")
-    bloks: list[BlokImplementationInputModel] | None = Field(default=None, description="The blocks of the agent. This is used to specify the initial blocks of the agent")
-    assets: list[AssetInputModel] | None = Field(default=None, description="The files the agent brings with it, by name. The agent uploads the ones the server does not hold yet.")
+    name: str | None = Field(
+        default=None,
+        description="The name of the agent. This is used to identify the agent in the system.",
+    )
+    description: str | None = Field(
+        default=None,
+        description="What this agent is, in a sentence. Omitting it leaves whatever the agent already has, unlike `name`, which falls back to the client id.",
+    )
+    states: list[StateImplementationInputModel] | None = Field(
+        default=None,
+        description="The states of the agent. This is used to specify the initial states of the agent",
+    )
+    implementations: list[ImplementationInputModel] | None = Field(
+        default=None,
+        description="The implementations of the agent. This is used to specify the initial implementations of the agent",
+    )
+    locks: list[LockImplementationInputModel] | None = Field(
+        default=None,
+        description="The locks of the agent. This is used to specify which resources the agent needs to run",
+    )
+    bloks: list[BlokImplementationInputModel] | None = Field(
+        default=None,
+        description="The blocks of the agent. This is used to specify the initial blocks of the agent",
+    )
+    assets: list[AssetInputModel] | None = Field(
+        default=None,
+        description="The files the agent brings with it, by name. The agent uploads the ones the server does not hold yet.",
+    )
     hash: str | None = Field(
         default=None,
         description="A unique hash of the agent definition. An agent can use this hash to check if its definition has changed and if it needs to update its implementations and states. This is used to optimize the update process by only updating the implementations and states that have changed.",
@@ -143,5 +173,7 @@ class ImplementAgentInputModel(BaseModel):
         logos = {blok.key for blok in self.bloks or [] if is_action_logo(blok)}
         for implementation in self.implementations or []:
             if implementation.logo is not None and implementation.logo not in logos:
-                raise ValueError(f"implementation {implementation.interface!r} is drawn by the logo {implementation.logo!r}, which is not an action logo blok this agent declares")
+                raise ValueError(
+                    f"implementation {implementation.interface!r} is drawn by the logo {implementation.logo!r}, which is not an action logo blok this agent declares"
+                )
         return self

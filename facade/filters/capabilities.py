@@ -15,11 +15,17 @@ from django.db.models import Q, QuerySet
 
 from facade import models
 
-Capability = Literal["asks", "informs", "calls", "dynamic_asks", "dynamic_informs", "dynamic_calls"]
+Capability = Literal[
+    "asks", "informs", "calls", "dynamic_asks", "dynamic_informs", "dynamic_calls"
+]
 
 
 def _declares(role: models.InteractionRole) -> Q:
-    return Q(id__in=models.ImplementationInteraction.objects.filter(role=role).values("implementation_id"))
+    return Q(
+        id__in=models.ImplementationInteraction.objects.filter(role=role).values(
+            "implementation_id"
+        )
+    )
 
 
 def _condition(capability: Capability) -> Q:
@@ -29,7 +35,9 @@ def _condition(capability: Capability) -> Q:
         case "informs":
             return Q(dynamic_informs=True) | _declares(models.InteractionRole.INFORM)
         case "calls":
-            return Q(dynamic_calls=True) | Q(id__in=models.Dependency.objects.values("implementation_id"))
+            return Q(dynamic_calls=True) | Q(
+                id__in=models.Dependency.objects.values("implementation_id")
+            )
         case "dynamic_asks" | "dynamic_informs" | "dynamic_calls":
             return Q(**{capability: True})
 

@@ -32,11 +32,20 @@ from rekuest_core.vocabulary import BlokScope, resolve_locals
 class StaleRevisionError(ValueError):
     """The blok was changed after the revision a write started from."""
 
-    def __init__(self, blok: models.Blok, base: models.BlokRevision | None, head: models.BlokRevision | None) -> None:
+    def __init__(
+        self,
+        blok: models.Blok,
+        base: models.BlokRevision | None,
+        head: models.BlokRevision | None,
+    ) -> None:
         self.head = head
-        started = "no revision" if base is None else f"revision {base.number} ({base.pk})"
+        started = (
+            "no revision" if base is None else f"revision {base.number} ({base.pk})"
+        )
         now = "none" if head is None else f"revision {head.number} ({head.pk})"
-        super().__init__(f"Blok '{blok.name}' changed since {started}: its head is {now}. Read it again and redo the change on top of it.")
+        super().__init__(
+            f"Blok '{blok.name}' changed since {started}: its head is {now}. Read it again and redo the change on top of it."
+        )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -82,7 +91,10 @@ class BlokContent:
         )
 
     def parsed_components(self) -> list[rimodels.ComponentNodeInputModel]:
-        return [rimodels.ComponentNodeInputModel.model_validate(component) for component in self.components]
+        return [
+            rimodels.ComponentNodeInputModel.model_validate(component)
+            for component in self.components
+        ]
 
     def stored_dependencies(self) -> list[dict]:
         return [dependency.model_dump(mode="json") for dependency in self.dependencies]
@@ -96,21 +108,40 @@ class BlokContent:
         if len(roots) != 1:
             return []
         resolved = resolve_locals(roots[0], tuple(self.dependencies))
-        return [{"node": node, **each.local.model_dump(mode="json", exclude_none=True)} for node, each in resolved.items()]
+        return [
+            {"node": node, **each.local.model_dump(mode="json", exclude_none=True)}
+            for node, each in resolved.items()
+        ]
 
     def stored_demo(self) -> dict:
-        return self.demo.model_dump(mode="json", exclude_none=True) if self.demo is not None else {}
+        return (
+            self.demo.model_dump(mode="json", exclude_none=True)
+            if self.demo is not None
+            else {}
+        )
 
     def rendering(self) -> dict[str, object]:
         """What decides what the blok draws: what :func:`blok_hash` hashes."""
-        return rendering_of(self.components, self.context.value, self.vocab, self.catalogs, self.stored_demo())
+        return rendering_of(
+            self.components,
+            self.context.value,
+            self.vocab,
+            self.catalogs,
+            self.stored_demo(),
+        )
 
     def hash(self) -> str:
         """sha256 of canonical JSON of every part; the module by its id. Parts that are empty are left out."""
-        parts = {**self.rendering(), "module": self.module.pk, "dependencies": self.stored_dependencies()}
+        parts = {
+            **self.rendering(),
+            "module": self.module.pk,
+            "dependencies": self.stored_dependencies(),
+        }
         if self.args:
             parts["args"] = self.stored_args()
-        canonical = json.dumps(parts, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        canonical = json.dumps(
+            parts, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        )
         return hashlib.sha256(canonical.encode()).hexdigest()
 
     def scope(self, kinds: tuple[str, ...] = ("custom",)) -> BlokScope:
@@ -155,7 +186,11 @@ def tree_context(components: list[JSONObject]) -> renums.ComponentContext | None
     from rekuest_core.vocabulary import BlokError, blok_header
 
     try:
-        return renums.ComponentContext(blok_header(rimodels.ComponentNodeInputModel.model_validate(components[0])).context)
+        return renums.ComponentContext(
+            blok_header(
+                rimodels.ComponentNodeInputModel.model_validate(components[0])
+            ).context
+        )
     except (BlokError, ValueError):
         return None
 
@@ -167,7 +202,12 @@ SELF_KEY = "self"
 def binding_key(identifier: str, taken: Iterable[str]) -> str:
     """The key a fork binds its app's agent under: the last segment of the app's identifier as a
     name (``live.arkitekt.gallery-app`` -> ``gallery_app``), numbered when the blok has it already."""
-    name = re.sub(r"_+", "_", re.sub(r"[^A-Za-z0-9_]", "_", identifier.rsplit(".", 1)[-1])).strip("_") or "agent"
+    name = (
+        re.sub(
+            r"_+", "_", re.sub(r"[^A-Za-z0-9_]", "_", identifier.rsplit(".", 1)[-1])
+        ).strip("_")
+        or "agent"
+    )
     if name[0].isdigit():
         name = f"_{name}"
     used = {SELF_KEY, *taken}
@@ -204,7 +244,11 @@ def _unselfed(value: object, key: str) -> object:
     if value.get("component") in ("local", "dependencies"):
         # `like` is a literal: `self.<action>[.<arg>]` names the app's own action.
         changed["props"] = [
-            {**prop, "static_value": _unselfed_path(prop["static_value"], key)} if isinstance(prop, dict) and prop.get("key") == "like" and isinstance(prop.get("static_value"), str) else prop
+            {**prop, "static_value": _unselfed_path(prop["static_value"], key)}
+            if isinstance(prop, dict)
+            and prop.get("key") == "like"
+            and isinstance(prop.get("static_value"), str)
+            else prop
             for prop in cast("list[object]", changed.get("props") or [])
         ]
     return changed
@@ -214,15 +258,33 @@ def as_custom(content: BlokContent, key: str) -> BlokContent:
     """What a fork of a provided blok holds: a custom blok, its app's own agent (``self``) one
     it is bound to as ``key`` (written ``agents.<key>``, stored ``deps.<key>``). Nothing else of
     the tree changes: the dependencies it declares for an action stay the viewer's to pick."""
-    components = [json_object(cast("dict[str, object]", _unselfed(component, key))) for component in content.components]
+    components = [
+        json_object(cast("dict[str, object]", _unselfed(component, key)))
+        for component in content.components
+    ]
     if components:
         root = dict(components[0])
-        root["props"] = [{**prop, "static_value": "custom"} if prop.get("key") == "kind" else prop for prop in cast("list[dict[str, object]]", root.get("props") or [])]
+        root["props"] = [
+            {**prop, "static_value": "custom"} if prop.get("key") == "kind" else prop
+            for prop in cast("list[dict[str, object]]", root.get("props") or [])
+        ]
         components = [json_object(root), *components[1:]]
-    dependencies = [dependency.model_copy(update={"key": key}) if dependency.key == SELF_KEY else dependency for dependency in content.dependencies]
+    dependencies = [
+        dependency.model_copy(update={"key": key})
+        if dependency.key == SELF_KEY
+        else dependency
+        for dependency in content.dependencies
+    ]
     demo = content.demo
     if demo is not None and isinstance(demo.deps, dict) and SELF_KEY in demo.deps:
-        demo = demo.model_copy(update={"deps": {(key if name == SELF_KEY else name): value for name, value in demo.deps.items()}})
+        demo = demo.model_copy(
+            update={
+                "deps": {
+                    (key if name == SELF_KEY else name): value
+                    for name, value in demo.deps.items()
+                }
+            }
+        )
     return content.but(components=components, dependencies=dependencies, demo=demo)
 
 
@@ -235,13 +297,21 @@ def rendering_of(
 ) -> dict[str, object]:
     """A blok's rendering parts as hashed: the tree (its declarations included), the context and
     the language version always, the rest only when set."""
-    parts: dict[str, object] = {"components": components, "context": context, "vocab": vocab}
+    parts: dict[str, object] = {
+        "components": components,
+        "context": context,
+        "vocab": vocab,
+    }
     optional: dict[str, object] = {"catalogs": catalogs, "demo": demo}
-    parts.update({key: value for key, value in optional.items() if value not in (None, [], {})})
+    parts.update(
+        {key: value for key, value in optional.items() if value not in (None, [], {})}
+    )
     return parts
 
 
-def dependency_input_of(row: models.BlokDependency) -> rimodels.AgentDependencyInputModel:
+def dependency_input_of(
+    row: models.BlokDependency,
+) -> rimodels.AgentDependencyInputModel:
     """A dependency row as the input that declares it."""
     return rimodels.AgentDependencyInputModel(
         key=row.key,
@@ -263,7 +333,9 @@ def content_of_blok(blok: models.Blok) -> BlokContent:
         components=[json_object(component) for component in blok.components],
         context=renums.ComponentContext(blok.context),
         module=blok.module,
-        dependencies=[dependency_input_of(row) for row in blok.dependencies.order_by("key")],
+        dependencies=[
+            dependency_input_of(row) for row in blok.dependencies.order_by("key")
+        ],
         args=[rimodels.ArgPortInputModel(**arg) for arg in blok.args or []],
         catalogs=list(blok.catalogs or []),
         demo=rimodels.BlokDemoInputModel(**blok.demo) if blok.demo else None,
@@ -275,14 +347,19 @@ def content_of_revision(revision: models.BlokRevision) -> BlokContent:
         components=[json_object(component) for component in revision.components],
         context=renums.ComponentContext(revision.context),
         module=revision.module,
-        dependencies=[rimodels.AgentDependencyInputModel(**dependency) for dependency in revision.dependencies],
+        dependencies=[
+            rimodels.AgentDependencyInputModel(**dependency)
+            for dependency in revision.dependencies
+        ],
         args=[rimodels.ArgPortInputModel(**arg) for arg in revision.args or []],
         catalogs=list(revision.catalogs or []),
         demo=rimodels.BlokDemoInputModel(**revision.demo) if revision.demo else None,
     )
 
 
-def sync_blok_dependencies(blok: models.Blok, dependencies: Iterable[rimodels.AgentDependencyInputModel]) -> None:
+def sync_blok_dependencies(
+    blok: models.Blok, dependencies: Iterable[rimodels.AgentDependencyInputModel]
+) -> None:
     """Upsert ``BlokDependency`` rows by ``(blok, key)`` and delete every key not declared any more.
 
     Upserting keeps a kept key's row, so the agent mappings that point at it stay bound. A
@@ -294,8 +371,12 @@ def sync_blok_dependencies(blok: models.Blok, dependencies: Iterable[rimodels.Ag
             blok=blok,
             key=declared.key,
             defaults=dict(
-                action_demands=[d.model_dump() for d in declared.action_dependencies or []],
-                state_demands=[d.model_dump() for d in declared.state_dependencies or []],
+                action_demands=[
+                    d.model_dump() for d in declared.action_dependencies or []
+                ],
+                state_demands=[
+                    d.model_dump() for d in declared.state_dependencies or []
+                ],
                 app_filter=declared.app,
                 version_filter=declared.version,
                 optional=declared.optional,
@@ -307,49 +388,74 @@ def sync_blok_dependencies(blok: models.Blok, dependencies: Iterable[rimodels.Ag
         )
         existing.pop(declared.key, None)
         # A key declared again (an undo of its removal) takes back the bindings that lost it.
-        models.BlokAgentMapping.objects.filter(materialized_blok__blok=blok, key=declared.key, dependency__isnull=True).update(dependency=dependency)
+        models.BlokAgentMapping.objects.filter(
+            materialized_blok__blok=blok, key=declared.key, dependency__isnull=True
+        ).update(dependency=dependency)
     for stale in existing.values():
         stale.delete()
 
 
-def sync_blok_arg_ports(blok: models.Blok, args: Iterable[rimodels.ArgPortInputModel]) -> None:
+def sync_blok_arg_ports(
+    blok: models.Blok, args: Iterable[rimodels.ArgPortInputModel]
+) -> None:
     """Replace the blok's ``BlokArgPort`` rows with ``args``' port trees, parents before children.
 
     The rows are what ``demands`` match; ``key_path`` is dotted from the root, ``requires``
     compiled to the JSONPath an item's descriptors are tested with, as takt writes them."""
 
-    def row(port: rimodels.ArgPortInputModel, parent: models.BlokArgPort | None, index: int, parent_path: str) -> tuple[rimodels.ArgPortInputModel, str, models.BlokArgPort]:
+    def row(
+        port: rimodels.ArgPortInputModel,
+        parent: models.BlokArgPort | None,
+        index: int,
+        parent_path: str,
+    ) -> tuple[rimodels.ArgPortInputModel, str, models.BlokArgPort]:
         path = f"{parent_path}.{port.key}" if parent_path else port.key
-        return port, path, models.BlokArgPort(
-            blok=blok,
-            parent=parent,
-            index=index,
-            key=port.key,
-            key_path=path,
-            kind=getattr(port.kind, "value", port.kind),
-            identifier=port.identifier,
-            compiled_jsonpath=compile_descriptors_to_jsonpath(port.requires or []),
-            nullable=port.nullable,
-            dimension=port.dimension,
+        return (
+            port,
+            path,
+            models.BlokArgPort(
+                blok=blok,
+                parent=parent,
+                index=index,
+                key=port.key,
+                key_path=path,
+                kind=getattr(port.kind, "value", port.kind),
+                identifier=port.identifier,
+                compiled_jsonpath=compile_descriptors_to_jsonpath(port.requires or []),
+                nullable=port.nullable,
+                dimension=port.dimension,
+            ),
         )
 
     blok.arg_ports.all().delete()
     level = [row(port, None, index, "") for index, port in enumerate(args)]
     while level:
         models.BlokArgPort.objects.bulk_create([port_row for _, _, port_row in level])
-        level = [row(child, port_row, index, path) for port, path, port_row in level for index, child in enumerate(port.children or [])]
+        level = [
+            row(child, port_row, index, path)
+            for port, path, port_row in level
+            for index, child in enumerate(port.children or [])
+        ]
 
 
 def _diagnostics(content: BlokContent) -> list[dict]:
     """The warnings on ``content`` against its module, as a blok row stores them; an error refuses it."""
     if not content.components:
         return []
-    return dump_diagnostics(validate_blok_against_module(content.module, content.parsed_components(), content.scope()))
+    return dump_diagnostics(
+        validate_blok_against_module(
+            content.module, content.parsed_components(), content.scope()
+        )
+    )
 
 
 def lock_blok(blok_id: int) -> models.Blok:
     """The blok row, locked until the transaction ends: writes to one blok queue behind each other."""
-    return models.Blok.objects.select_for_update(of=("self",)).select_related("head", "module").get(pk=blok_id)
+    return (
+        models.Blok.objects.select_for_update(of=("self",))
+        .select_related("head", "module")
+        .get(pk=blok_id)
+    )
 
 
 @transaction.atomic
@@ -372,10 +478,14 @@ def commit_revision(
     head's commits nothing and returns the head.
     """
     if blok.app_id is not None:
-        raise ValueError(f"Blok '{blok.name}' is provided by its agents and has no revisions; fork it to edit it.")
+        raise ValueError(
+            f"Blok '{blok.name}' is provided by its agents and has no revisions; fork it to edit it."
+        )
     locked = lock_blok(blok.pk)
     head = locked.head
-    if guarded and (None if base is None else base.pk) != (None if head is None else head.pk):
+    if guarded and (None if base is None else base.pk) != (
+        None if head is None else head.pk
+    ):
         raise StaleRevisionError(locked, base, head)
 
     content_hash = content.hash()
@@ -419,7 +529,20 @@ def commit_revision(
     locked.catalogs = revision.catalogs
     locked.resolved_locals = revision.resolved_locals
     locked.demo = revision.demo
-    locked.save(update_fields=["components", "context", "module", "args", "vocab", "catalogs", "resolved_locals", "demo", "diagnostics", "head"])
+    locked.save(
+        update_fields=[
+            "components",
+            "context",
+            "module",
+            "args",
+            "vocab",
+            "catalogs",
+            "resolved_locals",
+            "demo",
+            "diagnostics",
+            "head",
+        ]
+    )
     sync_blok_dependencies(locked, content.dependencies)
     if args_changed:
         sync_blok_arg_ports(locked, content.args)

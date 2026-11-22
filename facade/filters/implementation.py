@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import strawberry
 import strawberry_django
@@ -31,36 +31,75 @@ if TYPE_CHECKING:
 @strawberry_django.filter_type(models.Action)
 class ImplementationActionFilter:
     @filter_field
-    def search(self, info: Info, queryset: QuerySet[models.Action], value: str, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def search(
+        self, info: Info, queryset: QuerySet[models.Action], value: str, prefix: str
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset.filter(**{f"{prefix}name__icontains": value}), Q()
 
     @filter_field
-    def name(self, info: Info, queryset: QuerySet[models.Action], value: str, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def name(
+        self, info: Info, queryset: QuerySet[models.Action], value: str, prefix: str
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset.filter(**{f"{prefix}name": value}), Q()
 
     @filter_field
-    def ids(self, info: Info, queryset: QuerySet[models.Action], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def ids(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: list[strawberry.ID],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset.filter(**{f"{prefix}id__in": value}), Q()
 
     @filter_field
-    def demands(self, info: Info, queryset: QuerySet[models.Action], value: list[inputs.PortDemandInput], prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def demands(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: list[inputs.PortDemandInput],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], Q]:
         if len(value) == 0:
             return queryset, Q()
 
         # RawSQL subquery, returned as the Q so OR/NOT compose (see ActionFilter.demands).
-        subquery = managers.get_port_demand_subquery([managers.PortDemand.of(demand) for demand in value], organization_id=info.context.request.organization.id)
+        subquery = managers.get_port_demand_subquery(
+            [managers.PortDemand.of(demand) for demand in value],
+            organization_id=info.context.request.organization.id,
+        )
         return queryset, Q(**{f"{prefix}id__in": subquery})
 
-    @filter_field(description="Any of these demand sets: the rows that satisfy every demand of at least one set (each set as `demands`). One statement, so prefer it to `OR`-ing `demands`, which tests every row of the organization. An empty list is ignored; an empty set is an error.")
-    def any_demands(self, info: Info, queryset: QuerySet[models.Action], value: list[list[inputs.PortDemandInput]], prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    @filter_field(
+        description="Any of these demand sets: the rows that satisfy every demand of at least one set (each set as `demands`). One statement, so prefer it to `OR`-ing `demands`, which tests every row of the organization. An empty list is ignored; an empty set is an error."
+    )
+    def any_demands(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: list[list[inputs.PortDemandInput]],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset, any_port_demands(info, value, "action", f"{prefix}id")
 
     @filter_field
-    def kind(self, info: Info, queryset: QuerySet[models.Action], value: renums.ActionKind, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def kind(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: renums.ActionKind,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset.filter(**{f"{prefix}kind": value}), Q()
 
     @filter_field
-    def protocols(self, info: Info, queryset: QuerySet[models.Action], value: list[str], prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def protocols(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: list[str],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset.filter(**{f"{prefix}protocols__name__in": value}), Q()
 
 
@@ -68,50 +107,112 @@ class ImplementationActionFilter:
 class ImplementationOrder:
     created_at: auto
 
-    @strawberry_django.order_field(description="Implementations an agent can run now first (DESC), or last (ASC): takt's rule, `liveness.agent_available_q`.")
-    def active(self, info: Info, queryset: QuerySet[models.Implementation], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Implementation], list[OrderBy]]:
+    @strawberry_django.order_field(
+        description="Implementations an agent can run now first (DESC), or last (ASC): takt's rule, `liveness.agent_available_q`."
+    )
+    def active(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Implementation],
+        value: strawberry_django.Ordering,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Implementation], list[OrderBy]]:
         if not value:
             return queryset, []
-        available = ExpressionWrapper(liveness.agent_available_q(f"{prefix}agent__"), output_field=BooleanField())
+        available = ExpressionWrapper(
+            liveness.agent_available_q(f"{prefix}agent__"), output_field=BooleanField()
+        )
         return queryset, [available.desc() if "DESC" in value.name else available.asc()]
 
 
 @strawberry_django.filter_type(models.Implementation)
 class ImplementationFilter:
-    interface: Optional[FilterLookup[str]]
+    interface: FilterLookup[str] | None
     action: ImplementationActionFilter | None
     agent: ImplementationAgentFilter | None
 
-    @filter_field(description="Whether an agent can run it now: a webhook agent, or a connected one with a fresh heartbeat (takt's rule).")
-    def active(self, info: Info, queryset: QuerySet[models.Implementation], value: bool, prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
+    @filter_field(
+        description="Whether an agent can run it now: a webhook agent, or a connected one with a fresh heartbeat (takt's rule)."
+    )
+    def active(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Implementation],
+        value: bool,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Implementation], Q]:
         available = liveness.agent_available_q(f"{prefix}agent__")
         return queryset, available if value else ~available
 
     @filter_field
-    def ids(self, info: Info, queryset: QuerySet[models.Implementation], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
+    def ids(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Implementation],
+        value: list[strawberry.ID],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Implementation], Q]:
         return queryset.filter(**{f"{prefix}id__in": value}), Q()
 
     @filter_field
-    def action_hash(self, info: Info, queryset: QuerySet[models.Implementation], value: rscalars.ActionHash, prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
+    def action_hash(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Implementation],
+        value: rscalars.ActionHash,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Implementation], Q]:
         return queryset.filter(**{f"{prefix}action__hash": value}), Q()
 
     @filter_field
-    def parameters(self, info: Info, queryset: QuerySet[models.Implementation], value: list[ParamPair], prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
+    def parameters(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Implementation],
+        value: list[ParamPair],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Implementation], Q]:
         for param in value:
-            queryset = queryset.filter(**{f"{prefix}params__contains": {param.key: param.value}})
+            queryset = queryset.filter(
+                **{f"{prefix}params__contains": {param.key: param.value}}
+            )
         return queryset, Q()
 
     @filter_field
-    def resolvable_for(self, info: Info, queryset: QuerySet[models.Implementation], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
+    def resolvable_for(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Implementation],
+        value: strawberry.ID,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Implementation], Q]:
         dependency = models.Dependency.objects.get(id=value)
-        return queryset.filter(**{f"{prefix}action__app__identifier": dependency.app_filter}), Q()
+        return queryset.filter(
+            **{f"{prefix}action__app__identifier": dependency.app_filter}
+        ), Q()
 
     @filter_field
-    def search(self, info: Info, queryset: QuerySet[models.Implementation], value: str, prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
-        return queryset.filter(Q(**{f"{prefix}action__name__icontains": value}) | Q(**{f"{prefix}agent__name__icontains": value}) | Q(**{f"{prefix}interface__icontains": value})), Q()
+    def search(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Implementation],
+        value: str,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Implementation], Q]:
+        return queryset.filter(
+            Q(**{f"{prefix}action__name__icontains": value})
+            | Q(**{f"{prefix}agent__name__icontains": value})
+            | Q(**{f"{prefix}interface__icontains": value})
+        ), Q()
 
     @filter_field
-    def action_demand(self, info: Info, queryset: QuerySet[models.Implementation], value: ritypes.ActionDemandInput, prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
+    def action_demand(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Implementation],
+        value: ritypes.ActionDemandInput,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Implementation], Q]:
         new_ids = managers.get_action_ids_by_action_demands(
             [value.to_pydantic()],
             organization_id=info.context.request.organization.id,
@@ -119,25 +220,61 @@ class ImplementationFilter:
         return queryset, Q(**{f"{prefix}action__id__in": new_ids})
 
     @filter_field(description=capabilities.DESCRIPTIONS["asks"][0])
-    def asks(self, info: Info, queryset: QuerySet[models.Implementation], value: bool, prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
+    def asks(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Implementation],
+        value: bool,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Implementation], Q]:
         return queryset, capabilities.implementation_q("asks", value, prefix)
 
     @filter_field(description=capabilities.DESCRIPTIONS["informs"][0])
-    def informs(self, info: Info, queryset: QuerySet[models.Implementation], value: bool, prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
+    def informs(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Implementation],
+        value: bool,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Implementation], Q]:
         return queryset, capabilities.implementation_q("informs", value, prefix)
 
     @filter_field(description=capabilities.DESCRIPTIONS["calls"][0])
-    def calls(self, info: Info, queryset: QuerySet[models.Implementation], value: bool, prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
+    def calls(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Implementation],
+        value: bool,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Implementation], Q]:
         return queryset, capabilities.implementation_q("calls", value, prefix)
 
     @filter_field(description=capabilities.DESCRIPTIONS["dynamic_asks"][0])
-    def dynamic_asks(self, info: Info, queryset: QuerySet[models.Implementation], value: bool, prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
+    def dynamic_asks(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Implementation],
+        value: bool,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Implementation], Q]:
         return queryset, capabilities.implementation_q("dynamic_asks", value, prefix)
 
     @filter_field(description=capabilities.DESCRIPTIONS["dynamic_informs"][0])
-    def dynamic_informs(self, info: Info, queryset: QuerySet[models.Implementation], value: bool, prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
+    def dynamic_informs(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Implementation],
+        value: bool,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Implementation], Q]:
         return queryset, capabilities.implementation_q("dynamic_informs", value, prefix)
 
     @filter_field(description=capabilities.DESCRIPTIONS["dynamic_calls"][0])
-    def dynamic_calls(self, info: Info, queryset: QuerySet[models.Implementation], value: bool, prefix: str) -> tuple[QuerySet[models.Implementation], Q]:
+    def dynamic_calls(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Implementation],
+        value: bool,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Implementation], Q]:
         return queryset, capabilities.implementation_q("dynamic_calls", value, prefix)

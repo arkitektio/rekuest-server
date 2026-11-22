@@ -38,30 +38,52 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         entries = list(settings.SERVICES)
         if not entries:
-            self.stdout.write("No services configured (rekuest.services): only rekuest's own structures are catalogued.")
+            self.stdout.write(
+                "No services configured (rekuest.services): only rekuest's own structures are catalogued."
+            )
 
         deadline = time.monotonic() + WAIT_SECONDS
         failed = provisioning.catalogue_services()
         while failed is None:
             if time.monotonic() > deadline:
-                raise CommandError(f"Another provisioning pass held the lock for {WAIT_SECONDS:.0f} s; nothing was catalogued.")
+                raise CommandError(
+                    f"Another provisioning pass held the lock for {WAIT_SECONDS:.0f} s; nothing was catalogued."
+                )
             time.sleep(1.0)
             failed = provisioning.catalogue_services()
 
         refused: list[str] = []
         if service_catalog.SELF in failed:
             refused.append(service_catalog.SELF)
-            self.stderr.write(self.style.ERROR("Could not catalogue rekuest's own structures (see the log)."))
+            self.stderr.write(
+                self.style.ERROR(
+                    "Could not catalogue rekuest's own structures (see the log)."
+                )
+            )
         else:
-            self.stdout.write(self.style.SUCCESS("Catalogued rekuest's own structures."))
+            self.stdout.write(
+                self.style.SUCCESS("Catalogued rekuest's own structures.")
+            )
         for entry in entries:
-            source = "from the config" if entry.hosts is not None else "from its manifest"
+            source = (
+                "from the config" if entry.hosts is not None else "from its manifest"
+            )
             if entry.name not in failed:
-                self.stdout.write(self.style.SUCCESS(f"Catalogued {entry.name} ({source})."))
+                self.stdout.write(
+                    self.style.SUCCESS(f"Catalogued {entry.name} ({source}).")
+                )
             elif entry.hosts is not None:
                 refused.append(entry.name)
-                self.stderr.write(self.style.ERROR(f"Could not catalogue {entry.name} from the config (see the log)."))
+                self.stderr.write(
+                    self.style.ERROR(
+                        f"Could not catalogue {entry.name} from the config (see the log)."
+                    )
+                )
             else:
-                self.stdout.write(self.style.WARNING(f"Could not reach {entry.name} for its manifest: it is catalogued once it answers."))
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Could not reach {entry.name} for its manifest: it is catalogued once it answers."
+                    )
+                )
         if refused:
             raise CommandError(f"Could not catalogue {', '.join(refused)}.")

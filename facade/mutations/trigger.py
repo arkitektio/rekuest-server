@@ -19,10 +19,23 @@ from facade.types.base import scoped_get
 
 def create_trigger(info: Info, input: inputs.CreateTriggerInput) -> types.Trigger:
     action = scoped_get(models.Action, info, input.action)
-    agent = scoped_get(models.Agent, info, input.agent) if input.agent is not None else None
+    agent = (
+        scoped_get(models.Agent, info, input.agent) if input.agent is not None else None
+    )
     args = json_object(input.args or {})
-    conditions, compiled = triggers.validate(action=action, agent=agent, interface=input.interface, kind=input.kind.value, identifier=input.identifier, port=input.port, args=args, conditions=json_value(input.conditions or []))
-    rules.check_policies(max_runs=input.max_runs, debounce_seconds=input.debounce_seconds)
+    conditions, compiled = triggers.validate(
+        action=action,
+        agent=agent,
+        interface=input.interface,
+        kind=input.kind.value,
+        identifier=input.identifier,
+        port=input.port,
+        args=args,
+        conditions=json_value(input.conditions or []),
+    )
+    rules.check_policies(
+        max_runs=input.max_runs, debounce_seconds=input.debounce_seconds
+    )
     return cast(
         "types.Trigger",
         models.Trigger.objects.create(
@@ -65,7 +78,11 @@ def update_trigger(info: Info, input: inputs.UpdateTriggerInput) -> types.Trigge
             trigger.action = action
             changed.append("action")
     if input.agent is not strawberry.UNSET:
-        agent = scoped_get(models.Agent, info, input.agent) if input.agent is not None else None
+        agent = (
+            scoped_get(models.Agent, info, input.agent)
+            if input.agent is not None
+            else None
+        )
         if trigger.agent != agent:
             trigger.agent = agent
             changed.append("agent")
@@ -81,7 +98,10 @@ def update_trigger(info: Info, input: inputs.UpdateTriggerInput) -> types.Trigge
     if input.enabled is not None and trigger.enabled != input.enabled:
         trigger.enabled = input.enabled
         changed.append("enabled")
-    if input.description is not strawberry.UNSET and trigger.description != input.description:
+    if (
+        input.description is not strawberry.UNSET
+        and trigger.description != input.description
+    ):
         trigger.description = input.description
         changed.append("description")
     if input.ends_at is not strawberry.UNSET and trigger.ends_at != input.ends_at:
@@ -90,19 +110,32 @@ def update_trigger(info: Info, input: inputs.UpdateTriggerInput) -> types.Trigge
     if input.max_runs is not strawberry.UNSET and trigger.max_runs != input.max_runs:
         trigger.max_runs = input.max_runs
         changed.append("max_runs")
-    if input.debounce_seconds is not strawberry.UNSET and trigger.debounce_seconds != input.debounce_seconds:
+    if (
+        input.debounce_seconds is not strawberry.UNSET
+        and trigger.debounce_seconds != input.debounce_seconds
+    ):
         trigger.debounce_seconds = input.debounce_seconds
         changed.append("debounce_seconds")
     if input.policy is not None and trigger.policy != input.policy.value:
         trigger.policy = input.policy.value
         changed.append("policy")
-    rules.check_policies(max_runs=trigger.max_runs, debounce_seconds=trigger.debounce_seconds)
+    rules.check_policies(
+        max_runs=trigger.max_runs, debounce_seconds=trigger.debounce_seconds
+    )
 
     # What it runs and what it listens for is checked only when that changed, and then as a
     # whole (a new action with the old port, new conditions against a new kind). A trigger that
     # broke since it was written — its action re-registered, its signal no longer declared —
     # can still be renamed, limited or switched off.
-    if input.conditions is not None or set(changed) & {"kind", "identifier", "action", "agent", "interface", "port", "args"}:
+    if input.conditions is not None or set(changed) & {
+        "kind",
+        "identifier",
+        "action",
+        "agent",
+        "interface",
+        "port",
+        "args",
+    }:
         conditions, compiled = triggers.validate(
             action=trigger.action,
             agent=trigger.agent,
@@ -111,7 +144,9 @@ def update_trigger(info: Info, input: inputs.UpdateTriggerInput) -> types.Trigge
             identifier=trigger.identifier,
             port=trigger.port,
             args=trigger.args,
-            conditions=json_value(input.conditions if input.conditions is not None else trigger.conditions),
+            conditions=json_value(
+                input.conditions if input.conditions is not None else trigger.conditions
+            ),
         )
         if (conditions, compiled) != (trigger.conditions, trigger.compiled_jsonpath):
             trigger.conditions, trigger.compiled_jsonpath = conditions, compiled
@@ -130,6 +165,10 @@ def delete_trigger(info: Info, input: inputs.TriggerIdInput) -> strawberry.ID:
 
 def fire_trigger(info: Info, input: inputs.FireTriggerInput) -> types.Firing:
     """Fire a trigger on a stored signal by hand: a replay, logged as a firing of its own."""
-    trigger = scoped_get(models.Trigger, info, input.trigger, field="caller__organization")
+    trigger = scoped_get(
+        models.Trigger, info, input.trigger, field="caller__organization"
+    )
     signal = scoped_get(models.Signal, info, input.signal, field="organization")
-    return cast("types.Firing", triggers.fire(trigger, signal, CallerContext.from_info(info)))
+    return cast(
+        "types.Firing", triggers.fire(trigger, signal, CallerContext.from_info(info))
+    )

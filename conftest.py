@@ -40,7 +40,10 @@ def _reserve_free_ports(count: int) -> list[int]:
 
 # An explicit port from the environment always wins, so a developer can still
 # point the suite at a stack they brought up themselves.
-if any(name not in os.environ for name in (_DB_PORT_VAR, _REDIS_PORT_VAR, _TAKT_PORT_VAR, _JAEGER_PORT_VAR)):
+if any(
+    name not in os.environ
+    for name in (_DB_PORT_VAR, _REDIS_PORT_VAR, _TAKT_PORT_VAR, _JAEGER_PORT_VAR)
+):
     _db_port, _redis_port, _takt_port, _jaeger_port = _reserve_free_ports(4)
     os.environ.setdefault(_DB_PORT_VAR, str(_db_port))
     os.environ.setdefault(_REDIS_PORT_VAR, str(_redis_port))

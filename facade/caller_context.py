@@ -27,7 +27,9 @@ class CallerContext:
 
     def caller(self) -> models.Caller:
         """The Caller row of this identity: the requester recorded on work it originates."""
-        return models.Caller.objects.get_or_create(user=self.user, client=self.client, organization=self.organization)[0]
+        return models.Caller.objects.get_or_create(
+            user=self.user, client=self.client, organization=self.organization
+        )[0]
 
     @classmethod
     def from_info(cls, info: Info) -> CallerContext:
@@ -39,7 +41,9 @@ class CallerContext:
         request = info.context.request
         user = request.user
         if not isinstance(user, User):
-            raise TypeError(f"The request's user is a {type(user).__name__}, not an authentikate user")
+            raise TypeError(
+                f"The request's user is a {type(user).__name__}, not an authentikate user"
+            )
         # A request says "not set" by raising: a token may carry no client or organization.
         try:
             client = request.client
@@ -56,6 +60,10 @@ class CallerContext:
         return cls(
             user=user,
             client=client if isinstance(client, Client) else None,
-            organization=organization if isinstance(organization, Organization) else None,
-            roles=[str(role) for role in membership.roles or []] if isinstance(membership, Membership) else [],
+            organization=organization
+            if isinstance(organization, Organization)
+            else None,
+            roles=[str(role) for role in membership.roles or []]
+            if isinstance(membership, Membership)
+            else [],
         )

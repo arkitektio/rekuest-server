@@ -115,9 +115,13 @@ yields the GraphQL type. Sketch of the tasks subscription:
 
 ```python
 async def mytasks(self, info: Info) -> AsyncGenerator[TaskChangeEvent, None]:
-    caller, _ = await models.Caller.objects.aget_or_create(...)   # same identity as backend
-    async for message in task_event_channel.listen(info.context, [f"root_tasks_caller_{caller.id}"]):
-        yield _build_change(message)   # the payload carries the fields; no re-SELECT
+    caller, _ = await models.Caller.objects.aget_or_create(
+        ...
+    )  # same identity as backend
+    async for message in task_event_channel.listen(
+        info.context, [f"root_tasks_caller_{caller.id}"]
+    ):
+        yield _build_change(message)  # the payload carries the fields; no re-SELECT
 ```
 
 The major streams: `mytasks` (caller-keyed roots), `tasks` (org-keyed roots), `childTasks`

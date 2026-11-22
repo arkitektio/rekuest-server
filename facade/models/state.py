@@ -25,12 +25,19 @@ class StateDefinition(models.Model):
         help_text="The organization this StateDefinition belongs to. Access is scoped to it.",
     )
     name = models.CharField(max_length=2000)
-    hash = models.CharField(max_length=2000, help_text="sha256 over the ports; unique per organization")
+    hash = models.CharField(
+        max_length=2000, help_text="sha256 over the ports; unique per organization"
+    )
     ports = models.JSONField(default=dict, db_default={})
     description = models.CharField(max_length=2000)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["organization", "hash"], name="unique_state_definition_hash_per_organization")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "hash"],
+                name="unique_state_definition_hash_per_organization",
+            )
+        ]
 
 
 class State(models.Model):
@@ -45,7 +52,9 @@ class State(models.Model):
     # reverse relation's manager) without saying so in a way it can read.
     agent_id: int
 
-    definition = models.ForeignKey(StateDefinition, on_delete=models.CASCADE, related_name="states")
+    definition = models.ForeignKey(
+        StateDefinition, on_delete=models.CASCADE, related_name="states"
+    )
     interface = models.CharField(
         max_length=1000,
         help_text="The interface this state is for (e.g. Function)",
@@ -63,8 +72,14 @@ class State(models.Model):
         help_text="The identifier of the app providing this state (defaults to the owning agent's app identifier at registration)",
     )
     agent = models.ForeignKey("Agent", on_delete=models.CASCADE, related_name="states")
-    created_at = models.DateTimeField(auto_now_add=True, help_text="Date this State was first ever written to", db_default=Now())
-    updated_at = models.DateTimeField(auto_now=True, help_text="Date this State was last updated", db_default=Now())
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Date this State was first ever written to",
+        db_default=Now(),
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True, help_text="Date this State was last updated", db_default=Now()
+    )
 
     class Meta:
         constraints = [
@@ -78,10 +93,22 @@ class State(models.Model):
 class Session(models.Model):
     """A Session is a representation of a user session. Sessions are used to represent the current session of a user and can be used to track the changes that happen to a state over time. They are stored as a log of changes to a state and can be used to reconstruct the state at any point in time."""
 
-    agent = models.ForeignKey("Agent", on_delete=models.CASCADE, related_name="sessions")
-    session_id = models.CharField(max_length=1000, help_text="The unique identifier for this session")
-    created_at = models.DateTimeField(auto_now_add=True, help_text="The time this session was created", db_default=Now())
-    updated_at = models.DateTimeField(auto_now=True, help_text="The time this session was last updated", db_default=Now())
+    agent = models.ForeignKey(
+        "Agent", on_delete=models.CASCADE, related_name="sessions"
+    )
+    session_id = models.CharField(
+        max_length=1000, help_text="The unique identifier for this session"
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="The time this session was created",
+        db_default=Now(),
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text="The time this session was last updated",
+        db_default=Now(),
+    )
     projected_pos = models.PositiveBigIntegerField(
         default=0,
         help_text="Every numbered frame of this session up to this position is handled: a resend at or below it is skipped, and JOURNAL_ACK claims it (docs/design/journal.md).",
@@ -94,7 +121,9 @@ class Session(models.Model):
             # holds the socket. Two rows for one logical session split its patch/snapshot log, and
             # state reconstruction then silently returns half a history (``logic.py`` picks the
             # newest row). The constraint makes ``get_or_create`` retry into the winner instead.
-            models.UniqueConstraint(fields=["agent", "session_id"], name="session_unique_id_per_agent"),
+            models.UniqueConstraint(
+                fields=["agent", "session_id"], name="session_unique_id_per_agent"
+            ),
         ]
 
 
@@ -107,7 +136,14 @@ class Patch(models.Model):
     @staticmethod
     def document(ops: "Sequence[Mapping[str, object]]") -> list[dict[str, object]]:
         """``ops`` as an RFC 6902 patch document: a ``remove`` carries no value."""
-        return [{key: value for key, value in op.items() if key != "value" or op.get("op") != "remove"} for op in ops]
+        return [
+            {
+                key: value
+                for key, value in op.items()
+                if key != "value" or op.get("op") != "remove"
+            }
+            for op in ops
+        ]
 
     # Declared for the type checker: Django adds these (a foreign key's id column, a
     # reverse relation's manager) without saying so in a way it can read.
@@ -117,25 +153,72 @@ class Patch(models.Model):
     task_id: int | None
 
     state = models.ForeignKey(State, on_delete=models.CASCADE, related_name="patches")
-    agent = models.ForeignKey("Agent", on_delete=models.CASCADE, related_name="patches_created", null=True, blank=True)
-    interface = models.CharField(max_length=1000, help_text="The interface of the state in the agent")
-    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name="patches", null=True, blank=True)
-    ops = models.JSONField(help_text="The update's operations, as RFC 6902 objects (op, path, value), applied in order and together.")
-    timestamp = models.DateTimeField(auto_now_add=True, help_text="The time this patch was created", db_default=Now())
-    global_rev = models.IntegerField(help_text="The current revision of the state in the global context (e.g. considering all patches that have been applied to this state)")
-    task = models.ForeignKey("Task", on_delete=models.CASCADE, null=True, blank=True, help_text="The task that caused this patch (e.g. to be able to track changes by task)", related_name="patches")
-    agent_pos = models.PositiveBigIntegerField(null=True, blank=True, help_text="The session position (pos) of the frame that carried this patch. NULL for agents without numbering.")
-    agent_ts = models.DateTimeField(null=True, blank=True, help_text="When the agent recorded the patch (the frame's agent_ts). NULL for agents without numbering.")
-    step = models.PositiveBigIntegerField(null=True, blank=True, help_text="The changing task's step (the frame's task_step). NULL for agents without numbering and patches outside a task.")
-    lifecycle = models.CharField(max_length=1000, null=True, blank=True, help_text="Where in a task's or the agent's life the change was made, when not in its ordinary course: 'cleanup' (a task being stopped, on its way out) or 'shutdown' (the agent's shutdown hooks). Said by the agent's runtime; NULL for an ordinary change.")
-    qualifiers = models.JSONField(null=True, blank=True, help_text="What the app says the change was for: a list of its own names. NULL when it said nothing.")
+    agent = models.ForeignKey(
+        "Agent",
+        on_delete=models.CASCADE,
+        related_name="patches_created",
+        null=True,
+        blank=True,
+    )
+    interface = models.CharField(
+        max_length=1000, help_text="The interface of the state in the agent"
+    )
+    session = models.ForeignKey(
+        Session, on_delete=models.CASCADE, related_name="patches", null=True, blank=True
+    )
+    ops = models.JSONField(
+        help_text="The update's operations, as RFC 6902 objects (op, path, value), applied in order and together."
+    )
+    timestamp = models.DateTimeField(
+        auto_now_add=True, help_text="The time this patch was created", db_default=Now()
+    )
+    global_rev = models.IntegerField(
+        help_text="The current revision of the state in the global context (e.g. considering all patches that have been applied to this state)"
+    )
+    task = models.ForeignKey(
+        "Task",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text="The task that caused this patch (e.g. to be able to track changes by task)",
+        related_name="patches",
+    )
+    agent_pos = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        help_text="The session position (pos) of the frame that carried this patch. NULL for agents without numbering.",
+    )
+    agent_ts = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the agent recorded the patch (the frame's agent_ts). NULL for agents without numbering.",
+    )
+    step = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        help_text="The changing task's step (the frame's task_step). NULL for agents without numbering and patches outside a task.",
+    )
+    lifecycle = models.CharField(
+        max_length=1000,
+        null=True,
+        blank=True,
+        help_text="Where in a task's or the agent's life the change was made, when not in its ordinary course: 'cleanup' (a task being stopped, on its way out) or 'shutdown' (the agent's shutdown hooks). Said by the agent's runtime; NULL for an ordinary change.",
+    )
+    qualifiers = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="What the app says the change was for: a list of its own names. NULL when it said nothing.",
+    )
 
     class Meta:
         constraints = [
             # One update per revision of a state in a session: ``global_rev`` is bumped once per
             # update by the agent, so a second row is a resend. Without it a resent update was
             # applied twice on reconstruction. NULL sessions stay distinct in Postgres.
-            models.UniqueConstraint(fields=["session", "global_rev", "state"], name="patch_unique_rev_per_session_state"),
+            models.UniqueConstraint(
+                fields=["session", "global_rev", "state"],
+                name="patch_unique_rev_per_session_state",
+            ),
         ]
 
 
@@ -146,8 +229,28 @@ class Snapshot(models.Model):
     state_id: int
     agent_id: int | None
     state = models.ForeignKey(State, on_delete=models.CASCADE, related_name="snapshots")
-    agent = models.ForeignKey("Agent", on_delete=models.CASCADE, related_name="snapshots_created", null=True, blank=True)
-    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name="snapshots", null=True, blank=True)
-    value = models.JSONField(help_text="The value of this snapshot (e.g. the value of the state at the time of the snapshot)")
-    timestamp = models.DateTimeField(auto_now_add=True, help_text="The time this snapshot was created", db_default=Now())
-    global_rev = models.IntegerField(help_text="The revision of the state in the global context at the time of the snapshot (e.g. considering all patches that have been applied to this state)")
+    agent = models.ForeignKey(
+        "Agent",
+        on_delete=models.CASCADE,
+        related_name="snapshots_created",
+        null=True,
+        blank=True,
+    )
+    session = models.ForeignKey(
+        Session,
+        on_delete=models.CASCADE,
+        related_name="snapshots",
+        null=True,
+        blank=True,
+    )
+    value = models.JSONField(
+        help_text="The value of this snapshot (e.g. the value of the state at the time of the snapshot)"
+    )
+    timestamp = models.DateTimeField(
+        auto_now_add=True,
+        help_text="The time this snapshot was created",
+        db_default=Now(),
+    )
+    global_rev = models.IntegerField(
+        help_text="The revision of the state in the global context at the time of the snapshot (e.g. considering all patches that have been applied to this state)"
+    )

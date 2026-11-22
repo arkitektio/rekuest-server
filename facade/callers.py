@@ -22,7 +22,11 @@ def caller_agent_ids(task_id: object, organization_id: int) -> list[int]:
     Empty for a task of another organization (or none). The task's own agent is never one of
     them: an agent does not call itself back.
     """
-    task = models.Task.objects.filter(id=task_id, agent__organization_id=organization_id).only("id", "agent_id", "parent_id", "root_id").first()
+    task = (
+        models.Task.objects.filter(id=task_id, agent__organization_id=organization_id)
+        .only("id", "agent_id", "parent_id", "root_id")
+        .first()
+    )
     if task is None:
         return []
 
@@ -36,7 +40,9 @@ def caller_agent_ids(task_id: object, organization_id: int) -> list[int]:
         parent_id = parent.parent_id
 
     # The run's caller: its root's, or the task's own when it is the root.
-    root_caller = models.Caller.objects.filter(tasks__id=task.root_id or task.id).first()
+    root_caller = models.Caller.objects.filter(
+        tasks__id=task.root_id or task.id
+    ).first()
     if root_caller is not None:
         found.extend(
             models.Agent.objects.filter(
@@ -49,9 +55,21 @@ def caller_agent_ids(task_id: object, organization_id: int) -> list[int]:
     return [agent_id for agent_id in dict.fromkeys(found) if agent_id != task.agent_id]
 
 
-def nearest_first[M: Model](queryset: QuerySet[M], ids: list[int], field: str) -> QuerySet[M]:
+def nearest_first[M: Model](
+    queryset: QuerySet[M], ids: list[int], field: str
+) -> QuerySet[M]:
     """``queryset`` narrowed to ``ids`` (agent ids in ``field``) and ordered as they are listed."""
     if not ids:
         return queryset.none()
-    rank = Case(*(When(**{field: agent_id}, then=Value(index)) for index, agent_id in enumerate(ids)), output_field=IntegerField())
-    return queryset.filter(**{f"{field}__in": ids}).annotate(caller_rank=rank).order_by("caller_rank")
+    rank = Case(
+        *(
+            When(**{field: agent_id}, then=Value(index))
+            for index, agent_id in enumerate(ids)
+        ),
+        output_field=IntegerField(),
+    )
+    return (
+        queryset.filter(**{f"{field}__in": ids})
+        .annotate(caller_rank=rank)
+        .order_by("caller_rank")
+    )

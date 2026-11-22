@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import datetime
-from typing import Optional
 
 import strawberry
 import strawberry_django
@@ -22,7 +21,11 @@ from facade.filters import capabilities
 from rekuest_core import enums as renums
 
 
-def assignable_first(queryset: QuerySet[models.Action] | QuerySet[models.Shortcut], value: strawberry_django.Ordering, field: str) -> list[OrderBy | str]:
+def assignable_first(
+    queryset: QuerySet[models.Action] | QuerySet[models.Shortcut],
+    value: strawberry_django.Ordering,
+    field: str,
+) -> list[OrderBy | str]:
     """``field`` first, then the order the queryset already has — a search's ranking, which
     strawberry_django would otherwise replace — then ``pk``, so an offset window is stable."""
     existing = list(queryset.query.order_by) or list(queryset.model._meta.ordering)
@@ -30,7 +33,12 @@ def assignable_first(queryset: QuerySet[models.Action] | QuerySet[models.Shortcu
     return [value.resolve(field), *tie_break]
 
 
-def _filter_by_port_demands(info: Info, queryset: QuerySet[models.Action], value: list[inputs.PortDemandInput], prefix: str) -> tuple[QuerySet[models.Action], Q]:
+def _filter_by_port_demands(
+    info: Info,
+    queryset: QuerySet[models.Action],
+    value: list[inputs.PortDemandInput],
+    prefix: str,
+) -> tuple[QuerySet[models.Action], Q]:
     """Shared body of ``demands`` and ``object_demands`` — one port-demand resolution path.
 
     The two filter fields are the same computation; whether a demand is "structural" or
@@ -43,11 +51,19 @@ def _filter_by_port_demands(info: Info, queryset: QuerySet[models.Action], value
     # RawSQL subquery: the matching statement runs nested inside this query — one round
     # trip, no id materialization in Python. Returned as the Q, not applied, so ``OR`` and
     # ``NOT`` compose with it (strawberry_django applies a field's own ``.filter()`` always).
-    subquery = managers.get_port_demand_subquery([managers.PortDemand.of(demand) for demand in value], organization_id=info.context.request.organization.id)
+    subquery = managers.get_port_demand_subquery(
+        [managers.PortDemand.of(demand) for demand in value],
+        organization_id=info.context.request.organization.id,
+    )
     return queryset, Q(**{f"{prefix}id__in": subquery})
 
 
-def any_port_demands(info: Info, value: list[list[inputs.PortDemandInput]], owner: managers.DemandOwner, column: str) -> Q:
+def any_port_demands(
+    info: Info,
+    value: list[list[inputs.PortDemandInput]],
+    owner: managers.DemandOwner,
+    column: str,
+) -> Q:
     """Shared body of every ``any_demands`` field: ``column`` in the ``owner`` rows meeting at least one set.
 
     An empty list is ignored, like an empty ``demands``.
@@ -55,7 +71,13 @@ def any_port_demands(info: Info, value: list[list[inputs.PortDemandInput]], owne
     if len(value) == 0:
         return Q()
     sets = [[managers.PortDemand.of(demand) for demand in demands] for demands in value]
-    return Q(**{f"{column}__in": managers.get_any_port_demand_subquery(sets, organization_id=info.context.request.organization.id, owner=owner)})
+    return Q(
+        **{
+            f"{column}__in": managers.get_any_port_demand_subquery(
+                sets, organization_id=info.context.request.organization.id, owner=owner
+            )
+        }
+    )
 
 
 @strawberry_django.order_type(models.Action)
@@ -63,42 +85,98 @@ class ActionOrder:
     defined_at: auto
     kind: auto
 
-    @strawberry_django.order_field(description="By the identifier of the app the action belongs to, so one app's actions stay together across pages.")
-    def app_identifier(self, info: Info, queryset: QuerySet[models.Action], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Action], list[OrderBy]]:
+    @strawberry_django.order_field(
+        description="By the identifier of the app the action belongs to, so one app's actions stay together across pages."
+    )
+    def app_identifier(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: strawberry_django.Ordering,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], list[OrderBy]]:
         if not value:
             return queryset, []
         return queryset, [value.resolve(f"{prefix}app__identifier")]
 
-    @strawberry_django.order_field(description="By the name of the action's first collection (alphabetically): the collection a grouped list files it under. Actions in no collection come last.")
-    def collection(self, info: Info, queryset: QuerySet[models.Action], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Action], list[OrderBy]]:
+    @strawberry_django.order_field(
+        description="By the name of the action's first collection (alphabetically): the collection a grouped list files it under. Actions in no collection come last."
+    )
+    def collection(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: strawberry_django.Ordering,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], list[OrderBy]]:
         if not value:
             return queryset, []
-        queryset = queryset.annotate(first_collection_name=Min(f"{prefix}collections__name"))
+        queryset = queryset.annotate(
+            first_collection_name=Min(f"{prefix}collections__name")
+        )
         name = F("first_collection_name")
-        return queryset, [name.desc(nulls_last=True) if "DESC" in value.name else name.asc(nulls_last=True)]
+        return queryset, [
+            name.desc(nulls_last=True)
+            if "DESC" in value.name
+            else name.asc(nulls_last=True)
+        ]
 
-    @strawberry_django.order_field(description="By `Action.availability`: runnable now first (ASC), then recently active, offline, and without an implementation; DESC reverses it. Keeps each availability group together across pages.")
-    def availability(self, info: Info, queryset: QuerySet[models.Action], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Action], list[OrderBy]]:
+    @strawberry_django.order_field(
+        description="By `Action.availability`: runnable now first (ASC), then recently active, offline, and without an implementation; DESC reverses it. Keeps each availability group together across pages."
+    )
+    def availability(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: strawberry_django.Ordering,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], list[OrderBy]]:
         if not value:
             return queryset, []
         queryset = queryset.annotate(availability_rank=availability.rank(prefix))
         return queryset, [value.resolve("availability_rank")]
 
     @strawberry_django.order_field
-    def used_at(self, info: Info, queryset: QuerySet[models.Action], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Action], list[OrderBy]]:
+    def used_at(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: strawberry_django.Ordering,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], list[OrderBy]]:
         if not value:
             return queryset, []
         queryset = queryset.annotate(latest_task_time=Max(f"{prefix}task__created_at"))
         return queryset, [value.resolve("latest_task_time")]
 
-    @strawberry_django.order_field(description="Runnable first, then by the estimate for the object named in the `estimatedRuntime` filter, with no estimate last. Does nothing without that filter.")
-    def estimated_runtime(self, info: Info, queryset: QuerySet[models.Action], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Action], list[OrderBy]]:
+    @strawberry_django.order_field(
+        description="Runnable first, then by the estimate for the object named in the `estimatedRuntime` filter, with no estimate last. Does nothing without that filter."
+    )
+    def estimated_runtime(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: strawberry_django.Ordering,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], list[OrderBy]]:
         if not value or "estimated_seconds" not in queryset.query.annotations:
             return queryset, []
-        return queryset, [F(f"{prefix}assignable").desc(), value.resolve("estimated_seconds"), f"{prefix}pk"]
+        return queryset, [
+            F(f"{prefix}assignable").desc(),
+            value.resolve("estimated_seconds"),
+            f"{prefix}pk",
+        ]
 
-    @strawberry_django.order_field(description="Runnable first (DESC) or last (ASC) by `Action.assignable`. The order the filters set (a `search`'s ranking) is kept as the tie-break, so `search` with this ordering lists runnable matches first, each group still ranked by relevance.")
-    def assignable(self, info: Info, queryset: QuerySet[models.Action], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Action], list[OrderBy | str]]:
+    @strawberry_django.order_field(
+        description="Runnable first (DESC) or last (ASC) by `Action.assignable`. The order the filters set (a `search`'s ranking) is kept as the tie-break, so `search` with this ordering lists runnable matches first, each group still ranked by relevance."
+    )
+    def assignable(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: strawberry_django.Ordering,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], list[OrderBy | str]]:
         if not value:
             return queryset, []
         return queryset, assignable_first(queryset, value, f"{prefix}assignable")
@@ -106,38 +184,84 @@ class ActionOrder:
 
 @strawberry_django.filter_type(models.Action)
 class ActionFilter:
-    name: Optional[FilterLookup[str]]
+    name: FilterLookup[str] | None
 
     @filter_field(
         description="Search by name: a case-insensitive substring, or semantic similarity of the query to the action's name and description. Ranked: an exact match, then a prefix, then other textual matches by trigram similarity, then by meaning; an explicit `ordering` replaces that ranking."
     )
-    def search(self, info: Info, queryset: QuerySet[models.Action], value: str, prefix: str) -> tuple[QuerySet[models.Action], Q]:
-        return hybrid_search(queryset, prefix, value, Q(**{f"{prefix}name__icontains": value}), "name")
+    def search(
+        self, info: Info, queryset: QuerySet[models.Action], value: str, prefix: str
+    ) -> tuple[QuerySet[models.Action], Q]:
+        return hybrid_search(
+            queryset, prefix, value, Q(**{f"{prefix}name__icontains": value}), "name"
+        )
 
     @filter_field
-    def ids(self, info: Info, queryset: QuerySet[models.Action], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def ids(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: list[strawberry.ID],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset.filter(**{f"{prefix}id__in": value}), Q()
 
     @filter_field
-    def demands(self, info: Info, queryset: QuerySet[models.Action], value: list[inputs.PortDemandInput], prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def demands(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: list[inputs.PortDemandInput],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], Q]:
         return _filter_by_port_demands(info, queryset, value, prefix)
 
-    @filter_field(description="Any of these demand sets: the rows that satisfy every demand of at least one set (each set as `demands`). One statement, so prefer it to `OR`-ing `demands`, which tests every row of the organization. An empty list is ignored; an empty set is an error.")
-    def any_demands(self, info: Info, queryset: QuerySet[models.Action], value: list[list[inputs.PortDemandInput]], prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    @filter_field(
+        description="Any of these demand sets: the rows that satisfy every demand of at least one set (each set as `demands`). One statement, so prefer it to `OR`-ing `demands`, which tests every row of the organization. An empty list is ignored; an empty set is an error."
+    )
+    def any_demands(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: list[list[inputs.PortDemandInput]],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset, any_port_demands(info, value, "action", f"{prefix}id")
 
-    @filter_field(description="The estimate for one object, for `ActionOrder.estimatedRuntime` and `Action.estimatedRuntimeSeconds`. With `lte`, leaves out actions known to take longer: one with no estimate for this object stays.")
-    def estimated_runtime(self, info: Info, queryset: QuerySet[models.Action], value: inputs.EstimatedRuntimeFilterInput, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    @filter_field(
+        description="The estimate for one object, for `ActionOrder.estimatedRuntime` and `Action.estimatedRuntimeSeconds`. With `lte`, leaves out actions known to take longer: one with no estimate for this object stays."
+    )
+    def estimated_runtime(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: inputs.EstimatedRuntimeFilterInput,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], Q]:
         if prefix:
-            raise ValueError("estimatedRuntime filters actions themselves, not a relation to them.")
-        descriptors = {descriptor.key: descriptor.value for descriptor in value.descriptors}
-        queryset = queryset.annotate(estimated_seconds=managers.estimated_seconds(value.identifier, descriptors))
+            raise ValueError(
+                "estimatedRuntime filters actions themselves, not a relation to them."
+            )
+        descriptors = {
+            descriptor.key: descriptor.value for descriptor in value.descriptors
+        }
+        queryset = queryset.annotate(
+            estimated_seconds=managers.estimated_seconds(value.identifier, descriptors)
+        )
         if value.lte is None:
             return queryset, Q()
-        return queryset, Q(estimated_seconds__isnull=True) | Q(estimated_seconds__lte=value.lte)
+        return queryset, Q(estimated_seconds__isnull=True) | Q(
+            estimated_seconds__lte=value.lte
+        )
 
     @filter_field
-    def object_demands(self, info: Info, queryset: QuerySet[models.Action], value: list[inputs.PortDemandInput], prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def object_demands(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: list[inputs.PortDemandInput],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], Q]:
         """Filter to actions whose ports accept the given concrete runtime objects.
 
         Same input shape as ``demands``; kept as a separate entry point for the "what accepts
@@ -149,63 +273,119 @@ class ActionFilter:
         return _filter_by_port_demands(info, queryset, value, prefix)
 
     @filter_field
-    def protocols(self, info: Info, queryset: QuerySet[models.Action], value: list[str], prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def protocols(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: list[str],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset.filter(**{f"{prefix}protocols__name__in": value}), Q()
 
     @filter_field
-    def kind(self, info: Info, queryset: QuerySet[models.Action], value: renums.ActionKind, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def kind(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: renums.ActionKind,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset.filter(**{f"{prefix}kind": value}), Q()
 
     @filter_field
-    def in_collection(self, info: Info, queryset: QuerySet[models.Action], value: str, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def in_collection(
+        self, info: Info, queryset: QuerySet[models.Action], value: str, prefix: str
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset.filter(**{f"{prefix}collections__name": value}), Q()
 
     @filter_field
-    def used_before(self, info: Info, queryset: QuerySet[models.Action], value: datetime.datetime, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def used_before(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: datetime.datetime,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset.filter(**{f"{prefix}tasks__created_at__lt": value}), Q()
 
     @filter_field
-    def used_after(self, info: Info, queryset: QuerySet[models.Action], value: datetime.datetime, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def used_after(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: datetime.datetime,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset.filter(**{f"{prefix}tasks__created_at__gt": value}), Q()
 
-    @filter_field(description="Only actions of these availabilities (`Action.availability`). An empty list is ignored.")
-    def availability(self, info: Info, queryset: QuerySet[models.Action], value: list[enums.ActionAvailability], prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    @filter_field(
+        description="Only actions of these availabilities (`Action.availability`). An empty list is ignored."
+    )
+    def availability(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Action],
+        value: list[enums.ActionAvailability],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Action], Q]:
         if not value:
             return queryset, Q()
-        return queryset.annotate(availability_rank=availability.rank(prefix)), Q(availability_rank__in=availability.ranks(value))
+        return queryset.annotate(availability_rank=availability.rank(prefix)), Q(
+            availability_rank__in=availability.ranks(value)
+        )
 
-    @filter_field(description="Whether an agent that can take the action is connected now (`Action.assignable`).")
-    def assignable(self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    @filter_field(
+        description="Whether an agent that can take the action is connected now (`Action.assignable`)."
+    )
+    def assignable(
+        self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset.filter(**{f"{prefix}assignable": value}), Q()
 
     @filter_field
-    def stateful(self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def stateful(
+        self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset.filter(**{f"{prefix}stateful": value}), Q()
 
     @filter_field(description="Filter using app identifier")
-    def app_identifier(self, info: Info, queryset: QuerySet[models.Action], value: str, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def app_identifier(
+        self, info: Info, queryset: QuerySet[models.Action], value: str, prefix: str
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset.filter(**{f"{prefix}app__identifier": value}), Q()
 
     @filter_field(description=capabilities.DESCRIPTIONS["asks"][1])
-    def asks(self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def asks(
+        self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset, capabilities.action_q("asks", value, prefix)
 
     @filter_field(description=capabilities.DESCRIPTIONS["informs"][1])
-    def informs(self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def informs(
+        self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset, capabilities.action_q("informs", value, prefix)
 
     @filter_field(description=capabilities.DESCRIPTIONS["calls"][1])
-    def calls(self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def calls(
+        self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset, capabilities.action_q("calls", value, prefix)
 
     @filter_field(description=capabilities.DESCRIPTIONS["dynamic_asks"][1])
-    def dynamic_asks(self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def dynamic_asks(
+        self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset, capabilities.action_q("dynamic_asks", value, prefix)
 
     @filter_field(description=capabilities.DESCRIPTIONS["dynamic_informs"][1])
-    def dynamic_informs(self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def dynamic_informs(
+        self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset, capabilities.action_q("dynamic_informs", value, prefix)
 
     @filter_field(description=capabilities.DESCRIPTIONS["dynamic_calls"][1])
-    def dynamic_calls(self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str) -> tuple[QuerySet[models.Action], Q]:
+    def dynamic_calls(
+        self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str
+    ) -> tuple[QuerySet[models.Action], Q]:
         return queryset, capabilities.action_q("dynamic_calls", value, prefix)

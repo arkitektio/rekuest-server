@@ -1,16 +1,17 @@
 import datetime
-from typing import AsyncGenerator, cast
+from collections.abc import AsyncGenerator
+from typing import cast
 
 import strawberry
 from asgiref.sync import sync_to_async
 from kante.types import Info
 
 from facade import logic, models, scalars, types
-from facade.types.state import JSONPatch
 from facade.channels import (
     patch_channel,
     state_update_channel,
 )
+from facade.types.state import JSONPatch
 
 
 async def state_update_events(
@@ -40,7 +41,9 @@ class StateSnapshotEvent:
     timestamp: datetime.datetime | None
 
 
-@strawberry.type(description="One update of a state, with no model cross-references. Its operations are applied in order and together: the state is at `globalRevision` once all of them are.")
+@strawberry.type(
+    description="One update of a state, with no model cross-references. Its operations are applied in order and together: the state is at `globalRevision` once all of them are."
+)
 class StatePatchEvent:
     state_id: strawberry.ID
     agent_id: strawberry.ID
@@ -49,12 +52,17 @@ class StatePatchEvent:
     global_revision: int
     session_id: str | None
     timestamp: datetime.datetime | None
-    task_id: strawberry.ID | None = strawberry.field(default=None, description="The task that made the change, if one did.")
+    task_id: strawberry.ID | None = strawberry.field(
+        default=None, description="The task that made the change, if one did."
+    )
     lifecycle: str | None = strawberry.field(
         default=None,
         description="Where in a task's or the agent's life the change was made, when not in its ordinary course: `cleanup` or `shutdown`.",
     )
-    qualifiers: list[str] = strawberry.field(default_factory=list, description="What the app says the change was for: its own names.")
+    qualifiers: list[str] = strawberry.field(
+        default_factory=list,
+        description="What the app says the change was for: its own names.",
+    )
 
 
 async def watch_state(
@@ -74,7 +82,9 @@ async def watch_state(
             interface=interface,
         )
 
-    returned = await sync_to_async(logic.get_latest_state)(state.agent, state_id=state.pk)
+    returned = await sync_to_async(logic.get_latest_state)(
+        state.agent, state_id=state.pk
+    )
 
     yield StateSnapshotEvent(
         state_id=strawberry.ID(str(state_id)),
@@ -95,13 +105,17 @@ async def watch_state(
         # Payload-carrying: the PatchEvent brings the whole patch — no per-subscriber fetch.
         yield StatePatchEvent(
             state_id=strawberry.ID(str(message.state)),
-            agent_id=strawberry.ID(str(message.agent)) if message.agent else strawberry.ID(""),
+            agent_id=strawberry.ID(str(message.agent))
+            if message.agent
+            else strawberry.ID(""),
             ops=JSONPatch.of(message.ops),
             global_revision=message.global_rev,
             session_id=str(message.session) if message.session is not None else None,
             timestamp=message.timestamp,
             interface=message.interface,
-            task_id=strawberry.ID(str(message.task)) if message.task is not None else None,
+            task_id=strawberry.ID(str(message.task))
+            if message.task is not None
+            else None,
             lifecycle=message.lifecycle,
             qualifiers=list(message.qualifiers),
         )
@@ -151,7 +165,9 @@ async def watch_agent(
             session_id=str(message.session) if message.session is not None else None,
             timestamp=message.timestamp,
             interface=message.interface,
-            task_id=strawberry.ID(str(message.task)) if message.task is not None else None,
+            task_id=strawberry.ID(str(message.task))
+            if message.task is not None
+            else None,
             lifecycle=message.lifecycle,
             qualifiers=list(message.qualifiers),
         )

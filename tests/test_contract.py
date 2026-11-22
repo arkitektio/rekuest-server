@@ -15,17 +15,61 @@ from arkitekt_service.contract import cli
 PEM = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEILK+rl9gVEjfKGiye+mLLjfEUGIdoP0WPC8lMZS3NYK2\n-----END PRIVATE KEY-----\n"
 
 FACTS: dict[str, object] = {
-    "me": {"name": "rekuest", "path": "rekuest", "url": "http://rekuest:80/rekuest", "identifier": "live.arkitekt.rekuest", "secret_key": "s3cret", "admin": {"username": "admin", "password": "pw"}},
-    "hub": {"origins": ["https://lab.example"], "auth": {"audience": "*", "issuers": [{"kind": "jwks_uri", "iss": "lok", "jwks_uri": "http://lok/.well-known/jwks.json"}], "static_tokens": {}}},
-    "databases": {"main": {"host": "db", "name": "rekuest", "username": "hub", "password": "pw"}},
+    "me": {
+        "name": "rekuest",
+        "path": "rekuest",
+        "url": "http://rekuest:80/rekuest",
+        "identifier": "live.arkitekt.rekuest",
+        "secret_key": "s3cret",
+        "admin": {"username": "admin", "password": "pw"},
+    },
+    "hub": {
+        "origins": ["https://lab.example"],
+        "auth": {
+            "audience": "*",
+            "issuers": [
+                {
+                    "kind": "jwks_uri",
+                    "iss": "lok",
+                    "jwks_uri": "http://lok/.well-known/jwks.json",
+                }
+            ],
+            "static_tokens": {},
+        },
+    },
+    "databases": {
+        "main": {"host": "db", "name": "rekuest", "username": "hub", "password": "pw"}
+    },
     "redis": {"host": "redis"},
-    "storage": {"host": "rustfs", "port": 9000, "access_key": "a", "secret_key": "s", "buckets": {"media": "rekuestmedia"}},
-    "instance": {"private_key": PEM, "trust": {"jwks_uri": "http://lok/.well-known/hub-keys/1"}},
+    "storage": {
+        "host": "rustfs",
+        "port": 9000,
+        "access_key": "a",
+        "secret_key": "s",
+        "buckets": {"media": "rekuestmedia"},
+    },
+    "instance": {
+        "private_key": PEM,
+        "trust": {"jwks_uri": "http://lok/.well-known/hub-keys/1"},
+    },
     "peers": {
-        "takt": {"url": "http://rekuest-takt:8080/rekuest", "settings": {"socket": "/run/takt/internal.sock"}},
-        "mikro": {"identifier": "mikro", "url": "http://mikro:80/mikro", "offers": {"rekuest_service": "http://mikro:80/mikro/_rekuest/service", "rekuest_hook": "http://mikro:80/mikro/_rekuest/hook"}},
+        "takt": {
+            "url": "http://rekuest-takt:8080/rekuest",
+            "settings": {"socket": "/run/takt/internal.sock"},
+        },
+        "mikro": {
+            "identifier": "mikro",
+            "url": "http://mikro:80/mikro",
+            "offers": {
+                "rekuest_service": "http://mikro:80/mikro/_rekuest/service",
+                "rekuest_hook": "http://mikro:80/mikro/_rekuest/hook",
+            },
+        },
         "kraph": {"identifier": "kraph", "url": "http://kraph:80/kraph"},
-        "notes": {"url": "http://notes:80/notes", "offers": {"rekuest_hook": "http://notes:80/notes/_rekuest/hook"}},
+        "notes": {
+            "url": "http://notes:80/notes",
+            "offers": {"rekuest_hook": "http://notes:80/notes/_rekuest/hook"},
+        },
     },
 }
 
@@ -36,26 +80,49 @@ def this_image(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ARKITEKT_SERVICE", "rekuest.contract")
 
 
-def rendered(tmp_path: Path, capsys: pytest.CaptureFixture[str], facts: dict[str, object], overrides: dict[str, object] | None = None) -> tuple[int, str, str]:
+def rendered(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    facts: dict[str, object],
+    overrides: dict[str, object] | None = None,
+) -> tuple[int, str, str]:
     """``render`` asked on the command line: its exit code, what it printed, what it said."""
     (tmp_path / "facts.yaml").write_text(yaml.safe_dump(facts), encoding="utf-8")
     if overrides is not None:
-        (tmp_path / "overrides.yaml").write_text(yaml.safe_dump(overrides), encoding="utf-8")
-    code = cli.main(["render", "--facts", str(tmp_path / "facts.yaml"), "--overrides", str(tmp_path / "overrides.yaml")])
+        (tmp_path / "overrides.yaml").write_text(
+            yaml.safe_dump(overrides), encoding="utf-8"
+        )
+    code = cli.main(
+        [
+            "render",
+            "--facts",
+            str(tmp_path / "facts.yaml"),
+            "--overrides",
+            str(tmp_path / "overrides.yaml"),
+        ]
+    )
     said = capsys.readouterr()
     return code, said.out, said.err
 
 
-def test_it_says_what_it_needs_before_it_has_any_config(capsys: pytest.CaptureFixture[str]) -> None:
+def test_it_says_what_it_needs_before_it_has_any_config(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """``describe`` needs no config, and names what a hub has to provide."""
     assert cli.main(["describe"]) == 0
 
     said = json.loads(capsys.readouterr().out)
     assert said["name"] == "rekuest"
-    assert said["needs"]["instance_key"] is True and said["needs"]["storage"] == ["media", "kulisse"] and said["needs"]["peers"] == ["takt"]
+    assert (
+        said["needs"]["instance_key"] is True
+        and said["needs"]["storage"] == ["media", "kulisse"]
+        and said["needs"]["peers"] == ["takt"]
+    )
 
 
-def test_its_config_is_written_from_what_the_hub_says(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_its_config_is_written_from_what_the_hub_says(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """The hub's facts in, this release's config out — one it starts on."""
     code, out, err = rendered(tmp_path, capsys, FACTS)
     assert code == 0, err
@@ -64,37 +131,89 @@ def test_its_config_is_written_from_what_the_hub_says(tmp_path: Path, capsys: py
     block = config["rekuest"]
     # Wired to whoever offers each endpoint — a service, a hook agent, or both — by what the
     # peer offers and not by a list of names anybody keeps.
-    assert block["services"] == [{"name": "mikro", "url": "http://mikro:80/mikro/_rekuest/service", "identifier": "mikro"}]
+    assert block["services"] == [
+        {
+            "name": "mikro",
+            "url": "http://mikro:80/mikro/_rekuest/service",
+            "identifier": "mikro",
+        }
+    ]
     assert block["hook_agents"] == [
-        {"name": "mikro", "hook_url": "http://mikro:80/mikro/_rekuest/hook", "identifier": "mikro"},
+        {
+            "name": "mikro",
+            "hook_url": "http://mikro:80/mikro/_rekuest/hook",
+            "identifier": "mikro",
+        },
         {"name": "notes", "hook_url": "http://notes:80/notes/_rekuest/hook"},
     ]
-    assert block["takt_url"] == "http://rekuest-takt:8080/rekuest" and block["takt_socket"] == "/run/takt/internal.sock"
+    assert (
+        block["takt_url"] == "http://rekuest-takt:8080/rekuest"
+        and block["takt_socket"] == "/run/takt/internal.sock"
+    )
     assert block["server_url"] == "http://rekuest:80/rekuest"
     # It signs as its name in the hub — what the hub's trust bundle lists its key under —
     # and not as the kind of service it is, which the hub's facts also say.
     assert block["identifier"] == "rekuest"
     assert config["datalayer"]["media"] == {"bucket": "rekuestmedia"}
-    assert config["django"]["force_script_name"] == "rekuest" and config["django"]["csrf_trusted_origins"] == ["https://lab.example"]
-    assert config["instance"]["trust"] == {"jwks_uri": "http://lok/.well-known/hub-keys/1"}
+    assert config["django"]["force_script_name"] == "rekuest" and config["django"][
+        "csrf_trusted_origins"
+    ] == ["https://lab.example"]
+    assert config["instance"]["trust"] == {
+        "jwks_uri": "http://lok/.well-known/hub-keys/1"
+    }
 
 
-def test_what_a_peer_hosts_goes_into_its_services_entry(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_what_a_peer_hosts_goes_into_its_services_entry(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """A hub that knows what a service hosts (its image said) hands it over: rekuest catalogues it unasked."""
     hosts = {
-        "structures": [{"identifier": "@mikro/file", "label": "File", "description": "A file.", "descriptors": [{"key": "@mikro/content_type", "type": "STRING", "description": "Its media type"}]}],
-        "signals": [{"identifier": "@mikro/file", "kinds": ["CREATED", "DELETED"], "descriptors": ["@mikro/content_type"], "description": "A file was uploaded or deleted."}],
+        "structures": [
+            {
+                "identifier": "@mikro/file",
+                "label": "File",
+                "description": "A file.",
+                "descriptors": [
+                    {
+                        "key": "@mikro/content_type",
+                        "type": "STRING",
+                        "description": "Its media type",
+                    }
+                ],
+            }
+        ],
+        "signals": [
+            {
+                "identifier": "@mikro/file",
+                "kinds": ["CREATED", "DELETED"],
+                "descriptors": ["@mikro/content_type"],
+                "description": "A file was uploaded or deleted.",
+            }
+        ],
     }
-    facts = {**FACTS, "peers": {**FACTS["peers"], "mikro": {**FACTS["peers"]["mikro"], "hosts": hosts}}}  # type: ignore[dict-item]
+    facts = {
+        **FACTS,
+        "peers": {
+            **FACTS["peers"],  # type: ignore[dict-item]
+            "mikro": {**FACTS["peers"]["mikro"], "hosts": hosts},  # type: ignore[index]
+        },
+    }
     code, out, err = rendered(tmp_path, capsys, facts)
     assert code == 0, err
 
     (service,) = yaml.safe_load(out)["rekuest"]["services"]
     # As the hub said it.
-    assert service == {"name": "mikro", "url": "http://mikro:80/mikro/_rekuest/service", "identifier": "mikro", "hosts": hosts}
+    assert service == {
+        "name": "mikro",
+        "url": "http://mikro:80/mikro/_rekuest/service",
+        "identifier": "mikro",
+        "hosts": hosts,
+    }
 
 
-def test_cataloguing_is_a_job_and_part_of_the_setup(capsys: pytest.CaptureFixture[str]) -> None:
+def test_cataloguing_is_a_job_and_part_of_the_setup(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """``run migrate`` writes the catalog, and an installer can ask for it again by name."""
     assert cli.main(["describe"]) == 0
 
@@ -103,19 +222,34 @@ def test_cataloguing_is_a_job_and_part_of_the_setup(capsys: pytest.CaptureFixtur
     assert jobs["migrate"]["includes"] == ["ensureadmin", "catalogue"]
 
 
-def test_what_the_operator_set_is_in_it_and_what_this_release_does_not_read_is_refused(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_what_the_operator_set_is_in_it_and_what_this_release_does_not_read_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """An override is kept; one naming a key of another release stops the render by name."""
-    code, out, _ = rendered(tmp_path, capsys, FACTS, {"rekuest": {"task_retention": 2592000}})
+    code, out, _ = rendered(
+        tmp_path, capsys, FACTS, {"rekuest": {"task_retention": 2592000}}
+    )
     assert code == 0 and yaml.safe_load(out)["rekuest"]["task_retention"] == 2592000
 
-    code, out, err = rendered(tmp_path, capsys, FACTS, {"rekuest": {"service_agents": []}})
+    code, out, err = rendered(
+        tmp_path, capsys, FACTS, {"rekuest": {"service_agents": []}}
+    )
     assert code == cli.REFUSED and out == ""
     assert "rekuest.service_agents" in err
 
 
-def test_a_hub_it_cannot_run_in_is_refused_in_words(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_a_hub_it_cannot_run_in_is_refused_in_words(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """No takt, no rekuest: said, not rendered into a config that starts and does nothing."""
-    without_takt = {**FACTS, "peers": {name: peer for name, peer in FACTS["peers"].items() if name != "takt"}}  # type: ignore[union-attr]
+    without_takt = {
+        **FACTS,
+        "peers": {
+            name: peer
+            for name, peer in FACTS["peers"].items()  # type: ignore[union-attr]
+            if name != "takt"
+        },
+    }
     code, out, err = rendered(tmp_path, capsys, without_takt)
     assert code == cli.REFUSED and out == ""
     assert "takt" in err

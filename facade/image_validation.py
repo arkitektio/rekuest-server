@@ -61,7 +61,11 @@ def image_header(data: bytes) -> tuple[str, int, int] | None:
     if len(data) >= 30 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         kind = data[12:16]
         if kind == b"VP8X":
-            return "webp", 1 + int.from_bytes(data[24:27], "little"), 1 + int.from_bytes(data[27:30], "little")
+            return (
+                "webp",
+                1 + int.from_bytes(data[24:27], "little"),
+                1 + int.from_bytes(data[27:30], "little"),
+            )
         if kind == b"VP8 ":
             width, height = struct.unpack("<HH", data[26:30])
             return "webp", width & 0x3FFF, height & 0x3FFF
@@ -71,18 +75,33 @@ def image_header(data: bytes) -> tuple[str, int, int] | None:
     return None
 
 
-def validate_image(data: bytes, ref: str, policy: ImagePolicy | None = None) -> ImageReport:
+def validate_image(
+    data: bytes, ref: str, policy: ImagePolicy | None = None
+) -> ImageReport:
     """Check ``data`` against ``ref`` and ``policy``; return what it is or raise ``ImageRefused``."""
     policy = policy or ImagePolicy()
     if len(data) > policy.max_size:
-        raise ImageRefused("too_large", f"the image is {len(data)} bytes, over the limit of {policy.max_size}")
+        raise ImageRefused(
+            "too_large",
+            f"the image is {len(data)} bytes, over the limit of {policy.max_size}",
+        )
     actual = "sha256:" + hashlib.sha256(data).hexdigest()
     if actual != ref:
-        raise ImageRefused("hash_mismatch", f"the uploaded bytes hash to {actual}, not {ref}")
+        raise ImageRefused(
+            "hash_mismatch", f"the uploaded bytes hash to {actual}, not {ref}"
+        )
     header = image_header(data)
     if header is None:
-        raise ImageRefused("bad_header", f"an image is a PNG, a JPEG or a WebP file ({', '.join(IMAGE_FORMATS)})")
+        raise ImageRefused(
+            "bad_header",
+            f"an image is a PNG, a JPEG or a WebP file ({', '.join(IMAGE_FORMATS)})",
+        )
     format, width, height = header
     if not (0 < width <= policy.max_side and 0 < height <= policy.max_side):
-        raise ImageRefused("over_budget", f"the image is {width}x{height}, over the limit of {policy.max_side} a side")
-    return ImageReport(ref=ref, size=len(data), format=format, width=width, height=height)
+        raise ImageRefused(
+            "over_budget",
+            f"the image is {width}x{height}, over the limit of {policy.max_side} a side",
+        )
+    return ImageReport(
+        ref=ref, size=len(data), format=format, width=width, height=height
+    )

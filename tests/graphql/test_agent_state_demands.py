@@ -8,9 +8,8 @@ EVERY demand, each possibly via a different State.
 
 import pytest
 from asgiref.sync import sync_to_async
-from kante.context import HttpContext
-
 from authentikate.models import App, Client, Release
+from kante.context import HttpContext
 
 from facade import models
 from facade.schema import schema
@@ -34,7 +33,15 @@ def _seed_agents(context):
         name="Counter",
         hash="agents-sd-counter",
         description="counter",
-        ports=[{"key": "count", "kind": "INT", "identifier": None, "nullable": False, "children": []}],
+        ports=[
+            {
+                "key": "count",
+                "kind": "INT",
+                "identifier": None,
+                "nullable": False,
+                "children": [],
+            }
+        ],
     )
 
     agents = {}
@@ -43,9 +50,19 @@ def _seed_agents(context):
         release = Release.objects.create(app=app, version="1.0.0")
         # Agents are unique per (client, user, organization) — one client per agent.
         client = Client.objects.create(client_id=f"asd-{name}-client")
-        agent = models.Agent.objects.create(name=name, app=app, release=release, user=request.user, client=client, organization=org, hash=f"asd-{name}-hash")
+        agent = models.Agent.objects.create(
+            name=name,
+            app=app,
+            release=release,
+            user=request.user,
+            client=client,
+            organization=org,
+            hash=f"asd-{name}-hash",
+        )
         if with_state:
-            models.State.objects.create(definition=counter_definition, interface="counter", agent=agent)
+            models.State.objects.create(
+                definition=counter_definition, interface="counter", agent=agent
+            )
         agents[name] = agent
     return agents
 

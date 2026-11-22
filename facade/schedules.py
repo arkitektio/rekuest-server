@@ -57,33 +57,64 @@ def _caller(principal: CallerContext | None) -> int | None:
 
 def validate_timing(*, interval_seconds: int | None, cron: str | None, tz: str) -> None:
     """Raise ``ValueError`` unless exactly one of interval/cron is set and both it and ``tz`` parse."""
-    takt.call(takt_api.VALIDATE_TIMING, takt_api.Timing(interval_seconds=interval_seconds, cron=cron, timezone=tz))
+    takt.call(
+        takt_api.VALIDATE_TIMING,
+        takt_api.Timing(interval_seconds=interval_seconds, cron=cron, timezone=tz),
+    )
 
 
-def validate(*, action: models.Action, agent: models.Agent | None, interface: str | None, args: dict[str, JSON], interval_seconds: int | None, cron: str | None, tz: str) -> None:
+def validate(
+    *,
+    action: models.Action,
+    agent: models.Agent | None,
+    interface: str | None,
+    args: dict[str, JSON],
+    interval_seconds: int | None,
+    cron: str | None,
+    tz: str,
+) -> None:
     """Everything a schedule must satisfy to be written. One place, used when a schedule is
     created, changed or imported: its pin is an implementation of the action, its args fit, its
     timing parses."""
     rules.check_pin(action, agent, interface)
-    rules.check_provenance(action, agent, interface, "This action needs a provenance token, which a scheduled run cannot get while provenance is strict")
+    rules.check_provenance(
+        action,
+        agent,
+        interface,
+        "This action needs a provenance token, which a scheduled run cannot get while provenance is strict",
+    )
     if action.args:
         validate_assignment_args([ArgPortModel(**port) for port in action.args], args)
     validate_timing(interval_seconds=interval_seconds, cron=cron, tz=tz)
 
 
-def plan(schedule: models.Schedule, *, replan: bool = False, principal: CallerContext | None = None) -> None:
+def plan(
+    schedule: models.Schedule,
+    *,
+    replan: bool = False,
+    principal: CallerContext | None = None,
+) -> None:
     """Have takt plan the schedule's next run once this commits. ``replan``: its timing, target or
     switch changed, so the waiting run is cancelled first (as ``principal``)."""
     notify(PlanNotice(schedule=schedule.pk, replan=replan, caller=_caller(principal)))
 
 
-def drop_waiting_run(schedule: models.Schedule, principal: CallerContext | None = None) -> None:
+def drop_waiting_run(
+    schedule: models.Schedule, principal: CallerContext | None = None
+) -> None:
     """Before a schedule is deleted, in the same transaction: have takt drop the run that has not
     been handed over yet. The run is named, since the row that leads to it will be gone. An
     executing run is left to finish. The row is locked first: a refill that is planning it right
     now finishes, and no later one starts, so the run named here is the last one."""
     models.Schedule.objects.select_for_update().filter(pk=schedule.pk).first()
-    waiting = models.Task.objects.filter(schedule=schedule, is_done=False, dispatch_attempts=0).order_by("pk").values_list("pk", flat=True).first()
+    waiting = (
+        models.Task.objects.filter(
+            schedule=schedule, is_done=False, dispatch_attempts=0
+        )
+        .order_by("pk")
+        .values_list("pk", flat=True)
+        .first()
+    )
     if waiting is not None:
         notify(DropRunNotice(run=waiting, caller=_caller(principal)))
 
@@ -91,16 +122,35 @@ def drop_waiting_run(schedule: models.Schedule, principal: CallerContext | None 
 def trigger(schedule: models.Schedule) -> models.Task:
     """Run now: the waiting run is moved to now, or a one-off run is created. Refused
     (``ValueError``) while a run executes."""
-    return models.Task.objects.get(pk=takt.call(takt_api.TRIGGER_SCHEDULE, takt_api.ScheduleRequest(schedule=str(schedule.pk))).task)
+    return models.Task.objects.get(
+        pk=takt.call(
+            takt_api.TRIGGER_SCHEDULE,
+            takt_api.ScheduleRequest(schedule=str(schedule.pk)),
+        ).task
+    )
 
 
-def upcoming(asked: list[tuple[models.Schedule, int]]) -> list[list[datetime.datetime] | ValueError]:
+def upcoming(
+    asked: list[tuple[models.Schedule, int]],
+) -> list[list[datetime.datetime] | ValueError]:
     """For each ``(schedule, count)``: the next ``count`` slots of its timing after now, as takt
     reads it, or why takt cannot read it. One request, however many are asked.
 
     What the timing says, not a promise: a disabled or ended schedule runs none of them, and with
     ``SKIP`` overlap a slot that passes while a run is open is skipped.
     """
-    timings = [takt_api.UpcomingTiming(interval_seconds=schedule.interval_seconds, cron=schedule.cron, timezone=schedule.timezone, created_at=schedule.created_at, count=max(1, min(count, 50))) for schedule, count in asked]
+    timings = [
+        takt_api.UpcomingTiming(
+            interval_seconds=schedule.interval_seconds,
+            cron=schedule.cron,
+            timezone=schedule.timezone,
+            created_at=schedule.created_at,
+            count=max(1, min(count, 50)),
+        )
+        for schedule, count in asked
+    ]
     answer = takt.call(takt_api.UPCOMING, takt_api.UpcomingRequest(timings=timings))
-    return [ValueError(slots.error) if slots.error is not None else slots.slots for slots in answer.upcoming]
+    return [
+        ValueError(slots.error) if slots.error is not None else slots.slots
+        for slots in answer.upcoming
+    ]

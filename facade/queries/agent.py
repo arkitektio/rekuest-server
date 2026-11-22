@@ -31,9 +31,15 @@ def agent(
         if agents.count() == 1:
             return cast("types.Agent", agents.get())
         elif agents.count() > 1:
-            raise ValueError("Multiple agents found with the provided app, version and device_id. Please provide the agent id to identify the agent.")
+            raise ValueError(
+                "Multiple agents found with the provided app, version and device_id. Please provide the agent id to identify the agent."
+            )
         else:
-            raise ValueError("No agent found for {app} with version {version} and device_id {device_id}".format(app=app, version=version, device_id=device_id))
+            raise ValueError(
+                f"No agent found for {app} with version {version} and device_id {device_id}"
+            )
 
     else:
-        raise ValueError("You need to provide either the agent id or the app, version and device_id to identify the agent")
+        raise ValueError(
+            "You need to provide either the agent id or the app, version and device_id to identify the agent"
+        )

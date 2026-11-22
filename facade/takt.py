@@ -52,7 +52,11 @@ def post(path: str, body: bytes) -> JSON:
     url = f"{base.rstrip('/')}/internal/{path}"
     try:
         # The trace the request is served in goes with it: takt assigns from inside it.
-        response = _client.post(url, content=body, headers={"Content-Type": "application/json", **telemetry.headers()})
+        response = _client.post(
+            url,
+            content=body,
+            headers={"Content-Type": "application/json", **telemetry.headers()},
+        )
     except httpx.HTTPError as error:
         raise TaktUnavailable(f"takt is unreachable at {url}: {error}") from error
     try:
@@ -67,7 +71,9 @@ def post(path: str, body: bytes) -> JSON:
         raise ValueError(message)
     if response.status_code == 403:
         raise PermissionError(message)
-    raise TaktUnavailable(f"takt refused internal/{path} ({response.status_code}): {message}")
+    raise TaktUnavailable(
+        f"takt refused internal/{path} ({response.status_code}): {message}"
+    )
 
 
 def call[Req: Request, Ans: Answer](route: Route[Req, Ans], request: Req) -> Ans:
@@ -77,56 +83,103 @@ def call[Req: Request, Ans: Answer](route: Route[Req, Ans], request: Req) -> Ans
 
 def assign(context: CallerContext, input: inputs.AssignInputModel) -> models.Task:
     """The task for ``input``."""
-    answer = call(takt_api.ASSIGN, takt_api.AssignRequest(principal=Principal.of(context), input=input))
+    answer = call(
+        takt_api.ASSIGN,
+        takt_api.AssignRequest(principal=Principal.of(context), input=input),
+    )
     return models.Task.objects.get(pk=answer.task)
 
 
-def resolve_dependencies(context: CallerContext, input: inputs.DependencyTreeInputModel) -> takt_api.ResolveAnswer:
+def resolve_dependencies(
+    context: CallerContext, input: inputs.DependencyTreeInputModel
+) -> takt_api.ResolveAnswer:
     """A dry run of an assign's dependency tree: what it would bind, and what is unmet."""
-    return call(takt_api.RESOLVE, takt_api.ResolveRequest(principal=Principal.of(context), input=input))
+    return call(
+        takt_api.RESOLVE,
+        takt_api.ResolveRequest(principal=Principal.of(context), input=input),
+    )
 
 
-def _control(route: Route[takt_api.ControlRequest, takt_api.TaskAnswer], task: str, caller: models.Caller | None, step: bool | None = None) -> models.Task:
+def _control(
+    route: Route[takt_api.ControlRequest, takt_api.TaskAnswer],
+    task: str,
+    caller: models.Caller | None,
+    step: bool | None = None,
+) -> models.Task:
     principal = Principal.of_caller(caller) if caller is not None else None
-    answer = call(route, takt_api.ControlRequest(task=task, principal=principal, step=step))
+    answer = call(
+        route, takt_api.ControlRequest(task=task, principal=principal, step=step)
+    )
     return models.Task.objects.get(pk=answer.task)
 
 
-def cancel(input: inputs.CancelInputModel, caller: models.Caller | None = None) -> models.Task:
+def cancel(
+    input: inputs.CancelInputModel, caller: models.Caller | None = None
+) -> models.Task:
     """Two-phase: CANCELLING now, CANCELLED when the agent confirms."""
     return _control(takt_api.CANCEL, input.task, caller)
 
 
-def interrupt(input: inputs.InterruptInputModel, caller: models.Caller | None = None) -> models.Task:
+def interrupt(
+    input: inputs.InterruptInputModel, caller: models.Caller | None = None
+) -> models.Task:
     """Forceful: reaches every still-running descendant."""
     return _control(takt_api.INTERRUPT, input.task, caller)
 
 
-def pause(input: inputs.PauseInputModel, caller: models.Caller | None = None) -> models.Task:
+def pause(
+    input: inputs.PauseInputModel, caller: models.Caller | None = None
+) -> models.Task:
     """Ask the agent to pause the task."""
     return _control(takt_api.PAUSE, input.task, caller)
 
 
-def resume(input: inputs.ResumeInputModel, caller: models.Caller | None = None) -> models.Task:
+def resume(
+    input: inputs.ResumeInputModel, caller: models.Caller | None = None
+) -> models.Task:
     """Resume a paused task (``step``: to the next breakpoint only)."""
     return _control(takt_api.RESUME, input.task, caller, step=input.step)
 
 
-def inquire(input: inputs.InquireInputModel, caller: models.Caller | None = None) -> takt_api.InquireAnswer:
+def inquire(
+    input: inputs.InquireInputModel, caller: models.Caller | None = None
+) -> takt_api.InquireAnswer:
     """Ask a task's agent whether it is still on it. A read, with one consequence: an agent
     that says it does not know a task it was given has lost it, and the task ends LOST."""
     principal = Principal.of_caller(caller) if caller is not None else None
-    return call(takt_api.INQUIRE, takt_api.InquireRequest(task=input.task, principal=principal))
+    return call(
+        takt_api.INQUIRE, takt_api.InquireRequest(task=input.task, principal=principal)
+    )
 
 
 def decide(context: CallerContext, input: inputs.DecideInputModel) -> models.Task:
     """Answer a held task: a child an agent asked for runs or ends DENIED; a task's own hold carries on."""
-    answer = call(takt_api.DECIDE, takt_api.DecideRequest(principal=Principal.of(context), task=input.task, approved=input.approved, answer=input.answer, values=input.values, remember=input.remember.value if input.remember else None))
+    answer = call(
+        takt_api.DECIDE,
+        takt_api.DecideRequest(
+            principal=Principal.of(context),
+            task=input.task,
+            approved=input.approved,
+            answer=input.answer,
+            values=input.values,
+            remember=input.remember.value if input.remember else None,
+        ),
+    )
     return models.Task.objects.get(pk=answer.task)
 
 
-def _agent_op(route: Route[takt_api.AgentRequest, takt_api.AgentAnswer], context: CallerContext, agent: str, reason: str | None = None) -> models.Agent:
-    answer = call(route, takt_api.AgentRequest(principal=Principal.of(context), agent=agent, reason=reason))
+def _agent_op(
+    route: Route[takt_api.AgentRequest, takt_api.AgentAnswer],
+    context: CallerContext,
+    agent: str,
+    reason: str | None = None,
+) -> models.Agent:
+    answer = call(
+        route,
+        takt_api.AgentRequest(
+            principal=Principal.of(context), agent=agent, reason=reason
+        ),
+    )
     return models.Agent.objects.get(pk=answer.agent)
 
 
@@ -152,16 +205,29 @@ def unblock(context: CallerContext, input: inputs.UnblockInputModel) -> models.A
 
 def collect(context: CallerContext, input: inputs.CollectInputModel) -> list[str]:
     """Drop the given drawers from their agents' shelves."""
-    return call(takt_api.COLLECT, takt_api.CollectRequest(principal=Principal.of(context), drawers=input.drawers)).drawers
+    return call(
+        takt_api.COLLECT,
+        takt_api.CollectRequest(principal=Principal.of(context), drawers=input.drawers),
+    ).drawers
 
 
 def probe(context: CallerContext, input: inputs.ProbeInputModel) -> takt_api.ProbeState:
     """Create and dispatch a probe; its state."""
-    return call(takt_api.PROBE, takt_api.ProbeRequest(principal=Principal.of(context), input=input))
+    return call(
+        takt_api.PROBE,
+        takt_api.ProbeRequest(principal=Principal.of(context), input=input),
+    )
 
 
-def _probe_control(route: Route[takt_api.ProbeControlRequest, takt_api.ProbeState], context: CallerContext, probe: str) -> takt_api.ProbeState:
-    return call(route, takt_api.ProbeControlRequest(principal=Principal.of(context), probe=probe))
+def _probe_control(
+    route: Route[takt_api.ProbeControlRequest, takt_api.ProbeState],
+    context: CallerContext,
+    probe: str,
+) -> takt_api.ProbeState:
+    return call(
+        route,
+        takt_api.ProbeControlRequest(principal=Principal.of(context), probe=probe),
+    )
 
 
 def cancel_probe(context: CallerContext, probe: str) -> takt_api.ProbeState:

@@ -13,7 +13,17 @@ from enum import Enum
 
 import strawberry
 import strawberry_django
-from django.db.models import Avg, Count, DateField, FloatField, Max, Min, Model, QuerySet, Sum
+from django.db.models import (
+    Avg,
+    Count,
+    DateField,
+    FloatField,
+    Max,
+    Min,
+    Model,
+    QuerySet,
+    Sum,
+)
 from django.db.models.functions import Extract, Trunc
 from kante.types import Info
 from strawberry_django.filters import apply as apply_filters
@@ -67,7 +77,12 @@ class Selection[M: Model]:
         found = None
         for part in field.split("__"):
             found = options.pk if part == "pk" else options.get_field(part)
-            if found is not None and found.is_relation and found.related_model is not None and not isinstance(found.related_model, str):
+            if (
+                found is not None
+                and found.is_relation
+                and found.related_model is not None
+                and not isinstance(found.related_model, str)
+            ):
                 options = found.related_model._meta
         return isinstance(found, DateField)
 
@@ -80,7 +95,12 @@ class Selection[M: Model]:
         if self._is_temporal(field):
             epoch = Extract(field, "epoch", output_field=FloatField())
             return {"max": Max(epoch), "min": Min(epoch), "avg": Avg(epoch)}
-        return {"max": Max(field), "min": Min(field), "avg": Avg(field), "sum": Sum(field)}
+        return {
+            "max": Max(field),
+            "min": Min(field),
+            "avg": Avg(field),
+            "sum": Sum(field),
+        }
 
     def count(self) -> int:
         return self.queryset.count()
@@ -89,15 +109,45 @@ class Selection[M: Model]:
         """Every scalar statistic of ``field``, from one query, made once."""
         known = self._summaries.get(field)
         if known is None:
-            row = self.queryset.aggregate(distinctCount=Count(field, distinct=True), **self._aggregates(field))
-            known = Summary(distinct_count=row["distinctCount"], max=row["max"], min=row["min"], avg=row["avg"], sum=row.get("sum"))
+            row = self.queryset.aggregate(
+                distinctCount=Count(field, distinct=True), **self._aggregates(field)
+            )
+            known = Summary(
+                distinct_count=row["distinctCount"],
+                max=row["max"],
+                min=row["min"],
+                avg=row["avg"],
+                sum=row.get("sum"),
+            )
             self._summaries[field] = known
         return known
 
-    def series(self, field: str, timestamp_field: str, by: Granularity) -> list[TimeBucket]:
+    def series(
+        self, field: str, timestamp_field: str, by: Granularity
+    ) -> list[TimeBucket]:
         """The statistics of ``field`` per bucket of ``timestamp_field``, oldest first."""
-        rows = self.queryset.annotate(bucket=Trunc(timestamp_field, by.value)).values("bucket").annotate(count=Count("pk"), distinctCount=Count(field, distinct=True), **self._aggregates(field)).order_by("bucket")
-        return [TimeBucket(ts=row["bucket"], count=row["count"], distinctCount=row["distinctCount"], max=row["max"], min=row["min"], avg=row["avg"], sum=row.get("sum")) for row in rows]
+        rows = (
+            self.queryset.annotate(bucket=Trunc(timestamp_field, by.value))
+            .values("bucket")
+            .annotate(
+                count=Count("pk"),
+                distinctCount=Count(field, distinct=True),
+                **self._aggregates(field),
+            )
+            .order_by("bucket")
+        )
+        return [
+            TimeBucket(
+                ts=row["bucket"],
+                count=row["count"],
+                distinctCount=row["distinctCount"],
+                max=row["max"],
+                min=row["min"],
+                avg=row["avg"],
+                sum=row.get("sum"),
+            )
+            for row in rows
+        ]
 
 
 @strawberry.enum(description="Numeric/aggregatable fields of Action")
@@ -139,13 +189,19 @@ class ActionStats:
         return self._selection.summary(field.value).sum
 
     @strawberry_django.field(description="Time-bucketed stats over a datetime field.")
-    def series(self, field: ActionField, timestamp_field: ActionTimestampField, by: Granularity) -> list[TimeBucket]:
+    def series(
+        self, field: ActionField, timestamp_field: ActionTimestampField, by: Granularity
+    ) -> list[TimeBucket]:
         return self._selection.series(field.value, timestamp_field.value, by)
 
 
-def action_stats(info: Info, filters: filters.ActionFilter | None = None) -> ActionStats:
+def action_stats(
+    info: Info, filters: filters.ActionFilter | None = None
+) -> ActionStats:
     """The statistics of the organization's actions, narrowed by ``filters``."""
-    queryset = build_prescoped_queryset(info, models.Action.objects.all(), field="organization")
+    queryset = build_prescoped_queryset(
+        info, models.Action.objects.all(), field="organization"
+    )
     if filters is not None:
         queryset = apply_filters(filters, queryset, info)
     return ActionStats(_selection=Selection(queryset))
@@ -190,14 +246,18 @@ class TaskStats:
         return self._selection.summary(field.value).sum
 
     @strawberry_django.field(description="Time-bucketed stats over a datetime field.")
-    def series(self, field: TaskField, timestamp_field: TaskTimestampField, by: Granularity) -> list[TimeBucket]:
+    def series(
+        self, field: TaskField, timestamp_field: TaskTimestampField, by: Granularity
+    ) -> list[TimeBucket]:
         return self._selection.series(field.value, timestamp_field.value, by)
 
 
 def task_stats(info: Info, filters: filters.TaskFilter | None = None) -> TaskStats:
     """The statistics of the organization's tasks, narrowed by ``filters``."""
     # Through the non-null ``agent`` relation, as the Task type scopes itself.
-    queryset = build_prescoped_queryset(info, models.Task.objects.all(), field="agent__organization")
+    queryset = build_prescoped_queryset(
+        info, models.Task.objects.all(), field="agent__organization"
+    )
     if filters is not None:
         queryset = apply_filters(filters, queryset, info)
     return TaskStats(_selection=Selection(queryset))
@@ -219,7 +279,9 @@ class AgentTimestampField(Enum):
 class AgentStats:
     _selection: strawberry.Private[Selection[models.Agent]]
 
-    @strawberry_django.field(description="Total number of agents in the selection. Ask once with `filters: {connected: true}` (aliased) for how many are online.")
+    @strawberry_django.field(
+        description="Total number of agents in the selection. Ask once with `filters: {connected: true}` (aliased) for how many are online."
+    )
     def count(self) -> int:
         return self._selection.count()
 
@@ -244,13 +306,17 @@ class AgentStats:
         return self._selection.summary(field.value).sum
 
     @strawberry_django.field(description="Time-bucketed stats over a datetime field.")
-    def series(self, field: AgentField, timestamp_field: AgentTimestampField, by: Granularity) -> list[TimeBucket]:
+    def series(
+        self, field: AgentField, timestamp_field: AgentTimestampField, by: Granularity
+    ) -> list[TimeBucket]:
         return self._selection.series(field.value, timestamp_field.value, by)
 
 
 def agent_stats(info: Info, filters: filters.AgentFilter | None = None) -> AgentStats:
     """The statistics of the organization's agents, narrowed by ``filters``."""
-    queryset = build_prescoped_queryset(info, models.Agent.objects.all(), field="organization")
+    queryset = build_prescoped_queryset(
+        info, models.Agent.objects.all(), field="organization"
+    )
     if filters is not None:
         queryset = apply_filters(filters, queryset, info)
     return AgentStats(_selection=Selection(queryset))

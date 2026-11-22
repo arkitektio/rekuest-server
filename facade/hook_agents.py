@@ -38,7 +38,11 @@ from facade.caller_context import CallerContext
 from facade.takt_api import Principal
 from rekuest.configuration import HookAgentEntry
 from rekuest_core.enums import ActionKind
-from rekuest_core.inputs.models import ArgPortInputModel, DefinitionInputModel, ImplementationInputModel
+from rekuest_core.inputs.models import (
+    ArgPortInputModel,
+    DefinitionInputModel,
+    ImplementationInputModel,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +56,15 @@ FORMER_CLIENT_PREFIX = "rekuest:service-"
 
 def _identity(name: str, organization: Organization) -> tuple[User, Client]:
     """A rekuest-minted identity (user + app + release + client), member of ``organization``."""
-    user, _ = User.objects.get_or_create(username=f"rekuest-{name}", defaults=dict(sub=f"rekuest:{name}", iss=ISSUER))
+    user, _ = User.objects.get_or_create(
+        username=f"rekuest-{name}", defaults=dict(sub=f"rekuest:{name}", iss=ISSUER)
+    )
     app, _ = App.objects.get_or_create(identifier=f"rekuest.{name}")
     release, _ = Release.objects.get_or_create(app=app, version="1")
-    client, _ = Client.objects.get_or_create(client_id=f"rekuest:{name}", defaults=dict(release=release, iss=ISSUER, name=name))
+    client, _ = Client.objects.get_or_create(
+        client_id=f"rekuest:{name}",
+        defaults=dict(release=release, iss=ISSUER, name=name),
+    )
     Membership.objects.get_or_create(user=user, organization=organization)
     return user, client
 
@@ -82,7 +91,11 @@ def fetch_manifest(entry: HookAgentEntry) -> HookManifest:
     from facade import service_trust
 
     url = entry.hook_url.rstrip("/") + "/manifest"
-    response = httpx.get(url, headers={"Authorization": service_trust.sign_to(entry, "GET", url, b"")}, timeout=_TIMEOUT)
+    response = httpx.get(
+        url,
+        headers={"Authorization": service_trust.sign_to(entry, "GET", url, b"")},
+        timeout=_TIMEOUT,
+    )
     response.raise_for_status()
     return HookManifest.model_validate_json(response.content)
 
@@ -107,32 +120,60 @@ def _implementations(actions: list[HookAction]) -> list[ImplementationInputModel
     ]
 
 
-def provision_agent(entry: HookAgentEntry, manifest: HookManifest, organization: Organization) -> models.Agent | None:
+def provision_agent(
+    entry: HookAgentEntry, manifest: HookManifest, organization: Organization
+) -> models.Agent | None:
     """Bring ``organization``'s agent and its actions in line with the manifest. An agent that
     offers nothing (and never did) is not created."""
     from facade import service_trust
 
-    user, client = _identity(f"{service_trust.HOOK_IDENTITY_PREFIX}{entry.name}", organization)
+    user, client = _identity(
+        f"{service_trust.HOOK_IDENTITY_PREFIX}{entry.name}", organization
+    )
     actions = manifest.actions or []
-    if not actions and not models.Agent.objects.filter(client=client, user=user, organization=organization).exists():
+    if (
+        not actions
+        and not models.Agent.objects.filter(
+            client=client, user=user, organization=organization
+        ).exists()
+    ):
         return None
 
-    principal = Principal.of(CallerContext(user=user, client=client, organization=organization))
+    principal = Principal.of(
+        CallerContext(user=user, client=client, organization=organization)
+    )
     # No secret: requests both ways are signed with instance keys (facade.service_trust). The
     # secret is given as null, which clears whatever the agent had.
     ensured = takt.call(
         takt_api.ENSURE_AGENT,
-        takt_api.EnsureAgentRequest(principal=principal, name=entry.name, kind=enums.AgentKind.WEBHOOK.value, hook_url=entry.hook_url, hook_url_secret=None),
+        takt_api.EnsureAgentRequest(
+            principal=principal,
+            name=entry.name,
+            kind=enums.AgentKind.WEBHOOK.value,
+            hook_url=entry.hook_url,
+            hook_url_secret=None,
+        ),
     )
-    declared = inputs.ImplementAgentInputModel(name=entry.name, description=manifest.description or f"The {entry.name} hook agent.", implementations=_implementations(actions))
-    takt.call(takt_api.IMPLEMENT_AGENT, takt_api.ImplementAgentRequest(principal=principal, input=declared))
+    declared = inputs.ImplementAgentInputModel(
+        name=entry.name,
+        description=manifest.description or f"The {entry.name} hook agent.",
+        implementations=_implementations(actions),
+    )
+    takt.call(
+        takt_api.IMPLEMENT_AGENT,
+        takt_api.ImplementAgentRequest(principal=principal, input=declared),
+    )
     return models.Agent.objects.get(pk=ensured.agent)
 
 
-def provision(entry: HookAgentEntry, organizations: list[Organization] | None = None) -> None:
+def provision(
+    entry: HookAgentEntry, organizations: list[Organization] | None = None
+) -> None:
     """One hook agent, in every organization (or just ``organizations``)."""
     manifest = fetch_manifest(entry)
-    for organization in Organization.objects.all() if organizations is None else organizations:
+    for organization in (
+        Organization.objects.all() if organizations is None else organizations
+    ):
         provision_agent(entry, manifest, organization)
 
 
@@ -147,11 +188,24 @@ def retire_former_agents() -> None:
     What was attached to them goes with them — the schedules rekuest used to create by itself
     among it. Nothing replaces those: wiring is the organization's.
     """
-    stale = models.Agent.objects.filter(client__client_id__startswith=FORMER_CLIENT_PREFIX)
+    stale = models.Agent.objects.filter(
+        client__client_id__startswith=FORMER_CLIENT_PREFIX
+    )
     for agent in stale.select_related("user", "client", "organization"):
-        principal = Principal.of(CallerContext(user=agent.user, client=agent.client, organization=agent.organization))
-        takt.call(takt_api.DELETE_AGENT, takt_api.AgentRequest(principal=principal, agent=str(agent.pk)))
-        logger.info("Retired the former service agent %s of %s", agent.name, agent.organization_id)
+        principal = Principal.of(
+            CallerContext(
+                user=agent.user, client=agent.client, organization=agent.organization
+            )
+        )
+        takt.call(
+            takt_api.DELETE_AGENT,
+            takt_api.AgentRequest(principal=principal, agent=str(agent.pk)),
+        )
+        logger.info(
+            "Retired the former service agent %s of %s",
+            agent.name,
+            agent.organization_id,
+        )
 
 
 def provision_all(organizations: list[Organization] | None = None) -> list[str]:
@@ -164,8 +218,12 @@ def provision_all(organizations: list[Organization] | None = None) -> list[str]:
     for entry in configured():
         try:
             provision(entry, organizations)
-        except Exception as error:  # one unreachable agent must not keep the others unprovisioned
-            logger.warning("Could not provision the hook agent %r: %s", entry.name, error)
+        except (
+            Exception
+        ) as error:  # one unreachable agent must not keep the others unprovisioned
+            logger.warning(
+                "Could not provision the hook agent %r: %s", entry.name, error
+            )
             failed.append(entry.name)
     return failed
 
@@ -187,8 +245,14 @@ def provision_new_organization(organization: Organization) -> None:
         try:
             provisioning.provision_hook_agents([organization])
         except Exception as error:  # noqa: BLE001
-            logger.warning("Could not provision the hook agents of the new organization %s: %s", organization.pk, error)
+            logger.warning(
+                "Could not provision the hook agents of the new organization %s: %s",
+                organization.pk,
+                error,
+            )
         finally:
             close_old_connections()
 
-    threading.Thread(target=run, name=f"provision-{organization.pk}", daemon=True).start()
+    threading.Thread(
+        target=run, name=f"provision-{organization.pk}", daemon=True
+    ).start()

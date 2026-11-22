@@ -12,15 +12,26 @@ from django.conf import settings
 from facade import models
 
 
-def check_pin_names_an_implementation(action: models.Action, agent: models.Agent | None, interface: str | None) -> None:
+def check_pin_names_an_implementation(
+    action: models.Action, agent: models.Agent | None, interface: str | None
+) -> None:
     """A pin is an agent together with one of its interfaces, implementing ``action``."""
     if (agent is None) != (interface is None):
         raise ValueError("Pin an agent with both agent and interface, or give neither")
-    if agent is not None and not models.Implementation.objects.filter(agent=agent, interface=interface, action=action).exists():
-        raise ValueError(f"Agent {agent.pk} has no implementation {interface!r} of this action")
+    if (
+        agent is not None
+        and not models.Implementation.objects.filter(
+            agent=agent, interface=interface, action=action
+        ).exists()
+    ):
+        raise ValueError(
+            f"Agent {agent.pk} has no implementation {interface!r} of this action"
+        )
 
 
-def check_pin(action: models.Action, agent: models.Agent | None, interface: str | None) -> None:
+def check_pin(
+    action: models.Action, agent: models.Agent | None, interface: str | None
+) -> None:
     """The pin of a rule: an implementation of ``action``, and there for a stateful action.
 
     Nobody is asked when a rule fires, so a stateful action's rule says where it runs. (A
@@ -31,10 +42,14 @@ def check_pin(action: models.Action, agent: models.Agent | None, interface: str 
     if agent is None and action.stateful:
         # Its runs would be refused one by one: a stateful action reads or changes the state of
         # the agent that runs it, so a rule says which agent that is.
-        raise ValueError(f"A stateful action is assigned to a named agent: pin {action.name} to an agent and one of its interfaces")
+        raise ValueError(
+            f"A stateful action is assigned to a named agent: pin {action.name} to an agent and one of its interfaces"
+        )
 
 
-def check_provenance(action: models.Action, agent: models.Agent | None, interface: str | None, why: str) -> None:
+def check_provenance(
+    action: models.Action, agent: models.Agent | None, interface: str | None, why: str
+) -> None:
     """Refuse targets whose runs could never get a provenance token.
 
     A rule's run has no human request behind it; a strict provenance policy refuses to mint for
@@ -49,7 +64,9 @@ def check_provenance(action: models.Action, agent: models.Agent | None, interfac
         raise ValueError(why)
 
 
-def check_policies(*, max_runs: int | None = None, debounce_seconds: int | None = None) -> None:
+def check_policies(
+    *, max_runs: int | None = None, debounce_seconds: int | None = None
+) -> None:
     """The limits a rule may carry: a positive run limit, and a debounce window signals outlive.
 
     Debounce looks back over stored firings, which go with their signals: a window longer than
@@ -62,7 +79,9 @@ def check_policies(*, max_runs: int | None = None, debounce_seconds: int | None 
             raise ValueError("debounceSeconds must be at least 1")
         retention: int = settings.SIGNAL_RETENTION_SECONDS
         if retention and debounce_seconds > retention:
-            raise ValueError(f"debounceSeconds cannot exceed the signal retention ({retention} s)")
+            raise ValueError(
+                f"debounceSeconds cannot exceed the signal retention ({retention} s)"
+            )
 
 
 def exhausted(rule: models.Schedule | models.Trigger) -> bool:

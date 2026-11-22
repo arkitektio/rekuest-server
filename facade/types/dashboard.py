@@ -25,52 +25,95 @@ if TYPE_CHECKING:
 class Dashboard:
     id: strawberry.ID
     name: str | None
-    placements: list["DashboardPlacement"]
+    placements: list[DashboardPlacement]
 
     @classmethod
-    def get_queryset(cls, queryset: QuerySet[models.Dashboard], info: Info, **kwargs: object) -> QuerySet[models.Dashboard]:
+    def get_queryset(
+        cls, queryset: QuerySet[models.Dashboard], info: Info, **kwargs: object
+    ) -> QuerySet[models.Dashboard]:
         return build_prescoped_queryset(info, queryset, field="organization")
 
 
-@strawberry_django.type(models.Module, description="A module: an app's own, unversioned UI extras (the components a UI app can render beyond the spec's catalogs and the pure operations it can evaluate for UtilCalls), registered per organization with the catalogs it implements whole. A blok names at most one as its `module`.")
+@strawberry_django.type(
+    models.Module,
+    description="A module: an app's own, unversioned UI extras (the components a UI app can render beyond the spec's catalogs and the pure operations it can evaluate for UtilCalls), registered per organization with the catalogs it implements whole. A blok names at most one as its `module`.",
+)
 class Module:
     id: strawberry.ID
     name: str
     description: str | None
-    bloks: list["Blok"] = strawberry_django.field(field_cls=ListedBloksField, description="Bloks rendered against this module, but the ones a task made to show and an action's own (`Action.bloks`).")
+    bloks: list[Blok] = strawberry_django.field(
+        field_cls=ListedBloksField,
+        description="Bloks rendered against this module, but the ones a task made to show and an action's own (`Action.bloks`).",
+    )
 
-    @strawberry_django.field(description="Registered components. Empty until a UI app registers the module.")
+    @strawberry_django.field(
+        description="Registered components. Empty until a UI app registers the module."
+    )
     def components(self) -> list[rtypes.CatalogComponent]:
-        return cast("list[rtypes.CatalogComponent]", [rmodels.CatalogComponentModel(**component) for component in self.components])
+        return cast(
+            "list[rtypes.CatalogComponent]",
+            [
+                rmodels.CatalogComponentModel(**component)
+                for component in self.components
+            ],
+        )
 
-    @strawberry_django.field(description="Registered pure operations UtilCalls may name. Empty until a UI app registers the module.")
+    @strawberry_django.field(
+        description="Registered pure operations UtilCalls may name. Empty until a UI app registers the module."
+    )
     def operations(self) -> list[rtypes.CatalogOperation]:
-        return cast("list[rtypes.CatalogOperation]", [rmodels.CatalogOperationModel(**operation) for operation in self.operations])
+        return cast(
+            "list[rtypes.CatalogOperation]",
+            [
+                rmodels.CatalogOperationModel(**operation)
+                for operation in self.operations
+            ],
+        )
 
-    @strawberry_django.field(description="The spec's versioned catalogs (blok language v2) the UI app implements whole, as name@version ('ui@1'), as it registered them.")
+    @strawberry_django.field(
+        description="The spec's versioned catalogs (blok language v2) the UI app implements whole, as name@version ('ui@1'), as it registered them."
+    )
     def catalogs(self) -> list[str]:
         return list(self.catalogs)
 
-    @strawberry_django.field(description="Whether a UI app has registered components or operations; unregistered modules validate nothing.")
+    @strawberry_django.field(
+        description="Whether a UI app has registered components or operations; unregistered modules validate nothing."
+    )
     def is_registered(self) -> bool:
         return self.is_registered
 
-    @strawberry_django.field(description="Default widgets per port kind and/or structure identifier. A UI renders them for ports that declare no widget; an identifier match beats a kind match.")
+    @strawberry_django.field(
+        description="Default widgets per port kind and/or structure identifier. A UI renders them for ports that declare no widget; an identifier match beats a kind match."
+    )
     def widget_defaults(self) -> list[rtypes.WidgetDefault]:
-        return cast("list[rtypes.WidgetDefault]", [rmodels.WidgetDefaultModel(**default) for default in self.widget_defaults])
+        return cast(
+            "list[rtypes.WidgetDefault]",
+            [rmodels.WidgetDefaultModel(**default) for default in self.widget_defaults],
+        )
 
     @classmethod
-    def get_queryset(cls, queryset: QuerySet[models.Module], info: Info, **kwargs: object) -> QuerySet[models.Module]:
+    def get_queryset(
+        cls, queryset: QuerySet[models.Module], info: Info, **kwargs: object
+    ) -> QuerySet[models.Module]:
         return build_prescoped_queryset(info, queryset, field="organization")
 
 
-@strawberry.type(description="The built-in base catalog: the pure operations and control-flow components every UI implements, applied to every definition and blok before any registered UI catalog. Virtual: shipped with the server, not registered, identical in every organization.")
+@strawberry.type(
+    description="The built-in base catalog: the pure operations and control-flow components every UI implements, applied to every definition and blok before any registered UI catalog. Virtual: shipped with the server, not registered, identical in every organization."
+)
 class BaseCatalog:
     name: str = strawberry.field(description="Always 'base'.")
     version: int = strawberry.field(description="Manifest version; evolves additively.")
-    description: str | None = strawberry.field(default=None, description="What the base catalog is for.")
-    operations: list[rtypes.CatalogOperation] = strawberry.field(description="The base operations, argument order being positional order.")
-    components: list[rtypes.CatalogComponent] = strawberry.field(description="The base components: control flow (foreach, if, match, …), named in lowercase. A UI catalog may not redefine them.")
+    description: str | None = strawberry.field(
+        default=None, description="What the base catalog is for."
+    )
+    operations: list[rtypes.CatalogOperation] = strawberry.field(
+        description="The base operations, argument order being positional order."
+    )
+    components: list[rtypes.CatalogComponent] = strawberry.field(
+        description="The base components: control flow (foreach, if, match, …), named in lowercase. A UI catalog may not redefine them."
+    )
 
 
 def base_catalog(info: Info) -> BaseCatalog:
@@ -80,8 +123,20 @@ def base_catalog(info: Info) -> BaseCatalog:
         name=manifest.name,
         version=manifest.version,
         description=manifest.description,
-        operations=cast("list[rtypes.CatalogOperation]", [rmodels.CatalogOperationModel(**operation.model_dump()) for operation in manifest.operations]),
-        components=cast("list[rtypes.CatalogComponent]", [rmodels.CatalogComponentModel(**component.model_dump()) for component in manifest.components]),
+        operations=cast(
+            "list[rtypes.CatalogOperation]",
+            [
+                rmodels.CatalogOperationModel(**operation.model_dump())
+                for operation in manifest.operations
+            ],
+        ),
+        components=cast(
+            "list[rtypes.CatalogComponent]",
+            [
+                rmodels.CatalogComponentModel(**component.model_dump())
+                for component in manifest.components
+            ],
+        ),
     )
 
 

@@ -11,7 +11,6 @@ import json
 import re
 import typing as t
 from dataclasses import dataclass
-
 from datetime import timedelta
 
 from django.db import connection
@@ -20,8 +19,11 @@ from django.db.models.expressions import RawSQL
 from django.utils import timezone
 
 from facade.liveness import stale_after_seconds
-
-from rekuest_core.inputs.models import ActionDemandInputModel, PortMatchInputModel, StateDemandInputModel
+from rekuest_core.inputs.models import (
+    ActionDemandInputModel,
+    PortMatchInputModel,
+    StateDemandInputModel,
+)
 
 if t.TYPE_CHECKING:
     from facade.inputs import PortDemandInput
@@ -45,7 +47,9 @@ class PortDemand:
         """The demand a GraphQL ``PortDemandInput`` states."""
         return cls(
             kind=_demand_kind(demand.kind.value),
-            matches=[match.to_pydantic() for match in demand.matches] if demand.matches is not None else None,
+            matches=[match.to_pydantic() for match in demand.matches]
+            if demand.matches is not None
+            else None,
             force_length=demand.force_length,
             force_non_nullable_length=demand.force_non_nullable_length,
             force_structure_length=demand.force_structure_length,
@@ -80,7 +84,12 @@ class PortOwner:
     count_columns: dict[str, str] | None = None
 
 
-ACTION_PORTS = PortOwner("facade_action", "action_id", PORT_TABLE, {"args": "arg_count", "returns": "return_count"})
+ACTION_PORTS = PortOwner(
+    "facade_action",
+    "action_id",
+    PORT_TABLE,
+    {"args": "arg_count", "returns": "return_count"},
+)
 #: A blok's args (``facade_blokargport``): the items it is opened for. A blok has no returns.
 BLOK_PORTS = PortOwner("facade_blok", "blok_id", {"args": "facade_blokargport"})
 
@@ -96,7 +105,9 @@ def _agent_vars_sql(alias: str) -> str:
     return f"jsonb_build_object('agent', COALESCE({alias}.hardware, '{{}}'::jsonb))"
 
 
-def _fits_condition(port_alias: str, object_key: str, cutoff_key: str, params: Params) -> str:
+def _fits_condition(
+    port_alias: str, object_key: str, cutoff_key: str, params: Params
+) -> str:
     """Whether a live implementation can handle the object: hidden only when every live agent refuses.
 
     One without a ``Fits`` on this port has stated no limit, and with no live implementation
@@ -200,9 +211,20 @@ def _build_match_exists(
         # root port in the organization — the compiled predicate is unindexable in that
         # direction, so a structural field must narrow the candidate set first. Nested
         # children are exempt: their parent already narrows.
-        has_structural_narrowing = any(value is not None for value in (match.at, match.key, match.kind, match.identifier, match.dimension))
+        has_structural_narrowing = any(
+            value is not None
+            for value in (
+                match.at,
+                match.key,
+                match.kind,
+                match.identifier,
+                match.dimension,
+            )
+        )
         if not has_structural_narrowing:
-            raise ValueError("A root port match with descriptors must also narrow structurally (identifier, kind, key, at or dimension) — descriptor-only matches would scan every port in the organization.")
+            raise ValueError(
+                "A root port match with descriptors must also narrow structurally (identifier, kind, key, at or dimension) — descriptor-only matches would scan every port in the organization."
+            )
     if descriptors:
         # Micro-constraint: the port's compiled requires/provides JSONPath must be satisfied by
         # the candidate object, assembled here from the runtime descriptor key/value pairs
@@ -210,21 +232,47 @@ def _build_match_exists(
         # constraints, so it accepts any object. ``silent => true`` makes structurally-invalid
         # evaluations return NULL instead of raising. Matches without descriptors skip this
         # branch and stay purely structural.
-        candidate_object = {descriptor.key: descriptor.value for descriptor in descriptors}
+        candidate_object = {
+            descriptor.key: descriptor.value for descriptor in descriptors
+        }
         key = f"obj_{id_path}"
         params[key] = json.dumps(candidate_object)
-        if parent_alias is None and owner_column == "action_id" and table == PORT_TABLE["args"]:
+        if (
+            parent_alias is None
+            and owner_column == "action_id"
+            and table == PORT_TABLE["args"]
+        ):
             conditions.append(_fits_condition(alias, key, f"cutoff_{id_path}", params))
-        conditions.append(f"({alias}.compiled_jsonpath IS NULL OR jsonb_path_match(%({key})s::jsonb, {alias}.compiled_jsonpath::jsonpath, '{{}}'::jsonb, true))")
+        conditions.append(
+            f"({alias}.compiled_jsonpath IS NULL OR jsonb_path_match(%({key})s::jsonb, {alias}.compiled_jsonpath::jsonpath, '{{}}'::jsonb, true))"
+        )
 
     for child_index, child in enumerate(match.children or []):
-        conditions.append(_build_match_exists(child, table, action_alias, alias, f"{id_path}_{child_index}", params, owner_column))
+        conditions.append(
+            _build_match_exists(
+                child,
+                table,
+                action_alias,
+                alias,
+                f"{id_path}_{child_index}",
+                params,
+                owner_column,
+            )
+        )
 
     inner = " AND ".join(conditions)
     return f"EXISTS (SELECT 1 FROM {table} {alias} WHERE {inner})"
 
 
-def _root_count_subquery(table: str, action_alias: str, extra_condition: str, param_key: str, value: int, params: Params, owner_column: str = "action_id") -> str:
+def _root_count_subquery(
+    table: str,
+    action_alias: str,
+    extra_condition: str,
+    param_key: str,
+    value: int,
+    params: Params,
+    owner_column: str = "action_id",
+) -> str:
     """Build a ``(SELECT COUNT(*) ...) = N`` clause over an action's (or another owner's) root ports."""
     params[param_key] = value
     return f"(SELECT COUNT(*) FROM {table} pc WHERE pc.{owner_column} = {action_alias}.id AND pc.parent_id IS NULL AND {extra_condition}) = %({param_key})s"
@@ -268,29 +316,76 @@ def _port_demand_sql(
     for demand_index, demand in enumerate(demands):
         table = owner.port_tables.get(demand.kind)
         if table is None:
-            raise ValueError(f"{owner.table} rows have no {demand.kind} ports to demand: only {', '.join(sorted(owner.port_tables))}")
+            raise ValueError(
+                f"{owner.table} rows have no {demand.kind} ports to demand: only {', '.join(sorted(owner.port_tables))}"
+            )
 
         for match_index, match in enumerate(demand.matches or []):
-            clauses.append(_build_match_exists(match, table, action_alias, None, f"{demand_index}_{match_index}", params, owner.column))
+            clauses.append(
+                _build_match_exists(
+                    match,
+                    table,
+                    action_alias,
+                    None,
+                    f"{demand_index}_{match_index}",
+                    params,
+                    owner.column,
+                )
+            )
 
         if demand.force_length is not None:
             key = f"force_length_{demand_index}"
             if owner.count_columns is not None:
                 params[key] = demand.force_length
-                clauses.append(f"{action_alias}.{owner.count_columns[demand.kind]} = %({key})s")
+                clauses.append(
+                    f"{action_alias}.{owner.count_columns[demand.kind]} = %({key})s"
+                )
             else:
-                clauses.append(_root_count_subquery(table, action_alias, "TRUE", key, demand.force_length, params, owner.column))
+                clauses.append(
+                    _root_count_subquery(
+                        table,
+                        action_alias,
+                        "TRUE",
+                        key,
+                        demand.force_length,
+                        params,
+                        owner.column,
+                    )
+                )
 
         if demand.force_non_nullable_length is not None:
-            clauses.append(_root_count_subquery(table, action_alias, "pc.nullable = false", f"force_non_nullable_{demand_index}", demand.force_non_nullable_length, params, owner.column))
+            clauses.append(
+                _root_count_subquery(
+                    table,
+                    action_alias,
+                    "pc.nullable = false",
+                    f"force_non_nullable_{demand_index}",
+                    demand.force_non_nullable_length,
+                    params,
+                    owner.column,
+                )
+            )
 
         if demand.force_structure_length is not None:
-            clauses.append(_root_count_subquery(table, action_alias, "pc.kind = 'STRUCTURE'", f"force_structure_{demand_index}", demand.force_structure_length, params, owner.column))
+            clauses.append(
+                _root_count_subquery(
+                    table,
+                    action_alias,
+                    "pc.kind = 'STRUCTURE'",
+                    f"force_structure_{demand_index}",
+                    demand.force_structure_length,
+                    params,
+                    owner.column,
+                )
+            )
 
     if not clauses:
         raise ValueError("No search params provided")
 
-    sql = f"SELECT {action_alias}.id FROM {owner.table} {action_alias} WHERE " + " AND ".join(clauses)
+    sql = (
+        f"SELECT {action_alias}.id FROM {owner.table} {action_alias} WHERE "
+        + " AND ".join(clauses)
+    )
     return sql, params
 
 
@@ -314,7 +409,9 @@ PositionalParams = list[int | str | bool]
 DemandOwner = t.Literal["action", "blok", "shortcut"]
 
 
-def _shortcut_port_demand_sql(demands: t.Sequence[PortDemand], organization_id: int | str) -> tuple[str, PositionalParams]:
+def _shortcut_port_demand_sql(
+    demands: t.Sequence[PortDemand], organization_id: int | str
+) -> tuple[str, PositionalParams]:
     """The organization's shortcuts whose ports satisfy every demand.
 
     Shortcuts have no relational port rows: each demand is a scan of the shortcut's own
@@ -337,14 +434,26 @@ def _shortcut_port_demand_sql(demands: t.Sequence[PortDemand], organization_id: 
     return sql, params
 
 
-def _positional_port_demand_sql(demands: t.Sequence[PortDemand], organization_id: int | str, owner: DemandOwner) -> tuple[str, PositionalParams]:
+def _positional_port_demand_sql(
+    demands: t.Sequence[PortDemand], organization_id: int | str, owner: DemandOwner
+) -> tuple[str, PositionalParams]:
     """The ``owner`` rows of the organization satisfying every demand, with positional params."""
     if owner == "shortcut":
         return _shortcut_port_demand_sql(demands, organization_id)
-    return _to_positional(*_port_demand_sql(demands, organization_id=organization_id, owner=BLOK_PORTS if owner == "blok" else ACTION_PORTS))
+    return _to_positional(
+        *_port_demand_sql(
+            demands,
+            organization_id=organization_id,
+            owner=BLOK_PORTS if owner == "blok" else ACTION_PORTS,
+        )
+    )
 
 
-def get_port_demand_subquery(demands: t.Sequence[PortDemand], organization_id: int | str, owner: DemandOwner = "action") -> RawSQL:
+def get_port_demand_subquery(
+    demands: t.Sequence[PortDemand],
+    organization_id: int | str,
+    owner: DemandOwner = "action",
+) -> RawSQL:
     """The port-demand statement as a ``RawSQL`` id subquery for ``Q(id__in=...)``.
 
     Embedding the matching statement as a nested subquery keeps the whole filter one
@@ -356,7 +465,11 @@ def get_port_demand_subquery(demands: t.Sequence[PortDemand], organization_id: i
     return RawSQL(*_positional_port_demand_sql(demands, organization_id, owner))
 
 
-def get_any_port_demand_subquery(sets: t.Sequence[t.Sequence[PortDemand]], organization_id: int | str, owner: DemandOwner = "action") -> RawSQL:
+def get_any_port_demand_subquery(
+    sets: t.Sequence[t.Sequence[PortDemand]],
+    organization_id: int | str,
+    owner: DemandOwner = "action",
+) -> RawSQL:
     """The rows satisfying every demand of at least one set, as one ``UNION`` id subquery.
 
     The union is spelled out rather than left to ``OR``: ``id IN (A) OR id IN (B)`` cannot be
@@ -365,8 +478,13 @@ def get_any_port_demand_subquery(sets: t.Sequence[t.Sequence[PortDemand]], organ
     """
     if any(len(demands) == 0 for demands in sets):
         raise ValueError("Every set of anyDemands needs at least one demand.")
-    statements = [_positional_port_demand_sql(demands, organization_id, owner) for demands in sets]
-    return RawSQL(" UNION ".join(sql for sql, _ in statements), [param for _, params in statements for param in params])
+    statements = [
+        _positional_port_demand_sql(demands, organization_id, owner) for demands in sets
+    ]
+    return RawSQL(
+        " UNION ".join(sql for sql, _ in statements),
+        [param for _, params in statements for param in params],
+    )
 
 
 def get_action_ids_by_port_demands(
@@ -409,7 +527,9 @@ def _action_demand_clauses(
 
         if action_demand.app:
             params[f"{prefix}_app"] = action_demand.app
-            clauses.append(f"{action_alias}.app_id IN (SELECT id FROM authentikate_app WHERE identifier = %({prefix}_app)s)")
+            clauses.append(
+                f"{action_alias}.app_id IN (SELECT id FROM authentikate_app WHERE identifier = %({prefix}_app)s)"
+            )
 
         if action_demand.version:
             params[f"{prefix}_version"] = action_demand.version
@@ -420,10 +540,28 @@ def _action_demand_clauses(
             clauses.append(f"{action_alias}.name = %({prefix}_name)s")
 
         for index, match in enumerate(action_demand.arg_matches or []):
-            clauses.append(_build_match_exists(match, PORT_TABLE["args"], action_alias, None, f"{prefix}_arg_{index}", params))
+            clauses.append(
+                _build_match_exists(
+                    match,
+                    PORT_TABLE["args"],
+                    action_alias,
+                    None,
+                    f"{prefix}_arg_{index}",
+                    params,
+                )
+            )
 
         for index, match in enumerate(action_demand.return_matches or []):
-            clauses.append(_build_match_exists(match, PORT_TABLE["returns"], action_alias, None, f"{prefix}_ret_{index}", params))
+            clauses.append(
+                _build_match_exists(
+                    match,
+                    PORT_TABLE["returns"],
+                    action_alias,
+                    None,
+                    f"{prefix}_ret_{index}",
+                    params,
+                )
+            )
 
         if action_demand.force_arg_length is not None:
             params[f"{prefix}_force_arg_length"] = action_demand.force_arg_length
@@ -431,17 +569,25 @@ def _action_demand_clauses(
 
         if action_demand.force_return_length is not None:
             params[f"{prefix}_force_return_length"] = action_demand.force_return_length
-            clauses.append(f"{action_alias}.return_count = %({prefix}_force_return_length)s")
+            clauses.append(
+                f"{action_alias}.return_count = %({prefix}_force_return_length)s"
+            )
 
         # The action must implement ALL requested protocols (one EXISTS per name, ANDed) —
         # mirrors the name-based matching of ``ActionFilter.protocols``.
         for protocol_index, protocol_name in enumerate(action_demand.protocols or []):
             key = f"{prefix}_protocol_{protocol_index}"
             params[key] = protocol_name
-            clauses.append(f"EXISTS (SELECT 1 FROM facade_action_protocols ap_{key} JOIN facade_protocol p_{key} ON p_{key}.id = ap_{key}.protocol_id WHERE ap_{key}.action_id = {action_alias}.id AND p_{key}.name = %({key})s)")
+            clauses.append(
+                f"EXISTS (SELECT 1 FROM facade_action_protocols ap_{key} JOIN facade_protocol p_{key} ON p_{key}.id = ap_{key}.protocol_id WHERE ap_{key}.action_id = {action_alias}.id AND p_{key}.name = %({key})s)"
+            )
 
         # Semantic qualifiers: tri-state — None matches either.
-        for qualifier, value in (("pure", action_demand.pure), ("idempotent", action_demand.idempotent), ("stateful", action_demand.stateful)):
+        for qualifier, value in (
+            ("pure", action_demand.pure),
+            ("idempotent", action_demand.idempotent),
+            ("stateful", action_demand.stateful),
+        ):
             if value is not None:
                 params[f"{prefix}_{qualifier}"] = value
                 clauses.append(f"{action_alias}.{qualifier} = %({prefix}_{qualifier})s")
@@ -471,17 +617,24 @@ def get_action_ids_by_action_demands(
         params["org"] = organization_id
 
     for index, action_demand in enumerate(action_demands):
-        clauses = _action_demand_clauses(action_demand, action_alias, f"d{index}", params)
+        clauses = _action_demand_clauses(
+            action_demand, action_alias, f"d{index}", params
+        )
         if organization_id is not None:
             clauses.insert(0, f"{action_alias}.organization_id = %(org)s")
         # ``index`` is a loop counter, never user input — safe to inline as the demand tag.
-        selects.append(f"SELECT {index} AS demand_index, {action_alias}.id FROM facade_action {action_alias} WHERE " + " AND ".join(clauses))
+        selects.append(
+            f"SELECT {index} AS demand_index, {action_alias}.id FROM facade_action {action_alias} WHERE "
+            + " AND ".join(clauses)
+        )
 
     if not selects:
         return []
 
     results: list[list[int]] = [[] for _ in action_demands]
-    for demand_index, action_id in _execute_pairs("\nUNION ALL\n".join(selects), params):
+    for demand_index, action_id in _execute_pairs(
+        "\nUNION ALL\n".join(selects), params
+    ):
         results[demand_index].append(action_id)
     return results
 
@@ -505,7 +658,9 @@ ACTION_COLUMN = {"facade_shortcut": "action_id"}
 _JSON_SCAN_CHILD_DEPTH = 1
 
 
-def _reject_unsupported_legacy_match_fields(matches: t.Sequence[PortMatchInputModel] | None, model: str, depth: int = 0) -> None:
+def _reject_unsupported_legacy_match_fields(
+    matches: t.Sequence[PortMatchInputModel] | None, model: str, depth: int = 0
+) -> None:
     """Refuse demands the JSONB scanner cannot express instead of silently degrading them.
 
     The legacy scanner only compares key/kind/identifier (children positionally, one level
@@ -517,15 +672,27 @@ def _reject_unsupported_legacy_match_fields(matches: t.Sequence[PortMatchInputMo
     for match in matches or []:
         if match.descriptors:
             if model not in ACTION_COLUMN:
-                raise ValueError(f"Descriptor matching (requires/provides) is not supported for {model}: it has no action whose relational port rows carry the compiled constraints. Remove 'descriptors' from the demand.")
+                raise ValueError(
+                    f"Descriptor matching (requires/provides) is not supported for {model}: it has no action whose relational port rows carry the compiled constraints. Remove 'descriptors' from the demand."
+                )
             if depth > _JSON_SCAN_CHILD_DEPTH:
-                raise ValueError(f"Descriptor matching (requires/provides) is not supported for {model} below the first level of children: the JSONB scanner does not look deeper. Remove 'descriptors' from the nested match.")
+                raise ValueError(
+                    f"Descriptor matching (requires/provides) is not supported for {model} below the first level of children: the JSONB scanner does not look deeper. Remove 'descriptors' from the nested match."
+                )
         if match.nullable is not None:
-            raise ValueError(f"'nullable' matching is not supported for {model}: the legacy JSONB scanner only compares key/kind/identifier. Remove 'nullable' from the demand.")
+            raise ValueError(
+                f"'nullable' matching is not supported for {model}: the legacy JSONB scanner only compares key/kind/identifier. Remove 'nullable' from the demand."
+            )
         _reject_unsupported_legacy_match_fields(match.children, model, depth + 1)
 
 
-def _json_scan_descriptor_clauses(item: PortMatchInputModel, index: int, type: t.Literal["args", "returns"], model: str, params: Params) -> list[str]:
+def _json_scan_descriptor_clauses(
+    item: PortMatchInputModel,
+    index: int,
+    type: t.Literal["args", "returns"],
+    model: str,
+    params: Params,
+) -> list[str]:
     """The descriptor checks of one root match (and its children) against the action's port rows.
 
     Evaluated inside the scan's ``jsonb_array_elements`` subquery, where ``item`` is the
@@ -540,25 +707,37 @@ def _json_scan_descriptor_clauses(item: PortMatchInputModel, index: int, type: t
     clauses: list[str] = []
 
     def accepts(alias: str, match: PortMatchInputModel, key: str) -> str:
-        params[key] = json.dumps({descriptor.key: descriptor.value for descriptor in match.descriptors or []})
+        params[key] = json.dumps(
+            {descriptor.key: descriptor.value for descriptor in match.descriptors or []}
+        )
         return f"({alias}.compiled_jsonpath IS NULL OR jsonb_path_match(%({key})s::jsonb, {alias}.compiled_jsonpath::jsonpath, '{{}}'::jsonb, true))"
 
     root = f"dp_{type}_{index}"
     root_conditions = f"{root}.action_id = {action_column} AND {root}.parent_id IS NULL AND {root}.key = item->>'key'"
 
     if item.descriptors:
-        clauses.append(f"EXISTS (SELECT 1 FROM {table} {root} WHERE {root_conditions} AND {accepts(root, item, f'{type}_obj_{index}')})")
+        clauses.append(
+            f"EXISTS (SELECT 1 FROM {table} {root} WHERE {root_conditions} AND {accepts(root, item, f'{type}_obj_{index}')})"
+        )
 
     for child_index, child in enumerate(item.children or []):
         if not child.descriptors:
             continue
         alias = f"dc_{type}_{index}_{child_index}"
-        clauses.append(f"EXISTS (SELECT 1 FROM {table} {root} JOIN {table} {alias} ON {alias}.parent_id = {root}.id WHERE {root_conditions} AND {alias}.index = {child_index} AND {accepts(alias, child, f'{type}_obj_{index}_{child_index}')})")
+        clauses.append(
+            f"EXISTS (SELECT 1 FROM {table} {root} JOIN {table} {alias} ON {alias}.parent_id = {root}.id WHERE {root_conditions} AND {alias}.index = {child_index} AND {accepts(alias, child, f'{type}_obj_{index}_{child_index}')})"
+        )
 
     return clauses
 
 
-def build_child_recursively(item: PortMatchInputModel, prefix: str, value_path: str, parts: list[str], params: Params) -> None:
+def build_child_recursively(
+    item: PortMatchInputModel,
+    prefix: str,
+    value_path: str,
+    parts: list[str],
+    params: Params,
+) -> None:
     if item.key:
         parts.append(f"{prefix}->>'key' = %({value_path}_key)s")
         params[f"{value_path}_key"] = item.key
@@ -572,7 +751,12 @@ def build_child_recursively(item: PortMatchInputModel, prefix: str, value_path: 
         params[f"{value_path}_identifier"] = item.identifier
 
 
-def build_sql_for_item_recursive(item: PortMatchInputModel, index: int, at_value: int | None = None, prefix: str = "arg") -> tuple[str, Params]:
+def build_sql_for_item_recursive(
+    item: PortMatchInputModel,
+    index: int,
+    at_value: int | None = None,
+    prefix: str = "arg",
+) -> tuple[str, Params]:
     sql_parts: list[str] = []
     params: Params = {}
 
@@ -613,9 +797,9 @@ def build_sql_for_item_recursive(item: PortMatchInputModel, index: int, at_value
 def _json_scan_params(
     search_params: t.Sequence[PortMatchInputModel] | None,
     type: t.Literal["args", "returns"] = "args",
-    force_length: t.Optional[int] = None,
-    force_non_nullable_length: t.Optional[int] = None,
-    force_structure_length: t.Optional[int] = None,
+    force_length: int | None = None,
+    force_non_nullable_length: int | None = None,
+    force_structure_length: int | None = None,
     model: str = "facade_shortcut",
 ) -> tuple[str, Params]:
     individual_queries: list[str] = []
@@ -623,9 +807,22 @@ def _json_scan_params(
     if search_params:
         _reject_unsupported_legacy_match_fields(search_params, model)
         for index, item in enumerate(search_params):
-            sql_part, params = build_sql_for_item_recursive(item, index, at_value=item.at)
+            sql_part, params = build_sql_for_item_recursive(
+                item, index, at_value=item.at
+            )
             if model in ACTION_COLUMN:
-                sql_part = " AND ".join([part for part in [sql_part, *_json_scan_descriptor_clauses(item, index, type, model, params)] if part])
+                sql_part = " AND ".join(
+                    [
+                        part
+                        for part in [
+                            sql_part,
+                            *_json_scan_descriptor_clauses(
+                                item, index, type, model, params
+                            ),
+                        ]
+                        if part
+                    ]
+                )
             subquery = f"EXISTS (SELECT 1 FROM jsonb_array_elements({type}) WITH ORDINALITY AS j(item, idx) WHERE {sql_part})"
             individual_queries.append(subquery)
             all_params.update(params)
@@ -637,12 +834,16 @@ def _json_scan_params(
     if force_non_nullable_length is not None:
         sql_part = "item->>'nullable'::text = 'false'"
         all_params["force_non_nullable_length"] = force_non_nullable_length
-        individual_queries.append(f"""(SELECT COUNT(*) FROM jsonb_array_elements({type}) AS j(item) WHERE {sql_part}) = %(force_non_nullable_length)s""")
+        individual_queries.append(
+            f"""(SELECT COUNT(*) FROM jsonb_array_elements({type}) AS j(item) WHERE {sql_part}) = %(force_non_nullable_length)s"""
+        )
 
     if force_structure_length is not None:
         sql_part = "item->>'kind' = 'STRUCTURE'"
         all_params["force_structure_length"] = force_structure_length
-        individual_queries.append(f"""(SELECT COUNT(*) FROM jsonb_array_elements({type}) AS j(item) WHERE {sql_part}) = %(force_structure_length)s""")
+        individual_queries.append(
+            f"""(SELECT COUNT(*) FROM jsonb_array_elements({type}) AS j(item) WHERE {sql_part}) = %(force_structure_length)s"""
+        )
 
     if not individual_queries:
         raise ValueError("No search params provided")
@@ -660,7 +861,9 @@ def build_state_params(
     if search_params:
         _reject_unsupported_legacy_match_fields(search_params, model)
         for index, item in enumerate(search_params):
-            sql_part, params = build_sql_for_item_recursive(item, index, at_value=item.at)
+            sql_part, params = build_sql_for_item_recursive(
+                item, index, at_value=item.at
+            )
             subquery = f"EXISTS (SELECT 1 FROM jsonb_array_elements(ports) WITH ORDINALITY AS j(item, idx) WHERE {sql_part})"
             individual_queries.append(subquery)
             all_params.update(params)
@@ -680,7 +883,9 @@ def get_state_ids_by_demands(
     return _execute_ids(full_sql, all_params)
 
 
-def state_demand_state_filters(demand: StateDemandInputModel) -> dict[str, str | list[int]]:
+def state_demand_state_filters(
+    demand: StateDemandInputModel,
+) -> dict[str, str | list[int]]:
     """State-queryset filter kwargs for one state demand.
 
     ``app`` + ``key`` match the State's own identity columns (the preferred identification);

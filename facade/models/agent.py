@@ -18,9 +18,15 @@ class Lock(models.Model):
         related_name="locks",
         help_text="The agent this lock belongs to",
     )
-    key = models.CharField(max_length=2000, help_text="A unique identifier for this lock within the agent")
-    description = models.TextField(null=True, blank=True, help_text="A description for the Lock")
-    created_at = models.DateTimeField(auto_created=True, auto_now_add=True, db_default=Now())
+    key = models.CharField(
+        max_length=2000, help_text="A unique identifier for this lock within the agent"
+    )
+    description = models.TextField(
+        null=True, blank=True, help_text="A description for the Lock"
+    )
+    created_at = models.DateTimeField(
+        auto_created=True, auto_now_add=True, db_default=Now()
+    )
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
     hold_by = models.ForeignKey(
         "Task",
@@ -37,7 +43,9 @@ class Lock(models.Model):
             # (``on_agent_lock``) and its registration, which run on different backends — and
             # ``update_or_create`` cannot dedupe what the database does not constrain. A second
             # row makes every later upsert raise ``MultipleObjectsReturned``, permanently.
-            models.UniqueConstraint(fields=["agent", "key"], name="lock_unique_key_per_agent"),
+            models.UniqueConstraint(
+                fields=["agent", "key"], name="lock_unique_key_per_agent"
+            ),
         ]
 
 
@@ -56,11 +64,31 @@ class Agent(models.Model):
         related_name="agents",
         help_text="The app this agent belongs to (agents are part of an app and are NOT associated only with a release)",
     )
-    hash = models.CharField(max_length=1000, help_text="The hash of the Agent (comparing the hash can be used to check if the agent has changed in a definition way)")
-    release = models.ForeignKey(Release, on_delete=models.CASCADE, related_name="agents", help_text="The release this agent belongs to (agents are part of a release and are NOT associated only with an app)")
-    name = models.CharField(max_length=2000, help_text="The name the agent declares for itself, written at every registration.", default="Nana", db_default="Nana")
-    display_name = models.CharField(max_length=2000, null=True, blank=True, help_text="The name a user gave this agent. It wins over the declared name, and registration never touches it.")
-    description = models.TextField(null=True, blank=True, help_text="A description for the Agent")
+    hash = models.CharField(
+        max_length=1000,
+        help_text="The hash of the Agent (comparing the hash can be used to check if the agent has changed in a definition way)",
+    )
+    release = models.ForeignKey(
+        Release,
+        on_delete=models.CASCADE,
+        related_name="agents",
+        help_text="The release this agent belongs to (agents are part of a release and are NOT associated only with an app)",
+    )
+    name = models.CharField(
+        max_length=2000,
+        help_text="The name the agent declares for itself, written at every registration.",
+        default="Nana",
+        db_default="Nana",
+    )
+    display_name = models.CharField(
+        max_length=2000,
+        null=True,
+        blank=True,
+        help_text="The name a user gave this agent. It wins over the declared name, and registration never touches it.",
+    )
+    description = models.TextField(
+        null=True, blank=True, help_text="A description for the Agent"
+    )
     supervisor = models.CharField(
         max_length=1000,
         null=True,
@@ -88,7 +116,9 @@ class Agent(models.Model):
         on_delete=models.CASCADE,
         help_text="The user this Agent belongs to",
     )
-    installed_at = models.DateTimeField(auto_created=True, auto_now_add=True, db_default=Now())
+    installed_at = models.DateTimeField(
+        auto_created=True, auto_now_add=True, db_default=Now()
+    )
     active_connection_id = models.CharField(
         max_length=1000,
         null=True,
@@ -108,10 +138,26 @@ class Agent(models.Model):
         help_text="The kind of this Agent",
         db_default="WEBSOCKET",
     )
-    hook_url = models.CharField(max_length=1000, help_text="The webhook URL for this Agent (only if webhook)", null=True, blank=True)
-    hook_url_secret = models.CharField(max_length=1000, help_text="The webhook URL secret for this Agent (only if webhook)", null=True, blank=True)
-    connected = models.BooleanField(default=False, help_text="Is this Agent connected to the backend", db_default=False)
-    last_seen = models.DateTimeField(help_text="The last time this Agent was seen", null=True)
+    hook_url = models.CharField(
+        max_length=1000,
+        help_text="The webhook URL for this Agent (only if webhook)",
+        null=True,
+        blank=True,
+    )
+    hook_url_secret = models.CharField(
+        max_length=1000,
+        help_text="The webhook URL secret for this Agent (only if webhook)",
+        null=True,
+        blank=True,
+    )
+    connected = models.BooleanField(
+        default=False,
+        help_text="Is this Agent connected to the backend",
+        db_default=False,
+    )
+    last_seen = models.DateTimeField(
+        help_text="The last time this Agent was seen", null=True
+    )
     pinned_by = models.ManyToManyField(
         get_user_model(),
         related_name="pinned_agents",
@@ -151,7 +197,9 @@ class Agent(models.Model):
 
     # The executor lease. takt's (``takt/crates/facade/src/persist/leases.rs``): its claim,
     # renew, release and revoke are the only writers.
-    LEASE_FIELDS = frozenset({"connected", "last_seen", "active_connection_id", "active_session_id"})
+    LEASE_FIELDS = frozenset(
+        {"connected", "last_seen", "active_connection_id", "active_session_id"}
+    )
 
     def save(self, *args, **kwargs) -> None:
         """A save that names no fields never touches the lease.
@@ -164,8 +212,16 @@ class Agent(models.Model):
         is narrowed to everything *except* :attr:`LEASE_FIELDS`. Lease writers are unaffected:
         they always pass ``update_fields``.
         """
-        if not self._state.adding and kwargs.get("update_fields") is None and not kwargs.get("force_insert"):
-            kwargs["update_fields"] = [f.name for f in self._meta.concrete_fields if not f.primary_key and f.name not in self.LEASE_FIELDS]
+        if (
+            not self._state.adding
+            and kwargs.get("update_fields") is None
+            and not kwargs.get("force_insert")
+        ):
+            kwargs["update_fields"] = [
+                f.name
+                for f in self._meta.concrete_fields
+                if not f.primary_key and f.name not in self.LEASE_FIELDS
+            ]
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
@@ -266,11 +322,30 @@ class Command(models.Model):
     """
 
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="commands")
-    pos = models.PositiveBigIntegerField(null=True, blank=True, help_text="The command's position in the agent's stream. NULL until the connection holding the agent's lease numbers it.")
-    kind = models.CharField(max_length=64, help_text="The frame's type (ASSIGN, CANCEL, ASSIGN_RESPONSE, ...), or EVENT for the mirror of a task event.")
-    task = models.BigIntegerField(null=True, blank=True, help_text="The id of the task the command is about, if it is about one. Not a foreign key: takt deletes tasks with SQL of its own.")
-    event = models.BigIntegerField(null=True, blank=True, help_text="For an EVENT: the id of the TaskEvent it mirrors. The frame is built from that row when it is sent.")
-    frame = models.TextField(null=True, blank=True, help_text="The serialized frame, without its position. NULL for an EVENT.")
+    pos = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        help_text="The command's position in the agent's stream. NULL until the connection holding the agent's lease numbers it.",
+    )
+    kind = models.CharField(
+        max_length=64,
+        help_text="The frame's type (ASSIGN, CANCEL, ASSIGN_RESPONSE, ...), or EVENT for the mirror of a task event.",
+    )
+    task = models.BigIntegerField(
+        null=True,
+        blank=True,
+        help_text="The id of the task the command is about, if it is about one. Not a foreign key: takt deletes tasks with SQL of its own.",
+    )
+    event = models.BigIntegerField(
+        null=True,
+        blank=True,
+        help_text="For an EVENT: the id of the TaskEvent it mirrors. The frame is built from that row when it is sent.",
+    )
+    frame = models.TextField(
+        null=True,
+        blank=True,
+        help_text="The serialized frame, without its position. NULL for an EVENT.",
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
 
     class Meta:
@@ -283,5 +358,11 @@ class Command(models.Model):
 class CommandCursor(models.Model):
     """The last position given out in an agent's command stream. Only ever raised."""
 
-    agent = models.OneToOneField(Agent, on_delete=models.CASCADE, related_name="command_cursor")
-    numbered = models.PositiveBigIntegerField(default=0, db_default=0, help_text="The highest position a command of this agent was given.")
+    agent = models.OneToOneField(
+        Agent, on_delete=models.CASCADE, related_name="command_cursor"
+    )
+    numbered = models.PositiveBigIntegerField(
+        default=0,
+        db_default=0,
+        help_text="The highest position a command of this agent was given.",
+    )

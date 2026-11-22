@@ -9,7 +9,13 @@ from facade import enums, inputs, models, signals, takt, takt_api, types
 from facade.caller_context import CallerContext
 from facade.takt_api import Principal
 from facade.types.base import scoped_get
-from rekuest_core.inputs.types import AssetInput, BlokImplementationInput, ImplementationInput, LockImplementationInput, StateImplementationInput
+from rekuest_core.inputs.types import (
+    AssetInput,
+    BlokImplementationInput,
+    ImplementationInput,
+    LockImplementationInput,
+    StateImplementationInput,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +46,9 @@ class AgentInput:
 
 @strawberry.input
 class DeleteAgentInput:
-    id: strawberry.ID = strawberry.field(description="The ID of the agent to delete. This is used to identify the agent in the system.")
+    id: strawberry.ID = strawberry.field(
+        description="The ID of the agent to delete. This is used to identify the agent in the system."
+    )
 
 
 def ensure_agent(info: Info, input: AgentInput) -> types.Agent:
@@ -51,7 +59,9 @@ def ensure_agent(info: Info, input: AgentInput) -> types.Agent:
     register over; an agent turning WEBHOOK has its socket queue abandoned there.
     """
     # Only what the input gives is sent: to takt a field that is there and null means "clear".
-    request = takt_api.EnsureAgentRequest(principal=Principal.of(CallerContext.from_info(info)), clear_drawers=True)
+    request = takt_api.EnsureAgentRequest(
+        principal=Principal.of(CallerContext.from_info(info)), clear_drawers=True
+    )
     # What a socket agent's REGISTER says of its token, this says for one that never registers.
     token = info.context.request.get_extension("token")
     if token is not None:
@@ -66,10 +76,16 @@ def ensure_agent(info: Info, input: AgentInput) -> types.Agent:
         request.hook_url = input.hook_url
     if input.hook_url_secret is not None:
         request.hook_url_secret = input.hook_url_secret
-    return cast("types.Agent", models.Agent.objects.get(pk=takt.call(takt_api.ENSURE_AGENT, request).agent))
+    return cast(
+        "types.Agent",
+        models.Agent.objects.get(pk=takt.call(takt_api.ENSURE_AGENT, request).agent),
+    )
 
 
-@kante.pydantic_input(inputs.ImplementAgentInputModel, description="Implement an agent with the given implementations, states and locks. This will create the agent if it doesn't exist and update it if it does exist.")
+@kante.pydantic_input(
+    inputs.ImplementAgentInputModel,
+    description="Implement an agent with the given implementations, states and locks. This will create the agent if it doesn't exist and update it if it does exist.",
+)
 class ImplementAgentInput:
     name: str | None = None
     description: str | None = None
@@ -87,8 +103,13 @@ def implement_agent(info: Info, input: ImplementAgentInput) -> types.Agent:
     Served by takt (``internal/agent/implement``): the same reconciliation a socket agent's
     REGISTER runs, so either the whole declared set lands or none of it.
     """
-    request = takt_api.ImplementAgentRequest(principal=Principal.of(CallerContext.from_info(info)), input=input.to_pydantic())
-    return cast("types.Agent", models.Agent.objects.get(pk=takt.call(takt_api.IMPLEMENT_AGENT, request).agent))
+    request = takt_api.ImplementAgentRequest(
+        principal=Principal.of(CallerContext.from_info(info)), input=input.to_pydantic()
+    )
+    return cast(
+        "types.Agent",
+        models.Agent.objects.get(pk=takt.call(takt_api.IMPLEMENT_AGENT, request).agent),
+    )
 
 
 def pin_agent(info: Info, input: inputs.PinInput) -> types.Agent:
@@ -117,5 +138,10 @@ def update_agent(info: Info, input: inputs.UpdateAgentInput) -> types.Agent:
 def delete_agent(info: Info, input: DeleteAgentInput) -> strawberry.ID:
     """Delete an agent with everything below it. takt owns the rows: it kicks a connected agent and cascades."""
     agent = scoped_get(models.Agent, info, input.id)
-    takt.call(takt_api.DELETE_AGENT, takt_api.AgentRequest(principal=Principal.of(CallerContext.from_info(info)), agent=str(agent.pk)))
+    takt.call(
+        takt_api.DELETE_AGENT,
+        takt_api.AgentRequest(
+            principal=Principal.of(CallerContext.from_info(info)), agent=str(agent.pk)
+        ),
+    )
     return input.id

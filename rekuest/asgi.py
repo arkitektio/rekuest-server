@@ -34,10 +34,14 @@ from embeddings import engine  # noqa: E402
 try:
     engine.warm_up()
 except engine.EmbeddingsUnavailable as error:
-    logging.getLogger(__name__).warning("%s. Rows are saved without a vector and search is substring-only.", error)
+    logging.getLogger(__name__).warning(
+        "%s. Rows are saved without a vector and search is substring-only.", error
+    )
+
+from kante.router import router  # noqa: E402
 
 from facade.schema import schema  # noqa: E402
-from kante.router import router  # noqa: E402
+
 # The agent protocol (``/agi``: sockets, HookAgent intake, signals) is takt's; this serves
 # GraphQL and its subscriptions only.
 application = telemetry.wrap(

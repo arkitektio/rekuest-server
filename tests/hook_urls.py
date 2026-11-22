@@ -6,13 +6,21 @@ The live server then plays three parts: rekuest (its intakes), a service
 names, as two processes would be; tests declare on them and clear them again.
 """
 
+from arkitekt_service.hook import HookAgent
+from arkitekt_service.service import Service
 from django.conf import settings
 
 from rekuest.urls import urlpatterns as rekuest_urlpatterns
-from arkitekt_service.hook import HookAgent
-from arkitekt_service.service import Service
 
-housekeeping = Service("housekeeping", description="A test service.", key=settings.TEST_SERVICE_KEYS["housekeeping"])
-janitor = HookAgent("janitor", description="A test hook agent.", key=settings.TEST_SERVICE_KEYS["janitor"])
+housekeeping = Service(
+    "housekeeping",
+    description="A test service.",
+    key=settings.TEST_SERVICE_KEYS["housekeeping"],
+)
+janitor = HookAgent(
+    "janitor",
+    description="A test hook agent.",
+    key=settings.TEST_SERVICE_KEYS["janitor"],
+)
 
 urlpatterns = [*rekuest_urlpatterns, *housekeeping.urls, *janitor.urls]

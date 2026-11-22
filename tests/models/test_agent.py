@@ -4,7 +4,6 @@ import pytest
 from django.db import IntegrityError
 
 from facade.models import Agent
-
 from tests.factories import create_agent_for_registry, create_registry_bundle
 
 
@@ -62,8 +61,20 @@ class TestAgentModels:
         user1, client1, org1, caller1 = create_registry_bundle("identity-1")
         user2, client2, org2, caller2 = create_registry_bundle("identity-2")
 
-        agent1 = create_agent_for_registry(registry=caller1, user=user1, organization=org1, prefix="identity-1", name="Agent 1")
-        agent2 = create_agent_for_registry(registry=caller2, user=user2, organization=org2, prefix="identity-2", name="Agent 2")
+        agent1 = create_agent_for_registry(
+            registry=caller1,
+            user=user1,
+            organization=org1,
+            prefix="identity-1",
+            name="Agent 1",
+        )
+        agent2 = create_agent_for_registry(
+            registry=caller2,
+            user=user2,
+            organization=org2,
+            prefix="identity-2",
+            name="Agent 2",
+        )
 
         assert list(Agent.objects.filter(client=client1)) == [agent1]
         assert list(Agent.objects.filter(client=client2)) == [agent2]
@@ -89,8 +100,12 @@ class TestAgentModels:
         """Only one Agent is allowed per (client, user, organization)."""
         user, _, org, caller = create_registry_bundle("meta")
 
-        create_agent_for_registry(registry=caller, user=user, organization=org, prefix="meta-1")
+        create_agent_for_registry(
+            registry=caller, user=user, organization=org, prefix="meta-1"
+        )
 
         # A second agent with the same client/user/organization must fail the unique constraint.
         with pytest.raises(IntegrityError):
-            create_agent_for_registry(registry=caller, user=user, organization=org, prefix="meta-2")
+            create_agent_for_registry(
+                registry=caller, user=user, organization=org, prefix="meta-2"
+            )

@@ -30,26 +30,47 @@ class StateDefinition:
 
     @strawberry_django.field()
     def ports(self) -> list[rtypes.ReturnPort]:
-        return [rtypes.ReturnPort.from_pydantic(rmodels.ReturnPortModel(**i)) for i in self.ports]
+        return [
+            rtypes.ReturnPort.from_pydantic(rmodels.ReturnPortModel(**i))
+            for i in self.ports
+        ]
 
     @classmethod
-    def get_queryset(cls, queryset: QuerySet[models.StateDefinition], info: Info, **kwargs: object) -> QuerySet[models.StateDefinition]:
+    def get_queryset(
+        cls, queryset: QuerySet[models.StateDefinition], info: Info, **kwargs: object
+    ) -> QuerySet[models.StateDefinition]:
         return build_prescoped_queryset(info, queryset, field="organization")
 
 
 @strawberry_django.type(models.State)
 class State:
     id: strawberry.ID
-    definition: StateDefinition = strawberry_django.field(description="The schema definition for this state.")
-    agent: Agent = strawberry_django.field(description="The agent to which this state belongs.")
-    interface: str = strawberry_django.field(description="The interface this state is associated with.")
-    key: str | None = strawberry_django.field(description="The stable identity key of this state, matched by state demands (defaults to the interface at registration).")
-    app_identifier: str | None = strawberry_django.field(description="The identifier of the app providing this state (defaults to the owning agent's app identifier).")
-    created_at: datetime.datetime = strawberry_django.field(description="Timestamp when this state was created.")
-    updated_at: datetime.datetime = strawberry_django.field(description="Timestamp when this state was last updated.")
+    definition: StateDefinition = strawberry_django.field(
+        description="The schema definition for this state."
+    )
+    agent: Agent = strawberry_django.field(
+        description="The agent to which this state belongs."
+    )
+    interface: str = strawberry_django.field(
+        description="The interface this state is associated with."
+    )
+    key: str | None = strawberry_django.field(
+        description="The stable identity key of this state, matched by state demands (defaults to the interface at registration)."
+    )
+    app_identifier: str | None = strawberry_django.field(
+        description="The identifier of the app providing this state (defaults to the owning agent's app identifier)."
+    )
+    created_at: datetime.datetime = strawberry_django.field(
+        description="Timestamp when this state was created."
+    )
+    updated_at: datetime.datetime = strawberry_django.field(
+        description="Timestamp when this state was last updated."
+    )
 
     @classmethod
-    def get_queryset(cls, queryset: QuerySet[models.State], info: Info, **kwargs: object) -> QuerySet[models.State]:
+    def get_queryset(
+        cls, queryset: QuerySet[models.State], info: Info, **kwargs: object
+    ) -> QuerySet[models.State]:
         return build_prescoped_queryset(info, queryset, field="agent__organization")
 
 
@@ -57,10 +78,12 @@ class State:
 class JSONPatch:
     op: enums.JSONPatchOperation
     path: str
-    value: scalars.Args | None = strawberry.field(default=None, description="What the operation sets; nothing for a `remove`.")
+    value: scalars.Args | None = strawberry.field(
+        default=None, description="What the operation sets; nothing for a `remove`."
+    )
 
     @classmethod
-    def of(cls, ops: "Sequence[Mapping[str, object]]") -> "list[JSONPatch]":
+    def of(cls, ops: Sequence[Mapping[str, object]]) -> list[JSONPatch]:
         """The operations of an update as it is stored."""
         return [
             cls(
@@ -83,7 +106,10 @@ class Patch:
         description="Where in a task's or the agent's life the change was made, when not in its ordinary course: `cleanup` (a task being stopped, on its way out) or `shutdown` (the agent's shutdown hooks). Said by the agent's runtime."
     )
 
-    @strawberry_django.field(only=["qualifiers"], description="What the app says the change was for: its own names. Empty when it said nothing.")
+    @strawberry_django.field(
+        only=["qualifiers"],
+        description="What the app says the change was for: its own names. Empty when it said nothing.",
+    )
     def qualifiers(self) -> list[str]:
         row = row_of(self, models.Patch)
         return [str(q) for q in row.qualifiers or []]
@@ -91,12 +117,16 @@ class Patch:
     # Patch/Snapshot store exactly one revision column, ``global_rev``, the revision *after* the
     # patch applies (see facade.logic.get_latest_state). These were declared as real columns that
     # never existed, so every query touching them raised FieldError; they are derived now.
-    @strawberry.field(description="Global revision this patch applied to (global_rev - 1).")
+    @strawberry.field(
+        description="Global revision this patch applied to (global_rev - 1)."
+    )
     def global_current_revision(self) -> int:
         row = row_of(self, models.Patch)
         return row.global_rev - 1
 
-    @strawberry.field(description="Global revision produced by this patch (global_rev).")
+    @strawberry.field(
+        description="Global revision produced by this patch (global_rev)."
+    )
     def global_future_revision(self) -> int:
         row = row_of(self, models.Patch)
         return row.global_rev
@@ -112,13 +142,18 @@ class Patch:
 
     # ``only``: a resolver's columns are not loaded with the row unless it names them, and
     # loading one afterwards is a query from an async resolver, which Django refuses.
-    @strawberry_django.field(only=["ops"], description="What the update does, as RFC 6902 operations: apply them in order, and all of them before showing the state.")
+    @strawberry_django.field(
+        only=["ops"],
+        description="What the update does, as RFC 6902 operations: apply them in order, and all of them before showing the state.",
+    )
     def ops(self) -> list[JSONPatch]:
         row = row_of(self, models.Patch)
         return JSONPatch.of(row.ops)
 
     @classmethod
-    def get_queryset(cls, queryset: QuerySet[models.Patch], info: Info, **kwargs: object) -> QuerySet[models.Patch]:
+    def get_queryset(
+        cls, queryset: QuerySet[models.Patch], info: Info, **kwargs: object
+    ) -> QuerySet[models.Patch]:
         return build_prescoped_queryset(info, queryset, field="agent__organization")
 
 
@@ -128,7 +163,9 @@ class Snapshot:
     value: scalars.Args
     timestamp: datetime.datetime
 
-    @strawberry.field(description="Global revision this snapshot represents (global_rev).")
+    @strawberry.field(
+        description="Global revision this snapshot represents (global_rev)."
+    )
     def global_revision(self) -> int:
         row = row_of(self, models.Snapshot)
         return row.global_rev
@@ -141,5 +178,7 @@ class Snapshot:
     state: State
 
     @classmethod
-    def get_queryset(cls, queryset: QuerySet[models.Snapshot], info: Info, **kwargs: object) -> QuerySet[models.Snapshot]:
+    def get_queryset(
+        cls, queryset: QuerySet[models.Snapshot], info: Info, **kwargs: object
+    ) -> QuerySet[models.Snapshot]:
         return build_prescoped_queryset(info, queryset, field="agent__organization")

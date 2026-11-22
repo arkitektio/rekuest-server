@@ -24,7 +24,9 @@ from rekuest_core.values import validate_assignment_args
 _CONDITIONS = TypeAdapter(list[RequiresInputModel])
 
 
-def compile_conditions(conditions: JSON | list[RequiresInputModel]) -> tuple[list[RequiresInputModel], str | None]:
+def compile_conditions(
+    conditions: JSON | list[RequiresInputModel],
+) -> tuple[list[RequiresInputModel], str | None]:
     """``(the conditions, their compiled JSONPath)``; raises ``ValueError`` on a malformed one.
 
     Conditions arrive as a document's own models, or as JSON (a GraphQL argument, a stored row).
@@ -35,36 +37,61 @@ def compile_conditions(conditions: JSON | list[RequiresInputModel]) -> tuple[lis
 
 def target_port(action: models.Action, port: str, identifier: str) -> models.ArgPort:
     """The top-level STRUCTURE arg ``port`` of ``action`` taking ``identifier``, or ``ValueError``."""
-    found = models.ArgPort.objects.filter(action=action, parent__isnull=True, key=port).first()
+    found = models.ArgPort.objects.filter(
+        action=action, parent__isnull=True, key=port
+    ).first()
     if found is None:
         raise ValueError(f"The action has no argument {port!r}")
     if found.kind != "STRUCTURE" or found.identifier != identifier:
-        raise ValueError(f"Argument {port!r} takes {found.kind} {found.identifier or ''}, not a {identifier} structure")
+        raise ValueError(
+            f"Argument {port!r} takes {found.kind} {found.identifier or ''}, not a {identifier} structure"
+        )
     return found
 
 
-def check_args(action: models.Action, port: str, identifier: str, args: dict[str, JSON]) -> None:
+def check_args(
+    action: models.Action, port: str, identifier: str, args: dict[str, JSON]
+) -> None:
     """The fixed args plus a stand-in object in ``port`` must fit the action's ports."""
     if action.args:
-        validate_assignment_args([ArgPortModel(**p) for p in action.args], {**args, port: {"__identifier": identifier, "object": "0"}})
+        validate_assignment_args(
+            [ArgPortModel(**p) for p in action.args],
+            {**args, port: {"__identifier": identifier, "object": "0"}},
+        )
 
 
-def check_declared(kind: str, identifier: str, conditions: list[RequiresInputModel]) -> None:
+def check_declared(
+    kind: str, identifier: str, conditions: list[RequiresInputModel]
+) -> None:
     """The trigger waits for something a service declares it emits, on keys that service sends."""
     declarations = list(models.SignalDeclaration.objects.filter(identifier=identifier))
     matching = [d for d in declarations if d.kind == kind]
     if not matching:
         if declarations:
             kinds = sorted({d.kind for d in declarations})
-            raise ValueError(f"No service emits {kind} for {identifier}; declared: {', '.join(kinds)}")
+            raise ValueError(
+                f"No service emits {kind} for {identifier}; declared: {', '.join(kinds)}"
+            )
         raise ValueError(f"No service declares signals for {identifier}")
     keys = {key for d in matching for key in d.descriptor_keys}
     unknown = sorted({condition.key for condition in conditions} - keys)
     if unknown:
-        raise ValueError(f"No service sends the descriptor(s) {', '.join(unknown)} for {kind} {identifier}; sent: {', '.join(sorted(keys)) or 'none'}")
+        raise ValueError(
+            f"No service sends the descriptor(s) {', '.join(unknown)} for {kind} {identifier}; sent: {', '.join(sorted(keys)) or 'none'}"
+        )
 
 
-def validate(*, action: models.Action, agent: models.Agent | None, interface: str | None, kind: str, identifier: str, port: str, args: dict[str, JSON], conditions: JSON | list[RequiresInputModel]) -> tuple[list[JSONObject], str | None]:
+def validate(
+    *,
+    action: models.Action,
+    agent: models.Agent | None,
+    interface: str | None,
+    kind: str,
+    identifier: str,
+    port: str,
+    args: dict[str, JSON],
+    conditions: JSON | list[RequiresInputModel],
+) -> tuple[list[JSONObject], str | None]:
     """Everything a trigger must satisfy to be written; ``(stored conditions, compiled JSONPath)``.
 
     One place, used when a trigger is created, changed or imported: its pin is an implementation
@@ -76,7 +103,12 @@ def validate(*, action: models.Action, agent: models.Agent | None, interface: st
     check_args(action, port, identifier, args)
     parsed, compiled = compile_conditions(conditions)
     check_declared(kind, identifier, parsed)
-    rules.check_provenance(action, agent, interface, "This action needs a provenance token; under strict provenance a trigger can only feed it signals caused by a task, which cannot be guaranteed")
+    rules.check_provenance(
+        action,
+        agent,
+        interface,
+        "This action needs a provenance token; under strict provenance a trigger can only feed it signals caused by a task, which cannot be guaranteed",
+    )
     return [condition.model_dump(mode="json") for condition in parsed], compiled
 
 
@@ -85,29 +117,53 @@ def validate(*, action: models.Action, agent: models.Agent | None, interface: st
 _PATH_MATCHES = "jsonb_path_match(descriptors, %s::jsonpath, '{}'::jsonb, true) IS TRUE"
 
 
-def all_matching_signals(organization: Organization | int, kind: str, identifier: str, paths: list[str | None]) -> QuerySet[models.Signal]:
+def all_matching_signals(
+    organization: Organization | int,
+    kind: str,
+    identifier: str,
+    paths: list[str | None],
+) -> QuerySet[models.Signal]:
     """Every stored signal of the organization a rule with these compiled paths would have matched.
 
     A dry run over what is still retained: it reads the same rows and applies the same test as
     takt's sweep, and fires nothing.
     """
-    signals = models.Signal.objects.filter(organization=organization, kind=kind, identifier=identifier)
+    signals = models.Signal.objects.filter(
+        organization=organization, kind=kind, identifier=identifier
+    )
     for path in paths:
         if path:
             signals = signals.extra(where=[_PATH_MATCHES], params=[path])
     return signals
 
 
-def matching_signals(organization: Organization | int, kind: str, identifier: str, paths: list[str | None], limit: int = 20) -> QuerySet[models.Signal]:
+def matching_signals(
+    organization: Organization | int,
+    kind: str,
+    identifier: str,
+    paths: list[str | None],
+    limit: int = 20,
+) -> QuerySet[models.Signal]:
     """The newest ``limit`` (at most 200) of ``all_matching_signals``."""
-    return all_matching_signals(organization, kind, identifier, paths).order_by("-received_at")[: max(0, min(limit, 200))]
+    return all_matching_signals(organization, kind, identifier, paths).order_by(
+        "-received_at"
+    )[: max(0, min(limit, 200))]
 
 
-def fire(trigger: models.Trigger, signal: models.Signal, principal: CallerContext) -> models.Firing:
+def fire(
+    trigger: models.Trigger, signal: models.Signal, principal: CallerContext
+) -> models.Firing:
     """Fire ``trigger`` on a stored ``signal`` by hand: a replay.
 
     takt creates the run whether or not the signal satisfies the trigger and whatever its
     policies say (that is what a replay is for), and logs it as a firing of its own.
     """
-    answer = takt.call(takt_api.FIRE_TRIGGER, takt_api.FireTriggerRequest(principal=Principal.of(principal), trigger=str(trigger.pk), signal=str(signal.pk)))
+    answer = takt.call(
+        takt_api.FIRE_TRIGGER,
+        takt_api.FireTriggerRequest(
+            principal=Principal.of(principal),
+            trigger=str(trigger.pk),
+            signal=str(signal.pk),
+        ),
+    )
     return models.Firing.objects.get(pk=answer.firing)

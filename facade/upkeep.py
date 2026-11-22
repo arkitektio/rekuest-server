@@ -23,21 +23,26 @@ import time
 from collections.abc import Callable
 
 import redis
+from arkitekt_service import trust
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from pydantic import BaseModel
 
 from facade import provisioning, redis_keys, service_trust
-from arkitekt_service import trust
 
 logger = logging.getLogger(__name__)
 
+
 def _claim(verified: trust.Verified) -> bool:
     """Claim the token's ``jti`` once, across every replica (takt's ``service_trust::claim``)."""
-    connection = redis.Redis(host=settings.AGENT_REDIS_HOST, port=settings.AGENT_REDIS_PORT)
+    connection = redis.Redis(
+        host=settings.AGENT_REDIS_HOST, port=settings.AGENT_REDIS_PORT
+    )
     ttl = max(1, verified.expires_at + trust.LIFETIME_SECONDS - int(time.time()))
-    return bool(connection.set(redis_keys.key("service-jti", verified.jti), 1, nx=True, ex=ttl))
+    return bool(
+        connection.set(redis_keys.key("service-jti", verified.jti), 1, nx=True, ex=ttl)
+    )
 
 
 class Provisioned(BaseModel):
@@ -53,7 +58,10 @@ def provision() -> Provisioned:
     outcome = provisioning.provision_all()
     if outcome is None:
         return Provisioned(ok=True, skipped=True, failed=[])
-    failed = [*(f"service {name}" for name in outcome.services), *(f"hook agent {name}" for name in outcome.hook_agents)]
+    failed = [
+        *(f"service {name}" for name in outcome.services),
+        *(f"hook agent {name}" for name in outcome.hook_agents),
+    ]
     return Provisioned(ok=not failed, skipped=False, failed=failed)
 
 
@@ -69,7 +77,12 @@ def upkeep_view(request: HttpRequest, job: str) -> HttpResponse:
     if request.method != "POST":
         return JsonResponse({"error": "POST only"}, status=405)
     try:
-        verified = service_trust.verify_own(request.method, request.path, request.body, request.headers.get("Authorization"))
+        verified = service_trust.verify_own(
+            request.method,
+            request.path,
+            request.body,
+            request.headers.get("Authorization"),
+        )
     except trust.TrustError as error:
         logger.info("Refused an upkeep request to %s: %s", request.path, error)
         return JsonResponse({"error": str(error)}, status=401)

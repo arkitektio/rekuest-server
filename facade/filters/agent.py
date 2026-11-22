@@ -12,7 +12,6 @@ from strawberry.types import Info
 from strawberry_django.fields.filter_order import filter_field
 
 from facade import callers, enums, liveness, managers, models
-from facade.json_types import json_object
 from rekuest_core import enums as rcenums
 from rekuest_core.inputs import types as ritypes
 
@@ -25,10 +24,14 @@ def _implementing(protocols: list[str]) -> QuerySet[models.Implementation]:
 
     A subquery, not a join: an agent offering several matching hooks is one agent.
     """
-    return models.Implementation.objects.filter(action__protocols__name__in=protocols).values("agent_id")
+    return models.Implementation.objects.filter(
+        action__protocols__name__in=protocols
+    ).values("agent_id")
 
 
-def _supervisor_q(prefix: str, operator: rcenums.DescriptorOperator, value: object) -> Q:
+def _supervisor_q(
+    prefix: str, operator: rcenums.DescriptorOperator, value: object
+) -> Q:
     """One ``requires`` constraint on ``@rekuest/supervisor``, as a filter.
 
     The operators mean what the runtime's descriptor checks mean (``MATCHES`` is ``==``).
@@ -42,7 +45,9 @@ def _supervisor_q(prefix: str, operator: rcenums.DescriptorOperator, value: obje
         case rcenums.DescriptorOperator.NOT_EQUALS:
             return ~Q(**{field: value}) | Q(**{f"{field}__isnull": True})
         case rcenums.DescriptorOperator.IN:
-            return Q(**{f"{field}__in": list(value) if isinstance(value, list) else [value]})
+            return Q(
+                **{f"{field}__in": list(value) if isinstance(value, list) else [value]}
+            )
         case rcenums.DescriptorOperator.NOT_IN:
             values = list(value) if isinstance(value, list) else [value]
             return ~Q(**{f"{field}__in": values}) | Q(**{f"{field}__isnull": True})
@@ -51,64 +56,138 @@ def _supervisor_q(prefix: str, operator: rcenums.DescriptorOperator, value: obje
         case rcenums.DescriptorOperator.CONTAINS:
             return Q(**{f"{field}__contains": value})
         case _:
-            raise ValueError(f"{SUPERVISOR_DESCRIPTOR} is a string: {operator.value} does not apply to it")
+            raise ValueError(
+                f"{SUPERVISOR_DESCRIPTOR} is a string: {operator.value} does not apply to it"
+            )
 
 
 @strawberry_django.filter_type(models.Agent, description="A way to filter agents")
 class AgentFilter:
-    @filter_field(description="Filter by client ID of the app the agent is registered to")
-    def client_id(self, info: Info, queryset: QuerySet[models.Agent], value: str, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    @filter_field(
+        description="Filter by client ID of the app the agent is registered to"
+    )
+    def client_id(
+        self, info: Info, queryset: QuerySet[models.Agent], value: str, prefix: str
+    ) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}client__client_id": value}), Q()
 
-    @filter_field(description="Agents that can receive work now: a webhook agent, or a connected one with a fresh heartbeat (takt's rule).")
-    def available(self, info: Info, queryset: QuerySet[models.Agent], value: bool, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    @filter_field(
+        description="Agents that can receive work now: a webhook agent, or a connected one with a fresh heartbeat (takt's rule)."
+    )
+    def available(
+        self, info: Info, queryset: QuerySet[models.Agent], value: bool, prefix: str
+    ) -> tuple[QuerySet[models.Agent], Q]:
         available = liveness.agent_available_q(prefix)
         return queryset, available if value else ~available
 
-    @filter_field(description="Agents with a live connection (true): connected, with a fresh heartbeat. False keeps every other agent, webhook agents included. Unlike `available`, a webhook agent is never connected.")
-    def connected(self, info: Info, queryset: QuerySet[models.Agent], value: bool, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    @filter_field(
+        description="Agents with a live connection (true): connected, with a fresh heartbeat. False keeps every other agent, webhook agents included. Unlike `available`, a webhook agent is never connected."
+    )
+    def connected(
+        self, info: Info, queryset: QuerySet[models.Agent], value: bool, prefix: str
+    ) -> tuple[QuerySet[models.Agent], Q]:
         live = liveness.agent_live_q(prefix)
         return queryset, live if value else ~live
 
     @filter_field(description="Filter by the kind of agent (websocket, webhook, ...)")
-    def kind(self, info: Info, queryset: QuerySet[models.Agent], value: enums.AgentKind, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    def kind(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: enums.AgentKind,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}kind": value.value}), Q()
 
-    @filter_field(description="Agents whose self-declared supervisor is this app (e.g. 'plugin_engine').")
-    def supervisor(self, info: Info, queryset: QuerySet[models.Agent], value: str, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    @filter_field(
+        description="Agents whose self-declared supervisor is this app (e.g. 'plugin_engine')."
+    )
+    def supervisor(
+        self, info: Info, queryset: QuerySet[models.Agent], value: str, prefix: str
+    ) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}supervisor": value}), Q()
 
-    @filter_field(description="Agents meeting a port's descriptor constraints (a picker hands them in as $requires). The only descriptor of @rekuest/agent is @rekuest/supervisor; any other key is refused.")
-    def requires(self, info: Info, queryset: QuerySet[models.Agent], value: list[ritypes.RequiresInput], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    @filter_field(
+        description="Agents meeting a port's descriptor constraints (a picker hands them in as $requires). The only descriptor of @rekuest/agent is @rekuest/supervisor; any other key is refused."
+    )
+    def requires(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: list[ritypes.RequiresInput],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
         for constraint in value:
             if constraint.key != SUPERVISOR_DESCRIPTOR:
-                raise ValueError(f"@rekuest/agent declares no descriptor {constraint.key!r} (only {SUPERVISOR_DESCRIPTOR})")
-            queryset = queryset.filter(_supervisor_q(prefix, constraint.operator, constraint.value))
+                raise ValueError(
+                    f"@rekuest/agent declares no descriptor {constraint.key!r} (only {SUPERVISOR_DESCRIPTOR})"
+                )
+            queryset = queryset.filter(
+                _supervisor_q(prefix, constraint.operator, constraint.value)
+            )
         return queryset, Q()
 
-    @filter_field(description="The agents that called this task, nearest first: its ancestors' agents, then the agent of the app its run was started from. Never the task's own agent. How an app finds what its caller offers (with actionDemands) and calls it.")
-    def caller_of(self, info: Info, queryset: QuerySet[models.Agent], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    @filter_field(
+        description="The agents that called this task, nearest first: its ancestors' agents, then the agent of the app its run was started from. Never the task's own agent. How an app finds what its caller offers (with actionDemands) and calls it."
+    )
+    def caller_of(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: strawberry.ID,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
         ids = callers.caller_agent_ids(value, info.context.request.organization.id)
         return callers.nearest_first(queryset, ids, f"{prefix}id"), Q()
 
     @filter_field(description="Filter by IDs of the agents")
-    def ids(self, info: Info, queryset: QuerySet[models.Agent], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    def ids(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: list[strawberry.ID],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}id__in": value}), Q()
 
     @filter_field(description="Filter by implementations of the agents")
-    def has_implementations(self, info: Info, queryset: QuerySet[models.Agent], value: list[str], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
-        return queryset.filter(**{f"{prefix}implementations__action__hash__in": value}), Q()
+    def has_implementations(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: list[str],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
+        return queryset.filter(
+            **{f"{prefix}implementations__action__hash__in": value}
+        ), Q()
 
-    @filter_field(description="The agents with at least one implementation listed under any of these protocols, declared as a hint (`on_scene_annotation`) or inferred. Each agent once, however many of its actions match.")
-    def implements_protocols(self, info: Info, queryset: QuerySet[models.Agent], value: list[str], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    @filter_field(
+        description="The agents with at least one implementation listed under any of these protocols, declared as a hint (`on_scene_annotation`) or inferred. Each agent once, however many of its actions match."
+    )
+    def implements_protocols(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: list[str],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}id__in": _implementing(value)}), Q()
 
     @filter_field(description="Filter by states of the agents")
-    def has_states(self, info: Info, queryset: QuerySet[models.Agent], value: list[str], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    def has_states(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: list[str],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}states__definition__hash__in": value}), Q()
 
     @filter_field(description="Filter by pinned agents")
-    def pinned(self, info: Info, queryset: QuerySet[models.Agent], value: bool, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    def pinned(
+        self, info: Info, queryset: QuerySet[models.Agent], value: bool, prefix: str
+    ) -> tuple[QuerySet[models.Agent], Q]:
         user = info.context.request.user
         if value:
             return queryset.filter(**{f"{prefix}pinned_by__id": user.id}), Q()
@@ -116,33 +195,62 @@ class AgentFilter:
             return queryset.exclude(**{f"{prefix}pinned_by__id": user.id}), Q()
 
     @filter_field(description="Filter by name of the agents")
-    def search(self, info: Info, queryset: QuerySet[models.Agent], value: str, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    def search(
+        self, info: Info, queryset: QuerySet[models.Agent], value: str, prefix: str
+    ) -> tuple[QuerySet[models.Agent], Q]:
         if value == "":
             return queryset, Q()
-        return queryset.filter(Q(**{f"{prefix}name__icontains": value}) | Q(**{f"{prefix}display_name__icontains": value})), Q()
+        return queryset.filter(
+            Q(**{f"{prefix}name__icontains": value})
+            | Q(**{f"{prefix}display_name__icontains": value})
+        ), Q()
 
     @filter_field
-    def dependency(self, info: Info, queryset: QuerySet[models.Agent], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    def dependency(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: strawberry.ID,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
         dep = models.Dependency.objects.get(id=value)
         if dep.app_filter is not UNSET and dep.app_filter is not None:
             return queryset.filter(**{f"{prefix}app__identifier": dep.app_filter}), Q()
         else:
-            raise ValueError("Filtering by dependency currently only allowed when the dependency declared an app filter, sorry :( This is coming")
+            raise ValueError(
+                "Filtering by dependency currently only allowed when the dependency declared an app filter, sorry :( This is coming"
+            )
 
     @filter_field
-    def blok_dependency(self, info: Info, queryset: QuerySet[models.Agent], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    def blok_dependency(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: strawberry.ID,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
         dep = models.BlokDependency.objects.get(id=value)
         if dep.app_filter is not UNSET and dep.app_filter is not None:
             return queryset.filter(**{f"{prefix}app__identifier": dep.app_filter}), Q()
         else:
-            raise ValueError("Filtering by blok_dependency currently only allowed when the blok_dependency declared an app filter, sorry :( This is coming")
+            raise ValueError(
+                "Filtering by blok_dependency currently only allowed when the blok_dependency declared an app filter, sorry :( This is coming"
+            )
 
     @filter_field
-    def distinct(self, info: Info, queryset: QuerySet[models.Agent], value: bool, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    def distinct(
+        self, info: Info, queryset: QuerySet[models.Agent], value: bool, prefix: str
+    ) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.distinct(), Q()
 
     @filter_field
-    def action_demands(self, info: Info, queryset: QuerySet[models.Agent], value: list[ritypes.ActionDemandInput], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    def action_demands(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: list[ritypes.ActionDemandInput],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
         # One matcher round trip for all demands. The agent must satisfy EVERY demand, but each
         # demand may be met by a different implementation — hence one Exists() per demand
         # (ANDed) rather than one merged id set or chained M2M joins (which multiply rows).
@@ -154,33 +262,74 @@ class AgentFilter:
 
         matched = Q()
         for new_ids in per_demand_ids:
-            matched &= Q(Exists(models.Implementation.objects.filter(agent=OuterRef(f"{prefix}pk"), action_id__in=new_ids)))
+            matched &= Q(
+                Exists(
+                    models.Implementation.objects.filter(
+                        agent=OuterRef(f"{prefix}pk"), action_id__in=new_ids
+                    )
+                )
+            )
         return queryset, matched
 
     @filter_field
-    def state_demands(self, info: Info, queryset: QuerySet[models.Agent], value: list[ritypes.StateDemandInput], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    def state_demands(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: list[ritypes.StateDemandInput],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
         # The agent must satisfy EVERY state demand (one Exists() per demand, ANDed) — each
         # demand may be met by a different State of the agent, mirroring action_demands.
         # app/key match the State's identity columns; matches resolve via the port matcher.
         matched = Q()
         for state_demand in value:
-            matched &= Q(Exists(models.State.objects.filter(agent=OuterRef(f"{prefix}pk"), **managers.state_demand_state_filters(state_demand.to_pydantic()))))
+            matched &= Q(
+                Exists(
+                    models.State.objects.filter(
+                        agent=OuterRef(f"{prefix}pk"),
+                        **managers.state_demand_state_filters(
+                            state_demand.to_pydantic()
+                        ),
+                    )
+                )
+            )
         return queryset, matched
 
     @filter_field(description="Filter by user ID")
-    def user(self, info: Info, queryset: QuerySet[models.Agent], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    def user(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: strawberry.ID,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}user__sub": value}), Q()
 
     @filter_field(description="Filter using app identifier")
-    def app_identifier(self, info: Info, queryset: QuerySet[models.Agent], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    def app_identifier(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: strawberry.ID,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}app__identifier": value}), Q()
 
     @filter_field(description="Filter based on version string")
-    def version_number(self, info: Info, queryset: QuerySet[models.Agent], value: str, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    def version_number(
+        self, info: Info, queryset: QuerySet[models.Agent], value: str, prefix: str
+    ) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}release__version": value}), Q()
 
     @filter_field(description="Filter based on device")
-    def device_id(self, info: Info, queryset: QuerySet[models.Agent], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    def device_id(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: strawberry.ID,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}client__device__device_id": value}), Q()
 
 
@@ -192,27 +341,63 @@ class AgentOrder:
 
 @strawberry_django.filter_type(models.Agent)
 class ImplementationAgentFilter:
-    @filter_field(description="Implementations of the agents that called this task, nearest first: its ancestors' agents, then the agent of the app its run was started from. Never the task's own agent. How an app finds what its caller offers (with actionDemand) and calls it.")
-    def caller_of(self, info: Info, queryset: QuerySet[models.Agent], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    @filter_field(
+        description="Implementations of the agents that called this task, nearest first: its ancestors' agents, then the agent of the app its run was started from. Never the task's own agent. How an app finds what its caller offers (with actionDemand) and calls it."
+    )
+    def caller_of(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: strawberry.ID,
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
         ids = callers.caller_agent_ids(value, info.context.request.organization.id)
         return callers.nearest_first(queryset, ids, f"{prefix}id"), Q()
 
     @filter_field
-    def client_id(self, info: Info, queryset: QuerySet[models.Agent], value: str, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    def client_id(
+        self, info: Info, queryset: QuerySet[models.Agent], value: str, prefix: str
+    ) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}client__client_id": value}), Q()
 
     @filter_field
-    def ids(self, info: Info, queryset: QuerySet[models.Agent], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    def ids(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: list[strawberry.ID],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}id__in": value}), Q()
 
     @filter_field
-    def has_implementations(self, info: Info, queryset: QuerySet[models.Agent], value: list[str], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
-        return queryset.filter(**{f"{prefix}implementations__action__hash__in": value}), Q()
+    def has_implementations(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: list[str],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
+        return queryset.filter(
+            **{f"{prefix}implementations__action__hash__in": value}
+        ), Q()
 
     @filter_field
-    def implements_protocols(self, info: Info, queryset: QuerySet[models.Agent], value: list[str], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    def implements_protocols(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: list[str],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}id__in": _implementing(value)}), Q()
 
     @filter_field
-    def has_states(self, info: Info, queryset: QuerySet[models.Agent], value: list[str], prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+    def has_states(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Agent],
+        value: list[str],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}states__definition__hash__in": value}), Q()

@@ -10,19 +10,23 @@ These are pure tests (no database): the guard raises while building the SQL, bef
 execution.
 """
 
-from types import SimpleNamespace
-
-from facade.managers import PortDemand
-
-from rekuest_core.inputs.models import ActionDemandInputModel, DescriptorInputModel, PortMatchInputModel, StateDemandInputModel
-
 import pytest
 
-from facade.managers import build_state_params, get_port_demand_subquery
+from facade.managers import PortDemand, build_state_params, get_port_demand_subquery
+from rekuest_core.inputs.models import DescriptorInputModel, PortMatchInputModel
 
 
 def match(**overrides):
-    base = dict(at=None, key=None, kind=None, identifier="@mikro/image", nullable=None, dimension=None, descriptors=None, children=None)
+    base = dict(
+        at=None,
+        key=None,
+        kind=None,
+        identifier="@mikro/image",
+        nullable=None,
+        dimension=None,
+        descriptors=None,
+        children=None,
+    )
     base.update(overrides)
     return PortMatchInputModel(**base)
 
@@ -40,7 +44,9 @@ def test_descriptors_below_the_scanned_depth_are_rejected_for_shortcuts():
 
 def test_nullable_demand_is_rejected_for_legacy_models():
     with pytest.raises(ValueError, match="nullable"):
-        get_port_demand_subquery([demand(match(nullable=False))], organization_id=1, owner="shortcut")
+        get_port_demand_subquery(
+            [demand(match(nullable=False))], organization_id=1, owner="shortcut"
+        )
 
 
 def test_state_definition_matching_rejects_descriptors():

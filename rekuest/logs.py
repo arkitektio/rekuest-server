@@ -55,7 +55,10 @@ def build_logging(level: str = "INFO", rich: bool = False) -> dict:
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
-            "plain": {"format": "%(asctime)s %(levelname)-7s %(name)s: %(message)s", "datefmt": "%H:%M:%S"},
+            "plain": {
+                "format": "%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+                "datefmt": "%H:%M:%S",
+            },
             # rich prints time and level itself.
             "bare": {"format": "%(message)s"},
         },
@@ -67,18 +70,37 @@ def build_logging(level: str = "INFO", rich: bool = False) -> dict:
             "django": {"handlers": [], "level": "INFO", "propagate": True},
             "django.server": {"handlers": [], "level": "INFO", "propagate": True},
             # Where daphne's runserver logs each request.
-            "django.channels.server": {"handlers": [], "level": "INFO", "propagate": True},
-            **{name: {"handlers": [], "level": "WARNING", "propagate": True} for name in _QUIET},
+            "django.channels.server": {
+                "handlers": [],
+                "level": "INFO",
+                "propagate": True,
+            },
+            **{
+                name: {"handlers": [], "level": "WARNING", "propagate": True}
+                for name in _QUIET
+            },
         },
     }
 
 
 def _expected_errors() -> tuple[type[BaseException], ...]:
-    from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
+    from django.core.exceptions import (
+        ObjectDoesNotExist,
+        PermissionDenied,
+        ValidationError,
+    )
     from graphql import GraphQLError
 
     # ValueError covers pydantic's ValidationError; LookupError covers kante's UnscopedModelError.
-    return (GraphQLError, PermissionError, PermissionDenied, ObjectDoesNotExist, ValidationError, ValueError, LookupError)
+    return (
+        GraphQLError,
+        PermissionError,
+        PermissionDenied,
+        ObjectDoesNotExist,
+        ValidationError,
+        ValueError,
+        LookupError,
+    )
 
 
 def log_graphql_errors(errors: Iterable[GraphQLError]) -> None:
@@ -97,5 +119,7 @@ def log_graphql_errors(errors: Iterable[GraphQLError]) -> None:
 class QuietErrorsSchema:
     """Mix in before the strawberry schema class: ``class Schema(QuietErrorsSchema, kante.Schema)``."""
 
-    def process_errors(self, errors: list[GraphQLError], execution_context: object = None) -> None:
+    def process_errors(
+        self, errors: list[GraphQLError], execution_context: object = None
+    ) -> None:
         log_graphql_errors(errors)

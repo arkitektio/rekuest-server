@@ -21,34 +21,81 @@ class StructureDescriptorOrder:
     type: auto
 
 
-@strawberry_django.filter_type(models.Descriptor, description="A way to filter descriptors")
+@strawberry_django.filter_type(
+    models.Descriptor, description="A way to filter descriptors"
+)
 class StructureDescriptorFilter:
     @filter_field(description="Filter by IDs")
-    def ids(self, info: Info, queryset: QuerySet[models.Descriptor], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[models.Descriptor], Q]:
+    def ids(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Descriptor],
+        value: list[strawberry.ID],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Descriptor], Q]:
         return queryset.filter(**{f"{prefix}id__in": value}), Q()
 
-    @filter_field(description="Keep descriptors whose key or description contains this text, or whose description means something close to it. Ranked: an exact match, then a prefix, then other textual matches by trigram similarity, then by meaning; an explicit `ordering` replaces that ranking.")
-    def search(self, info: Info, queryset: QuerySet[models.Descriptor], value: str, prefix: str) -> tuple[QuerySet[models.Descriptor], Q]:
-        return hybrid_search(queryset, prefix, value, Q(**{f"{prefix}key__icontains": value}) | Q(**{f"{prefix}description__icontains": value}), "key")
+    @filter_field(
+        description="Keep descriptors whose key or description contains this text, or whose description means something close to it. Ranked: an exact match, then a prefix, then other textual matches by trigram similarity, then by meaning; an explicit `ordering` replaces that ranking."
+    )
+    def search(
+        self, info: Info, queryset: QuerySet[models.Descriptor], value: str, prefix: str
+    ) -> tuple[QuerySet[models.Descriptor], Q]:
+        return hybrid_search(
+            queryset,
+            prefix,
+            value,
+            Q(**{f"{prefix}key__icontains": value})
+            | Q(**{f"{prefix}description__icontains": value}),
+            "key",
+        )
 
-    @filter_field(description="Filter by the exact descriptor key, e.g. '@mikro/n_channels'")
-    def key(self, info: Info, queryset: QuerySet[models.Descriptor], value: str, prefix: str) -> tuple[QuerySet[models.Descriptor], Q]:
+    @filter_field(
+        description="Filter by the exact descriptor key, e.g. '@mikro/n_channels'"
+    )
+    def key(
+        self, info: Info, queryset: QuerySet[models.Descriptor], value: str, prefix: str
+    ) -> tuple[QuerySet[models.Descriptor], Q]:
         return queryset.filter(**{f"{prefix}key": value}), Q()
 
-    @filter_field(description="Filter by what the value is: INT, FLOAT, STRING, BOOL, LIST or ANY")
-    def type(self, info: Info, queryset: QuerySet[models.Descriptor], value: list[str], prefix: str) -> tuple[QuerySet[models.Descriptor], Q]:
-        return queryset.filter(**{f"{prefix}type__in": [kind.upper() for kind in value]}), Q()
+    @filter_field(
+        description="Filter by what the value is: INT, FLOAT, STRING, BOOL, LIST or ANY"
+    )
+    def type(
+        self,
+        info: Info,
+        queryset: QuerySet[models.Descriptor],
+        value: list[str],
+        prefix: str,
+    ) -> tuple[QuerySet[models.Descriptor], Q]:
+        return queryset.filter(
+            **{f"{prefix}type__in": [kind.upper() for kind in value]}
+        ), Q()
 
-    @filter_field(description="Keep the descriptors of this structure, by its identifier, e.g. '@mikro/arraydataset'")
-    def structure(self, info: Info, queryset: QuerySet[models.Descriptor], value: str, prefix: str) -> tuple[QuerySet[models.Descriptor], Q]:
+    @filter_field(
+        description="Keep the descriptors of this structure, by its identifier, e.g. '@mikro/arraydataset'"
+    )
+    def structure(
+        self, info: Info, queryset: QuerySet[models.Descriptor], value: str, prefix: str
+    ) -> tuple[QuerySet[models.Descriptor], Q]:
         return queryset.filter(**{f"{prefix}structure__identifier__iexact": value}), Q()
 
-    @filter_field(description="Keep the descriptors of structures in this package, e.g. 'mikro'")
-    def package(self, info: Info, queryset: QuerySet[models.Descriptor], value: str, prefix: str) -> tuple[QuerySet[models.Descriptor], Q]:
-        return queryset.filter(**{f"{prefix}structure__identifier__istartswith": f"@{value}/"}), Q()
+    @filter_field(
+        description="Keep the descriptors of structures in this package, e.g. 'mikro'"
+    )
+    def package(
+        self, info: Info, queryset: QuerySet[models.Descriptor], value: str, prefix: str
+    ) -> tuple[QuerySet[models.Descriptor], Q]:
+        return queryset.filter(
+            **{f"{prefix}structure__identifier__istartswith": f"@{value}/"}
+        ), Q()
 
-    @filter_field(description="Keep the descriptors declared by this service, by its name")
-    def service(self, info: Info, queryset: QuerySet[models.Descriptor], value: str, prefix: str) -> tuple[QuerySet[models.Descriptor], Q]:
+    @filter_field(
+        description="Keep the descriptors declared by this service, by its name"
+    )
+    def service(
+        self, info: Info, queryset: QuerySet[models.Descriptor], value: str, prefix: str
+    ) -> tuple[QuerySet[models.Descriptor], Q]:
         return queryset.filter(**{f"{prefix}structure__service__name": value}), Q()
 
 
@@ -58,28 +105,84 @@ class HostedStructureOrder:
     label: auto
 
 
-@strawberry_django.filter_type(models.StructureDeclaration, description="A way to filter hosted structures")
+@strawberry_django.filter_type(
+    models.StructureDeclaration, description="A way to filter hosted structures"
+)
 class HostedStructureFilter:
     @filter_field(description="Filter by IDs")
-    def ids(self, info: Info, queryset: QuerySet[models.StructureDeclaration], value: list[strawberry.ID], prefix: str) -> tuple[QuerySet[models.StructureDeclaration], Q]:
+    def ids(
+        self,
+        info: Info,
+        queryset: QuerySet[models.StructureDeclaration],
+        value: list[strawberry.ID],
+        prefix: str,
+    ) -> tuple[QuerySet[models.StructureDeclaration], Q]:
         return queryset.filter(**{f"{prefix}id__in": value}), Q()
 
-    @filter_field(description="Keep structures whose identifier, label or description contains this text, or whose label and description mean something close to it. Ranked: an exact match, then a prefix, then other textual matches by trigram similarity, then by meaning; an explicit `ordering` replaces that ranking.")
-    def search(self, info: Info, queryset: QuerySet[models.StructureDeclaration], value: str, prefix: str) -> tuple[QuerySet[models.StructureDeclaration], Q]:
-        return hybrid_search(queryset, prefix, value, Q(**{f"{prefix}identifier__icontains": value}) | Q(**{f"{prefix}label__icontains": value}) | Q(**{f"{prefix}description__icontains": value}), "identifier")
+    @filter_field(
+        description="Keep structures whose identifier, label or description contains this text, or whose label and description mean something close to it. Ranked: an exact match, then a prefix, then other textual matches by trigram similarity, then by meaning; an explicit `ordering` replaces that ranking."
+    )
+    def search(
+        self,
+        info: Info,
+        queryset: QuerySet[models.StructureDeclaration],
+        value: str,
+        prefix: str,
+    ) -> tuple[QuerySet[models.StructureDeclaration], Q]:
+        return hybrid_search(
+            queryset,
+            prefix,
+            value,
+            Q(**{f"{prefix}identifier__icontains": value})
+            | Q(**{f"{prefix}label__icontains": value})
+            | Q(**{f"{prefix}description__icontains": value}),
+            "identifier",
+        )
 
     @filter_field(description="Keep the structures of this package, e.g. 'mikro'")
-    def package(self, info: Info, queryset: QuerySet[models.StructureDeclaration], value: str, prefix: str) -> tuple[QuerySet[models.StructureDeclaration], Q]:
-        return queryset.filter(**{f"{prefix}identifier__istartswith": f"@{value}/"}), Q()
+    def package(
+        self,
+        info: Info,
+        queryset: QuerySet[models.StructureDeclaration],
+        value: str,
+        prefix: str,
+    ) -> tuple[QuerySet[models.StructureDeclaration], Q]:
+        return queryset.filter(
+            **{f"{prefix}identifier__istartswith": f"@{value}/"}
+        ), Q()
 
     @filter_field(description="Keep the structures this service hosts, by its name")
-    def service(self, info: Info, queryset: QuerySet[models.StructureDeclaration], value: str, prefix: str) -> tuple[QuerySet[models.StructureDeclaration], Q]:
+    def service(
+        self,
+        info: Info,
+        queryset: QuerySet[models.StructureDeclaration],
+        value: str,
+        prefix: str,
+    ) -> tuple[QuerySet[models.StructureDeclaration], Q]:
         return queryset.filter(**{f"{prefix}service__name": value}), Q()
 
-    @filter_field(description="Keep the structures whose objects carry this descriptor key")
-    def descriptor(self, info: Info, queryset: QuerySet[models.StructureDeclaration], value: str, prefix: str) -> tuple[QuerySet[models.StructureDeclaration], Q]:
+    @filter_field(
+        description="Keep the structures whose objects carry this descriptor key"
+    )
+    def descriptor(
+        self,
+        info: Info,
+        queryset: QuerySet[models.StructureDeclaration],
+        value: str,
+        prefix: str,
+    ) -> tuple[QuerySet[models.StructureDeclaration], Q]:
         return queryset.filter(**{f"{prefix}descriptors__key": value}).distinct(), Q()
 
-    @filter_field(description="Keep the structures that declare descriptors (true), or those that declare none (false)")
-    def described(self, info: Info, queryset: QuerySet[models.StructureDeclaration], value: bool, prefix: str) -> tuple[QuerySet[models.StructureDeclaration], Q]:
-        return queryset.filter(**{f"{prefix}descriptors__isnull": not value}).distinct(), Q()
+    @filter_field(
+        description="Keep the structures that declare descriptors (true), or those that declare none (false)"
+    )
+    def described(
+        self,
+        info: Info,
+        queryset: QuerySet[models.StructureDeclaration],
+        value: bool,
+        prefix: str,
+    ) -> tuple[QuerySet[models.StructureDeclaration], Q]:
+        return queryset.filter(
+            **{f"{prefix}descriptors__isnull": not value}
+        ).distinct(), Q()

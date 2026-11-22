@@ -24,7 +24,12 @@ from django.conf import settings
 from pydantic import BaseModel
 
 from facade import models
-from rekuest.configuration import DescriptorManifest, ServiceEntry, SignalManifest, StructureManifest
+from rekuest.configuration import (
+    DescriptorManifest,
+    ServiceEntry,
+    SignalManifest,
+    StructureManifest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +54,11 @@ def fetch_manifest(entry: ServiceEntry) -> ServiceManifest:
     from facade import service_trust
 
     url = entry.url.rstrip("/") + "/manifest"
-    response = httpx.get(url, headers={"Authorization": service_trust.sign_to(entry, "GET", url, b"")}, timeout=_TIMEOUT)
+    response = httpx.get(
+        url,
+        headers={"Authorization": service_trust.sign_to(entry, "GET", url, b"")},
+        timeout=_TIMEOUT,
+    )
     response.raise_for_status()
     return ServiceManifest.model_validate_json(response.content)
 
@@ -63,7 +72,11 @@ def declared_inline(entry: ServiceEntry) -> ServiceManifest | None:
 
     if entry.hosts is None:
         return None
-    return ServiceManifest(identifier=service_trust.identifier_of(entry), structures=entry.hosts.structures, signals=entry.hosts.signals)
+    return ServiceManifest(
+        identifier=service_trust.identifier_of(entry),
+        structures=entry.hosts.structures,
+        signals=entry.hosts.signals,
+    )
 
 
 def catalogue(entry: ServiceEntry) -> models.Service:
@@ -79,7 +92,9 @@ def catalogue(entry: ServiceEntry) -> models.Service:
     if manifest is None:
         manifest = fetch_manifest(entry)
         defaults["description"] = manifest.description
-    service, _ = models.Service.objects.update_or_create(name=entry.name, defaults={"identifier": manifest.identifier, **defaults})
+    service, _ = models.Service.objects.update_or_create(
+        name=entry.name, defaults={"identifier": manifest.identifier, **defaults}
+    )
     _sync_structures(service, manifest.structures)
     _sync_signals(service, manifest.signals or [])
     return service
@@ -95,14 +110,19 @@ def _sync_signals(service: models.Service, signals: list[SignalManifest]) -> Non
                 service=service,
                 identifier=signal.identifier,
                 kind=kind,
-                defaults={"descriptor_keys": list(signal.descriptors or []), "description": signal.description},
+                defaults={
+                    "descriptor_keys": list(signal.descriptors or []),
+                    "description": signal.description,
+                },
             )
     for row in models.SignalDeclaration.objects.filter(service=service):
         if (row.identifier, row.kind) not in declared:
             row.delete()
 
 
-def _sync_structures(service: models.Service, structures: list[StructureManifest] | None) -> None:
+def _sync_structures(
+    service: models.Service, structures: list[StructureManifest] | None
+) -> None:
     """Make the structures the service hosts exactly what its manifest declares.
 
     An identifier another service already hosts stays that service's: the claim is skipped with
@@ -112,20 +132,38 @@ def _sync_structures(service: models.Service, structures: list[StructureManifest
         return
     declared: set[str] = set()
     for structure in structures:
-        holder = models.StructureDeclaration.objects.filter(identifier=structure.identifier).exclude(service=service).select_related("service").first()
+        holder = (
+            models.StructureDeclaration.objects.filter(identifier=structure.identifier)
+            .exclude(service=service)
+            .select_related("service")
+            .first()
+        )
         if holder is not None:
-            logger.warning("%s declares the structure %s, which %s already hosts; ignored", service.name, structure.identifier, holder.service.name)
+            logger.warning(
+                "%s declares the structure %s, which %s already hosts; ignored",
+                service.name,
+                structure.identifier,
+                holder.service.name,
+            )
             continue
         declared.add(structure.identifier)
         hosted, _ = models.StructureDeclaration.objects.update_or_create(
             identifier=structure.identifier,
-            defaults={"service": service, "label": structure.label, "description": structure.description},
+            defaults={
+                "service": service,
+                "label": structure.label,
+                "description": structure.description,
+            },
         )
         _sync_descriptors(hosted, structure.descriptors or [])
-    models.StructureDeclaration.objects.filter(service=service).exclude(identifier__in=declared).delete()
+    models.StructureDeclaration.objects.filter(service=service).exclude(
+        identifier__in=declared
+    ).delete()
 
 
-def _sync_descriptors(structure: models.StructureDeclaration, descriptors: list[DescriptorManifest]) -> None:
+def _sync_descriptors(
+    structure: models.StructureDeclaration, descriptors: list[DescriptorManifest]
+) -> None:
     """Make the structure's Descriptor rows exactly what its manifest declares, in that order.
 
     In place: a descriptor that is still declared keeps its row (and its id), so what a client
@@ -137,9 +175,15 @@ def _sync_descriptors(structure: models.StructureDeclaration, descriptors: list[
         models.Descriptor.objects.update_or_create(
             structure=structure,
             key=descriptor.key,
-            defaults={"type": descriptor.type or "ANY", "description": descriptor.description, "position": position},
+            defaults={
+                "type": descriptor.type or "ANY",
+                "description": descriptor.description,
+                "position": position,
+            },
         )
-    models.Descriptor.objects.filter(structure=structure).exclude(key__in=declared).delete()
+    models.Descriptor.objects.filter(structure=structure).exclude(
+        key__in=declared
+    ).delete()
 
 
 #: The name rekuest's own catalog row goes under, beside its peers' names.
@@ -155,9 +199,27 @@ def catalogue_self() -> models.Service:
     from rekuest.contract import contract
 
     description = contract.description
-    service, _ = models.Service.objects.update_or_create(name=SELF, defaults={"identifier": description.identifier, "description": description.summary})
-    _sync_structures(service, [StructureManifest.model_validate(structure.model_dump()) for structure in description.hosts.structures])
-    _sync_signals(service, [SignalManifest.model_validate(signal.model_dump()) for signal in description.hosts.signals])
+    service, _ = models.Service.objects.update_or_create(
+        name=SELF,
+        defaults={
+            "identifier": description.identifier,
+            "description": description.summary,
+        },
+    )
+    _sync_structures(
+        service,
+        [
+            StructureManifest.model_validate(structure.model_dump())
+            for structure in description.hosts.structures
+        ],
+    )
+    _sync_signals(
+        service,
+        [
+            SignalManifest.model_validate(signal.model_dump())
+            for signal in description.hosts.signals
+        ],
+    )
     return service
 
 
@@ -173,7 +235,9 @@ def catalogue_all() -> list[str]:
     for entry in services:
         try:
             catalogue(entry)
-        except Exception as error:  # one unreachable service must not keep the others uncatalogued
+        except (
+            Exception
+        ) as error:  # one unreachable service must not keep the others uncatalogued
             logger.warning("Could not catalogue the service %r: %s", entry.name, error)
             failed.append(entry.name)
     return failed

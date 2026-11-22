@@ -5,24 +5,55 @@ from django.db import models
 from django.db.models.functions import Now
 
 
-
 class Asset(models.Model):
     """One verified file. Identical bytes within an organization are one asset, whoever brought them."""
 
     # Declared for the type checker: Django adds the foreign key's id column without saying so.
     organization_id: int
 
-    organization = models.ForeignKey("authentikate.Organization", on_delete=models.CASCADE, related_name="assets", help_text="The organization this asset belongs to. Access is scoped to it.")
-    ref = models.CharField(max_length=71, help_text="'sha256:' and the hex SHA-256 of the file's exact bytes.")
-    kind = models.CharField(max_length=32, help_text="What the file is (rekuest_core AssetKind).")
-    file = models.ForeignKey("datalayer.DatalayerStore", on_delete=models.CASCADE, related_name="assets", help_text="The stored file: a kulisse store for a 3D model, a media store for an image.")
-    size = models.BigIntegerField(help_text="The size of the file in bytes, measured by the server.")
-    meta = models.JSONField(default=dict, db_default={}, help_text="What validation found: a model's node names, counts and joint table, an image's format and size.")
-    uploaded_by = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name="uploaded_assets", help_text="The user whose app uploaded the file.")
+    organization = models.ForeignKey(
+        "authentikate.Organization",
+        on_delete=models.CASCADE,
+        related_name="assets",
+        help_text="The organization this asset belongs to. Access is scoped to it.",
+    )
+    ref = models.CharField(
+        max_length=71,
+        help_text="'sha256:' and the hex SHA-256 of the file's exact bytes.",
+    )
+    kind = models.CharField(
+        max_length=32, help_text="What the file is (rekuest_core AssetKind)."
+    )
+    file = models.ForeignKey(
+        "datalayer.DatalayerStore",
+        on_delete=models.CASCADE,
+        related_name="assets",
+        help_text="The stored file: a kulisse store for a 3D model, a media store for an image.",
+    )
+    size = models.BigIntegerField(
+        help_text="The size of the file in bytes, measured by the server."
+    )
+    meta = models.JSONField(
+        default=dict,
+        db_default={},
+        help_text="What validation found: a model's node names, counts and joint table, an image's format and size.",
+    )
+    uploaded_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="uploaded_assets",
+        help_text="The user whose app uploaded the file.",
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["organization", "ref"], name="unique_asset_ref_per_organization")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "ref"], name="unique_asset_ref_per_organization"
+            )
+        ]
 
 
 class AgentAsset(models.Model):
@@ -33,14 +64,40 @@ class AgentAsset(models.Model):
     for a file the agent only names a ``source`` for, by an admin.
     """
 
-    agent = models.ForeignKey("Agent", on_delete=models.CASCADE, related_name="assets", help_text="The agent that declares the asset.")
-    name = models.CharField(max_length=200, help_text="The name bloks refer to the asset by.")
-    kind = models.CharField(max_length=32, help_text="What the agent says the file is (rekuest_core AssetKind).")
-    ref = models.CharField(max_length=71, help_text="'sha256:' and the hex SHA-256 of the file's exact bytes, as the agent declares it.")
-    size = models.BigIntegerField(null=True, blank=True, help_text="The size of the file in bytes, as the agent declares it. NULL for a file the agent does not hold (it names a source).")
-    source = models.CharField(max_length=2000, null=True, blank=True, help_text="The https URL the file can be fetched from. Set when the agent does not hold the file: an admin's client fetches and uploads it.")
+    agent = models.ForeignKey(
+        "Agent",
+        on_delete=models.CASCADE,
+        related_name="assets",
+        help_text="The agent that declares the asset.",
+    )
+    name = models.CharField(
+        max_length=200, help_text="The name bloks refer to the asset by."
+    )
+    kind = models.CharField(
+        max_length=32,
+        help_text="What the agent says the file is (rekuest_core AssetKind).",
+    )
+    ref = models.CharField(
+        max_length=71,
+        help_text="'sha256:' and the hex SHA-256 of the file's exact bytes, as the agent declares it.",
+    )
+    size = models.BigIntegerField(
+        null=True,
+        blank=True,
+        help_text="The size of the file in bytes, as the agent declares it. NULL for a file the agent does not hold (it names a source).",
+    )
+    source = models.CharField(
+        max_length=2000,
+        null=True,
+        blank=True,
+        help_text="The https URL the file can be fetched from. Set when the agent does not hold the file: an admin's client fetches and uploads it.",
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["agent", "name"], name="unique_asset_name_per_agent")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["agent", "name"], name="unique_asset_name_per_agent"
+            )
+        ]

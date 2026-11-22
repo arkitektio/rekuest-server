@@ -4,7 +4,6 @@ import pytest
 from kante.context import HttpContext
 
 from facade.schema import schema
-
 from tests.graphql_ops import CREATE_BLOK, CREATE_DASHBOARD
 
 
@@ -35,7 +34,17 @@ class TestGraphQLUI:
 
     async def test_create_blok_mutation(self, authenticated_context: HttpContext):
         """Test creating a UI blok via mutation."""
-        result = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "Test UI Blok", "description": "A test UI component", "vocab": 2}})
+        result = await schema.execute(
+            CREATE_BLOK,
+            context_value=authenticated_context,
+            variable_values={
+                "input": {
+                    "name": "Test UI Blok",
+                    "description": "A test UI component",
+                    "vocab": 2,
+                }
+            },
+        )
 
         assert result.data is not None, f"Errors: {result.errors}"
         assert "createBlok" in result.data
@@ -46,7 +55,11 @@ class TestGraphQLUI:
 
     async def test_create_dashboard_mutation(self, authenticated_context: HttpContext):
         """Test creating a dashboard via mutation."""
-        result = await schema.execute(CREATE_DASHBOARD, context_value=authenticated_context, variable_values={"input": {"name": "Test Dashboard"}})
+        result = await schema.execute(
+            CREATE_DASHBOARD,
+            context_value=authenticated_context,
+            variable_values={"input": {"name": "Test Dashboard"}},
+        )
 
         assert result.data is not None, f"Errors: {result.errors}"
         assert "createDashboard" in result.data

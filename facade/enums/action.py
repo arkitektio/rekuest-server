@@ -19,7 +19,10 @@ class EffectsChoices(TextChoices):
     NONE = "NONE", "None (changes nothing)"
     REPEATABLE = "REPEATABLE", "Repeatable (a second run leaves the same state)"
     UNKNOWN = "UNKNOWN", "Unknown (no claim)"
-    IRREVERSIBLE = "IRREVERSIBLE", "Irreversible (a second run happens again, in the real world)"
+    IRREVERSIBLE = (
+        "IRREVERSIBLE",
+        "Irreversible (a second run happens again, in the real world)",
+    )
 
 
 class ExecutionChoices(TextChoices):

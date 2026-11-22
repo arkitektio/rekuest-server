@@ -1,13 +1,14 @@
+from authentikate.models import App
 from django.contrib.auth import get_user_model
 from django.db import models
 from django.db.models.functions import Now
 from django_choices_field import TextChoicesField
 
-from authentikate.models import App
-
-from rekuest_core.inputs.models import ActionDependencyInputModel, StateDependencyInputModel
-
 from facade import enums
+from rekuest_core.inputs.models import (
+    ActionDependencyInputModel,
+    StateDependencyInputModel,
+)
 
 from .action import BasePort, port_indexes
 
@@ -61,16 +62,60 @@ class Blok(models.Model):
         related_name="bloks",
         help_text="The module (an app's own UI extras) this Blok renders against besides its catalogs.",
     )
-    components = models.JSONField(help_text="The component tree of this Blok (blok language v2): one `<Blok kind context>` root, as rekuest_core ComponentNodeInput, its declarations (`<local>`, `<query>`, `<subscription>`) included.", default=list, db_default=[])
-    vocab = models.PositiveSmallIntegerField(default=2, db_default=2, help_text="The blok language version this Blok speaks (rekuest_core.vocabulary); 2 is the only one.")
-    catalogs = models.JSONField(default=list, db_default=[], help_text="The catalogs this Blok needs, as name@version ('ui@1', 'scene@1').")
-    resolved_locals = models.JSONField(default=list, db_default=[], help_text="The `<local>` declarations of its tree as they resolve (rekuest_core.vocabulary.infer), each its node id plus its port with a kind: derived, recomputed on every write, never hashed.")
-    demo = models.JSONField(default=dict, db_default={}, help_text="What a preview renders it with (rekuest_core BlokDemoInput: deps, args, task, queries, subscriptions).")
-    context = models.CharField(max_length=16, default="PANEL", db_default="PANEL", help_text="What draws it, as its `<Blok context=...>` says (rekuest_core ComponentContext): PANEL, SCENE or LOGO.")
-    for_model = models.CharField(max_length=71, null=True, blank=True, db_index=True, help_text="The model reference ('sha256:...') this Blok decorates, if any. Viewers showing that model offer the Blok at `for_node`.")
-    for_node = models.CharField(max_length=1000, null=True, blank=True, help_text="The node of `for_model` this Blok attaches to; the model's root when NULL.")
-    args = models.JSONField(default=list, db_default=[], help_text="The items this Blok is opened for: its declared arg ports (rekuest_core ArgPortInput), read under `@args.<key>`. Matched through its BlokArgPort rows.")
-    returns = models.JSONField(default=list, db_default=[], help_text="What a person answers through this Blok when a task asks with it (rekuest_core ReturnPortInput): the values `blok.answer` hands back.")
+    components = models.JSONField(
+        help_text="The component tree of this Blok (blok language v2): one `<Blok kind context>` root, as rekuest_core ComponentNodeInput, its declarations (`<local>`, `<query>`, `<subscription>`) included.",
+        default=list,
+        db_default=[],
+    )
+    vocab = models.PositiveSmallIntegerField(
+        default=2,
+        db_default=2,
+        help_text="The blok language version this Blok speaks (rekuest_core.vocabulary); 2 is the only one.",
+    )
+    catalogs = models.JSONField(
+        default=list,
+        db_default=[],
+        help_text="The catalogs this Blok needs, as name@version ('ui@1', 'scene@1').",
+    )
+    resolved_locals = models.JSONField(
+        default=list,
+        db_default=[],
+        help_text="The `<local>` declarations of its tree as they resolve (rekuest_core.vocabulary.infer), each its node id plus its port with a kind: derived, recomputed on every write, never hashed.",
+    )
+    demo = models.JSONField(
+        default=dict,
+        db_default={},
+        help_text="What a preview renders it with (rekuest_core BlokDemoInput: deps, args, task, queries, subscriptions).",
+    )
+    context = models.CharField(
+        max_length=16,
+        default="PANEL",
+        db_default="PANEL",
+        help_text="What draws it, as its `<Blok context=...>` says (rekuest_core ComponentContext): PANEL, SCENE or LOGO.",
+    )
+    for_model = models.CharField(
+        max_length=71,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="The model reference ('sha256:...') this Blok decorates, if any. Viewers showing that model offer the Blok at `for_node`.",
+    )
+    for_node = models.CharField(
+        max_length=1000,
+        null=True,
+        blank=True,
+        help_text="The node of `for_model` this Blok attaches to; the model's root when NULL.",
+    )
+    args = models.JSONField(
+        default=list,
+        db_default=[],
+        help_text="The items this Blok is opened for: its declared arg ports (rekuest_core ArgPortInput), read under `@args.<key>`. Matched through its BlokArgPort rows.",
+    )
+    returns = models.JSONField(
+        default=list,
+        db_default=[],
+        help_text="What a person answers through this Blok when a task asks with it (rekuest_core ReturnPortInput): the values `blok.answer` hands back.",
+    )
     owner_task = models.ForeignKey(
         "Task",
         on_delete=models.CASCADE,
@@ -79,7 +124,11 @@ class Blok(models.Model):
         related_name="owned_bloks",
         help_text="The task that made this Blok from its BSX to show it (ask or inform). It is never listed and goes with its task. NULL for every other Blok.",
     )
-    diagnostics = models.JSONField(default=list, help_text="Findings on this Blok (rekuest_core Diagnostic: level, code, message, path), with the blok vocabulary's codes: the warnings of its last write, replaced on every write.", db_default=[])
+    diagnostics = models.JSONField(
+        default=list,
+        help_text="Findings on this Blok (rekuest_core Diagnostic: level, code, message, path), with the blok vocabulary's codes: the warnings of its last write, replaced on every write.",
+        db_default=[],
+    )
     app = models.ForeignKey(
         App,
         on_delete=models.CASCADE,
@@ -88,10 +137,29 @@ class Blok(models.Model):
         related_name="provided_bloks",
         help_text="The app whose agents provide this Blok. NULL for a custom Blok a user made.",
     )
-    declaration_hash = models.CharField(max_length=64, null=True, blank=True, help_text="sha256 of the declared content of a provided Blok (not the rendering `hash` the API computes); NULL for a custom one.")
-    held_by_action = models.BooleanField(default=False, db_default=False, help_text="Whether this provided Blok is an action's own (`ActionBlok`) or an implementation's declared ask or inform (`ImplementationInteraction`): declared inline, it is never listed or edited, and only an interaction's is materialized, for the task that shows it. takt deletes it once nothing holds or shows it.")
-    origin = models.CharField(max_length=2000, null=True, blank=True, help_text="Where a custom Blok was installed from, e.g. kabinet's `github:<owner>/<repo>:<branch>#<key>`; NULL for one made here. Installing from the same origin again updates this row.")
-    origin_hash = models.CharField(max_length=100, null=True, blank=True, help_text="The hash its origin gave what it draws when it was installed: an origin whose hash differs has an update.")
+    declaration_hash = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+        help_text="sha256 of the declared content of a provided Blok (not the rendering `hash` the API computes); NULL for a custom one.",
+    )
+    held_by_action = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text="Whether this provided Blok is an action's own (`ActionBlok`) or an implementation's declared ask or inform (`ImplementationInteraction`): declared inline, it is never listed or edited, and only an interaction's is materialized, for the task that shows it. takt deletes it once nothing holds or shows it.",
+    )
+    origin = models.CharField(
+        max_length=2000,
+        null=True,
+        blank=True,
+        help_text="Where a custom Blok was installed from, e.g. kabinet's `github:<owner>/<repo>:<branch>#<key>`; NULL for one made here. Installing from the same origin again updates this row.",
+    )
+    origin_hash = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text="The hash its origin gave what it draws when it was installed: an origin whose hash differs has an update.",
+    )
     head = models.ForeignKey(
         "BlokRevision",
         on_delete=models.SET_NULL,
@@ -111,9 +179,21 @@ class Blok(models.Model):
         # createBlok upserts a custom blok on (organization, name); registration upserts a provided
         # one on its content, so v1 and v2 of an app never overwrite each other.
         constraints = [
-            models.UniqueConstraint(fields=["organization", "name"], condition=models.Q(app__isnull=True, owner_task__isnull=True), name="unique_blok_name_per_organization"),
-            models.UniqueConstraint(fields=["organization", "app", "name", "declaration_hash"], condition=models.Q(app__isnull=False), name="blok_unique_provided"),
-            models.UniqueConstraint(fields=["organization", "origin"], condition=models.Q(app__isnull=True, origin__isnull=False), name="unique_blok_origin_per_organization"),
+            models.UniqueConstraint(
+                fields=["organization", "name"],
+                condition=models.Q(app__isnull=True, owner_task__isnull=True),
+                name="unique_blok_name_per_organization",
+            ),
+            models.UniqueConstraint(
+                fields=["organization", "app", "name", "declaration_hash"],
+                condition=models.Q(app__isnull=False),
+                name="blok_unique_provided",
+            ),
+            models.UniqueConstraint(
+                fields=["organization", "origin"],
+                condition=models.Q(app__isnull=True, origin__isnull=False),
+                name="unique_blok_origin_per_organization",
+            ),
         ]
 
 
@@ -130,15 +210,38 @@ class ActionBlok(models.Model):
     action_id: int
     blok_id: int
 
-    action = models.ForeignKey("Action", on_delete=models.CASCADE, related_name="bloks", help_text="The action this blok shows runs of.")
-    context = models.CharField(max_length=16, help_text="Where a client shows a run with it (rekuest_core ComponentContext): PANEL or SCENE. One blok per context and phase.")
-    phase = models.CharField(max_length=16, default="RUN", db_default="RUN", help_text="When a client shows it (rekuest_core ActionBlokPhase): RUN for a run of the action, ASSIGN before one, to start it.")
-    blok = models.ForeignKey(Blok, on_delete=models.CASCADE, related_name="action_bloks", help_text="The blok: a provided one, held by its actions only. takt collects it once no action holds it; going with its module or creator, it takes this row along.")
+    action = models.ForeignKey(
+        "Action",
+        on_delete=models.CASCADE,
+        related_name="bloks",
+        help_text="The action this blok shows runs of.",
+    )
+    context = models.CharField(
+        max_length=16,
+        help_text="Where a client shows a run with it (rekuest_core ComponentContext): PANEL or SCENE. One blok per context and phase.",
+    )
+    phase = models.CharField(
+        max_length=16,
+        default="RUN",
+        db_default="RUN",
+        help_text="When a client shows it (rekuest_core ActionBlokPhase): RUN for a run of the action, ASSIGN before one, to start it.",
+    )
+    blok = models.ForeignKey(
+        Blok,
+        on_delete=models.CASCADE,
+        related_name="action_bloks",
+        help_text="The blok: a provided one, held by its actions only. takt collects it once no action holds it; going with its module or creator, it takes this row along.",
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["action", "context", "phase"], name="unique_action_blok_context_phase")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["action", "context", "phase"],
+                name="unique_action_blok_context_phase",
+            )
+        ]
 
 
 class BlokRevision(models.Model):
@@ -158,26 +261,96 @@ class BlokRevision(models.Model):
     task_id: int | None
 
     blok = models.ForeignKey(Blok, on_delete=models.CASCADE, related_name="revisions")
-    number = models.PositiveIntegerField(help_text="The place of this revision in its blok's history, from 1.")
-    parent = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="children", help_text="The revision this one was made from; NULL for the first.")
-    components = models.JSONField(default=list, db_default=[], help_text="The component tree of this revision (blok language v2).")
-    vocab = models.PositiveSmallIntegerField(default=2, db_default=2, help_text="The blok language version of this revision.")
-    catalogs = models.JSONField(default=list, db_default=[], help_text="The catalogs of this revision.")
-    resolved_locals = models.JSONField(default=list, db_default=[], help_text="The `<local>` declarations of this revision's tree as they resolve, each its node id plus its port with a kind: derived, never hashed.")
-    demo = models.JSONField(default=dict, db_default={}, help_text="The demo of this revision (rekuest_core BlokDemoInput).")
-    context = models.CharField(max_length=16, default="PANEL", db_default="PANEL", help_text="What draws this revision, as its `<Blok context=...>` says (rekuest_core ComponentContext).")
-    module = models.ForeignKey("Module", on_delete=models.CASCADE, related_name="blok_revisions", help_text="The module this revision renders against.")
-    dependencies = models.JSONField(default=list, db_default=[], help_text="The agent dependencies of this revision (rekuest_core AgentDependencyInput), as the blok's dependency rows held them.")
-    args = models.JSONField(default=list, db_default=[], help_text="The args of this revision (rekuest_core ArgPortInput): the items the blok is opened for.")
-    returns = models.JSONField(default=list, db_default=[], help_text="The returns of this revision (rekuest_core ReturnPortInput): what a person answers through the blok.")
-    content_hash = models.CharField(max_length=64, help_text="sha256 of everything above: two revisions with the same hash are the same blok.")
-    author = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name="blok_revisions", help_text="The user this revision was written as.")
-    task = models.ForeignKey("Task", on_delete=models.SET_NULL, null=True, blank=True, related_name="blok_revisions", help_text="The task that wrote this revision, e.g. the assistant turn that designed it.")
-    message = models.TextField(null=True, blank=True, help_text="What changed and why, in a sentence.")
+    number = models.PositiveIntegerField(
+        help_text="The place of this revision in its blok's history, from 1."
+    )
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="children",
+        help_text="The revision this one was made from; NULL for the first.",
+    )
+    components = models.JSONField(
+        default=list,
+        db_default=[],
+        help_text="The component tree of this revision (blok language v2).",
+    )
+    vocab = models.PositiveSmallIntegerField(
+        default=2, db_default=2, help_text="The blok language version of this revision."
+    )
+    catalogs = models.JSONField(
+        default=list, db_default=[], help_text="The catalogs of this revision."
+    )
+    resolved_locals = models.JSONField(
+        default=list,
+        db_default=[],
+        help_text="The `<local>` declarations of this revision's tree as they resolve, each its node id plus its port with a kind: derived, never hashed.",
+    )
+    demo = models.JSONField(
+        default=dict,
+        db_default={},
+        help_text="The demo of this revision (rekuest_core BlokDemoInput).",
+    )
+    context = models.CharField(
+        max_length=16,
+        default="PANEL",
+        db_default="PANEL",
+        help_text="What draws this revision, as its `<Blok context=...>` says (rekuest_core ComponentContext).",
+    )
+    module = models.ForeignKey(
+        "Module",
+        on_delete=models.CASCADE,
+        related_name="blok_revisions",
+        help_text="The module this revision renders against.",
+    )
+    dependencies = models.JSONField(
+        default=list,
+        db_default=[],
+        help_text="The agent dependencies of this revision (rekuest_core AgentDependencyInput), as the blok's dependency rows held them.",
+    )
+    args = models.JSONField(
+        default=list,
+        db_default=[],
+        help_text="The args of this revision (rekuest_core ArgPortInput): the items the blok is opened for.",
+    )
+    returns = models.JSONField(
+        default=list,
+        db_default=[],
+        help_text="The returns of this revision (rekuest_core ReturnPortInput): what a person answers through the blok.",
+    )
+    content_hash = models.CharField(
+        max_length=64,
+        help_text="sha256 of everything above: two revisions with the same hash are the same blok.",
+    )
+    author = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="blok_revisions",
+        help_text="The user this revision was written as.",
+    )
+    task = models.ForeignKey(
+        "Task",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="blok_revisions",
+        help_text="The task that wrote this revision, e.g. the assistant turn that designed it.",
+    )
+    message = models.TextField(
+        null=True, blank=True, help_text="What changed and why, in a sentence."
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["blok", "number"], name="unique_revision_number_per_blok")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["blok", "number"], name="unique_revision_number_per_blok"
+            )
+        ]
 
 
 class BlokArgPort(BasePort):
@@ -189,7 +362,14 @@ class BlokArgPort(BasePort):
     parent_id: int | None
 
     blok = models.ForeignKey(Blok, on_delete=models.CASCADE, related_name="arg_ports")
-    parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children", help_text="If this port is nested inside a LIST or DICT")
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="children",
+        help_text="If this port is nested inside a LIST or DICT",
+    )
 
     class Meta:
         indexes = port_indexes("blok")
@@ -247,9 +427,15 @@ class BlokDependency(models.Model):
         blank=True,
         help_text="If set, only Agents of this version will be able to be assigned to this dependency",
     )
-    optional = models.BooleanField(default=False, help_text="Is this dependency optional", db_default=False)
-    description = models.TextField(null=True, blank=True, help_text="A description for this dependency")
-    created_at = models.DateTimeField(auto_created=True, auto_now_add=True, db_default=Now())
+    optional = models.BooleanField(
+        default=False, help_text="Is this dependency optional", db_default=False
+    )
+    description = models.TextField(
+        null=True, blank=True, help_text="A description for this dependency"
+    )
+    created_at = models.DateTimeField(
+        auto_created=True, auto_now_add=True, db_default=Now()
+    )
     min_viable_instances = models.IntegerField(
         null=True,
         help_text="The minimal viable instance count for this dependency",
@@ -260,7 +446,11 @@ class BlokDependency(models.Model):
     )
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["blok", "key"], name="unique_dependency_key_per_blok")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["blok", "key"], name="unique_dependency_key_per_blok"
+            )
+        ]
 
     def get_action_dependencies(self) -> list[ActionDependencyInputModel]:
         return [ActionDependencyInputModel(**demand) for demand in self.action_demands]
@@ -279,7 +469,9 @@ class MaterializedBlok(models.Model):
     pinned_revision_id: int | None
     agent_mappings: "models.Manager[BlokAgentMapping]"
 
-    blok = models.ForeignKey(Blok, on_delete=models.CASCADE, related_name="materialized_bloks")
+    blok = models.ForeignKey(
+        Blok, on_delete=models.CASCADE, related_name="materialized_bloks"
+    )
     declared_by = models.ForeignKey(
         "Agent",
         on_delete=models.CASCADE,
@@ -288,8 +480,12 @@ class MaterializedBlok(models.Model):
         related_name="declared_materialized_bloks",
         help_text="The agent whose registration auto-materialized this blok, if any. NULL means a user created it by hand. An auto-materialization is meaningless without its agent, hence CASCADE.",
     )
-    name = models.CharField(max_length=1000, help_text="The name of this Blok Implementation")
-    description = models.TextField(help_text="A description for this Blok Implementation")
+    name = models.CharField(
+        max_length=1000, help_text="The name of this Blok Implementation"
+    )
+    description = models.TextField(
+        help_text="A description for this Blok Implementation"
+    )
     pinned_revision = models.ForeignKey(
         BlokRevision,
         on_delete=models.SET_NULL,
@@ -298,7 +494,11 @@ class MaterializedBlok(models.Model):
         related_name="pinned_by",
         help_text="The revision this materialization stays at. NULL follows the blok's head, which is what a materialization does unless pinned.",
     )
-    is_default = models.BooleanField(default=False, db_default=False, help_text="Whether this is its declaring agent's default Blok for the Blok's context. At most one per agent and context: declaring a new default clears the previous one.")
+    is_default = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text="Whether this is its declaring agent's default Blok for the Blok's context. At most one per agent and context: declaring a new default clears the previous one.",
+    )
     scope = TextChoicesField(  # pyright: ignore[reportCallIssue]  django-choices-field's stub predates db_default
         max_length=1000,
         choices_enum=enums.MaterializationScopeChoices,  # pyright: ignore[reportCallIssue]  django-choices-field's stub predates db_default
@@ -314,8 +514,18 @@ class MaterializedBlok(models.Model):
         related_name="shown_bloks",
         help_text="The task that showed this materialization (scope TASK): it goes with its task.",
     )
-    task_role = models.CharField(max_length=16, null=True, blank=True, choices=enums.TaskBlokRoleChoices.choices, help_text="Why its task showed it: ASK (the task holds until a person answers through it) or INFORM.")
-    args = models.JSONField(default=dict, db_default={}, help_text="What it is opened on, by arg key (read under `@args.<key>`). Empty for a materialization opened by whoever shows it.")
+    task_role = models.CharField(
+        max_length=16,
+        null=True,
+        blank=True,
+        choices=enums.TaskBlokRoleChoices.choices,
+        help_text="Why its task showed it: ASK (the task holds until a person answers through it) or INFORM.",
+    )
+    args = models.JSONField(
+        default=dict,
+        db_default={},
+        help_text="What it is opened on, by arg key (read under `@args.<key>`). Empty for a materialization opened by whoever shows it.",
+    )
     pinned_by = models.ManyToManyField(
         get_user_model(),
         related_name="pinned_materialized_bloks",
@@ -347,8 +557,12 @@ class MaterializedBlok(models.Model):
 
 
 class DashboardPlacement(models.Model):
-    dashboard = models.ForeignKey(Dashboard, on_delete=models.CASCADE, related_name="placements")
-    blok = models.ForeignKey(MaterializedBlok, on_delete=models.CASCADE, related_name="dashboard_placements")
+    dashboard = models.ForeignKey(
+        Dashboard, on_delete=models.CASCADE, related_name="placements"
+    )
+    blok = models.ForeignKey(
+        MaterializedBlok, on_delete=models.CASCADE, related_name="dashboard_placements"
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
 
@@ -359,8 +573,15 @@ class BlokAgentMapping(models.Model):
     # Declared for the type checker: Django adds the foreign key's id column without saying so.
     agent_id: int
 
-    key = models.CharField(max_length=1000, help_text="The reference of the dependency this mapping is for (e.g. imagej)", default="general", db_default="general")
-    agent = models.ForeignKey("Agent", on_delete=models.CASCADE, related_name="agent_mappings")
+    key = models.CharField(
+        max_length=1000,
+        help_text="The reference of the dependency this mapping is for (e.g. imagej)",
+        default="general",
+        db_default="general",
+    )
+    agent = models.ForeignKey(
+        "Agent", on_delete=models.CASCADE, related_name="agent_mappings"
+    )
     materialized_blok = models.ForeignKey(
         MaterializedBlok,
         on_delete=models.CASCADE,
@@ -378,4 +599,9 @@ class BlokAgentMapping(models.Model):
 
     class Meta:
         # Prevents mapping 'stage_dep' to two different agents inside the same materialized instance
-        constraints = [models.UniqueConstraint(fields=["materialized_blok", "key"], name="unique_dependency_per_materialized_blok")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["materialized_blok", "key"],
+                name="unique_dependency_per_materialized_blok",
+            )
+        ]

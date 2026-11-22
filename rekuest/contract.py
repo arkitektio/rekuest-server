@@ -7,7 +7,25 @@ the same commit, and no installer has to learn of it.
 
 from __future__ import annotations
 
-from arkitekt_service.contract import JSON, Contract, Description, Descriptor, Facts, Hosts, Job, Needs, Offers, Peer, Refused, Role, Scope, Sidecar, Start, Structure, blocks
+from arkitekt_service.contract import (
+    JSON,
+    Contract,
+    Description,
+    Descriptor,
+    Facts,
+    Hosts,
+    Job,
+    Needs,
+    Offers,
+    Peer,
+    Refused,
+    Role,
+    Scope,
+    Sidecar,
+    Start,
+    Structure,
+    blocks,
+)
 
 from rekuest.configuration import Settings
 
@@ -17,16 +35,47 @@ TAKT = "takt"
 #: What an app may do here on a user's behalf: defined at the coordination server when the hub
 #: enrols. Every root field of the schema asks for one of them (`AuthExtension(scopes=...)`).
 SCOPES = [
-    Scope(key="rekuest_read", description="See agents, actions, tasks, dashboards, bloks, spaces and automations."),
-    Scope(key="rekuest_root_call", description="Start actions on agents as tasks of their own, and pause, resume, cancel or interrupt the tasks you started."),
-    Scope(key="rekuest_agent", description="Act as an agent: register actions and modules and receive tasks."),
-    Scope(key="rekuest_write", description="Create and change dashboards, bloks, spaces, shortcuts, test cases and assets."),
-    Scope(key="rekuest_automate", description="Create and change triggers, schedules and wiregrams that run actions automatically."),
-    Scope(key="rekuest_dependency_call", description="As an agent, run the actions its actions declare they depend on, as part of their tasks."),
-    Scope(key="rekuest_dynamic_ask", description="As an agent, ask you through forms it makes while it runs, not only the ones its actions declare."),
-    Scope(key="rekuest_dynamic_call", description="As an agent, run actions it finds while it runs, as you, not only the ones its actions declare they depend on."),
-    Scope(key="rekuest_dynamic_inform", description="As an agent, show you panels it makes while it runs, not only the ones its actions declare."),
-    Scope(key="rekuest_all", description="Do everything in Rekuest on your behalf.", is_all_scope=True),
+    Scope(
+        key="rekuest_read",
+        description="See agents, actions, tasks, dashboards, bloks, spaces and automations.",
+    ),
+    Scope(
+        key="rekuest_root_call",
+        description="Start actions on agents as tasks of their own, and pause, resume, cancel or interrupt the tasks you started.",
+    ),
+    Scope(
+        key="rekuest_agent",
+        description="Act as an agent: register actions and modules and receive tasks.",
+    ),
+    Scope(
+        key="rekuest_write",
+        description="Create and change dashboards, bloks, spaces, shortcuts, test cases and assets.",
+    ),
+    Scope(
+        key="rekuest_automate",
+        description="Create and change triggers, schedules and wiregrams that run actions automatically.",
+    ),
+    Scope(
+        key="rekuest_dependency_call",
+        description="As an agent, run the actions its actions declare they depend on, as part of their tasks.",
+    ),
+    Scope(
+        key="rekuest_dynamic_ask",
+        description="As an agent, ask you through forms it makes while it runs, not only the ones its actions declare.",
+    ),
+    Scope(
+        key="rekuest_dynamic_call",
+        description="As an agent, run actions it finds while it runs, as you, not only the ones its actions declare they depend on.",
+    ),
+    Scope(
+        key="rekuest_dynamic_inform",
+        description="As an agent, show you panels it makes while it runs, not only the ones its actions declare.",
+    ),
+    Scope(
+        key="rekuest_all",
+        description="Do everything in Rekuest on your behalf.",
+        is_all_scope=True,
+    ),
 ]
 
 #: The scope that stands for every other one.
@@ -53,9 +102,20 @@ HOSTS = Hosts(
 
 #: What a member of an organization may do here.
 ROLES = [
-    Role(key="rekuest_admin", description="Full control of Rekuest in this organization.", is_admin_role=True),
-    Role(key="rekuest_editor", description="Run actions, act as an agent, and build dashboards and bloks.", is_default_role=True),
-    Role(key="rekuest_automator", description="Set up automations that run on the organization's behalf."),
+    Role(
+        key="rekuest_admin",
+        description="Full control of Rekuest in this organization.",
+        is_admin_role=True,
+    ),
+    Role(
+        key="rekuest_editor",
+        description="Run actions, act as an agent, and build dashboards and bloks.",
+        is_default_role=True,
+    ),
+    Role(
+        key="rekuest_automator",
+        description="Set up automations that run on the organization's behalf.",
+    ),
 ]
 
 #: The role every write asks for, the one automations ask for instead, and the one that holds both.
@@ -70,7 +130,11 @@ def _service(name: str, peer: Peer) -> dict[str, JSON]:
         "name": name,
         "url": peer.offers["rekuest_service"],
         **({"identifier": peer.identifier} if peer.identifier else {}),
-        **({"hosts": peer.hosts.model_dump(mode="json")} if peer.hosts is not None else {}),
+        **(
+            {"hosts": peer.hosts.model_dump(mode="json")}
+            if peer.hosts is not None
+            else {}
+        ),
     }
 
 
@@ -78,7 +142,9 @@ def render(facts: Facts) -> dict[str, JSON]:
     """This release's config for the hub ``facts`` describes."""
     takt = facts.peers.get(TAKT)
     if takt is None:
-        raise Refused("it needs takt beside it: without takt nothing can be assigned and no agent can connect")
+        raise Refused(
+            "it needs takt beside it: without takt nothing can be assigned and no agent can connect"
+        )
 
     document: dict[str, JSON] = {
         **blocks.server(facts),
@@ -89,14 +155,28 @@ def render(facts: Facts) -> dict[str, JSON]:
             # there, the other what can be done there. A peer may offer either or both.
             # What a service hosts goes in with it when the hub knows it (its image said so):
             # the catalog is then written from here, and the service is not asked.
-            "services": [_service(name, peer) for name, peer in facts.offering("rekuest_service").items()],
-            "hook_agents": [{"name": name, "hook_url": peer.offers["rekuest_hook"], **({"identifier": peer.identifier} if peer.identifier else {})} for name, peer in facts.offering("rekuest_hook").items()],
+            "services": [
+                _service(name, peer)
+                for name, peer in facts.offering("rekuest_service").items()
+            ],
+            "hook_agents": [
+                {
+                    "name": name,
+                    "hook_url": peer.offers["rekuest_hook"],
+                    **({"identifier": peer.identifier} if peer.identifier else {}),
+                }
+                for name, peer in facts.offering("rekuest_hook").items()
+            ],
             # What Rekuest signs as and is listed under in the hub's trust bundle: its name in
             # the hub (`rekuest`), not the kind of service it is (`me.identifier`).
             "identifier": facts.me.name,
             "server_url": facts.me.url,
             "takt_url": takt.url,
-            **({"takt_socket": takt.settings["socket"]} if "socket" in takt.settings else {}),
+            **(
+                {"takt_socket": takt.settings["socket"]}
+                if "socket" in takt.settings
+                else {}
+            ),
         },
     }
     if facts.storage is not None:
@@ -109,26 +189,53 @@ contract = Contract(
         name="rekuest",
         identifier="live.arkitekt.rekuest",
         summary="Assigns work to agents and keeps the record of it.",
-        needs=Needs(scopes=SCOPES, roles=ROLES, storage=["media", "kulisse"], instance_key=True, peers=[TAKT]),
+        needs=Needs(
+            scopes=SCOPES,
+            roles=ROLES,
+            storage=["media", "kulisse"],
+            instance_key=True,
+            peers=[TAKT],
+        ),
         offers=Offers(health="ht"),
         hosts=HOSTS,
         # Its other half: every agent connects to takt, not to this server, and the two are
         # released together under the same tag (takt even names the migrations it expects).
-        sidecars=[Sidecar(name="takt", image="{repository}-takt:{tag}", summary="The agent protocol: registration, assignment, liveness.")],
+        sidecars=[
+            Sidecar(
+                name="takt",
+                image="{repository}-takt:{tag}",
+                summary="The agent protocol: registration, assignment, liveness.",
+            )
+        ],
         upgrade_from="11.0.0",
     ),
     settings=Settings,
     render=render,
     # How this service is started: there is no script beside it. `arkitekt-service serve`
     # (and `debug`) become these, so they get the container's signals themselves.
-    serve=Start(("daphne", "-b", "0.0.0.0", "-p", "80", "--websocket_timeout", "-1", "rekuest.asgi:application")),
+    serve=Start(
+        (
+            "daphne",
+            "-b",
+            "0.0.0.0",
+            "-p",
+            "80",
+            "--websocket_timeout",
+            "-1",
+            "rekuest.asgi:application",
+        )
+    ),
     debug=Start(("python", "manage.py", "runserver", "0.0.0.0:80")),
     # The catalog of what the hub's services host is written with the database, from what the
     # config says of each (`rekuest.services[].hosts`): there before anything serves, and an
     # installer runs it again by name when a service was added, without restarting rekuest.
     jobs={
-        "ensureadmin": Job(("ensureadmin",), "Create the operator account the config names"),
-        "catalogue": Job(("catalogue",), "Catalogue what the hub's services host, from the config"),
+        "ensureadmin": Job(
+            ("ensureadmin",), "Create the operator account the config names"
+        ),
+        "catalogue": Job(
+            ("catalogue",), "Catalogue what the hub's services host, from the config"
+        ),
     },
     setup=("ensureadmin", "catalogue"),
 )

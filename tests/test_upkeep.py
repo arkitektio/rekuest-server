@@ -9,6 +9,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
+from arkitekt_service import trust
 from django.db import connection, connections
 from django.test import Client as HttpClient
 from django.urls import reverse
@@ -16,7 +17,6 @@ from django.urls import reverse
 from facade import models, provisioning
 from facade.service_trust import rekuest_identifier
 from rekuest.configuration import HookAgentEntry, ServiceEntry
-from arkitekt_service import trust
 from tests.provisioning_fixtures import declared, hub, lab  # noqa: F401  (fixtures)
 
 pytestmark = pytest.mark.usefixtures("takt")
@@ -26,9 +26,13 @@ def _post(job: str, authorization: str | None = "sign", body: bytes = b"{}"):
     path = reverse("upkeep", kwargs={"job": job})
     if authorization == "sign":
         identity = rekuest_identifier()
-        authorization = trust.sign("POST", path, body, issuer=identity, audience=identity)
+        authorization = trust.sign(
+            "POST", path, body, issuer=identity, audience=identity
+        )
     headers = {"Authorization": authorization} if authorization else {}
-    return HttpClient().post(path, data=body, content_type="application/json", headers=headers)
+    return HttpClient().post(
+        path, data=body, content_type="application/json", headers=headers
+    )
 
 
 @pytest.mark.django_db
@@ -36,18 +40,39 @@ class TestOnlyTaktMayAsk:
     def test_an_unsigned_request_is_refused(self):
         assert _post("provision", authorization=None).status_code == 401
 
-    def test_another_instances_key_is_refused_even_if_the_hub_vouches_for_it(self, settings):
+    def test_another_instances_key_is_refused_even_if_the_hub_vouches_for_it(
+        self, settings
+    ):
         """mikro's key is in the trust bundle, but only this instance's own key is takt's."""
         path = reverse("upkeep", kwargs={"job": "provision"})
         identity = rekuest_identifier()
-        forged = trust.sign("POST", path, b"{}", issuer=identity, audience=identity, key=settings.TEST_SERVICE_KEYS["mikro"])
+        forged = trust.sign(
+            "POST",
+            path,
+            b"{}",
+            issuer=identity,
+            audience=identity,
+            key=settings.TEST_SERVICE_KEYS["mikro"],
+        )
         assert _post("provision", authorization=forged).status_code == 401
 
     def test_a_token_for_another_request_is_refused(self):
         identity = rekuest_identifier()
-        elsewhere = trust.sign("POST", reverse("upkeep", kwargs={"job": "vacuum"}), b"{}", issuer=identity, audience=identity)
+        elsewhere = trust.sign(
+            "POST",
+            reverse("upkeep", kwargs={"job": "vacuum"}),
+            b"{}",
+            issuer=identity,
+            audience=identity,
+        )
         assert _post("provision", authorization=elsewhere).status_code == 401
-        other_body = trust.sign("POST", reverse("upkeep", kwargs={"job": "provision"}), b'{"x": 1}', issuer=identity, audience=identity)
+        other_body = trust.sign(
+            "POST",
+            reverse("upkeep", kwargs={"job": "provision"}),
+            b'{"x": 1}',
+            issuer=identity,
+            audience=identity,
+        )
         assert _post("provision", authorization=other_body).status_code == 401
 
     def test_a_token_is_good_once(self, monkeypatch):
@@ -61,7 +86,10 @@ class TestOnlyTaktMayAsk:
 
     def test_an_unknown_job_or_method_is_refused(self):
         assert _post("vacuum").status_code == 404
-        assert HttpClient().get(reverse("upkeep", kwargs={"job": "provision"})).status_code == 405
+        assert (
+            HttpClient().get(reverse("upkeep", kwargs={"job": "provision"})).status_code
+            == 405
+        )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -75,19 +103,38 @@ class TestProvision:
         assert models.Agent.objects.filter(name="janitor", organization=lab).exists()
 
     def test_it_says_what_failed(self, hub):
-        hub.SERVICES = [ServiceEntry(name="offline", url="http://127.0.0.1:9/_rekuest/service"), *hub.SERVICES]
-        hub.HOOK_AGENTS = [HookAgentEntry(name="gone", hook_url="http://127.0.0.1:9/_rekuest/hook"), *hub.HOOK_AGENTS]
+        hub.SERVICES = [
+            ServiceEntry(name="offline", url="http://127.0.0.1:9/_rekuest/service"),
+            *hub.SERVICES,
+        ]
+        hub.HOOK_AGENTS = [
+            HookAgentEntry(name="gone", hook_url="http://127.0.0.1:9/_rekuest/hook"),
+            *hub.HOOK_AGENTS,
+        ]
 
-        assert _post("provision").json() == {"ok": False, "skipped": False, "failed": ["service offline", "hook agent gone"]}
+        assert _post("provision").json() == {
+            "ok": False,
+            "skipped": False,
+            "failed": ["service offline", "hook agent gone"],
+        }
 
     def test_a_pass_already_running_elsewhere_is_left_to_it(self, hub, lab):
         """Another replica holds the lock: this one does nothing, and says so."""
         other = connections.create_connection("default")
         try:
             with other.cursor() as cursor:
-                cursor.execute("SELECT pg_advisory_lock(%s)", [provisioning.PROVISION_LOCK_KEY])
-            assert _post("provision").json() == {"ok": True, "skipped": True, "failed": []}
-            assert not models.Agent.objects.filter(name="janitor").exists() and not models.Service.objects.exists()
+                cursor.execute(
+                    "SELECT pg_advisory_lock(%s)", [provisioning.PROVISION_LOCK_KEY]
+                )
+            assert _post("provision").json() == {
+                "ok": True,
+                "skipped": True,
+                "failed": [],
+            }
+            assert (
+                not models.Agent.objects.filter(name="janitor").exists()
+                and not models.Service.objects.exists()
+            )
         finally:
             other.close()
 

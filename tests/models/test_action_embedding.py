@@ -19,7 +19,11 @@ def _action(prefix: str, **overrides) -> Action:
 @pytest.mark.django_db(transaction=True)
 def test_create_embeds_with_the_release_model() -> None:
     """A new action gets a unit vector of the release's width."""
-    action = _action("emb-create", name="Segment nuclei", description="Find cell nuclei in a fluorescence image")
+    action = _action(
+        "emb-create",
+        name="Segment nuclei",
+        description="Find cell nuclei in a fluorescence image",
+    )
     action.refresh_from_db()
 
     assert action.embedding is not None
@@ -30,7 +34,9 @@ def test_create_embeds_with_the_release_model() -> None:
 @pytest.mark.django_db(transaction=True)
 def test_editing_the_description_reembeds() -> None:
     """A changed description changes the vector; an unrelated ``update_fields`` save does not."""
-    action = _action("emb-edit", name="Export", description="Write a table to a spreadsheet")
+    action = _action(
+        "emb-edit", name="Export", description="Write a table to a spreadsheet"
+    )
     before = list(Action.objects.get(pk=action.pk).embedding)
 
     action = Action.objects.get(pk=action.pk)
@@ -68,14 +74,18 @@ def test_blank_text_stores_null() -> None:
 
 
 @pytest.mark.django_db(transaction=True)
-def test_an_unloadable_model_saves_the_row_without_a_vector(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_unloadable_model_saves_the_row_without_a_vector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The write does not fail because the model did; the next save of the row embeds it."""
 
     def unloadable() -> None:
         raise OSError("no weights")
 
     monkeypatch.setattr(engine, "_load_model_cached", unloadable)
-    action = _action("emb-unloadable", name="Blur", description="Gaussian blur of an image")
+    action = _action(
+        "emb-unloadable", name="Blur", description="Gaussian blur of an image"
+    )
     action.refresh_from_db()
     assert action.embedding is None
 

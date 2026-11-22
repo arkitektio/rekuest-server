@@ -51,7 +51,9 @@ def _compile_descriptor_condition(desc) -> str:
         if desc.value is None:
             return f"exists({pg_path})"
         if not isinstance(desc.value, bool):
-            raise ValueError(f"Operator {op} requires a boolean value (True = must exist, False = must not exist), got {desc.value!r}")
+            raise ValueError(
+                f"Operator {op} requires a boolean value (True = must exist, False = must not exist), got {desc.value!r}"
+            )
         return f"exists({pg_path})" if desc.value else f"!(exists({pg_path}))"
 
     if op in (RequiresOperator.MATCHES, RequiresOperator.EQUALS):

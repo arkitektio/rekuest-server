@@ -37,11 +37,23 @@ class PortDemandInput:
 class CreateHigherOrderImplementationInputModel(BaseModel):
     """A wrapper to deploy onto the agent of the implementation it wraps."""
 
-    lower: str = Field(description="The implementation to wrap; its agent hosts the wrapper.")
-    interface: str = Field(description="The wrapper's interface, unique on that agent (e.g. 'flow:123').")
-    definition: rimodels.DefinitionInputModel = Field(description="The wrapper's typed contract, derived by the caller.")
-    config: dict[str, JSON] | None = Field(default=None, description="Projection config: bound params + arg/dependency/return maps (see Implementation.higher_order_config).")
-    dependencies: list[rimodels.AgentDependencyInputModel] | None = Field(default=None, description="Dependencies the wrapper declares, for a dependency_map sourcing 'from: caller'.")
+    lower: str = Field(
+        description="The implementation to wrap; its agent hosts the wrapper."
+    )
+    interface: str = Field(
+        description="The wrapper's interface, unique on that agent (e.g. 'flow:123')."
+    )
+    definition: rimodels.DefinitionInputModel = Field(
+        description="The wrapper's typed contract, derived by the caller."
+    )
+    config: dict[str, JSON] | None = Field(
+        default=None,
+        description="Projection config: bound params + arg/dependency/return maps (see Implementation.higher_order_config).",
+    )
+    dependencies: list[rimodels.AgentDependencyInputModel] | None = Field(
+        default=None,
+        description="Dependencies the wrapper declares, for a dependency_map sourcing 'from: caller'.",
+    )
 
 
 @pydantic.input(
@@ -63,7 +75,9 @@ class DeleteImplementationInputModel(BaseModel):
         implementation: ID of the implementation to delete
     """
 
-    implementation: str = Field(description="The implementation ID to delete. This is used to identify the implementation in the system.")
+    implementation: str = Field(
+        description="The implementation ID to delete. This is used to identify the implementation in the system."
+    )
 
 
 @pydantic.input(
@@ -77,5 +91,10 @@ class DeleteImplementationInput:
 @strawberry.input(description="One object an action's estimate is computed for.")
 class EstimatedRuntimeFilterInput:
     identifier: str = strawberry.field(description="The object's structure.")
-    descriptors: list[ritypes.DescriptorInput] = strawberry.field(description="What the object says of itself, as for `objectDemands`.")
-    lte: float | None = strawberry.field(default=None, description="Leave out actions known to take longer than this many seconds.")
+    descriptors: list[ritypes.DescriptorInput] = strawberry.field(
+        description="What the object says of itself, as for `objectDemands`."
+    )
+    lte: float | None = strawberry.field(
+        default=None,
+        description="Leave out actions known to take longer than this many seconds.",
+    )

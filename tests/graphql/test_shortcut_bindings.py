@@ -37,7 +37,12 @@ ME = "query { dashboards { id } }"
 
 
 def _as(token: str) -> HttpContext:
-    return HttpContext(request=UniversalRequest(_extensions={}), response=TemporalResponse(), headers={"Authorization": f"Bearer {token}"}, type="http")
+    return HttpContext(
+        request=UniversalRequest(_extensions={}),
+        response=TemporalResponse(),
+        headers={"Authorization": f"Bearer {token}"},
+        type="http",
+    )
 
 
 def _reason(result: ExecutionResult) -> str | None:
@@ -47,26 +52,51 @@ def _reason(result: ExecutionResult) -> str | None:
 def _shortcuts() -> dict[str, str]:
     """Four shortcuts in the admin's organization, by name."""
     admin = User.objects.get(sub="1")
-    membership = Membership.objects.filter(user=admin).select_related("organization").first()
+    membership = (
+        Membership.objects.filter(user=admin).select_related("organization").first()
+    )
     assert membership is not None
     client = Client.objects.get(client_id="oinsoins")
-    toolbox = models.Toolbox.objects.create(name="box", description="", creator=admin, client=client, organization=membership.organization)
-    return {name: str(models.Shortcut.objects.create(name=name, toolbox=toolbox, creator=admin).pk) for name in ("a-here", "b-elsewhere", "c-everywhere", "d-unbound")}
+    toolbox = models.Toolbox.objects.create(
+        name="box",
+        description="",
+        creator=admin,
+        client=client,
+        organization=membership.organization,
+    )
+    return {
+        name: str(
+            models.Shortcut.objects.create(name=name, toolbox=toolbox, creator=admin).pk
+        )
+        for name in ("a-here", "b-elsewhere", "c-everywhere", "d-unbound")
+    }
 
 
-async def _bind(shortcut: str, users: list[str], app: str | None, token: str = "test") -> ExecutionResult:
-    return await schema.execute(BIND, variable_values={"shortcut": shortcut, "users": users, "app": app}, context_value=_as(token))
+async def _bind(
+    shortcut: str, users: list[str], app: str | None, token: str = "test"
+) -> ExecutionResult:
+    return await schema.execute(
+        BIND,
+        variable_values={"shortcut": shortcut, "users": users, "app": app},
+        context_value=_as(token),
+    )
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_bound_shortcut_is_pinned_for_its_user_in_its_app(backend_stack: Deployment) -> None:
+async def test_a_bound_shortcut_is_pinned_for_its_user_in_its_app(
+    backend_stack: Deployment,
+) -> None:
     """Pinned (and first) for the bound user in its app or every app, not in another app, not for the admin."""
     assert (await schema.execute(ME, context_value=_as("test"))).errors is None
     ids = await sync_to_async(_shortcuts)()
 
     # "test2" has never called rekuest: binding makes their user row.
-    for name, app in (("a-here", APP), ("b-elsewhere", "another-app"), ("c-everywhere", None)):
+    for name, app in (
+        ("a-here", APP),
+        ("b-elsewhere", "another-app"),
+        ("c-everywhere", None),
+    ):
         bound = await _bind(ids[name], ["2"], app)
         assert bound.errors is None, bound.errors
 
@@ -77,7 +107,10 @@ async def test_a_bound_shortcut_is_pinned_for_its_user_in_its_app(backend_stack:
     # Their first request finds that row, and sees what is pinned for them in this app.
     pinned = await schema.execute(PINNED, context_value=_as("test2"))
     assert pinned.errors is None, pinned.errors
-    assert sorted(s["name"] for s in pinned.data["shortcuts"]) == ["a-here", "c-everywhere"]
+    assert sorted(s["name"] for s in pinned.data["shortcuts"]) == [
+        "a-here",
+        "c-everywhere",
+    ]
     assert await User.objects.filter(sub="2").acount() == 1
 
     ordered = await schema.execute(ORDERED, context_value=_as("test2"))
@@ -96,7 +129,9 @@ async def test_a_bound_shortcut_is_pinned_for_its_user_in_its_app(backend_stack:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_binding_again_changes_nothing_and_unbinding_unpins(backend_stack: Deployment) -> None:
+async def test_binding_again_changes_nothing_and_unbinding_unpins(
+    backend_stack: Deployment,
+) -> None:
     """A second bind keeps the one binding; unbinding unpins."""
     assert (await schema.execute(ME, context_value=_as("test"))).errors is None
     ids = await sync_to_async(_shortcuts)()
@@ -107,7 +142,9 @@ async def test_binding_again_changes_nothing_and_unbinding_unpins(backend_stack:
     bindings = again.data["bindShortcut"]["bindings"]
     assert [(b["app"], b["user"]["sub"]) for b in bindings] == [(None, "2")]
 
-    unbound = await schema.execute(UNBIND, variable_values={"id": bindings[0]["id"]}, context_value=_as("test"))
+    unbound = await schema.execute(
+        UNBIND, variable_values={"id": bindings[0]["id"]}, context_value=_as("test")
+    )
     assert unbound.errors is None, unbound.errors
     pinned = await schema.execute(PINNED, context_value=_as("test2"))
     assert pinned.data["shortcuts"] == []
@@ -126,14 +163,18 @@ async def test_only_an_admin_binds(backend_stack: Deployment) -> None:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_another_organizations_admin_cannot_bind(backend_stack: Deployment) -> None:
+async def test_another_organizations_admin_cannot_bind(
+    backend_stack: Deployment,
+) -> None:
     """An admin elsewhere cannot reach this organization's shortcut."""
     assert (await schema.execute(ME, context_value=_as("test"))).errors is None
     ids = await sync_to_async(_shortcuts)()
 
     refused = await _bind(ids["a-here"], ["3"], APP, token="test-other")
     assert refused.errors is not None
-    assert not await models.ShortcutBinding.objects.filter(shortcut_id=ids["a-here"]).aexists()
+    assert not await models.ShortcutBinding.objects.filter(
+        shortcut_id=ids["a-here"]
+    ).aexists()
 
 
 MENU = """
@@ -145,7 +186,9 @@ MENU = """
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_the_menus_limit_keeps_the_pinned_shortcuts(backend_stack: Deployment) -> None:
+async def test_the_menus_limit_keeps_the_pinned_shortcuts(
+    backend_stack: Deployment,
+) -> None:
     """The menu's order (pinned, then runnable, then `pk`) under its limit still lists what is pinned."""
     assert (await schema.execute(ME, context_value=_as("test"))).errors is None
     ids = await sync_to_async(_shortcuts)()
@@ -155,7 +198,10 @@ async def test_the_menus_limit_keeps_the_pinned_shortcuts(backend_stack: Deploym
 
     menu = await schema.execute(MENU, context_value=_as("test2"))
     assert menu.errors is None, menu.errors
-    assert sorted(s["name"] for s in menu.data["shortcuts"]) == ["c-everywhere", "d-unbound"]
+    assert sorted(s["name"] for s in menu.data["shortcuts"]) == [
+        "c-everywhere",
+        "d-unbound",
+    ]
 
 
 CREATE = """
@@ -167,38 +213,62 @@ CREATE = """
 
 def _action() -> str:
     admin = User.objects.get(sub="1")
-    membership = Membership.objects.filter(user=admin).select_related("organization").first()
+    membership = (
+        Membership.objects.filter(user=admin).select_related("organization").first()
+    )
     assert membership is not None
     return str(create_action_for_organization(membership.organization, "bindcreate").pk)
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_an_admin_creates_a_shortcut_pinned_for_members(backend_stack: Deployment) -> None:
+async def test_an_admin_creates_a_shortcut_pinned_for_members(
+    backend_stack: Deployment,
+) -> None:
     """`createShortcut` with bindings makes the shortcut, in this organization's toolbox, and its pins."""
     assert (await schema.execute(ME, context_value=_as("test"))).errors is None
     action = await sync_to_async(_action)()
 
-    made = await schema.execute(CREATE, variable_values={"action": action, "bindings": {"users": ["2"], "app": APP}}, context_value=_as("test"))
+    made = await schema.execute(
+        CREATE,
+        variable_values={"action": action, "bindings": {"users": ["2"], "app": APP}},
+        context_value=_as("test"),
+    )
     assert made.errors is None, made.errors
-    assert made.data["createShortcut"]["bindings"] == [{"app": APP, "user": {"sub": "2"}}]
+    assert made.data["createShortcut"]["bindings"] == [
+        {"app": APP, "user": {"sub": "2"}}
+    ]
     admin = await User.objects.aget(sub="1")
-    toolbox = await models.Toolbox.objects.select_related("organization").aget(pk=made.data["createShortcut"]["toolbox"]["id"])
-    assert await Membership.objects.filter(user=admin, organization=toolbox.organization).aexists()
+    toolbox = await models.Toolbox.objects.select_related("organization").aget(
+        pk=made.data["createShortcut"]["toolbox"]["id"]
+    )
+    assert await Membership.objects.filter(
+        user=admin, organization=toolbox.organization
+    ).aexists()
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_member_cannot_create_a_shortcut_pinned_for_others(backend_stack: Deployment) -> None:
+async def test_a_member_cannot_create_a_shortcut_pinned_for_others(
+    backend_stack: Deployment,
+) -> None:
     """Only the bindings need an admin; refused, nothing is made."""
     assert (await schema.execute(ME, context_value=_as("test"))).errors is None
     action = await sync_to_async(_action)()
 
-    refused = await schema.execute(CREATE, variable_values={"action": action, "bindings": {"users": ["2"], "app": APP}}, context_value=_as("test-member"))
+    refused = await schema.execute(
+        CREATE,
+        variable_values={"action": action, "bindings": {"users": ["2"], "app": APP}},
+        context_value=_as("test-member"),
+    )
     assert refused.errors is not None
     assert not await models.Shortcut.objects.filter(name="pinned").aexists()
 
-    plain = await schema.execute(CREATE, variable_values={"action": action, "bindings": None}, context_value=_as("test-member"))
+    plain = await schema.execute(
+        CREATE,
+        variable_values={"action": action, "bindings": None},
+        context_value=_as("test-member"),
+    )
     assert plain.errors is None, plain.errors
 
 
@@ -213,16 +283,22 @@ RULE = """
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_a_rule_pins_for_whoever_matches_every_dimension_it_sets(backend_stack: Deployment) -> None:
+async def test_a_rule_pins_for_whoever_matches_every_dimension_it_sets(
+    backend_stack: Deployment,
+) -> None:
     """Each of user, app, client and device that a binding sets must be the caller's; unset matches anyone."""
     assert (await schema.execute(ME, context_value=_as("test"))).errors is None
     ids = await sync_to_async(_shortcuts)()
     names = ["a-here", "b-elsewhere", "c-everywhere", "d-unbound"]
-    extra = await sync_to_async(lambda: models.Shortcut.objects.get(pk=ids["a-here"]).toolbox)()
+    extra = await sync_to_async(
+        lambda: models.Shortcut.objects.get(pk=ids["a-here"]).toolbox
+    )()
     admin = await User.objects.aget(sub="1")
 
     async def shortcut(name: str) -> str:
-        made = await models.Shortcut.objects.acreate(name=name, toolbox=extra, creator=admin)
+        made = await models.Shortcut.objects.acreate(
+            name=name, toolbox=extra, creator=admin
+        )
         names.append(name)
         return str(made.pk)
 
@@ -234,12 +310,24 @@ async def test_a_rule_pins_for_whoever_matches_every_dimension_it_sets(backend_s
         # Nothing set: the whole organization.
         "c-everywhere": {},
         await shortcut("e-device"): {"device": DEVICE},
-        await shortcut("f-user-app-device"): {"users": ["2"], "app": APP, "device": DEVICE},
+        await shortcut("f-user-app-device"): {
+            "users": ["2"],
+            "app": APP,
+            "device": DEVICE,
+        },
         # Right user and app, wrong client: one dimension off is no match.
-        await shortcut("g-wrong-client"): {"users": ["2"], "app": APP, "client": "oinsoins"},
+        await shortcut("g-wrong-client"): {
+            "users": ["2"],
+            "app": APP,
+            "client": "oinsoins",
+        },
     }
     for name, rule in rules.items():
-        bound = await schema.execute(RULE, variable_values={"shortcut": ids.get(name, name), **rule}, context_value=_as("test"))
+        bound = await schema.execute(
+            RULE,
+            variable_values={"shortcut": ids.get(name, name), **rule},
+            context_value=_as("test"),
+        )
         assert bound.errors is None, bound.errors
 
     async def pinned(token: str) -> list[str]:
@@ -247,7 +335,12 @@ async def test_a_rule_pins_for_whoever_matches_every_dimension_it_sets(backend_s
         assert result.errors is None, result.errors
         return sorted(s["name"] for s in result.data["shortcuts"])
 
-    assert await pinned("test2") == ["a-here", "c-everywhere", "e-device", "f-user-app-device"]
+    assert await pinned("test2") == [
+        "a-here",
+        "c-everywhere",
+        "e-device",
+        "f-user-app-device",
+    ]
     # The admin is another user on another client, on the same device.
     assert await pinned("test") == ["c-everywhere", "e-device"]
 
@@ -260,9 +353,15 @@ async def test_a_rule_without_users_is_one_binding(backend_stack: Deployment) ->
     ids = await sync_to_async(_shortcuts)()
 
     for _ in range(2):
-        bound = await schema.execute(RULE, variable_values={"shortcut": ids["c-everywhere"], "app": APP}, context_value=_as("test"))
+        bound = await schema.execute(
+            RULE,
+            variable_values={"shortcut": ids["c-everywhere"], "app": APP},
+            context_value=_as("test"),
+        )
         assert bound.errors is None, bound.errors
-    assert bound.data["bindShortcut"]["bindings"] == [{"user": None, "app": APP, "client": None, "device": None}]
+    assert bound.data["bindShortcut"]["bindings"] == [
+        {"user": None, "app": APP, "client": None, "device": None}
+    ]
 
 
 CREATE_PINNED = """
@@ -283,16 +382,35 @@ async def test_a_shortcut_names_the_agent_it_runs_on(backend_stack: Deployment) 
     from tests.factories import _build_implementation_for_agent, seed_agent
 
     agent = await seed_agent("shortcut-pin", token="test")
-    implementation = await sync_to_async(_build_implementation_for_agent)(agent.pk, "shortcut-pin")
+    implementation = await sync_to_async(_build_implementation_for_agent)(
+        agent.pk, "shortcut-pin"
+    )
     target = {"action": str(implementation.action_id), "agent": str(agent.pk)}
 
-    created = await schema.execute(CREATE_PINNED, variable_values={**target, "interface": implementation.interface}, context_value=_as("test"))
+    created = await schema.execute(
+        CREATE_PINNED,
+        variable_values={**target, "interface": implementation.interface},
+        context_value=_as("test"),
+    )
     assert created.errors is None, created.errors
-    assert created.data["createShortcut"] == {"id": created.data["createShortcut"]["id"], "interface": implementation.interface, "agent": {"id": str(agent.pk)}}
+    assert created.data["createShortcut"] == {
+        "id": created.data["createShortcut"]["id"],
+        "interface": implementation.interface,
+        "agent": {"id": str(agent.pk)},
+    }
 
-    refused = await schema.execute(CREATE_PINNED, variable_values={**target, "interface": "another"}, context_value=_as("test"))
-    assert refused.errors and "has no implementation 'another'" in refused.errors[0].message
+    refused = await schema.execute(
+        CREATE_PINNED,
+        variable_values={**target, "interface": "another"},
+        context_value=_as("test"),
+    )
+    assert (
+        refused.errors
+        and "has no implementation 'another'" in refused.errors[0].message
+    )
 
     await agent.adelete()
-    shortcut = await models.Shortcut.objects.aget(pk=created.data["createShortcut"]["id"])
+    shortcut = await models.Shortcut.objects.aget(
+        pk=created.data["createShortcut"]["id"]
+    )
     assert shortcut.agent_id is None

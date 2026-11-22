@@ -58,7 +58,9 @@ async def _seed(prefix):
     """
     agent = await seed_agent(prefix, token="test")
     root = await build_task_for_agent_caller(agent.pk, f"{prefix}-root")
-    child = await build_task_for_agent_caller(agent.pk, f"{prefix}-child", parent=root, root=root)
+    child = await build_task_for_agent_caller(
+        agent.pk, f"{prefix}-child", parent=root, root=root
+    )
     client_id = await sync_to_async(lambda: agent.client.client_id)()
     return SimpleNamespace(agent=agent, root=root, child=child, client_id=client_id)
 
@@ -135,7 +137,9 @@ class TestTaskFilter:
         assert not result.errors, result.errors
         assert [t["id"] for t in result.data["tasks"]] == [str(seeded.root.id)]
 
-    async def test_root_isnull_separates_roots_from_children(self, authenticated_context):
+    async def test_root_isnull_separates_roots_from_children(
+        self, authenticated_context
+    ):
         seeded = await _seed("tf-rootnull")
 
         result = await schema.execute(

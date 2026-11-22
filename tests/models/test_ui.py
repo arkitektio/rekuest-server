@@ -31,13 +31,24 @@ class TestUIModels:
         user = User.objects.create(username="testuser", email="test@example.com")
 
         org = _org()
-        blok = Blok.objects.create(name="Test Blok", description="A test UI blok", creator=user, organization=org, module=_catalog(org))
+        blok = Blok.objects.create(
+            name="Test Blok",
+            description="A test UI blok",
+            creator=user,
+            organization=org,
+            module=_catalog(org),
+        )
 
         assert blok.name == "Test Blok"
         assert blok.description == "A test UI blok"
         assert blok.creator == user
         assert blok.components == []
-        assert blok.demo == {} and blok.resolved_locals == [] and blok.vocab == 2 and blok.context == "PANEL"
+        assert (
+            blok.demo == {}
+            and blok.resolved_locals == []
+            and blok.vocab == 2
+            and blok.context == "PANEL"
+        )
 
     def test_dashboard_creation(self):
         """Test creating a Dashboard model instance."""
@@ -52,13 +63,19 @@ class TestUIModels:
 
         user = get_user_model().objects.create(username="unique-blok-user")
         org_a, org_b = _org("unique-a"), _org("unique-b")
-        Blok.objects.create(name="Same", creator=user, organization=org_a, module=_catalog(org_a))
+        Blok.objects.create(
+            name="Same", creator=user, organization=org_a, module=_catalog(org_a)
+        )
 
         with pytest.raises(IntegrityError), transaction.atomic():
-            Blok.objects.create(name="Same", creator=user, organization=org_a, module=_catalog(org_a))
+            Blok.objects.create(
+                name="Same", creator=user, organization=org_a, module=_catalog(org_a)
+            )
 
         # A different organization may reuse the name.
-        Blok.objects.create(name="Same", creator=user, organization=org_b, module=_catalog(org_b))
+        Blok.objects.create(
+            name="Same", creator=user, organization=org_b, module=_catalog(org_b)
+        )
 
     def test_dependency_key_unique_per_blok(self):
         """A blok cannot declare the same dependency key twice."""
@@ -69,7 +86,9 @@ class TestUIModels:
 
         user = get_user_model().objects.create(username="unique-dep-user")
         org = _org("unique-dep")
-        blok = Blok.objects.create(name="Deps", creator=user, organization=org, module=_catalog(org))
+        blok = Blok.objects.create(
+            name="Deps", creator=user, organization=org, module=_catalog(org)
+        )
         BlokDependency.objects.create(blok=blok, key="stage")
 
         with pytest.raises(IntegrityError), transaction.atomic():

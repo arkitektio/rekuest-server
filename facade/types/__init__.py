@@ -14,42 +14,49 @@ resolve against the defining module's namespace when Strawberry builds the schem
 from . import (
     action,
     agent,
-    schedule,
-    wiregram,
-    trigger,
-    task,
     auth,
     base,
     blok,
-    probe,
     dashboard,
     demand,
     dependency,
     implementation,
+    probe,
+    schedule,
     session,
     shelve,
     state,
     structure,
+    task,
     testcase,
     threed,
     toolbox,
+    trigger,
+    wiregram,
 )
 from .action import Action
-from .stats import ActionStats, AgentStats, TaskStats, action_stats, agent_stats, task_stats
 from .agent import Agent, Lock
-from .schedule import Schedule
-from .wiregram import Wiregram
-from .trigger import Firing, Signal, SignalDeclaration, Trigger
-from .task import (
-    ActionAllowance,
-    Task,
-    TaskEvent,
-    TaskInstruct,
+from .asset import (
+    AgentAsset,
+    Asset,
+    AssetPolicy,
+    AssetUploadGrant,
+    ImagePolicy,
+    ModelPolicy,
+    ModelStats,
 )
-from .probe import Probe, ProbeEvent, ProbeStats, TaskInquiry
 from .auth import App, Caller, Client, Device, Organization, Release, User
 from .base import build_prescoped_queryset
-from .blok import ActionBlok, Blok, BlokAgentMapping, BlokDependency, BlokEdit, BlokRevision, MaterializedBlok, RevisionDependency
+from .blok import (
+    ActionBlok,
+    Blok,
+    BlokAgentMapping,
+    BlokDependency,
+    BlokEdit,
+    BlokRevision,
+    MaterializedBlok,
+    RevisionDependency,
+)
 from .dashboard import BaseCatalog, Dashboard, DashboardPlacement, Module
 from .demand import (
     ActionDemand,
@@ -66,11 +73,13 @@ from .dependency import (
     Dependency,
     DependencyTree,
     ImplementationMapping,
+    Resolution,
     ResolvedAgentDependency,
     ResolvedDependency,
-    Resolution,
 )
 from .implementation import Implementation, ImplementationInteraction
+from .probe import Probe, ProbeEvent, ProbeStats, TaskInquiry
+from .schedule import Schedule
 from .session import Session, SessionBoundary, TaskBoundary
 from .shelve import MemoryDrawer, MemoryShelve
 from .state import (
@@ -80,19 +89,34 @@ from .state import (
     State,
     StateDefinition,
 )
+from .stats import (
+    ActionStats,
+    AgentStats,
+    TaskStats,
+    action_stats,
+    agent_stats,
+    task_stats,
+)
 from .structure import (
+    HostedStructure,
     Interface,
     PortUsage,
     Service,
-    HostedStructure,
     Structure,
     StructureDescriptor,
     StructurePackage,
 )
+from .task import (
+    ActionAllowance,
+    Task,
+    TaskEvent,
+    TaskInstruct,
+)
 from .testcase import TestCase, TestResult
-from .asset import AgentAsset, Asset, AssetPolicy, AssetUploadGrant, ImagePolicy, ModelPolicy, ModelStats
 from .threed import Placement, Space
 from .toolbox import Collection, Protocol, Shortcut, ShortcutBinding, Toolbox
+from .trigger import Firing, Signal, SignalDeclaration, Trigger
+from .wiregram import Wiregram
 
 __all__ = [
     "build_prescoped_queryset",

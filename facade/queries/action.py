@@ -32,7 +32,12 @@ def action(
         return models.Implementation.objects.get(id=implementation).action
 
     if hash:
-        return cast("types.Action", models.Action.objects.get(hash=hash, organization=info.context.request.organization))
+        return cast(
+            "types.Action",
+            models.Action.objects.get(
+                hash=hash, organization=info.context.request.organization
+            ),
+        )
 
     if matching:
         ids = managers.get_action_ids_by_action_demands(
@@ -47,17 +52,29 @@ def action(
 
     if agent:
         if interface:
-            found = models.Implementation.objects.filter(action__hash=hash, interface=interface).first()
+            found = models.Implementation.objects.filter(
+                action__hash=hash, interface=interface
+            ).first()
             if found is None:
-                raise ValueError(f"No implementation of {hash} under the interface {interface!r}")
+                raise ValueError(
+                    f"No implementation of {hash} under the interface {interface!r}"
+                )
             return cast("types.Action", found.action)
         else:
-            raise ValueError("You need to provide either, action_hash or action_id, if you want to inspect the action of an agent")
+            raise ValueError(
+                "You need to provide either, action_hash or action_id, if you want to inspect the action of an agent"
+            )
 
     return cast("types.Action", models.Action.objects.get(id=id))
 
 
-def similar_actions_queryset(info: Info, origin: models.Action, filters_: "filters.ActionFilter | None" = None, limit: int = 10, max_distance: float | None = None) -> QuerySet[models.Action]:
+def similar_actions_queryset(
+    info: Info,
+    origin: models.Action,
+    filters_: "filters.ActionFilter | None" = None,
+    limit: int = 10,
+    max_distance: float | None = None,
+) -> QuerySet[models.Action]:
     """The org's other actions ranked by how close their name + description is to ``origin``'s.
 
     Cosine distance between ``origin``'s stored embedding and every other action's, nearest
@@ -72,9 +89,13 @@ def similar_actions_queryset(info: Info, origin: models.Action, filters_: "filte
     """
     if not engine.enabled() or origin.embedding is None:
         return models.Action.objects.none()
-    queryset = models.Action.objects.filter(organization=origin.organization, embedding__isnull=False).exclude(pk=origin.pk)
+    queryset = models.Action.objects.filter(
+        organization=origin.organization, embedding__isnull=False
+    ).exclude(pk=origin.pk)
     queryset = apply_filters(filters_, queryset, info)
-    queryset = queryset.annotate(_similar_distance=CosineDistance("embedding", origin.embedding))
+    queryset = queryset.annotate(
+        _similar_distance=CosineDistance("embedding", origin.embedding)
+    )
     if max_distance is not None:
         queryset = queryset.filter(_similar_distance__lt=max_distance)
     return queryset.order_by("_similar_distance", "pk")[: max(1, limit)]
@@ -89,4 +110,7 @@ def similar_actions(
 ) -> list[types.Action]:
     """Actions semantically similar to ``action``, nearest first (see ``similar_actions_queryset``)."""
     origin = scoped_get(models.Action, info, action)
-    return cast("list[types.Action]", list(similar_actions_queryset(info, origin, filters, limit, max_distance)))
+    return cast(
+        "list[types.Action]",
+        list(similar_actions_queryset(info, origin, filters, limit, max_distance)),
+    )

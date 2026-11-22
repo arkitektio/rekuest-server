@@ -7,7 +7,10 @@ from django.db.models.functions import Now
 from django_choices_field import TextChoicesField
 
 from facade import enums
-from rekuest_core.inputs.models import ActionDependencyInputModel, StateDependencyInputModel
+from rekuest_core.inputs.models import (
+    ActionDependencyInputModel,
+    StateDependencyInputModel,
+)
 
 if TYPE_CHECKING:
     from facade.models.task import Task
@@ -63,9 +66,15 @@ class Dependency(models.Model):
         help_text="If set, only Agents of this version will be able to be assigned to this dependency",
     )
 
-    optional = models.BooleanField(default=False, help_text="Is this dependency optional", db_default=False)
-    description = models.TextField(null=True, blank=True, help_text="A description for this dependency")
-    created_at = models.DateTimeField(auto_created=True, auto_now_add=True, db_default=Now())
+    optional = models.BooleanField(
+        default=False, help_text="Is this dependency optional", db_default=False
+    )
+    description = models.TextField(
+        null=True, blank=True, help_text="A description for this dependency"
+    )
+    created_at = models.DateTimeField(
+        auto_created=True, auto_now_add=True, db_default=Now()
+    )
     min_viable_instances = models.IntegerField(
         null=True,
         help_text="The minimal viable instance count for this dependency",
@@ -88,11 +97,23 @@ class Dependency(models.Model):
 
 
 class Resolution(models.Model):
-    resolved_at = models.DateTimeField(auto_created=True, auto_now_add=True, db_default=Now())
+    resolved_at = models.DateTimeField(
+        auto_created=True, auto_now_add=True, db_default=Now()
+    )
     # Preset Logic
-    name = models.CharField(max_length=200, null=True, blank=True, help_text="If set, this is a named preset (e.g. 'Standard Zeiss Config')")
+    name = models.CharField(
+        max_length=200,
+        null=True,
+        blank=True,
+        help_text="If set, this is a named preset (e.g. 'Standard Zeiss Config')",
+    )
 
-    implementation = models.ForeignKey("Implementation", on_delete=models.CASCADE, related_name="resolutions", help_text="The specific Implementation that this tree is configuring dependencies for.")
+    implementation = models.ForeignKey(
+        "Implementation",
+        on_delete=models.CASCADE,
+        related_name="resolutions",
+        help_text="The specific Implementation that this tree is configuring dependencies for.",
+    )
     creator = models.ForeignKey(
         get_user_model(),
         on_delete=models.CASCADE,
@@ -110,12 +131,28 @@ class Resolution(models.Model):
 class ResolvedDependency(models.Model):
     # The Parent Scope
 
-    resolution = models.ForeignKey(Resolution, on_delete=models.CASCADE, related_name="resolved_dependencies", help_text="The resolution scope this choice belongs to")
-    dependency = models.ForeignKey(Dependency, on_delete=models.SET_NULL, null=True, blank=True, help_text="The dependency this choice is fulfilling")
+    resolution = models.ForeignKey(
+        Resolution,
+        on_delete=models.CASCADE,
+        related_name="resolved_dependencies",
+        help_text="The resolution scope this choice belongs to",
+    )
+    dependency = models.ForeignKey(
+        Dependency,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="The dependency this choice is fulfilling",
+    )
 
     # The Requirement & The Choice
     key = models.CharField(max_length=2000)  # Matches Dependency.key
-    resolution_key = models.CharField(max_length=2000, null=True, blank=True, help_text="An optional key to identify this resolution in the context of its parent resolution")
+    resolution_key = models.CharField(
+        max_length=2000,
+        null=True,
+        blank=True,
+        help_text="An optional key to identify this resolution in the context of its parent resolution",
+    )
     implementation = models.ForeignKey(
         "Implementation",
         on_delete=models.PROTECT,  # Don't delete history if a tool is removed
@@ -124,7 +161,14 @@ class ResolvedDependency(models.Model):
 
     # The Recursive Link (The Sub-Tree)
     # If the chosen implementation has dependencies itself, this is where they are configured and stored
-    down_stream_resolution = models.ForeignKey(Resolution, on_delete=models.CASCADE, null=True, blank=True, related_name="upstream_dependencies", help_text="The configuration tree for THIS implementation's dependencies")
+    down_stream_resolution = models.ForeignKey(
+        Resolution,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="upstream_dependencies",
+        help_text="The configuration tree for THIS implementation's dependencies",
+    )
 
 
 class Implementation(models.Model):
@@ -137,7 +181,9 @@ class Implementation(models.Model):
     dependencies: "models.Manager[Dependency]"
     tasks: "models.Manager[Task]"
 
-    interface = models.CharField(max_length=1000, help_text="Interface (think Function)")
+    interface = models.CharField(
+        max_length=1000, help_text="Interface (think Function)"
+    )
     action = models.ForeignKey(
         "Action",
         on_delete=models.CASCADE,
@@ -172,12 +218,27 @@ class Implementation(models.Model):
         ),
         db_default={},
     )
-    params = models.JSONField(default=dict, help_text="Params for this Implementation", db_default={})
+    params = models.JSONField(
+        default=dict, help_text="Params for this Implementation", db_default={}
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
-    diagnostics = models.JSONField(default=list, help_text="Non-fatal registration findings (rekuest_core Diagnostic), e.g. validator/effect calls naming operations that neither the base catalog nor the definition's catalog provides. Replaced on every registration.", db_default=[])
-    manipulates = models.ManyToManyField("State", help_text="Which states does this implementation manipulate?", related_name="manipulated_by")
-    required_locks = models.ManyToManyField("Lock", related_name="required_by", blank=True, help_text="The agent's locks this implementation takes while it runs (declared as its `locks`).")
+    diagnostics = models.JSONField(
+        default=list,
+        help_text="Non-fatal registration findings (rekuest_core Diagnostic), e.g. validator/effect calls naming operations that neither the base catalog nor the definition's catalog provides. Replaced on every registration.",
+        db_default=[],
+    )
+    manipulates = models.ManyToManyField(
+        "State",
+        help_text="Which states does this implementation manipulate?",
+        related_name="manipulated_by",
+    )
+    required_locks = models.ManyToManyField(
+        "Lock",
+        related_name="required_by",
+        blank=True,
+        help_text="The agent's locks this implementation takes while it runs (declared as its `locks`).",
+    )
     needs_token = models.BooleanField(
         default=True,
         help_text="Whether Rekuest mints a signed provenance token when this implementation is assigned. Default true (provenance-by-default); false skips minting for trivial/internal tasks.",
@@ -228,7 +289,7 @@ class Implementation(models.Model):
         null=True,
         blank=True,
         related_name="drawn_implementations",
-        help_text="The agent's action logo blok (`<Blok kind=\"action\" context=\"logo\">`) that draws this implementation's action, if it declared one.",
+        help_text='The agent\'s action logo blok (`<Blok kind="action" context="logo">`) that draws this implementation\'s action, if it declared one.',
     )
     dynamic_asks = models.BooleanField(
         default=False,
@@ -274,15 +335,29 @@ class ImplementationFit(models.Model):
     """What an implementation can handle of one structure argument: a formula over the object's
     descriptors and its agent's hardware. takt writes these at registration."""
 
-    implementation = models.ForeignKey(Implementation, on_delete=models.CASCADE, related_name="fits", help_text="The implementation it is about.")
+    implementation = models.ForeignKey(
+        Implementation,
+        on_delete=models.CASCADE,
+        related_name="fits",
+        help_text="The implementation it is about.",
+    )
     port_key = models.CharField(max_length=1000, help_text="The key of the argument.")
-    compiled_jsonpath = models.TextField(help_text="The formula compiled to a PostgreSQL JSONPath predicate over the object and $agent.")
-    call = models.JSONField(help_text="The pure blok call the frontend and the agent evaluate.")
-    source = models.TextField(null=True, blank=True, help_text="The formula as its author wrote it.")
+    compiled_jsonpath = models.TextField(
+        help_text="The formula compiled to a PostgreSQL JSONPath predicate over the object and $agent."
+    )
+    call = models.JSONField(
+        help_text="The pure blok call the frontend and the agent evaluate."
+    )
+    source = models.TextField(
+        null=True, blank=True, help_text="The formula as its author wrote it."
+    )
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["implementation", "port_key"], name="implementation_fit_unique_port"),
+            models.UniqueConstraint(
+                fields=["implementation", "port_key"],
+                name="implementation_fit_unique_port",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -298,17 +373,41 @@ class ImplementationInteraction(models.Model):
     takt writes these at registration and deletes a template once nothing holds or shows it.
     """
 
-    implementation = models.ForeignKey(Implementation, on_delete=models.CASCADE, related_name="interactions", help_text="The implementation that declares it.")
-    key = models.CharField(max_length=1000, help_text="What a task names it by: `<parameter>.<method>` of the action's interactions protocol.")
-    role = models.CharField(max_length=16, choices=InteractionRole.choices, default=InteractionRole.ASK, db_default=InteractionRole.ASK, help_text="Whether a task holds on it until it is answered (ASK) or shows it and goes on (INFORM).")
-    description = models.TextField(null=True, blank=True, help_text="What it asks or shows, in a sentence.")
-    blok = models.ForeignKey("Blok", on_delete=models.PROTECT, related_name="interacted_by", help_text="The blok it is shown as.")
+    implementation = models.ForeignKey(
+        Implementation,
+        on_delete=models.CASCADE,
+        related_name="interactions",
+        help_text="The implementation that declares it.",
+    )
+    key = models.CharField(
+        max_length=1000,
+        help_text="What a task names it by: `<parameter>.<method>` of the action's interactions protocol.",
+    )
+    role = models.CharField(
+        max_length=16,
+        choices=InteractionRole.choices,
+        default=InteractionRole.ASK,
+        db_default=InteractionRole.ASK,
+        help_text="Whether a task holds on it until it is answered (ASK) or shows it and goes on (INFORM).",
+    )
+    description = models.TextField(
+        null=True, blank=True, help_text="What it asks or shows, in a sentence."
+    )
+    blok = models.ForeignKey(
+        "Blok",
+        on_delete=models.PROTECT,
+        related_name="interacted_by",
+        help_text="The blok it is shown as.",
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["implementation", "key"], name="implementation_interaction_unique_key"),
+            models.UniqueConstraint(
+                fields=["implementation", "key"],
+                name="implementation_interaction_unique_key",
+            ),
         ]
 
     def __str__(self) -> str:

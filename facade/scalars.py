@@ -2,7 +2,6 @@ from typing import NewType
 
 import strawberry
 
-
 Args = NewType("Args", object)
 Props = NewType("Props", object)
 

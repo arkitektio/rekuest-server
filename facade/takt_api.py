@@ -16,7 +16,13 @@ from pydantic import BaseModel, ConfigDict
 
 from facade import models
 from facade.caller_context import CallerContext
-from facade.inputs import AssignInputModel, CreateHigherOrderImplementationInputModel, DependencyTreeInputModel, ImplementAgentInputModel, ProbeInputModel
+from facade.inputs import (
+    AssignInputModel,
+    CreateHigherOrderImplementationInputModel,
+    DependencyTreeInputModel,
+    ImplementAgentInputModel,
+    ProbeInputModel,
+)
 
 
 class Request(BaseModel):
@@ -62,14 +68,20 @@ class Principal(BaseModel):
         return cls(
             user=context.user.pk,
             client=context.client.pk if context.client is not None else None,
-            organization=context.organization.pk if context.organization is not None else None,
+            organization=context.organization.pk
+            if context.organization is not None
+            else None,
             roles=list(context.roles),
         )
 
     @classmethod
     def of_caller(cls, caller: models.Caller) -> Principal:
         """A recorded caller, which carries no roles."""
-        return cls(user=caller.user_id, client=caller.client_id, organization=caller.organization_id)
+        return cls(
+            user=caller.user_id,
+            client=caller.client_id,
+            organization=caller.organization_id,
+        )
 
 
 # --- tasks -----------------------------------------------------------------------------------
@@ -372,8 +384,12 @@ PROBE_RESUME = Route("probe/resume", ProbeState, ProbeControlRequest)
 ENSURE_AGENT = Route("agent/ensure", AgentAnswer, EnsureAgentRequest)
 IMPLEMENT_AGENT = Route("agent/implement", ImplementAnswer, ImplementAgentRequest)
 DELETE_AGENT = Route("agent/delete", AgentAnswer, AgentRequest)
-DELETE_IMPLEMENTATION = Route("implementation/delete", ImplementationAnswer, DeleteImplementationRequest)
-CREATE_HIGHER_ORDER = Route("higher-order/create", ImplementationAnswer, CreateHigherOrderRequest)
+DELETE_IMPLEMENTATION = Route(
+    "implementation/delete", ImplementationAnswer, DeleteImplementationRequest
+)
+CREATE_HIGHER_ORDER = Route(
+    "higher-order/create", ImplementationAnswer, CreateHigherOrderRequest
+)
 CLEANUP_ACTIONS = Route("action/cleanup", CleanupActionsAnswer, CleanupActionsRequest)
 VALIDATE_TIMING = Route("schedule/validate", Nothing, Timing)
 PARSE_BLOK = Route("blok/parse", ParseBlokAnswer, ParseBlokRequest)

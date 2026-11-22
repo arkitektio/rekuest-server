@@ -13,7 +13,16 @@ from kante.context import HttpContext
 
 from facade.models import Agent, Blok, BlokDependency, Caller, MaterializedBlok, Module
 from facade.schema import schema
-from tests.graphql_ops import BLOKS, CREATE_BLOK, DELETE_BLOK, DELETE_MATERIALIZED_BLOK, FORK_BLOK, MATERIALIZE_BLOK, UPDATE_BLOK, UPDATE_MATERIALIZED_BLOK
+from tests.graphql_ops import (
+    BLOKS,
+    CREATE_BLOK,
+    DELETE_BLOK,
+    DELETE_MATERIALIZED_BLOK,
+    FORK_BLOK,
+    MATERIALIZE_BLOK,
+    UPDATE_BLOK,
+    UPDATE_MATERIALIZED_BLOK,
+)
 from tests.registered import blok as blok_tree
 from tests.registered import node
 
@@ -22,10 +31,22 @@ from tests.registered import node
 def _provided(context: HttpContext) -> dict:
     """A blok the app ``viewer`` provides, held by one of its agents."""
     org, user = context.request.organization, context.request.user
-    client = Client.objects.create(client_id="viewer-client", device=Device.objects.create(device_id="viewer-device"))
+    client = Client.objects.create(
+        client_id="viewer-client",
+        device=Device.objects.create(device_id="viewer-device"),
+    )
     Caller.objects.create(client=client, user=user, organization=org)
-    release = Release.objects.create(app=App.objects.create(identifier="viewer"), version="1.0.0")
-    agent = Agent.objects.create(app=release.app, hash="h", release=release, user=user, client=client, organization=org)
+    release = Release.objects.create(
+        app=App.objects.create(identifier="viewer"), version="1.0.0"
+    )
+    agent = Agent.objects.create(
+        app=release.app,
+        hash="h",
+        release=release,
+        user=user,
+        client=client,
+        organization=org,
+    )
     catalog = Module.objects.get_or_create(name="orkestrator", organization=org)[0]
     blok = Blok.objects.create(
         name="panel",
@@ -37,39 +58,78 @@ def _provided(context: HttpContext) -> dict:
         components=[blok_tree("agent", "panel", node("Box"))],
     )
     BlokDependency.objects.create(blok=blok, key="self")
-    slot = MaterializedBlok.objects.create(blok=blok, declared_by=agent, name="panel", description="")
+    slot = MaterializedBlok.objects.create(
+        blok=blok, declared_by=agent, name="panel", description=""
+    )
     return {"blok": blok, "agent": agent, "slot": slot}
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 class TestProvidedBloks:
-    async def test_a_provided_blok_is_not_changed_by_hand(self, authenticated_context: HttpContext) -> None:
+    async def test_a_provided_blok_is_not_changed_by_hand(
+        self, authenticated_context: HttpContext
+    ) -> None:
         env = await _provided(authenticated_context)
-        blok, slot, agent = str(env["blok"].id), str(env["slot"].id), str(env["agent"].id)
+        blok, slot, agent = (
+            str(env["blok"].id),
+            str(env["slot"].id),
+            str(env["agent"].id),
+        )
         refused = {
             "updateBlok": (UPDATE_BLOK, {"id": blok, "description": "mine now"}),
             "deleteBlok": (DELETE_BLOK, {"id": blok}),
-            "materializeBlok": (MATERIALIZE_BLOK, {"blok": blok, "agentMappings": [{"key": "self", "agent": agent}]}),
-            "updateMaterializedBlok": (UPDATE_MATERIALIZED_BLOK, {"id": slot, "agentMappings": []}),
+            "materializeBlok": (
+                MATERIALIZE_BLOK,
+                {"blok": blok, "agentMappings": [{"key": "self", "agent": agent}]},
+            ),
+            "updateMaterializedBlok": (
+                UPDATE_MATERIALIZED_BLOK,
+                {"id": slot, "agentMappings": []},
+            ),
             "deleteMaterializedBlok": (DELETE_MATERIALIZED_BLOK, {"id": slot}),
         }
         for name, (operation, variables) in refused.items():
-            result = await schema.execute(operation, context_value=authenticated_context, variable_values={"input": variables})
+            result = await schema.execute(
+                operation,
+                context_value=authenticated_context,
+                variable_values={"input": variables},
+            )
             assert result.errors, name
-        assert await sync_to_async(MaterializedBlok.objects.filter(id=env["slot"].id).exists)()
-        assert await sync_to_async(lambda: Blok.objects.get(id=env["blok"].id).description)() is None
+        assert await sync_to_async(
+            MaterializedBlok.objects.filter(id=env["slot"].id).exists
+        )()
+        assert (
+            await sync_to_async(
+                lambda: Blok.objects.get(id=env["blok"].id).description
+            )()
+            is None
+        )
 
-    async def test_create_blok_never_replaces_a_provided_one(self, authenticated_context: HttpContext) -> None:
+    async def test_create_blok_never_replaces_a_provided_one(
+        self, authenticated_context: HttpContext
+    ) -> None:
         env = await _provided(authenticated_context)
-        created = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "panel", "vocab": 2, "description": "mine"}})
+        created = await schema.execute(
+            CREATE_BLOK,
+            context_value=authenticated_context,
+            variable_values={
+                "input": {"name": "panel", "vocab": 2, "description": "mine"}
+            },
+        )
         assert not created.errors, created.errors
         assert created.data["createBlok"]["id"] != str(env["blok"].id)
         assert await sync_to_async(Blok.objects.filter(name="panel").count)() == 2
 
-    async def test_a_fork_is_a_custom_copy(self, authenticated_context: HttpContext) -> None:
+    async def test_a_fork_is_a_custom_copy(
+        self, authenticated_context: HttpContext
+    ) -> None:
         env = await _provided(authenticated_context)
-        forked = await schema.execute(FORK_BLOK, context_value=authenticated_context, variable_values={"input": {"id": str(env["blok"].id), "name": "my-panel"}})
+        forked = await schema.execute(
+            FORK_BLOK,
+            context_value=authenticated_context,
+            variable_values={"input": {"id": str(env["blok"].id), "name": "my-panel"}},
+        )
         assert not forked.errors, forked.errors
         fork = forked.data["forkBlok"]
         assert fork["name"] == "my-panel"
@@ -80,18 +140,35 @@ class TestProvidedBloks:
         assert fork["dependencies"] == [{"key": "viewer"}]
 
         # The copy is the user's: editable, and it outlives the provided one.
-        updated = await schema.execute(UPDATE_BLOK, context_value=authenticated_context, variable_values={"input": {"id": fork["id"], "description": "mine"}})
+        updated = await schema.execute(
+            UPDATE_BLOK,
+            context_value=authenticated_context,
+            variable_values={"input": {"id": fork["id"], "description": "mine"}},
+        )
         assert not updated.errors, updated.errors
         await sync_to_async(env["blok"].delete)()
         assert await sync_to_async(Blok.objects.filter(id=fork["id"]).exists)()
 
-        again = await schema.execute(FORK_BLOK, context_value=authenticated_context, variable_values={"input": {"id": fork["id"]}})
+        again = await schema.execute(
+            FORK_BLOK,
+            context_value=authenticated_context,
+            variable_values={"input": {"id": fork["id"]}},
+        )
         assert again.errors, "a custom blok is not forked"
 
-    async def test_a_fork_reads_its_apps_agent_as_one_it_is_bound_to(self, authenticated_context: HttpContext) -> None:
+    async def test_a_fork_reads_its_apps_agent_as_one_it_is_bound_to(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """``self`` becomes the binding (stored ``deps.viewer``); the dependencies it declares for an action stay."""
         env = await _provided(authenticated_context)
-        call = {"key": "onClick", "agent_call": {"dependency": "self", "operation": "analyze", "given": "cells"}}
+        call = {
+            "key": "onClick",
+            "agent_call": {
+                "dependency": "self",
+                "operation": "analyze",
+                "given": "cells",
+            },
+        }
         tree = blok_tree(
             "agent",
             "panel",
@@ -100,36 +177,85 @@ class TestProvidedBloks:
             node("Text", text={"path": "deps.cells__microscope.stage.x"}),
             {"id": "", "component": "Button", "props": [call]},
         )
-        await sync_to_async(Blok.objects.filter(id=env["blok"].id).update)(components=[tree])
+        await sync_to_async(Blok.objects.filter(id=env["blok"].id).update)(
+            components=[tree]
+        )
         await sync_to_async(BlokDependency.objects.filter(blok=env["blok"]).update)(
             action_demands=[{"key": "analyze", "demand": {}}],
-            state_demands=[{"key": "arm", "demand": {"matches": [{"key": "mode", "kind": "STRING"}]}}],
+            state_demands=[
+                {
+                    "key": "arm",
+                    "demand": {"matches": [{"key": "mode", "kind": "STRING"}]},
+                }
+            ],
         )
 
-        forked = await schema.execute(FORK_BLOK, context_value=authenticated_context, variable_values={"input": {"id": str(env["blok"].id), "name": "station"}})
+        forked = await schema.execute(
+            FORK_BLOK,
+            context_value=authenticated_context,
+            variable_values={"input": {"id": str(env["blok"].id), "name": "station"}},
+        )
         assert not forked.errors, forked.errors
 
-        fork = await sync_to_async(lambda: Blok.objects.get(id=forked.data["forkBlok"]["id"]).head.components)()
+        fork = await sync_to_async(
+            lambda: Blok.objects.get(id=forked.data["forkBlok"]["id"]).head.components
+        )()
         expected = blok_tree(
             "custom",
             "panel",
             node("dependencies", key="cells", like="deps.viewer.analyze"),
             node("Text", text={"path": "deps.viewer.arm.mode"}),
             node("Text", text={"path": "deps.cells__microscope.stage.x"}),
-            {"id": "", "component": "Button", "props": [{"key": "onClick", "agent_call": {"dependency": "viewer", "operation": "analyze", "given": "cells"}}]},
+            {
+                "id": "",
+                "component": "Button",
+                "props": [
+                    {
+                        "key": "onClick",
+                        "agent_call": {
+                            "dependency": "viewer",
+                            "operation": "analyze",
+                            "given": "cells",
+                        },
+                    }
+                ],
+            },
         )
         assert fork == [expected]
 
-    async def test_provided_tells_the_two_apart(self, authenticated_context: HttpContext) -> None:
+    async def test_provided_tells_the_two_apart(
+        self, authenticated_context: HttpContext
+    ) -> None:
         env = await _provided(authenticated_context)
-        created = await schema.execute(CREATE_BLOK, context_value=authenticated_context, variable_values={"input": {"name": "custom", "vocab": 2}})
+        created = await schema.execute(
+            CREATE_BLOK,
+            context_value=authenticated_context,
+            variable_values={"input": {"name": "custom", "vocab": 2}},
+        )
         assert not created.errors, created.errors
 
         for provided, expected in [
-            (True, [{"name": "panel", "provided": True, "app": {"identifier": "viewer"}, "providers": [{"id": str(env["agent"].id)}]}]),
-            (False, [{"name": "custom", "provided": False, "app": None, "providers": []}]),
+            (
+                True,
+                [
+                    {
+                        "name": "panel",
+                        "provided": True,
+                        "app": {"identifier": "viewer"},
+                        "providers": [{"id": str(env["agent"].id)}],
+                    }
+                ],
+            ),
+            (
+                False,
+                [{"name": "custom", "provided": False, "app": None, "providers": []}],
+            ),
         ]:
-            listed = await schema.execute(BLOKS, context_value=authenticated_context, variable_values={"filters": {"provided": provided}})
+            listed = await schema.execute(
+                BLOKS,
+                context_value=authenticated_context,
+                variable_values={"filters": {"provided": provided}},
+            )
             assert not listed.errors, listed.errors
             assert listed.data["bloks"] == expected
 
@@ -147,23 +273,72 @@ BLOKS_FOR = """
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 class TestBlokArgs:
-    async def test_a_fork_keeps_the_items_the_blok_opens_for(self, authenticated_context: HttpContext) -> None:
+    async def test_a_fork_keeps_the_items_the_blok_opens_for(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """The fork copies the args and their rows (children under their copied parent), so an item finds both."""
         from tests.registered import create_blok
 
-        image = {"key": "image", "kind": "STRUCTURE", "identifier": "@mikro/image", "nullable": False}
-        org, user = authenticated_context.request.organization, authenticated_context.request.user
+        image = {
+            "key": "image",
+            "kind": "STRUCTURE",
+            "identifier": "@mikro/image",
+            "nullable": False,
+        }
+        org, user = (
+            authenticated_context.request.organization,
+            authenticated_context.request.user,
+        )
         app = await sync_to_async(App.objects.create)(identifier="gallery-app")
-        provided = await sync_to_async(create_blok)(org, user, "gallery", [{"key": "images", "kind": "LIST", "nullable": False, "children": [image]}], app=app, declaration_hash="b" * 64)
+        provided = await sync_to_async(create_blok)(
+            org,
+            user,
+            "gallery",
+            [{"key": "images", "kind": "LIST", "nullable": False, "children": [image]}],
+            app=app,
+            declaration_hash="b" * 64,
+        )
 
-        forked = await schema.execute(FORK_BLOK, context_value=authenticated_context, variable_values={"input": {"id": str(provided.id), "name": "my-gallery"}})
+        forked = await schema.execute(
+            FORK_BLOK,
+            context_value=authenticated_context,
+            variable_values={"input": {"id": str(provided.id), "name": "my-gallery"}},
+        )
         assert not forked.errors, forked.errors
 
-        demand = {"kind": "ARGS", "matches": [{"at": 0, "kind": "LIST", "children": [{"identifier": "@mikro/image"}]}]}
-        found = await schema.execute(BLOKS_FOR, context_value=authenticated_context, variable_values={"filters": {"demands": [demand]}})
+        demand = {
+            "kind": "ARGS",
+            "matches": [
+                {"at": 0, "kind": "LIST", "children": [{"identifier": "@mikro/image"}]}
+            ],
+        }
+        found = await schema.execute(
+            BLOKS_FOR,
+            context_value=authenticated_context,
+            variable_values={"filters": {"demands": [demand]}},
+        )
         assert not found.errors, found.errors
-        assert sorted(blok["name"] for blok in found.data["bloks"]) == ["gallery", "my-gallery"]
-        assert all(blok["args"] == [{"key": "images", "identifier": None}] for blok in found.data["bloks"])
+        assert sorted(blok["name"] for blok in found.data["bloks"]) == [
+            "gallery",
+            "my-gallery",
+        ]
+        assert all(
+            blok["args"] == [{"key": "images", "identifier": None}]
+            for blok in found.data["bloks"]
+        )
 
-        none = await schema.execute(BLOKS_FOR, context_value=authenticated_context, variable_values={"filters": {"demands": [{"kind": "ARGS", "matches": [{"at": 0, "identifier": "@mikro/table"}]}]}})
+        none = await schema.execute(
+            BLOKS_FOR,
+            context_value=authenticated_context,
+            variable_values={
+                "filters": {
+                    "demands": [
+                        {
+                            "kind": "ARGS",
+                            "matches": [{"at": 0, "identifier": "@mikro/table"}],
+                        }
+                    ]
+                }
+            },
+        )
         assert none.data["bloks"] == []

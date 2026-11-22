@@ -26,7 +26,9 @@ IMPLEMENTATIONS = """
 """
 
 
-def _agent(context: HttpContext, name: str, organization: Organization | None = None) -> models.Agent:
+def _agent(
+    context: HttpContext, name: str, organization: Organization | None = None
+) -> models.Agent:
     """A live agent of the request's user, on a client of its own, offering ``work``."""
     request = context.request
     device = Device.objects.create(device_id=f"{name}-device")
@@ -45,15 +47,33 @@ def _agent(context: HttpContext, name: str, organization: Organization | None = 
         last_seen=timezone.now(),
     )
     create_implementation(
-        ImplementationInputModel.model_validate({"interface": "work", "definition": {"key": "work", "version": "1", "name": f"{name} work", "kind": "FUNCTION", "args": [], "returns": []}}),
+        ImplementationInputModel.model_validate(
+            {
+                "interface": "work",
+                "definition": {
+                    "key": "work",
+                    "version": "1",
+                    "name": f"{name} work",
+                    "kind": "FUNCTION",
+                    "args": [],
+                    "returns": [],
+                },
+            }
+        ),
         agent,
     )
     return agent
 
 
-def _task(agent: models.Agent, caller_agent: models.Agent, parent: models.Task | None = None) -> models.Task:
+def _task(
+    agent: models.Agent, caller_agent: models.Agent, parent: models.Task | None = None
+) -> models.Task:
     """A task ``agent`` runs, asked for by ``caller_agent``'s identity (its client, user and org)."""
-    caller, _ = models.Caller.objects.get_or_create(client=caller_agent.client, user=caller_agent.user, organization=caller_agent.organization)
+    caller, _ = models.Caller.objects.get_or_create(
+        client=caller_agent.client,
+        user=caller_agent.user,
+        organization=caller_agent.organization,
+    )
     implementation = models.Implementation.objects.get(agent=agent, interface="work")
     return models.Task.objects.create(
         caller=caller,
@@ -68,15 +88,28 @@ def _task(agent: models.Agent, caller_agent: models.Agent, parent: models.Task |
 
 
 def _tree(context: HttpContext) -> dict[str, models.Agent | models.Task]:
-    ui, first, second, third = (_agent(context, name) for name in ("caller-ui", "caller-root", "caller-child", "caller-grandchild"))
+    ui, first, second, third = (
+        _agent(context, name)
+        for name in ("caller-ui", "caller-root", "caller-child", "caller-grandchild")
+    )
     root = _task(first, caller_agent=ui)
     child = _task(second, caller_agent=first, parent=root)
     grandchild = _task(third, caller_agent=second, parent=child)
-    return {"ui": ui, "first": first, "second": second, "third": third, "root": root, "child": child, "grandchild": grandchild}
+    return {
+        "ui": ui,
+        "first": first,
+        "second": second,
+        "third": third,
+        "root": root,
+        "child": child,
+        "grandchild": grandchild,
+    }
 
 
 async def _data(context: HttpContext, query: str, filters: dict) -> dict:
-    result = await schema.execute(query, context_value=context, variable_values={"filters": filters})
+    result = await schema.execute(
+        query, context_value=context, variable_values={"filters": filters}
+    )
     assert result.errors is None, result.errors
     return result.data
 
@@ -84,28 +117,53 @@ async def _data(context: HttpContext, query: str, filters: dict) -> dict:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 class TestCallerOf:
-    async def test_the_callers_are_the_ancestors_agents_then_the_ui_nearest_first(self, authenticated_context: HttpContext):
+    async def test_the_callers_are_the_ancestors_agents_then_the_ui_nearest_first(
+        self, authenticated_context: HttpContext
+    ):
         tree = await sync_to_async(_tree)(authenticated_context)
 
-        data = await _data(authenticated_context, AGENTS, {"callerOf": str(tree["grandchild"].id)})
+        data = await _data(
+            authenticated_context, AGENTS, {"callerOf": str(tree["grandchild"].id)}
+        )
 
-        assert [a["id"] for a in data["agents"]] == [str(tree[k].id) for k in ("second", "first", "ui")]
+        assert [a["id"] for a in data["agents"]] == [
+            str(tree[k].id) for k in ("second", "first", "ui")
+        ]
 
-    async def test_a_root_s_caller_is_the_app_it_was_started_from(self, authenticated_context: HttpContext):
+    async def test_a_root_s_caller_is_the_app_it_was_started_from(
+        self, authenticated_context: HttpContext
+    ):
         tree = await sync_to_async(_tree)(authenticated_context)
 
-        data = await _data(authenticated_context, AGENTS, {"callerOf": str(tree["root"].id)})
+        data = await _data(
+            authenticated_context, AGENTS, {"callerOf": str(tree["root"].id)}
+        )
 
         assert [a["id"] for a in data["agents"]] == [str(tree["ui"].id)]
 
-    async def test_implementations_of_the_callers_come_nearest_first_and_narrow_with_the_other_filters(self, authenticated_context: HttpContext):
+    async def test_implementations_of_the_callers_come_nearest_first_and_narrow_with_the_other_filters(
+        self, authenticated_context: HttpContext
+    ):
         tree = await sync_to_async(_tree)(authenticated_context)
 
-        data = await _data(authenticated_context, IMPLEMENTATIONS, {"agent": {"callerOf": str(tree["child"].id)}, "interface": {"exact": "work"}, "active": True})
+        data = await _data(
+            authenticated_context,
+            IMPLEMENTATIONS,
+            {
+                "agent": {"callerOf": str(tree["child"].id)},
+                "interface": {"exact": "work"},
+                "active": True,
+            },
+        )
 
-        assert [i["agent"]["id"] for i in data["implementations"]] == [str(tree["first"].id), str(tree["ui"].id)]
+        assert [i["agent"]["id"] for i in data["implementations"]] == [
+            str(tree["first"].id),
+            str(tree["ui"].id),
+        ]
 
-    async def test_the_task_s_own_agent_is_never_its_caller(self, authenticated_context: HttpContext):
+    async def test_the_task_s_own_agent_is_never_its_caller(
+        self, authenticated_context: HttpContext
+    ):
         def calls_itself() -> tuple[models.Agent, models.Task]:
             agent = _agent(authenticated_context, "caller-self")
             root = _task(agent, caller_agent=agent)
@@ -117,11 +175,17 @@ class TestCallerOf:
 
         assert data["agents"] == []
 
-    async def test_a_task_of_another_organization_has_no_callers_here(self, authenticated_context: HttpContext):
+    async def test_a_task_of_another_organization_has_no_callers_here(
+        self, authenticated_context: HttpContext
+    ):
         def elsewhere() -> models.Task:
             other = Organization.objects.create(identifier="caller-elsewhere-org")
-            ui = _agent(authenticated_context, "caller-elsewhere-ui", organization=other)
-            agent = _agent(authenticated_context, "caller-elsewhere", organization=other)
+            ui = _agent(
+                authenticated_context, "caller-elsewhere-ui", organization=other
+            )
+            agent = _agent(
+                authenticated_context, "caller-elsewhere", organization=other
+            )
             return _task(agent, caller_agent=ui)
 
         task = await sync_to_async(elsewhere)()

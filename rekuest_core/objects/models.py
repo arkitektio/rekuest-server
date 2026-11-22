@@ -1,10 +1,10 @@
-import strawberry
-from typing import List, Optional
-from pydantic import BaseModel, JsonValue, field_validator
-from typing import Literal, Union
 import datetime
+from typing import Any, Literal, Optional, Union
+
+import strawberry
+from pydantic import BaseModel, JsonValue, field_validator
+
 from rekuest_core import enums
-from typing import Any
 
 
 class ChoiceModel(BaseModel):
@@ -38,7 +38,7 @@ class CustomAssignWidgetModel(AssignWidgetModel):
 
     kind: Literal["CUSTOM"]
     component: str
-    props: Optional[List["ComponentPropModel"]] = None
+    props: list["ComponentPropModel"] | None = None
     children: list[Any] | None = None
     dependencies: list[str] | None = None
     fallback: Optional["AssignWidgetModelUnion"] = None
@@ -113,7 +113,7 @@ class CustomReturnWidgetModel(ReturnWidgetModel):
 
     kind: Literal["CUSTOM"]
     component: str
-    props: Optional[List["ComponentPropModel"]] = None
+    props: list["ComponentPropModel"] | None = None
 
 
 class ChoiceReturnWidgetModel(ReturnWidgetModel):
@@ -213,13 +213,13 @@ class ArgPortModel(PortModel):
     validators: list[ValidatorModel] | None = None
     default: Any | None = None
     children: list["ArgPortModel"] | None = None
-    widget: Optional[AssignWidgetModelUnion] = None
+    widget: AssignWidgetModelUnion | None = None
     requires: list[RequiresModel] | None = None
 
 
 class ReturnPortModel(PortModel):
     children: list["ReturnPortModel"] | None = None
-    widget: Optional[ReturnWidgetModelUnion] = None
+    widget: ReturnWidgetModelUnion | None = None
     provides: list[ProvidesModel] | None = None
 
 
@@ -264,13 +264,13 @@ class AgentCallModel(BaseModel):
 
     dependency: str
     operation: str
-    arguments: Optional[List["ActionArgumentModel"]] = None
-    given: Optional[str] = None
+    arguments: list["ActionArgumentModel"] | None = None
+    given: str | None = None
 
 
 class UtilCallModel(BaseModel):
     operation: str
-    arguments: Optional[List["ActionArgumentModel"]] = None
+    arguments: list["ActionArgumentModel"] | None = None
 
 
 class ActionArgumentModel(BaseModel):
@@ -284,14 +284,14 @@ class ActionArgumentModel(BaseModel):
 
     key: str | None = None
     value_literal: JsonValue = None
-    value_path: Optional[str] = None
+    value_path: str | None = None
 
     # Separated nested calls
     agent_call: Optional["AgentCallModel"] = None
     util_call: Optional["UtilCallModel"] = None
 
-    value_list: Optional[List["ActionArgumentModel"]] = None
-    value_dict: Optional[List["ActionArgumentModel"]] = None
+    value_list: list["ActionArgumentModel"] | None = None
+    value_dict: list["ActionArgumentModel"] | None = None
 
 
 # ============================================================================
@@ -309,19 +309,21 @@ class ComponentPropModel(BaseModel):
 
     key: str
     static_value: JsonValue = None
-    dynamic_value: Optional[DynamicValueModel] = None
-    declares_value: Optional[str] = None  # The record a task call writes (``into``), or a foreach's loop variable.
+    dynamic_value: DynamicValueModel | None = None
+    declares_value: str | None = (
+        None  # The record a task call writes (``into``), or a foreach's loop variable.
+    )
 
     # Separated top-level callbacks
-    agent_call: Optional[AgentCallModel] = None
-    util_call: Optional[UtilCallModel] = None
+    agent_call: AgentCallModel | None = None
+    util_call: UtilCallModel | None = None
 
 
 class ComponentNodeModel(BaseModel):
     id: str
     component: str
-    props: Optional[List[ComponentPropModel]] = None
-    children: Optional[List["ComponentNodeModel"]] = None
+    props: list[ComponentPropModel] | None = None
+    children: list["ComponentNodeModel"] | None = None
 
 
 class WidgetDefaultModel(BaseModel):
@@ -329,8 +331,8 @@ class WidgetDefaultModel(BaseModel):
 
     kind: str | None = None
     identifier: str | None = None
-    widget: Optional[AssignWidgetModelUnion] = None
-    return_widget: Optional[ReturnWidgetModelUnion] = None
+    widget: AssignWidgetModelUnion | None = None
+    return_widget: ReturnWidgetModelUnion | None = None
 
 
 SearchAssignWidgetModel.model_rebuild()
@@ -405,7 +407,7 @@ class BlokLocalModel(BaseModel):
     dimension: str | None = None
     validators: list[ValidatorModel] | None = None
     default: JsonValue = None
-    widget: Optional[AssignWidgetModelUnion] = None
+    widget: AssignWidgetModelUnion | None = None
     requires: list[RequiresModel] | None = None
     persist: bool = False
 

@@ -18,13 +18,25 @@ class ProbeInputModel(BaseModel):
     """
 
     action: str | None = Field(default=None, description="The action ID to probe")
-    implementation: str | None = Field(default=None, description="The implementation ID to probe directly")
-    action_hash: str | None = Field(default=None, description="The hash of the action to probe")
-    args: dict[str, JSON] = Field(description="The args of the probe. A dictionary of ports and values")
-    reference: str | None = Field(default=None, description="An optional caller-side reference echoed to the agent")
+    implementation: str | None = Field(
+        default=None, description="The implementation ID to probe directly"
+    )
+    action_hash: str | None = Field(
+        default=None, description="The hash of the action to probe"
+    )
+    args: dict[str, JSON] = Field(
+        description="The args of the probe. A dictionary of ports and values"
+    )
+    reference: str | None = Field(
+        default=None,
+        description="An optional caller-side reference echoed to the agent",
+    )
 
 
-@pydantic.input(ProbeInputModel, description="The input for a probe — a zero-persistence invocation.")
+@pydantic.input(
+    ProbeInputModel,
+    description="The input for a probe — a zero-persistence invocation.",
+)
 class ProbeInput:
     action: strawberry.ID | None = None
     implementation: strawberry.ID | None = None
@@ -39,7 +51,10 @@ class CancelProbeInputModel(BaseModel):
     probe: str = Field(description="The probe ID to cancel")
 
 
-@pydantic.input(CancelProbeInputModel, description="The input for cancelling a probe. Idempotent: cancelling a finished probe is a no-op.")
+@pydantic.input(
+    CancelProbeInputModel,
+    description="The input for cancelling a probe. Idempotent: cancelling a finished probe is a no-op.",
+)
 class CancelProbeInput:
     probe: strawberry.ID
 
@@ -50,7 +65,10 @@ class PauseProbeInputModel(BaseModel):
     probe: str = Field(description="The probe ID to pause")
 
 
-@pydantic.input(PauseProbeInputModel, description="The input for pausing a probe. Idempotent: pausing a finished probe is a no-op.")
+@pydantic.input(
+    PauseProbeInputModel,
+    description="The input for pausing a probe. Idempotent: pausing a finished probe is a no-op.",
+)
 class PauseProbeInput:
     probe: strawberry.ID
 
@@ -61,6 +79,9 @@ class ResumeProbeInputModel(BaseModel):
     probe: str = Field(description="The probe ID to resume")
 
 
-@pydantic.input(ResumeProbeInputModel, description="The input for resuming a paused probe. Idempotent: resuming a finished probe is a no-op.")
+@pydantic.input(
+    ResumeProbeInputModel,
+    description="The input for resuming a paused probe. Idempotent: resuming a finished probe is a no-op.",
+)
 class ResumeProbeInput:
     probe: strawberry.ID

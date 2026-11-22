@@ -10,7 +10,13 @@ from facade.catalog_validation import (
     resolve_operations,
     validate_calls_against_catalog,
 )
-from rekuest_core.catalogs import BASE_CATALOG_VERSION, base_components, base_operation_names, base_operations, load_base_catalog
+from rekuest_core.catalogs import (
+    BASE_CATALOG_VERSION,
+    base_components,
+    base_operation_names,
+    base_operations,
+    load_base_catalog,
+)
 from rekuest_core.inputs import models as imodels
 
 V1_NAMES = {
@@ -147,8 +153,21 @@ def test_manifest_argument_order_is_positional_order() -> None:
 def test_boolean_operations_return_bool() -> None:
     """Everything a validator or effect can use returns BOOL; the value-shaped ones do not."""
     ops = base_operations()
-    non_bool = {name for name, op in ops.items() if name in V1_NAMES and op.returns != "BOOL"}
-    assert non_bool == {"if", "len", "get", "coalesce", "add", "sub", "mul", "div", "mod", "neg"}
+    non_bool = {
+        name for name, op in ops.items() if name in V1_NAMES and op.returns != "BOOL"
+    }
+    assert non_bool == {
+        "if",
+        "len",
+        "get",
+        "coalesce",
+        "add",
+        "sub",
+        "mul",
+        "div",
+        "mod",
+        "neg",
+    }
 
 
 def test_parameter_names_are_python_keyword_argument_names() -> None:
@@ -157,7 +176,9 @@ def test_parameter_names_are_python_keyword_argument_names() -> None:
 
     for op in base_operations().values():
         for argument in op.arguments:
-            assert argument.key.isidentifier() and not keyword.iskeyword(argument.key), f"{op.name}.{argument.key}"
+            assert argument.key.isidentifier() and not keyword.iskeyword(
+                argument.key
+            ), f"{op.name}.{argument.key}"
 
 
 def test_resolve_operations_without_catalog_is_base() -> None:
@@ -168,8 +189,20 @@ def test_resolve_operations_without_catalog_is_base() -> None:
 @pytest.mark.django_db
 def test_resolve_operations_unions_extension() -> None:
     """A registered catalog adds to base."""
-    org = __import__("authentikate.models", fromlist=["Organization"]).Organization.objects.create(identifier="base-cat-org")
-    catalog = models.Module.objects.create(name="electron", organization=org, operations=[{"name": "clamp", "arguments": [{"key": "v", "kind": "FLOAT"}], "returns": "FLOAT"}])
+    org = __import__(
+        "authentikate.models", fromlist=["Organization"]
+    ).Organization.objects.create(identifier="base-cat-org")
+    catalog = models.Module.objects.create(
+        name="electron",
+        organization=org,
+        operations=[
+            {
+                "name": "clamp",
+                "arguments": [{"key": "v", "kind": "FLOAT"}],
+                "returns": "FLOAT",
+            }
+        ],
+    )
     resolved = resolve_operations([catalog])
     assert set(resolved) == V1_NAMES | STD_NAMES | {"clamp"}
     assert resolved["gt"] is base_operations()["gt"]
@@ -180,8 +213,14 @@ def test_base_version_names() -> None:
     from rekuest_core.catalogs import BASE_CATALOG_ID, base_version_named
 
     assert BASE_CATALOG_ID == "base@1"
-    assert base_version_named("base") == 1 and base_version_named("base@1") == 1 and base_version_named("base@7") == 7
-    assert base_version_named("electron") is None and base_version_named("base@x") is None
+    assert (
+        base_version_named("base") == 1
+        and base_version_named("base@1") == 1
+        and base_version_named("base@7") == 7
+    )
+    assert (
+        base_version_named("electron") is None and base_version_named("base@x") is None
+    )
 
 
 def test_extension_cannot_shadow_base() -> None:
@@ -189,7 +228,9 @@ def test_extension_cannot_shadow_base() -> None:
     gt = imodels.CatalogOperationInputModel(name="gt", arguments=[], returns="BOOL")
     fmt = imodels.CatalogOperationInputModel(name="fmt", arguments=[], returns="STRING")
     check_extension_does_not_shadow_base([fmt], "electron")
-    with pytest.raises(ValueError, match=r"catalog 'electron' cannot redefine base operations \['gt'\]"):
+    with pytest.raises(
+        ValueError, match=r"catalog 'electron' cannot redefine base operations \['gt'\]"
+    ):
         check_extension_does_not_shadow_base([fmt, gt], "electron")
 
 
@@ -199,21 +240,56 @@ def _call(operation: str, *arguments: dict) -> imodels.UtilCallInputModel:
 
 def test_unknown_operation_and_argument_mismatch_are_warnings() -> None:
     """An unknown operation and a known one called with the wrong keys are findings, not refusals."""
-    warnings = validate_calls_against_catalog(None, [_call("fizz", {"key": "a", "value_path": "/value"})], "Validator x")
+    warnings = validate_calls_against_catalog(
+        None, [_call("fizz", {"key": "a", "value_path": "/value"})], "Validator x"
+    )
     assert [w.code for w in warnings] == [UNKNOWN_OPERATION]
     assert "'fizz'" in warnings[0].message and warnings[0].path == "Validator x"
 
-    (wrong,) = validate_calls_against_catalog(None, [_call("between", {"key": "a", "value_path": "/value"}, {"key": "b", "value_literal": 1})], "Validator x")
-    assert wrong.code == "operation_arguments" and "'between' does not accept arguments ['a', 'b']" in wrong.message
-    (missing,) = validate_calls_against_catalog(None, [_call("gt", {"key": "a", "value_path": "/value"})], "Validator x")
-    assert missing.code == "operation_arguments" and "'gt' requires arguments ['b']" in missing.message
+    (wrong,) = validate_calls_against_catalog(
+        None,
+        [
+            _call(
+                "between",
+                {"key": "a", "value_path": "/value"},
+                {"key": "b", "value_literal": 1},
+            )
+        ],
+        "Validator x",
+    )
+    assert (
+        wrong.code == "operation_arguments"
+        and "'between' does not accept arguments ['a', 'b']" in wrong.message
+    )
+    (missing,) = validate_calls_against_catalog(
+        None, [_call("gt", {"key": "a", "value_path": "/value"})], "Validator x"
+    )
+    assert (
+        missing.code == "operation_arguments"
+        and "'gt' requires arguments ['b']" in missing.message
+    )
 
 
 def test_nested_calls_are_checked_and_optional_arguments_may_be_omitted() -> None:
     """Nested calls are checked; optional arguments may be omitted."""
     nested = _call("not", {"key": "a", "util_call": _call("fizz")})
-    assert [w.code for w in validate_calls_against_catalog(None, [nested], "Effect")] == [UNKNOWN_OPERATION]
-    assert validate_calls_against_catalog(None, [_call("len_between", {"key": "value", "value_path": "/value"}, {"key": "min", "value_literal": 1})], "Validator") == []
+    assert [
+        w.code for w in validate_calls_against_catalog(None, [nested], "Effect")
+    ] == [UNKNOWN_OPERATION]
+    assert (
+        validate_calls_against_catalog(
+            None,
+            [
+                _call(
+                    "len_between",
+                    {"key": "value", "value_path": "/value"},
+                    {"key": "min", "value_literal": 1},
+                )
+            ],
+            "Validator",
+        )
+        == []
+    )
 
 
 def test_resolve_components_is_none_until_a_catalog_registers_components() -> None:
@@ -221,15 +297,47 @@ def test_resolve_components_is_none_until_a_catalog_registers_components() -> No
     from facade.catalog_validation import resolve_components
 
     assert resolve_components([]) is None
-    assert resolve_components([models.Module(name="a", operations=[{"name": "x", "arguments": [], "returns": "ANY"}])]) is None
+    assert (
+        resolve_components(
+            [
+                models.Module(
+                    name="a",
+                    operations=[{"name": "x", "arguments": [], "returns": "ANY"}],
+                )
+            ]
+        )
+        is None
+    )
 
     box = {"name": "Box", "props": [], "accepts_children": True}
-    knob = {"name": "Knob", "props": [{"key": "value", "kind": "FLOAT", "required": False, "description": None}], "accepts_children": False, "description": None}
-    resolved = resolve_components([models.Module(name="a", components=[box]), models.Module(name="b", components=[box, knob])])
+    knob = {
+        "name": "Knob",
+        "props": [
+            {"key": "value", "kind": "FLOAT", "required": False, "description": None}
+        ],
+        "accepts_children": False,
+        "description": None,
+    }
+    resolved = resolve_components(
+        [
+            models.Module(name="a", components=[box]),
+            models.Module(name="b", components=[box, knob]),
+        ]
+    )
     assert set(resolved) == {"Box", "Knob"} | BASE_COMPONENTS
 
-    with pytest.raises(ValueError, match="component 'Knob' is defined differently by catalogs 'a' and 'b'"):
-        resolve_components([models.Module(name="a", components=[knob]), models.Module(name="b", components=[{**knob, "accepts_children": True}])])
+    with pytest.raises(
+        ValueError,
+        match="component 'Knob' is defined differently by catalogs 'a' and 'b'",
+    ):
+        resolve_components(
+            [
+                models.Module(name="a", components=[knob]),
+                models.Module(
+                    name="b", components=[{**knob, "accepts_children": True}]
+                ),
+            ]
+        )
 
 
 def test_extension_cannot_shadow_a_base_component() -> None:
@@ -237,14 +345,19 @@ def test_extension_cannot_shadow_a_base_component() -> None:
     button = imodels.CatalogComponentInputModel(name="Button")
     foreach = imodels.CatalogComponentInputModel(name="foreach")
     check_extension_does_not_shadow_base([], "electron", [button])
-    with pytest.raises(ValueError, match=r"catalog 'electron' cannot redefine base components \['foreach'\]"):
+    with pytest.raises(
+        ValueError,
+        match=r"catalog 'electron' cannot redefine base components \['foreach'\]",
+    ):
         check_extension_does_not_shadow_base([], "electron", [button, foreach])
 
 
 @pytest.mark.django_db
 def test_base_components_win_over_an_older_registration() -> None:
     """A catalog registered before a component joined base may still list it; base's definition is used."""
-    org = __import__("authentikate.models", fromlist=["Organization"]).Organization.objects.create(identifier="base-comp-org")
+    org = __import__(
+        "authentikate.models", fromlist=["Organization"]
+    ).Organization.objects.create(identifier="base-comp-org")
     catalog = models.Module.objects.create(
         name="electron",
         organization=org,
@@ -255,7 +368,9 @@ def test_base_components_win_over_an_older_registration() -> None:
     assert components is not None
     assert components["foreach"] is base_components()["foreach"]
     assert "Button" in components
-    assert resolve_operations([catalog])["list.first"] is base_operations()["list.first"]
+    assert (
+        resolve_operations([catalog])["list.first"] is base_operations()["list.first"]
+    )
 
 
 def test_without_registered_components_nothing_is_checked() -> None:

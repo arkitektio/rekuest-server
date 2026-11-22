@@ -7,11 +7,14 @@ then the YAML file (``config.yaml`` where the service runs by default; override 
 with a ``ValidationError`` if they are not supplied via config or environment.
 """
 
-from typing import List, Optional
-
 from arkitekt_datalayer.configuration import DatalayerSettings
 from arkitekt_service.server import settings as shared
-from arkitekt_service.server.settings import DjangoSettings, InstanceSettings, PostgresSettings, ServiceSettings
+from arkitekt_service.server.settings import (
+    DjangoSettings,
+    InstanceSettings,
+    PostgresSettings,
+    ServiceSettings,
+)
 from authentikate.base_models import AuthentikateSettings
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -19,9 +22,18 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 class RedisSettings(shared.RedisSettings):
     """Redis connection (channel layer / cache)."""
 
-    channel_prefix: str = Field(default="rekuest", description="Key prefix for the channels_redis channel layer. Must differ from every other service on the same redis, or group messages bleed across services.")
-    key_prefix: str = Field(default="rekuest", description="Namespace for every redis key this service writes (agent queues, probe state, sweep and upkeep tokens, replay guards). Give each deployment sharing one redis a distinct value.")
-    channel_capacity: int = Field(default=5000, description="channels_redis capacity. This bounds the ONE per-process receive queue shared by every socket and subscription in a replica — messages beyond it are dropped silently — so it must be far above the library default of 100.")
+    channel_prefix: str = Field(
+        default="rekuest",
+        description="Key prefix for the channels_redis channel layer. Must differ from every other service on the same redis, or group messages bleed across services.",
+    )
+    key_prefix: str = Field(
+        default="rekuest",
+        description="Namespace for every redis key this service writes (agent queues, probe state, sweep and upkeep tokens, replay guards). Give each deployment sharing one redis a distinct value.",
+    )
+    channel_capacity: int = Field(
+        default=5000,
+        description="channels_redis capacity. This bounds the ONE per-process receive queue shared by every socket and subscription in a replica — messages beyond it are dropped silently — so it must be far above the library default of 100.",
+    )
 
 
 class DescriptorManifest(BaseModel):
@@ -32,8 +44,13 @@ class DescriptorManifest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     key: str = Field(description="The descriptor's key, e.g. @mikro/n_channels.")
-    type: Optional[str] = Field(default=None, description="What its value is (ANY, INT, FLOAT, STRING, BOOL, LIST). Default: ANY.")
-    description: Optional[str] = Field(default=None, description="What it says about an object.")
+    type: str | None = Field(
+        default=None,
+        description="What its value is (ANY, INT, FLOAT, STRING, BOOL, LIST). Default: ANY.",
+    )
+    description: str | None = Field(
+        default=None, description="What it says about an object."
+    )
 
 
 class StructureManifest(BaseModel):
@@ -41,10 +58,14 @@ class StructureManifest(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    identifier: str = Field(description="What the structure is known by across the hub, e.g. @mikro/arraydataset.")
-    label: Optional[str] = Field(default=None, description="What a user reads it as.")
-    description: Optional[str] = Field(default=None, description="What it is.")
-    descriptors: Optional[list[DescriptorManifest]] = Field(default=None, description="What is known of each of its objects, in order.")
+    identifier: str = Field(
+        description="What the structure is known by across the hub, e.g. @mikro/arraydataset."
+    )
+    label: str | None = Field(default=None, description="What a user reads it as.")
+    description: str | None = Field(default=None, description="What it is.")
+    descriptors: list[DescriptorManifest] | None = Field(
+        default=None, description="What is known of each of its objects, in order."
+    )
 
 
 class SignalManifest(BaseModel):
@@ -53,9 +74,15 @@ class SignalManifest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     identifier: str = Field(description="The structure the signal is about.")
-    kinds: Optional[list[str]] = Field(default=None, description="What is announced: CREATED, UPDATED, DELETED. Default: CREATED.")
-    descriptors: Optional[list[str]] = Field(default=None, description="The descriptor keys an announcement carries: what a trigger can test.")
-    description: Optional[str] = Field(default=None, description="What it announces.")
+    kinds: list[str] | None = Field(
+        default=None,
+        description="What is announced: CREATED, UPDATED, DELETED. Default: CREATED.",
+    )
+    descriptors: list[str] | None = Field(
+        default=None,
+        description="The descriptor keys an announcement carries: what a trigger can test.",
+    )
+    description: str | None = Field(default=None, description="What it announces.")
 
 
 class ServiceHosts(BaseModel):
@@ -67,8 +94,13 @@ class ServiceHosts(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    structures: list[StructureManifest] = Field(default_factory=list, description="The structures the service hosts, with their descriptors.")
-    signals: list[SignalManifest] = Field(default_factory=list, description="The signals it emits about them.")
+    structures: list[StructureManifest] = Field(
+        default_factory=list,
+        description="The structures the service hosts, with their descriptors.",
+    )
+    signals: list[SignalManifest] = Field(
+        default_factory=list, description="The signals it emits about them."
+    )
 
 
 class ServiceEntry(BaseModel):
@@ -81,10 +113,20 @@ class ServiceEntry(BaseModel):
     signed with each side's instance key and checked against the hub's trust bundle (``instance.trust``).
     """
 
-    name: str = Field(description="The service's name (e.g. 'mikro'): what it is catalogued under, and its signal endpoint.")
-    url: str = Field(description="The service's `rekuest_service` endpoint, e.g. http://mikro:80/mikro/_rekuest/service; its manifest is read at <url>/manifest.")
-    identifier: Optional[str] = Field(default=None, description="The fakts identifier of the service's instance — what its key is listed under in the trust bundle. Default: its name.")
-    hosts: Optional[ServiceHosts] = Field(default=None, description="What the service hosts and emits, as its image says. Set: catalogued from here, and the service is not asked. Unset: its manifest is fetched.")
+    name: str = Field(
+        description="The service's name (e.g. 'mikro'): what it is catalogued under, and its signal endpoint."
+    )
+    url: str = Field(
+        description="The service's `rekuest_service` endpoint, e.g. http://mikro:80/mikro/_rekuest/service; its manifest is read at <url>/manifest."
+    )
+    identifier: str | None = Field(
+        default=None,
+        description="The fakts identifier of the service's instance — what its key is listed under in the trust bundle. Default: its name.",
+    )
+    hosts: ServiceHosts | None = Field(
+        default=None,
+        description="What the service hosts and emits, as its image says. Set: catalogued from here, and the service is not asked. Unset: its manifest is fetched.",
+    )
 
 
 class HookAgentEntry(BaseModel):
@@ -94,15 +136,24 @@ class HookAgentEntry(BaseModel):
     requests both ways are signed with instance keys.
     """
 
-    name: str = Field(description="The agent's name: what every organization sees it as.")
-    hook_url: str = Field(description="Where rekuest POSTs the agent's Assigns — its `rekuest_hook` endpoint, e.g. http://mikro:80/mikro/_rekuest/hook; its manifest is read at <hook_url>/manifest.")
-    identifier: Optional[str] = Field(default=None, description="The fakts identifier of the instance the agent runs in — what its key is listed under in the trust bundle. Default: its name.")
+    name: str = Field(
+        description="The agent's name: what every organization sees it as."
+    )
+    hook_url: str = Field(
+        description="Where rekuest POSTs the agent's Assigns — its `rekuest_hook` endpoint, e.g. http://mikro:80/mikro/_rekuest/hook; its manifest is read at <hook_url>/manifest."
+    )
+    identifier: str | None = Field(
+        default=None,
+        description="The fakts identifier of the instance the agent runs in — what its key is listed under in the trust bundle. Default: its name.",
+    )
 
 
 class InstanceBlock(InstanceSettings):
     """This instance's key — its only secret towards the hub's other services — and whom it trusts."""
 
-    private_key: str = Field(description="Ed25519 private key (PKCS#8 PEM). Signs provenance tokens and requests to the hub's services. Secret — must be set.")
+    private_key: str = Field(
+        description="Ed25519 private key (PKCS#8 PEM). Signs provenance tokens and requests to the hub's services. Secret — must be set."
+    )
 
 
 class RekuestBlock(BaseModel):
@@ -112,49 +163,115 @@ class RekuestBlock(BaseModel):
     the block a release renames keys in.
     """
 
-    grace_default: int = Field(default=30, description="Default reclaim grace window (seconds) after a disconnect.")
-    sweep_interval: int = Field(default=5, description="How often (seconds) takt sweeps the DB-held deadlines. Bounds how late a deadline can fire.")
-    pickup_deadline: int = Field(default=60, description="Seconds a dispatched task may go without any report from its (live) agent before the Assign is redelivered once, then failed; 0 disables.")
-    disconnected_expiry: int = Field(default=3600, description="Seconds a DISCONNECTED (fate unknown) task stays recoverable before it is finalized as terminal; 0 = never.")
+    grace_default: int = Field(
+        default=30,
+        description="Default reclaim grace window (seconds) after a disconnect.",
+    )
+    sweep_interval: int = Field(
+        default=5,
+        description="How often (seconds) takt sweeps the DB-held deadlines. Bounds how late a deadline can fire.",
+    )
+    pickup_deadline: int = Field(
+        default=60,
+        description="Seconds a dispatched task may go without any report from its (live) agent before the Assign is redelivered once, then failed; 0 disables.",
+    )
+    disconnected_expiry: int = Field(
+        default=3600,
+        description="Seconds a DISCONNECTED (fate unknown) task stays recoverable before it is finalized as terminal; 0 = never.",
+    )
     control_deadline: int = Field(
         default=60,
         description="Seconds an unconfirmed cancel may wait before it escalates to an interrupt (and an unconfirmed interrupt before it is finalized); 0 disables. On by default: a Cancel/Interrupt frame lost in transit (a displaced connection, a redis restart) is otherwise never noticed — the DB says CANCELLING while the agent never heard of it.",
     )
-    hook_signature_mode: str = Field(default="compat", description="HookAgent HTTP signatures. 'compat': accept the timestamped V1 signature or the legacy body-only one, send both. 'strict': V1 only (replay-protected).")
-    hook_max_skew: int = Field(default=300, description="Maximum age/clock skew (seconds) accepted for a V1-signed HookAgent request; also bounds the replay-guard window.")
-    task_retention: int = Field(default=0, description="Seconds to keep terminal root task trees; 0 disables deletion. Deleting past runs also removes them from replay (reusable_task_for). Suggested production value: 2592000 (30 days).")
-    ephemeral_task_retention: int = Field(default=86400, description="Seconds to keep terminal EPHEMERAL root task trees (housekeeping runs of schedules with ephemeralRuns); applies even while task_retention is 0. 0 disables.")
-    takt_url: Optional[str] = Field(
+    hook_signature_mode: str = Field(
+        default="compat",
+        description="HookAgent HTTP signatures. 'compat': accept the timestamped V1 signature or the legacy body-only one, send both. 'strict': V1 only (replay-protected).",
+    )
+    hook_max_skew: int = Field(
+        default=300,
+        description="Maximum age/clock skew (seconds) accepted for a V1-signed HookAgent request; also bounds the replay-guard window.",
+    )
+    task_retention: int = Field(
+        default=0,
+        description="Seconds to keep terminal root task trees; 0 disables deletion. Deleting past runs also removes them from replay (reusable_task_for). Suggested production value: 2592000 (30 days).",
+    )
+    ephemeral_task_retention: int = Field(
+        default=86400,
+        description="Seconds to keep terminal EPHEMERAL root task trees (housekeeping runs of schedules with ephemeralRuns); applies even while task_retention is 0. 0 disables.",
+    )
+    takt_url: str | None = Field(
         default=None,
         validation_alias=AliasChoices("takt_url", "agentd_url"),
         description="takt's internal listener (`TAKT_INTERNAL_BIND`), with its script name: not the address agents connect to. Defaults to http://takt:8081/<django.force_script_name>. Assigns, controls, registrations, deletes, probes and running a schedule now go through its internal API; while it is unreachable each of those raises TaktUnavailable. `agentd_url` is its former name and still read.",
     )
-    server_url: Optional[str] = Field(default=None, description="Read by takt, not by this server: where takt reaches this server for the upkeep jobs, with its script name. Defaults to http://rekuest:80/<django.force_script_name>; empty turns upkeep off.")
-    takt_socket: Optional[str] = Field(default=None, description="takt's internal listener as a unix socket this server and takt both mount (takt: `TAKT_INTERNAL_BIND=unix:<path>`). When set, the internal API is reached through it and only the path of `takt_url` is used.")
-    identifier: str = Field(default="rekuest", description="This rekuest's name in its hub — what its key is listed under in the hub trust bundle, and what services require rekuest's requests to come from.")
-    services: list[ServiceEntry] = Field(default_factory=list, description="This hub's services: each one's structures and signals are catalogued from its manifest. Says nothing about agents.")
-    hook_agents: list[HookAgentEntry] = Field(default_factory=list, description="This hub's hook agents: each is given to every organization, with the actions its manifest lists. Nothing is scheduled or triggered by itself.")
-    trigger_max_depth: int = Field(default=3, description="How many trigger firings may chain (a triggered run's object signalling another trigger …) before a signal stops firing — the loop guard.")
-    dependency_max_depth: int = Field(default=8, description="How many levels of dependencies an assign resolves below the assigned implementation before it refuses.")
-    signal_retention: int = Field(default=604800, description="Seconds to keep processed signals (the runs they caused keep their link as null afterwards); 0 keeps them forever.")
-    probe_ttl: int = Field(default=3600, description="Lifetime (seconds) of a probe's redis state while live.")
-    probe_linger: int = Field(default=300, description="How long (seconds) a terminal call's state lingers for late subscribers.")
-    probe_max_inflight: int = Field(default=32, description="Maximum concurrent probes per caller.")
+    server_url: str | None = Field(
+        default=None,
+        description="Read by takt, not by this server: where takt reaches this server for the upkeep jobs, with its script name. Defaults to http://rekuest:80/<django.force_script_name>; empty turns upkeep off.",
+    )
+    takt_socket: str | None = Field(
+        default=None,
+        description="takt's internal listener as a unix socket this server and takt both mount (takt: `TAKT_INTERNAL_BIND=unix:<path>`). When set, the internal API is reached through it and only the path of `takt_url` is used.",
+    )
+    identifier: str = Field(
+        default="rekuest",
+        description="This rekuest's name in its hub — what its key is listed under in the hub trust bundle, and what services require rekuest's requests to come from.",
+    )
+    services: list[ServiceEntry] = Field(
+        default_factory=list,
+        description="This hub's services: each one's structures and signals are catalogued from its manifest. Says nothing about agents.",
+    )
+    hook_agents: list[HookAgentEntry] = Field(
+        default_factory=list,
+        description="This hub's hook agents: each is given to every organization, with the actions its manifest lists. Nothing is scheduled or triggered by itself.",
+    )
+    trigger_max_depth: int = Field(
+        default=3,
+        description="How many trigger firings may chain (a triggered run's object signalling another trigger …) before a signal stops firing — the loop guard.",
+    )
+    dependency_max_depth: int = Field(
+        default=8,
+        description="How many levels of dependencies an assign resolves below the assigned implementation before it refuses.",
+    )
+    signal_retention: int = Field(
+        default=604800,
+        description="Seconds to keep processed signals (the runs they caused keep their link as null afterwards); 0 keeps them forever.",
+    )
+    probe_ttl: int = Field(
+        default=3600,
+        description="Lifetime (seconds) of a probe's redis state while live.",
+    )
+    probe_linger: int = Field(
+        default=300,
+        description="How long (seconds) a terminal call's state lingers for late subscribers.",
+    )
+    probe_max_inflight: int = Field(
+        default=32, description="Maximum concurrent probes per caller."
+    )
 
 
 class ProvenanceBlock(BaseModel):
     """Rekuest provenance (attestation) policy. Tokens are signed with the instance key (`instance`), `kid` its thumbprint."""
 
     issuer: str = Field(default="rekuest", description="Provenance token issuer (iss).")
-    token_ttl_seconds: int = Field(default=3600, description="Provenance token lifetime (seconds).")
-    human_roles: List[str] = Field(default_factory=list, description="Roles marking an accountable human; empty disables the human-root invariant.")
-    strict: bool = Field(default=False, description="Require the human-root invariant when minting.")
+    token_ttl_seconds: int = Field(
+        default=3600, description="Provenance token lifetime (seconds)."
+    )
+    human_roles: list[str] = Field(
+        default_factory=list,
+        description="Roles marking an accountable human; empty disables the human-root invariant.",
+    )
+    strict: bool = Field(
+        default=False, description="Require the human-root invariant when minting."
+    )
 
 
 class RekuestDatalayerSettings(DatalayerSettings):
     """The datalayer block: rekuest stores agent assets and 3D models as media."""
 
-    session_name: str = Field(default="rekuest", description="Prefix of every STS session rekuest assumes, so an object store's audit log names it.")
+    session_name: str = Field(
+        default="rekuest",
+        description="Prefix of every STS session rekuest assumes, so an object store's audit log names it.",
+    )
 
 
 class EmbeddingsSettings(BaseModel):
@@ -164,8 +281,14 @@ class EmbeddingsSettings(BaseModel):
     it is a constant of the release (``embeddings.engine.MODEL``) and the image carries it.
     """
 
-    enabled: bool = Field(default=True, description="Embed rows on save and give `search` a semantic leg. Off: `search` is substring-only and the embedding column stays NULL.")
-    distance_threshold: float = Field(default=0.55, description="Cosine distance (0 identical, 1 unrelated) above which a row no longer counts as a semantic `search` hit.")
+    enabled: bool = Field(
+        default=True,
+        description="Embed rows on save and give `search` a semantic leg. Off: `search` is substring-only and the embedding column stays NULL.",
+    )
+    distance_threshold: float = Field(
+        default=0.55,
+        description="Cosine distance (0 identical, 1 unrelated) above which a row no longer counts as a semantic `search` hit.",
+    )
 
 
 class Settings(ServiceSettings):
@@ -174,9 +297,22 @@ class Settings(ServiceSettings):
     django: DjangoSettings = Field(description="Core Django settings.")
     postgres: PostgresSettings = Field(description="PostgreSQL connection.")
     redis: RedisSettings = Field(description="Redis connection.")
-    authentikate: AuthentikateSettings = Field(description="Token-verification config (authentikate).")
-    rekuest: RekuestBlock = Field(default_factory=RekuestBlock, description="Grace/capability tuning.")
-    provenance: ProvenanceBlock = Field(description="Provenance signing config (requires a static Ed25519 key).")
-    instance: InstanceBlock = Field(description="This instance's key and the hub trust bundle (no shared secrets between services).")
-    datalayer: Optional[RekuestDatalayerSettings] = Field(default=None, description="Optional S3 config forwarded to the datalayer app.")
-    embeddings: EmbeddingsSettings = Field(default_factory=EmbeddingsSettings, description="Semantic search: on or off, and its threshold.")
+    authentikate: AuthentikateSettings = Field(
+        description="Token-verification config (authentikate)."
+    )
+    rekuest: RekuestBlock = Field(
+        default_factory=RekuestBlock, description="Grace/capability tuning."
+    )
+    provenance: ProvenanceBlock = Field(
+        description="Provenance signing config (requires a static Ed25519 key)."
+    )
+    instance: InstanceBlock = Field(
+        description="This instance's key and the hub trust bundle (no shared secrets between services)."
+    )
+    datalayer: RekuestDatalayerSettings | None = Field(
+        default=None, description="Optional S3 config forwarded to the datalayer app."
+    )
+    embeddings: EmbeddingsSettings = Field(
+        default_factory=EmbeddingsSettings,
+        description="Semantic search: on or off, and its threshold.",
+    )

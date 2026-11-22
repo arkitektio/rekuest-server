@@ -1,4 +1,5 @@
 from typing import NewType
+
 import strawberry
 
 Identifier = NewType("Identifier", str)

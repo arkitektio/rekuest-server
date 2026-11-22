@@ -29,21 +29,29 @@ if TYPE_CHECKING:
 class Space:
     id: strawberry.ID
     name: str
-    reference: str | None = strawberry_django.field(description="What finds the room again: a blok's `room`.")
+    reference: str | None = strawberry_django.field(
+        description="What finds the room again: a blok's `room`."
+    )
     description: str | None
     creator: User
     created_at: datetime.datetime
     updated_at: datetime.datetime
-    placements: list["Placement"] = strawberry_django.field(description="Where someone left each agent in this room.")
+    placements: list[Placement] = strawberry_django.field(
+        description="Where someone left each agent in this room."
+    )
 
     @classmethod
-    def get_queryset(cls, queryset: QuerySet[models.Space], info: Info, **kwargs: object) -> QuerySet[models.Space]:
+    def get_queryset(
+        cls, queryset: QuerySet[models.Space], info: Info, **kwargs: object
+    ) -> QuerySet[models.Space]:
         return build_prescoped_queryset(info, queryset, field="organization")
 
 
 def space_by_reference(info: Info, room: str) -> Space | None:
     """The caller's space that ``room`` names: null until someone kept a pose in it."""
-    space = models.Space.objects.filter(organization=info.context.request.organization, reference=room.strip()).first()
+    space = models.Space.objects.filter(
+        organization=info.context.request.organization, reference=room.strip()
+    ).first()
     return cast("Space | None", space)
 
 
@@ -58,14 +66,22 @@ class Placement:
     id: strawberry.ID
     space: Space
     agent: Agent
-    role: str = strawberry_django.field(description="The dependency key the agent was placed under when its pose was kept.")
-    affine_matrix: scalars.Args | None = strawberry_django.field(description="Where the agent stands: a 4x4 affine matrix, row-major, in meters with Y up.")
+    role: str = strawberry_django.field(
+        description="The dependency key the agent was placed under when its pose was kept."
+    )
+    affine_matrix: scalars.Args | None = strawberry_django.field(
+        description="Where the agent stands: a 4x4 affine matrix, row-major, in meters with Y up."
+    )
     updated_at: datetime.datetime
 
-    @strawberry_django.field(description="Get the agent associated with this placement.")
+    @strawberry_django.field(
+        description="Get the agent associated with this placement."
+    )
     def name(self) -> str:
         return self.agent.name
 
     @classmethod
-    def get_queryset(cls, queryset: QuerySet[models.Placement], info: Info, **kwargs: object) -> QuerySet[models.Placement]:
+    def get_queryset(
+        cls, queryset: QuerySet[models.Placement], info: Info, **kwargs: object
+    ) -> QuerySet[models.Placement]:
         return build_prescoped_queryset(info, queryset, field="space__organization")

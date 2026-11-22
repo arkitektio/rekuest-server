@@ -9,7 +9,7 @@ gone by design (``seq`` gaps make that visible to the client).
 """
 
 import json
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import strawberry
 from django.utils import timezone

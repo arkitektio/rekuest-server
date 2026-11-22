@@ -55,7 +55,9 @@ A `Caller` is **`get_or_create`d on every request that needs to record who is as
 
 ```python
 def get_caller_for_context(ctx: CallerContext) -> models.Caller:
-    return models.Caller.objects.get_or_create(user=ctx.user, client=ctx.client, organization=ctx.organization)[0]
+    return models.Caller.objects.get_or_create(
+        user=ctx.user, client=ctx.client, organization=ctx.organization
+    )[0]
 ```
 
 takt has the same function for the work it records (`get_caller_for_context` in

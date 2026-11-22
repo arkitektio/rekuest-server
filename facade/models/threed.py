@@ -51,14 +51,27 @@ class Space(models.Model):
 class Placement(models.Model):
     """Where someone left an agent in a space: its pose, the same for every viewer."""
 
-    space = models.ForeignKey(Space, on_delete=models.CASCADE, related_name="placements")
-    agent = models.ForeignKey("Agent", on_delete=models.CASCADE, related_name="placements")
+    space = models.ForeignKey(
+        Space, on_delete=models.CASCADE, related_name="placements"
+    )
+    agent = models.ForeignKey(
+        "Agent", on_delete=models.CASCADE, related_name="placements"
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
-    role = models.CharField(max_length=1000, help_text="The dependency key the agent was placed under when its pose was kept (`robot`)")
-    affine_matrix = models.JSONField(help_text="Where the agent stands: a 4x4 affine matrix, row-major, in meters with Y up, from the agent's model into the space", null=True, blank=True)
+    role = models.CharField(
+        max_length=1000,
+        help_text="The dependency key the agent was placed under when its pose was kept (`robot`)",
+    )
+    affine_matrix = models.JSONField(
+        help_text="Where the agent stands: a 4x4 affine matrix, row-major, in meters with Y up, from the agent's model into the space",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["space", "agent"], name="placement_one_per_agent_and_space"),
+            models.UniqueConstraint(
+                fields=["space", "agent"], name="placement_one_per_agent_and_space"
+            ),
         ]

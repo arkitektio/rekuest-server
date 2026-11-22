@@ -11,4 +11,3 @@ The two concepts are separated by the id space: Task ids are integer PKs, Probe 
 ``p-<hex>`` strings (takt mints them), so every router can branch with a
 prefix check.
 """
-

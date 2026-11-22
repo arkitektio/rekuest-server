@@ -20,7 +20,6 @@ from asgiref.sync import sync_to_async
 
 from facade import models
 from facade.schema import schema
-
 from tests.factories import create_agent_for_registry, create_registry_bundle
 
 
@@ -32,12 +31,20 @@ def _seed_history(prefix, context):
     agent = create_agent_for_registry(caller, user, org, prefix)
 
     definition = models.StateDefinition.objects.create(
-        name=f"{prefix} def", hash=f"{prefix}-def-hash", ports=[], description="d", organization=org
+        name=f"{prefix} def",
+        hash=f"{prefix}-def-hash",
+        ports=[],
+        description="d",
+        organization=org,
     )
-    state = models.State.objects.create(definition=definition, interface=f"{prefix}-iface", agent=agent)
+    state = models.State.objects.create(
+        definition=definition, interface=f"{prefix}-iface", agent=agent
+    )
     session = models.Session.objects.create(agent=agent, session_id=f"{prefix}-session")
 
-    models.Snapshot.objects.create(state=state, agent=agent, session=session, value={"count": 0}, global_rev=1)
+    models.Snapshot.objects.create(
+        state=state, agent=agent, session=session, value={"count": 0}, global_rev=1
+    )
     for rev, count in ((2, 1), (3, 2)):
         models.Patch.objects.create(
             state=state,
@@ -53,7 +60,9 @@ def _seed_history(prefix, context):
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 class TestStateHistory:
-    async def test_state_at_global_rev_reconstructs_the_value(self, authenticated_context):
+    async def test_state_at_global_rev_reconstructs_the_value(
+        self, authenticated_context
+    ):
         seeded = await _seed_history("hist-at", authenticated_context)
 
         result = await schema.execute(
@@ -128,13 +137,33 @@ class TestStateHistory:
         sid, session = str(seeded["state"].pk), seeded["session"].session_id
 
         queries = [
-            ("query Q($s: ID!) { sessionBoundaries(sessionId: $s) { startGlobalRevision } }", {"s": session}),
-            ("query Q($c: String!) { taskBoundaries(correlationId: $c) { startGlobalRevision } }", {"c": "no-such-task"}),
-            ("query Q($r: Int!) { stateAtGlobalRev(globalRevision: $r) { value } }", {"r": 3}),
-            ("query Q($r: Int!) { forwardEventsAfterRev(globalRevision: $r) { globalFutureRevision } }", {"r": 1}),
-            ("query Q($f: Int!, $t: Int!) { patchEventsBetweenGlobalRevs(fromGlobalRevision: $f, toGlobalRevision: $t) { globalFutureRevision } }", {"f": 1, "t": 3}),
-            ("query Q($r: Int!, $s: ID!) { snapshotsAroundRev(revision: $r, stateId: $s) { globalRevision } }", {"r": 2, "s": sid}),
+            (
+                "query Q($s: ID!) { sessionBoundaries(sessionId: $s) { startGlobalRevision } }",
+                {"s": session},
+            ),
+            (
+                "query Q($c: String!) { taskBoundaries(correlationId: $c) { startGlobalRevision } }",
+                {"c": "no-such-task"},
+            ),
+            (
+                "query Q($r: Int!) { stateAtGlobalRev(globalRevision: $r) { value } }",
+                {"r": 3},
+            ),
+            (
+                "query Q($r: Int!) { forwardEventsAfterRev(globalRevision: $r) { globalFutureRevision } }",
+                {"r": 1},
+            ),
+            (
+                "query Q($f: Int!, $t: Int!) { patchEventsBetweenGlobalRevs(fromGlobalRevision: $f, toGlobalRevision: $t) { globalFutureRevision } }",
+                {"f": 1, "t": 3},
+            ),
+            (
+                "query Q($r: Int!, $s: ID!) { snapshotsAroundRev(revision: $r, stateId: $s) { globalRevision } }",
+                {"r": 2, "s": sid},
+            ),
         ]
         for query, variables in queries:
-            result = await schema.execute(query, context_value=authenticated_context, variable_values=variables)
+            result = await schema.execute(
+                query, context_value=authenticated_context, variable_values=variables
+            )
             assert not result.errors, f"{query.strip()[:60]} -> {result.errors}"

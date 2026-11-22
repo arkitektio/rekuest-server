@@ -8,12 +8,13 @@ resolves real StateDefinition ids by their port descriptors.
 
 from types import SimpleNamespace
 
-from rekuest_core.inputs.models import ActionDemandInputModel, DescriptorInputModel, PortMatchInputModel, StateDemandInputModel
-
 import pytest
 
 from facade import managers, models
 from rekuest_core.enums import PortKind
+from rekuest_core.inputs.models import (
+    PortMatchInputModel,
+)
 
 
 def _org(name="test-org-scope"):
@@ -24,7 +25,14 @@ def _org(name="test-org-scope"):
 
 
 def pm(at=None, key=None, kind=None, identifier=None, nullable=None, children=None):
-    return PortMatchInputModel(at=at, key=key, kind=kind, identifier=identifier, nullable=nullable, children=children)
+    return PortMatchInputModel(
+        at=at,
+        key=key,
+        kind=kind,
+        identifier=identifier,
+        nullable=nullable,
+        children=children,
+    )
 
 
 @pytest.fixture
@@ -34,14 +42,30 @@ def state_defs(db):
         name="Counter",
         hash="counter-hash",
         description="counter",
-        ports=[{"key": "count", "kind": "INT", "identifier": None, "nullable": False, "children": []}],
+        ports=[
+            {
+                "key": "count",
+                "kind": "INT",
+                "identifier": None,
+                "nullable": False,
+                "children": [],
+            }
+        ],
     )
     tracker = models.StateDefinition.objects.create(
         organization=_org(),
         name="Tracker",
         hash="tracker-hash",
         description="tracker",
-        ports=[{"key": "position", "kind": "STRUCTURE", "identifier": "@mikro/roi", "nullable": False, "children": []}],
+        ports=[
+            {
+                "key": "position",
+                "kind": "STRUCTURE",
+                "identifier": "@mikro/roi",
+                "nullable": False,
+                "children": [],
+            }
+        ],
     )
     return SimpleNamespace(counter=counter, tracker=tracker)
 

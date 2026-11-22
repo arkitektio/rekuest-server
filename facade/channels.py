@@ -1,6 +1,17 @@
 from kante.channel import build_channel
-from .channel_events import StateUpdateEvent, TaskEventCreatedEvent, ImplementationEvent, AgentEvent, ProbeEventBroadcast, ChildTaskEvent, PatchEvent, RuleFeedEvent, SignalFeedEvent, AssetEvent
 
+from .channel_events import (
+    AgentEvent,
+    AssetEvent,
+    ChildTaskEvent,
+    ImplementationEvent,
+    PatchEvent,
+    ProbeEventBroadcast,
+    RuleFeedEvent,
+    SignalFeedEvent,
+    StateUpdateEvent,
+    TaskEventCreatedEvent,
+)
 
 # takt publishes on these channels by name (``takt/crates/facade/src/channels.rs``): every
 # name is spelled out here, so renaming a payload class cannot silently change one.
@@ -47,7 +58,6 @@ def implementation_task_events(implementation: int | str) -> str:
     to the same name (``signals::implementation_task_events``).
     """
     return f"implementation_task_events_{implementation}"
-
 
 
 def task_events(task: int | str) -> str:

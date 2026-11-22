@@ -21,6 +21,12 @@ class ReadOnlyAdmin(admin.ModelAdmin):
         return False
 
 
-for model in (models.Action, models.Implementation, models.TaskEvent, models.Agent, models.Task):
+for model in (
+    models.Action,
+    models.Implementation,
+    models.TaskEvent,
+    models.Agent,
+    models.Task,
+):
     admin.site.register(model, ReadOnlyAdmin)
 admin.site.register(models.Caller)

@@ -28,4 +28,8 @@ def probe_stats(info: Info) -> types.ProbeStats:
         organization=request.organization,
     )
     stats = get_probe_store().stats_sync(caller.pk)
-    return types.ProbeStats(total_live=stats.total_live, my_inflight=stats.my_inflight, max_inflight=stats.max_inflight)
+    return types.ProbeStats(
+        total_live=stats.total_live,
+        my_inflight=stats.my_inflight,
+        max_inflight=stats.max_inflight,
+    )

@@ -48,10 +48,14 @@ class SessionBoundary:
 class Session:
     id: strawberry.ID
     agent: Agent
-    started_at: datetime.datetime = strawberry_django.field(field_name="created_at", description="When the session started.")
+    started_at: datetime.datetime = strawberry_django.field(
+        field_name="created_at", description="When the session started."
+    )
     snapshots: list[Snapshot]
     patches: list[Patch]
 
     @classmethod
-    def get_queryset(cls, queryset: QuerySet[models.Session], info: Info, **kwargs: object) -> QuerySet[models.Session]:
+    def get_queryset(
+        cls, queryset: QuerySet[models.Session], info: Info, **kwargs: object
+    ) -> QuerySet[models.Session]:
         return build_prescoped_queryset(info, queryset, field="agent__organization")

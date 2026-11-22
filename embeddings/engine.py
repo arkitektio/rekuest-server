@@ -84,15 +84,24 @@ def _load_model_cached() -> StaticModel:
             with open(stamp, encoding="utf-8") as handle:
                 baked = handle.read().strip()
             if baked != MODEL:
-                raise ImproperlyConfigured(f"{baked_path!r} holds the weights of {baked!r} but this release embeds with {MODEL!r}. Rebuild the image.")
+                raise ImproperlyConfigured(
+                    f"{baked_path!r} holds the weights of {baked!r} but this release embeds with {MODEL!r}. Rebuild the image."
+                )
         model = StaticModel.from_pretrained(baked_path)
     else:
         # ``force_download`` defaults to True upstream, which would re-fetch the weights on
         # every process start; the hub cache is exactly what a dev box or CI runner wants.
         model = StaticModel.from_pretrained(MODEL, force_download=False)
     if int(model.dim) != DIMENSIONS:
-        raise ImproperlyConfigured(f"Embedding model {MODEL!r} produces {model.dim}-wide vectors but this release stores {DIMENSIONS}-wide ones. The two are constants of `embeddings.engine` and change together, with a migration of the vector column.")
-    logger.info("Embedding model %s loaded (%d dims)%s", MODEL, DIMENSIONS, f" from {baked_path}" if baked_path else "")
+        raise ImproperlyConfigured(
+            f"Embedding model {MODEL!r} produces {model.dim}-wide vectors but this release stores {DIMENSIONS}-wide ones. The two are constants of `embeddings.engine` and change together, with a migration of the vector column."
+        )
+    logger.info(
+        "Embedding model %s loaded (%d dims)%s",
+        MODEL,
+        DIMENSIONS,
+        f" from {baked_path}" if baked_path else "",
+    )
     return model
 
 
@@ -106,7 +115,9 @@ def _model() -> StaticModel:
     except ImproperlyConfigured:
         raise
     except Exception as exc:  # weights missing, no network, corrupt files, ...
-        raise EmbeddingsUnavailable(f"Embedding model {MODEL!r} could not be loaded: {exc}") from exc
+        raise EmbeddingsUnavailable(
+            f"Embedding model {MODEL!r} could not be loaded: {exc}"
+        ) from exc
 
 
 def reset() -> None:
@@ -149,7 +160,10 @@ def embed_texts(texts: Sequence[str]) -> list[list[float] | None]:
     if not texts:
         return []
     model = _model()
-    matrix = np.asarray(model.encode(list(texts), show_progress_bar=False, use_multiprocessing=False), dtype=np.float32)
+    matrix = np.asarray(
+        model.encode(list(texts), show_progress_bar=False, use_multiprocessing=False),
+        dtype=np.float32,
+    )
     if matrix.ndim == 1:  # a single text comes back as one row
         matrix = matrix.reshape(1, -1)
     norms = np.linalg.norm(matrix, axis=1)

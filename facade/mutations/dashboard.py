@@ -19,7 +19,9 @@ def create_dashboard(info: Info, input: inputs.CreateDashboardInput) -> types.Da
 
 def delete_dashboard(info: Info, input: inputs.DeleteDashboardInput) -> bool:
     try:
-        dashboard = models.Dashboard.objects.get(id=input.id, organization=info.context.request.organization)
+        dashboard = models.Dashboard.objects.get(
+            id=input.id, organization=info.context.request.organization
+        )
         dashboard.delete()
         return True
     except models.Dashboard.DoesNotExist:
@@ -29,7 +31,9 @@ def delete_dashboard(info: Info, input: inputs.DeleteDashboardInput) -> bool:
 
 def update_dashboard(info: Info, input: inputs.UpdateDashboardInput) -> types.Dashboard:
     try:
-        dashboard = models.Dashboard.objects.get(id=input.id, organization=info.context.request.organization)
+        dashboard = models.Dashboard.objects.get(
+            id=input.id, organization=info.context.request.organization
+        )
     except models.Dashboard.DoesNotExist:
         logger.warning(f"Dashboard with id {input.id} does not exist.")
         raise ValueError(f"Dashboard with id {input.id} does not exist.")
@@ -41,8 +45,12 @@ def update_dashboard(info: Info, input: inputs.UpdateDashboardInput) -> types.Da
             placement.delete()
 
         for blok_id in input.bloks:
-            blok = models.MaterializedBlok.objects.get(id=blok_id, blok__organization=info.context.request.organization)
-            placement = models.DashboardPlacement.objects.create(dashboard=dashboard, blok=blok)
+            blok = models.MaterializedBlok.objects.get(
+                id=blok_id, blok__organization=info.context.request.organization
+            )
+            placement = models.DashboardPlacement.objects.create(
+                dashboard=dashboard, blok=blok
+            )
 
     dashboard.save()
 

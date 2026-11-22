@@ -15,7 +15,9 @@ class TestMyTasksQuery:
         # Everything keys off the token "test" identity, which is also what the request resolves to.
         agent = await seed_agent("myq", token="test")
         root = await build_task_for_agent_caller(agent.pk, "myq-root")
-        child = await build_task_for_agent_caller(agent.pk, "myq-child", parent=root, root=root)
+        child = await build_task_for_agent_caller(
+            agent.pk, "myq-child", parent=root, root=root
+        )
 
         result = await schema.execute(MY_TASKS, context_value=authenticated_context)
 

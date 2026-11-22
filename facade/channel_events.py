@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
@@ -28,18 +28,38 @@ class PatchEvent(BaseModel):
 
     create: int = Field(..., description="The patch ID that was created.")
     state: int = Field(..., description="The state ID related to the patch.")
-    agent: int | None = Field(default=None, description="The agent ID related to the patch.")
-    interface: str = Field(default="", description="The interface of the state in the agent.")
-    ops: list[dict[str, JSON]] = Field(default_factory=list, description="The update's RFC 6902 operations (op, path, value), to be applied in order and together.")
-    global_rev: int = Field(default=0, description="The global revision after this patch.")
-    session: Optional[int] = Field(default=None, description="The session ID related to the patch.")
-    timestamp: Optional[datetime.datetime] = Field(default=None, description="When the patch was created.")
-    task: Optional[int] = Field(default=None, description="The task that made the change, if one did.")
-    lifecycle: Optional[str] = Field(default=None, description="Where in a task's or the agent's life the change was made, when not in its ordinary course.")
-    qualifiers: list[str] = Field(default_factory=list, description="What the app says the change was for.")
+    agent: int | None = Field(
+        default=None, description="The agent ID related to the patch."
+    )
+    interface: str = Field(
+        default="", description="The interface of the state in the agent."
+    )
+    ops: list[dict[str, JSON]] = Field(
+        default_factory=list,
+        description="The update's RFC 6902 operations (op, path, value), to be applied in order and together.",
+    )
+    global_rev: int = Field(
+        default=0, description="The global revision after this patch."
+    )
+    session: int | None = Field(
+        default=None, description="The session ID related to the patch."
+    )
+    timestamp: datetime.datetime | None = Field(
+        default=None, description="When the patch was created."
+    )
+    task: int | None = Field(
+        default=None, description="The task that made the change, if one did."
+    )
+    lifecycle: str | None = Field(
+        default=None,
+        description="Where in a task's or the agent's life the change was made, when not in its ordinary course.",
+    )
+    qualifiers: list[str] = Field(
+        default_factory=list, description="What the app says the change was for."
+    )
 
     @classmethod
-    def from_patch(cls, p: models.Patch) -> "PatchEvent":
+    def from_patch(cls, p: models.Patch) -> PatchEvent:
         return cls(
             create=p.pk,
             state=p.state_id,
@@ -70,25 +90,25 @@ class TaskChangePayload(BaseModel):
     """
 
     id: str
-    reference: Optional[str] = None
+    reference: str | None = None
     is_done: bool = False
     latest_event_kind: str
     latest_instruct_kind: str
     action: str
-    implementation: Optional[str] = None
-    agent: Optional[str] = None
-    root: Optional[str] = None
-    parent: Optional[str] = None
+    implementation: str | None = None
+    agent: str | None = None
+    root: str | None = None
+    parent: str | None = None
     created_at: datetime.datetime
     updated_at: datetime.datetime
-    finished_at: Optional[datetime.datetime] = None
+    finished_at: datetime.datetime | None = None
     # Monotonic per-task version. Several backends write the same task (an agent report here, a
     # cancel or a sweep there) and the channel layer does not deliver in commit order — a
     # consumer applies a change only if its revision is greater than the last one it applied.
     revision: int = 0
 
     @classmethod
-    def from_task(cls, t: models.Task) -> "TaskChangePayload":
+    def from_task(cls, t: models.Task) -> TaskChangePayload:
         return cls(
             id=str(t.pk),
             # ``Task.reference`` defaults to the ``uuid.uuid4`` callable, so an in-memory
@@ -120,16 +140,16 @@ class TaskEventPayload(BaseModel):
     id: str
     task: str
     kind: str
-    message: Optional[str] = None
-    progress: Optional[int] = None
+    message: str | None = None
+    progress: int | None = None
     returns: JSON = None
-    level: Optional[str] = None
+    level: str | None = None
     # EFFECT: the value taken; LOST: what is known (started, last progress, effects).
     value: JSON = None
     created_at: datetime.datetime
 
     @classmethod
-    def from_event(cls, e: models.TaskEvent) -> "TaskEventPayload":
+    def from_event(cls, e: models.TaskEvent) -> TaskEventPayload:
         return cls(
             id=str(e.pk),
             task=str(e.task_id),
@@ -146,15 +166,23 @@ class TaskEventPayload(BaseModel):
 class TaskEventCreatedEvent(BaseModel):
     """A task feed message: either a persisted event or a freshly created root task."""
 
-    event: TaskEventPayload | None = Field(default=None, description="The event that was created.")
-    create: TaskChangePayload | None = Field(default=None, description="The task created.")
+    event: TaskEventPayload | None = Field(
+        default=None, description="The event that was created."
+    )
+    create: TaskChangePayload | None = Field(
+        default=None, description="The task created."
+    )
 
 
 class ChildTaskEvent(BaseModel):
     """A model representing a child task event."""
 
-    create: TaskChangePayload | None = Field(default=None, description="The task that was created.")
-    update: TaskChangePayload | None = Field(default=None, description="The task that was updated.")
+    create: TaskChangePayload | None = Field(
+        default=None, description="The task that was created."
+    )
+    update: TaskChangePayload | None = Field(
+        default=None, description="The task that was updated."
+    )
 
 
 class ProbeEventBroadcast(BaseModel):
@@ -168,11 +196,17 @@ class ProbeEventBroadcast(BaseModel):
     probe: str = Field(..., description="The probe id (p-…).")
     kind: str = Field(..., description="The TaskEventKind value of this event.")
     seq: int = Field(..., description="Per-probe monotonic sequence number.")
-    message: Optional[str] = Field(default=None, description="Optional human-readable message / error.")
-    level: Optional[str] = Field(default=None, description="Log level for LOG events.")
-    progress: Optional[int] = Field(default=None, description="Progress (0-100) for PROGRESS events.")
+    message: str | None = Field(
+        default=None, description="Optional human-readable message / error."
+    )
+    level: str | None = Field(default=None, description="Log level for LOG events.")
+    progress: int | None = Field(
+        default=None, description="Progress (0-100) for PROGRESS events."
+    )
     returns: JSON = Field(default=None, description="Returns payload for YIELD events.")
-    created_at: datetime.datetime = Field(..., description="Server-side time the event was recorded.")
+    created_at: datetime.datetime = Field(
+        ..., description="Server-side time the event was recorded."
+    )
 
 
 class AgentEvent(BaseModel):
@@ -194,16 +228,24 @@ class AssetEvent(BaseModel):
 class ImplementationEvent(BaseModel):
     """A model representing a template event."""
 
-    create: int | None = Field(default=None, description="The template that was created.")
-    update: int | None = Field(default=None, description="The template that was updated.")
-    delete: int | None = Field(default=None, description="The template that was deleted.")
+    create: int | None = Field(
+        default=None, description="The template that was created."
+    )
+    update: int | None = Field(
+        default=None, description="The template that was updated."
+    )
+    delete: int | None = Field(
+        default=None, description="The template that was deleted."
+    )
 
 
 class SignalFeedEvent(BaseModel):
     """A signal arrived (``create``) or was matched against the triggers (``update``); ids only."""
 
     create: int | None = Field(default=None, description="The signal that arrived.")
-    update: int | None = Field(default=None, description="The signal that was processed.")
+    update: int | None = Field(
+        default=None, description="The signal that was processed."
+    )
 
 
 class RuleFeedEvent(BaseModel):

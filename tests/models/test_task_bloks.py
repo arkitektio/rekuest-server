@@ -8,7 +8,7 @@ an inform SHOWN. They are never listed.
 import pytest
 
 from facade import enums
-from facade.models import Blok, MaterializedBlok, TaskEvent, Module
+from facade.models import Blok, MaterializedBlok, Module, TaskEvent
 from facade.types.task import task_bloks
 from tests.factories import _build_task
 
@@ -19,11 +19,27 @@ def _shown(task, role: str) -> MaterializedBlok:
         name=f"task-{task.id}-{role}",
         organization=organization,
         creator=task.agent.user,
-        module=Module.objects.get_or_create(name="orkestrator", organization=organization)[0],
+        module=Module.objects.get_or_create(
+            name="orkestrator", organization=organization
+        )[0],
         owner_task=task,
-        returns=[{"key": "image", "kind": "STRUCTURE", "identifier": "@mikro/image", "nullable": False}],
+        returns=[
+            {
+                "key": "image",
+                "kind": "STRUCTURE",
+                "identifier": "@mikro/image",
+                "nullable": False,
+            }
+        ],
     )
-    return MaterializedBlok.objects.create(blok=blok, name=blok.name, description="", scope="TASK", owner_task=task, task_role=role)
+    return MaterializedBlok.objects.create(
+        blok=blok,
+        name=blok.name,
+        description="",
+        scope="TASK",
+        owner_task=task,
+        task_role=role,
+    )
 
 
 def _event(task, kind: str, value: dict, message: str | None = None) -> None:
@@ -39,13 +55,25 @@ def test_an_ask_waits_then_is_answered_and_an_inform_is_shown() -> None:
     _event(task, "INFORM", {"blok": str(inform.id)}, "Halfway")
 
     waiting, shown = task_bloks(task)
-    assert (waiting.role, waiting.status, waiting.message) == (enums.TaskBlokRole.ASK, enums.TaskBlokStatus.WAITING, "Which one?")
-    assert (shown.role, shown.status, shown.message) == (enums.TaskBlokRole.INFORM, enums.TaskBlokStatus.SHOWN, "Halfway")
+    assert (waiting.role, waiting.status, waiting.message) == (
+        enums.TaskBlokRole.ASK,
+        enums.TaskBlokStatus.WAITING,
+        "Which one?",
+    )
+    assert (shown.role, shown.status, shown.message) == (
+        enums.TaskBlokRole.INFORM,
+        enums.TaskBlokStatus.SHOWN,
+        "Halfway",
+    )
 
     picked = {"image": {"__identifier": "@mikro/image", "object": "8"}}
     _event(task, "DECIDED", {"approved": True, "values": picked, "user": "someone"})
     answered = task_bloks(task)[0]
-    assert (answered.status, answered.values, answered.decided_by) == (enums.TaskBlokStatus.ANSWERED, picked, "someone")
+    assert (answered.status, answered.values, answered.decided_by) == (
+        enums.TaskBlokStatus.ANSWERED,
+        picked,
+        "someone",
+    )
 
 
 @pytest.mark.django_db

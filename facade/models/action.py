@@ -26,14 +26,23 @@ class Action(EmbeddedDescriptionMixin, models.Model):
         related_name="actions",
         help_text="The app this action belongs to (actions are part of an app and are NOT associated only with a release)",
     )
-    key = models.CharField(max_length=2000, help_text="A unique identifier for this action within the app")
-    version = models.CharField(max_length=100, help_text="The version of this action (e.g. 1.0.0), this is used to differentiate if the underyling algorithm has changed, i.e we would expect different results for the same input")
+    key = models.CharField(
+        max_length=2000, help_text="A unique identifier for this action within the app"
+    )
+    version = models.CharField(
+        max_length=100,
+        help_text="The version of this action (e.g. 1.0.0), this is used to differentiate if the underyling algorithm has changed, i.e we would expect different results for the same input",
+    )
     collections = models.ManyToManyField(
         "Collection",
         related_name="actions",
         help_text="The collections this Action belongs to",
     )
-    pure = models.BooleanField(default=False, help_text="Is this function pure. e.g can we cache the result?", db_default=False)
+    pure = models.BooleanField(
+        default=False,
+        help_text="Is this function pure. e.g can we cache the result?",
+        db_default=False,
+    )
     idempotent = models.BooleanField(
         default=False,
         help_text="Is this function idempotent. e.g can we run it multiple times without changing the data again ?",
@@ -56,8 +65,17 @@ class Action(EmbeddedDescriptionMixin, models.Model):
         help_text="Function, generator? Will this function generate multiple results?",
         db_default="FUNCTION",
     )
-    port_groups = models.JSONField(default=list, help_text="Intercae that we use to interpret the meta data", db_default=[])
-    name = models.CharField(max_length=1000, help_text="The cleartext name of this Action (e.g. 'Segment Image')", default="Unnamed Action", db_default="Unnamed Action")
+    port_groups = models.JSONField(
+        default=list,
+        help_text="Intercae that we use to interpret the meta data",
+        db_default=[],
+    )
+    name = models.CharField(
+        max_length=1000,
+        help_text="The cleartext name of this Action (e.g. 'Segment Image')",
+        default="Unnamed Action",
+        db_default="Unnamed Action",
+    )
     description = models.TextField(help_text="A description for the Action")
     scope = models.CharField(
         max_length=1000,
@@ -78,7 +96,9 @@ class Action(EmbeddedDescriptionMixin, models.Model):
         blank=True,
         help_text="The protocols this Action implements (e.g. Predicate)",
     )
-    is_dev = models.BooleanField(default=False, help_text="Is this Action a development Action", db_default=False)
+    is_dev = models.BooleanField(
+        default=False, help_text="Is this Action a development Action", db_default=False
+    )
 
     hash = models.CharField(
         max_length=1000,
@@ -90,7 +110,9 @@ class Action(EmbeddedDescriptionMixin, models.Model):
         related_name="actions",
         help_text="The organization this Action belongs to",
     )
-    defined_at = models.DateTimeField(auto_created=True, auto_now_add=True, db_default=Now())
+    defined_at = models.DateTimeField(
+        auto_created=True, auto_now_add=True, db_default=Now()
+    )
     latest_logo = models.ForeignKey(
         "Blok",
         on_delete=models.SET_NULL,
@@ -100,11 +122,19 @@ class Action(EmbeddedDescriptionMixin, models.Model):
         help_text="The action logo blok of the implementation most recently registered with one. takt keeps it as agents register.",
     )
 
-    args = models.JSONField(default=list, help_text="Inputs for this Action", db_default=[])
-    returns = models.JSONField(default=list, help_text="Outputs for this Action", db_default=[])
+    args = models.JSONField(
+        default=list, help_text="Inputs for this Action", db_default=[]
+    )
+    returns = models.JSONField(
+        default=list, help_text="Outputs for this Action", db_default=[]
+    )
 
-    arg_count = models.IntegerField(default=0, help_text="Pre-calculated number of root input ports", db_default=0)
-    return_count = models.IntegerField(default=0, help_text="Pre-calculated number of root output ports", db_default=0)
+    arg_count = models.IntegerField(
+        default=0, help_text="Pre-calculated number of root input ports", db_default=0
+    )
+    return_count = models.IntegerField(
+        default=0, help_text="Pre-calculated number of root output ports", db_default=0
+    )
 
     # Kept by the database, never written by code (migration 0006_action_assignable): whoever
     # changes an agent's `connected`/`kind` or an implementation leaves a mark in
@@ -144,7 +174,9 @@ class Action(EmbeddedDescriptionMixin, models.Model):
             models.Index(fields=["organization", "key"], name="action_org_key_idx"),
             models.Index(fields=["name"], name="action_name_idx"),
             # The menu's "runnable first" ordering and the `assignable` filter, inside one org.
-            models.Index(fields=["organization", "assignable"], name="action_org_assignable_idx"),
+            models.Index(
+                fields=["organization", "assignable"], name="action_org_assignable_idx"
+            ),
         ]
 
 
@@ -168,19 +200,42 @@ class BasePort(models.Model):
     """
 
     index = models.IntegerField(help_text="The position of this port in the list")
-    key = models.CharField(max_length=255, null=True, help_text="The local key (e.g. 'mask')")
+    key = models.CharField(
+        max_length=255, null=True, help_text="The local key (e.g. 'mask')"
+    )
 
     # The Semantic Materialized Path for O(1) nested execution lookups
-    key_path = models.CharField(max_length=500, db_index=True, help_text="The full dot-notation path (e.g. 'options.advanced.mask')")
+    key_path = models.CharField(
+        max_length=500,
+        db_index=True,
+        help_text="The full dot-notation path (e.g. 'options.advanced.mask')",
+    )
 
-    kind = models.CharField(max_length=50, null=True, help_text="The structural kind (e.g. LIST, DICT, INT)")
-    identifier = models.CharField(max_length=255, null=True, db_index=True, help_text="The macro-type (e.g. '@mikro/image')")
-    dimension = models.CharField(max_length=255, null=True, blank=True, db_index=True, help_text="Canonical pint dimensionality for QUANTITY ports (the wiring-compatibility key)")
+    kind = models.CharField(
+        max_length=50, null=True, help_text="The structural kind (e.g. LIST, DICT, INT)"
+    )
+    identifier = models.CharField(
+        max_length=255,
+        null=True,
+        db_index=True,
+        help_text="The macro-type (e.g. '@mikro/image')",
+    )
+    dimension = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Canonical pint dimensionality for QUANTITY ports (the wiring-compatibility key)",
+    )
 
     # The ECS JSONPath string compiler output. TextField: the compiled predicate grows with
     # every descriptor (and every IN-list element), so a length cap would turn a large-but-valid
     # requires/provides declaration into a DataError at registration time.
-    compiled_jsonpath = models.TextField(null=True, blank=True, help_text="PostgreSQL JSONPath string for micro-constraints")
+    compiled_jsonpath = models.TextField(
+        null=True,
+        blank=True,
+        help_text="PostgreSQL JSONPath string for micro-constraints",
+    )
     nullable = models.BooleanField(default=False, db_default=False)
 
     class Meta:
@@ -196,8 +251,16 @@ def port_indexes(owner: str) -> list[models.Index]:
         # force_* count subqueries all filter exactly on
         # (<owner>_id, parent_id IS NULL, kind|nullable). Nested children are reached via the
         # FK index on parent with tiny fan-out, so only root rows are worth indexing.
-        models.Index(fields=[owner, "kind"], condition=models.Q(parent__isnull=True), name="%(class)s_root_kind_idx"),
-        models.Index(fields=[owner, "nullable"], condition=models.Q(parent__isnull=True), name="%(class)s_root_null_idx"),
+        models.Index(
+            fields=[owner, "kind"],
+            condition=models.Q(parent__isnull=True),
+            name="%(class)s_root_kind_idx",
+        ),
+        models.Index(
+            fields=[owner, "nullable"],
+            condition=models.Q(parent__isnull=True),
+            name="%(class)s_root_null_idx",
+        ),
         # Case-insensitive reverse lookup ("which actions use @mikro/image?") — the catalog
         # entities are lower-cased at registration while port identifiers keep original case.
         models.Index(Upper("identifier"), name="%(class)s_ident_upper_idx"),
@@ -211,8 +274,17 @@ class ArgPort(BasePort):
     # reverse relation's manager) without saying so in a way it can read.
     action_id: int
 
-    action = models.ForeignKey(Action, on_delete=models.CASCADE, related_name="arg_ports")
-    parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children", help_text="If this port is nested inside a LIST or DICT")
+    action = models.ForeignKey(
+        Action, on_delete=models.CASCADE, related_name="arg_ports"
+    )
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="children",
+        help_text="If this port is nested inside a LIST or DICT",
+    )
 
     class Meta:
         indexes = port_indexes("action")
@@ -228,8 +300,17 @@ class ReturnPort(BasePort):
     # reverse relation's manager) without saying so in a way it can read.
     action_id: int
 
-    action = models.ForeignKey(Action, on_delete=models.CASCADE, related_name="return_ports")
-    parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="children", help_text="If this port is nested inside a LIST or DICT")
+    action = models.ForeignKey(
+        Action, on_delete=models.CASCADE, related_name="return_ports"
+    )
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="children",
+        help_text="If this port is nested inside a LIST or DICT",
+    )
 
     class Meta:
         indexes = port_indexes("action")

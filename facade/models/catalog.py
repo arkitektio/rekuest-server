@@ -1,9 +1,13 @@
 from authentikate.models import Client, Organization
-from django.db.models.functions import Now
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.db.models.functions import Now
 
-from rekuest_core.inputs.models import CatalogComponentInputModel, CatalogOperationInputModel, WidgetDefaultInputModel
+from rekuest_core.inputs.models import (
+    CatalogComponentInputModel,
+    CatalogOperationInputModel,
+    WidgetDefaultInputModel,
+)
 
 
 class Collection(models.Model):
@@ -23,7 +27,10 @@ class Collection(models.Model):
 
     """
 
-    name = models.CharField(max_length=1000, help_text="The name of this Collection, unique within its organization")
+    name = models.CharField(
+        max_length=1000,
+        help_text="The name of this Collection, unique within its organization",
+    )
     description = models.TextField(help_text="A description for the Collection")
     defined_at = models.DateTimeField(
         auto_created=True,
@@ -31,7 +38,11 @@ class Collection(models.Model):
         help_text="Date this Collection was created",
         db_default=Now(),
     )
-    updated_at = models.DateTimeField(auto_now=True, help_text="Date this Collection was last updated", db_default=Now())
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text="Date this Collection was last updated",
+        db_default=Now(),
+    )
     creator = models.ForeignKey(
         get_user_model(),
         on_delete=models.CASCADE,
@@ -46,7 +57,12 @@ class Collection(models.Model):
     )
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["organization", "name"], name="collection_unique_name_per_organization")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "name"],
+                name="collection_unique_name_per_organization",
+            )
+        ]
 
 
 class Protocol(models.Model):
@@ -65,11 +81,19 @@ class Protocol(models.Model):
         related_name="protocols",
         help_text="The organization this Protocol belongs to. Access is scoped to it.",
     )
-    name = models.CharField(max_length=1000, help_text="The name of this Protocol, unique within its organization")
+    name = models.CharField(
+        max_length=1000,
+        help_text="The name of this Protocol, unique within its organization",
+    )
     description = models.TextField(help_text="A description for the Protocol")
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["organization", "name"], name="protocol_unique_name_per_organization")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "name"],
+                name="protocol_unique_name_per_organization",
+            )
+        ]
 
     def __str__(self) -> str:
         return self.name
@@ -89,7 +113,9 @@ class Module(models.Model):
         help_text="The organization this Module belongs to. Access is scoped to it.",
     )
     name = models.CharField(max_length=1000)
-    description = models.TextField(null=True, blank=True, help_text="A description of this module")
+    description = models.TextField(
+        null=True, blank=True, help_text="A description of this module"
+    )
     components = models.JSONField(
         default=list,
         help_text="Registered component specs (rekuest_core CatalogComponent): the names a ComponentNode.component may use and the props each accepts.",
@@ -120,7 +146,12 @@ class Module(models.Model):
     )
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["organization", "name"], name="unique_module_name_per_organization")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "name"],
+                name="unique_module_name_per_organization",
+            )
+        ]
 
     @property
     def is_registered(self) -> bool:
@@ -128,10 +159,14 @@ class Module(models.Model):
         return bool(self.components) or bool(self.operations)
 
     def get_components(self) -> list[CatalogComponentInputModel]:
-        return [CatalogComponentInputModel(**component) for component in self.components]
+        return [
+            CatalogComponentInputModel(**component) for component in self.components
+        ]
 
     def get_operations(self) -> list[CatalogOperationInputModel]:
-        return [CatalogOperationInputModel(**operation) for operation in self.operations]
+        return [
+            CatalogOperationInputModel(**operation) for operation in self.operations
+        ]
 
     def get_widget_defaults(self) -> list[WidgetDefaultInputModel]:
         return [WidgetDefaultInputModel(**default) for default in self.widget_defaults]
@@ -166,9 +201,15 @@ class Toolbox(models.Model):
 class Shortcut(models.Model):
     name = models.CharField(max_length=1000)
     description = models.TextField(null=True, blank=True)
-    toolbox = models.ForeignKey(Toolbox, on_delete=models.CASCADE, related_name="shortcuts")
-    action = models.ForeignKey("Action", on_delete=models.CASCADE, related_name="shortcuts", null=True)
-    implementation = models.ForeignKey("Implementation", on_delete=models.CASCADE, related_name="shortcuts", null=True)
+    toolbox = models.ForeignKey(
+        Toolbox, on_delete=models.CASCADE, related_name="shortcuts"
+    )
+    action = models.ForeignKey(
+        "Action", on_delete=models.CASCADE, related_name="shortcuts", null=True
+    )
+    implementation = models.ForeignKey(
+        "Implementation", on_delete=models.CASCADE, related_name="shortcuts", null=True
+    )
     # The pin, as a schedule keeps it: an agent with one of its interfaces. Not the implementation
     # row, which is made again when the agent registers again. Without the agent the shortcut
     # is still there, unpinned.
@@ -180,7 +221,12 @@ class Shortcut(models.Model):
         related_name="shortcuts",
         help_text="Run the shortcut on this agent (with ``interface``); null = whoever runs it says where, or the server picks",
     )
-    interface = models.CharField(max_length=1000, null=True, blank=True, help_text="The implementation interface on the pinned agent")
+    interface = models.CharField(
+        max_length=1000,
+        null=True,
+        blank=True,
+        help_text="The implementation interface on the pinned agent",
+    )
     saved_args = models.JSONField(default=dict, db_default={})
     creator = models.ForeignKey(
         get_user_model(),
@@ -197,8 +243,12 @@ class Shortcut(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
     updated_at = models.DateTimeField(auto_now=True, db_default=Now())
-    args = models.JSONField(default=list, help_text="Inputs for this Shortcut", db_default=[])
-    returns = models.JSONField(default=list, help_text="Outputs for this Shortcut", db_default=[])
+    args = models.JSONField(
+        default=list, help_text="Inputs for this Shortcut", db_default=[]
+    )
+    returns = models.JSONField(
+        default=list, help_text="Outputs for this Shortcut", db_default=[]
+    )
     allow_quick = models.BooleanField(
         default=False,
         help_text="Allow quick execution of this Shortcut (e.g. run without confirmation)",
@@ -221,16 +271,49 @@ class ShortcutBinding(models.Model):
     shortcut stays visible to the whole organization.
     """
 
-    shortcut = models.ForeignKey(Shortcut, on_delete=models.CASCADE, related_name="bindings")
-    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, null=True, blank=True, related_name="shortcut_bindings", help_text="The user this shortcut is pinned for; null for every user")
-    app = models.CharField(max_length=2000, null=True, blank=True, help_text="The identifier of the app it is pinned in; null for every app")
-    client = models.CharField(max_length=2000, null=True, blank=True, help_text="The client_id of the client it is pinned in; null for every client")
-    device = models.CharField(max_length=2000, null=True, blank=True, help_text="The device_id of the device it is pinned on; null for every device")
-    bound_by = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name="bound_shortcuts", help_text="The admin who bound it")
+    shortcut = models.ForeignKey(
+        Shortcut, on_delete=models.CASCADE, related_name="bindings"
+    )
+    user = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="shortcut_bindings",
+        help_text="The user this shortcut is pinned for; null for every user",
+    )
+    app = models.CharField(
+        max_length=2000,
+        null=True,
+        blank=True,
+        help_text="The identifier of the app it is pinned in; null for every app",
+    )
+    client = models.CharField(
+        max_length=2000,
+        null=True,
+        blank=True,
+        help_text="The client_id of the client it is pinned in; null for every client",
+    )
+    device = models.CharField(
+        max_length=2000,
+        null=True,
+        blank=True,
+        help_text="The device_id of the device it is pinned on; null for every device",
+    )
+    bound_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        related_name="bound_shortcuts",
+        help_text="The admin who bound it",
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_default=Now())
 
     class Meta:
         constraints = [
             # One rule of each shape too: null ("anyone") counts as a value here.
-            models.UniqueConstraint(fields=["shortcut", "user", "app", "client", "device"], name="one_binding_per_shortcut_rule", nulls_distinct=False),
+            models.UniqueConstraint(
+                fields=["shortcut", "user", "app", "client", "device"],
+                name="one_binding_per_shortcut_rule",
+                nulls_distinct=False,
+            ),
         ]

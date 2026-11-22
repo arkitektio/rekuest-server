@@ -9,19 +9,19 @@ semantics as the action demands).
 
 from types import SimpleNamespace
 
-from rekuest_core.enums import PortKind
-
-from rekuest_core.inputs.models import ActionDemandInputModel, DescriptorInputModel, PortMatchInputModel, StateDemandInputModel
-
 import pytest
-
-from rekuest_core.inputs.models import ImplementationInputModel, StateDependencyInputModel
 
 from facade import models
 from facade.logic import auto_resolve
-from tests.registered import create_implementation as _create_implementation
-
+from rekuest_core.enums import PortKind
+from rekuest_core.inputs.models import (
+    ImplementationInputModel,
+    PortMatchInputModel,
+    StateDemandInputModel,
+    StateDependencyInputModel,
+)
 from tests.factories import create_agent_for_registry, create_registry_bundle
+from tests.registered import create_implementation as _create_implementation
 
 SNAP_DEFINITION = {
     "key": "snap",
@@ -48,8 +48,15 @@ def _orchestrator_input(state_port_kind="INT"):
             "dependencies": [
                 {
                     "key": "snap",
-                    "action_dependencies": [{"key": "snap", "demand": {"name": "Snap"}}],
-                    "state_dependencies": [{"key": "counter", "demand": {"matches": [{"kind": state_port_kind}]}}],
+                    "action_dependencies": [
+                        {"key": "snap", "demand": {"name": "Snap"}}
+                    ],
+                    "state_dependencies": [
+                        {
+                            "key": "counter",
+                            "demand": {"matches": [{"kind": state_port_kind}]},
+                        }
+                    ],
                     "prefered_instances": 1,
                 }
             ],
@@ -72,20 +79,49 @@ def setup(db):
     agent_with_state = _agent_in(org, "statedep-stateful")
     agent_without_state = _agent_in(org, "statedep-stateless")
     for agent in (agent_with_state, agent_without_state):
-        _create_implementation(ImplementationInputModel.model_validate({"interface": "snap", "definition": SNAP_DEFINITION}), agent)
+        _create_implementation(
+            ImplementationInputModel.model_validate(
+                {"interface": "snap", "definition": SNAP_DEFINITION}
+            ),
+            agent,
+        )
 
     counter_definition = models.StateDefinition.objects.create(
         organization=org,
         name="Counter",
         hash="statedep-counter-hash",
         description="counter",
-        ports=[{"key": "count", "kind": "INT", "identifier": None, "nullable": False, "children": []}],
+        ports=[
+            {
+                "key": "count",
+                "kind": "INT",
+                "identifier": None,
+                "nullable": False,
+                "children": [],
+            }
+        ],
     )
-    models.State.objects.create(definition=counter_definition, interface="counter", key="counter", app_identifier="statedep-stateful-app", agent=agent_with_state)
+    models.State.objects.create(
+        definition=counter_definition,
+        interface="counter",
+        key="counter",
+        app_identifier="statedep-stateful-app",
+        agent=agent_with_state,
+    )
 
     main_impl = _create_implementation(_orchestrator_input(), orchestrator_agent)
-    info = SimpleNamespace(context=SimpleNamespace(request=SimpleNamespace(organization=org, user=user)))
-    return SimpleNamespace(org=org, user=user, info=info, main_impl=main_impl, agent_with_state=agent_with_state, agent_without_state=agent_without_state, counter_definition=counter_definition)
+    info = SimpleNamespace(
+        context=SimpleNamespace(request=SimpleNamespace(organization=org, user=user))
+    )
+    return SimpleNamespace(
+        org=org,
+        user=user,
+        info=info,
+        main_impl=main_impl,
+        agent_with_state=agent_with_state,
+        agent_without_state=agent_without_state,
+        counter_definition=counter_definition,
+    )
 
 
 def test_state_demands_persist_on_both_write_paths(setup):
@@ -124,7 +160,9 @@ def test_auto_resolve_selects_only_agents_with_matching_state(setup):
 
 def test_auto_resolve_raises_when_no_state_definition_matches(setup):
     # Re-register the orchestrator with a state demand no StateDefinition satisfies.
-    main_impl = _create_implementation(_orchestrator_input(state_port_kind="DATE"), setup.main_impl.agent)
+    main_impl = _create_implementation(
+        _orchestrator_input(state_port_kind="DATE"), setup.main_impl.agent
+    )
     resolution = models.Resolution.objects.create(
         name="statedep-nomatch",
         implementation=main_impl,
@@ -147,12 +185,18 @@ def test_state_demand_by_key_only_selects_matching_agent(setup):
 
     from django.db.models import Exists, OuterRef
 
-    queryset = models.Agent.objects.filter(Exists(models.State.objects.filter(agent=OuterRef("pk"), **filters)))
+    queryset = models.Agent.objects.filter(
+        Exists(models.State.objects.filter(agent=OuterRef("pk"), **filters))
+    )
     assert set(queryset.values_list("pk", flat=True)) == {setup.agent_with_state.pk}
 
     # Pinning by app identifier works the same way.
-    app_filters = managers.state_demand_state_filters(StateDemandInputModel(app="statedep-stateful-app"))
-    queryset = models.Agent.objects.filter(Exists(models.State.objects.filter(agent=OuterRef("pk"), **app_filters)))
+    app_filters = managers.state_demand_state_filters(
+        StateDemandInputModel(app="statedep-stateful-app")
+    )
+    queryset = models.Agent.objects.filter(
+        Exists(models.State.objects.filter(agent=OuterRef("pk"), **app_filters))
+    )
     assert set(queryset.values_list("pk", flat=True)) == {setup.agent_with_state.pk}
 
 
@@ -167,5 +211,11 @@ def test_agent_state_demand_exists_semantics(setup):
     fitting_ids = managers.get_state_ids_by_demands(matches)
     assert setup.counter_definition.id in fitting_ids
 
-    queryset = models.Agent.objects.filter(Exists(models.State.objects.filter(agent=OuterRef("pk"), definition_id__in=fitting_ids)))
+    queryset = models.Agent.objects.filter(
+        Exists(
+            models.State.objects.filter(
+                agent=OuterRef("pk"), definition_id__in=fitting_ids
+            )
+        )
+    )
     assert set(queryset.values_list("pk", flat=True)) == {setup.agent_with_state.pk}

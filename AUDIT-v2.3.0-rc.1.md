@@ -98,7 +98,7 @@ any user can hijack another org's blok or toolbox by name.
 ```python
 async def on_agent_done(self, agent_id: int, message: messages.Completed) -> None:
     ...
-    x = await models.Task.objects.aget(id=message.task)   # agent_id unused
+    x = await models.Task.objects.aget(id=message.task)  # agent_id unused
     await models.TaskEvent.objects.acreate(task=x, kind=enums.TaskEventKind.COMPLETED)
 ```
 
@@ -125,9 +125,11 @@ drop it, resolving by caller-supplied `message.task`.
 
 ```python
 if action_ids:
-    actions_to_check = models.Action.objects.filter(id__in=action_ids, organization=info.context.request.organization)
+    actions_to_check = models.Action.objects.filter(
+        id__in=action_ids, organization=info.context.request.organization
+    )
 else:
-    actions_to_check = models.Action.objects          # <-- no organization filter
+    actions_to_check = models.Action.objects  # <-- no organization filter
 ```
 
 **Failure scenario.** A user in org A calls `mutation { cleanupActions }` with no arguments. Every
@@ -141,7 +143,9 @@ function's own `# TODO: Check that user has permission to delete actions` confir
 
 ```python
 models.State.objects.filter(agent=agent).exclude(id__in=created_states_id).delete()
-models.Implementation.objects.filter(agent=agent).exclude(id__in=created_implementations_id).delete()
+models.Implementation.objects.filter(agent=agent).exclude(
+    id__in=created_implementations_id
+).delete()
 ```
 
 `Task.implementation` is `null=True, blank=True` but `on_delete=models.CASCADE`

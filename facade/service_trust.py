@@ -21,12 +21,12 @@ from __future__ import annotations
 import time
 from urllib.parse import urlparse
 
+from arkitekt_service import trust
 from django.conf import settings
 from joserfc import jwt
 from joserfc.jwk import KeySet
 
 from rekuest.configuration import HookAgentEntry, ServiceEntry
-from arkitekt_service import trust
 
 #: The identities rekuest mints for configured hook agents are named ``hook-<name>``, so their
 #: clients are ``rekuest:hook-<name>``: that is how an agent is recognised as one.
@@ -43,12 +43,22 @@ def identifier_of(entry: ServiceEntry | HookAgentEntry) -> str:
     return entry.identifier or entry.name
 
 
-def sign_to(entry: ServiceEntry | HookAgentEntry, method: str, url: str, body: bytes) -> str:
+def sign_to(
+    entry: ServiceEntry | HookAgentEntry, method: str, url: str, body: bytes
+) -> str:
     """The ``Authorization`` value of a request from rekuest to this entry's instance (a service or a hook agent)."""
-    return trust.sign(method, urlparse(url).path, body, issuer=rekuest_identifier(), audience=identifier_of(entry))
+    return trust.sign(
+        method,
+        urlparse(url).path,
+        body,
+        issuer=rekuest_identifier(),
+        audience=identifier_of(entry),
+    )
 
 
-def verify_own(method: str, path: str, body: bytes, authorization: str | None, max_skew: int = 30) -> trust.Verified:
+def verify_own(
+    method: str, path: str, body: bytes, authorization: str | None, max_skew: int = 30
+) -> trust.Verified:
     """Check a request takt signed as this rekuest, to this rekuest; ``TrustError`` otherwise.
 
     takt reads the same ``config.yaml`` and so signs with this instance's own key. The check is
@@ -58,15 +68,24 @@ def verify_own(method: str, path: str, body: bytes, authorization: str | None, m
     """
     key = trust.instance_key()
     if key is None:
-        raise trust.TrustError("No instance key configured (settings.INSTANCE['PRIVATE_KEY'])")
+        raise trust.TrustError(
+            "No instance key configured (settings.INSTANCE['PRIVATE_KEY'])"
+        )
     if not authorization or not authorization.startswith(f"{trust.SCHEME} "):
         raise trust.TrustError("No service token")
     token = authorization[len(trust.SCHEME) + 1 :].strip()
     try:
-        decoded = jwt.decode(token, KeySet.import_key_set({"keys": [trust.public_jwk(key)]}), algorithms=[trust.ALGORITHM])
+        decoded = jwt.decode(
+            token,
+            KeySet.import_key_set({"keys": [trust.public_jwk(key)]}),
+            algorithms=[trust.ALGORITHM],
+        )
     except Exception as error:  # noqa: BLE001
         raise trust.TrustError(f"Bad service token signature: {error}") from None
-    if decoded.header.get("typ") != trust.TYP or decoded.header.get("kid") != key.thumbprint():
+    if (
+        decoded.header.get("typ") != trust.TYP
+        or decoded.header.get("kid") != key.thumbprint()
+    ):
         raise trust.TrustError("Not a service token of this instance")
     claims = decoded.claims
     identity = rekuest_identifier()
@@ -74,7 +93,13 @@ def verify_own(method: str, path: str, body: bytes, authorization: str | None, m
         raise trust.TrustError("Not a token from rekuest to itself")
     now = int(time.time())
     exp, iat = claims.get("exp"), claims.get("iat")
-    if not isinstance(exp, int) or not isinstance(iat, int) or exp < now - max_skew or iat > now + max_skew or exp - iat > trust.LIFETIME_SECONDS + max_skew:
+    if (
+        not isinstance(exp, int)
+        or not isinstance(iat, int)
+        or exp < now - max_skew
+        or iat > now + max_skew
+        or exp - iat > trust.LIFETIME_SECONDS + max_skew
+    ):
         raise trust.TrustError("Service token expired or not yet valid")
     if claims.get("htm") != method.upper() or claims.get("htu") != path:
         raise trust.TrustError("Service token was signed for another request")
