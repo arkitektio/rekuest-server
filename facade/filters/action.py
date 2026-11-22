@@ -17,7 +17,7 @@ from strawberry_django.fields.filter_order import filter_field
 from strawberry_django.filters import FilterLookup
 
 from embeddings.search import hybrid_search
-from facade import inputs, managers, models
+from facade import availability, enums, inputs, managers, models
 from facade.filters import capabilities
 from rekuest_core import enums as renums
 
@@ -77,6 +77,13 @@ class ActionOrder:
         name = F("first_collection_name")
         return queryset, [name.desc(nulls_last=True) if "DESC" in value.name else name.asc(nulls_last=True)]
 
+    @strawberry_django.order_field(description="By `Action.availability`: runnable now first (ASC), then recently active, offline, and without an implementation; DESC reverses it. Keeps each availability group together across pages.")
+    def availability(self, info: Info, queryset: QuerySet[models.Action], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Action], list[OrderBy]]:
+        if not value:
+            return queryset, []
+        queryset = queryset.annotate(availability_rank=availability.rank(prefix))
+        return queryset, [value.resolve("availability_rank")]
+
     @strawberry_django.order_field
     def used_at(self, info: Info, queryset: QuerySet[models.Action], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Action], list[OrderBy]]:
         if not value:
@@ -101,7 +108,9 @@ class ActionOrder:
 class ActionFilter:
     name: Optional[FilterLookup[str]]
 
-    @filter_field(description="Search by name: a case-insensitive substring, or semantic similarity of the query to the action's name and description. Ranked: an exact match, then a prefix, then other textual matches by trigram similarity, then by meaning; an explicit `ordering` replaces that ranking.")
+    @filter_field(
+        description="Search by name: a case-insensitive substring, or semantic similarity of the query to the action's name and description. Ranked: an exact match, then a prefix, then other textual matches by trigram similarity, then by meaning; an explicit `ordering` replaces that ranking."
+    )
     def search(self, info: Info, queryset: QuerySet[models.Action], value: str, prefix: str) -> tuple[QuerySet[models.Action], Q]:
         return hybrid_search(queryset, prefix, value, Q(**{f"{prefix}name__icontains": value}), "name")
 
@@ -158,6 +167,12 @@ class ActionFilter:
     @filter_field
     def used_after(self, info: Info, queryset: QuerySet[models.Action], value: datetime.datetime, prefix: str) -> tuple[QuerySet[models.Action], Q]:
         return queryset.filter(**{f"{prefix}tasks__created_at__gt": value}), Q()
+
+    @filter_field(description="Only actions of these availabilities (`Action.availability`). An empty list is ignored.")
+    def availability(self, info: Info, queryset: QuerySet[models.Action], value: list[enums.ActionAvailability], prefix: str) -> tuple[QuerySet[models.Action], Q]:
+        if not value:
+            return queryset, Q()
+        return queryset.annotate(availability_rank=availability.rank(prefix)), Q(availability_rank__in=availability.ranks(value))
 
     @filter_field(description="Whether an agent that can take the action is connected now (`Action.assignable`).")
     def assignable(self, info: Info, queryset: QuerySet[models.Action], value: bool, prefix: str) -> tuple[QuerySet[models.Action], Q]:

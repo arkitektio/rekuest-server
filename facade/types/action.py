@@ -11,7 +11,7 @@ from django.db.models import QuerySet
 from kante.types import Info
 
 from embeddings.strawberry import Embedding, embedding_of
-from facade import enums, filters, models
+from facade import availability, enums, filters, models
 from facade.types.base import build_prescoped_queryset, row_of
 from rekuest_core import enums as renums
 from rekuest_core import scalars as rscalars
@@ -57,6 +57,7 @@ class Action:
         field_name="latest_logo",
         description="The action logo that draws this action: that of the implementation most recently registered with one (`Action.latest_logo`, kept by takt). Each implementation has its own (`Implementation.logo`); an action without one is drawn by its agent's default logo.",
     )
+
     @strawberry_django.field(description="The action's own bloks, at most one per context (PANEL for a task panel, SCENE a 3D view, as a `Space` placing the run's dependencies): declared with the action, the latest registration's. Not part of its hash.")
     def bloks(self) -> list["ActionBlok"]:
         return cast("list[ActionBlok]", list(models.ActionBlok.objects.filter(action_id=row_of(self, models.Action).pk, phase="RUN").order_by("context")))
@@ -68,6 +69,7 @@ class Action:
     live_implementations: int = strawberry_django.field(
         description="How many of its implementations sit on an agent that can take work now (connected, or a webhook agent) — one per agent. Kept by the database as agents connect and leave, a moment behind (takt recomputes it on commit); a crashed agent counts until takt's stale sweep notices (seconds)."
     )
+
     @strawberry_django.field(description="The estimate in seconds for the object named in the `estimatedRuntime` filter: its fastest live implementation that fits. Null without that filter, or when it cannot be computed for this object.")
     def estimated_runtime_seconds(self) -> float | None:
         return getattr(row_of(self, models.Action), "estimated_seconds", None)
@@ -77,6 +79,18 @@ class Action:
         return models.ImplementationFit.objects.filter(implementation__action=row_of(self, models.Action)).exists()
 
     assignable: bool = strawberry_django.field(description="Whether an agent that can take this action is connected (or is a webhook agent) right now: `liveImplementations > 0`.")
+
+    @strawberry_django.field(
+        annotate={"availability_rank": lambda info: availability.rank()},
+        description="Whether it can run: RUNNABLE now, RECENT (an implementing agent seen in the last 24 hours), OFFLINE, or NONE (no implementation). The same rank `ActionOrder.availability` orders and `ActionFilter.availability` filters by.",
+    )
+    def availability(self) -> enums.ActionAvailability:
+        row = row_of(self, models.Action)
+        rank = getattr(row, "availability_rank", None)  # annotated by the optimizer; absent on a row fetched without it
+        if rank is None:
+            rank = models.Action.objects.filter(pk=row.pk).annotate(availability_rank=availability.rank()).values_list("availability_rank", flat=True).get()
+        return availability.of_rank(rank)
+
     test_cases: list["TestCase"] | None = strawberry_django.field(description="Test cases for this action.")
     organization: "Organization" = strawberry_django.field(description="The organization that owns this action.")
     tasks: list["Task"] = strawberry_django.field(description="Tasks created for this action.")

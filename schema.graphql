@@ -129,6 +129,11 @@ type Action {
   hasFits: Boolean!
 
   """
+  Whether it can run: RUNNABLE now, RECENT (an implementing agent seen in the last 24 hours), OFFLINE, or NONE (no implementation). The same rank `ActionOrder.availability` orders and `ActionFilter.availability` filters by.
+  """
+  availability: ActionAvailability!
+
+  """
   This action's stored vector, as `<model id>:<floats>`. Null until it has been indexed.
   """
   embedding: Embedding
@@ -229,6 +234,16 @@ input ActionArgumentInput {
   Defines a list of key-value pairs if this argument should be a dictionary.
   """
   valueDict: [ActionArgumentInput!] = null
+}
+
+"""
+Whether an action can run, as a list groups it: RUNNABLE now (`Action.assignable`), RECENT (an implementing agent was seen in the last 24 hours), OFFLINE (implemented, but no agent seen for longer), NONE (no implementation). In that order, which is `ActionOrder.availability` ascending.
+"""
+enum ActionAvailability {
+  RUNNABLE
+  RECENT
+  OFFLINE
+  NONE
 }
 
 """
@@ -494,6 +509,11 @@ input ActionFilter {
   usedAfter: DateTime
 
   """
+  Only actions of these availabilities (`Action.availability`). An empty list is ignored.
+  """
+  availability: [ActionAvailability!]
+
+  """
   Whether an agent that can take the action is connected now (`Action.assignable`).
   """
   assignable: Boolean
@@ -551,6 +571,11 @@ input ActionOrder @oneOf {
   By the name of the action's first collection (alphabetically): the collection a grouped list files it under. Actions in no collection come last.
   """
   collection: Ordering
+
+  """
+  By `Action.availability`: runnable now first (ASC), then recently active, offline, and without an implementation; DESC reverses it. Keeps each availability group together across pages.
+  """
+  availability: Ordering
   usedAt: Ordering
 
   """

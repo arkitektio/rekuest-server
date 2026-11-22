@@ -4,7 +4,7 @@ Split into domain submodules. This ``__init__`` re-exports every public enum so
 the established ``from facade import enums`` / ``enums.X`` access keeps working.
 """
 
-from .action import ActionKindChoices, ActionScope, DemandKind, EffectsChoices, ExecutionChoices, HookKind
+from .action import ActionAvailability, ActionKindChoices, ActionScope, DemandKind, EffectsChoices, ExecutionChoices, HookKind
 from .blok import MaterializationScope, MaterializationScopeChoices, TaskBlokRole, TaskBlokRoleChoices, TaskBlokStatus
 from .agent import (
     AgentEventChoices,

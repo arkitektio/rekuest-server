@@ -58,3 +58,12 @@ def agent_available_q(prefix: str = "") -> Q:
     without the heartbeat term (migration ``0006_action_assignable``).
     """
     return Q(**{f"{prefix}kind": "WEBHOOK"}) | agent_live_q(prefix)
+
+
+RECENTLY_SEEN = timedelta(hours=24)
+"""How long after its last heartbeat an agent still counts as recently active (``ActionAvailability.RECENT``)."""
+
+
+def agent_recent_q(prefix: str = "") -> Q:
+    """Agents heard from within ``RECENTLY_SEEN``, live or not, as a ``Q``."""
+    return Q(**{f"{prefix}last_seen__gt": timezone.now() - RECENTLY_SEEN})

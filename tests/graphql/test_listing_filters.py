@@ -9,6 +9,7 @@ import datetime
 
 import pytest
 from asgiref.sync import sync_to_async
+from django.db import connection
 from django.utils import timezone
 
 from authentikate.models import App, Client, Release, User
@@ -123,6 +124,49 @@ class TestActionOrder:
         assert (await order({"collection": "DESC"}, {"definedAt": "ASC"}))[-1] == "z2"
 
         assert (await order({"kind": "ASC"}, {"definedAt": "ASC"}))[-1] == "a1"  # FUNCTION < GENERATOR
+
+    async def test_actions_are_grouped_by_availability_across_pages(self):
+        (context, user, _client, organization), (other, *_) = await _contexts()
+
+        def seed() -> dict[str, models.Action]:
+            app = App.objects.create(identifier="lf-avail")
+            actions = {key: _action(organization, app, f"lf-av-{key}") for key in ("none", "offline", "recent", "runnable")}
+            now = timezone.now()
+            agents = {
+                "runnable": _agent(organization, "lf-av-hook", kind=enums.AgentKind.WEBHOOK.value),
+                "recent": _agent(organization, "lf-av-recent", connected=False, last_seen=now - datetime.timedelta(hours=2)),
+                "offline": _agent(organization, "lf-av-gone", connected=False, last_seen=now - datetime.timedelta(days=3)),
+            }
+            for key, holder in agents.items():
+                models.Implementation.objects.create(agent=holder, action=actions[key], interface=f"lf-av-{key}")
+            # An agent seen long ago besides the recent one does not make "recent" offline.
+            models.Implementation.objects.create(agent=agents["offline"], action=actions["recent"], interface="lf-av-recent-2")
+            with connection.cursor() as cursor:  # takt's drain, which recomputes `assignable` on a hub
+                cursor.execute("SELECT facade_refresh_live_implementations(500)")
+            return actions
+
+        actions = await sync_to_async(seed)()
+        name = {str(action.pk): key for key, action in actions.items()}
+        query = 'query($ordering: [ActionOrder!]!, $only: [ActionAvailability!]) { actions(filters: {search: "lf-av-", availability: $only}, ordering: $ordering, pagination: {limit: 2}) { id availability } }'
+
+        async def page(ordering: list[dict[str, str]], only: list[str] | None = None, offset: int = 0) -> list[tuple[str, str]]:
+            q = query.replace("limit: 2", f"limit: 2, offset: {offset}")
+            rows = (await _run(q, context, ordering=ordering, only=only))["actions"]
+            return [(name[row["id"]], row["availability"]) for row in rows]
+
+        # Two pages of two: the groups come in order, so a page edge never splits one out of place.
+        ordering = [{"availability": "ASC"}, {"definedAt": "ASC"}]
+        assert await page(ordering) + await page(ordering, offset=2) == [
+            ("runnable", "RUNNABLE"),
+            ("recent", "RECENT"),
+            ("offline", "OFFLINE"),
+            ("none", "NONE"),
+        ]
+        assert [key for key, _ in await page([{"availability": "DESC"}])] == ["none", "offline"]
+        # A whole group, whatever page it starts on.
+        assert await page(ordering, only=["OFFLINE", "NONE"]) == [("offline", "OFFLINE"), ("none", "NONE")]
+        # Another organization's agents and actions are not ours to rank.
+        assert (await _run('{ actions(filters: {search: "lf-av-"}) { id } }', other))["actions"] == []
 
 
 class TestBloks:

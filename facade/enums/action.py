@@ -51,3 +51,13 @@ class DemandKind(str, Enum):
 class HookKind(str, Enum):
     CLEANUP = "CLEANUP"
     INIT = "INIT"
+
+
+@strawberry.enum(
+    description="Whether an action can run, as a list groups it: RUNNABLE now (`Action.assignable`), RECENT (an implementing agent was seen in the last 24 hours), OFFLINE (implemented, but no agent seen for longer), NONE (no implementation). In that order, which is `ActionOrder.availability` ascending."
+)
+class ActionAvailability(str, Enum):
+    RUNNABLE = "RUNNABLE"
+    RECENT = "RECENT"
+    OFFLINE = "OFFLINE"
+    NONE = "NONE"
