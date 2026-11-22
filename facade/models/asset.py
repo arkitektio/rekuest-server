@@ -9,6 +9,9 @@ from django.db.models.functions import Now
 class Asset(models.Model):
     """One verified file. Identical bytes within an organization are one asset, whoever brought them."""
 
+    # Declared for the type checker: Django adds the foreign key's id column without saying so.
+    organization_id: int
+
     organization = models.ForeignKey("authentikate.Organization", on_delete=models.CASCADE, related_name="assets", help_text="The organization this asset belongs to. Access is scoped to it.")
     ref = models.CharField(max_length=71, help_text="'sha256:' and the hex SHA-256 of the file's exact bytes.")
     kind = models.CharField(max_length=32, help_text="What the file is (rekuest_core AssetKind).")

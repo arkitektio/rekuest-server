@@ -1,5 +1,5 @@
 from kante.channel import build_channel
-from .channel_events import StateUpdateEvent, TaskEventCreatedEvent, ImplementationEvent, AgentEvent, ProbeEventBroadcast, ChildTaskEvent, PatchEvent, RuleFeedEvent, SignalFeedEvent
+from .channel_events import StateUpdateEvent, TaskEventCreatedEvent, ImplementationEvent, AgentEvent, ProbeEventBroadcast, ChildTaskEvent, PatchEvent, RuleFeedEvent, SignalFeedEvent, AssetEvent
 
 
 # takt publishes on these channels by name (``takt/crates/facade/src/channels.rs``): every
@@ -29,6 +29,14 @@ signal_channel = build_channel(SignalFeedEvent, "signal_feed")
 
 rule_channel = build_channel(RuleFeedEvent, "rule_feed")
 
+# Python only: assets are stored by ``createAsset``, never by takt.
+asset_channel = build_channel(AssetEvent, "asset_feed")
+
+
+def assets_org(organization: int | str) -> str:
+    """The group of an organization's asset feed, on ``asset_channel``."""
+    return f"assets_org_{organization}"
+
 
 def implementation_task_events(implementation: int | str) -> str:
     """The group of one implementation's task feed, on ``task_event_channel``.
@@ -40,3 +48,12 @@ def implementation_task_events(implementation: int | str) -> str:
     """
     return f"implementation_task_events_{implementation}"
 
+
+
+def task_events(task: int | str) -> str:
+    """The group of one task's own event feed, on ``task_event_channel``.
+
+    Every event the task records, logs included, whoever called it. takt publishes to the same
+    name (``signals::task_events``).
+    """
+    return f"task_events_{task}"

@@ -130,6 +130,13 @@ pub fn implementation_task_events(implementation: i64) -> String {
     format!("implementation_task_events_{implementation}")
 }
 
+/// The group of one task's own event feed (`taskEvents(task:)`): every event the task records,
+/// logs included, whoever called it. Python listens on the same name
+/// (`facade/channels.py::task_events`).
+pub fn task_events(task: i64) -> String {
+    format!("task_events_{task}")
+}
+
 /// The event kinds a task's record is made of (progress, results, the end): what the
 /// implementation's feed carries. Logs and lifecycle chatter change nothing a viewer shows.
 fn is_reported(kind: &str) -> bool {
@@ -337,7 +344,8 @@ async fn queue_for_calling_agent(
 /// task's caller (a child's reach the agent that asked for it through that agent's own queue;
 /// anything else goes to `task_caller_{caller}`, which the caller's sockets joined), and, for a
 /// root task, the caller's and the organization's root-task feeds. What a task's record is made
-/// of also reaches its implementation's feed, whoever called it and even if nobody did.
+/// of also reaches its implementation's feed, whoever called it and even if nobody did, and
+/// every event reaches the task's own feed (`task_events_{task}`).
 pub async fn task_event_created(ctx: &Context, event_id: i64) {
     if let Err(e) = task_event_created_inner(ctx, event_id).await {
         tracing::error!(event_id, "task event fan-out failed: {e}");
@@ -369,6 +377,18 @@ async fn task_event_created_inner(ctx: &Context, event_id: i64) -> Result<(), sq
                 create: None,
             },
             vec![implementation_task_events(implementation)],
+        )
+        .await;
+    }
+    if let Ok(task) = payload.task.parse::<i64>() {
+        publish(
+            ctx,
+            channels::TASK_EVENT,
+            &TaskEventCreatedEvent {
+                event: Some(payload.clone()),
+                create: None,
+            },
+            vec![task_events(task)],
         )
         .await;
     }

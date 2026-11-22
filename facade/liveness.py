@@ -39,6 +39,16 @@ def agent_is_live(connected: bool, last_seen: datetime.datetime | None) -> bool:
     return last_seen > timezone.now() - timedelta(seconds=stale_after_seconds())
 
 
+def agent_live_q(prefix: str = "") -> Q:
+    """Agents with a live connection: ``connected`` AND a fresh heartbeat, as a ``Q``.
+
+    The query form of ``agent_is_live``. Unlike ``agent_available_q`` it leaves webhook agents
+    out: they never connect, so they are never "online".
+    """
+    cutoff = timezone.now() - timedelta(seconds=stale_after_seconds())
+    return Q(**{f"{prefix}connected": True, f"{prefix}last_seen__gt": cutoff})
+
+
 def agent_available_q(prefix: str = "") -> Q:
     """Agents that can receive work now: takt's ``AVAILABLE`` (``backend.rs``), as a ``Q``.
 
@@ -47,5 +57,4 @@ def agent_available_q(prefix: str = "") -> Q:
     (``"agent__"`` from an implementation). ``Action.assignable`` is the stored form of this rule
     without the heartbeat term (migration ``0006_action_assignable``).
     """
-    cutoff = timezone.now() - timedelta(seconds=stale_after_seconds())
-    return Q(**{f"{prefix}kind": "WEBHOOK"}) | Q(**{f"{prefix}connected": True, f"{prefix}last_seen__gt": cutoff})
+    return Q(**{f"{prefix}kind": "WEBHOOK"}) | agent_live_q(prefix)

@@ -9,7 +9,7 @@ from typing import Optional
 
 import strawberry
 import strawberry_django
-from django.db.models import F, Max, Q, QuerySet
+from django.db.models import F, Max, Min, Q, QuerySet
 from django.db.models.expressions import OrderBy
 from strawberry import auto
 from strawberry.types import Info
@@ -61,6 +61,21 @@ def any_port_demands(info: Info, value: list[list[inputs.PortDemandInput]], owne
 @strawberry_django.order_type(models.Action)
 class ActionOrder:
     defined_at: auto
+    kind: auto
+
+    @strawberry_django.order_field(description="By the identifier of the app the action belongs to, so one app's actions stay together across pages.")
+    def app_identifier(self, info: Info, queryset: QuerySet[models.Action], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Action], list[OrderBy]]:
+        if not value:
+            return queryset, []
+        return queryset, [value.resolve(f"{prefix}app__identifier")]
+
+    @strawberry_django.order_field(description="By the name of the action's first collection (alphabetically): the collection a grouped list files it under. Actions in no collection come last.")
+    def collection(self, info: Info, queryset: QuerySet[models.Action], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Action], list[OrderBy]]:
+        if not value:
+            return queryset, []
+        queryset = queryset.annotate(first_collection_name=Min(f"{prefix}collections__name"))
+        name = F("first_collection_name")
+        return queryset, [name.desc(nulls_last=True) if "DESC" in value.name else name.asc(nulls_last=True)]
 
     @strawberry_django.order_field
     def used_at(self, info: Info, queryset: QuerySet[models.Action], value: strawberry_django.Ordering, prefix: str) -> tuple[QuerySet[models.Action], list[OrderBy]]:

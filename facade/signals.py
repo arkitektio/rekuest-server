@@ -139,3 +139,11 @@ def trigger_post_save(sender: type[models.Trigger], instance: models.Trigger, cr
 @receiver(post_delete, sender=models.Trigger)
 def trigger_post_delete(sender: type[models.Trigger], instance: models.Trigger, **kwargs: object) -> None:
     _broadcast_rule(instance, "delete")
+
+
+@receiver(post_save, sender=models.Asset)
+def asset_post_save(sender: type[models.Asset], instance: models.Asset, created: bool, **kwargs: object) -> None:
+    # An asset is stored once and never changes: only its arrival is news (a blok waiting on
+    # an agent's declared file renders as soon as it is there).
+    if created:
+        _broadcast_on_commit(channels.asset_channel, channel_events.AssetEvent(create=instance.pk, ref=instance.ref, kind=instance.kind), [channels.assets_org(instance.organization_id)])

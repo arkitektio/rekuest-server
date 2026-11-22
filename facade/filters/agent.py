@@ -11,7 +11,7 @@ from strawberry import UNSET, auto
 from strawberry.types import Info
 from strawberry_django.fields.filter_order import filter_field
 
-from facade import callers, liveness, managers, models
+from facade import callers, enums, liveness, managers, models
 from facade.json_types import json_object
 from rekuest_core import enums as rcenums
 from rekuest_core.inputs import types as ritypes
@@ -64,6 +64,15 @@ class AgentFilter:
     def available(self, info: Info, queryset: QuerySet[models.Agent], value: bool, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
         available = liveness.agent_available_q(prefix)
         return queryset, available if value else ~available
+
+    @filter_field(description="Agents with a live connection (true): connected, with a fresh heartbeat. False keeps every other agent, webhook agents included. Unlike `available`, a webhook agent is never connected.")
+    def connected(self, info: Info, queryset: QuerySet[models.Agent], value: bool, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+        live = liveness.agent_live_q(prefix)
+        return queryset, live if value else ~live
+
+    @filter_field(description="Filter by the kind of agent (websocket, webhook, ...)")
+    def kind(self, info: Info, queryset: QuerySet[models.Agent], value: enums.AgentKind, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
+        return queryset.filter(**{f"{prefix}kind": value.value}), Q()
 
     @filter_field(description="Agents whose self-declared supervisor is this app (e.g. 'plugin_engine').")
     def supervisor(self, info: Info, queryset: QuerySet[models.Agent], value: str, prefix: str) -> tuple[QuerySet[models.Agent], Q]:
@@ -178,6 +187,7 @@ class AgentFilter:
 @strawberry_django.order_type(models.Agent)
 class AgentOrder:
     last_seen: auto
+    installed_at: auto
 
 
 @strawberry_django.filter_type(models.Agent)

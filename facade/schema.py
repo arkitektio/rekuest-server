@@ -136,6 +136,7 @@ class Query:
     # Stats
     actionStats: types.ActionStats = field(resolver=types.action_stats, description="Statistics about actions and their implementations.")
     taskStats: types.TaskStats = field(resolver=types.task_stats, description="Statistics about tasks and their states.")
+    agentStats: types.AgentStats = field(resolver=types.agent_stats, description="Statistics about agents: how many (narrowed by filters, e.g. connected or kind) and when they registered or were last seen.")
 
     state_for = field(resolver=queries.state_for, description="Retrieve state for a specific context.")
 
@@ -255,6 +256,13 @@ class Query:
 
         _, compiled = triggers.compile_conditions(json_value(conditions or []))
         return cast(list[types.Signal], list(triggers.matching_signals(info.context.request.organization.id, kind.value, identifier, [compiled], limit)))
+
+    @field(description="How many of the organization's stored signals of this kind and structure satisfy the conditions: the uncapped count behind `matchingSignals`. Fires nothing.")
+    def matching_signal_count(self, info: Info, kind: enums.SignalKind, identifier: str, conditions: rscalars.AnyDefault | None = None) -> int:
+        from facade import triggers
+
+        _, compiled = triggers.compile_conditions(json_value(conditions or []))
+        return triggers.all_matching_signals(info.context.request.organization.id, kind.value, identifier, [compiled]).count()
 
     @field(description="Fetch a wiregram by ID.")
     def wiregram(self, info: Info, id: strawberry.ID) -> types.Wiregram:
@@ -378,6 +386,7 @@ class Subscription:
     mytasks = subscription(resolver=subscriptions.mytasks, description="Subscribe to root tasks created by this client (caller-scoped).")
     tasks = subscription(resolver=subscriptions.tasks, description="Subscribe to root task changes across the whole organization.")
     agents = subscription(resolver=subscriptions.agents, description="Subscribe to updates on agent connections and statuses.")
+    assets = subscription(resolver=subscriptions.assets, description="The organization's assets as they are stored (only those of `refs`, if given): an agent's declared asset becomes available the moment one with its ref arrives.")
     signals = subscription(resolver=subscriptions.signals, description="Subscribe to the signals services send about the organization's objects: one arrived, or triggers were matched against it.")
     schedules = subscription(resolver=subscriptions.schedules, description="Subscribe to the organization's schedules being created, changed (by a user or by their runs) or deleted.")
     triggers = subscription(resolver=subscriptions.triggers, description="Subscribe to the organization's triggers being created, changed (by a user or by their firings) or deleted.")
@@ -391,6 +400,10 @@ class Subscription:
     latest_task = subscription(
         resolver=subscriptions.latest_task,
         description="The task an agent's action last ran as, whoever started it, kept current. Yields a `LatestTaskSnapshot` first, then that task's events (`TaskEventChange`: progress, results, its end) and, as a `TaskChange`, every task of the action that starts or ends: a started one with a higher id is the latest from then on. A snapshot without an implementation means the agent offers no action under that interface, and nothing follows.",
+    )
+    task_events = subscription(
+        resolver=subscriptions.task_events,
+        description="One task's events, whoever started it: those already recorded (all, or those newer than `after`), oldest first, then each new one as it is recorded, logs included. Replaces polling a task's event history.",
     )
     probe_events = subscription(resolver=subscriptions.probe_events, description="Stream the events of one probe (caller-scoped, payload-carrying). Emits a state snapshot first when events already happened.")
 

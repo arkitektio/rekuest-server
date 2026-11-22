@@ -33,9 +33,15 @@ class BlokFilter:
     def provided(self, info: Info, queryset: QuerySet[models.Blok], value: bool, prefix: str) -> tuple[QuerySet[models.Blok], Q]:
         return queryset.filter(**{f"{prefix}app__isnull": not value}), Q()
 
-    @filter_field(description="Search by name")
+    @filter_field(description="Search by name or description (case-insensitive substring).")
     def search(self, info: Info, queryset: QuerySet[models.Blok], value: str | None, prefix: str) -> tuple[QuerySet[models.Blok], Q]:
-        return queryset.filter(**{f"{prefix}name__icontains": value}), Q()
+        if not value:
+            return queryset, Q()
+        return queryset.filter(Q(**{f"{prefix}name__icontains": value}) | Q(**{f"{prefix}description__icontains": value})), Q()
+
+    @filter_field(description="Only bloks that render in one of these contexts: PANEL and SCENE are interfaces to open, LOGO draws an agent or an action.")
+    def contexts(self, info: Info, queryset: QuerySet[models.Blok], value: list[renums.ComponentContext], prefix: str) -> tuple[QuerySet[models.Blok], Q]:
+        return queryset.filter(**{f"{prefix}context__in": [context.value for context in value]}), Q()
 
     @filter_field(description="Only bloks the caller pinned (true) or did not (false).")
     def pinned(self, info: Info, queryset: QuerySet[models.Blok], value: bool, prefix: str) -> tuple[QuerySet[models.Blok], Q]:
@@ -77,6 +83,10 @@ class MaterializedBlokFilter:
     @filter_field(description="Search by name")
     def search(self, info: Info, queryset: QuerySet[models.MaterializedBlok], value: str | None, prefix: str) -> tuple[QuerySet[models.MaterializedBlok], Q]:
         return queryset.filter(**{f"{prefix}name__icontains": value}), Q()
+
+    @filter_field(description="Only materializations of the blok with exactly this name (case-sensitive), unlike the substring `search`.")
+    def blok_name(self, info: Info, queryset: QuerySet[models.MaterializedBlok], value: str, prefix: str) -> tuple[QuerySet[models.MaterializedBlok], Q]:
+        return queryset.filter(**{f"{prefix}blok__name": value}), Q()
 
     @filter_field(description="Only materializations the caller pinned (true) or did not (false).")
     def pinned(self, info: Info, queryset: QuerySet[models.MaterializedBlok], value: bool, prefix: str) -> tuple[QuerySet[models.MaterializedBlok], Q]:

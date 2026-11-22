@@ -35,7 +35,7 @@ from . import (
     toolbox,
 )
 from .action import Action
-from .stats import ActionStats, TaskStats, action_stats, task_stats
+from .stats import ActionStats, AgentStats, TaskStats, action_stats, agent_stats, task_stats
 from .agent import Agent, Lock
 from .schedule import Schedule
 from .wiregram import Wiregram
@@ -99,6 +99,8 @@ __all__ = [
     "Action",
     "ActionStats",
     "action_stats",
+    "AgentStats",
+    "agent_stats",
     "ActionDemand",
     "ActionDependency",
     "ActionDemandModel",

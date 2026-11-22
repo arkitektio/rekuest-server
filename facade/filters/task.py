@@ -48,9 +48,13 @@ class TaskFilter:
     def agent(self, info: Info, queryset: QuerySet[models.Task], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Task], Q]:
         return queryset.filter(**{f"{prefix}agent_id": value}), Q()
 
-    @filter_field(description="Filter by the caller (client/user/organization) that created the task")
+    @filter_field(description="Filter by the caller that created the task: the ID of a Caller row (one client, user and organization), not a user. For a person use `user`.")
     def caller(self, info: Info, queryset: QuerySet[models.Task], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Task], Q]:
         return queryset.filter(**{f"{prefix}caller_id": value}), Q()
+
+    @filter_field(description="Filter by the user (their sub) on whose behalf the task was created, whatever client they used.")
+    def user(self, info: Info, queryset: QuerySet[models.Task], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Task], Q]:
+        return queryset.filter(**{f"{prefix}caller__user__sub": value}), Q()
 
     @filter_field(description="Filter by the direct parent task")
     def parent(self, info: Info, queryset: QuerySet[models.Task], value: strawberry.ID, prefix: str) -> tuple[QuerySet[models.Task], Q]:

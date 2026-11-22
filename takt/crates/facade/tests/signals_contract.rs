@@ -216,6 +216,23 @@ async fn the_rust_fan_out_is_the_python_fan_out() {
         "nothing else belongs on an implementation's feed"
     );
 
+    // A task's own feed (`taskEvents(task:)`): every event it records, logs included, and
+    // nothing of another task.
+    let mut own = listen(&ctx, &[facade::signals::task_events(id("root"))]).await;
+    facade::signals::task_event_created(&ctx, id("orphan_progress")).await;
+    facade::signals::task_event_created(&ctx, id("log")).await;
+    let got = next(&mut own).await;
+    assert_eq!(got["type"], "channel.TaskEventCreatedEvent");
+    assert_eq!(got["message"]["event"]["id"], id("log").to_string());
+    facade::signals::task_event_created(&ctx, id("event")).await;
+    assert_eq!(next(&mut own).await["message"], seed["event_payload"]);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(300), own.recv())
+            .await
+            .is_err(),
+        "only the task's own events belong on its feed"
+    );
+
     // A patch: its state's feed.
     let mut patches = listen(&ctx, &[format!("patches_state_{}", id("state"))]).await;
     facade::signals::patch_created(&ctx, id("patch")).await;

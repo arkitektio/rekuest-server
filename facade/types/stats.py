@@ -201,3 +201,56 @@ def task_stats(info: Info, filters: filters.TaskFilter | None = None) -> TaskSta
     if filters is not None:
         queryset = apply_filters(filters, queryset, info)
     return TaskStats(_selection=Selection(queryset))
+
+
+@strawberry.enum(description="Numeric/aggregatable fields of Agent")
+class AgentField(Enum):
+    INSTALLED_AT = "installed_at"
+    LAST_SEEN = "last_seen"
+
+
+@strawberry.enum(description="Datetime fields of Agent for bucketing")
+class AgentTimestampField(Enum):
+    INSTALLED_AT = "installed_at"
+    LAST_SEEN = "last_seen"
+
+
+@strawberry.type
+class AgentStats:
+    _selection: strawberry.Private[Selection[models.Agent]]
+
+    @strawberry_django.field(description="Total number of agents in the selection. Ask once with `filters: {connected: true}` (aliased) for how many are online.")
+    def count(self) -> int:
+        return self._selection.count()
+
+    @strawberry_django.field(description="Number of distinct values for the field")
+    def distinct_count(self, field: AgentField) -> int:
+        return self._selection.summary(field.value).distinct_count
+
+    @strawberry_django.field(description="Maximum")
+    def max(self, field: AgentField) -> float | None:
+        return self._selection.summary(field.value).max
+
+    @strawberry_django.field(description="Minimum")
+    def min(self, field: AgentField) -> float | None:
+        return self._selection.summary(field.value).min
+
+    @strawberry_django.field(description="Average")
+    def avg(self, field: AgentField) -> float | None:
+        return self._selection.summary(field.value).avg
+
+    @strawberry_django.field(description="Sum")
+    def sum(self, field: AgentField) -> float | None:
+        return self._selection.summary(field.value).sum
+
+    @strawberry_django.field(description="Time-bucketed stats over a datetime field.")
+    def series(self, field: AgentField, timestamp_field: AgentTimestampField, by: Granularity) -> list[TimeBucket]:
+        return self._selection.series(field.value, timestamp_field.value, by)
+
+
+def agent_stats(info: Info, filters: filters.AgentFilter | None = None) -> AgentStats:
+    """The statistics of the organization's agents, narrowed by ``filters``."""
+    queryset = build_prescoped_queryset(info, models.Agent.objects.all(), field="organization")
+    if filters is not None:
+        queryset = apply_filters(filters, queryset, info)
+    return AgentStats(_selection=Selection(queryset))

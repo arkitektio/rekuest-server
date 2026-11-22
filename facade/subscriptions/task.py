@@ -6,7 +6,7 @@ from asgiref.sync import sync_to_async
 from kante.types import Info
 
 from facade import channel_events, enums, models
-from facade.channels import agent_task_channel, child_task_channel, implementation_task_events, task_event_channel
+from facade.channels import agent_task_channel, child_task_channel, implementation_task_events, task_event_channel, task_events as task_events_group
 from facade.types.base import scoped_get
 from rekuest_core import scalars as rscalars
 
@@ -267,3 +267,39 @@ async def latest_task(
             if relayed is not None:
                 yield relayed
 
+
+
+def read_task_events(task: int, after: int) -> list[TaskEventChange]:
+    """The task's recorded events newer than event ``after`` (0 for all), oldest first."""
+    return [TaskEventChange.from_model(event) for event in models.TaskEvent.objects.filter(task_id=task, id__gt=after).order_by("id")]
+
+
+async def task_events(
+    self: object,
+    info: Info,
+    task: strawberry.ID,
+    after: strawberry.ID | None = None,
+) -> AsyncGenerator[TaskEventChange, None]:
+    """One task's events: those already recorded (newer than ``after``), then each new one as it is recorded."""
+    found = await sync_to_async(scoped_get)(models.Task, info, task, field="agent__organization")
+
+    # Joined before the history is read: what is recorded meanwhile waits in the queue, and is
+    # dropped there if the history already had it.
+    async with info.context.consumer.listen_to_channel(  # type: ignore[union-attr]
+        task_event_channel.message_type, groups=[task_events_group(found.pk)]
+    ) as messages:
+        floor = int(after) if after is not None else 0
+        history = await sync_to_async(read_task_events)(found.pk, floor)
+        # By id, not by "newest seen": events of one task may be published out of id order.
+        replayed = {int(event.id) for event in history}
+        for event in history:
+            yield event
+
+        async for raw in messages:
+            message = task_event_channel.model.model_validate(raw.get("message"))
+            if message.event is None:
+                continue
+            event_id = int(message.event.id)
+            if event_id <= floor or event_id in replayed:
+                continue
+            yield TaskEventChange.from_payload(message.event)

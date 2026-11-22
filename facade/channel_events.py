@@ -183,6 +183,14 @@ class AgentEvent(BaseModel):
     delete: int | None = Field(default=None, description="The agent that was deleted.")
 
 
+class AssetEvent(BaseModel):
+    """An asset was stored: its id, the reference bloks name it by, and what it is."""
+
+    create: int = Field(..., description="The asset that was stored.")
+    ref: str = Field(..., description="'sha256:' and the hex SHA-256 of its bytes.")
+    kind: str = Field(..., description="What the file is (rekuest_core AssetKind).")
+
+
 class ImplementationEvent(BaseModel):
     """A model representing a template event."""
 

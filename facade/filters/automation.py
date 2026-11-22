@@ -35,6 +35,7 @@ class ScheduleOrder:
     name: auto
     created_at: auto
     updated_at: auto
+    consecutive_failures: auto
 
 
 @strawberry_django.filter_type(models.Schedule, description="A way to filter schedules")
@@ -70,6 +71,7 @@ class TriggerOrder:
     name: auto
     created_at: auto
     updated_at: auto
+    consecutive_failures: auto
 
 
 @strawberry_django.filter_type(models.Trigger, description="A way to filter triggers")

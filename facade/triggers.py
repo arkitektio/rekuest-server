@@ -85,8 +85,8 @@ def validate(*, action: models.Action, agent: models.Agent | None, interface: st
 _PATH_MATCHES = "jsonb_path_match(descriptors, %s::jsonpath, '{}'::jsonb, true) IS TRUE"
 
 
-def matching_signals(organization: Organization | int, kind: str, identifier: str, paths: list[str | None], limit: int = 20) -> QuerySet[models.Signal]:
-    """The organization's stored signals a rule with these compiled paths would have matched, newest first.
+def all_matching_signals(organization: Organization | int, kind: str, identifier: str, paths: list[str | None]) -> QuerySet[models.Signal]:
+    """Every stored signal of the organization a rule with these compiled paths would have matched.
 
     A dry run over what is still retained: it reads the same rows and applies the same test as
     takt's sweep, and fires nothing.
@@ -95,7 +95,12 @@ def matching_signals(organization: Organization | int, kind: str, identifier: st
     for path in paths:
         if path:
             signals = signals.extra(where=[_PATH_MATCHES], params=[path])
-    return signals.order_by("-received_at")[: max(0, min(limit, 200))]
+    return signals
+
+
+def matching_signals(organization: Organization | int, kind: str, identifier: str, paths: list[str | None], limit: int = 20) -> QuerySet[models.Signal]:
+    """The newest ``limit`` (at most 200) of ``all_matching_signals``."""
+    return all_matching_signals(organization, kind, identifier, paths).order_by("-received_at")[: max(0, min(limit, 200))]
 
 
 def fire(trigger: models.Trigger, signal: models.Signal, principal: CallerContext) -> models.Firing:

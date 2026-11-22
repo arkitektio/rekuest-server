@@ -540,6 +540,17 @@ enum ActionKind {
 
 input ActionOrder @oneOf {
   definedAt: Ordering
+  kind: Ordering
+
+  """
+  By the identifier of the app the action belongs to, so one app's actions stay together across pages.
+  """
+  appIdentifier: Ordering
+
+  """
+  By the name of the action's first collection (alphabetically): the collection a grouped list files it under. Actions in no collection come last.
+  """
+  collection: Ordering
   usedAt: Ordering
 
   """
@@ -843,6 +854,12 @@ input AgentDependencyInput {
   preferedInstances: Int = null
 }
 
+"""Numeric/aggregatable fields of Agent"""
+enum AgentField {
+  INSTALLED_AT
+  LAST_SEEN
+}
+
 """A way to filter agents"""
 input AgentFilter {
   AND: AgentFilter
@@ -857,6 +874,14 @@ input AgentFilter {
   Agents that can receive work now: a webhook agent, or a connected one with a fresh heartbeat (takt's rule).
   """
   available: Boolean
+
+  """
+  Agents with a live connection (true): connected, with a fresh heartbeat. False keeps every other agent, webhook agents included. Unlike `available`, a webhook agent is never connected.
+  """
+  connected: Boolean
+
+  """Filter by the kind of agent (websocket, webhook, ...)"""
+  kind: AgentKind
 
   """
   Agents whose self-declared supervisor is this app (e.g. 'plugin_engine').
@@ -977,6 +1002,7 @@ type AgentMapping {
 
 input AgentOrder @oneOf {
   lastSeen: Ordering
+  installedAt: Ordering
 }
 
 """
@@ -1004,9 +1030,40 @@ type AgentSnapshotEvent {
 
 union AgentSnapshotEventStatePatchEvent = AgentSnapshotEvent | StatePatchEvent
 
+type AgentStats {
+  """
+  Total number of agents in the selection. Ask once with `filters: {connected: true}` (aliased) for how many are online.
+  """
+  count: Int!
+
+  """Number of distinct values for the field"""
+  distinctCount(field: AgentField!): Int!
+
+  """Maximum"""
+  max(field: AgentField!): Float
+
+  """Minimum"""
+  min(field: AgentField!): Float
+
+  """Average"""
+  avg(field: AgentField!): Float
+
+  """Sum"""
+  sum(field: AgentField!): Float
+
+  """Time-bucketed stats over a datetime field."""
+  series(field: AgentField!, timestampField: AgentTimestampField!, by: Granularity!): [TimeBucket!]!
+}
+
 type AgentTaskUpdate {
   create: TaskChange
   update: TaskChange
+}
+
+"""Datetime fields of Agent for bucketing"""
+enum AgentTimestampField {
+  INSTALLED_AT
+  LAST_SEEN
 }
 
 type AgentWithValues {
@@ -1244,6 +1301,21 @@ type Asset {
 
   """An image's height in pixels. Null for other kinds."""
   height: Int
+}
+
+"""
+An asset that was just stored: enough to tell whether it is the one awaited.
+"""
+type AssetChange {
+  id: ID!
+
+  """
+  'sha256:' and the hex SHA-256 of the file's bytes: what an agent's declared asset names.
+  """
+  ref: String!
+
+  """What the file is (AssetKind)."""
+  kind: String!
 }
 
 """
@@ -1896,8 +1968,13 @@ input BlokFilter {
   """
   provided: Boolean
 
-  """Search by name"""
+  """Search by name or description (case-insensitive substring)."""
   search: String
+
+  """
+  Only bloks that render in one of these contexts: PANEL and SCENE are interfaces to open, LOGO draws an agent or an action.
+  """
+  contexts: [ComponentContext!]
 
   """Only bloks the caller pinned (true) or did not (false)."""
   pinned: Boolean
@@ -4583,6 +4660,11 @@ input MaterializedBlokFilter {
   """Search by name"""
   search: String
 
+  """
+  Only materializations of the blok with exactly this name (case-sensitive), unlike the substring `search`.
+  """
+  blokName: String
+
   """Only materializations the caller pinned (true) or did not (false)."""
   pinned: Boolean
 
@@ -5722,6 +5804,11 @@ type Query {
   """Statistics about tasks and their states."""
   taskStats(filters: TaskFilter = null): TaskStats! @auth(required_scopes: ["rekuest_read"])
 
+  """
+  Statistics about agents: how many (narrowed by filters, e.g. connected or kind) and when they registered or were last seen.
+  """
+  agentStats(filters: AgentFilter = null): AgentStats! @auth(required_scopes: ["rekuest_read"])
+
   """Get task boundaries."""
   taskBoundaries(correlationId: String!, stateId: ID = null): TaskBoundary @auth(required_scopes: ["rekuest_read"])
 
@@ -5924,6 +6011,11 @@ type Query {
   A dry run for a trigger not written yet: the organization's stored signals of this kind and structure whose descriptors satisfy the conditions, newest first. Fires nothing.
   """
   matchingSignals(kind: SignalKind!, identifier: String!, conditions: AnyDefault = null, limit: Int! = 20): [Signal!]! @auth(required_scopes: ["rekuest_read"])
+
+  """
+  How many of the organization's stored signals of this kind and structure satisfy the conditions: the uncapped count behind `matchingSignals`. Fires nothing.
+  """
+  matchingSignalCount(kind: SignalKind!, identifier: String!, conditions: AnyDefault = null): Int! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch a wiregram by ID."""
   wiregram(id: ID!): Wiregram! @auth(required_scopes: ["rekuest_read"])
@@ -6529,6 +6621,7 @@ input ScheduleOrder @oneOf {
   name: Ordering
   createdAt: Ordering
   updatedAt: Ordering
+  consecutiveFailures: Ordering
 }
 
 """
@@ -7558,6 +7651,11 @@ type Subscription {
   agents: AgentChangeEvent! @auth(required_scopes: ["rekuest_read"])
 
   """
+  The organization's assets as they are stored (only those of `refs`, if given): an agent's declared asset becomes available the moment one with its ref arrives.
+  """
+  assets(refs: [String!] = null): AssetChange! @auth(required_scopes: ["rekuest_read"])
+
+  """
   Subscribe to the signals services send about the organization's objects: one arrived, or triggers were matched against it.
   """
   signals: SignalChangeEvent! @auth(required_scopes: ["rekuest_read"])
@@ -7597,6 +7695,11 @@ type Subscription {
   The task an agent's action last ran as, whoever started it, kept current. Yields a `LatestTaskSnapshot` first, then that task's events (`TaskEventChange`: progress, results, its end) and, as a `TaskChange`, every task of the action that starts or ends: a started one with a higher id is the latest from then on. A snapshot without an implementation means the agent offers no action under that interface, and nothing follows.
   """
   latestTask(agent: ID!, interface: String!): LatestTaskSnapshotTaskChangeTaskEventChange! @auth(required_scopes: ["rekuest_read"])
+
+  """
+  One task's events, whoever started it: those already recorded (all, or those newer than `after`), oldest first, then each new one as it is recorded, logs included. Replaces polling a task's event history.
+  """
+  taskEvents(task: ID!, after: ID = null): TaskEventChange! @auth(required_scopes: ["rekuest_read"])
 
   """
   Stream the events of one probe (caller-scoped, payload-carrying). Emits a state snapshot first when events already happened.
@@ -8014,8 +8117,15 @@ input TaskFilter {
   """Filter by the agent executing the task"""
   agent: ID
 
-  """Filter by the caller (client/user/organization) that created the task"""
+  """
+  Filter by the caller that created the task: the ID of a Caller row (one client, user and organization), not a user. For a person use `user`.
+  """
   caller: ID
+
+  """
+  Filter by the user (their sub) on whose behalf the task was created, whatever client they used.
+  """
+  user: ID
 
   """Filter by the direct parent task"""
   parent: ID
@@ -8455,6 +8565,7 @@ input TriggerOrder @oneOf {
   name: Ordering
   createdAt: Ordering
   updatedAt: Ordering
+  consecutiveFailures: Ordering
 }
 
 """Remove a shortcut's binding to a user."""

@@ -67,6 +67,9 @@ class TestFilters:
         assert await ids(filters={"failing": True}) == [hourly]
         assert await ids(filters={"failing": False}) == [nightly]
         assert await ids(filters={"action": str(impl.action_id)}, ordering=[{"name": "ASC"}]) == [hourly, nightly]
+        # Failing rules first, across the whole list rather than within a loaded page.
+        assert await ids(ordering=[{"consecutiveFailures": "DESC"}, {"name": "DESC"}]) == [hourly, nightly]
+        assert await ids(ordering=[{"consecutiveFailures": "ASC"}]) == [nightly, hourly]
         # A filters variable that is given as null scopes like one that is absent.
         assert sorted(await ids(filters=None)) == sorted([nightly, hourly])
 
@@ -80,6 +83,9 @@ class TestFilters:
         triggers = "query($filters: TriggerFilter) { triggers(filters: $filters) { id } }"
         assert [t["id"] for t in (await _run(triggers, context, filters={"kind": "UPDATED"}))["triggers"]] == [updated]
         assert [t["id"] for t in (await _run(triggers, context, filters={"identifier": IDENTIFIER, "search": "create"}))["triggers"]] == [created]
+        await models.Trigger.objects.filter(pk=updated).aupdate(consecutive_failures=3)
+        failing_first = "query { triggers(ordering: [{consecutiveFailures: DESC}, {name: ASC}]) { id } }"
+        assert [t["id"] for t in (await _run(failing_first, context))["triggers"]] == [updated, created]
 
         organization = context.request.organization
         first = await _signal(organization, "1", 3)
@@ -157,6 +163,14 @@ class TestDryRun:
         assert await matching() == [str(three.pk), str(one.pk)]  # newest first, this kind, this tenant
         assert await matching([{"key": CHANNELS, "operator": "GTE", "value": 2}]) == [str(three.pk)]
         assert await matching([{"key": "@mikro/unsent", "operator": "EQUALS", "value": 1}]) == []
+
+        counted = 'query($conditions: AnyDefault) { matchingSignalCount(kind: CREATED, identifier: "%s", conditions: $conditions) }' % IDENTIFIER
+
+        async def count(conditions=None):
+            return (await _run(counted, context, conditions=conditions))["matchingSignalCount"]
+
+        assert await count() == 2  # what `matchingSignals` lists, as a number, uncapped
+        assert await count([{"key": CHANNELS, "operator": "GTE", "value": 2}]) == 1
         bad = await schema.execute(query, variable_values={"conditions": [{"key": CHANNELS, "operator": "IN", "value": 3}]}, context_value=context)
         assert bad.errors is not None
 
