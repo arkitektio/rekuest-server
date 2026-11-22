@@ -12,7 +12,7 @@ lowercase; what a UI draws is its own catalog's.
 import functools
 import json
 from pathlib import Path
-from typing import Literal, Self
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -51,7 +51,7 @@ class BaseCatalogModel(BaseModel):
     components: list[CatalogComponentInputModel] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def check_unique_operations(self) -> Self:
+    def check_unique_operations(self) -> "BaseCatalogModel":
         """Operation and component names are unique."""
         _check_unique(self.operations, "name", "base catalog")
         _check_unique(self.components, "name", "base catalog")

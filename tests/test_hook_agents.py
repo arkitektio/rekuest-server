@@ -16,6 +16,7 @@ import pytest
 from arkitekt_service import trust
 from authentikate.models import Organization
 from django.test import Client as HttpClient
+from pytest_django.fixtures import SettingsWrapper
 
 from facade import (
     enums,
@@ -30,14 +31,16 @@ from facade.inputs import ImplementAgentInputModel
 from rekuest.configuration import HookAgentEntry
 from tests import registered
 from tests.hook_urls import janitor
-from tests.provisioning_fixtures import an_organization, declared, hub, lab  # noqa: F401  (fixtures)
+from tests.provisioning_fixtures import an_organization
 
 pytestmark = pytest.mark.usefixtures("takt")
 
 
 @pytest.mark.django_db(transaction=True)
 class TestHookAgents:
-    def test_an_organization_gets_the_agent_and_its_actions(self, hub, lab):
+    def test_an_organization_gets_the_agent_and_its_actions(
+        self, hub: SettingsWrapper, lab: Organization
+    ) -> None:
         assert hook_agents.provision_all() == []
 
         agent = models.Agent.objects.get(name="janitor", organization=lab)
@@ -52,14 +55,16 @@ class TestHookAgents:
         assert hook_agents.provision_all() == []
         assert models.Agent.objects.get(name="janitor", organization=lab).pk == agent.pk
 
-    def test_nothing_is_wired(self, hub, lab):
+    def test_nothing_is_wired(self, hub: SettingsWrapper, lab: Organization) -> None:
         """An agent offers actions; when one runs is the organization's own automation."""
         hook_agents.provision_all()
         assert models.Implementation.objects.filter(interface="tidy_up").exists()
         assert not models.Schedule.objects.exists()
         assert not models.Trigger.objects.exists()
 
-    def test_every_organization_has_its_own_agent(self, hub, lab):
+    def test_every_organization_has_its_own_agent(
+        self, hub: SettingsWrapper, lab: Organization
+    ) -> None:
         an_organization("clinic")
         hook_agents.provision_all()
         assert {
@@ -67,12 +72,16 @@ class TestHookAgents:
             for agent in models.Agent.objects.filter(name="janitor")
         } >= {"lab", "clinic"}
 
-    def test_an_agent_that_offers_nothing_is_not_created(self, hub, lab):
+    def test_an_agent_that_offers_nothing_is_not_created(
+        self, hub: SettingsWrapper, lab: Organization
+    ) -> None:
         janitor._actions.clear()
         assert hook_agents.provision_all() == []
         assert not models.Agent.objects.filter(name="janitor").exists()
 
-    def test_provisioning_an_agent_touches_no_catalog_row(self, hub, lab):
+    def test_provisioning_an_agent_touches_no_catalog_row(
+        self, hub: SettingsWrapper, lab: Organization
+    ) -> None:
         hook_agents.provision_all()
         assert not models.Service.objects.exists()
         assert (
@@ -80,7 +89,9 @@ class TestHookAgents:
             and not models.SignalDeclaration.objects.exists()
         )
 
-    def test_the_agents_once_minted_for_services_are_retired(self, hub, lab):
+    def test_the_agents_once_minted_for_services_are_retired(
+        self, hub: SettingsWrapper, lab: Organization
+    ) -> None:
         user, client = hook_agents._identity("service-housekeeping", lab)
         former, _ = registered.implement_agent(
             client,
@@ -95,8 +106,8 @@ class TestHookAgents:
         assert models.Agent.objects.filter(name="janitor", organization=lab).exists()
 
     def test_an_unreachable_agent_is_reported_and_the_others_still_provisioned(
-        self, hub, lab
-    ):
+        self, hub: SettingsWrapper, lab: Organization
+    ) -> None:
         hub.HOOK_AGENTS = [
             HookAgentEntry(name="offline", hook_url="http://127.0.0.1:9/_rekuest/hook"),
             *hub.HOOK_AGENTS,
@@ -107,7 +118,9 @@ class TestHookAgents:
             client__client_id="rekuest:hook-janitor"
         ).exists()
 
-    def test_a_new_organization_gets_its_agents_on_the_fly(self, hub):
+    def test_a_new_organization_gets_its_agents_on_the_fly(
+        self, hub: SettingsWrapper
+    ) -> None:
         """No provisioning pass is asked for: creating the organization is enough."""
         newcomer = Organization.objects.create(identifier="newcomer")
         deadline = time.monotonic() + 10
@@ -125,7 +138,9 @@ class TestHookAgents:
 
 @pytest.mark.django_db(transaction=True)
 class TestWithoutAnyService:
-    def test_a_hub_with_no_service_still_has_its_hook_agents(self, hub, lab):
+    def test_a_hub_with_no_service_still_has_its_hook_agents(
+        self, hub: SettingsWrapper, lab: Organization
+    ) -> None:
         hub.SERVICES = []
         assert provisioning.provision_all() == provisioning.Failed(
             services=[], hook_agents=[]
@@ -139,12 +154,14 @@ class TestWithoutAnyService:
 
 @pytest.mark.django_db
 class TestHookEndpoint:
-    def test_an_unsigned_or_forged_request_is_refused(self, hub):
+    def test_an_unsigned_or_forged_request_is_refused(
+        self, hub: SettingsWrapper
+    ) -> None:
         client = HttpClient()
         url = urlparse(hub.HOOK_AGENTS[0].hook_url).path
         body = b'{"type": "ASSIGN", "task": "1", "interface": "tidy_up", "args": {}}'
 
-        def post(authorization):
+        def post(authorization: str | None) -> int:
             headers = {"X-Rekuest-Agent": "7"}
             if authorization:
                 headers["Authorization"] = authorization
@@ -201,13 +218,15 @@ INGEST = hook_agents.HookManifest.model_validate(
 
 @pytest.mark.django_db(transaction=True)
 class TestHookActionPorts:
-    def test_a_manifest_without_ports_is_an_action_without_arguments(self):
+    def test_a_manifest_without_ports_is_an_action_without_arguments(self) -> None:
         (action,) = hook_agents.HookManifest.model_validate(
             {"actions": [{"interface": "tidy_up"}]}
         ).actions
         assert action.args == []
 
-    def test_a_structure_port_becomes_the_actions_argument(self, lab):
+    def test_a_structure_port_becomes_the_actions_argument(
+        self, lab: Organization
+    ) -> None:
         agent = hook_agents.provision_agent(
             HookAgentEntry(name="kraph", hook_url="http://127.0.0.1:9/_rekuest/hook"),
             INGEST,
@@ -226,7 +245,7 @@ class TestHookActionPorts:
             True,
         )
 
-    def test_a_trigger_on_the_structure_can_feed_it(self, lab):
+    def test_a_trigger_on_the_structure_can_feed_it(self, lab: Organization) -> None:
         agent = hook_agents.provision_agent(
             HookAgentEntry(name="kraph", hook_url="http://127.0.0.1:9/_rekuest/hook"),
             INGEST,
@@ -240,7 +259,7 @@ class TestHookActionPorts:
         with pytest.raises(ValueError):
             triggers.target_port(action, "metric", "@mikro/annotation")
 
-    def test_a_schedule_runs_it_without_an_object(self, lab):
+    def test_a_schedule_runs_it_without_an_object(self, lab: Organization) -> None:
         """The same action on a schedule: the nullable port is simply left out."""
         agent = hook_agents.provision_agent(
             HookAgentEntry(name="kraph", hook_url="http://127.0.0.1:9/_rekuest/hook"),

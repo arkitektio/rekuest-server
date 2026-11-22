@@ -9,33 +9,39 @@ import datetime
 
 import pytest
 from asgiref.sync import sync_to_async
-from authentikate.models import App, Client, Release, User
+from authentikate.models import App, Client, Organization, Release, User
 from django.db import connection
 from django.utils import timezone
+from kante.context import HttpContext
 
 from facade import enums, models
 from facade.schema import schema
 from tests.factories import TEST_TOKEN
-from tests.graphql.test_cross_tenant_isolation import OTHER_TOKEN, tenant_context
+from tests.graphql.test_cross_tenant_isolation import (
+    OTHER_TOKEN,
+    TenantContext,
+    tenant_context,
+)
 
 pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.asyncio]
 
 
-async def _contexts():
+async def _contexts() -> tuple[TenantContext, TenantContext]:
     return await sync_to_async(
         lambda: (tenant_context(TEST_TOKEN), tenant_context(OTHER_TOKEN))
     )()
 
 
-async def _run(query: str, context, **variables):
+async def _run(query: str, context: HttpContext, **variables: object) -> dict:
     result = await schema.execute(
         query, variable_values=variables or None, context_value=context
     )
     assert result.errors is None, result.errors
+    assert result.data is not None
     return result.data
 
 
-def _agent(organization, prefix: str, **fields) -> models.Agent:
+def _agent(organization: Organization, prefix: str, **fields: object) -> models.Agent:
     """An agent of ``organization`` with its own client, user and app."""
     user = User.objects.create(
         username=f"{prefix}-user", password="x", sub=f"{prefix}-sub"
@@ -59,7 +65,7 @@ agent = sync_to_async(_agent)
 
 
 class TestAgents:
-    async def test_online_agents_are_filtered_and_counted_on_the_server(self):
+    async def test_online_agents_are_filtered_and_counted_on_the_server(self) -> None:
         (context, *_, organization), (other, *_, other_organization) = await _contexts()
         fresh = timezone.now()
         stale = fresh - datetime.timedelta(hours=1)
@@ -72,7 +78,7 @@ class TestAgents:
 
         listed = "query($filters: AgentFilter) { agents(filters: $filters) { id } }"
 
-        async def ids(**filters) -> set[str]:
+        async def ids(**filters: object) -> set[str]:
             return {
                 row["id"]
                 for row in (await _run(listed, context, filters=filters))["agents"]
@@ -101,7 +107,7 @@ class TestAgents:
         }
         assert (await _run(stats, other))["all"]["count"] == 1  # their own, not ours
 
-    async def test_agents_are_ordered_by_when_they_registered(self):
+    async def test_agents_are_ordered_by_when_they_registered(self) -> None:
         (context, *_, organization), _ = await _contexts()
         first = await agent(organization, "lf-first")
         second = await agent(organization, "lf-second")
@@ -118,7 +124,7 @@ class TestAgents:
 
 
 def _action(
-    organization,
+    organization: Organization,
     app: App,
     key: str,
     kind: str = "FUNCTION",
@@ -145,7 +151,7 @@ def _action(
 
 
 class TestActionOrder:
-    async def test_actions_of_one_group_stay_together_across_pages(self):
+    async def test_actions_of_one_group_stay_together_across_pages(self) -> None:
         (context, user, _client, organization), _ = await _contexts()
 
         def seed() -> dict[str, models.Action]:
@@ -181,7 +187,7 @@ class TestActionOrder:
         name = {str(action.pk): key for key, action in actions.items()}
         query = 'query($ordering: [ActionOrder!]!) { actions(filters: {search: "lf-"}, ordering: $ordering) { id } }'
 
-        async def order(*ordering) -> list[str]:
+        async def order(*ordering: dict[str, str]) -> list[str]:
             return [
                 name[row["id"]]
                 for row in (await _run(query, context, ordering=list(ordering)))[
@@ -206,7 +212,7 @@ class TestActionOrder:
             -1
         ] == "a1"  # FUNCTION < GENERATOR
 
-    async def test_actions_are_grouped_by_availability_across_pages(self):
+    async def test_actions_are_grouped_by_availability_across_pages(self) -> None:
         (context, user, _client, organization), (other, *_) = await _contexts()
 
         def seed() -> dict[str, models.Action]:
@@ -286,7 +292,9 @@ class TestActionOrder:
 
 
 class TestBloks:
-    async def test_a_blok_is_found_by_its_exact_name_and_bloks_by_what_they_say(self):
+    async def test_a_blok_is_found_by_its_exact_name_and_bloks_by_what_they_say(
+        self,
+    ) -> None:
         (context, user, _client, organization), _ = await _contexts()
 
         def seed() -> tuple[models.Blok, models.Blok, models.MaterializedBlok]:
@@ -326,7 +334,7 @@ class TestBloks:
 
         bloks = "query($filters: BlokFilter) { bloks(filters: $filters) { id } }"
 
-        async def ids(**filters) -> set[str]:
+        async def ids(**filters: object) -> set[str]:
             return {
                 row["id"]
                 for row in (await _run(bloks, context, filters=filters))["bloks"]
@@ -339,7 +347,7 @@ class TestBloks:
 class TestTasksByMember:
     async def test_a_persons_tasks_are_found_by_their_sub_whatever_client_they_used(
         self,
-    ):
+    ) -> None:
         (context, *_, organization), _ = await _contexts()
         runner = await agent(
             organization, "lf-runner", kind=enums.AgentKind.WEBHOOK.value

@@ -1,4 +1,5 @@
 import uuid
+from typing import Any
 
 from authentikate.models import App, Organization
 from django.contrib.auth import get_user_model
@@ -303,7 +304,7 @@ class Task(models.Model):
     def __str__(self) -> str:
         return f"{self.latest_event_kind} for {self.action_id}"
 
-    def save(self, *args, **kwargs) -> None:
+    def save(self, *args: Any, **kwargs: Any) -> None:
         """Every update bumps ``revision`` — atomically, in the database.
 
         ``F("revision") + 1`` rather than ``self.revision + 1``: the latter is only right when the

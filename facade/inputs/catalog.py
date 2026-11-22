@@ -1,7 +1,5 @@
 """Inputs for registering modules: an app's own UI extras."""
 
-from typing import Self
-
 import strawberry
 from pydantic import BaseModel, Field, model_validator
 from strawberry.experimental import pydantic
@@ -37,7 +35,7 @@ class RegisterModuleInputModel(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_catalogs(self) -> Self:
+    def check_catalogs(self) -> "RegisterModuleInputModel":
         """Each catalog is spelled name@version and named once (``manifest.catalog``, ``manifest.duplicate``)."""
         from rekuest_core.vocabulary import BlokError
 
@@ -53,7 +51,7 @@ class RegisterModuleInputModel(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def check_unique_selectors(self) -> Self:
+    def check_unique_selectors(self) -> "RegisterModuleInputModel":
         """Two defaults may not target the same (kind, identifier)."""
         seen: set[tuple[str | None, str | None]] = set()
         for default in self.widget_defaults:

@@ -7,9 +7,10 @@ structure's port rows (the ``identifier`` index) and reach the actions from ther
 every action of the organization for such a port.
 """
 
-from types import SimpleNamespace
+from dataclasses import dataclass
 
 import pytest
+from authentikate.models import Organization
 from django.db import connection
 from django.utils import timezone
 
@@ -22,12 +23,22 @@ from tests.factories import (
     create_agent_for_registry,
     create_registry_bundle,
 )
+from tests.models.test_action_matching import Descriptor
 
 OTHERS = 3000
 
 
+@dataclass(frozen=True)
+class LargeCatalog:
+    """The organization, and the two actions on the structure asked about."""
+
+    org: Organization
+    paths: models.Action
+    boxes: models.Action
+
+
 @pytest.fixture
-def large_catalog(db: None) -> SimpleNamespace:
+def large_catalog(db: None) -> LargeCatalog:
     """One organization with thousands of actions on another structure, and two on the one asked about."""
     _, _, org, _ = create_registry_bundle("planorg")
     template = create_action_for_organization(org, "plan-template", args=[], returns=[])
@@ -62,11 +73,7 @@ def large_catalog(db: None) -> SimpleNamespace:
     def constrained(prefix: str, value: str) -> models.Action:
         action = create_action_for_organization(org, prefix, args=[], returns=[])
         path = compile_descriptors_to_jsonpath(
-            [
-                SimpleNamespace(
-                    key="@mikro/annotation_kind", operator="EQUALS", value=value
-                )
-            ]
+            [Descriptor(key="@mikro/annotation_kind", operator="EQUALS", value=value)]
         )
         models.ArgPort.objects.create(
             action=action,
@@ -82,7 +89,7 @@ def large_catalog(db: None) -> SimpleNamespace:
     with connection.cursor() as cursor:
         cursor.execute("ANALYZE facade_action")
         cursor.execute("ANALYZE facade_argport")
-    return SimpleNamespace(
+    return LargeCatalog(
         org=org,
         paths=constrained("plan-paths", "PATH"),
         boxes=constrained("plan-boxes", "RECTANGLE"),
@@ -98,15 +105,15 @@ def _demand() -> PortDemand:
 
 
 def test_actions_taking_a_structure_are_found_from_its_ports(
-    large_catalog: SimpleNamespace,
+    large_catalog: LargeCatalog,
 ) -> None:
     """Right answer, and reached from the identifier's port rows rather than by testing every action."""
     assert managers.get_action_ids_by_port_demands(
-        [_demand()], organization_id=large_catalog.org.id
-    ) == [large_catalog.paths.id]
+        [_demand()], organization_id=large_catalog.org.pk
+    ) == [large_catalog.paths.pk]
 
     sql, params = managers._port_demand_sql(
-        [_demand()], organization_id=large_catalog.org.id
+        [_demand()], organization_id=large_catalog.org.pk
     )
     with connection.cursor() as cursor:
         cursor.execute(f"EXPLAIN {sql}", params)
@@ -118,7 +125,10 @@ def test_actions_taking_a_structure_are_found_from_its_ports(
 
 
 def _live_implementation(
-    catalog: SimpleNamespace, action: models.Action, name: str, hardware: dict
+    catalog: LargeCatalog,
+    action: models.Action,
+    name: str,
+    hardware: dict[str, int] | None,
 ) -> models.Implementation:
     user, _, _, registry = create_registry_bundle(name)
     agent = create_agent_for_registry(registry, user, catalog.org, name)
@@ -140,7 +150,7 @@ def _fit(implementation: models.Implementation) -> models.ImplementationFit:
 
 
 def test_an_action_is_hidden_only_when_every_live_agent_refuses(
-    large_catalog: SimpleNamespace,
+    large_catalog: LargeCatalog,
 ) -> None:
     """Fits narrows the same statement, which still starts from the identifier's port rows."""
     paths = large_catalog.paths
@@ -148,7 +158,7 @@ def test_an_action_is_hidden_only_when_every_live_agent_refuses(
     _fit(small)
     assert (
         managers.get_action_ids_by_port_demands(
-            [_demand()], organization_id=large_catalog.org.id
+            [_demand()], organization_id=large_catalog.org.pk
         )
         == []
     )
@@ -156,26 +166,26 @@ def test_an_action_is_hidden_only_when_every_live_agent_refuses(
     big = _live_implementation(large_catalog, paths, "plan-big", {"memory_mib": 2000})
     _fit(big)
     assert managers.get_action_ids_by_port_demands(
-        [_demand()], organization_id=large_catalog.org.id
-    ) == [paths.id]
+        [_demand()], organization_id=large_catalog.org.pk
+    ) == [paths.pk]
 
     big.delete()
     no_hardware = _live_implementation(large_catalog, paths, "plan-unknown", None)
     _fit(no_hardware)
     assert (
         managers.get_action_ids_by_port_demands(
-            [_demand()], organization_id=large_catalog.org.id
+            [_demand()], organization_id=large_catalog.org.pk
         )
         == []
     )
 
     _live_implementation(large_catalog, paths, "plan-unlimited", {"memory_mib": 1})
     assert managers.get_action_ids_by_port_demands(
-        [_demand()], organization_id=large_catalog.org.id
-    ) == [paths.id]
+        [_demand()], organization_id=large_catalog.org.pk
+    ) == [paths.pk]
 
     sql, params = managers._port_demand_sql(
-        [_demand()], organization_id=large_catalog.org.id
+        [_demand()], organization_id=large_catalog.org.pk
     )
     with connection.cursor() as cursor:
         cursor.execute(f"EXPLAIN {sql}", params)
@@ -185,7 +195,7 @@ def test_an_action_is_hidden_only_when_every_live_agent_refuses(
 
 
 def test_an_estimate_is_the_fastest_agent_that_fits(
-    large_catalog: SimpleNamespace,
+    large_catalog: LargeCatalog,
 ) -> None:
     paths, boxes = large_catalog.paths, large_catalog.boxes
     path = '($."@mikro/size" / $agent.cpu_count)'

@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from authentikate.models import App, Client, Organization, Release, User
 from django.contrib.auth import get_user_model
@@ -201,7 +201,7 @@ class Agent(models.Model):
         {"connected", "last_seen", "active_connection_id", "active_session_id"}
     )
 
-    def save(self, *args, **kwargs) -> None:
+    def save(self, *args: Any, **kwargs: Any) -> None:
         """A save that names no fields never touches the lease.
 
         ``agent.save()`` writes EVERY column from whatever snapshot the instance was loaded with.

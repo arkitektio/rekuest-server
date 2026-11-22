@@ -7,6 +7,7 @@ people left each device. The first pose kept makes the space its ``room`` names.
 import pytest
 from asgiref.sync import sync_to_async
 from authentikate.models import App, Client, Device, Organization, Release, User
+from dokker import Deployment
 from kante.context import HttpContext
 
 from facade.models import Agent, Caller, Placement, Space
@@ -74,7 +75,7 @@ async def _run(context: HttpContext, query: str, variables: dict) -> dict:
 @pytest.mark.asyncio
 class TestSpacePlacements:
     async def test_a_room_is_made_by_the_first_pose_kept_in_it(
-        self, backend_stack
+        self, backend_stack: Deployment
     ) -> None:
         context, arm = await _seed()
         assert (await _run(context, ROOM, {"room": "room:helsinki-lab"}))[
@@ -110,7 +111,7 @@ class TestSpacePlacements:
         ]
 
     async def test_moving_a_device_again_keeps_one_pose_per_agent(
-        self, backend_stack
+        self, backend_stack: Deployment
     ) -> None:
         context, arm = await _seed()
         first = (
@@ -147,7 +148,7 @@ class TestSpacePlacements:
         assert await Space.objects.acount() == 1
 
     async def test_reset_forgets_the_pose_so_the_blok_decides_again(
-        self, backend_stack
+        self, backend_stack: Deployment
     ) -> None:
         context, arm = await _seed()
         kept = (
@@ -175,7 +176,9 @@ class TestSpacePlacements:
             "placements"
         ] == []
 
-    async def test_a_matrix_that_is_not_4x4_is_refused(self, backend_stack) -> None:
+    async def test_a_matrix_that_is_not_4x4_is_refused(
+        self, backend_stack: Deployment
+    ) -> None:
         context, arm = await _seed()
         refused = await schema.execute(
             SAVE,
@@ -192,7 +195,7 @@ class TestSpacePlacements:
         assert refused.errors and "4 rows of 4" in refused.errors[0].message
 
     async def test_another_organization_has_its_own_rooms_and_cannot_place_ours(
-        self, backend_stack
+        self, backend_stack: Deployment
     ) -> None:
         context, arm = await _seed()
         other_context, _theirs = await _seed(OTHER_TOKEN)

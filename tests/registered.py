@@ -14,25 +14,31 @@ import hashlib
 import json
 import typing as t
 
+from authentikate.models import Client, Organization, User
+
 from facade import models
 from facade.descriptors import compile_descriptors_to_jsonpath
+from facade.inputs.agent import ImplementAgentInputModel
 from rekuest_core.inputs.models import (
     BlokImplementationInputModel,
     DefinitionInputModel,
     ImplementationInputModel,
+    PortInputModel,
 )
 
 
 def _ports(
-    port_datas: t.Sequence[t.Any],
-    owner: dict[str, t.Any],
+    port_datas: t.Sequence[PortInputModel],
+    owner: dict[str, models.Action | models.Blok],
     port_model: type,
     descriptor_field: str,
 ) -> None:
     """The port tree as rows of ``owner`` (``{"action": ...}``, ``{"blok": ...}``), parents before
     children (``key_path`` dotted from the root)."""
 
-    def build(port_data: t.Any, parent: t.Any, index: int, parent_path: str) -> tuple:
+    def build(
+        port_data: PortInputModel, parent: object, index: int, parent_path: str
+    ) -> tuple[PortInputModel, str, object]:
         path = f"{parent_path}.{port_data.key}" if parent_path else port_data.key
         row = port_model(
             **owner,
@@ -185,8 +191,8 @@ def gql(tree: dict) -> dict:
 
 
 def create_blok(
-    organization: t.Any,
-    creator: t.Any,
+    organization: Organization,
+    creator: User,
     name: str,
     args: t.Sequence[dict] = (),
     **fields: t.Any,
@@ -280,7 +286,10 @@ def create_implementation(
 
 
 def implement_agent(
-    client: t.Any, user: t.Any, organization: t.Any, payload: t.Any
+    client: Client,
+    user: User,
+    organization: Organization,
+    payload: ImplementAgentInputModel,
 ) -> tuple[models.Agent, list]:
     """The agent of the identity, with every declared implementation (``implement_agent``'s rows)."""
     agent, _ = models.Agent.objects.get_or_create(

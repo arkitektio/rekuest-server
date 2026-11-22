@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, TypeVar
 
 from authentikate.models import Organization
 from django.db import transaction
@@ -29,6 +29,8 @@ from facade import models, rules, schedules, triggers
 from facade.caller_context import CallerContext
 from facade.inputs.wiregram import WiregramModel, WireScheduleModel, WireTriggerModel
 from facade.json_types import JSON, JSONObject
+
+Rule = TypeVar("Rule", bound=models.Schedule | models.Trigger)
 
 
 @dataclass
@@ -77,7 +79,7 @@ def _target(
     )
 
 
-class _Fields[Rule: models.Schedule | models.Trigger](Protocol):
+class _Fields(Protocol[Rule]):
     """What a document says a rule's row holds. Not its bookkeeping (takt's), nor ``enabled``
     (the organization's own switch, taken from the document only when the rule is created)."""
 
@@ -349,7 +351,7 @@ def _checked(
     return wanted_schedules, wanted_triggers
 
 
-def _bring_in_line[Rule: models.Schedule | models.Trigger](
+def _bring_in_line(
     model: type[Rule],
     wiregram: models.Wiregram,
     wanted: dict[str, _Fields[Rule]],

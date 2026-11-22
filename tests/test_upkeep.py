@@ -6,23 +6,31 @@ the instance key the pair shares. That takt really calls it (and when) is judged
 """
 
 import threading
+from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import TYPE_CHECKING
 
 import pytest
 from arkitekt_service import trust
+from authentikate.models import Organization
 from django.db import connection, connections
 from django.test import Client as HttpClient
 from django.urls import reverse
+from pytest_django.fixtures import SettingsWrapper
 
 from facade import models, provisioning
 from facade.service_trust import rekuest_identifier
 from rekuest.configuration import HookAgentEntry, ServiceEntry
-from tests.provisioning_fixtures import declared, hub, lab  # noqa: F401  (fixtures)
+
+if TYPE_CHECKING:
+    from django.test.client import _MonkeyPatchedWSGIResponse
 
 pytestmark = pytest.mark.usefixtures("takt")
 
 
-def _post(job: str, authorization: str | None = "sign", body: bytes = b"{}"):
+def _post(
+    job: str, authorization: str | None = "sign", body: bytes = b"{}"
+) -> "_MonkeyPatchedWSGIResponse":
     path = reverse("upkeep", kwargs={"job": job})
     if authorization == "sign":
         identity = rekuest_identifier()
@@ -37,12 +45,12 @@ def _post(job: str, authorization: str | None = "sign", body: bytes = b"{}"):
 
 @pytest.mark.django_db
 class TestOnlyTaktMayAsk:
-    def test_an_unsigned_request_is_refused(self):
+    def test_an_unsigned_request_is_refused(self) -> None:
         assert _post("provision", authorization=None).status_code == 401
 
     def test_another_instances_key_is_refused_even_if_the_hub_vouches_for_it(
-        self, settings
-    ):
+        self, settings: SettingsWrapper
+    ) -> None:
         """mikro's key is in the trust bundle, but only this instance's own key is takt's."""
         path = reverse("upkeep", kwargs={"job": "provision"})
         identity = rekuest_identifier()
@@ -56,7 +64,7 @@ class TestOnlyTaktMayAsk:
         )
         assert _post("provision", authorization=forged).status_code == 401
 
-    def test_a_token_for_another_request_is_refused(self):
+    def test_a_token_for_another_request_is_refused(self) -> None:
         identity = rekuest_identifier()
         elsewhere = trust.sign(
             "POST",
@@ -75,7 +83,7 @@ class TestOnlyTaktMayAsk:
         )
         assert _post("provision", authorization=other_body).status_code == 401
 
-    def test_a_token_is_good_once(self, monkeypatch):
+    def test_a_token_is_good_once(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Only the guard is judged here: the pass itself has its own tests below.
         monkeypatch.setattr(provisioning, "provision_all", lambda: None)
         path = reverse("upkeep", kwargs={"job": "provision"})
@@ -84,7 +92,7 @@ class TestOnlyTaktMayAsk:
         assert _post("provision", authorization=token).status_code == 200
         assert _post("provision", authorization=token).status_code == 409
 
-    def test_an_unknown_job_or_method_is_refused(self):
+    def test_an_unknown_job_or_method_is_refused(self) -> None:
         assert _post("vacuum").status_code == 404
         assert (
             HttpClient().get(reverse("upkeep", kwargs={"job": "provision"})).status_code
@@ -94,7 +102,9 @@ class TestOnlyTaktMayAsk:
 
 @pytest.mark.django_db(transaction=True)
 class TestProvision:
-    def test_it_catalogues_the_services_and_provisions_the_hook_agents(self, hub, lab):
+    def test_it_catalogues_the_services_and_provisions_the_hook_agents(
+        self, hub: SettingsWrapper, lab: Organization
+    ) -> None:
         response = _post("provision")
 
         assert response.status_code == 200
@@ -102,7 +112,7 @@ class TestProvision:
         assert models.Service.objects.filter(name="housekeeping").exists()
         assert models.Agent.objects.filter(name="janitor", organization=lab).exists()
 
-    def test_it_says_what_failed(self, hub):
+    def test_it_says_what_failed(self, hub: SettingsWrapper) -> None:
         hub.SERVICES = [
             ServiceEntry(name="offline", url="http://127.0.0.1:9/_rekuest/service"),
             *hub.SERVICES,
@@ -118,7 +128,9 @@ class TestProvision:
             "failed": ["service offline", "hook agent gone"],
         }
 
-    def test_a_pass_already_running_elsewhere_is_left_to_it(self, hub, lab):
+    def test_a_pass_already_running_elsewhere_is_left_to_it(
+        self, hub: SettingsWrapper, lab: Organization
+    ) -> None:
         """Another replica holds the lock: this one does nothing, and says so."""
         other = connections.create_connection("default")
         try:
@@ -140,7 +152,9 @@ class TestProvision:
 
         assert _post("provision").json()["skipped"] is False
 
-    def test_passes_racing_from_real_threads_leave_one_of_each(self, hub, lab):
+    def test_passes_racing_from_real_threads_leave_one_of_each(
+        self, hub: SettingsWrapper, lab: Organization
+    ) -> None:
         start = threading.Barrier(4)
         answers: list = []
 
@@ -171,12 +185,12 @@ class _TaktHealth(BaseHTTPRequestHandler):
         self.send_response(self.status if self.path == "/rekuest/ht" else 404)
         self.end_headers()
 
-    def log_message(self, *args) -> None:
+    def log_message(self, format: str, *args: object) -> None:
         pass
 
 
 @pytest.fixture
-def takt_health(settings):
+def takt_health(settings: SettingsWrapper) -> Iterator[type[_TaktHealth]]:
     """Something answering takt's ``ht`` on a real socket, as unhealthy as ``status`` says: a real
     takt only says so when its database or redis is gone."""
     server = ThreadingHTTPServer(("127.0.0.1", 0), _TaktHealth)
@@ -191,13 +205,13 @@ def takt_health(settings):
 
 @pytest.mark.django_db
 class TestHealthAnswersForTakt:
-    def test_healthy_with_takt_healthy(self, takt):
+    def test_healthy_with_takt_healthy(self, takt: str) -> None:
         assert HttpClient().get(reverse("health_check")).status_code == 200
 
-    def test_unhealthy_when_takt_says_so(self, takt_health):
+    def test_unhealthy_when_takt_says_so(self, takt_health: type[_TaktHealth]) -> None:
         takt_health.status = 503
         assert HttpClient().get(reverse("health_check")).status_code == 500
 
-    def test_unhealthy_when_takt_is_gone(self, settings):
+    def test_unhealthy_when_takt_is_gone(self, settings: SettingsWrapper) -> None:
         settings.TAKT_URL = "http://127.0.0.1:9/rekuest"
         assert HttpClient().get(reverse("health_check")).status_code == 500

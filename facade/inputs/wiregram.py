@@ -9,7 +9,6 @@ organization that has those agents.
 from __future__ import annotations
 
 import datetime
-from typing import Self
 
 import strawberry
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -64,7 +63,7 @@ class _WireRuleModel(BaseModel):
     )
 
     @model_validator(mode="after")
-    def args_are_a_dict(self) -> Self:
+    def args_are_a_dict(self) -> _WireRuleModel:
         if self.args is None:
             self.args = {}
         return self
@@ -97,7 +96,7 @@ class WireScheduleModel(_WireRuleModel):
     )
 
     @model_validator(mode="after")
-    def one_timing(self) -> Self:
+    def one_timing(self) -> WireScheduleModel:
         if (self.interval_seconds is None) == (self.cron is None):
             raise ValueError(
                 f"Schedule {self.key!r} needs exactly one of interval_seconds or cron"
@@ -152,7 +151,7 @@ class WiregramModel(BaseModel):
     )
 
     @model_validator(mode="after")
-    def unique_keys(self) -> Self:
+    def unique_keys(self) -> WiregramModel:
         for what, rules in (("schedule", self.schedules), ("trigger", self.triggers)):
             keys = [rule.key for rule in rules]
             twice = sorted({key for key in keys if keys.count(key) > 1})

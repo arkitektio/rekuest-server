@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
@@ -45,8 +45,12 @@ class Answer(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+Req = TypeVar("Req", bound=Request)
+Ans = TypeVar("Ans", bound=Answer)
+
+
 @dataclass(frozen=True)
-class Route[Req: Request, Ans: Answer]:
+class Route(Generic[Req, Ans]):
     """One route of the internal API: its path under ``internal/``, and what it answers."""
 
     path: str

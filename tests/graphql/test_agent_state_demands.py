@@ -24,7 +24,7 @@ AGENTS_QUERY = """
 """
 
 
-def _seed_agents(context):
+def _seed_agents(context: HttpContext) -> dict[str, models.Agent]:
     request = context.request
     org = request.organization
 
@@ -44,7 +44,7 @@ def _seed_agents(context):
         ],
     )
 
-    agents = {}
+    agents: dict[str, models.Agent] = {}
     for name, with_state in [("stateful", True), ("stateless", False)]:
         app = App.objects.create(identifier=f"asd-{name}-app")
         release = Release.objects.create(app=app, version="1.0.0")
@@ -69,7 +69,9 @@ def _seed_agents(context):
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
-async def test_agents_filtered_by_state_demands(authenticated_context: HttpContext):
+async def test_agents_filtered_by_state_demands(
+    authenticated_context: HttpContext,
+) -> None:
     await schema.execute("query { __typename }", context_value=authenticated_context)
     await sync_to_async(_seed_agents)(authenticated_context)
 

@@ -46,7 +46,7 @@ def _runnable(context: HttpContext, *actions: models.Action) -> None:
         cursor.execute("SELECT facade_refresh_live_implementations(500)")
 
 
-async def _actions(context: HttpContext, **variables) -> list[tuple[str, bool]]:
+async def _actions(context: HttpContext, **variables: object) -> list[tuple[str, bool]]:
     result = await schema.execute(
         ACTIONS, context_value=context, variable_values=variables
     )

@@ -6,15 +6,18 @@ action's relational port rows, so a descriptor-bearing demand is checked there: 
 the same key as the shortcut's port must accept the candidate object.
 """
 
-from types import SimpleNamespace
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Literal
 
 import pytest
 
 from facade import managers, models
 from facade.managers import PortDemand
 from rekuest_core.enums import PortKind
+from rekuest_core.inputs.models import PortMatchInputModel
 from tests.factories import create_registry_bundle
-from tests.models.test_action_matching import make_action, pm
+from tests.models.test_action_matching import PortSpec, make_action, pm
 
 IMAGE = {
     "key": "image",
@@ -25,7 +28,9 @@ IMAGE = {
 REQUIRES_C = [{"key": "axes", "operator": "EQUALS", "value": "c"}]
 
 
-def shortcut_ids(matches, type="args"):
+def shortcut_ids(
+    matches: list[PortMatchInputModel], type: Literal["args", "returns"] = "args"
+) -> set[int]:
     organization_id = models.Toolbox.objects.get(name="box").organization_id
     subquery = managers.get_port_demand_subquery(
         [PortDemand(kind=type, matches=matches)],
@@ -37,14 +42,27 @@ def shortcut_ids(matches, type="args"):
     )
 
 
+@dataclass(frozen=True)
+class Shortcuts:
+    """One shortcut per shape the matcher must tell apart."""
+
+    strict: models.Shortcut
+    loose: models.Shortcut
+    shifted: models.Shortcut
+    listed: models.Shortcut
+    orphan: models.Shortcut
+
+
 @pytest.fixture
-def shortcuts(db):
+def shortcuts(db: None) -> Shortcuts:
     user, client, org, _ = create_registry_bundle("shortcutorg")
     toolbox = models.Toolbox.objects.create(
         name="box", description="", creator=user, client=client, organization=org
     )
 
-    def shortcut(prefix, args, saved=()):
+    def shortcut(
+        prefix: str, args: Sequence[PortSpec], saved: tuple[str, ...] = ()
+    ) -> models.Shortcut:
         action = make_action(org, prefix, args=args)
         remaining = [arg for arg in args if arg["key"] not in saved]
         return models.Shortcut.objects.create(
@@ -81,12 +99,12 @@ def shortcuts(db):
     orphan = models.Shortcut.objects.create(
         name="sc-orphan", toolbox=toolbox, creator=user, args=[IMAGE]
     )
-    return SimpleNamespace(
+    return Shortcuts(
         strict=strict, loose=loose, shifted=shifted, listed=listed, orphan=orphan
     )
 
 
-def image(at=0, **descriptors):
+def image(at: int = 0, **descriptors: str) -> PortMatchInputModel:
     return pm(
         at=at,
         kind=PortKind.STRUCTURE,
@@ -95,28 +113,28 @@ def image(at=0, **descriptors):
     )
 
 
-def test_structural_match_ignores_constraints(shortcuts):
+def test_structural_match_ignores_constraints(shortcuts: Shortcuts) -> None:
     assert shortcut_ids([image()]) == {
-        shortcuts.strict.id,
-        shortcuts.loose.id,
-        shortcuts.shifted.id,
-        shortcuts.orphan.id,
+        shortcuts.strict.pk,
+        shortcuts.loose.pk,
+        shortcuts.shifted.pk,
+        shortcuts.orphan.pk,
     }
 
 
-def test_descriptors_are_checked_on_the_actions_port(shortcuts):
+def test_descriptors_are_checked_on_the_actions_port(shortcuts: Shortcuts) -> None:
     assert shortcut_ids([image(axes="c")]) == {
-        shortcuts.strict.id,
-        shortcuts.loose.id,
-        shortcuts.shifted.id,
+        shortcuts.strict.pk,
+        shortcuts.loose.pk,
+        shortcuts.shifted.pk,
     }
-    assert shortcut_ids([image(axes="z")]) == {shortcuts.loose.id}
+    assert shortcut_ids([image(axes="z")]) == {shortcuts.loose.pk}
 
 
-def test_list_children_carry_descriptors(shortcuts):
-    def images(**descriptors):
-        return pm(at=0, kind=PortKind.LIST, children=[image(**descriptors)])
+def test_list_children_carry_descriptors(shortcuts: Shortcuts) -> None:
+    def images(**descriptors: str) -> PortMatchInputModel:
+        return pm(at=0, kind=PortKind.LIST, children=[image(0, **descriptors)])
 
-    assert shortcut_ids([images()]) == {shortcuts.listed.id}
-    assert shortcut_ids([images(axes="c")]) == {shortcuts.listed.id}
+    assert shortcut_ids([images()]) == {shortcuts.listed.pk}
+    assert shortcut_ids([images(axes="c")]) == {shortcuts.listed.pk}
     assert shortcut_ids([images(axes="z")]) == set()

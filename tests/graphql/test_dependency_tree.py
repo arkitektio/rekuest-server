@@ -56,7 +56,9 @@ def _definition(key: str) -> dict:
     }
 
 
-def _seed(context: HttpContext):
+def _seed(
+    context: HttpContext,
+) -> tuple[models.Implementation, models.Implementation]:
     """A workflow that depends on a relay, which depends (optionally) on a leaf.
 
     Both agents are HookAgents: takt only binds an agent that can receive work.
@@ -107,7 +109,7 @@ def _seed(context: HttpContext):
 @pytest.mark.asyncio
 async def test_a_dry_run_is_read_level_by_level(
     authenticated_context: HttpContext, takt: str
-):
+) -> None:
     await schema.execute("query { __typename }", context_value=authenticated_context)
     workflow, relay = await sync_to_async(_seed)(authenticated_context)
     declared = await models.Dependency.objects.aget(
@@ -174,12 +176,12 @@ async def test_a_dry_run_is_read_level_by_level(
 @pytest.mark.asyncio
 async def test_a_tasks_snapshot_is_read_level_by_level(
     authenticated_context: HttpContext,
-):
+) -> None:
     await schema.execute("query { __typename }", context_value=authenticated_context)
     workflow, relay = await sync_to_async(_seed)(authenticated_context)
     request = authenticated_context.request
 
-    def tasks():
+    def tasks() -> tuple[models.Task, models.Task]:
         caller, _ = models.Caller.objects.get_or_create(
             client=request.client, user=request.user, organization=request.organization
         )

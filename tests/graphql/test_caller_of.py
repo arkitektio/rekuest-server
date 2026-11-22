@@ -119,7 +119,7 @@ async def _data(context: HttpContext, query: str, filters: dict) -> dict:
 class TestCallerOf:
     async def test_the_callers_are_the_ancestors_agents_then_the_ui_nearest_first(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         tree = await sync_to_async(_tree)(authenticated_context)
 
         data = await _data(
@@ -132,7 +132,7 @@ class TestCallerOf:
 
     async def test_a_root_s_caller_is_the_app_it_was_started_from(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         tree = await sync_to_async(_tree)(authenticated_context)
 
         data = await _data(
@@ -143,7 +143,7 @@ class TestCallerOf:
 
     async def test_implementations_of_the_callers_come_nearest_first_and_narrow_with_the_other_filters(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         tree = await sync_to_async(_tree)(authenticated_context)
 
         data = await _data(
@@ -163,7 +163,7 @@ class TestCallerOf:
 
     async def test_the_task_s_own_agent_is_never_its_caller(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         def calls_itself() -> tuple[models.Agent, models.Task]:
             agent = _agent(authenticated_context, "caller-self")
             root = _task(agent, caller_agent=agent)
@@ -177,7 +177,7 @@ class TestCallerOf:
 
     async def test_a_task_of_another_organization_has_no_callers_here(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         def elsewhere() -> models.Task:
             other = Organization.objects.create(identifier="caller-elsewhere-org")
             ui = _agent(

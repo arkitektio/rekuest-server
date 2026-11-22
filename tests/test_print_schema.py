@@ -8,13 +8,13 @@ import re
 from facade.schema import schema
 
 
-def test_print_schema():
+def test_print_schema() -> None:
     sdl = str(schema)
     print(sdl)  # visible with `pytest -s`
     assert sdl.strip(), "Schema SDL should not be empty"
 
 
-def test_no_phantom_column_ordering_keys():
+def test_no_phantom_column_ordering_keys() -> None:
     """Guard against the ``status``/``startedAt`` class of bug returning.
 
     ``strawberry_django.order_type`` never validates its annotations against the model, so an
@@ -40,7 +40,7 @@ def test_no_phantom_column_ordering_keys():
             )
 
 
-def test_blok_dependency_has_no_phantom_implementation_field():
+def test_blok_dependency_has_no_phantom_implementation_field() -> None:
     """`BlokDependency.implementation` was declared on the GraphQL type but never existed on the model."""
     from facade.schema import schema
 
@@ -51,7 +51,7 @@ def test_blok_dependency_has_no_phantom_implementation_field():
     assert "blok: Blok!" in block
 
 
-def test_sdl_has_base_catalog_and_diagnostics():
+def test_sdl_has_base_catalog_and_diagnostics() -> None:
     """The base catalog query, stored diagnostics and the additive call fields are in the SDL."""
     sdl = str(schema)
     assert "baseCatalog: BaseCatalog!" in sdl
@@ -88,7 +88,7 @@ def _fields_named_embedding(sdl: str) -> dict:
     return found
 
 
-def test_only_the_embedded_types_publish_a_vector():
+def test_only_the_embedded_types_publish_a_vector() -> None:
     """A vector is readable, and only where a model actually carries one.
 
     This used to assert the word "embedding" appeared nowhere in the SDL. The vectors are
@@ -99,17 +99,17 @@ def test_only_the_embedded_types_publish_a_vector():
     assert _fields_named_embedding(str(schema))["type"] == EMBEDDING_TYPES
 
 
-def test_no_input_accepts_an_embedding():
+def test_no_input_accepts_an_embedding() -> None:
     """Read-only: a client may not write a vector; every vector comes from the release's model."""
     assert _fields_named_embedding(str(schema))["input"] == set()
 
 
-def test_the_model_id_is_never_its_own_field():
+def test_the_model_id_is_never_its_own_field() -> None:
     """The model id is carried inside the `Embedding` string, never as its own field."""
     assert "embeddingModel" not in str(schema)
 
 
-def test_checked_in_sdl_is_current():
+def test_checked_in_sdl_is_current() -> None:
     """schema.graphql at the repo root is the printed schema."""
     from pathlib import Path
 

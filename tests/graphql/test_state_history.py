@@ -15,18 +15,31 @@ the duplicate non-global fields (``revision`` / ``currentRevision`` / ``futureRe
 duplicate ``stateAtLocalRev`` query were removed rather than kept as aliases.
 """
 
+from dataclasses import dataclass
+
 import pytest
 from asgiref.sync import sync_to_async
+from kante.context import HttpContext
 
 from facade import models
 from facade.schema import schema
 from tests.factories import create_agent_for_registry, create_registry_bundle
+from tests.graphql.test_cross_tenant_isolation import organization_of
+
+
+@dataclass(frozen=True)
+class History:
+    """A seeded state's rows."""
+
+    state: models.State
+    session: models.Session
+    agent: models.Agent
 
 
 @sync_to_async
-def _seed_history(prefix, context):
+def _seed_history(prefix: str, context: HttpContext) -> History:
     """One state with a snapshot at rev 1 and patches carrying it to rev 3."""
-    org = context.request.organization
+    org = organization_of(context)
     user, client, _, caller = create_registry_bundle(prefix)
     agent = create_agent_for_registry(caller, user, org, prefix)
 
@@ -54,21 +67,21 @@ def _seed_history(prefix, context):
             ops=[{"op": "replace", "path": "/count", "value": count}],
             global_rev=rev,
         )
-    return {"state": state, "session": session, "agent": agent}
+    return History(state=state, session=session, agent=agent)
 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 class TestStateHistory:
     async def test_state_at_global_rev_reconstructs_the_value(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         seeded = await _seed_history("hist-at", authenticated_context)
 
         result = await schema.execute(
             "query Q($rev: Int!, $state: ID!) { stateAtGlobalRev(globalRevision: $rev, stateId: $state) { value globalRevision } }",
             context_value=authenticated_context,
-            variable_values={"rev": 3, "state": str(seeded["state"].pk)},
+            variable_values={"rev": 3, "state": str(seeded.state.pk)},
         )
 
         assert not result.errors, result.errors
@@ -78,25 +91,29 @@ class TestStateHistory:
         assert rows[0]["value"] == {"count": 2}
         assert rows[0]["globalRevision"] == 3
 
-    async def test_state_at_earlier_revision_stops_there(self, authenticated_context):
+    async def test_state_at_earlier_revision_stops_there(
+        self, authenticated_context: HttpContext
+    ) -> None:
         seeded = await _seed_history("hist-mid", authenticated_context)
 
         result = await schema.execute(
             "query Q($rev: Int!, $state: ID!) { stateAtGlobalRev(globalRevision: $rev, stateId: $state) { value } }",
             context_value=authenticated_context,
-            variable_values={"rev": 2, "state": str(seeded["state"].pk)},
+            variable_values={"rev": 2, "state": str(seeded.state.pk)},
         )
 
         assert not result.errors, result.errors
         assert result.data["stateAtGlobalRev"][0]["value"] == {"count": 1}
 
-    async def test_boundaries_span_the_patch_range(self, authenticated_context):
+    async def test_boundaries_span_the_patch_range(
+        self, authenticated_context: HttpContext
+    ) -> None:
         seeded = await _seed_history("hist-bound", authenticated_context)
 
         result = await schema.execute(
             "query Q($s: ID!) { sessionBoundaries(sessionId: $s) { startGlobalRevision endGlobalRevision } }",
             context_value=authenticated_context,
-            variable_values={"s": seeded["session"].session_id},
+            variable_values={"s": seeded.session.session_id},
         )
 
         assert not result.errors, result.errors
@@ -105,8 +122,10 @@ class TestStateHistory:
         assert b["startGlobalRevision"] == 1
         assert b["endGlobalRevision"] == 3
 
-    async def test_patch_revision_fields_are_derived(self, authenticated_context):
-        seeded = await _seed_history("hist-fields", authenticated_context)
+    async def test_patch_revision_fields_are_derived(
+        self, authenticated_context: HttpContext
+    ) -> None:
+        await _seed_history("hist-fields", authenticated_context)
 
         result = await schema.execute(
             """query Q($f: Int!, $t: Int!) {
@@ -131,10 +150,12 @@ class TestStateHistory:
         ]
         assert [row["qualifiers"] for row in rows] == [[], []]
 
-    async def test_every_state_history_query_executes(self, authenticated_context):
+    async def test_every_state_history_query_executes(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """All six remaining root fields — each of these previously raised FieldError."""
         seeded = await _seed_history("hist-all", authenticated_context)
-        sid, session = str(seeded["state"].pk), seeded["session"].session_id
+        sid, session = str(seeded.state.pk), seeded.session.session_id
 
         queries = [
             (

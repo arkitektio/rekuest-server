@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import hashlib
 import json
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import strawberry
 import strawberry_django
@@ -114,7 +114,12 @@ def _pinned(
 class ListedMaterializationsField(StrawberryDjangoField):
     """The materializations a list shows: not the ones made for a message or shown by a task, which only their message or task opens."""
 
-    def get_queryset(self, queryset, info, **kwargs):  # noqa: ANN001, ANN201  strawberry_django's own signature
+    def get_queryset(
+        self,
+        queryset: QuerySet[models.MaterializedBlok],
+        info: Info,
+        **kwargs: Any,
+    ) -> QuerySet[models.MaterializedBlok]:
         hidden = [
             enums.MaterializationScopeChoices.MESSAGE,
             enums.MaterializationScopeChoices.TASK,
@@ -126,7 +131,9 @@ class ListedBloksField(StrawberryDjangoField):
     """The bloks a list shows: not the ones a task made from its BSX to show, which go with their task,
     nor an action's own, which its action shows (``Action.bloks``)."""
 
-    def get_queryset(self, queryset, info, **kwargs):  # noqa: ANN001, ANN201  strawberry_django's own signature
+    def get_queryset(
+        self, queryset: QuerySet[models.Blok], info: Info, **kwargs: Any
+    ) -> QuerySet[models.Blok]:
         return super().get_queryset(
             queryset.filter(owner_task__isnull=True, held_by_action=False),
             info,

@@ -88,7 +88,7 @@ async def _data(context: HttpContext, query: str, filters: dict) -> dict:
 class TestImplementsProtocols:
     async def test_only_the_agents_offering_a_hinted_action_and_each_once(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         def agents() -> tuple[models.Agent, models.Agent]:
             scene = _agent(
                 authenticated_context,
@@ -114,7 +114,7 @@ class TestImplementsProtocols:
 
     async def test_an_agent_s_hooks_narrow_by_protocol(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         scene = await sync_to_async(_agent)(
             authenticated_context,
             "proto-hooks",

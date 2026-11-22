@@ -124,8 +124,8 @@ def test_bloks_are_matched_within_the_organization_and_actions_are_untouched() -
 
     assert _bloks([_image()], org) == set()
     assert managers.get_action_ids_by_port_demands(
-        [_image()], organization_id=org.id
-    ) == [action.id]
+        [_image()], organization_id=org.pk
+    ) == [action.pk]
 
 
 def test_a_blok_has_no_returns_to_demand() -> None:

@@ -1,19 +1,24 @@
 """Cached pint unit registry and QUANTITY-port unit semantics."""
 
 import functools
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    import pint
 
 DIMENSIONLESS = "dimensionless"
 
 
 @functools.lru_cache(maxsize=1)
-def get_unit_registry():
+def get_unit_registry() -> "pint.UnitRegistry":
     """The process-wide pint registry. Lazily built, as construction is expensive (~100ms)."""
     import pint
 
     return pint.UnitRegistry()
 
 
-def _render_dimensionality(dims) -> str:
+def _render_dimensionality(dims: Mapping[str, float]) -> str:
     """Deterministic string form of a pint dimensionality mapping.
 
     ``str(UnitsContainer)`` is not order-stable (it depends on the registry's cache
@@ -27,7 +32,7 @@ def _render_dimensionality(dims) -> str:
     if not positive and not negative:
         return DIMENSIONLESS
 
-    def term(dim: str, exp) -> str:
+    def term(dim: str, exp: float) -> str:
         exp = abs(exp)
         return dim if exp == 1 else f"{dim} ** {exp:g}"
 
@@ -55,4 +60,5 @@ def dimensionality_of(expression: str) -> str:
         dims = get_unit_registry().get_dimensionality(expression)
     except (pint.PintError, KeyError, ValueError, TypeError) as e:
         raise ValueError(f"Unknown or unparseable unit '{expression}': {e}") from e
-    return _render_dimensionality(dims)
+    # pint types an exponent as any Scalar, complex included; a dimension's is real.
+    return _render_dimensionality(cast("Mapping[str, float]", dims))

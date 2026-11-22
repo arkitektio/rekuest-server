@@ -30,7 +30,7 @@ ORIGIN = "github:arkitektio/bloks:main#layers"
 TREE = [gql(blok("custom", "panel", node("Slider")))]
 
 
-async def _create(context: HttpContext, **fields) -> dict:
+async def _create(context: HttpContext, **fields: object) -> dict:
     result = await schema.execute(
         CREATE,
         context_value=context,

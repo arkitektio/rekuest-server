@@ -27,7 +27,9 @@ pytestmark = pytest.mark.usefixtures("takt")
 class TestIntegration:
     """Integration test suite for complete workflows."""
 
-    async def test_agent_lifecycle_workflow(self, authenticated_context: HttpContext):
+    async def test_agent_lifecycle_workflow(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """Test complete agent lifecycle from registration to deletion."""
 
         # Step 1: Register agent
@@ -84,7 +86,7 @@ class TestIntegration:
 
     async def test_repeated_ensure_collapses_to_single_agent(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         """Repeated ensureAgent under one registry collapses to a single agent."""
 
         # Step 1: Ensure the agent several times under the same (authenticated) registry.
@@ -121,7 +123,7 @@ class TestIntegration:
 
     async def test_dashboard_and_blok_workflow(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         """Test creating UI components workflow."""
 
         # Step 1: Create a blok
@@ -191,7 +193,9 @@ class TestIntegration:
         assert blok_query_result.data is not None
         assert blok_query_result.data["blok"]["name"] == "Integration Test Blok"
 
-    async def test_error_handling_workflow(self, authenticated_context: HttpContext):
+    async def test_error_handling_workflow(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """Test proper error handling in various scenarios."""
 
         # Test 1: Query non-existent agent

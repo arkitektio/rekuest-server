@@ -26,28 +26,33 @@ VOLT_DIM = "[length] ** 2 * [mass] / [current] / [time] ** 3"
 PROPOSED = ["uV", "mV", "V"]
 
 
-def q(key: str = "v", **overrides) -> dict:
-    port = {"key": key, "kind": "QUANTITY", "nullable": False, "reference_unit": "volt"}
+def q(key: str = "v", **overrides: object) -> dict[str, object]:
+    port: dict[str, object] = {
+        "key": key,
+        "kind": "QUANTITY",
+        "nullable": False,
+        "reference_unit": "volt",
+    }
     port.update(overrides)
     return port
 
 
 class TestQuantityValidation:
-    def test_dimension_is_derived_when_omitted(self):
+    def test_dimension_is_derived_when_omitted(self) -> None:
         port = ArgPortInputModel.model_validate(q())
         assert port.kind == PortKind.QUANTITY
         assert port.dimension == VOLT_DIM
         # The derived value is what lands in the Action.args JSONField.
         assert port.model_dump()["dimension"] == VOLT_DIM
 
-    def test_dimension_is_verified_and_canonicalized_when_provided(self):
+    def test_dimension_is_verified_and_canonicalized_when_provided(self) -> None:
         # An equivalent but non-canonical spelling must validate and be normalized.
         port = ArgPortInputModel.model_validate(
             q(dimension="[mass] * [length] ** 2 / [time] ** 3 / [current]")
         )
         assert port.dimension == VOLT_DIM
 
-    def test_canonical_dimension_is_a_fixed_point(self):
+    def test_canonical_dimension_is_a_fixed_point(self) -> None:
         # Persisted dimensions get re-validated on later submissions; the canonical
         # form must survive its own round trip regardless of registry cache state.
         from rekuest_core.units import dimensionality_of
@@ -57,7 +62,7 @@ class TestQuantityValidation:
             "farad"
         )
 
-    def test_dimensionless_quantities_are_supported(self):
+    def test_dimensionless_quantities_are_supported(self) -> None:
         port = ArgPortInputModel.model_validate(
             q(reference_unit="percent", proposed_units=["dimensionless"])
         )
@@ -68,29 +73,29 @@ class TestQuantityValidation:
         )
         assert again.dimension == "dimensionless"
 
-    def test_reciprocal_dimension_renders_with_unit_numerator(self):
+    def test_reciprocal_dimension_renders_with_unit_numerator(self) -> None:
         port = ArgPortInputModel.model_validate(q(reference_unit="hertz"))
         assert port.dimension == "1 / [time]"
         from rekuest_core.units import dimensionality_of
 
         assert dimensionality_of(port.dimension) == port.dimension
 
-    def test_proposed_units_of_same_dimension_pass(self):
+    def test_proposed_units_of_same_dimension_pass(self) -> None:
         port = ArgPortInputModel.model_validate(q(proposed_units=PROPOSED))
         assert port.proposed_units == PROPOSED
         assert port.dimension == VOLT_DIM
 
     @pytest.mark.parametrize("unit", ["mV", "volt", "kV"])
-    def test_canonicalization_equivalence(self, unit):
+    def test_canonicalization_equivalence(self, unit: str) -> None:
         port = ArgPortInputModel.model_validate(q(reference_unit=unit))
         assert port.dimension == VOLT_DIM
 
-    def test_different_quantities_derive_different_dimensions(self):
+    def test_different_quantities_derive_different_dimensions(self) -> None:
         farad = ArgPortInputModel.model_validate(q(reference_unit="farad"))
         assert farad.dimension != VOLT_DIM
         assert "[current] ** 2" in farad.dimension
 
-    def test_nested_quantity_under_list(self):
+    def test_nested_quantity_under_list(self) -> None:
         port = ArgPortInputModel.model_validate(
             {
                 "key": "voltages",
@@ -101,7 +106,7 @@ class TestQuantityValidation:
         )
         assert port.children[0].dimension == VOLT_DIM
 
-    def test_return_port_derives_dimension(self):
+    def test_return_port_derives_dimension(self) -> None:
         port = ReturnPortInputModel.model_validate(
             q(key="reading", proposed_units=PROPOSED)
         )
@@ -112,23 +117,23 @@ class TestQuantityValidation:
 
 
 class TestQuantityRejections:
-    def test_missing_reference_unit(self):
+    def test_missing_reference_unit(self) -> None:
         with pytest.raises(ValidationError, match="must declare a reference_unit"):
             ArgPortInputModel.model_validate(q(reference_unit=None))
 
-    def test_bogus_reference_unit(self):
+    def test_bogus_reference_unit(self) -> None:
         with pytest.raises(
             ValidationError, match="Unknown or unparseable unit 'blorbs'"
         ):
             ArgPortInputModel.model_validate(q(reference_unit="blorbs"))
 
-    def test_proposed_unit_of_wrong_dimension(self):
+    def test_proposed_unit_of_wrong_dimension(self) -> None:
         with pytest.raises(
             ValidationError, match="proposed unit 'kg' has dimensionality"
         ):
             ArgPortInputModel.model_validate(q(proposed_units=["mV", "kg"]))
 
-    def test_dimension_inconsistent_with_reference_unit(self):
+    def test_dimension_inconsistent_with_reference_unit(self) -> None:
         with pytest.raises(ValidationError, match="inconsistent with reference_unit"):
             ArgPortInputModel.model_validate(q(dimension="[time]"))
 
@@ -140,13 +145,15 @@ class TestQuantityRejections:
             ("STRING", {"dimension": "[time]"}),
         ],
     )
-    def test_unit_fields_rejected_on_non_quantity_ports(self, kind, extra):
+    def test_unit_fields_rejected_on_non_quantity_ports(
+        self, kind: str, extra: dict[str, object]
+    ) -> None:
         with pytest.raises(ValidationError, match="must not set QUANTITY-only fields"):
             ArgPortInputModel.model_validate(
                 {"key": "n", "kind": kind, "nullable": False, **extra}
             )
 
-    def test_quantity_under_list_is_validated_too(self):
+    def test_quantity_under_list_is_validated_too(self) -> None:
         with pytest.raises(ValidationError, match="must declare a reference_unit"):
             ArgPortInputModel.model_validate(
                 {
@@ -157,7 +164,7 @@ class TestQuantityRejections:
                 }
             )
 
-    def test_list_without_children_raises_clean_error(self):
+    def test_list_without_children_raises_clean_error(self) -> None:
         with pytest.raises(ValidationError, match="exactly one child"):
             ArgPortInputModel.model_validate(
                 {"key": "xs", "kind": "LIST", "nullable": False}
@@ -171,7 +178,7 @@ class TestQuantityRejections:
 
 
 class TestRoundTrip:
-    def test_non_quantity_ports_default_unit_fields_to_none(self):
+    def test_non_quantity_ports_default_unit_fields_to_none(self) -> None:
         port = ArgPortInputModel.model_validate(
             {"key": "n", "kind": "INT", "nullable": False}
         )
@@ -180,7 +187,7 @@ class TestRoundTrip:
         assert dumped["proposed_units"] is None
         assert dumped["dimension"] is None
 
-    def test_quantity_output_models_read_back_unit_fields(self):
+    def test_quantity_output_models_read_back_unit_fields(self) -> None:
         common = {
             "key": "v_init",
             "kind": "QUANTITY",
@@ -202,7 +209,7 @@ class TestRoundTrip:
         assert ret.proposed_units == PROPOSED
         assert ret.dimension == VOLT_DIM
 
-    def test_output_models_stay_permissive_for_legacy_json(self):
+    def test_output_models_stay_permissive_for_legacy_json(self) -> None:
         # Rows persisted before the pint validation existed may lack the derived dimension
         # (or any unit metadata). Reading them back must not error — strictness is input-only.
         legacy = {
@@ -221,7 +228,7 @@ class TestRoundTrip:
 
 
 @pytest.mark.django_db
-def test_quantity_definition_persists_and_rehydrates():
+def test_quantity_definition_persists_and_rehydrates() -> None:
     """Full write→read flow: definition model_dump into Action JSON, rebuild relational rows, hydrate back."""
     from tests.factories import create_action_for_organization, create_registry_bundle
     from tests.registered import rebuild_relational_ports

@@ -4,18 +4,20 @@ Nothing here is about agents: a service has none, and cataloguing one creates no
 """
 
 import pytest
+from pytest_django.fixtures import SettingsWrapper
 
 from facade import models, provisioning, service_catalog
 from rekuest.configuration import ServiceEntry
 from tests.hook_urls import housekeeping
-from tests.provisioning_fixtures import declared, hub  # noqa: F401  (fixtures)
 
 pytestmark = pytest.mark.usefixtures("takt")
 
 
 @pytest.mark.django_db(transaction=True)
 class TestServiceCatalog:
-    def test_a_service_is_catalogued_with_what_it_hosts_and_emits(self, hub):
+    def test_a_service_is_catalogued_with_what_it_hosts_and_emits(
+        self, hub: SettingsWrapper
+    ) -> None:
         assert service_catalog.catalogue_all() == []
 
         service = models.Service.objects.get(name="housekeeping")
@@ -41,7 +43,7 @@ class TestServiceCatalog:
             ("@housekeeping/room", "DELETED", ("@housekeeping/area",)),
         }
 
-    def test_cataloguing_a_service_creates_no_agent(self, hub):
+    def test_cataloguing_a_service_creates_no_agent(self, hub: SettingsWrapper) -> None:
         hub.HOOK_AGENTS = []
         assert provisioning.provision_all() == provisioning.Failed(
             services=[], hook_agents=[]
@@ -49,7 +51,9 @@ class TestServiceCatalog:
         assert models.Service.objects.filter(name="housekeeping").exists()
         assert not models.Agent.objects.exists()
 
-    def test_hosting_and_announcing_are_catalogued_separately(self, hub):
+    def test_hosting_and_announcing_are_catalogued_separately(
+        self, hub: SettingsWrapper
+    ) -> None:
         housekeeping._signals.clear()  # hosted, never announced
         service_catalog.catalogue_all()
         assert models.StructureDeclaration.objects.filter(
@@ -57,7 +61,7 @@ class TestServiceCatalog:
         ).exists()
         assert models.SignalDeclaration.objects.count() == 0
 
-    def test_the_catalog_is_exactly_the_manifest(self, hub):
+    def test_the_catalog_is_exactly_the_manifest(self, hub: SettingsWrapper) -> None:
         service_catalog.catalogue_all()
         housekeeping._signals.clear()
         housekeeping.signal("@housekeeping/room", kinds=["CREATED"])
@@ -75,8 +79,8 @@ class TestServiceCatalog:
         )
 
     def test_a_service_that_cannot_say_what_it_hosts_keeps_what_it_hosted(
-        self, hub, monkeypatch
-    ):
+        self, hub: SettingsWrapper, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         service_catalog.catalogue_all()
         current = housekeeping.manifest()
         # A manifest without the key at all (a rolled back service): unknown, not nothing.
@@ -93,7 +97,9 @@ class TestServiceCatalog:
             identifier="@housekeeping/room"
         ).exists()
 
-    def test_a_structure_stays_with_the_service_that_hosted_it_first(self, hub):
+    def test_a_structure_stays_with_the_service_that_hosted_it_first(
+        self, hub: SettingsWrapper
+    ) -> None:
         service_catalog.catalogue_all()
         claimant = models.Service.objects.create(name="claimant")
 
@@ -121,8 +127,8 @@ class TestServiceCatalog:
         )
 
     def test_an_unreachable_service_is_reported_and_the_others_still_catalogued(
-        self, hub
-    ):
+        self, hub: SettingsWrapper
+    ) -> None:
         hub.SERVICES = [
             ServiceEntry(name="offline", url="http://127.0.0.1:9/_rekuest/service"),
             *hub.SERVICES,

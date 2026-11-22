@@ -1,4 +1,4 @@
-from typing import Annotated, cast
+from typing import Annotated, Any, cast
 
 import kante
 import strawberry
@@ -32,12 +32,12 @@ from rekuest_core.constants import input_union_types, interface_types
 from rekuest_core.scalars import scalar_map as rscalar_map
 
 
-def field(scope: str = "rekuest_read", **kwargs):  # noqa: ANN201  strawberry types a field as whatever it is assigned to
+def field(scope: str = "rekuest_read", **kwargs: Any):  # noqa: ANN201  strawberry types a field as whatever it is assigned to
     """A field an app needs ``scope`` for (``rekuest_read``, unless it says otherwise)."""
     return strawberry_django.field(extensions=[AuthExtension(scopes=[scope])], **kwargs)
 
 
-def mutation(scope: str, roles: list[str] | None = None, **kwargs):  # noqa: ANN201  as above
+def mutation(scope: str, roles: list[str] | None = None, **kwargs: Any):  # noqa: ANN201  as above
     """A write: an app needs ``scope`` for it, a member one of ``roles`` (``rekuest_editor`` unless it
     says otherwise; ``rekuest_admin`` holds every role)."""
     return strawberry_django.mutation(
@@ -46,7 +46,7 @@ def mutation(scope: str, roles: list[str] | None = None, **kwargs):  # noqa: ANN
     )
 
 
-def automation(**kwargs):  # noqa: ANN201  as above
+def automation(**kwargs: Any):  # noqa: ANN201  as above
     """A write to what runs actions on the organization's behalf: triggers, schedules and wiregrams.
 
     Only ``rekuest_automator`` may, not every editor: what it sets up runs without anyone there.
@@ -54,14 +54,14 @@ def automation(**kwargs):  # noqa: ANN201  as above
     return mutation(scope="rekuest_automate", roles=[AUTOMATOR], **kwargs)
 
 
-def read_mutation(**kwargs):  # noqa: ANN201  as above
+def read_mutation(**kwargs: Any):  # noqa: ANN201  as above
     """A mutation that changes nothing (it hands out read credentials, or writes a document down): a read."""
     return strawberry_django.mutation(
         extensions=[AuthExtension(scopes=["rekuest_read"])], **kwargs
     )
 
 
-def upload_mutation(**kwargs):  # noqa: ANN201  as above
+def upload_mutation(**kwargs: Any):  # noqa: ANN201  as above
     """A datalayer upload: an app needs ``rekuest_write``, a member one of the configured ``upload_roles``
     (``rekuest_editor`` when none are). Read once, at schema build."""
     return mutation(
@@ -69,7 +69,7 @@ def upload_mutation(**kwargs):  # noqa: ANN201  as above
     )
 
 
-def subscription(scope: str = "rekuest_read", **kwargs):  # noqa: ANN201  as above
+def subscription(scope: str = "rekuest_read", **kwargs: Any):  # noqa: ANN201  as above
     """A subscription: what it streams is read, so an app needs ``rekuest_read`` for it."""
     return strawberry.subscription(
         extensions=[AuthSubscribeExtension(scopes=[scope])], **kwargs

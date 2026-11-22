@@ -18,53 +18,59 @@ from rekuest_core.enums import PortKind
 from rekuest_core.inputs.models import DescriptorInputModel, PortMatchInputModel
 
 
-def match(**overrides):
-    base = dict(
-        at=None,
-        key=None,
-        kind=None,
-        identifier=None,
-        nullable=None,
-        dimension=None,
-        descriptors=None,
-        children=None,
+def match(
+    *,
+    at: int | None = None,
+    key: str | None = None,
+    kind: PortKind | None = None,
+    identifier: str | None = None,
+    nullable: bool | None = None,
+    dimension: str | None = None,
+    descriptors: list[DescriptorInputModel] | None = None,
+    children: list[PortMatchInputModel] | None = None,
+) -> PortMatchInputModel:
+    return PortMatchInputModel(
+        at=at,
+        key=key,
+        kind=kind,
+        identifier=identifier,
+        nullable=nullable,
+        dimension=dimension,
+        descriptors=descriptors,
+        children=children,
     )
-    base.update(overrides)
-    return PortMatchInputModel(**base)
 
 
-def demand(*matches):
+def demand(*matches: PortMatchInputModel) -> PortDemand:
     return PortDemand(kind="args", matches=list(matches))
 
 
 DESCRIPTORS = [DescriptorInputModel(key="axes", value="c")]
 
 
-def test_descriptor_only_root_match_is_rejected():
+def test_descriptor_only_root_match_is_rejected() -> None:
     with pytest.raises(ValueError, match="narrow structurally"):
         get_action_ids_by_port_demands([demand(match(descriptors=DESCRIPTORS))])
 
 
-def test_descriptor_only_root_match_is_rejected_in_subquery_form():
+def test_descriptor_only_root_match_is_rejected_in_subquery_form() -> None:
     with pytest.raises(ValueError, match="narrow structurally"):
         get_port_demand_subquery(
             [demand(match(descriptors=DESCRIPTORS))], organization_id=1
         )
 
 
-def test_root_descriptors_with_structural_narrowing_are_allowed():
-    for narrowing in (
-        dict(identifier="@mikro/image"),
-        dict(kind=PortKind.STRUCTURE),
-        dict(key="image"),
-        dict(at=0),
-        dict(dimension="length"),
+def test_root_descriptors_with_structural_narrowing_are_allowed() -> None:
+    for narrowed in (
+        match(descriptors=DESCRIPTORS, identifier="@mikro/image"),
+        match(descriptors=DESCRIPTORS, kind=PortKind.STRUCTURE),
+        match(descriptors=DESCRIPTORS, key="image"),
+        match(descriptors=DESCRIPTORS, at=0),
+        match(descriptors=DESCRIPTORS, dimension="length"),
     ):
-        get_port_demand_subquery(
-            [demand(match(descriptors=DESCRIPTORS, **narrowing))], organization_id=1
-        )
+        get_port_demand_subquery([demand(narrowed)], organization_id=1)
 
 
-def test_descriptor_only_nested_child_is_allowed():
+def test_descriptor_only_nested_child_is_allowed() -> None:
     parent = match(identifier="@mikro/image", children=[match(descriptors=DESCRIPTORS)])
     get_port_demand_subquery([demand(parent)], organization_id=1)

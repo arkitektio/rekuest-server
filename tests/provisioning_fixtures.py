@@ -1,11 +1,15 @@
 """A hub with one service and one hook agent configured — two entries that share nothing."""
 
+from collections.abc import Callable, Iterator
+
 import pytest
 from arkitekt_service.service import Descriptor
 from arkitekt_service.service.described import Described
 from authentikate.models import Organization
 from django.conf import settings as django_settings
 from django.test import override_settings
+from pytest_django.fixtures import SettingsWrapper
+from pytest_django.live_server_helper import LiveServer
 
 from rekuest.configuration import HookAgentEntry, ServiceEntry
 from tests.hook_urls import housekeeping, janitor
@@ -23,10 +27,10 @@ class Room(Described):
 
 
 @pytest.fixture
-def declared():
+def declared() -> Iterator[Callable[[], dict[str, int]]]:
     """What the service hosts and emits, and what the agent offers, for this test only."""
 
-    def tidy_up() -> dict:
+    def tidy_up() -> dict[str, int]:
         return {"acted": 3}
 
     janitor.action(interface="tidy_up", description="Tidy things up.")(tidy_up)
@@ -50,7 +54,11 @@ def declared():
 
 
 @pytest.fixture
-def hub(live_server, settings, declared):
+def hub(
+    live_server: LiveServer,
+    settings: SettingsWrapper,
+    declared: Callable[[], dict[str, int]],
+) -> SettingsWrapper:
     prefix = (
         f"/{django_settings.MY_SCRIPT_NAME.strip('/')}"
         if django_settings.MY_SCRIPT_NAME
@@ -81,6 +89,6 @@ def an_organization(identifier: str) -> Organization:
 
 
 @pytest.fixture
-def lab(db):
+def lab(db: None) -> Organization:
     """An organization of users: provisioning gives it the hook agent."""
     return an_organization("lab")

@@ -1,11 +1,15 @@
 import datetime
 from collections.abc import Awaitable, Callable, Sequence
+from typing import TypeVar
 
 from asgiref.sync import sync_to_async
 from kante.types import Info
 from strawberry.dataloader import DataLoader
 
 from facade import models
+
+K = TypeVar("K")
+V = TypeVar("V")
 
 PKType = int | str
 
@@ -38,7 +42,7 @@ async def load_implementations_by_ids(
     return [impl_map.get(str(i)) for i in ids]
 
 
-def _loader[K, V](
+def _loader(
     info: Info,
     name: str,
     load_fn: Callable[[list[K]], Awaitable[Sequence[V | BaseException]]],

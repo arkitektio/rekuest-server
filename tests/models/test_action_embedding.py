@@ -11,7 +11,7 @@ from facade.models import Action
 from tests.factories import create_action_for_organization, create_registry_bundle
 
 
-def _action(prefix: str, **overrides) -> Action:
+def _action(prefix: str, **overrides: object) -> Action:
     _, _, org, _ = create_registry_bundle(prefix)
     return create_action_for_organization(org, prefix, **overrides)
 

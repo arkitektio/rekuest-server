@@ -8,9 +8,13 @@ calls it like any other child; nothing about the call itself is special.
 
 from __future__ import annotations
 
+from typing import TypeVar
+
 from django.db.models import Case, IntegerField, Model, QuerySet, Value, When
 
 from facade import models
+
+M = TypeVar("M", bound=Model)
 
 #: Ancestors walked at most: a deeper tree is cut off, never an error.
 MAX_DEPTH = 32
@@ -55,9 +59,7 @@ def caller_agent_ids(task_id: object, organization_id: int) -> list[int]:
     return [agent_id for agent_id in dict.fromkeys(found) if agent_id != task.agent_id]
 
 
-def nearest_first[M: Model](
-    queryset: QuerySet[M], ids: list[int], field: str
-) -> QuerySet[M]:
+def nearest_first(queryset: QuerySet[M], ids: list[int], field: str) -> QuerySet[M]:
     """``queryset`` narrowed to ``ids`` (agent ids in ``field``) and ordered as they are listed."""
     if not ids:
         return queryset.none()

@@ -4,23 +4,32 @@ These are pure (no database): they assert the compiled JSONPath strings that lat
 evaluated by ``jsonb_path_match`` at query time.
 """
 
-from types import SimpleNamespace
+from dataclasses import dataclass
 
 import pytest
 
 from facade.descriptors import compile_descriptors_to_jsonpath
 
 
-def d(key, operator, value):
-    return SimpleNamespace(key=key, operator=operator, value=value)
+@dataclass(frozen=True)
+class Descriptor:
+    """A requires/provides entry as the compiler reads it: a key, an operator, a value."""
+
+    key: str
+    operator: str
+    value: object
 
 
-def test_empty_descriptors_returns_none():
+def d(key: str, operator: str, value: object) -> Descriptor:
+    return Descriptor(key=key, operator=operator, value=value)
+
+
+def test_empty_descriptors_returns_none() -> None:
     assert compile_descriptors_to_jsonpath(None) is None
     assert compile_descriptors_to_jsonpath([]) is None
 
 
-def test_equals_and_matches_render_equality():
+def test_equals_and_matches_render_equality() -> None:
     assert (
         compile_descriptors_to_jsonpath([d("axes", "EQUALS", "c")]) == '$."axes" == "c"'
     )
@@ -30,19 +39,19 @@ def test_equals_and_matches_render_equality():
     )
 
 
-def test_not_equals():
+def test_not_equals() -> None:
     assert (
         compile_descriptors_to_jsonpath([d("axes", "NOT_EQUALS", "c")])
         == '$."axes" != "c"'
     )
 
 
-def test_numeric_comparisons():
+def test_numeric_comparisons() -> None:
     assert compile_descriptors_to_jsonpath([d("size", "GTE", 10)]) == '$."size" >= 10'
     assert compile_descriptors_to_jsonpath([d("size", "LTE", 10)]) == '$."size" <= 10'
 
 
-def test_exists_true_and_false():
+def test_exists_true_and_false() -> None:
     assert (
         compile_descriptors_to_jsonpath([d("axes", "EXISTS", True)])
         == 'exists($."axes")'
@@ -53,7 +62,7 @@ def test_exists_true_and_false():
     )
 
 
-def test_exists_requires_a_boolean_value():
+def test_exists_requires_a_boolean_value() -> None:
     """Non-boolean EXISTS values used to silently compile to the absence branch — the exact
     inverse of what a client sending value="true"/1 meant. They must be rejected instead."""
     for bad_value in ("true", "yes", 1, 0, {}, []):
@@ -61,21 +70,21 @@ def test_exists_requires_a_boolean_value():
             compile_descriptors_to_jsonpath([d("axes", "EXISTS", bad_value)])
 
 
-def test_exists_without_a_value_is_presence():
+def test_exists_without_a_value_is_presence() -> None:
     assert (
         compile_descriptors_to_jsonpath([d("axes", "EXISTS", None)])
         == 'exists($."axes")'
     )
 
 
-def test_contains_array_membership():
+def test_contains_array_membership() -> None:
     assert (
         compile_descriptors_to_jsonpath([d("tags", "CONTAINS", "brain")])
         == '$."tags"[*] == "brain"'
     )
 
 
-def test_in_and_not_in_expand_to_boolean_combinations():
+def test_in_and_not_in_expand_to_boolean_combinations() -> None:
     assert (
         compile_descriptors_to_jsonpath([d("axes", "IN", ["c", "t"])])
         == '($."axes" == "c" || $."axes" == "t")'
@@ -86,19 +95,19 @@ def test_in_and_not_in_expand_to_boolean_combinations():
     )
 
 
-def test_in_requires_a_list_value():
+def test_in_requires_a_list_value() -> None:
     with pytest.raises(ValueError):
         compile_descriptors_to_jsonpath([d("axes", "IN", "c")])
 
 
-def test_multiple_descriptors_are_anded():
+def test_multiple_descriptors_are_anded() -> None:
     compiled = compile_descriptors_to_jsonpath(
         [d("axes", "EQUALS", "c"), d("dtype", "EQUALS", "uint8")]
     )
     assert compiled == '$."axes" == "c" && $."dtype" == "uint8"'
 
 
-def test_key_is_one_flat_member():
+def test_key_is_one_flat_member() -> None:
     """The query side builds the candidate as a FLAT ``{key: value}`` object, so a dotted key is
     one member name, not a nested path — ``$.options.advanced`` could never match it."""
     assert (
@@ -112,7 +121,7 @@ def test_key_is_one_flat_member():
     )
 
 
-def test_namespaced_key_is_quoted():
+def test_namespaced_key_is_quoted() -> None:
     """``@package/name`` keys (the mikro spec vocabulary) are legal member names once quoted."""
     assert (
         compile_descriptors_to_jsonpath([d("@mikro/n_space_axes", "EQUALS", 3)])
@@ -133,7 +142,7 @@ def test_namespaced_key_is_quoted():
     )
 
 
-def test_hostile_key_cannot_escape_the_member_literal():
+def test_hostile_key_cannot_escape_the_member_literal() -> None:
     """Quotes and operators inside a key stay inside the quoted string literal (JSON escaping),
     so a key can never close the accessor and inject a predicate."""
     assert (
@@ -150,12 +159,14 @@ def test_hostile_key_cannot_escape_the_member_literal():
     )
 
 
-def test_empty_key_is_rejected():
+def test_empty_key_is_rejected() -> None:
     for bad_key in ("", "$.", None, 3):
         with pytest.raises(ValueError):
-            compile_descriptors_to_jsonpath([d(bad_key, "EQUALS", "c")])
+            # A key that is not a string is what the guard is tested with.
+            descriptor = d(bad_key, "EQUALS", "c")  # pyright: ignore[reportArgumentType]
+            compile_descriptors_to_jsonpath([descriptor])
 
 
-def test_unsupported_operator_raises():
+def test_unsupported_operator_raises() -> None:
     with pytest.raises(ValueError):
         compile_descriptors_to_jsonpath([d("axes", "NONSENSE", "c")])

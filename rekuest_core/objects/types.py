@@ -1,6 +1,6 @@
 import dataclasses
 import datetime
-from typing import Annotated, Any
+from typing import Annotated
 
 import strawberry
 import strawberry_django
@@ -179,13 +179,15 @@ class ChoiceReturnWidget(ReturnWidget):
     kind: enums.ReturnWidgetKind
 
 
-def _call_as_json(call: Any) -> Any:
+def _call_as_json(call: object) -> scalars.JSONSerializable:
     """A call tree as plain JSON, whether strawberry hands us the pydantic model or its dataclass twin."""
-    if hasattr(call, "model_dump"):
-        return call.model_dump(mode="json", exclude_none=True)
-    if dataclasses.is_dataclass(call):
-        return {k: v for k, v in dataclasses.asdict(call).items() if v is not None}
-    return call
+    if isinstance(call, BaseModel):
+        return scalars.JSONSerializable(call.model_dump(mode="json", exclude_none=True))
+    if dataclasses.is_dataclass(call) and not isinstance(call, type):
+        return scalars.JSONSerializable(
+            {k: v for k, v in dataclasses.asdict(call).items() if v is not None}
+        )
+    return scalars.JSONSerializable(call)
 
 
 @pydantic.interface(models.EffectModel)

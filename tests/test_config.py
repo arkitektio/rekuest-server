@@ -3,26 +3,29 @@
 Standalone — needs no database; run with ``uv run pytest tests/test_config.py``.
 """
 
+import pytest
 from arkitekt_service.contract.unread import unread
 from arkitekt_service.server.settings import written
 
 from rekuest.configuration import Settings
 
 
-def test_config_yaml_validates():
+def test_config_yaml_validates() -> None:
     """The service's own config.yaml parses into the typed schema."""
     s = Settings()
     assert s.postgres.db_name
     assert s.redis.host
 
 
-def test_env_override(monkeypatch):
+def test_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     """Env vars override the YAML file (nested via ``__``)."""
     monkeypatch.setenv("POSTGRES__PASSWORD", "from-env-test")
     assert Settings().postgres.password == "from-env-test"
 
 
-def test_embeddings_block_defaults_and_override(monkeypatch):
+def test_embeddings_block_defaults_and_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The ``embeddings`` block is on by default and env-overridable; the model is not in it."""
     s = Settings()
     assert s.embeddings.enabled is True
@@ -32,19 +35,19 @@ def test_embeddings_block_defaults_and_override(monkeypatch):
     assert Settings().embeddings.distance_threshold == 0.42
 
 
-def test_a_model_named_in_the_config_is_reported_as_unread():
+def test_a_model_named_in_the_config_is_reported_as_unread() -> None:
     """The model is a constant of the release: a config that names one is told so."""
     assert unread(
         Settings, {"embeddings": {"enabled": True, "model": "some/other-model"}}
     ).unknown == ["embeddings.model"]
 
 
-def test_the_services_own_config_is_read_as_written():
+def test_the_services_own_config_is_read_as_written() -> None:
     """Nothing in the repo's config.yaml goes unread."""
     assert not unread(Settings, written())
 
 
-def test_a_key_of_another_release_is_reported_not_swallowed():
+def test_a_key_of_another_release_is_reported_not_swallowed() -> None:
     """A hub's config written for rekuest 5: the list it read is unknown to this release."""
     found = unread(
         Settings,
@@ -74,7 +77,7 @@ def test_a_key_of_another_release_is_reported_not_swallowed():
     assert found.renamed == [("rekuest.agentd_url", "rekuest.takt_url")]
 
 
-def test_open_blocks_and_the_top_level_are_not_reported():
+def test_open_blocks_and_the_top_level_are_not_reported() -> None:
     """Driver options in a connection block, and blocks other services read, are nobody's mistake."""
     found = unread(
         Settings,

@@ -12,7 +12,7 @@ from tests.graphql_ops import CREATE_BLOK, CREATE_DASHBOARD
 class TestGraphQLUI:
     """GraphQL operations over UI components (Blok / Dashboard)."""
 
-    async def test_bloks_query(self, authenticated_context: HttpContext):
+    async def test_bloks_query(self, authenticated_context: HttpContext) -> None:
         """Test fetching all UI bloks via GraphQL query."""
         query = """
             query GetBloks {
@@ -32,7 +32,9 @@ class TestGraphQLUI:
         assert "bloks" in result.data
         assert isinstance(result.data["bloks"], list)
 
-    async def test_create_blok_mutation(self, authenticated_context: HttpContext):
+    async def test_create_blok_mutation(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """Test creating a UI blok via mutation."""
         result = await schema.execute(
             CREATE_BLOK,
@@ -53,7 +55,9 @@ class TestGraphQLUI:
         assert blok["name"] == "Test UI Blok"
         assert blok["description"] == "A test UI component"
 
-    async def test_create_dashboard_mutation(self, authenticated_context: HttpContext):
+    async def test_create_dashboard_mutation(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """Test creating a dashboard via mutation."""
         result = await schema.execute(
             CREATE_DASHBOARD,

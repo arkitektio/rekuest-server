@@ -3,14 +3,18 @@
 import hashlib
 import json
 import struct
-from typing import Any
+from collections.abc import Iterator
 
 import pytest
 from arkitekt_datalayer.datalayer import get_current_datalayer
 from arkitekt_datalayer.models import DatalayerStore
 from asgiref.sync import sync_to_async
 from authentikate.models import App, Release
+from botocore.client import BaseClient
+from dokker import Deployment
 from kante.context import HttpContext
+from pytest_django.fixtures import SettingsWrapper
+from strawberry.types import ExecutionResult
 
 from facade.models import Agent, AgentAsset, Asset
 from facade.schema import schema
@@ -24,7 +28,7 @@ SOURCE = "https://vendor.example/models/scope.glb"
 POLICY = "query { assetPolicy { model { maxSize maxNodes extensions } image { maxSize maxSide formats } } }"
 
 
-def glb(document: dict[str, Any], binary: bytes = b"") -> bytes:
+def glb(document: dict[str, object], binary: bytes = b"") -> bytes:
     """A GLB container around ``document`` and ``binary``, padded as the format requires."""
     payload = json.dumps(document).encode()
     payload += b" " * (-len(payload) % 4)
@@ -35,10 +39,10 @@ def glb(document: dict[str, Any], binary: bytes = b"") -> bytes:
     return struct.pack("<III", 0x46546C67, 2, 12 + len(chunks)) + chunks
 
 
-def triangle(**extra: Any) -> tuple[dict[str, Any], bytes]:
+def triangle(**extra: object) -> tuple[dict[str, object], bytes]:
     """One triangle on a node called ``stage_x``."""
     binary = struct.pack("<9f", 0, 0, 0, 1, 0, 0, 0, 1, 0)
-    document: dict[str, Any] = {
+    document: dict[str, object] = {
         "asset": {"version": "2.0"},
         "buffers": [{"byteLength": len(binary)}],
         "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": len(binary)}],
@@ -82,23 +86,23 @@ def _caller(token: str) -> tuple[HttpContext, Agent]:
 
 
 @pytest.fixture
-def caller(db, backend_stack) -> tuple[HttpContext, Agent]:
+def caller(db: None, backend_stack: Deployment) -> tuple[HttpContext, Agent]:
     return _caller("test-member")
 
 
 @pytest.fixture
-def stranger(db, backend_stack) -> tuple[HttpContext, Agent]:
+def stranger(db: None, backend_stack: Deployment) -> tuple[HttpContext, Agent]:
     return _caller(OTHER_TOKEN)
 
 
 @pytest.fixture
-def admin(db, backend_stack) -> tuple[HttpContext, Agent]:
+def admin(db: None, backend_stack: Deployment) -> tuple[HttpContext, Agent]:
     """An admin of the caller's organization (a static token is one unless it says otherwise), with an agent of their own."""
     return _caller("test")
 
 
 @pytest.fixture
-def media_bucket(s3, settings):
+def media_bucket(s3: BaseClient, settings: SettingsWrapper) -> Iterator[None]:
     """A datalayer with a media bucket (images) and a kulisse bucket (3D models), on moto."""
     from arkitekt_datalayer import datalayer as module
 
@@ -155,7 +159,7 @@ async def _upload(
     return grant["store"]
 
 
-async def _create(context: HttpContext, ref: str, store: str):
+async def _create(context: HttpContext, ref: str, store: str) -> ExecutionResult:
     return await schema.execute(
         CREATE,
         context_value=context,

@@ -1,5 +1,5 @@
 import datetime
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional, TypeAlias
 
 import strawberry
 from pydantic import BaseModel, JsonValue, field_validator
@@ -92,16 +92,16 @@ class StringWidgetModel(AssignWidgetModel):
     as_paragraph: bool | None
 
 
-AssignWidgetModelUnion = Union[
-    SliderAssignWidgetModel,
-    ChoiceAssignWidgetModel,
-    SearchAssignWidgetModel,
-    StateChoiceAssignWidgetModel,
-    StringWidgetModel,
-    CustomAssignWidgetModel,
-    BlokAssignWidgetModel,
-    ProxyWidgetModel,
-]
+AssignWidgetModelUnion: TypeAlias = (
+    SliderAssignWidgetModel
+    | ChoiceAssignWidgetModel
+    | SearchAssignWidgetModel
+    | StateChoiceAssignWidgetModel
+    | StringWidgetModel
+    | CustomAssignWidgetModel
+    | BlokAssignWidgetModel
+    | ProxyWidgetModel
+)
 
 
 class ReturnWidgetModel(BaseModel):
@@ -122,7 +122,7 @@ class ChoiceReturnWidgetModel(ReturnWidgetModel):
     kind: Literal["CHOICE"]
 
 
-ReturnWidgetModelUnion = Union[CustomReturnWidgetModel, ChoiceReturnWidgetModel]
+ReturnWidgetModelUnion: TypeAlias = CustomReturnWidgetModel | ChoiceReturnWidgetModel
 
 
 class EffectModel(BaseModel):
@@ -146,7 +146,7 @@ class CustomEffectModel(EffectModel):
     kind: Literal["CUSTOM"]
 
 
-EffectModelUnion = Union[MessageEffectModel, HideEffectModel, CustomEffectModel]
+EffectModelUnion: TypeAlias = MessageEffectModel | HideEffectModel | CustomEffectModel
 
 
 class PortGroupModel(BaseModel):

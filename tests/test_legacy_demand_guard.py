@@ -13,43 +13,52 @@ execution.
 import pytest
 
 from facade.managers import PortDemand, build_state_params, get_port_demand_subquery
+from rekuest_core.enums import PortKind
 from rekuest_core.inputs.models import DescriptorInputModel, PortMatchInputModel
 
 
-def match(**overrides):
-    base = dict(
-        at=None,
-        key=None,
-        kind=None,
-        identifier="@mikro/image",
-        nullable=None,
-        dimension=None,
-        descriptors=None,
-        children=None,
+def match(
+    *,
+    at: int | None = None,
+    key: str | None = None,
+    kind: PortKind | None = None,
+    identifier: str | None = "@mikro/image",
+    nullable: bool | None = None,
+    dimension: str | None = None,
+    descriptors: list[DescriptorInputModel] | None = None,
+    children: list[PortMatchInputModel] | None = None,
+) -> PortMatchInputModel:
+    return PortMatchInputModel(
+        at=at,
+        key=key,
+        kind=kind,
+        identifier=identifier,
+        nullable=nullable,
+        dimension=dimension,
+        descriptors=descriptors,
+        children=children,
     )
-    base.update(overrides)
-    return PortMatchInputModel(**base)
 
 
-def demand(*matches):
+def demand(*matches: PortMatchInputModel) -> PortDemand:
     return PortDemand(kind="args", matches=list(matches))
 
 
-def test_descriptors_below_the_scanned_depth_are_rejected_for_shortcuts():
+def test_descriptors_below_the_scanned_depth_are_rejected_for_shortcuts() -> None:
     descriptors = [DescriptorInputModel(key="axes", value="c")]
     nested = match(children=[match(children=[match(descriptors=descriptors)])])
     with pytest.raises(ValueError, match="below the first level"):
         get_port_demand_subquery([demand(nested)], organization_id=1, owner="shortcut")
 
 
-def test_nullable_demand_is_rejected_for_legacy_models():
+def test_nullable_demand_is_rejected_for_legacy_models() -> None:
     with pytest.raises(ValueError, match="nullable"):
         get_port_demand_subquery(
             [demand(match(nullable=False))], organization_id=1, owner="shortcut"
         )
 
 
-def test_state_definition_matching_rejects_descriptors():
+def test_state_definition_matching_rejects_descriptors() -> None:
     descriptors = [DescriptorInputModel(key="axes", value="c")]
     with pytest.raises(ValueError, match="Descriptor matching"):
         build_state_params([match(descriptors=descriptors)])

@@ -10,12 +10,14 @@ passed — the ``FieldError`` only ever surfaced on a real query. Hence: every t
 ``schema.execute`` and asserts ``not result.errors``.
 """
 
-from types import SimpleNamespace
+from collections.abc import Callable
+from dataclasses import dataclass
 
 import pytest
 from asgiref.sync import sync_to_async
+from kante.context import HttpContext
 
-from facade import enums
+from facade import enums, models
 from facade.schema import schema
 from tests.factories import (
     build_task_event,
@@ -49,7 +51,17 @@ TASKS = """
 TASKS_PLAIN = "query { tasks { id implementation { id } } }"
 
 
-async def _seed(prefix):
+@dataclass(frozen=True)
+class Seeded:
+    """An agent, its two-level task tree and its client's id."""
+
+    agent: models.Agent
+    root: models.Task
+    child: models.Task
+    client_id: str
+
+
+async def _seed(prefix: str) -> Seeded:
     """An agent plus a two-level task tree, all owned by the token-"test" identity.
 
     ``seed_agent`` derives (client, user, organization) through the same authentikate expansion
@@ -62,21 +74,21 @@ async def _seed(prefix):
         agent.pk, f"{prefix}-child", parent=root, root=root
     )
     client_id = await sync_to_async(lambda: agent.client.client_id)()
-    return SimpleNamespace(agent=agent, root=root, child=child, client_id=client_id)
+    return Seeded(agent=agent, root=root, child=child, client_id=client_id)
 
 
 # One entry per TaskFilter key. The point is coverage of the ORM path, not the result set:
 # a key naming a column that does not exist raises FieldError right here.
-FILTER_CASES = {
-    "ids": lambda s: {"ids": [str(s.root.id)]},
+FILTER_CASES: dict[str, Callable[[Seeded], dict[str, object]]] = {
+    "ids": lambda s: {"ids": [str(s.root.pk)]},
     "clientId": lambda s: {"clientId": s.client_id},
     "state": lambda s: {"state": ["STARTED", "COMPLETED"]},
     "implementation": lambda s: {"implementation": str(s.root.implementation_id)},
     "action": lambda s: {"action": str(s.root.action_id)},
-    "agent": lambda s: {"agent": str(s.agent.id)},
+    "agent": lambda s: {"agent": str(s.agent.pk)},
     "caller": lambda s: {"caller": str(s.root.caller_id)},
-    "parent": lambda s: {"parent": str(s.root.id)},
-    "root": lambda s: {"root": str(s.root.id)},
+    "parent": lambda s: {"parent": str(s.root.pk)},
+    "root": lambda s: {"root": str(s.root.pk)},
     "rootIsnull": lambda s: {"rootIsnull": True},
     "isDone": lambda s: {"isDone": False},
     "actedOn": lambda s: {"actedOn": ["@mikro/image:1"]},
@@ -99,7 +111,9 @@ ORDERING_CASES = {
 @pytest.mark.asyncio
 class TestTaskFilter:
     @pytest.mark.parametrize("key", sorted(FILTER_CASES))
-    async def test_every_filter_key_executes(self, authenticated_context, key):
+    async def test_every_filter_key_executes(
+        self, authenticated_context: HttpContext, key: str
+    ) -> None:
         # Distinct prefix per case: the factory uses App.objects.create, not get_or_create.
         seeded = await _seed(f"tf-{key.lower()}")
 
@@ -112,7 +126,9 @@ class TestTaskFilter:
         assert not result.errors, result.errors
 
     @pytest.mark.parametrize("key", sorted(ORDERING_CASES))
-    async def test_every_ordering_key_executes(self, authenticated_context, key):
+    async def test_every_ordering_key_executes(
+        self, authenticated_context: HttpContext, key: str
+    ) -> None:
         await _seed(f"to-{key.lower()}")
 
         result = await schema.execute(
@@ -123,7 +139,9 @@ class TestTaskFilter:
 
         assert not result.errors, result.errors
 
-    async def test_filters_actually_narrow(self, authenticated_context):
+    async def test_filters_actually_narrow(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """Sanity anchor: ``ids`` returns exactly the one task, so the pipeline is wired rather
         than merely error-free."""
         seeded = await _seed("tf-narrow")
@@ -131,15 +149,15 @@ class TestTaskFilter:
         result = await schema.execute(
             TASKS,
             context_value=authenticated_context,
-            variable_values={"filters": {"ids": [str(seeded.root.id)]}, "ordering": []},
+            variable_values={"filters": {"ids": [str(seeded.root.pk)]}, "ordering": []},
         )
 
         assert not result.errors, result.errors
-        assert [t["id"] for t in result.data["tasks"]] == [str(seeded.root.id)]
+        assert [t["id"] for t in result.data["tasks"]] == [str(seeded.root.pk)]
 
     async def test_root_isnull_separates_roots_from_children(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         seeded = await _seed("tf-rootnull")
 
         result = await schema.execute(
@@ -150,10 +168,12 @@ class TestTaskFilter:
 
         assert not result.errors, result.errors
         ids = [t["id"] for t in result.data["tasks"]]
-        assert str(seeded.root.id) in ids
-        assert str(seeded.child.id) not in ids
+        assert str(seeded.root.pk) in ids
+        assert str(seeded.child.pk) not in ids
 
-    async def test_nested_event_filter_executes(self, authenticated_context):
+    async def test_nested_event_filter_executes(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """``Task.events`` is a real strawberry_django field, so it exposes ``TaskEventFilter``
         as a nested argument — unlike ``Task.instructs``, which is a hand-written resolver and
         generates no ``filters`` arg. Both keys of the reachable filter are executed here."""
@@ -174,7 +194,9 @@ class TestTaskFilter:
         kinds = [e["kind"] for t in result.data["tasks"] for e in t["events"]]
         assert kinds and set(kinds) == {"COMPLETED"}
 
-    async def test_unimplemented_task_is_returned(self, authenticated_context):
+    async def test_unimplemented_task_is_returned(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """Regression: a QUEUED/BOUND task has ``implementation = NULL``.
 
         The old prescope joined ``implementation__action__organization``; because that FK is
@@ -189,5 +211,5 @@ class TestTaskFilter:
 
         assert not result.errors, result.errors
         returned = {t["id"]: t for t in result.data["tasks"]}
-        assert str(orphan.id) in returned
-        assert returned[str(orphan.id)]["implementation"] is None
+        assert str(orphan.pk) in returned
+        assert returned[str(orphan.pk)]["implementation"] is None

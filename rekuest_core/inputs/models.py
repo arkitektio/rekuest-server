@@ -9,7 +9,7 @@ from typing import (
     ClassVar,
     Literal,
     Optional,
-    Self,
+    TypeAlias,
 )
 
 from pydantic import (
@@ -428,7 +428,7 @@ class EffectInputModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def check_call_is_pure(self) -> Self:
+    def check_call_is_pure(self) -> "EffectInputModel":
         """Reject impure calls and value_paths outside the declared dependencies."""
         _check_pure_call(
             self.call,
@@ -438,7 +438,7 @@ class EffectInputModel(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def check_kind_fields(self) -> Self:
+    def check_kind_fields(self) -> "EffectInputModel":
         """A MESSAGE effect needs its message; `fade` only means something on HIDE."""
         if self.kind == enums.EffectKind.MESSAGE and not self.message:
             raise ValueError("MESSAGE effect requires a message")
@@ -489,7 +489,7 @@ class ValidatorInputModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def check_call_is_pure(self) -> Self:
+    def check_call_is_pure(self) -> "ValidatorInputModel":
         """Reject impure calls and value_paths outside the declared dependencies."""
         _check_pure_call(
             self.call,
@@ -513,7 +513,7 @@ class StateAccessorInputModel(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_one_of(self) -> Self:
+    def check_one_of(self) -> "StateAccessorInputModel":
         """A pointer is either static or computed, not both."""
         if self.path is not None and self.call is not None:
             raise ValueError("StateAccessor: set either path or call, not both")
@@ -594,7 +594,7 @@ def _check_widget_tree(
         _check_widget_tree(node.children, in_scope, owner)
 
 
-def _as_plain(value: Any) -> Any:
+def _as_plain(value: object) -> object:
     """A discriminated-union field accepts dicts (matched on `kind`) or its own member instances.
 
     Strawberry hands us member model instances (via the merged input's ``to_pydantic``), config
@@ -633,7 +633,7 @@ class SliderAssignWidgetInputModel(_AssignWidgetBase):
     )
 
     @model_validator(mode="after")
-    def check_range(self) -> Self:
+    def check_range(self) -> "SliderAssignWidgetInputModel":
         """A slider's range must be non-empty and its step positive."""
         if self.min is not None and self.max is not None and self.min >= self.max:
             raise ValueError(
@@ -688,7 +688,7 @@ class SearchAssignWidgetInputModel(_AssignWidgetBase):
     placeholder: str | None = Field(default=None, description="The placeholder text.")
 
     @model_validator(mode="after")
-    def check_query(self) -> Self:
+    def check_query(self) -> "SearchAssignWidgetInputModel":
         """The query parses, is one `query` operation, and declares the variables the widget will pass."""
         from graphql import OperationType, parse
         from graphql.error import GraphQLSyntaxError
@@ -766,11 +766,11 @@ class CustomAssignWidgetInputModel(_AssignWidgetBase):
 
     @field_validator("fallback", mode="before")
     @classmethod
-    def _plain_fallback(cls, value: Any) -> Any:
+    def _plain_fallback(cls, value: object) -> object:
         return _as_plain(value)
 
     @model_validator(mode="after")
-    def check_props(self) -> Self:
+    def check_props(self) -> "CustomAssignWidgetInputModel":
         """Props are pure and only reference declared ports."""
         _check_widget_props(self.props, self.dependencies, "CustomAssignWidget")
         declared = [
@@ -818,7 +818,7 @@ class BlokAssignWidgetInputModel(_AssignWidgetBase):
 
     @field_validator("fallback", mode="before")
     @classmethod
-    def _plain_fallback(cls, value: Any) -> Any:
+    def _plain_fallback(cls, value: object) -> object:
         return _as_plain(value)
 
 
@@ -848,7 +848,7 @@ class StateChoiceAssignWidgetInputModel(_AssignWidgetBase):
     )
 
     @model_validator(mode="after")
-    def check_pointer(self) -> Self:
+    def check_pointer(self) -> "StateChoiceAssignWidgetInputModel":
         """Exactly one pointer source, and every call is pure."""
         if (self.state_path is None) == (self.state_call is None):
             raise ValueError(
@@ -941,7 +941,7 @@ class CustomReturnWidgetInputModel(_ReturnWidgetBase):
     )
 
     @model_validator(mode="after")
-    def check_props(self) -> Self:
+    def check_props(self) -> "CustomReturnWidgetInputModel":
         """Props are pure and only reference the returned value."""
         _check_widget_props(self.props, None, "CustomReturnWidget")
         return self
@@ -959,11 +959,21 @@ RETURN_WIDGET_INPUT_MODELS: dict[str, type[_ReturnWidgetBase]] = {
 }
 
 
-def iter_widget_chain(widget: Any) -> Iterator[Any]:
-    """A widget followed by its fallback chain."""
+WidgetInputModel: TypeAlias = AssignWidgetInputModel | ReturnWidgetInputModel
+"""An assign or a return widget, of any kind."""
+
+
+def iter_widget_chain(widget: WidgetInputModel | None) -> Iterator[WidgetInputModel]:
+    """A widget followed by its fallback chain (only CUSTOM and BLOK widgets have one)."""
     while widget is not None:
         yield widget
-        widget = getattr(widget, "fallback", None)
+        widget = (
+            widget.fallback
+            if isinstance(
+                widget, (CustomAssignWidgetInputModel, BlokAssignWidgetInputModel)
+            )
+            else None
+        )
 
 
 # Which port kinds each assign widget kind can edit. Absent kinds fit any port.
@@ -978,7 +988,7 @@ _WIDGET_PORT_KINDS: dict[str, set[enums.PortKind]] = {
 }
 
 
-def _check_widget_fits_port(widget: Any, port: "PortInputModel") -> None:
+def _check_widget_fits_port(widget: WidgetInputModel, port: "PortInputModel") -> None:
     """A widget only makes sense on ports whose kind it can edit; choices and defaults must agree."""
     fits = _WIDGET_PORT_KINDS.get(widget.kind)
     if fits is not None and port.kind not in fits:
@@ -1066,7 +1076,7 @@ class RequiresInputModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def check_operator_value(self) -> Self:
+    def check_operator_value(self) -> "RequiresInputModel":
         """Operator and value agree."""
         _check_descriptor(self, "requires")
         return self
@@ -1088,7 +1098,7 @@ class ProvidesInputModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def check_operator_value(self) -> Self:
+    def check_operator_value(self) -> "ProvidesInputModel":
         """Operator and value agree."""
         _check_descriptor(self, "provides")
         return self
@@ -1112,7 +1122,7 @@ class OptimisticInputModel(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_one_of(self) -> Self:
+    def check_one_of(self) -> "OptimisticInputModel":
         """The pointer is either static or computed, and a computed one only sees the args."""
         if (self.path is None) == (self.path_call is None):
             raise ValueError("Optimistic needs exactly one of path or path_call")
@@ -1250,7 +1260,7 @@ class PortInputModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def check_kind_specific_fields(self) -> Self:
+    def check_kind_specific_fields(self) -> "PortInputModel":
         """Key, per-kind structure (children, identifier, choices) and the QUANTITY unit rules."""
         _check_port_key(self.key, "Port")
         _check_port_shape(self)
@@ -1313,11 +1323,11 @@ class ArgPortInputModel(PortInputModel):
 
     @field_validator("widget", mode="before")
     @classmethod
-    def _plain_widget(cls, value: Any) -> Any:
+    def _plain_widget(cls, value: object) -> object:
         return _as_plain(value)
 
     @model_validator(mode="after")
-    def check_widget_and_default(self) -> Self:
+    def check_widget_and_default(self) -> "ArgPortInputModel":
         """The widget (and its fallbacks) fit the port's kind; a default fits the kind and the choices."""
         if self.default is not None:
             mismatch = value_mismatch(self, self.default)
@@ -1345,11 +1355,11 @@ class ReturnPortInputModel(PortInputModel):
 
     @field_validator("widget", mode="before")
     @classmethod
-    def _plain_widget(cls, value: Any) -> Any:
+    def _plain_widget(cls, value: object) -> object:
         return _as_plain(value)
 
     @model_validator(mode="after")
-    def check_widget_and_choices(self) -> Self:
+    def check_widget_and_choices(self) -> "ReturnPortInputModel":
         """A CHOICE return widget displays the port's choices, so the port must declare them."""
         if (
             self.widget is not None
@@ -1630,7 +1640,7 @@ class TestTargetInputModel(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_target(self) -> Self:
+    def check_target(self) -> "TestTargetInputModel":
         if not self.hash and not self.key:
             raise ValueError("A test target must provide either a hash or a key")
         return self
@@ -1716,7 +1726,7 @@ class DefinitionInputModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def check_bloks(self) -> Self:
+    def check_bloks(self) -> "DefinitionInputModel":
         """An action has one blok per context and phase: the one a client picks for where it shows the run, or its start."""
         slots = [(blok.phase, blok.context) for blok in self.bloks]
         twice = next((slot for slot in slots if slots.count(slot) > 1), None)
@@ -1728,7 +1738,7 @@ class DefinitionInputModel(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def check_protocols(self) -> Self:
+    def check_protocols(self) -> "DefinitionInputModel":
         """A protocol hint is a name to filter on: one word, said once."""
         for protocol in self.protocols:
             # `Protocol.name` is a CharField(max_length=1000).
@@ -1754,7 +1764,7 @@ class DefinitionInputModel(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def check_keys(self) -> Self:
+    def check_keys(self) -> "DefinitionInputModel":
         """Root arg keys and root return keys are unique, and the two sets do not overlap."""
         _check_unique(self.args, "key", f"Definition {self.key} args")
         _check_unique(self.returns, "key", f"Definition {self.key} returns")
@@ -1768,7 +1778,7 @@ class DefinitionInputModel(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def check_port_groups(self) -> Self:
+    def check_port_groups(self) -> "DefinitionInputModel":
         """Group keys are unique, every member is a root arg, and no port sits in two groups."""
         _check_unique(self.port_groups, "key", f"Definition {self.key} port_groups")
         arg_keys = {port.key for port in self.args}
@@ -1787,7 +1797,7 @@ class DefinitionInputModel(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def check_dependencies(self) -> Self:
+    def check_dependencies(self) -> "DefinitionInputModel":
         """Every dependency of every validator, effect and widget (args, returns, nested children, port groups) is a resolvable port path."""
         roots: list[PortInputModel] = [*self.args, *self.returns]
 
@@ -1961,7 +1971,7 @@ class ImplementationInputModel(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_formulas(self) -> Self:
+    def check_formulas(self) -> "ImplementationInputModel":
         estimate = self.estimated_runtime
         if estimate is not None:
             _check_estimated_runtime(
@@ -1994,7 +2004,7 @@ class ImplementationInputModel(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def check_declared_interactions(self) -> Self:
+    def check_declared_interactions(self) -> "ImplementationInputModel":
         """Each ask and inform keyed once, across both; only a workflow calls actions it found at run time."""
         keys = [ask.key for ask in self.asks or []] + [
             inform.key for inform in self.informs or []
@@ -2011,7 +2021,7 @@ class ImplementationInputModel(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def check_widget_targets(self) -> Self:
+    def check_widget_targets(self) -> "ImplementationInputModel":
         """PROXY and STATE_CHOICE widgets may only name agent dependencies this implementation declares."""
         dependencies = {dependency.key: dependency for dependency in self.dependencies}
 
@@ -2047,7 +2057,7 @@ class ImplementationInputModel(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def check_action_bloks(self) -> Self:
+    def check_action_bloks(self) -> "ImplementationInputModel":
         """The action's bloks name devices by its dependency keys: the ones this implementation declares."""
         arg_keys = [port.key for port in self.definition.args]
         for blok in self.definition.bloks:
@@ -2197,7 +2207,7 @@ class AgentProbeInputModel(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_argument_keys(self) -> Self:
+    def check_argument_keys(self) -> "AgentProbeInputModel":
         """Call arguments are a map: every entry needs a unique key."""
         _check_keyed(self.arguments, f"arguments of agent call {self.operation}")
         return self
@@ -2224,7 +2234,7 @@ class UtilCallInputModel(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_argument_keys(self) -> Self:
+    def check_argument_keys(self) -> "UtilCallInputModel":
         """Call arguments are a map: every entry needs a unique key."""
         _check_keyed(self.arguments, f"arguments of {self.operation}")
         return self
@@ -2274,7 +2284,7 @@ class ActionArgumentInputModel(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_at_most_one_binding(self) -> Self:
+    def check_at_most_one_binding(self) -> "ActionArgumentInputModel":
         """An argument is bound at most one way (none: null); list entries are unkeyed, dict entries uniquely keyed."""
         bound = [name for name in self.BINDINGS if getattr(self, name) is not None]
         if len(bound) > 1:
@@ -2332,7 +2342,7 @@ class ComponentPropInputModel(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_at_most_one_binding(self) -> Self:
+    def check_at_most_one_binding(self) -> "ComponentPropInputModel":
         """A prop is bound at most one way; one bound no way is null."""
         bound = [name for name in self.BINDINGS if getattr(self, name) is not None]
         if len(bound) > 1:
@@ -2453,7 +2463,7 @@ class BlokLocalInputModel(BaseModel):
         return _as_plain(value)
 
     @model_validator(mode="after")
-    def check_port(self) -> Self:
+    def check_port(self) -> "BlokLocalInputModel":
         """A typed local is held to the arg port rules (its default is the checker's,
         ``local.default``); an ``ANY`` or left-out one only to its key."""
         _check_port_key(self.key, "Local")
@@ -2811,7 +2821,7 @@ class BlokImplementationInputModel(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_manifest(self) -> Self:
+    def check_manifest(self) -> "BlokImplementationInputModel":
         """Sent one way; its declarations well-formed; its tree (when sent as one) coherent with them.
 
         A blok sent as its source is checked once takt has parsed it, at registration."""
@@ -2951,7 +2961,7 @@ class ActionBlokInputModel(BaseModel):
         return "assign" if self.phase == enums.ActionBlokPhase.ASSIGN else "action"
 
     @model_validator(mode="after")
-    def check_action_blok(self) -> Self:
+    def check_action_blok(self) -> "ActionBlokInputModel":
         """Sent one way, in a context an action has a blok for."""
         check_blok_sent_once(self.components, self.source, required=True)
         if self.context not in ACTION_BLOK_CONTEXTS:
@@ -3018,7 +3028,7 @@ class AskBlokInputModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def check_ask_blok(self) -> Self:
+    def check_ask_blok(self) -> "AskBlokInputModel":
         """Sent one way; its declarations a task blok's; its args and returns each keyed once."""
         check_blok_sent_once(self.components, self.source, required=True)
         check_blok_declarations(
@@ -3091,7 +3101,7 @@ class InformBlokInputModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def check_inform_blok(self) -> Self:
+    def check_inform_blok(self) -> "InformBlokInputModel":
         """Sent one way; its declarations a task blok's; its args each keyed once."""
         check_blok_sent_once(self.components, self.source, required=True)
         check_blok_declarations(
@@ -3129,11 +3139,11 @@ class WidgetDefaultInputModel(BaseModel):
 
     @field_validator("widget", "return_widget", mode="before")
     @classmethod
-    def _plain_widgets(cls, value: Any) -> Any:
+    def _plain_widgets(cls, value: object) -> object:
         return _as_plain(value)
 
     @model_validator(mode="after")
-    def check_selector_and_widget(self) -> Self:
+    def check_selector_and_widget(self) -> "WidgetDefaultInputModel":
         """A default needs something to match on and something to render."""
         if self.kind is None and self.identifier is None:
             raise ValueError(
@@ -3242,7 +3252,7 @@ class CatalogComponentInputModel(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_unique_props(self) -> Self:
+    def check_unique_props(self) -> "CatalogComponentInputModel":
         """Prop keys are unique per component."""
         _check_unique(self.props, "key", f"catalog component {self.name}")
         return self
@@ -3276,7 +3286,7 @@ class CatalogOperationInputModel(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_unique_arguments(self) -> Self:
+    def check_unique_arguments(self) -> "CatalogOperationInputModel":
         """Argument keys are unique per operation."""
         _check_unique(self.arguments, "key", f"catalog operation {self.name}")
         return self

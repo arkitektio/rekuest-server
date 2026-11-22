@@ -60,7 +60,9 @@ def check_agent_mappings(
                 id=agent_id, organization=organization
             )
         except models.Agent.DoesNotExist:
-            raise PermissionError(f"No Agent {agent_id} in this organization.")
+            raise PermissionError(
+                f"No Agent {agent_id} in this organization."
+            ) from None
 
         if dep.app and agent.app.identifier != dep.app:
             raise ValueError(
@@ -214,7 +216,7 @@ def pin_materialized_blok_revision(
         except models.BlokRevision.DoesNotExist:
             raise ValueError(
                 f"Blok '{mblok.blok.name}' has no revision {input.revision}."
-            )
+            ) from None
     mblok.save(update_fields=["pinned_revision", "updated_at"])
     return cast("types.MaterializedBlok", mblok)
 

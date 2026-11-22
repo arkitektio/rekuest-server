@@ -36,6 +36,6 @@ def revoke_allowance(info: Info, input: inputs.RevokeAllowanceInput) -> strawber
             id=data.id, user=request.user, organization=request.organization
         )
     except models.ActionAllowance.DoesNotExist:
-        raise PermissionError(f"No allowance {data.id} on your auto list.")
+        raise PermissionError(f"No allowance {data.id} on your auto list.") from None
     allowance.delete()
     return strawberry.ID(data.id)

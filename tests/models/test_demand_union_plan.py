@@ -13,9 +13,10 @@ OR'd union against a hand-written ``UNION`` of the two demand statements.
 import json
 import os
 import statistics
-from types import SimpleNamespace
+from dataclasses import dataclass
 
 import pytest
+from authentikate.models import Organization
 from django.db import connection
 from django.db.models import Q, QuerySet
 from django.db.models.expressions import RawSQL
@@ -31,7 +32,16 @@ from tests.factories import create_action_for_organization, create_registry_bund
 TYPED = 20
 
 
-def _catalog(others: int) -> SimpleNamespace:
+@dataclass(frozen=True)
+class Catalog:
+    """The organization, and the ids of the actions typed on an image and on an annotation."""
+
+    org: Organization
+    images: set[int]
+    annotations: set[int]
+
+
+def _catalog(others: int) -> Catalog:
     """One organization: ``others`` actions on a table structure, ``TYPED`` each on an image and an annotation."""
     _, _, org, _ = create_registry_bundle(f"union{others}")
     template = create_action_for_organization(
@@ -92,10 +102,10 @@ def _catalog(others: int) -> SimpleNamespace:
     with connection.cursor() as cursor:
         cursor.execute("ANALYZE facade_action")
         cursor.execute("ANALYZE facade_argport")
-    return SimpleNamespace(
+    return Catalog(
         org=org,
-        images={action.id for action in images},
-        annotations={action.id for action in annotations},
+        images={action.pk for action in images},
+        annotations={action.pk for action in annotations},
     )
 
 
@@ -103,18 +113,18 @@ def _takes(identifier: str) -> PortDemand:
     return PortDemand(kind="args", matches=[PortMatchInputModel(identifier=identifier)])
 
 
-def _subquery(catalog: SimpleNamespace, demand: PortDemand) -> RawSQL:
-    return managers.get_port_demand_subquery([demand], organization_id=catalog.org.id)
+def _subquery(catalog: Catalog, demand: PortDemand) -> RawSQL:
+    return managers.get_port_demand_subquery([demand], organization_id=catalog.org.pk)
 
 
-def _union(catalog: SimpleNamespace, *demands: PortDemand) -> RawSQL:
+def _union(catalog: Catalog, *demands: PortDemand) -> RawSQL:
     """``anyDemands``: one statement, the ``UNION`` of the demand statements."""
     return managers.get_any_port_demand_subquery(
-        [[demand] for demand in demands], organization_id=catalog.org.id
+        [[demand] for demand in demands], organization_id=catalog.org.pk
     )
 
 
-def _actions(catalog: SimpleNamespace) -> QuerySet[models.Action]:
+def _actions(catalog: Catalog) -> QuerySet[models.Action]:
     return models.Action.objects.filter(organization=catalog.org)
 
 
@@ -142,11 +152,11 @@ def _milliseconds(queryset: QuerySet[models.Action], runs: int = 7) -> float:
 
 
 @pytest.fixture
-def catalog(db: None) -> SimpleNamespace:
+def catalog(db: None) -> Catalog:
     return _catalog(3000)
 
 
-def test_or_of_demands_is_the_union(catalog: SimpleNamespace) -> None:
+def test_or_of_demands_is_the_union(catalog: Catalog) -> None:
     image, annotation = _takes("@mikro/image"), _takes("@mikro/annotation")
     either = _actions(catalog).filter(
         Q(id__in=_subquery(catalog, image)) | Q(id__in=_subquery(catalog, annotation))
@@ -162,7 +172,7 @@ def test_or_of_demands_is_the_union(catalog: SimpleNamespace) -> None:
 
 
 def test_each_side_of_the_or_starts_from_its_identifier(
-    catalog: SimpleNamespace,
+    catalog: Catalog,
 ) -> None:
     image, annotation = _takes("@mikro/image"), _takes("@mikro/annotation")
     plan = _plan(
@@ -177,7 +187,7 @@ def test_each_side_of_the_or_starts_from_its_identifier(
 
 
 def test_any_demands_reaches_the_actions_from_the_port_rows(
-    catalog: SimpleNamespace,
+    catalog: Catalog,
 ) -> None:
     """The union is joined to the actions, not probed by a scan of all of them."""
     plan = _plan(

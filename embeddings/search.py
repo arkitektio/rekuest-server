@@ -4,13 +4,28 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Any
+from collections.abc import Iterable
+from typing import TypeVar
 
 from django.contrib.postgres.search import TrigramSimilarity
-from django.db.models import Case, F, FloatField, IntegerField, Q, QuerySet, Value, When
+from django.db.models import (
+    Case,
+    Expression,
+    F,
+    FloatField,
+    IntegerField,
+    Model,
+    OrderBy,
+    Q,
+    QuerySet,
+    Value,
+    When,
+)
 from pgvector.django import CosineDistance
 
 from embeddings import engine
+
+_M = TypeVar("_M", bound=Model)
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +44,8 @@ def query_vector(value: str) -> list[float] | None:
 
 
 def hybrid_search(
-    queryset: QuerySet[Any], prefix: str, value: str, lexical: Q, name: str
-) -> tuple[QuerySet[Any], Q]:
+    queryset: QuerySet[_M], prefix: str, value: str, lexical: Q, name: str
+) -> tuple[QuerySet[_M], Q]:
     """``lexical`` OR (embedded AND cosine distance below the threshold), ranked on ``name``.
 
     Four tiers: ``name`` is the text, ``name`` starts with it, any other ``lexical`` hit,
@@ -59,7 +74,7 @@ def hybrid_search(
         f"_search_distance_{digest}",
     )
     if rank not in queryset.query.annotations:
-        annotations: dict[str, Any] = {
+        annotations: dict[str, Expression] = {
             rank: Case(
                 When(**{f"{name}__iexact": needle}, then=Value(0)),
                 When(**{f"{name}__istartswith": needle}, then=Value(1)),
@@ -77,7 +92,7 @@ def hybrid_search(
         if vector is not None:
             annotations[distance] = CosineDistance("embedding", vector)
         queryset = queryset.annotate(**annotations)
-    order: list[Any] = [rank, F(similarity).desc(nulls_last=True)]
+    order: list[str | OrderBy] = [rank, F(similarity).desc(nulls_last=True)]
     if vector is not None:
         order.append(F(distance).asc(nulls_last=True))
     queryset = queryset.order_by(*order, "pk")
@@ -97,12 +112,12 @@ DEFAULT_NEIGHBOURS = 10
 
 
 def neighbourhood(
-    queryset: QuerySet[Any],
-    vector: Any,
+    queryset: QuerySet[_M],
+    vector: Iterable[float] | None,
     *,
-    exclude_pk: Any = None,
+    exclude_pk: int | str | None = None,
     threshold: float | None = None,
-) -> tuple[QuerySet[Any], Q]:
+) -> tuple[QuerySet[_M], Q]:
     """``queryset`` ordered by distance to ``vector``, with the predicate that selects it.
 
     The other half of the semantic story: :func:`hybrid_search` answers "what matches this
@@ -138,13 +153,13 @@ def neighbourhood(
 
 
 def neighbours(
-    queryset: QuerySet[Any],
-    vector: Any,
+    queryset: QuerySet[_M],
+    vector: Iterable[float] | None,
     *,
-    exclude_pk: Any = None,
+    exclude_pk: int | str | None = None,
     limit: int = DEFAULT_NEIGHBOURS,
     threshold: float | None = None,
-) -> QuerySet[Any]:
+) -> QuerySet[_M]:
     """The ``limit`` rows of ``queryset`` nearest to ``vector``, nearest first."""
     queryset, predicate = neighbourhood(
         queryset, vector, exclude_pk=exclude_pk, threshold=threshold

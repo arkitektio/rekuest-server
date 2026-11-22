@@ -5,6 +5,7 @@ fields as epoch seconds (and leaves their meaningless ``sum`` null).
 """
 
 import pytest
+from kante.context import HttpContext
 
 from facade.schema import schema
 from tests.factories import build_task_for_agent_caller, seed_agent
@@ -35,8 +36,8 @@ STATS = """
 @pytest.mark.asyncio
 class TestStats:
     async def test_task_stats_aggregate_timestamps_as_epoch(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         agent = await seed_agent("stats", token="test")
         first = await build_task_for_agent_caller(agent.pk, "stats-first")
         second = await build_task_for_agent_caller(agent.pk, "stats-second")
@@ -59,7 +60,9 @@ class TestStats:
         assert sum(bucket["count"] for bucket in stats["series"]) == stats["count"]
         assert all(bucket["sum"] is None for bucket in stats["series"])
 
-    async def test_action_stats_resolve(self, authenticated_context):
+    async def test_action_stats_resolve(
+        self, authenticated_context: HttpContext
+    ) -> None:
         # Action has no created_at column; CREATED_AT maps onto defined_at.
         await seed_agent("stats-action", token="test")
 

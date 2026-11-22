@@ -8,15 +8,15 @@ an inform SHOWN. They are never listed.
 import pytest
 
 from facade import enums
-from facade.models import Blok, MaterializedBlok, Module, TaskEvent
+from facade.models import Blok, MaterializedBlok, Module, Task, TaskEvent
 from facade.types.task import task_bloks
 from tests.factories import _build_task
 
 
-def _shown(task, role: str) -> MaterializedBlok:
+def _shown(task: Task, role: str) -> MaterializedBlok:
     organization = task.agent.organization
     blok = Blok.objects.create(
-        name=f"task-{task.id}-{role}",
+        name=f"task-{task.pk}-{role}",
         organization=organization,
         creator=task.agent.user,
         module=Module.objects.get_or_create(
@@ -42,7 +42,7 @@ def _shown(task, role: str) -> MaterializedBlok:
     )
 
 
-def _event(task, kind: str, value: dict, message: str | None = None) -> None:
+def _event(task: Task, kind: str, value: dict, message: str | None = None) -> None:
     TaskEvent.objects.create(task=task, kind=kind, value=value, message=message)
 
 
@@ -50,9 +50,9 @@ def _event(task, kind: str, value: dict, message: str | None = None) -> None:
 def test_an_ask_waits_then_is_answered_and_an_inform_is_shown() -> None:
     task = _build_task("ask")
     ask = _shown(task, "ASK")
-    _event(task, "HELD", {"kind": "self", "blok": str(ask.id)}, "Which one?")
+    _event(task, "HELD", {"kind": "self", "blok": str(ask.pk)}, "Which one?")
     inform = _shown(task, "INFORM")
-    _event(task, "INFORM", {"blok": str(inform.id)}, "Halfway")
+    _event(task, "INFORM", {"blok": str(inform.pk)}, "Halfway")
 
     waiting, shown = task_bloks(task)
     assert (waiting.role, waiting.status, waiting.message) == (
@@ -80,13 +80,13 @@ def test_an_ask_waits_then_is_answered_and_an_inform_is_shown() -> None:
 def test_an_ask_dismissed_or_left_by_its_task() -> None:
     dismissed = _build_task("dismissed")
     ask = _shown(dismissed, "ASK")
-    _event(dismissed, "HELD", {"kind": "self", "blok": str(ask.id)})
+    _event(dismissed, "HELD", {"kind": "self", "blok": str(ask.pk)})
     _event(dismissed, "DECIDED", {"approved": False, "user": "someone"})
     assert task_bloks(dismissed)[0].status == enums.TaskBlokStatus.DISMISSED
 
     left = _build_task("left")
     ask = _shown(left, "ASK")
-    _event(left, "HELD", {"kind": "self", "blok": str(ask.id)})
+    _event(left, "HELD", {"kind": "self", "blok": str(ask.pk)})
     left.is_done = True
     left.save()
     assert task_bloks(left)[0].status == enums.TaskBlokStatus.GONE

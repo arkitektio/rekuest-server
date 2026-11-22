@@ -1,6 +1,6 @@
 """Inputs for bloks and materialized bloks."""
 
-from typing import Literal, Self
+from typing import Literal
 
 import strawberry
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -110,7 +110,7 @@ class CreateBlokInputModel(BaseModel):
         return renums.ComponentContext.PANEL if context is None else context
 
     @model_validator(mode="after")
-    def check_manifest(self) -> Self:
+    def check_manifest(self) -> "CreateBlokInputModel":
         """Sent one way; what it declares well-formed. The tree is checked against it (and the
         module) once ``createBlok`` has it, parsed by takt when sent as source."""
         rimodels.check_blok_sent_once(self.components, self.source, required=False)
@@ -170,7 +170,7 @@ class UpdateBlokInputModel(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_sent_once(self) -> Self:
+    def check_sent_once(self) -> "UpdateBlokInputModel":
         """A new tree comes as components or as source, not both."""
         rimodels.check_blok_sent_once(self.components, self.source, required=False)
         return self
@@ -318,7 +318,7 @@ class EditBlokInputModel(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_sent_once(self) -> Self:
+    def check_sent_once(self) -> "EditBlokInputModel":
         rimodels.check_blok_sent_once(self.components, self.source, required=False)
         if (self.blok is None) == (self.materialized_blok is None):
             raise ValueError(

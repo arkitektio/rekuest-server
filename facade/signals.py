@@ -1,4 +1,5 @@
 import logging
+from typing import TypeVar
 
 from authentikate.models import Organization
 from django.db import transaction
@@ -9,10 +10,12 @@ from pydantic import BaseModel
 
 from facade import channel_events, channels, models
 
+Event = TypeVar("Event", bound=BaseModel)
+
 logger = logging.getLogger(__name__)
 
 
-def _broadcast_on_commit[Event: BaseModel](
+def _broadcast_on_commit(
     channel: Channel[Event], event: Event, topics: list[str] | None = None
 ) -> None:
     """Fan an event out only once the surrounding transaction commits.

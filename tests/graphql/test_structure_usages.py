@@ -26,7 +26,7 @@ USAGES_QUERY = """
 """
 
 
-def _masker_input():
+def _masker_input() -> ImplementationInputModel:
     return ImplementationInputModel.model_validate(
         {
             "interface": "masker",
@@ -62,7 +62,7 @@ def _masker_input():
     )
 
 
-def _seed_masker(context):
+def _seed_masker(context: HttpContext) -> models.Action:
     request = context.request
     app = App.objects.create(identifier="usages-app")
     release = Release.objects.create(app=app, version="1.0.0")
@@ -81,7 +81,7 @@ def _seed_masker(context):
 @pytest.mark.asyncio
 async def test_structure_usages_resolved_from_port_rows(
     authenticated_context: HttpContext,
-):
+) -> None:
     # Warm-up execute so the seed lands in the org the executed query scopes to.
     await schema.execute("query { __typename }", context_value=authenticated_context)
     await sync_to_async(_seed_masker)(authenticated_context)
@@ -123,7 +123,7 @@ HOSTED_QUERY = """
 """
 
 
-def _seed_hosted():
+def _seed_hosted() -> None:
     """A service hosting a structure that no action port references — and no agent anywhere."""
     service = models.Service.objects.create(name="lab", description="The bench.")
     sample = models.StructureDeclaration.objects.create(

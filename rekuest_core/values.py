@@ -6,32 +6,50 @@ of the choices, STRUCTURE/MEMORY_STRUCTURE/INTERFACE a ``{"__identifier", "objec
 ``{"value": number, "unit": str}`` object, UNION anything one of its variants accepts.
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import date, datetime
-from typing import Any, Protocol
+from enum import Enum
+from typing import Protocol
+
+
+class ChoiceLike(Protocol):
+    """A port's choice: what an ENUM value is compared with."""
+
+    @property
+    def value(self) -> object: ...
 
 
 class PortLike(Protocol):
     """The subset of a port both the input and the output models expose."""
 
-    key: str
-    kind: Any
-    nullable: bool
-    children: Any
-    choices: Any
+    @property
+    def key(self) -> str: ...
+
+    @property
+    def kind(self) -> object: ...
+
+    @property
+    def nullable(self) -> bool: ...
+
+    @property
+    def children(self) -> Sequence["PortLike"] | None: ...
+
+    @property
+    def choices(self) -> Sequence[ChoiceLike] | None: ...
 
 
-def _kind_name(kind: Any) -> str:
-    return kind.value if hasattr(kind, "value") else str(kind)
+def _kind_name(kind: object) -> str:
+    """The kind's name, from the enum member or its raw string value."""
+    return str(kind.value) if isinstance(kind, Enum) else str(kind)
 
 
-def _is_number(value: Any) -> bool:
+def _is_number(value: object) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def value_mismatch(
     port: PortLike,
-    value: Any,
+    value: object,
     path: str | None = None,
     *,
     reference_envelope: bool = False,
@@ -181,7 +199,9 @@ def value_mismatch(
     return None
 
 
-def validate_assignment_args(ports: Iterable[PortLike], args: dict[str, Any]) -> None:
+def validate_assignment_args(
+    ports: Iterable[PortLike], args: Mapping[str, object]
+) -> None:
     """Assignment arguments against the action's root arg ports.
 
     Unknown keys are rejected; a non-nullable port without a default must be present and

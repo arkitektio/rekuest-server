@@ -5,16 +5,18 @@ strawberry-django combines a custom filter's returned ``Q`` with ``OR``/``NOT``,
 has to be the union of what each demand finds, and ``{NOT: {demands: A}}`` the complement.
 """
 
+from collections.abc import Mapping
 from types import SimpleNamespace
 
 import pytest
 from asgiref.sync import sync_to_async
-from authentikate.models import App, Client, Release
+from authentikate.models import App, Client, Release, User
 from kante.context import HttpContext
 
 from facade import models
 from facade.schema import schema
 from rekuest_core.inputs.models import ImplementationInputModel
+from tests.graphql.test_cross_tenant_isolation import organization_of
 from tests.models.test_action_matching import make_action
 from tests.registered import create_blok, create_implementation
 
@@ -73,10 +75,11 @@ IMPLEMENTATIONS = """
 def _catalog(context: HttpContext) -> SimpleNamespace:
     """Three of everything in the caller's organization: one taking an image (with ``axes == "c"``), one a table, one both."""
     org, user, client = (
-        context.request.organization,
+        organization_of(context),
         context.request.user,
         context.request.client,
     )
+    assert isinstance(user, User)
     shapes = {"image": [STRICT_IMAGE], "table": [TABLE], "both": [IMAGE, TABLE]}
 
     for name, args in shapes.items():
@@ -131,7 +134,7 @@ async def _names(
     context: HttpContext,
     query: str,
     field: str,
-    filters: dict[str, object],
+    filters: Mapping[str, object],
     key: str = "name",
 ) -> set[str]:
     result = await schema.execute(

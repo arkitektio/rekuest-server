@@ -10,6 +10,8 @@ can be imported from migrations and unit tests without pulling in the mutation l
 """
 
 import json
+from collections.abc import Sequence
+from typing import Protocol
 
 from rekuest_core.enums import RequiresOperator
 
@@ -19,6 +21,20 @@ from rekuest_core.enums import RequiresOperator
 # literal via ``json.dumps`` — JSON string escaping is a subset of jsonpath string-literal escaping,
 # so any character (``@``, ``/``, ``.``, quotes, backslashes) is safe. Values are always rendered
 # via json.dumps as well.
+
+
+class DescriptorLike(Protocol):
+    """What a requires/provides descriptor exposes: a key, an operator (the enum member or its
+    raw string value) and a value."""
+
+    @property
+    def key(self) -> str: ...
+
+    @property
+    def operator(self) -> object: ...
+
+    @property
+    def value(self) -> object: ...
 
 
 def _normalize_jsonpath_key(key: str) -> str:
@@ -31,7 +47,7 @@ def _normalize_jsonpath_key(key: str) -> str:
     return f"$.{json.dumps(raw)}"
 
 
-def _compile_descriptor_condition(desc) -> str:
+def _compile_descriptor_condition(desc: DescriptorLike) -> str:
     """Map a single requires/provides descriptor to one PostgreSQL JSONPath predicate.
 
     ``desc`` is any object exposing ``key``, ``operator`` and ``value`` (pydantic models,
@@ -85,7 +101,9 @@ def _compile_descriptor_condition(desc) -> str:
     raise ValueError(f"Unsupported JSONPath operator: {op}")
 
 
-def compile_descriptors_to_jsonpath(descriptors) -> str | None:
+def compile_descriptors_to_jsonpath(
+    descriptors: Sequence[DescriptorLike] | None,
+) -> str | None:
     """Translate a list of requires/provides descriptors into a PostgreSQL JSONPath string.
 
     Returns ``None`` when there are no descriptors (so Django stores NULL). Multiple

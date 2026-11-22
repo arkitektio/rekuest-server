@@ -10,9 +10,10 @@
 
 import pytest
 from asgiref.sync import async_to_sync
-from authentikate.models import App, Client, Device, Release, User
+from authentikate.models import App, Client, Device, Organization, Release, User
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
+from kante.context import HttpContext
 
 from facade import models
 from facade.schema import schema
@@ -22,15 +23,16 @@ from tests.graphql.test_cross_tenant_isolation import OTHER_TOKEN, tenant_contex
 pytestmark = pytest.mark.django_db(transaction=True)
 
 
-def _run(query: str, context, **variables):
+def _run(query: str, context: HttpContext, **variables: object) -> dict:
     result = async_to_sync(schema.execute)(
         query, variable_values=variables or None, context_value=context
     )
     assert result.errors is None, result.errors
+    assert result.data is not None
     return result.data
 
 
-def _agent(organization, prefix: str) -> models.Agent:
+def _agent(organization: Organization, prefix: str) -> models.Agent:
     user = User.objects.create(
         username=f"{prefix}-user", password="x", sub=f"{prefix}-sub"
     )
@@ -48,7 +50,9 @@ def _agent(organization, prefix: str) -> models.Agent:
     )
 
 
-def _blok(organization, creator, name: str, **fields) -> models.Blok:
+def _blok(
+    organization: Organization, creator: User, name: str, **fields: object
+) -> models.Blok:
     module = models.Module.objects.get_or_create(
         name="orkestrator", organization=organization
     )[0]
@@ -58,7 +62,7 @@ def _blok(organization, creator, name: str, **fields) -> models.Blok:
 
 
 def _actions(
-    organization, agent: models.Agent, count: int, prefix: str
+    organization: Organization, agent: models.Agent, count: int, prefix: str
 ) -> list[models.Action]:
     """``count`` actions on ``agent``: every other one with a fit and an assign blok."""
     actions = []
@@ -107,12 +111,14 @@ LISTED = """query($ids: [ID!]!) {
 
 
 class TestActionListCost:
-    def _count(self, context, actions: list[models.Action]) -> tuple[int, list[dict]]:
+    def _count(
+        self, context: HttpContext, actions: list[models.Action]
+    ) -> tuple[int, list[dict]]:
         with CaptureQueriesContext(connection) as captured:
             data = _run(LISTED, context, ids=[str(action.pk) for action in actions])
         return len(captured.captured_queries), data["actions"]
 
-    def test_fits_and_assign_bloks_are_answered_per_list_not_per_row(self):
+    def test_fits_and_assign_bloks_are_answered_per_list_not_per_row(self) -> None:
         context, *_, organization = tenant_context(TEST_TOKEN)
         agent = _agent(organization, "qc-agent")
         small_queries, small = self._count(
@@ -135,7 +141,7 @@ class TestActionListCost:
 
 
 class TestBloksForModels:
-    def test_every_model_of_a_scene_in_one_request(self):
+    def test_every_model_of_a_scene_in_one_request(self) -> None:
         context, user, _, organization = tenant_context(TEST_TOKEN)
         _, other_user, _, other_organization = tenant_context(OTHER_TOKEN)
         _blok(organization, user, "turret", for_model="sha256:turret")
@@ -156,7 +162,7 @@ class TestBloksForModels:
 
 
 class TestNarrowedOnTheServer:
-    def test_clients_are_searched_by_app_version_device_and_id(self):
+    def test_clients_are_searched_by_app_version_device_and_id(self) -> None:
         context, *_ = tenant_context(TEST_TOKEN)
         app = App.objects.create(identifier="qc-microscope")
         release = Release.objects.create(app=app, version="4.2.0")
@@ -178,7 +184,7 @@ class TestNarrowedOnTheServer:
             assert found.client_id in ids(term), term
         assert ids("qc-microscope") == {found.client_id}
 
-    def test_bloks_whose_name_a_new_one_would_take(self):
+    def test_bloks_whose_name_a_new_one_would_take(self) -> None:
         context, user, _, organization = tenant_context(TEST_TOKEN)
         for name in ("Stage panel", "stage panel 2", "Other stage panel"):
             _blok(organization, user, name)
@@ -195,7 +201,7 @@ class TestNarrowedOnTheServer:
 
 
 class TestPagedDerivedLists:
-    def test_structures_interfaces_and_packages_page_like_any_list(self):
+    def test_structures_interfaces_and_packages_page_like_any_list(self) -> None:
         context, user, _, organization = tenant_context(TEST_TOKEN)
         agent = _agent(organization, "qc-ports")
         action = models.Action.objects.create(
@@ -251,7 +257,7 @@ class TestPagedDerivedLists:
         ]
         assert page("structurePackages", "key", 3, 10) == ["qcpkg3", "qcpkg4"]
 
-    def test_dashboards_take_pagination(self):
+    def test_dashboards_take_pagination(self) -> None:
         context, *_, organization = tenant_context(TEST_TOKEN)
         for index in range(3):
             models.Dashboard.objects.create(

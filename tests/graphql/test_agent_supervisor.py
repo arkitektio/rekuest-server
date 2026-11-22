@@ -61,7 +61,7 @@ async def _ids(context: HttpContext, filters: dict) -> set[str]:
 class TestAgentSupervisor:
     async def test_the_agent_shows_its_supervisor(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         managed = await _agent(authenticated_context, "managed", "plugin_engine")
 
         result = await schema.execute(
@@ -75,7 +75,7 @@ class TestAgentSupervisor:
 
     async def test_requires_narrows_by_the_supervisor(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         managed = await _agent(authenticated_context, "managed", "plugin_engine")
         elsewhere = await _agent(authenticated_context, "elsewhere", "local_launcher")
         free = await _agent(authenticated_context, "free", None)
@@ -114,7 +114,7 @@ class TestAgentSupervisor:
 
     async def test_a_key_the_agent_does_not_carry_is_refused(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         await _agent(authenticated_context, "managed", "plugin_engine")
 
         result = await schema.execute(
@@ -133,7 +133,7 @@ class TestAgentSupervisor:
 
     async def test_an_operator_a_string_cannot_take_is_refused(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         result = await schema.execute(
             AGENTS,
             context_value=authenticated_context,

@@ -11,7 +11,7 @@ reader checks the GLB and hashes it) and reads an image back, and holds each to 
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
-from typing import Any
+from typing import Any, TypeVar
 
 from arkitekt_datalayer.datalayer import Datalayer, load_config
 from arkitekt_datalayer.kulisse import KulissePolicy, KulisseRefused, check_ref
@@ -22,6 +22,8 @@ from django.db import IntegrityError, transaction
 from facade import models
 from facade.image_validation import ImagePolicy, ImageRefused, validate_image
 from rekuest_core.enums import AssetKind
+
+P = TypeVar("P")
 
 
 class AssetRefused(ValueError):
@@ -55,7 +57,7 @@ class AssetPolicy:
         )
 
 
-def _overlaid[P](policy: type[P], setting: str) -> P:  # noqa: D103
+def _overlaid(policy: type[P], setting: str) -> P:  # noqa: D103
     """``policy``'s defaults overlaid with the deployment's ``setting``."""
     overrides = dict(getattr(settings, setting, None) or {})
     unknown = sorted(set(overrides) - {field.name for field in fields(policy)})  # type: ignore[arg-type]

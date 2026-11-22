@@ -28,7 +28,7 @@ FILTER_QUERY = """
 """
 
 
-def _implementation_input():
+def _implementation_input() -> ImplementationInputModel:
     return ImplementationInputModel.model_validate(
         {
             "interface": "thresholder",
@@ -54,7 +54,7 @@ def _implementation_input():
     )
 
 
-def _seed_action_requiring_axes_c(context):
+def _seed_action_requiring_axes_c(context: HttpContext) -> models.Action:
     """Register (via the real path) an Action in the authenticated org whose ``image`` arg
     REQUIRES ``axes == "c"``.
 
@@ -77,7 +77,7 @@ def _seed_action_requiring_axes_c(context):
     return _create_implementation(_implementation_input(), agent).action
 
 
-async def _seed_in_execution_org(context):
+async def _seed_in_execution_org(context: HttpContext) -> models.Action:
     """Seed the action into the org the *executed* query will scope to.
 
     The kante auth extension resolves and sets ``request.organization`` from the token during
@@ -88,7 +88,7 @@ async def _seed_in_execution_org(context):
     return await sync_to_async(_seed_action_requiring_axes_c)(context)
 
 
-def _demands(descriptor_values):
+def _demands(descriptor_values: dict[str, object]) -> list[dict[str, object]]:
     return [
         {
             "kind": "ARGS",
@@ -111,7 +111,7 @@ class TestActionObjectFilter:
 
     async def test_filter_matches_when_descriptors_satisfied(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         await _seed_in_execution_org(authenticated_context)
 
         result = await schema.execute(
@@ -126,7 +126,7 @@ class TestActionObjectFilter:
 
     async def test_filter_excludes_when_descriptors_violated(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         await _seed_in_execution_org(authenticated_context)
 
         result = await schema.execute(
@@ -191,11 +191,11 @@ def _seed_estimates(context: HttpContext) -> None:
 @pytest.mark.asyncio
 async def test_actions_filter_and_sort_by_their_estimate(
     authenticated_context: HttpContext,
-):
+) -> None:
     await schema.execute("query { __typename }", context_value=authenticated_context)
     await sync_to_async(_seed_estimates)(authenticated_context)
 
-    def object_filter(**extra):
+    def object_filter(**extra: object) -> dict[str, dict[str, object]]:
         return {
             "estimatedRuntime": {
                 "identifier": "@mikro/image",

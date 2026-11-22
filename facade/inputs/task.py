@@ -1,7 +1,6 @@
 """Inputs for tasks and the postman lifecycle controls."""
 
 import datetime
-from typing import Self
 
 import strawberry
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -67,7 +66,7 @@ class StateRequirementInputModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def check_operator_value(self) -> Self:
+    def check_operator_value(self) -> "StateRequirementInputModel":
         """Operator and value agree, as for a port's requires."""
         operator, value, where = self.operator, self.value, f"{self.state}{self.path}"
         if operator in (

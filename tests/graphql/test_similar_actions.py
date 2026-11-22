@@ -56,7 +56,7 @@ def _seed(
     *,
     e0: np.ndarray | None = None,
     distance: float | None = None,
-    **overrides,
+    **overrides: object,
 ) -> Action:
     action = create_action_for_organization(
         context.request.organization,
@@ -78,7 +78,7 @@ async def _origin_and_e0(context: HttpContext) -> tuple[Action, np.ndarray]:
     return origin, np.asarray(origin.embedding)
 
 
-async def _names(context: HttpContext, query: str, **variables) -> list[str]:
+async def _names(context: HttpContext, query: str, **variables: object) -> list[str]:
     result = await schema.execute(
         query, context_value=context, variable_values=variables
     )

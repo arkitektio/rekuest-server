@@ -5,7 +5,7 @@ class FacadeConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "facade"
 
-    def ready(self):
+    def ready(self) -> None:
         # Implicitly connect signal handlers decorated with @receiver.
         #
         # The embedding system check (the vector column is as wide as the release's model)

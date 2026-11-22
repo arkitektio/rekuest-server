@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from typing import TypeVar
+
 from django.db.models import Model, QuerySet
 from kante.types import Info
 
+M = TypeVar("M", bound=Model)
 
-def row_of[M: Model](self: object, model: type[M]) -> M:
+
+def row_of(self: object, model: type[M]) -> M:
     """The row behind a strawberry-django type.
 
     A resolver's ``self`` is declared as the GraphQL type and is, when it runs, the Django row
@@ -17,7 +21,7 @@ def row_of[M: Model](self: object, model: type[M]) -> M:
     return self
 
 
-def build_prescoped_queryset[M: Model](
+def build_prescoped_queryset(
     info: Info, queryset: QuerySet[M], field: str = "organization"
 ) -> QuerySet[M]:
     # ``filters`` may be absent, or given as null: both mean "no custom scope".
@@ -29,7 +33,7 @@ def build_prescoped_queryset[M: Model](
         raise Exception("Custom scopes not implemented yet")
 
 
-def scoped_get[M: Model](
+def scoped_get(
     model: type[M], info: Info, pk: str | int, *, field: str = "organization"
 ) -> M:
     """Fetch one row by id, scoped to the caller's organization.
@@ -47,4 +51,6 @@ def scoped_get[M: Model](
             **{"id": pk, field: info.context.request.organization}
         )
     except model.DoesNotExist:
-        raise PermissionError(f"No {model.__name__} {pk} in this organization.")
+        raise PermissionError(
+            f"No {model.__name__} {pk} in this organization."
+        ) from None

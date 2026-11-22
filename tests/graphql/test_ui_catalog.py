@@ -5,6 +5,7 @@ import itertools
 import pytest
 from asgiref.sync import sync_to_async
 from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from facade.models import Module
 from facade.schema import schema
@@ -114,7 +115,7 @@ async def _create_blok(
     context: str = "PANEL",
     components: list[dict] | None = None,
     **extra: object,
-):
+) -> ExecutionResult:
     """A custom blok holding ``content`` beside its local ``exposure``; ``components`` is sent as it is instead."""
     tree = components if components is not None else _tree(*content, context=context)
     return await schema.execute(
@@ -458,7 +459,7 @@ class TestUiCatalog:
         )
         assert await _stored(accepted) == []
 
-        for tree, message in (
+        for tree, _message in (
             (
                 element("Frame", element("Move", props=moved)),
                 "<Move> is a scene component, not one of the panel context",

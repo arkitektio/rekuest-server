@@ -60,7 +60,7 @@ def test_state_demand_matches_every_child_position() -> None:
             )
         ]
     )
-    assert definition.id in set(found)
+    assert definition.pk in set(found)
 
     last_only = managers.get_state_ids_by_demands(
         [
@@ -70,9 +70,9 @@ def test_state_demand_matches_every_child_position() -> None:
             )
         ]
     )
-    assert definition.id in set(last_only)
+    assert definition.pk in set(last_only)
 
     swapped = managers.get_state_ids_by_demands(
         [pm(key="parent", children=[pm(key="second"), pm(key="first")])]
     )
-    assert definition.id not in set(swapped)
+    assert definition.pk not in set(swapped)

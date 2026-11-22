@@ -2,7 +2,10 @@
 
 import pytest
 from asgiref.sync import sync_to_async
+from django.db.models import QuerySet
+from kante.context import HttpContext
 
+from embeddings.models import EmbeddedDescriptionMixin
 from facade import models, service_catalog
 from facade.schema import schema
 from tests.factories import TEST_TOKEN
@@ -74,20 +77,23 @@ def _declare(mikro: models.Service, bank: models.Service) -> None:
     )
 
 
-async def _run(query: str, context, **variables):
+async def _run(query: str, context: HttpContext, **variables: object) -> dict:
     result = await schema.execute(
         query, variable_values=variables or None, context_value=context
     )
     assert result.errors is None, result.errors
+    assert result.data is not None
     return result.data
 
 
-async def test_descriptors_are_searched_by_key_and_by_meaning(authenticated_context):
+async def test_descriptors_are_searched_by_key_and_by_meaning(
+    authenticated_context: HttpContext,
+) -> None:
     context = (await sync_to_async(tenant_context)(TEST_TOKEN))[0]
     await sync_to_async(_catalogue)()
     query = "query($filters: StructureDescriptorFilter, $ordering: [StructureDescriptorOrder!]! = []) { descriptors(filters: $filters, ordering: $ordering) { key type structure { identifier } service { name } } }"
 
-    async def found(**variables):
+    async def found(**variables: object) -> list[tuple[str, str]]:
         return [
             (row["key"], row["structure"]["identifier"])
             for row in (await _run(query, context, **variables))["descriptors"]
@@ -120,8 +126,8 @@ async def test_descriptors_are_searched_by_key_and_by_meaning(authenticated_cont
 
 
 async def test_a_descriptor_and_a_hosted_structure_are_fetched_and_lead_to_each_other(
-    authenticated_context,
-):
+    authenticated_context: HttpContext,
+) -> None:
     context = (await sync_to_async(tenant_context)(TEST_TOKEN))[0]
     await sync_to_async(_catalogue)()
     channels = await models.Descriptor.objects.aget(
@@ -180,12 +186,14 @@ async def test_a_descriptor_and_a_hosted_structure_are_fetched_and_lead_to_each_
     ]
 
 
-async def test_hosted_structures_are_searched(authenticated_context):
+async def test_hosted_structures_are_searched(
+    authenticated_context: HttpContext,
+) -> None:
     context = (await sync_to_async(tenant_context)(TEST_TOKEN))[0]
     await sync_to_async(_catalogue)()
     query = "query($filters: HostedStructureFilter) { hostedStructures(filters: $filters, ordering: [{identifier: ASC}]) { identifier } }"
 
-    async def found(**filters):
+    async def found(**filters: object) -> list[str]:
         return [
             row["identifier"]
             for row in (await _run(query, context, filters=filters or None))[
@@ -209,8 +217,8 @@ async def test_hosted_structures_are_searched(authenticated_context):
 
 
 async def test_a_descriptor_keeps_its_row_across_provisioning_passes(
-    authenticated_context,
-):
+    authenticated_context: HttpContext,
+) -> None:
     await sync_to_async(_catalogue)()
     before = await models.Descriptor.objects.aget(
         key="@mikro/n_channels", structure__identifier="@mikro/lens"
@@ -270,11 +278,13 @@ def _catalogue_signals() -> None:
         )
 
 
-async def test_the_catalogue_is_embedded_when_it_is_read(authenticated_context):
+async def test_the_catalogue_is_embedded_when_it_is_read(
+    authenticated_context: HttpContext,
+) -> None:
     await sync_to_async(_catalogue)()
     await sync_to_async(_catalogue_signals)()
 
-    def embedded(queryset) -> dict[str, bool]:
+    def embedded(queryset: QuerySet[EmbeddedDescriptionMixin]) -> dict[str, bool]:
         return {str(row): row.embedding is not None for row in queryset}
 
     structures = await sync_to_async(embedded)(
@@ -300,8 +310,8 @@ async def test_the_catalogue_is_embedded_when_it_is_read(authenticated_context):
 
 
 async def test_a_row_without_a_vector_is_embedded_on_the_next_pass(
-    authenticated_context,
-):
+    authenticated_context: HttpContext,
+) -> None:
     # Rows catalogued before the column existed, or while the model could not load, have none.
     await sync_to_async(_catalogue)()
     await sync_to_async(_catalogue_signals)()
@@ -324,7 +334,9 @@ async def test_a_row_without_a_vector_is_embedded_on_the_next_pass(
     ).aexists()
 
 
-async def test_the_catalogue_is_searched_by_meaning(authenticated_context):
+async def test_the_catalogue_is_searched_by_meaning(
+    authenticated_context: HttpContext,
+) -> None:
     """No word of these queries is in what the service declares; what it says means them."""
     context = (await sync_to_async(tenant_context)(TEST_TOKEN))[0]
     await sync_to_async(_catalogue)()
@@ -358,7 +370,9 @@ async def test_the_catalogue_is_searched_by_meaning(authenticated_context):
     assert signals[0] == {"identifier": "@bank/category", "kind": "CREATED"}
 
 
-async def test_signal_declarations_are_searched(authenticated_context):
+async def test_signal_declarations_are_searched(
+    authenticated_context: HttpContext,
+) -> None:
     context = (await sync_to_async(tenant_context)(TEST_TOKEN))[0]
     await sync_to_async(_catalogue)()
     await sync_to_async(_catalogue_signals)()

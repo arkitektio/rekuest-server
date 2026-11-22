@@ -29,7 +29,7 @@ ENSURE_AGENT_WITH_DESCRIPTION = """
 class TestGraphQLAgents:
     """GraphQL operations over the Agent type."""
 
-    async def test_agents_query(self, authenticated_context: HttpContext):
+    async def test_agents_query(self, authenticated_context: HttpContext) -> None:
         """Test fetching all agents via GraphQL query."""
         result = await schema.execute(GET_AGENTS, context_value=authenticated_context)
 
@@ -37,7 +37,7 @@ class TestGraphQLAgents:
         assert "agents" in result.data
         assert isinstance(result.data["agents"], list)
 
-    async def test_single_agent_query(self, authenticated_context: HttpContext):
+    async def test_single_agent_query(self, authenticated_context: HttpContext) -> None:
         """Test fetching a single agent by ID."""
         create_result = await schema.execute(
             ENSURE_AGENT,
@@ -59,7 +59,9 @@ class TestGraphQLAgents:
         assert result.data["agent"]["id"] == agent_id
         assert result.data["agent"]["name"] == "Test Query Agent"
 
-    async def test_query_with_invalid_id(self, authenticated_context: HttpContext):
+    async def test_query_with_invalid_id(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """Test querying with an invalid ID returns appropriate error."""
         result = await schema.execute(
             GET_AGENT,
@@ -73,7 +75,7 @@ class TestGraphQLAgents:
 
     async def test_ensure_agent_mutation_with_name(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         """Test creating an agent with custom name via ensureAgent mutation."""
         result = await schema.execute(
             ENSURE_AGENT,
@@ -89,7 +91,7 @@ class TestGraphQLAgents:
 
     async def test_ensure_agent_mutation_default_name(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         """Test creating an agent with default name generation."""
         result = await schema.execute(
             ENSURE_AGENT,
@@ -105,7 +107,7 @@ class TestGraphQLAgents:
 
     async def test_ensure_agent_mutation_is_idempotent_per_registry(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         """ensureAgent is keyed on the registry, so repeated calls reuse the record."""
         # Create first agent
         result1 = await schema.execute(
@@ -134,7 +136,7 @@ class TestGraphQLAgents:
 
     async def test_ensure_agent_records_and_returns_a_description(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         """A name identifies an agent; a description is what tells two of them apart.
 
         Worth asserting on the *returned* payload and not just the row: the point of the field
@@ -155,7 +157,7 @@ class TestGraphQLAgents:
 
     async def test_ensure_agent_leaves_an_omitted_description_alone(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         """Omitting it means "unchanged", not "cleared".
 
         ``ensureAgent`` is called on every bootstrap, and most callers pass only a name -- if an
@@ -184,7 +186,7 @@ class TestGraphQLAgents:
 
     async def test_an_agent_that_never_declared_one_has_no_description(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         """Null, not an empty string: there is nothing to derive a description from.
 
         Every agent that predates the field reads this way too, which is the honest answer.
@@ -200,7 +202,7 @@ class TestGraphQLAgents:
 
     async def test_a_rename_is_the_users_and_leaves_the_declared_name(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         """updateAgent names the agent for its users; the declared name, which registration rewrites, stays the agent's."""
         created = await schema.execute(
             ENSURE_AGENT,
@@ -242,7 +244,9 @@ class TestGraphQLAgents:
             "declaredName": "microscope:1.1",
         }
 
-    async def test_delete_agent_mutation(self, authenticated_context: HttpContext):
+    async def test_delete_agent_mutation(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """Test deleting an agent via mutation."""
         # First create an agent
         create_result = await schema.execute(
@@ -274,7 +278,7 @@ class TestGraphQLAgents:
         assert query_result.data is None
         assert query_result.errors is not None
 
-    async def test_mutation_without_authentication(self):
+    async def test_mutation_without_authentication(self) -> None:
         """Test that mutations require authentication."""
         # Create a context without authentication
         from kante.context import HttpContext, UniversalRequest
@@ -301,7 +305,9 @@ class TestGraphQLAgents:
         # Should fail due to lack of authentication
         assert result.data is None or result.errors is not None
 
-    async def test_invalid_input_mutation(self, authenticated_context: HttpContext):
+    async def test_invalid_input_mutation(
+        self, authenticated_context: HttpContext
+    ) -> None:
         """Test mutation with invalid input data (unknown input field)."""
         result = await schema.execute(
             ENSURE_AGENT,
@@ -319,7 +325,7 @@ class TestGraphQLAgents:
 
     async def test_an_agent_names_its_default_blok_per_context(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         """A client finds an agent's logo without listing every blok it declared."""
         from facade.models import Blok, MaterializedBlok, Module
 
@@ -378,7 +384,7 @@ class TestGraphQLAgents:
 
     async def test_an_implementation_and_its_action_are_drawn_by_a_logo(
         self, authenticated_context: HttpContext
-    ):
+    ) -> None:
         """`Implementation.logo` is the blok it named; `Action.logo` the logo of one of its implementations."""
         from facade.models import Action, Blok, Implementation, Module
         from rekuest_core.inputs.models import (

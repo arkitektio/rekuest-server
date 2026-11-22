@@ -55,6 +55,7 @@ __all__ = [
     "ScheduleOverlap",
     "ScheduleOverlapChoices",
     # action
+    "ActionAvailability",
     "ActionKindChoices",
     "ActionScope",
     "DemandKind",

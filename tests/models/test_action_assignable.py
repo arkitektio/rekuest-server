@@ -19,6 +19,7 @@ import psycopg
 import pytest
 from django.db import connection
 from django.utils import timezone
+from psycopg.rows import TupleRow
 
 from facade import liveness, models
 from rekuest_core.inputs.models import ImplementationInputModel
@@ -54,7 +55,7 @@ def _sql(statement: str, *params: object) -> None:
         cursor.execute(statement, params)
 
 
-def drain(cursor=None) -> int:
+def drain(cursor: psycopg.Cursor[TupleRow] | None = None) -> int:
     """takt's drain, until there is nothing left it can take."""
     total = 0
     for _ in range(10):
@@ -63,9 +64,11 @@ def drain(cursor=None) -> int:
                 own.execute("SELECT facade_refresh_live_implementations(500)")
                 done = own.fetchone()[0]
         else:
-            done = cursor.execute(
+            row = cursor.execute(
                 "SELECT facade_refresh_live_implementations(500)"
-            ).fetchone()[0]
+            ).fetchone()
+            assert row is not None
+            done = row[0]
         total += done
         if done == 0:
             return total
@@ -78,7 +81,7 @@ def claim(agent: models.Agent, connection_id: str = "conn-1") -> None:
         "UPDATE facade_agent SET connected = true, last_seen = %s, active_connection_id = %s WHERE id = %s",
         timezone.now(),
         connection_id,
-        agent.id,
+        agent.pk,
     )
 
 
@@ -87,7 +90,7 @@ def release(agent: models.Agent) -> None:
     _sql(
         "UPDATE facade_agent SET connected = false, last_seen = %s WHERE id = %s",
         timezone.now(),
-        agent.id,
+        agent.pk,
     )
 
 
@@ -95,7 +98,7 @@ def revoke(agent: models.Agent) -> None:
     """The stale sweep (``revoke_lease``): ``last_seen`` is left alone."""
     _sql(
         "UPDATE facade_agent SET connected = false, active_connection_id = NULL WHERE id = %s",
-        agent.id,
+        agent.pk,
     )
 
 
@@ -104,14 +107,14 @@ def heartbeat(agent: models.Agent, connection_id: str = "conn-1") -> None:
     _sql(
         "UPDATE facade_agent SET last_seen = %s WHERE id = %s AND active_connection_id = %s AND connected",
         timezone.now(),
-        agent.id,
+        agent.pk,
         connection_id,
     )
 
 
 def live(action: models.Action) -> tuple[int, bool]:
     return models.Action.objects.values_list("live_implementations", "assignable").get(
-        id=action.id
+        id=action.pk
     )
 
 
@@ -126,7 +129,9 @@ def marks_ever() -> int:
         return cursor.fetchone()[0]
 
 
-def settled(*actions: models.Action, seconds: float = 5.0):
+def settled(
+    *actions: models.Action, seconds: float = 5.0
+) -> tuple[int, bool] | list[tuple[int, bool]]:
     """What the counts settle to: drain until no mark waits, then read them."""
     deadline = time.monotonic() + seconds
     while True:
@@ -153,7 +158,7 @@ def _other() -> psycopg.Connection:
 
 @pytest.mark.django_db(transaction=True)
 class TestLiveImplementations:
-    def test_follows_the_agent_through_connect_release_and_the_sweep(self):
+    def test_follows_the_agent_through_connect_release_and_the_sweep(self) -> None:
         agent = _agent("live-lease")
         action = create_implementation(_input(), agent).action
         assert settled(action) == (0, False)
@@ -169,7 +174,7 @@ class TestLiveImplementations:
         revoke(agent)
         assert settled(action) == (0, False)
 
-    def test_counts_every_agent_that_can_take_it(self):
+    def test_counts_every_agent_that_can_take_it(self) -> None:
         first, second = _agent("live-first"), _agent("live-second")
         action = create_implementation(_input(), first).action
         models.Implementation.objects.create(
@@ -185,7 +190,7 @@ class TestLiveImplementations:
         release(second)
         assert settled(action) == (0, False)
 
-    def test_a_heartbeat_leaves_no_mark(self):
+    def test_a_heartbeat_leaves_no_mark(self) -> None:
         agent = _agent("live-heartbeat")
         action = create_implementation(_input(), agent).action
         claim(agent)
@@ -194,7 +199,7 @@ class TestLiveImplementations:
         heartbeat(agent)
         assert marks_ever() == before
 
-    def test_follows_implementations_arriving_moving_and_leaving(self):
+    def test_follows_implementations_arriving_moving_and_leaving(self) -> None:
         online, offline, elsewhere = (
             _agent("live-online"),
             _agent("live-offline"),
@@ -209,26 +214,26 @@ class TestLiveImplementations:
         )
         assert settled(action) == (1, True)
 
-        models.Implementation.objects.filter(id=implementation.id).update(
+        models.Implementation.objects.filter(id=implementation.pk).update(
             agent=elsewhere
         )
         assert settled(action) == (0, False)
 
-        models.Implementation.objects.filter(id=implementation.id).update(agent=online)
+        models.Implementation.objects.filter(id=implementation.pk).update(agent=online)
         assert settled(action) == (1, True)
 
         implementation.delete()
         assert settled(action) == (0, False)
 
-    def test_a_webhook_agent_is_always_available(self):
+    def test_a_webhook_agent_is_always_available(self) -> None:
         agent = _agent("live-webhook")
         action = create_implementation(_input(), agent).action
-        _sql("UPDATE facade_agent SET kind = 'WEBHOOK' WHERE id = %s", agent.id)
+        _sql("UPDATE facade_agent SET kind = 'WEBHOOK' WHERE id = %s", agent.pk)
         assert settled(action) == (1, True)
-        _sql("UPDATE facade_agent SET kind = 'WEBSOCKET' WHERE id = %s", agent.id)
+        _sql("UPDATE facade_agent SET kind = 'WEBSOCKET' WHERE id = %s", agent.pk)
         assert settled(action) == (0, False)
 
-    def test_a_deleted_actions_mark_ends(self):
+    def test_a_deleted_actions_mark_ends(self) -> None:
         agent = _agent("live-deleted")
         action = create_implementation(_input(), agent).action
         claim(agent)
@@ -239,7 +244,7 @@ class TestLiveImplementations:
             time.sleep(0.02)
         assert marks() == 0
 
-    def test_no_code_writes_it(self):
+    def test_no_code_writes_it(self) -> None:
         agent = _agent("live-guard")
         action = create_implementation(_input(), agent).action
         claim(agent)
@@ -263,30 +268,30 @@ class TestLiveImplementations:
         )
         assert live(fresh) == (0, False)
 
-    def test_the_python_rule_is_takts(self):
+    def test_the_python_rule_is_takts(self) -> None:
         agent = _agent("live-rule")
         claim(agent)
         available = models.Agent.objects.filter(liveness.agent_available_q())
-        assert available.filter(id=agent.id).exists()
+        assert available.filter(id=agent.pk).exists()
 
         stale = timezone.now() - datetime.timedelta(
             seconds=liveness.stale_after_seconds() + 1
         )
-        _sql("UPDATE facade_agent SET last_seen = %s WHERE id = %s", stale, agent.id)
-        assert not available.filter(id=agent.id).exists()
+        _sql("UPDATE facade_agent SET last_seen = %s WHERE id = %s", stale, agent.pk)
+        assert not available.filter(id=agent.pk).exists()
 
         _sql(
             "UPDATE facade_agent SET kind = 'WEBHOOK', connected = false WHERE id = %s",
-            agent.id,
+            agent.pk,
         )
-        assert available.filter(id=agent.id).exists()
+        assert available.filter(id=agent.pk).exists()
 
 
 @pytest.mark.django_db(transaction=True)
 class TestNoRaces:
     """Writers never wait on the drain, the drain never waits on anyone, and nothing is lost."""
 
-    def test_a_change_not_yet_committed_is_counted_once_it_is(self):
+    def test_a_change_not_yet_committed_is_counted_once_it_is(self) -> None:
         agent = _agent("race-uncommitted")
         action = create_implementation(_input(), agent).action
         assert settled(action) == (0, False)
@@ -294,7 +299,7 @@ class TestNoRaces:
         with _other() as writer:
             writer.execute(
                 "UPDATE facade_agent SET connected = true, last_seen = now() WHERE id = %s",
-                [agent.id],
+                [agent.pk],
             )
             # The writer's mark is its own until it commits: no drain, ours or another's, sees it.
             drain()
@@ -305,7 +310,7 @@ class TestNoRaces:
 
     def test_an_action_someone_holds_is_skipped_without_waiting_and_kept_for_later(
         self,
-    ):
+    ) -> None:
         agent = _agent("race-held")
         action = create_implementation(_input(), agent).action
         assert settled(action) == (0, False)
@@ -327,7 +332,7 @@ class TestNoRaces:
         # The skipped mark was put back, so the count still arrives.
         assert settled(action) == (1, True)
 
-    def test_two_drains_at_once_end_right(self):
+    def test_two_drains_at_once_end_right(self) -> None:
         first, second = _agent("race-two-a"), _agent("race-two-b")
         actions = [
             create_implementation(_input(f"act{i}"), first).action for i in range(5)

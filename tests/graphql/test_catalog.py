@@ -11,7 +11,7 @@ from facade.schema import schema
 class TestGraphQLCatalog:
     """Read-side GraphQL operations over the action/protocol/state catalog."""
 
-    async def test_actions_query(self, authenticated_context: HttpContext):
+    async def test_actions_query(self, authenticated_context: HttpContext) -> None:
         """Test fetching all actions via GraphQL query."""
         query = """
             query GetActions {
@@ -30,7 +30,7 @@ class TestGraphQLCatalog:
         assert "actions" in result.data
         assert isinstance(result.data["actions"], list)
 
-    async def test_protocols_query(self, authenticated_context: HttpContext):
+    async def test_protocols_query(self, authenticated_context: HttpContext) -> None:
         """Test fetching all protocols via GraphQL query."""
         query = """
             query GetProtocols {
@@ -51,7 +51,7 @@ class TestGraphQLCatalog:
         assert "protocols" in result.data
         assert isinstance(result.data["protocols"], list)
 
-    async def test_clients_query(self, authenticated_context: HttpContext):
+    async def test_clients_query(self, authenticated_context: HttpContext) -> None:
         """Test fetching all clients via GraphQL query."""
         query = """
             query GetClients {

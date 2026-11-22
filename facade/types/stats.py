@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime
 from dataclasses import dataclass
 from enum import Enum
+from typing import Generic, TypeVar
 
 import strawberry
 import strawberry_django
@@ -30,6 +31,8 @@ from strawberry_django.filters import apply as apply_filters
 
 from facade import filters, models
 from facade.types.base import build_prescoped_queryset
+
+M = TypeVar("M", bound=Model)
 
 
 @strawberry.type
@@ -64,7 +67,7 @@ class Summary:
     sum: float | None
 
 
-class Selection[M: Model]:
+class Selection(Generic[M]):
     """The rows a stats field is about, and what was already aggregated over them."""
 
     def __init__(self, queryset: QuerySet[M]) -> None:

@@ -8,32 +8,34 @@ EVERY demand" AND is applied by the caller via one ``Exists()`` per demand, wher
 be met by a different implementation.
 """
 
-from types import SimpleNamespace
+from dataclasses import dataclass
+from typing import Literal
 
 import pytest
+from authentikate.models import Organization, User
 from django.db.models import Exists, OuterRef
+from pytest_django import DjangoAssertNumQueries
 
 from facade import managers, models
 from facade.managers import PortDemand
 from rekuest_core.enums import PortKind
+from rekuest_core.inputs.models import PortMatchInputModel
 from tests.factories import create_agent_for_registry, create_registry_bundle
 from tests.models.test_action_matching import action_demand, make_action, pm
 
 
-def _org(name="test-org-scope"):
+def _org(name: str = "test-org-scope") -> Organization:
     """Protocol / StateDefinition / Blok / Dashboard are organization-scoped; any org will do here."""
-    from authentikate.models import Organization
-
     return Organization.objects.get_or_create(identifier=name)[0]
 
 
 def pd(
-    matches=None,
-    kind="args",
-    force_length=None,
-    force_non_nullable_length=None,
-    force_structure_length=None,
-):
+    matches: list[PortMatchInputModel] | None = None,
+    kind: Literal["args", "returns"] = "args",
+    force_length: int | None = None,
+    force_non_nullable_length: int | None = None,
+    force_structure_length: int | None = None,
+) -> PortDemand:
     """A PortDemandInput-shaped object (attribute access is all the manager needs)."""
     return PortDemand(
         kind=kind,
@@ -44,8 +46,20 @@ def pd(
     )
 
 
+@dataclass(frozen=True)
+class Catalog:
+    """Three actions with overlapping shapes, the identity they were made under."""
+
+    user: User
+    org: Organization
+    caller: models.Caller
+    a1: models.Action
+    a2: models.Action
+    a3: models.Action
+
+
 @pytest.fixture
-def catalog(db):
+def catalog(db: None) -> Catalog:
     """Three actions with overlapping arg/return shapes in one organization."""
     user, _, org, caller = create_registry_bundle("consol")
 
@@ -84,31 +98,33 @@ def catalog(db):
             {"key": "out", "kind": "STRUCTURE", "identifier": "@x/b", "nullable": False}
         ],
     )
-    return SimpleNamespace(user=user, org=org, caller=caller, a1=a1, a2=a2, a3=a3)
+    return Catalog(user=user, org=org, caller=caller, a1=a1, a2=a2, a3=a3)
 
 
 ARGS_XA = [pm(identifier="@x/a")]
 RETURNS_XB = [pm(identifier="@x/b")]
 
 
-def test_multi_demand_equals_per_demand_intersection(catalog):
+def test_multi_demand_equals_per_demand_intersection(catalog: Catalog) -> None:
     # Demand A (args @x/a) alone -> {a1, a2}; demand B (returns @x/b) alone -> {a2, a3}.
     a_ids = set(managers.get_action_ids_by_port_demands([pd(ARGS_XA)]))
     b_ids = set(
         managers.get_action_ids_by_port_demands([pd(RETURNS_XB, kind="returns")])
     )
-    assert a_ids == {catalog.a1.id, catalog.a2.id}
-    assert b_ids == {catalog.a2.id, catalog.a3.id}
+    assert a_ids == {catalog.a1.pk, catalog.a2.pk}
+    assert b_ids == {catalog.a2.pk, catalog.a3.pk}
 
     combined = set(
         managers.get_action_ids_by_port_demands(
             [pd(ARGS_XA), pd(RETURNS_XB, kind="returns")]
         )
     )
-    assert combined == a_ids & b_ids == {catalog.a2.id}
+    assert combined == a_ids & b_ids == {catalog.a2.pk}
 
 
-def test_multi_demand_is_one_query(catalog, django_assert_num_queries):
+def test_multi_demand_is_one_query(
+    catalog: Catalog, django_assert_num_queries: DjangoAssertNumQueries
+) -> None:
     with django_assert_num_queries(1):
         ids = managers.get_action_ids_by_port_demands(
             [
@@ -117,33 +133,33 @@ def test_multi_demand_is_one_query(catalog, django_assert_num_queries):
                 pd([pm(kind=PortKind.STRUCTURE)]),
             ]
         )
-    assert set(ids) == {catalog.a2.id}
+    assert set(ids) == {catalog.a2.pk}
 
 
-def test_per_demand_force_params_combine(catalog):
+def test_per_demand_force_params_combine(catalog: Catalog) -> None:
     # ARGS force_length=1 -> {a1, a3}; RETURNS @x/b -> {a2, a3}; ANDed -> {a3}.
     ids = managers.get_action_ids_by_port_demands(
         [pd(force_length=1), pd(RETURNS_XB, kind="returns")]
     )
-    assert set(ids) == {catalog.a3.id}
+    assert set(ids) == {catalog.a3.pk}
 
 
-def test_per_demand_count_subqueries_combine(catalog):
+def test_per_demand_count_subqueries_combine(catalog: Catalog) -> None:
     # Non-nullable root args = 1 -> {a1, a3}; root arg structures = 1 -> {a1, a2}; ANDed -> {a1}.
     ids = managers.get_action_ids_by_port_demands(
         [pd(force_non_nullable_length=1), pd(force_structure_length=1)]
     )
-    assert set(ids) == {catalog.a1.id}
+    assert set(ids) == {catalog.a1.pk}
 
 
-def test_all_empty_demands_raise(catalog):
+def test_all_empty_demands_raise(catalog: Catalog) -> None:
     with pytest.raises(ValueError, match="No search params provided"):
         managers.get_action_ids_by_port_demands([pd()])
 
 
 def test_action_demands_are_index_aligned_in_one_query(
-    catalog, django_assert_num_queries
-):
+    catalog: Catalog, django_assert_num_queries: DjangoAssertNumQueries
+) -> None:
     d1 = action_demand(arg_matches=ARGS_XA)
     d2 = action_demand(return_matches=RETURNS_XB)
     d3 = action_demand(name="no-such-action")
@@ -152,21 +168,21 @@ def test_action_demands_are_index_aligned_in_one_query(
         per_demand = managers.get_action_ids_by_action_demands([d1, d2, d3])
 
     assert [set(ids) for ids in per_demand] == [
-        {catalog.a1.id, catalog.a2.id},
-        {catalog.a2.id, catalog.a3.id},
+        {catalog.a1.pk, catalog.a2.pk},
+        {catalog.a2.pk, catalog.a3.pk},
         set(),
     ]
 
 
-def test_action_demands_single_demand_matches_legacy_shape(catalog):
+def test_action_demands_single_demand_matches_legacy_shape(catalog: Catalog) -> None:
     # The single-demand callers (queries/logic/filters) use [demand] + [0].
     ids = managers.get_action_ids_by_action_demands(
         [action_demand(name=catalog.a1.name)]
     )[0]
-    assert set(ids) == {catalog.a1.id}
+    assert set(ids) == {catalog.a1.pk}
 
 
-def test_action_demand_protocols_are_matched(catalog):
+def test_action_demand_protocols_are_matched(catalog: Catalog) -> None:
     # a1 implements "predicate"; a2/a3 don't. Protocols on a demand AND with the port matches
     # (previously the field was accepted on dependency inputs but silently ignored).
     predicate = models.Protocol.objects.create(
@@ -177,7 +193,7 @@ def test_action_demand_protocols_are_matched(catalog):
     ids = managers.get_action_ids_by_action_demands(
         [action_demand(arg_matches=ARGS_XA, protocols=["predicate"])]
     )[0]
-    assert set(ids) == {catalog.a1.id}
+    assert set(ids) == {catalog.a1.pk}
 
     ids = managers.get_action_ids_by_action_demands(
         [
@@ -189,7 +205,7 @@ def test_action_demand_protocols_are_matched(catalog):
     assert ids == []
 
 
-def test_action_demand_identity_pins_and_matches_loosen(catalog):
+def test_action_demand_identity_pins_and_matches_loosen(catalog: Catalog) -> None:
     """app/key/version on the demand pin a specific action ("imagej/open_image"); dropping
     them and relying on the structural matches loosens the demand to equivalent actions of
     other apps."""
@@ -227,12 +243,12 @@ def test_action_demand_identity_pins_and_matches_loosen(catalog):
         None,
     )
     ids = managers.get_action_ids_by_action_demands([pinned])[0]
-    assert set(ids) == {imagej.id}
+    assert set(ids) == {imagej.pk}
 
     # Loosened to the structural matches only: both apps' equivalents match.
     loose = action_demand(arg_matches=[pm(identifier="@y/img")])
     ids = managers.get_action_ids_by_action_demands([loose])[0]
-    assert set(ids) == {imagej.id, fiji.id}
+    assert set(ids) == {imagej.pk, fiji.pk}
 
     # Version is part of the identity (factory registers 1.0.0).
     versioned = action_demand(arg_matches=[pm(identifier="@y/img")])
@@ -241,28 +257,28 @@ def test_action_demand_identity_pins_and_matches_loosen(catalog):
     assert ids == []
 
 
-def test_action_demand_qualifiers_are_matched(catalog):
+def test_action_demand_qualifiers_are_matched(catalog: Catalog) -> None:
     """Tri-state semantic qualifiers on the demand: True/False filter, None matches either."""
     models.Action.objects.filter(pk=catalog.a1.pk).update(pure=True, idempotent=True)
 
     pure_demand = action_demand(arg_matches=ARGS_XA)
     pure_demand.pure = True
     ids = managers.get_action_ids_by_action_demands([pure_demand])[0]
-    assert set(ids) == {catalog.a1.id}
+    assert set(ids) == {catalog.a1.pk}
 
     impure_demand = action_demand(arg_matches=ARGS_XA)
     impure_demand.pure = False
     ids = managers.get_action_ids_by_action_demands([impure_demand])[0]
-    assert set(ids) == {catalog.a2.id}
+    assert set(ids) == {catalog.a2.pk}
 
     # None (the helper default) matches either.
     ids = managers.get_action_ids_by_action_demands(
         [action_demand(arg_matches=ARGS_XA)]
     )[0]
-    assert set(ids) == {catalog.a1.id, catalog.a2.id}
+    assert set(ids) == {catalog.a1.pk, catalog.a2.pk}
 
 
-def test_agent_must_satisfy_every_demand(catalog):
+def test_agent_must_satisfy_every_demand(catalog: Catalog) -> None:
     """Mirrors AgentFilter.action_demands: one Exists() per demand, ANDed at the agent level.
 
     Each demand may be satisfied by a DIFFERENT implementation of the agent — an agent
@@ -290,7 +306,7 @@ def test_agent_must_satisfy_every_demand(catalog):
         action_demand(return_matches=RETURNS_XB),
     ]
     per_demand_ids = managers.get_action_ids_by_action_demands(
-        demands, organization_id=catalog.org.id
+        demands, organization_id=catalog.org.pk
     )
 
     queryset = models.Agent.objects.all()
@@ -303,4 +319,4 @@ def test_agent_must_satisfy_every_demand(catalog):
             )
         )
 
-    assert set(queryset.values_list("id", flat=True)) == {agent_both.id}
+    assert set(queryset.values_list("id", flat=True)) == {agent_both.pk}

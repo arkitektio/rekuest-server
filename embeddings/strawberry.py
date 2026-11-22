@@ -12,9 +12,11 @@ client can group, cluster or cache results it already has, not so it can write v
 
 from __future__ import annotations
 
-from typing import Any, NewType
+from collections.abc import Iterable
+from typing import NewType
 
 import strawberry
+from strawberry.types.scalar import ScalarDefinition
 
 from embeddings import engine
 
@@ -23,7 +25,7 @@ DESCRIPTOR_SEPARATOR = ":"
 
 Embedding = NewType("Embedding", str)
 
-scalar_map: dict[Any, Any] = {
+scalar_map: dict[object, ScalarDefinition] = {
     Embedding: strawberry.scalar(
         name="Embedding",
         description=(
@@ -38,7 +40,9 @@ scalar_map: dict[Any, Any] = {
 }
 
 
-def format_embedding(vector: Any, model_id: str | None) -> Embedding | None:
+def format_embedding(
+    vector: Iterable[float] | None, model_id: str | None
+) -> Embedding | None:
     """``<model id>:<floats>``, or ``None`` when there is no vector to describe."""
     if vector is None or not model_id:
         return None
@@ -49,6 +53,6 @@ def format_embedding(vector: Any, model_id: str | None) -> Embedding | None:
     )
 
 
-def embedding_of(instance: Any) -> Embedding | None:
+def embedding_of(instance: object) -> Embedding | None:
     """The formatted vector of a row carrying :class:`embeddings.models.EmbeddedDescriptionMixin`."""
     return format_embedding(getattr(instance, "embedding", None), engine.model_id())

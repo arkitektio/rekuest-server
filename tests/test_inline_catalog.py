@@ -4,11 +4,11 @@ Nothing here asks a service or takt: an inline declaration needs the database an
 """
 
 import pytest
+from pytest_django.fixtures import SettingsWrapper
 
 from facade import models, service_catalog
 from rekuest.configuration import ServiceEntry
 from tests.hook_urls import housekeeping
-from tests.provisioning_fixtures import declared, hub  # noqa: F401  (fixtures)
 
 
 def _rows() -> dict:
@@ -41,7 +41,9 @@ def _rows() -> dict:
 class TestInlineDeclaration:
     """An entry that carries what its service hosts (``hosts``) is catalogued from that, unasked."""
 
-    def test_the_declaration_in_the_config_gives_the_rows_the_manifest_gives(self, hub):
+    def test_the_declaration_in_the_config_gives_the_rows_the_manifest_gives(
+        self, hub: SettingsWrapper
+    ) -> None:
         """One declaration, both ways in: fetched from the service, and handed over inline."""
         said = housekeeping.manifest()
         (fetched,) = hub.SERVICES
@@ -71,7 +73,9 @@ class TestInlineDeclaration:
 
         assert _rows() == from_manifest
 
-    def test_a_description_is_only_a_manifests_to_state(self, hub):
+    def test_a_description_is_only_a_manifests_to_state(
+        self, hub: SettingsWrapper
+    ) -> None:
         """An image's ``hosts`` describes no service: the inline way leaves the row's description alone."""
         said = housekeeping.manifest()
         (fetched,) = hub.SERVICES
@@ -98,7 +102,7 @@ class TestInlineDeclaration:
         service_catalog.catalogue_all()
         assert models.Service.objects.get(name="housekeeping").description is None
 
-    def test_an_inline_declaration_is_all_there_is(self, hub):
+    def test_an_inline_declaration_is_all_there_is(self, hub: SettingsWrapper) -> None:
         """Unlike a manifest that lists no structures (unknown), an inline declaration without any takes them away."""
         (fetched,) = hub.SERVICES
         service_catalog.catalogue_all()
@@ -116,8 +120,8 @@ class TestInlineDeclaration:
         )
 
     def test_the_catalogue_job_writes_what_the_config_says_and_does_not_fail_on_a_service_that_is_not_up(
-        self, hub, capsys
-    ):
+        self, hub: SettingsWrapper, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         from django.core.management import call_command
 
         said = housekeeping.manifest()
@@ -148,8 +152,8 @@ class TestRekuestsOwnStructures:
     """rekuest hosts ``@rekuest/agent`` itself: catalogued with every pass, peers or not."""
 
     def test_the_agent_and_its_supervisor_descriptor_are_catalogued_without_any_peer(
-        self, settings
-    ):
+        self, settings: SettingsWrapper
+    ) -> None:
         settings.SERVICES = []
 
         assert service_catalog.catalogue_all() == []
@@ -161,8 +165,8 @@ class TestRekuestsOwnStructures:
         ]
 
     def test_the_catalogue_job_writes_them_with_no_services_configured(
-        self, settings, capsys
-    ):
+        self, settings: SettingsWrapper, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         from django.core.management import call_command
 
         settings.SERVICES = []

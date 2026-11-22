@@ -139,14 +139,16 @@ async def seeded(authenticated_context: HttpContext) -> HttpContext:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 class TestActionCapabilityFilters:
-    async def test_asks_counts_declared_and_dynamic_asks(self, seeded: HttpContext):
+    async def test_asks_counts_declared_and_dynamic_asks(
+        self, seeded: HttpContext
+    ) -> None:
         assert sorted(await _names(seeded, {"asks": True})) == [
             "Asker",
             "DynamicAsker",
             "Twice",
         ]
 
-    async def test_asks_false_is_never_asks(self, seeded: HttpContext):
+    async def test_asks_false_is_never_asks(self, seeded: HttpContext) -> None:
         assert sorted(await _names(seeded, {"asks": False})) == [
             "Caller",
             "DynamicCaller",
@@ -154,23 +156,23 @@ class TestActionCapabilityFilters:
             "Plain",
         ]
 
-    async def test_informs(self, seeded: HttpContext):
+    async def test_informs(self, seeded: HttpContext) -> None:
         assert await _names(seeded, {"informs": True}) == ["Informer"]
 
     async def test_calls_counts_dependencies_and_dynamic_calls(
         self, seeded: HttpContext
-    ):
+    ) -> None:
         assert sorted(await _names(seeded, {"calls": True})) == [
             "Caller",
             "DynamicCaller",
         ]
 
-    async def test_dynamic_flags(self, seeded: HttpContext):
+    async def test_dynamic_flags(self, seeded: HttpContext) -> None:
         assert await _names(seeded, {"dynamicCalls": True}) == ["DynamicCaller"]
         assert await _names(seeded, {"dynamicAsks": True}) == ["DynamicAsker"]
         assert await _names(seeded, {"dynamicInforms": True}) == []
 
-    async def test_compose_under_or_and_not(self, seeded: HttpContext):
+    async def test_compose_under_or_and_not(self, seeded: HttpContext) -> None:
         assert sorted(
             await _names(seeded, {"informs": True, "OR": {"calls": True}})
         ) == ["Caller", "DynamicCaller", "Informer"]
@@ -182,7 +184,7 @@ class TestActionCapabilityFilters:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 class TestImplementationCapabilityFilters:
-    async def test_asks_lists_each_implementation(self, seeded: HttpContext):
+    async def test_asks_lists_each_implementation(self, seeded: HttpContext) -> None:
         result = await schema.execute(
             IMPLEMENTATIONS,
             context_value=seeded,
@@ -196,7 +198,7 @@ class TestImplementationCapabilityFilters:
             "twice",
         ]
 
-    async def test_calls_false(self, seeded: HttpContext):
+    async def test_calls_false(self, seeded: HttpContext) -> None:
         result = await schema.execute(
             IMPLEMENTATIONS,
             context_value=seeded,

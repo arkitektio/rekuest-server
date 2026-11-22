@@ -8,7 +8,7 @@ from facade.models import Action, Protocol, StateDefinition
 from tests.factories import create_action_for_organization
 
 
-def _org(name="catalog-test-org"):
+def _org(name: str = "catalog-test-org") -> Organization:
     """Protocol and StateDefinition are organization-scoped; these tests only need *an* org."""
     return Organization.objects.get_or_create(identifier=name)[0]
 
@@ -17,7 +17,7 @@ def _org(name="catalog-test-org"):
 class TestCatalogModels:
     """Test suite for the action/protocol/state-definition catalog models."""
 
-    def test_protocol_creation(self):
+    def test_protocol_creation(self) -> None:
         """Test creating a Protocol model instance."""
         protocol = Protocol.objects.create(
             organization=_org(),
@@ -28,7 +28,7 @@ class TestCatalogModels:
         assert protocol.name == "Test Protocol"
         assert protocol.description == "A test protocol for unit testing"
 
-    def test_protocol_unique_name_constraint(self):
+    def test_protocol_unique_name_constraint(self) -> None:
         """Test that Protocol names must be unique."""
         Protocol.objects.create(
             organization=_org(), name="Unique Protocol", description="First protocol"
@@ -42,7 +42,7 @@ class TestCatalogModels:
                 description="Second protocol with same name",
             )
 
-    def test_action_creation(self):
+    def test_action_creation(self) -> None:
         """Test creating an Action model instance."""
         org = Organization.objects.create(identifier="test-org-3")
 
@@ -58,7 +58,7 @@ class TestCatalogModels:
         assert action.description == "A test action"
         assert action.hash == "test-hash-123"
 
-    def test_state_schema_creation(self):
+    def test_state_schema_creation(self) -> None:
         """Test creating a StateDefinition model instance."""
         ports_data = {
             "input": {"type": "string", "description": "Input port"},
@@ -78,7 +78,7 @@ class TestCatalogModels:
         assert state_schema.ports == ports_data
         assert state_schema.description == "A test state schema"
 
-    def test_state_schema_unique_hash_constraint(self):
+    def test_state_schema_unique_hash_constraint(self) -> None:
         """Test that StateDefinition hash must be unique."""
         StateDefinition.objects.create(
             organization=_org(),
@@ -96,7 +96,7 @@ class TestCatalogModels:
                 description="Second schema with same hash",
             )
 
-    def test_protocol_action_relationship(self):
+    def test_protocol_action_relationship(self) -> None:
         """Test the relationship between Protocol and Action."""
         protocol = Protocol.objects.create(
             organization=_org(),

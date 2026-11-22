@@ -36,7 +36,7 @@ def update_dashboard(info: Info, input: inputs.UpdateDashboardInput) -> types.Da
         )
     except models.Dashboard.DoesNotExist:
         logger.warning(f"Dashboard with id {input.id} does not exist.")
-        raise ValueError(f"Dashboard with id {input.id} does not exist.")
+        raise ValueError(f"Dashboard with id {input.id} does not exist.") from None
 
     if input.name is not None:
         dashboard.name = input.name

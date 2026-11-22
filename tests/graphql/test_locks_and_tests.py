@@ -106,7 +106,9 @@ async def test_test_cases_stay_in_their_organization_and_results_keep_their_payl
     """A test case on another organization's action is refused; a result's JSON is shown and filterable by action."""
 
     @sync_to_async
-    def seed():
+    def seed() -> tuple[
+        models.Action, models.Action, models.Implementation, models.Action
+    ]:
         agent = _agent_in(authenticated_context, "cases")
         action = create_action_for_organization(agent.organization, "cases-target")
         tester = create_action_for_organization(agent.organization, "cases-tester")

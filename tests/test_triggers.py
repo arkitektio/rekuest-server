@@ -4,10 +4,17 @@ Receiving signals, matching them to triggers and firing them are takt's and test
 (``takt/crates/facade/tests/scheduling.rs``, ``signal_intake.rs``). Real postgres.
 """
 
+from collections.abc import Awaitable
+
 import pytest
+from authentikate.models import Organization
+from kante.context import HttpContext
+from pytest_django.fixtures import SettingsWrapper
+from strawberry.types import ExecutionResult
 
 from facade import enums, models, triggers
 from facade.hook_agents import _identity
+from facade.json_types import JSON
 from rekuest.configuration import ServiceEntry
 from tests import registered
 
@@ -16,20 +23,20 @@ CHANNELS = "@mikro/n_channels"
 
 
 @pytest.fixture
-def mikro_service(settings):
+def mikro_service(settings: SettingsWrapper) -> SettingsWrapper:
     settings.SERVICES = [
         ServiceEntry(name="mikro", url="http://127.0.0.1:9/_rekuest/service")
     ]
     return settings
 
 
-def _org(name: str):
-    from authentikate.models import Organization
-
+def _org(name: str) -> Organization:
     return Organization.objects.get_or_create(identifier=name)[0]
 
 
-def _target(prefix: str, org, *, needs_token: bool = False) -> models.Implementation:
+def _target(
+    prefix: str, org: Organization, *, needs_token: bool = False
+) -> models.Implementation:
     """An agent in ``org`` implementing an action whose ``image`` port takes a multi-channel dataset."""
     from facade.inputs import ImplementAgentInputModel
     from rekuest_core.enums import ActionKind
@@ -79,7 +86,10 @@ def _target(prefix: str, org, *, needs_token: bool = False) -> models.Implementa
 
 
 def _trigger(
-    impl: models.Implementation, *, conditions=None, owner_prefix: str = "owner"
+    impl: models.Implementation,
+    *,
+    conditions: list[JSON] | None = None,
+    owner_prefix: str = "owner",
 ) -> models.Trigger:
     user, client = _identity(f"{owner_prefix}-{impl.pk}", impl.agent.organization)
     caller, _ = models.Caller.objects.get_or_create(
@@ -109,7 +119,9 @@ CREATE_TRIGGER = """
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.asyncio
 class TestTriggerGraphQL:
-    async def test_create_validates_and_is_scoped(self, authenticated_context):
+    async def test_create_validates_and_is_scoped(
+        self, authenticated_context: HttpContext
+    ) -> None:
         from asgiref.sync import sync_to_async
 
         from facade.schema import schema
@@ -119,12 +131,10 @@ class TestTriggerGraphQL:
             tenant_context,
         )
 
-        context_a, context_b = await sync_to_async(
-            lambda: (tenant_context(TEST_TOKEN)[0], tenant_context(OTHER_TOKEN)[0])
+        (context_a, _, _, organization_a), (context_b, *_) = await sync_to_async(
+            lambda: (tenant_context(TEST_TOKEN), tenant_context(OTHER_TOKEN))
         )()
-        impl = await sync_to_async(_target)(
-            "gql-trigger", context_a.request.organization
-        )
+        impl = await sync_to_async(_target)("gql-trigger", organization_a)
         service = await models.Service.objects.acreate(name="gql-trigger-service")
         await models.SignalDeclaration.objects.acreate(
             service=service,
@@ -133,8 +143,13 @@ class TestTriggerGraphQL:
             descriptor_keys=[CHANNELS],
         )
 
-        def create(port, conditions=None, kind="CREATED", identifier=IDENTIFIER):
-            inp = {
+        def create(
+            port: str,
+            conditions: list[dict[str, object]] | None = None,
+            kind: str = "CREATED",
+            identifier: str = IDENTIFIER,
+        ) -> Awaitable[ExecutionResult]:
+            inp: dict[str, object] = {
                 "name": "t",
                 "kind": kind,
                 "identifier": identifier,

@@ -16,7 +16,7 @@ extra query fetches all ancestors for all usages.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, TypeVar, cast
 
 import strawberry
 import strawberry_django
@@ -26,6 +26,8 @@ from strawberry_django.pagination import OffsetPaginationInput
 
 from facade import filters, models
 from facade.types.base import row_of
+
+T = TypeVar("T")
 
 if TYPE_CHECKING:
     # Named in annotations only: strawberry resolves them when it builds the schema.
@@ -474,7 +476,7 @@ class Structure:
 # --------------------------------------------------------------------------- #
 # Query resolvers (wired in facade/schema.py)
 # --------------------------------------------------------------------------- #
-def _page[T](rows: list[T], pagination: OffsetPaginationInput | None) -> list[T]:
+def _page(rows: list[T], pagination: OffsetPaginationInput | None) -> list[T]:
     """One page of a derived (sorted) list, the way strawberry_django pages a queryset: from
     ``offset``, at most ``limit`` (a negative or missing limit: all of the rest)."""
     if pagination is None:

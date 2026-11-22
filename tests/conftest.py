@@ -3,7 +3,7 @@ import json
 import os
 import time
 from collections.abc import Awaitable, Callable, Iterator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 import boto3
 import httpx
@@ -16,6 +16,7 @@ from authentikate.expand import (
 )
 from authentikate.models import Membership
 from authentikate.utils import authenticate_token_or_none
+from botocore.client import BaseClient
 from django.conf import settings
 from dokker import Deployment, testing
 from kante.context import HttpContext, UniversalRequest
@@ -23,12 +24,16 @@ from moto import mock_aws
 from pytest_django.fixtures import SettingsWrapper
 from strawberry.http.temporal_response import TemporalResponse
 
+# The hub's fixtures, for every test that asks for them by name: pytest finds a
+# fixture in conftest's namespace, so these imports are used though nothing names them.
+from tests.provisioning_fixtures import declared, hub, lab  # noqa: F401
+
 if TYPE_CHECKING:
     from facade import models
 
 
 @pytest.fixture(scope="session", autouse=True)
-def embedding_model_warm():
+def embedding_model_warm() -> Iterator[None]:
     """Load the embedding model once per session, outside any test's DB transaction.
 
     Every save of an Action embeds its text, so the first one would otherwise pay the model
@@ -52,18 +57,18 @@ def aws_credentials() -> None:
 
 
 @pytest.fixture(scope="function")
-def s3(aws_credentials):
+def s3(aws_credentials: None) -> Iterator[BaseClient]:
     with mock_aws():
         yield boto3.client("s3", region_name="us-east-1")
 
 
 @pytest.fixture
-def create_bucket1(s3) -> None:
+def create_bucket1(s3: BaseClient) -> None:
     s3.create_bucket(Bucket="babanana")
 
 
 @pytest.fixture
-def create_bucket2(s3) -> None:
+def create_bucket2(s3: BaseClient) -> None:
     s3.create_bucket(Bucket="cabanana")
 
 
@@ -190,7 +195,10 @@ def schedule_notices(takt: str) -> Iterator[ScheduleNotices]:
         yield ScheduleNotices(connection)
 
 
-async def eventually[T](
+T = TypeVar("T")
+
+
+async def eventually(
     read: Callable[[], Awaitable[T | None]], seconds: float = 10.0
 ) -> T:
     """What takt does on a notice happens after the mutation answered: ask until it is there."""
@@ -205,7 +213,7 @@ async def eventually[T](
 
 
 @pytest.fixture(scope="session")
-def django_db_modify_db_settings(backend_stack):
+def django_db_modify_db_settings(backend_stack: Deployment) -> Iterator[None]:
     """Start the backend services before pytest-django configures the test DB.
 
     The published host ports are reserved per run (see the root ``conftest.py``),
@@ -225,7 +233,7 @@ def django_db_modify_db_settings(backend_stack):
 
 
 @pytest.fixture(scope="function")
-def authenticated_context(db, backend_stack):
+def authenticated_context(db: None, backend_stack: Deployment) -> HttpContext:
     # Derive the identity from the same static token the agent sockets use, so a caller built
     # here and an agent from ``seed_agent`` land in the SAME organization. This used to
     # hardcode a fixed organization while ``seed_agent`` resolved the token's own org,
@@ -236,6 +244,7 @@ def authenticated_context(db, backend_stack):
     from tests.factories import TEST_TOKEN
 
     decoded = async_to_sync(authenticate_token_or_none)(TEST_TOKEN)
+    assert decoded is not None, "the static test token does not authenticate"
     user = async_to_sync(aexpand_user_from_token)(decoded)
     client = async_to_sync(aexpand_client_from_token)(decoded)
     org = async_to_sync(aexpand_organization_from_token)(decoded)

@@ -1,7 +1,5 @@
 """Inputs for agent lifecycle controls (pin, bounce, kick, block, update)."""
 
-from typing import Self
-
 import strawberry
 from pydantic import BaseModel, Field, model_validator
 from strawberry.experimental import pydantic
@@ -155,7 +153,7 @@ class ImplementAgentInputModel(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_logos(self) -> Self:
+    def check_logos(self) -> "ImplementAgentInputModel":
         """An implementation's logo is an action logo blok the agent declares: a logo blok whose
         ``<Blok>`` says kind action (one sent as source is told once takt has parsed it)."""
         from rekuest_core.vocabulary import BlokError, blok_header

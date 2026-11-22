@@ -6,6 +6,7 @@ fan-out); here the subscription reads them as a websocket consumer hands them ov
 
 import asyncio
 import contextlib
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Sequence
 from types import SimpleNamespace
 
 import pytest
@@ -36,19 +37,27 @@ def _message(event: models.TaskEvent) -> dict:
 class Consumer:
     """The little of a websocket consumer the subscription uses: joining a group and reading its queue."""
 
-    def __init__(self, on_join=None) -> None:
+    def __init__(
+        self, on_join: Callable[["Consumer"], Awaitable[None]] | None = None
+    ) -> None:
         self.groups: list[str] = []
-        self.queue: asyncio.Queue = asyncio.Queue()
+        self.queue: asyncio.Queue[dict | None] = asyncio.Queue()
         self.on_join = on_join
 
     @contextlib.asynccontextmanager
-    async def listen_to_channel(self, type: str, *, groups=(), timeout=None):
+    async def listen_to_channel(
+        self,
+        type: str,
+        *,
+        groups: Sequence[str] = (),
+        timeout: float | None = None,
+    ) -> AsyncIterator[AsyncIterator[dict]]:
         assert type == task_event_channel.message_type
         self.groups = list(groups)
         if self.on_join:
             await self.on_join(self)
 
-        async def messages():
+        async def messages() -> AsyncIterator[dict]:
             while (message := await self.queue.get()) is not None:
                 yield message
 
@@ -57,7 +66,7 @@ class Consumer:
 
 async def _watch(
     task: models.Task, consumer: Consumer, token: str = "test", after: str | None = None
-):
+) -> AsyncGenerator[TaskEventChange, None]:
     context = (await sync_to_async(tenant_context)(token))[0]
     info = SimpleNamespace(
         context=SimpleNamespace(request=context.request, consumer=consumer)
@@ -65,7 +74,9 @@ async def _watch(
     return task_events(None, info, str(task.pk), after)  # type: ignore[arg-type]
 
 
-async def _drain(feed, consumer: Consumer) -> list[TaskEventChange]:
+async def _drain(
+    feed: AsyncGenerator[TaskEventChange, None], consumer: Consumer
+) -> list[TaskEventChange]:
     consumer.queue.put_nowait(None)
     return [message async for message in feed]
 

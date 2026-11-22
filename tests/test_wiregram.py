@@ -6,12 +6,18 @@ records every request).
 
 import pytest
 from asgiref.sync import sync_to_async
+from kante.context import HttpContext
+from strawberry.types import ExecutionResult
 
 from facade import models
 from facade.schema import schema
-from tests.conftest import settled_run, waiting_run
+from tests.conftest import ScheduleNotices, settled_run, waiting_run
 from tests.factories import TEST_TOKEN
-from tests.graphql.test_cross_tenant_isolation import OTHER_TOKEN, tenant_context
+from tests.graphql.test_cross_tenant_isolation import (
+    OTHER_TOKEN,
+    organization_of,
+    tenant_context,
+)
 from tests.test_schedules import _schedulable
 from tests.test_triggers import CHANNELS, IDENTIFIER, _target
 
@@ -32,7 +38,7 @@ IMPORT = """
 """
 
 
-async def _contexts():
+async def _contexts() -> tuple[HttpContext, HttpContext]:
     return await sync_to_async(
         lambda: (tenant_context(TEST_TOKEN)[0], tenant_context(OTHER_TOKEN)[0])
     )()
@@ -45,11 +51,13 @@ async def _named(
     return implementation
 
 
-async def _hub(context, prefix: str):
+async def _hub(
+    context: HttpContext, prefix: str
+) -> tuple[models.Implementation, models.Implementation]:
     """An organization with a 'kuvert' agent offering a sweep and a 'thumbs' agent whose action takes a dataset."""
     sweep = await _named(await _schedulable(f"{prefix}-sweep", context), "kuvert")
     thumbs = await _named(
-        await sync_to_async(_target)(f"{prefix}-thumbs", context.request.organization),
+        await sync_to_async(_target)(f"{prefix}-thumbs", organization_of(context)),
         "thumbs",
     )
     if not await models.SignalDeclaration.objects.filter(
@@ -65,7 +73,9 @@ async def _hub(context, prefix: str):
     return sweep, thumbs
 
 
-def _document(sweep, thumbs, **overrides) -> dict:
+def _document(
+    sweep: models.Implementation, thumbs: models.Implementation, **overrides: object
+) -> dict:
     return {
         "key": "housekeeping",
         "name": "Housekeeping",
@@ -96,7 +106,7 @@ def _document(sweep, thumbs, **overrides) -> dict:
     }
 
 
-async def _import(context, document):
+async def _import(context: HttpContext, document: dict) -> ExecutionResult:
     return await schema.execute(
         IMPORT, variable_values={"input": document}, context_value=context
     )
@@ -108,8 +118,8 @@ async def _waiting(schedule: str) -> int:
 
 
 async def test_importing_creates_the_rules_and_plans_the_schedules(
-    authenticated_context,
-):
+    authenticated_context: HttpContext,
+) -> None:
     context, other = await _contexts()
     sweep, thumbs = await _hub(context, "wg-create")
 
@@ -152,8 +162,8 @@ async def test_importing_creates_the_rules_and_plans_the_schedules(
 
 
 async def test_importing_again_updates_in_place_and_removes_what_is_no_longer_listed(
-    authenticated_context, schedule_notices
-):
+    authenticated_context: HttpContext, schedule_notices: ScheduleNotices
+) -> None:
     context, _ = await _contexts()
     sweep, thumbs = await _hub(context, "wg-again")
     first = (await _import(context, _document(sweep, thumbs))).data["importWiregram"]
@@ -196,11 +206,13 @@ async def test_importing_again_updates_in_place_and_removes_what_is_no_longer_li
     assert (await settled_run(waiting)).latest_event_kind == "CANCELLED"
 
 
-async def test_a_document_that_cannot_be_is_refused_whole(authenticated_context):
+async def test_a_document_that_cannot_be_is_refused_whole(
+    authenticated_context: HttpContext,
+) -> None:
     context, _ = await _contexts()
     sweep, thumbs = await _hub(context, "wg-refuse")
 
-    async def refused(document) -> str:
+    async def refused(document: dict) -> str:
         result = await _import(context, document)
         assert result.errors is not None
         assert (
@@ -237,7 +249,9 @@ async def test_a_document_that_cannot_be_is_refused_whole(authenticated_context)
     assert "exactly one of" in await refused(no_timing)
 
 
-async def test_two_agents_of_one_name_are_not_guessed_between(authenticated_context):
+async def test_two_agents_of_one_name_are_not_guessed_between(
+    authenticated_context: HttpContext,
+) -> None:
     context, _ = await _contexts()
     sweep, thumbs = await _hub(context, "wg-twins")
     twin = await _named(await _schedulable("wg-twins-second", context), "kuvert")
@@ -253,8 +267,8 @@ async def test_two_agents_of_one_name_are_not_guessed_between(authenticated_cont
 
 
 async def test_deleting_a_wiregram_removes_its_rules_and_cancels_their_waiting_runs(
-    authenticated_context,
-):
+    authenticated_context: HttpContext,
+) -> None:
     context, other = await _contexts()
     sweep, thumbs = await _hub(context, "wg-delete")
     wiregram = (await _import(context, _document(sweep, thumbs))).data["importWiregram"]
@@ -281,8 +295,8 @@ async def test_deleting_a_wiregram_removes_its_rules_and_cancels_their_waiting_r
 
 
 async def test_rules_are_exported_as_a_document_another_organization_can_import(
-    authenticated_context,
-):
+    authenticated_context: HttpContext,
+) -> None:
     context, other = await _contexts()
     sweep, thumbs = await _hub(context, "wg-export")
     wiregram = (await _import(context, _document(sweep, thumbs))).data["importWiregram"]

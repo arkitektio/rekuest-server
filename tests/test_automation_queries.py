@@ -6,12 +6,20 @@ when it arrives is takt's and tested there.
 
 import pytest
 from asgiref.sync import sync_to_async
+from authentikate.models import Organization
+from kante.context import HttpContext
+from pytest_django.fixtures import SettingsWrapper
+from strawberry.types import ExecutionResult
 
 from facade import models
 from facade.schema import schema
-from tests.conftest import settled_run, waiting_run
+from tests.conftest import ScheduleNotices, settled_run, waiting_run
 from tests.factories import TEST_TOKEN
-from tests.graphql.test_cross_tenant_isolation import OTHER_TOKEN, tenant_context
+from tests.graphql.test_cross_tenant_isolation import (
+    OTHER_TOKEN,
+    organization_of,
+    tenant_context,
+)
 from tests.test_schedules import CREATE_SCHEDULE, _schedulable
 from tests.test_triggers import CHANNELS, CREATE_TRIGGER, IDENTIFIER, _target
 
@@ -22,7 +30,7 @@ pytestmark = [
 ]
 
 
-async def _contexts():
+async def _contexts() -> tuple[HttpContext, HttpContext]:
     return await sync_to_async(
         lambda: (tenant_context(TEST_TOKEN)[0], tenant_context(OTHER_TOKEN)[0])
     )()
@@ -40,7 +48,7 @@ async def _declared(name: str, *kinds: str) -> None:
 
 
 async def _signal(
-    organization, object: str, channels: int, kind: str = "CREATED"
+    organization: Organization, object: str, channels: int, kind: str = "CREATED"
 ) -> models.Signal:
     return await models.Signal.objects.acreate(
         service="mikro",
@@ -53,16 +61,19 @@ async def _signal(
     )
 
 
-async def _run(query: str, context, **variables):
+async def _run(query: str, context: HttpContext, **variables: object) -> dict:
     result = await schema.execute(
         query, variable_values=variables or None, context_value=context
     )
     assert result.errors is None, result.errors
+    assert result.data is not None
     return result.data
 
 
-async def _trigger(context, impl, **fields) -> str:
-    values = {
+async def _trigger(
+    context: HttpContext, impl: models.Implementation, **fields: object
+) -> str:
+    values: dict[str, object] = {
         "name": "thumbnail",
         "kind": "CREATED",
         "identifier": IDENTIFIER,
@@ -80,7 +91,9 @@ async def _waiting(schedule: str) -> int:
 
 
 class TestFilters:
-    async def test_schedules_are_filtered_and_ordered(self, authenticated_context):
+    async def test_schedules_are_filtered_and_ordered(
+        self, authenticated_context: HttpContext
+    ) -> None:
         context, _ = await _contexts()
         impl = await _schedulable("flt-sched", context)
         base = {"action": str(impl.action_id), "intervalSeconds": 3600}
@@ -98,7 +111,7 @@ class TestFilters:
 
         listed = "query($filters: ScheduleFilter, $ordering: [ScheduleOrder!]! = []) { schedules(filters: $filters, ordering: $ordering) { id } }"
 
-        async def ids(**variables):
+        async def ids(**variables: object) -> list[str]:
             return [
                 row["id"]
                 for row in (await _run(listed, context, **variables))["schedules"]
@@ -119,10 +132,12 @@ class TestFilters:
         # A filters variable that is given as null scopes like one that is absent.
         assert sorted(await ids(filters=None)) == sorted([nightly, hourly])
 
-    async def test_triggers_and_signals_are_filtered(self, authenticated_context):
+    async def test_triggers_and_signals_are_filtered(
+        self, authenticated_context: HttpContext
+    ) -> None:
         context, other = await _contexts()
         await _declared("flt-service", "CREATED", "UPDATED")
-        impl = await sync_to_async(_target)("flt-trig", context.request.organization)
+        impl = await sync_to_async(_target)("flt-trig", organization_of(context))
         created = await _trigger(context, impl, name="on create")
         updated = await _trigger(context, impl, name="on update", kind="UPDATED")
 
@@ -152,17 +167,17 @@ class TestFilters:
             created,
         ]
 
-        organization = context.request.organization
+        organization = organization_of(context)
         first = await _signal(organization, "1", 3)
         second = await _signal(organization, "2", 1, kind="UPDATED")
         await models.Signal.objects.filter(pk=first.pk).aupdate(
             processed_at="2026-10-03T00:00:00Z"
         )
-        await _signal(other.request.organization, "9", 3)  # another tenant's
+        await _signal(organization_of(other), "9", 3)  # another tenant's
 
         signals = "query($filters: SignalFilter, $ordering: [SignalOrder!]! = []) { signals(filters: $filters, ordering: $ordering) { id } }"
 
-        async def ids(**variables):
+        async def ids(**variables: object) -> list[str]:
             return [
                 row["id"]
                 for row in (await _run(signals, context, **variables))["signals"]
@@ -178,10 +193,10 @@ class TestFilters:
         assert await ids(filters={"matched": True}) == []  # nothing ran for either
 
     async def test_a_signal_is_fetched_by_id_within_its_organization(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         context, other = await _contexts()
-        signal = await _signal(context.request.organization, "7", 2)
+        signal = await _signal(organization_of(context), "7", 2)
         query = "query($id: ID!) { signal(id: $id) { id object descriptors } }"
 
         assert (await _run(query, context, id=str(signal.pk)))["signal"][
@@ -195,8 +210,8 @@ class TestFilters:
 
 class TestReverseLinks:
     async def test_a_run_names_its_schedule_and_actions_and_agents_their_rules(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         context, _ = await _contexts()
         await _declared("link-service", "CREATED")
         scheduled = await _schedulable("link-sched", context)
@@ -213,9 +228,7 @@ class TestReverseLinks:
                 },
             )
         )["createSchedule"]
-        triggered = await sync_to_async(_target)(
-            "link-trig", context.request.organization
-        )
+        triggered = await sync_to_async(_target)("link-trig", organization_of(context))
         trigger = await _trigger(
             context,
             triggered,
@@ -262,11 +275,11 @@ class TestReverseLinks:
         assert of_trigger["agent"] == {"schedules": [], "triggers": [{"id": trigger}]}
 
     async def test_a_declaration_lists_the_organizations_own_triggers(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         context, other = await _contexts()
         await _declared("decl-service", "CREATED")
-        impl = await sync_to_async(_target)("decl-trig", context.request.organization)
+        impl = await sync_to_async(_target)("decl-trig", organization_of(context))
         trigger = await _trigger(context, impl)
         query = "query { signalDeclarations { kind triggers { id } } }"
 
@@ -280,22 +293,21 @@ class TestReverseLinks:
 
 class TestDryRun:
     async def test_conditions_are_tried_against_the_stored_signals(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         context, other = await _contexts()
-        organization = context.request.organization
+        organization = organization_of(context)
         one, three = (
             await _signal(organization, "one", 1),
             await _signal(organization, "three", 3),
         )
         await _signal(organization, "gone", 3, kind="DELETED")
-        await _signal(other.request.organization, "theirs", 3)
-        query = (
-            'query($conditions: AnyDefault) { matchingSignals(kind: CREATED, identifier: "%s", conditions: $conditions) { id } }'
-            % IDENTIFIER
-        )
+        await _signal(organization_of(other), "theirs", 3)
+        query = f'query($conditions: AnyDefault) {{ matchingSignals(kind: CREATED, identifier: "{IDENTIFIER}", conditions: $conditions) {{ id }} }}'
 
-        async def matching(conditions=None):
+        async def matching(
+            conditions: list[dict[str, object]] | None = None,
+        ) -> list[str]:
             return [
                 row["id"]
                 for row in (await _run(query, context, conditions=conditions))[
@@ -315,12 +327,9 @@ class TestDryRun:
             == []
         )
 
-        counted = (
-            'query($conditions: AnyDefault) { matchingSignalCount(kind: CREATED, identifier: "%s", conditions: $conditions) }'
-            % IDENTIFIER
-        )
+        counted = f'query($conditions: AnyDefault) {{ matchingSignalCount(kind: CREATED, identifier: "{IDENTIFIER}", conditions: $conditions) }}'
 
-        async def count(conditions=None):
+        async def count(conditions: list[dict[str, object]] | None = None) -> int:
             return (await _run(counted, context, conditions=conditions))[
                 "matchingSignalCount"
             ]
@@ -337,11 +346,11 @@ class TestDryRun:
         assert bad.errors is not None
 
     async def test_a_trigger_also_applies_what_its_port_requires(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         context, _ = await _contexts()
         await _declared("dry-service", "CREATED")
-        organization = context.request.organization
+        organization = organization_of(context)
         impl = await sync_to_async(_target)(
             "dry-trig", organization
         )  # its port requires two channels or more
@@ -379,11 +388,11 @@ UPDATE_SCHEDULE = "mutation($input: UpdateScheduleInput!) { updateSchedule(input
 
 class TestRepointing:
     async def test_a_trigger_is_repointed_and_checked_as_a_whole(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         context, _ = await _contexts()
         await _declared("repoint-service", "CREATED", "UPDATED")
-        organization = context.request.organization
+        organization = organization_of(context)
         first = await sync_to_async(_target)("repoint-a", organization)
         second = await sync_to_async(_target)("repoint-b", organization)
         trigger = await _trigger(
@@ -394,7 +403,7 @@ class TestRepointing:
             consecutive_failures=3, last_error="earlier"
         )
 
-        async def update(**fields):
+        async def update(**fields: object) -> ExecutionResult:
             return await schema.execute(
                 UPDATE_TRIGGER,
                 variable_values={"input": {"id": trigger, **fields}},
@@ -443,8 +452,8 @@ class TestRepointing:
         )
 
     async def test_a_retargeted_schedule_is_replanned(
-        self, authenticated_context, schedule_notices
-    ):
+        self, authenticated_context: HttpContext, schedule_notices: ScheduleNotices
+    ) -> None:
         context, _ = await _contexts()
         first = await _schedulable("retarget-a", context)
         second = await _schedulable("retarget-b", context)
@@ -500,11 +509,11 @@ class TestBrokenRules:
     """A rule that broke since it was written can still be renamed and switched off."""
 
     async def test_a_trigger_whose_signal_is_no_longer_declared(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         context, _ = await _contexts()
         await _declared("gone-service", "CREATED")
-        impl = await sync_to_async(_target)("gone-trig", context.request.organization)
+        impl = await sync_to_async(_target)("gone-trig", organization_of(context))
         trigger = await _trigger(context, impl)
         await models.SignalDeclaration.objects.all().adelete()
         update = "mutation($input: UpdateTriggerInput!) { updateTrigger(input: $input) { name enabled maxRuns } }"
@@ -529,7 +538,9 @@ class TestBrokenRules:
             retargeted.errors[0]
         )
 
-    async def test_a_schedule_whose_implementation_is_gone(self, authenticated_context):
+    async def test_a_schedule_whose_implementation_is_gone(
+        self, authenticated_context: HttpContext
+    ) -> None:
         context, _ = await _contexts()
         impl = await _schedulable("gone-sched", context)
         schedule = (
@@ -566,8 +577,8 @@ class TestBrokenRules:
         )
 
     async def test_an_edit_does_not_use_up_a_schedules_run_limit(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         context, _ = await _contexts()
         impl = await _schedulable("limit-sched", context)
         # The mutations answer with the row as they wrote it; what takt made of it is read afterwards.
@@ -607,15 +618,15 @@ class TestBrokenRules:
 
 class TestPoliciesAndTheFiringLog:
     async def test_policies_are_checked_and_lifted(
-        self, authenticated_context, settings
-    ):
+        self, authenticated_context: HttpContext, settings: SettingsWrapper
+    ) -> None:
         context, _ = await _contexts()
         await _declared("policy-service", "CREATED")
-        impl = await sync_to_async(_target)("policy-trig", context.request.organization)
+        impl = await sync_to_async(_target)("policy-trig", organization_of(context))
         settings.SIGNAL_RETENTION_SECONDS = 3600
 
-        async def create(**fields):
-            values = {
+        async def create(**fields: object) -> ExecutionResult:
+            values: dict[str, object] = {
                 "name": "t",
                 "kind": "CREATED",
                 "identifier": IDENTIFIER,
@@ -666,8 +677,8 @@ class TestPoliciesAndTheFiringLog:
         }
 
     async def test_a_schedule_carries_its_policies_and_says_what_comes_next(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         context, _ = await _contexts()
         impl = await _schedulable("policy-sched", context)
         created = await _run(
@@ -714,11 +725,11 @@ class TestPoliciesAndTheFiringLog:
         )["schedule"] == {"exhausted": True}
 
     async def test_the_firing_log_is_read_and_a_trigger_is_replayed(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         context, other = await _contexts()
         await _declared("firing-service", "CREATED")
-        organization = context.request.organization
+        organization = organization_of(context)
         impl = await sync_to_async(_target)("firing-trig", organization)
         trigger = await _trigger(
             context, impl, agent=str(impl.agent_id), interface=impl.interface
@@ -770,8 +781,7 @@ class TestPoliciesAndTheFiringLog:
         assert foreign.errors is not None
 
         seen = await _run(
-            'query($id: ID!) { signal(id: $id) { firings { outcome } } trigger(id: "%s") { firings { outcome } } }'
-            % trigger,
+            f'query($id: ID!) {{ signal(id: $id) {{ firings {{ outcome }} }} trigger(id: "{trigger}") {{ firings {{ outcome }} }} }}',
             context,
             id=str(silent.pk),
         )
@@ -784,8 +794,8 @@ class TestPoliciesAndTheFiringLog:
 
 class TestRuleFeed:
     async def test_a_users_change_to_a_rule_is_published_to_its_organization(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         """What the ``schedules`` / ``triggers`` subscriptions listen to, read off the channel layer itself."""
         from channels.layers import get_channel_layer
 
@@ -839,11 +849,11 @@ class TestRuleFeed:
 
 class TestSearchAndLookups:
     async def test_rules_are_searched_by_what_they_run_and_where_they_came_from(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         context, _ = await _contexts()
         await _declared("search-service", "CREATED")
-        impl = await sync_to_async(_target)("search-trig", context.request.organization)
+        impl = await sync_to_async(_target)("search-trig", organization_of(context))
         await models.Agent.objects.filter(pk=impl.agent_id).aupdate(name="thumbnailer")
         await models.Action.objects.filter(pk=impl.action_id).aupdate(
             name="Make Thumbnail"
@@ -860,7 +870,7 @@ class TestSearchAndLookups:
         )
         query = "query($filters: TriggerFilter) { triggers(filters: $filters, ordering: [{name: ASC}]) { id } }"
 
-        async def found(text):
+        async def found(text: str) -> list[str]:
             return [
                 row["id"]
                 for row in (await _run(query, context, filters={"search": text}))[
@@ -904,10 +914,10 @@ class TestSearchAndLookups:
             ] == [schedule], text
 
     async def test_signals_are_searched_by_text_and_name_their_service(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         context, other = await _contexts()
-        organization = context.request.organization
+        organization = organization_of(context)
         catalogued = await models.Service.objects.acreate(
             name="mikro", description="Microscopy data"
         )
@@ -933,7 +943,7 @@ class TestSearchAndLookups:
         )
         query = "query($filters: SignalFilter) { signals(filters: $filters) { id serviceName service { id name description } } }"
 
-        async def found(text):
+        async def found(text: str) -> list[str]:
             return [
                 row["id"]
                 for row in (await _run(query, context, filters={"search": text}))[
@@ -960,12 +970,12 @@ class TestSearchAndLookups:
         ) == ("retired", None)
 
     async def test_a_service_and_a_firing_are_fetched_by_id(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         context, other = await _contexts()
         await _declared("lookup-service", "CREATED")
         service = await models.Service.objects.aget(name="lookup-service")
-        organization = context.request.organization
+        organization = organization_of(context)
         impl = await sync_to_async(_target)("lookup-trig", organization)
         trigger = await _trigger(context, impl)
         signal = await _signal(organization, "one", 1)

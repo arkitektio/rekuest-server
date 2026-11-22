@@ -46,7 +46,11 @@ def create_registry_bundle(prefix: str) -> tuple[User, Client, Organization, Cal
 
 
 def create_agent_for_registry(
-    registry: Caller, user: User, organization: Organization, prefix: str, **overrides
+    registry: Caller,
+    user: User,
+    organization: Organization,
+    prefix: str,
+    **overrides: object,
 ) -> Agent:
     release = Release.objects.create(
         app=App.objects.create(identifier=f"{prefix}-app"), version="1.0.0"
@@ -55,7 +59,7 @@ def create_agent_for_registry(
     registry.client.device = device
     registry.client.save()
 
-    agent_data = {
+    agent_data: dict[str, object] = {
         "app": release.app,
         "hash": f"{prefix}-hash",
         "release": release,
@@ -69,10 +73,10 @@ def create_agent_for_registry(
 
 
 def create_action_for_organization(
-    organization: Organization, prefix: str, **overrides
+    organization: Organization, prefix: str, **overrides: object
 ) -> Action:
     app = App.objects.create(identifier=f"{prefix}-app")
-    action_data = {
+    action_data: dict[str, object] = {
         "app": app,
         "key": f"{prefix}-key",
         "version": "1.0.0",
@@ -89,7 +93,9 @@ def create_action_for_organization(
 # --------------------------------------------------------------------------- #
 # Agent seeding (async) — reproduces ``ensureAgent`` for the websocket tests
 # --------------------------------------------------------------------------- #
-async def seed_agent(instance_id, token=TEST_TOKEN, blocked=False):
+async def seed_agent(
+    instance_id: str, token: str = TEST_TOKEN, blocked: bool = False
+) -> Agent:
     """Pre-create the agent the consumer will look up for ``token``.
 
     Uses the same authentikate expansion the consumer uses, so the derived
@@ -97,6 +103,7 @@ async def seed_agent(instance_id, token=TEST_TOKEN, blocked=False):
     ``instance_id`` is only a label used to make seeded rows distinguishable.
     """
     decoded = await authenticate_token_or_none(token)
+    assert decoded is not None, f"the static token {token!r} does not authenticate"
     user = await aexpand_user_from_token(decoded)
     client = await aexpand_client_from_token(decoded)
     organization = await aexpand_organization_from_token(decoded)
@@ -125,14 +132,14 @@ async def seed_agent(instance_id, token=TEST_TOKEN, blocked=False):
 # Object-graph builders (run synchronously, wrapped via sync_to_async)
 # --------------------------------------------------------------------------- #
 def _build_task(
-    prefix,
+    prefix: str,
     *,
-    effects="UNKNOWN",
-    idempotent=False,
-    pure=False,
-    parent=None,
-    agent_pk=None,
-):
+    effects: str = "UNKNOWN",
+    idempotent: bool = False,
+    pure: bool = False,
+    parent: Task | None = None,
+    agent_pk: int | None = None,
+) -> Task:
     """Create a standalone Action -> Implementation -> Task graph.
 
     ``effect`` sets the implementation's effect class; ``parent`` wires the tree shape.
@@ -195,7 +202,7 @@ def _build_task(
     )
 
 
-def _build_unimplemented_task_for_agent(agent_pk, prefix):
+def _build_unimplemented_task_for_agent(agent_pk: int, prefix: str) -> Task:
     """An unfinished task owned directly by ``agent`` with NO implementation.
 
     Exercises the disconnect path: such rows are found by the direct ``agent`` FK
@@ -223,7 +230,12 @@ def _build_unimplemented_task_for_agent(agent_pk, prefix):
     )
 
 
-def _build_task_for_agent_caller(agent_pk, prefix, parent=None, root=None):
+def _build_task_for_agent_caller(
+    agent_pk: int,
+    prefix: str,
+    parent: Task | None = None,
+    root: Task | None = None,
+) -> Task:
     """A task whose ``caller`` is the agent's own identity.
 
     Used by the caller-event return tests: because the task's caller matches the
@@ -242,7 +254,7 @@ def _build_task_for_agent_caller(agent_pk, prefix, parent=None, root=None):
     )
 
     app = App.objects.create(identifier=f"{prefix}-app")
-    release = Release.objects.create(app=app, version="1.0.0")
+    Release.objects.create(app=app, version="1.0.0")
     action = Action.objects.create(
         app=app,
         key=f"{prefix}-key",
@@ -269,7 +281,7 @@ def _build_task_for_agent_caller(agent_pk, prefix, parent=None, root=None):
     )
 
 
-def _touch_agent(agent_pk):
+def _touch_agent(agent_pk: int) -> Agent:
     """Re-save an agent (an ``update`` fan-out on the ``agents`` feed)."""
     agent = Agent.objects.get(pk=agent_pk)
     agent.save()
@@ -277,12 +289,12 @@ def _touch_agent(agent_pk):
 
 
 def _build_task_event(
-    task_pk,
-    kind=enums.TaskEventChoices.COMPLETED,
-    message=None,
-    progress=None,
-    returns=None,
-):
+    task_pk: int,
+    kind: enums.TaskEventChoices | str = enums.TaskEventChoices.COMPLETED,
+    message: str | None = None,
+    progress: int | None = None,
+    returns: dict[str, object] | None = None,
+) -> TaskEvent:
     """Persist a ``TaskEvent`` on a task, firing the same ``post_save`` fan-out as real dispatch.
 
     On a root task this drives a ``mytasks`` / ``tasks`` ``event`` over the change feeds.
@@ -298,8 +310,8 @@ def _build_task_event(
 
 
 def _build_implementation_for_agent(
-    agent_pk, prefix, needs_token=True, allow_probe=True
-):
+    agent_pk: int, prefix: str, needs_token: bool = True, allow_probe: bool = True
+) -> Implementation:
     """An Action + Implementation owned by ``agent`` (connectable assign target).
 
     ``allow_probe`` defaults True so the call tests can target it; the flag only
@@ -326,7 +338,7 @@ def _build_implementation_for_agent(
     )
 
 
-def _seed_throwaway_agent_graph(prefix):
+def _seed_throwaway_agent_graph(prefix: str) -> Agent:
     """A standalone Agent with its own user/client/org/app — no token, no socket.
 
     For tests that only need *an* agent to hang rows off (locks, sessions, bloks), where
@@ -350,7 +362,7 @@ def _seed_throwaway_agent_graph(prefix):
     )
 
 
-def _build_state_for_agent(agent_pk, interface, prefix):
+def _build_state_for_agent(agent_pk: int, interface: str, prefix: str) -> State:
     """Create a State (and its definition) attached to an existing agent."""
     agent = Agent.objects.get(pk=agent_pk)
     definition = StateDefinition.objects.create(
@@ -365,7 +377,9 @@ def _build_state_for_agent(agent_pk, interface, prefix):
     )
 
 
-def _build_webhook_agent(prefix, secret="s3cr3t", hook_url="https://hook.example/in"):
+def _build_webhook_agent(
+    prefix: str, secret: str = "s3cr3t", hook_url: str = "https://hook.example/in"
+) -> Agent:
     """A HookAgent (kind=WEBHOOK) with a hook_url + shared secret, plus its identity graph."""
     user = User.objects.create(
         username=f"{prefix}-user", password="x", sub=f"{prefix}-sub"

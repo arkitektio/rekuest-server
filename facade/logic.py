@@ -38,7 +38,9 @@ def auto_resolve(
             organization_id=info.context.request.organization.id,
         )
 
-        for action_dependency, new_ids in zip(action_dependencies, per_demand_ids):
+        for action_dependency, new_ids in zip(
+            action_dependencies, per_demand_ids, strict=True
+        ):
             if len(new_ids) == 0:
                 raise ValueError(
                     f"No actions found that match the given action demands {action_dependency}"

@@ -8,10 +8,12 @@ thing: takt is the real one (``takt``), and what it is told is read off its noti
 
 import pytest
 from asgiref.sync import sync_to_async
+from kante.context import HttpContext
+from pytest_django.fixtures import SettingsWrapper
 
 from facade import models
 from facade.schema import schema
-from tests.conftest import waiting_run
+from tests.conftest import ScheduleNotices, waiting_run
 from tests.factories import (
     TEST_TOKEN,
     build_implementation_for_agent,
@@ -23,7 +25,7 @@ pytestmark = pytest.mark.usefixtures("takt")
 
 
 async def _schedulable(
-    prefix: str, context, *, needs_token: bool = False
+    prefix: str, context: HttpContext, *, needs_token: bool = False
 ) -> models.Implementation:
     """An implementation on a HookAgent, both in the tenant of ``context``."""
     agent = await build_webhook_agent(prefix)
@@ -49,10 +51,10 @@ CREATE_SCHEDULE = """
 @pytest.mark.asyncio
 class TestScheduleGraphQL:
     async def test_create_plans_the_next_run_and_is_scoped_to_the_organization(
-        self, authenticated_context
-    ):
+        self, authenticated_context: HttpContext
+    ) -> None:
         @sync_to_async
-        def seed():
+        def seed() -> tuple[HttpContext, HttpContext]:
             context_a, *_ = tenant_context(TEST_TOKEN)
             context_b, *_ = tenant_context(OTHER_TOKEN)
             return context_a, context_b
@@ -109,8 +111,8 @@ class TestScheduleGraphQL:
         assert direct.errors is not None  # another tenant's id reads as missing
 
     async def test_strict_provenance_refuses_a_target_that_needs_a_token(
-        self, authenticated_context, settings
-    ):
+        self, authenticated_context: HttpContext, settings: SettingsWrapper
+    ) -> None:
         settings.PROVENANCE = {**settings.PROVENANCE, "STRICT": True}
         context_a = (await sync_to_async(tenant_context)(TEST_TOKEN))[0]
         agent = await build_webhook_agent("sch-gql-strict")
@@ -134,7 +136,9 @@ class TestScheduleGraphQL:
         )
         assert result.errors is not None and "provenance" in str(result.errors[0])
 
-    async def test_invalid_timing_is_refused(self, authenticated_context):
+    async def test_invalid_timing_is_refused(
+        self, authenticated_context: HttpContext
+    ) -> None:
         context_a = (await sync_to_async(tenant_context)(TEST_TOKEN))[0]
         agent = await build_webhook_agent("sch-gql-bad")
         impl = await build_implementation_for_agent(
@@ -169,10 +173,10 @@ UPDATE_SCHEDULE = """
 @pytest.mark.asyncio
 class TestScheduleChanges:
     async def _created(
-        self, prefix: str, context, **input
+        self, prefix: str, context: HttpContext, **input: object
     ) -> tuple[str, models.Implementation]:
         impl = await _schedulable(prefix, context)
-        fields = {
+        fields: dict[str, object] = {
             "name": "hourly",
             "action": str(impl.action_id),
             "intervalSeconds": 3600,
@@ -184,11 +188,12 @@ class TestScheduleChanges:
             CREATE_SCHEDULE, variable_values={"input": fields}, context_value=context
         )
         assert result.errors is None, result.errors
+        assert result.data is not None
         return result.data["createSchedule"]["id"], impl
 
     async def test_a_retimed_schedule_is_replanned_and_a_renamed_one_is_not(
-        self, authenticated_context, schedule_notices
-    ):
+        self, authenticated_context: HttpContext, schedule_notices: ScheduleNotices
+    ) -> None:
         context = (await sync_to_async(tenant_context)(TEST_TOKEN))[0]
         schedule_id, _ = await self._created("sch-retime", context)
         first_run = await waiting_run(schedule_id)
@@ -245,8 +250,8 @@ class TestScheduleChanges:
         assert (await models.Schedule.objects.aget(pk=schedule_id)).cron == "0 2 * * *"
 
     async def test_a_schedules_policy_is_its_runs_policy(
-        self, authenticated_context, schedule_notices
-    ):
+        self, authenticated_context: HttpContext, schedule_notices: ScheduleNotices
+    ) -> None:
         """ASK unless it says AUTO; a changed policy replans the waiting run with it."""
         context = (await sync_to_async(tenant_context)(TEST_TOKEN))[0]
         schedule_id, _ = await self._created("sch-policy", context)
@@ -272,8 +277,8 @@ class TestScheduleChanges:
         ).policy == "AUTO"
 
     async def test_run_now_and_delete_go_through_takt(
-        self, authenticated_context, schedule_notices
-    ):
+        self, authenticated_context: HttpContext, schedule_notices: ScheduleNotices
+    ) -> None:
         context = (await sync_to_async(tenant_context)(TEST_TOKEN))[0]
         other = (await sync_to_async(tenant_context)(OTHER_TOKEN))[0]
         schedule_id, _ = await self._created("sch-now", context)

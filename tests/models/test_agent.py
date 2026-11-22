@@ -11,7 +11,7 @@ from tests.factories import create_agent_for_registry, create_registry_bundle
 class TestAgentModels:
     """Test suite for the Agent model."""
 
-    def test_agent_creation(self):
+    def test_agent_creation(self) -> None:
         """Test creating an Agent model instance."""
         user, client, org, caller = create_registry_bundle("agent-creation")
 
@@ -29,7 +29,7 @@ class TestAgentModels:
         assert agent.user == user
         assert agent.organization == org
 
-    def test_agent_default_values(self):
+    def test_agent_default_values(self) -> None:
         """Test Agent model default values."""
         user, _, org, caller = create_registry_bundle("agent-defaults")
 
@@ -42,7 +42,7 @@ class TestAgentModels:
 
         assert agent.name == "Nana"  # Default name
 
-    def test_agent_str_representation(self):
+    def test_agent_str_representation(self) -> None:
         """Test Agent model string representation."""
         user, _, org, caller = create_registry_bundle("agent-str")
 
@@ -56,7 +56,7 @@ class TestAgentModels:
 
         assert "Test Agent Display" in str(agent)
 
-    def test_identity_independence(self):
+    def test_identity_independence(self) -> None:
         """Agents in different (client, user, organization) identities are independent."""
         user1, client1, org1, caller1 = create_registry_bundle("identity-1")
         user2, client2, org2, caller2 = create_registry_bundle("identity-2")
@@ -79,7 +79,7 @@ class TestAgentModels:
         assert list(Agent.objects.filter(client=client1)) == [agent1]
         assert list(Agent.objects.filter(client=client2)) == [agent2]
 
-    def test_agent_cascade_delete(self):
+    def test_agent_cascade_delete(self) -> None:
         """Deleting the client cascades to its agents (Agent.client is CASCADE)."""
         user, client, org, caller = create_registry_bundle("agent-cascade")
 
@@ -96,7 +96,7 @@ class TestAgentModels:
 
         assert not Agent.objects.filter(pk=agent_pk).exists()
 
-    def test_one_agent_per_identity(self):
+    def test_one_agent_per_identity(self) -> None:
         """Only one Agent is allowed per (client, user, organization)."""
         user, _, org, caller = create_registry_bundle("meta")
 

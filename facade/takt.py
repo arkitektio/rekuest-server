@@ -17,6 +17,7 @@ reports it exactly as before.
 from __future__ import annotations
 
 import logging
+from typing import TypeVar
 
 import httpx
 from arkitekt_service import telemetry
@@ -26,6 +27,9 @@ from facade import inputs, models, takt_api
 from facade.caller_context import CallerContext
 from facade.json_types import JSON
 from facade.takt_api import Answer, Principal, Request, Route
+
+Req = TypeVar("Req", bound=Request)
+Ans = TypeVar("Ans", bound=Answer)
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +80,7 @@ def post(path: str, body: bytes) -> JSON:
     )
 
 
-def call[Req: Request, Ans: Answer](route: Route[Req, Ans], request: Req) -> Ans:
+def call(route: Route[Req, Ans], request: Req) -> Ans:
     """Ask takt for ``route``; its answer, or the refusal raised."""
     return route.answer.model_validate(post(route.path, request.body()))
 

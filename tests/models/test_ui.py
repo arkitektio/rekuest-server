@@ -1,20 +1,17 @@
 """UI-component model tests: Blok and Dashboard creation."""
 
 import pytest
+from authentikate.models import Organization
 
-from facade.models import Blok, Dashboard
+from facade.models import Blok, Dashboard, Module
 
 
-def _org(name="test-org-scope"):
+def _org(name: str = "test-org-scope") -> Organization:
     """Protocol / StateDefinition / Blok / Dashboard are organization-scoped; any org will do here."""
-    from authentikate.models import Organization
-
     return Organization.objects.get_or_create(identifier=name)[0]
 
 
-def _catalog(org, name="default"):
-    from facade.models import Module
-
+def _catalog(org: Organization, name: str = "default") -> Module:
     return Module.objects.get_or_create(name=name, organization=org)[0]
 
 
@@ -22,7 +19,7 @@ def _catalog(org, name="default"):
 class TestUIModels:
     """Test suite for the Blok / Dashboard UI models."""
 
-    def test_blok_creation(self):
+    def test_blok_creation(self) -> None:
         """Test creating a Blok model instance."""
         # Create a test user for creator
         from django.contrib.auth import get_user_model
@@ -50,13 +47,13 @@ class TestUIModels:
             and blok.context == "PANEL"
         )
 
-    def test_dashboard_creation(self):
+    def test_dashboard_creation(self) -> None:
         """Test creating a Dashboard model instance."""
         dashboard = Dashboard.objects.create(name="Test Dashboard", organization=_org())
 
         assert dashboard.name == "Test Dashboard"
 
-    def test_blok_name_unique_per_organization(self):
+    def test_blok_name_unique_per_organization(self) -> None:
         """The (organization, name) pair every write path upserts on is enforced by the database."""
         from django.contrib.auth import get_user_model
         from django.db import IntegrityError, transaction
@@ -77,7 +74,7 @@ class TestUIModels:
             name="Same", creator=user, organization=org_b, module=_catalog(org_b)
         )
 
-    def test_dependency_key_unique_per_blok(self):
+    def test_dependency_key_unique_per_blok(self) -> None:
         """A blok cannot declare the same dependency key twice."""
         from django.contrib.auth import get_user_model
         from django.db import IntegrityError, transaction

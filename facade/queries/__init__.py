@@ -41,4 +41,8 @@ __all__ = [
     "forward_events_after_rev",
     "patch_events_between_global_revs",
     "snapshots_around_rev",
+    "agent",
+    "dependency_tree",
+    "resolved_implementations",
+    "checkout",
 ]

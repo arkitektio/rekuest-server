@@ -25,8 +25,9 @@ from __future__ import annotations
 
 import hashlib
 import time
+from typing import Any
 
-from django.core.management.base import CommandError
+from django.core.management.base import CommandError, CommandParser
 from django.core.management.commands.migrate import Command as DjangoMigrate
 from django.db import DEFAULT_DB_ALIAS, connections
 
@@ -41,7 +42,7 @@ class Command(DjangoMigrate):
         DjangoMigrate.help + " Serialized across replicas by a Postgres advisory lock."
     )
 
-    def add_arguments(self, parser) -> None:
+    def add_arguments(self, parser: CommandParser) -> None:
         super().add_arguments(parser)
         parser.add_argument(
             "--no-lock",
@@ -55,7 +56,7 @@ class Command(DjangoMigrate):
             help="Seconds to wait for another replica's migrate before giving up (default 900).",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args: Any, **options: Any) -> str | None:
         connection = connections[options.get("database") or DEFAULT_DB_ALIAS]
         if options.get("no_lock") or connection.vendor != "postgresql":
             return super().handle(*args, **options)

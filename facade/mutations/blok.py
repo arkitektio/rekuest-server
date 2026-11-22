@@ -346,7 +346,7 @@ def _task_of(caller: CallerContext, task_id: str | None) -> models.Task | None:
     except models.Task.DoesNotExist:
         raise PermissionError(
             f"Task {task_id} is not one of this client's agents runs."
-        )
+        ) from None
 
 
 @transaction.atomic
@@ -387,7 +387,9 @@ def edit_blok(info: Info, input: inputs.EditBlokInput) -> types.BlokEdit:
         try:
             base = None if model.base is None else blok.revisions.get(id=model.base)
         except models.BlokRevision.DoesNotExist:
-            raise ValueError(f"Blok '{blok.name}' has no revision {model.base}.")
+            raise ValueError(
+                f"Blok '{blok.name}' has no revision {model.base}."
+            ) from None
         # No base names a blok without history; one that has some must be edited from its head.
         if (None if base is None else base.pk) != blok.head_id:
             raise StaleRevisionError(blok, base, blok.head)
@@ -504,7 +506,7 @@ def revert_blok(info: Info, input: inputs.RevertBlokInput) -> types.BlokRevision
     except models.BlokRevision.DoesNotExist:
         raise ValueError(
             f"Blok '{blok.name}' has no revision {input.to} or {input.base}."
-        )
+        ) from None
     message = input.message or f"Back to revision {earlier.number}"
     revision = commit_revision(
         blok,

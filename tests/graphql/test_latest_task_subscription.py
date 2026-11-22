@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Sequence
 from types import SimpleNamespace
 
 import pytest
@@ -55,19 +56,27 @@ def _message(
 class Consumer:
     """The little of a websocket consumer the subscription uses: joining a group and reading its queue."""
 
-    def __init__(self, on_join=None) -> None:
+    def __init__(
+        self, on_join: Callable[["Consumer"], Awaitable[None]] | None = None
+    ) -> None:
         self.groups: list[str] = []
-        self.queue: asyncio.Queue = asyncio.Queue()
+        self.queue: asyncio.Queue[dict | None] = asyncio.Queue()
         self.on_join = on_join
 
     @contextlib.asynccontextmanager
-    async def listen_to_channel(self, type: str, *, groups=(), timeout=None):
+    async def listen_to_channel(
+        self,
+        type: str,
+        *,
+        groups: Sequence[str] = (),
+        timeout: float | None = None,
+    ) -> AsyncIterator[AsyncIterator[dict]]:
         assert type == task_event_channel.message_type
         self.groups = list(groups)
         if self.on_join:
             await self.on_join(self)
 
-        async def messages():
+        async def messages() -> AsyncIterator[dict]:
             while (message := await self.queue.get()) is not None:
                 yield message
 
@@ -76,7 +85,7 @@ class Consumer:
 
 async def _watch(
     agent: models.Agent, interface: str, consumer: Consumer, token: str = "test"
-):
+) -> AsyncGenerator[LatestTaskSnapshot | TaskChange | TaskEventChange, None]:
     context = (await sync_to_async(tenant_context)(token))[0]
     info = SimpleNamespace(
         context=SimpleNamespace(request=context.request, consumer=consumer)
@@ -169,14 +178,19 @@ class TestLatestTask:
             agent, "blur-iface", consumer := Consumer(on_join=published_meanwhile)
         )
         snapshot = await anext(feed)
+        assert isinstance(snapshot, LatestTaskSnapshot)
         assert [event.progress for event in snapshot.events] == [40]
 
         later = await build_task_event(running.pk, kind="PROGRESS", progress=70)
         consumer.queue.put_nowait(_message(event=later))
         consumer.queue.put_nowait(None)
+        relayed = [m async for m in feed]
+        assert [type(message) for message in relayed] == [TaskEventChange]
         assert [
-            (type(message), message.progress) for message in [m async for m in feed]
-        ] == [(TaskEventChange, 70)]
+            message.progress
+            for message in relayed
+            if isinstance(message, TaskEventChange)
+        ] == [70]
 
     async def test_a_newer_run_and_its_reports_are_relayed_and_an_older_ones_are_not(
         self,
@@ -191,7 +205,7 @@ class TestLatestTask:
         held = await run(implementation)
         seen = (await build_task_event(held.pk, kind="PROGRESS", progress=10)).pk
 
-        def relay(**message: object):
+        def relay(**message: object) -> TaskChange | TaskEventChange | None:
             parsed = task_event_channel.model.model_validate(
                 _message(**message)["message"]  # type: ignore[arg-type]
             )

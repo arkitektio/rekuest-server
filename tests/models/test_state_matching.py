@@ -6,9 +6,10 @@ field that no longer exists (the FK is ``definition``). These verify ``get_state
 resolves real StateDefinition ids by their port descriptors.
 """
 
-from types import SimpleNamespace
+from dataclasses import dataclass
 
 import pytest
+from authentikate.models import Organization
 
 from facade import managers, models
 from rekuest_core.enums import PortKind
@@ -17,14 +18,19 @@ from rekuest_core.inputs.models import (
 )
 
 
-def _org(name="test-org-scope"):
+def _org(name: str = "test-org-scope") -> Organization:
     """Protocol / StateDefinition / Blok / Dashboard are organization-scoped; any org will do here."""
-    from authentikate.models import Organization
-
     return Organization.objects.get_or_create(identifier=name)[0]
 
 
-def pm(at=None, key=None, kind=None, identifier=None, nullable=None, children=None):
+def pm(
+    at: int | None = None,
+    key: str | None = None,
+    kind: PortKind | None = None,
+    identifier: str | None = None,
+    nullable: bool | None = None,
+    children: list[PortMatchInputModel] | None = None,
+) -> PortMatchInputModel:
     return PortMatchInputModel(
         at=at,
         key=key,
@@ -35,8 +41,16 @@ def pm(at=None, key=None, kind=None, identifier=None, nullable=None, children=No
     )
 
 
+@dataclass(frozen=True)
+class StateDefinitions:
+    """A counter (one INT port) and a tracker (one ``@mikro/roi`` structure)."""
+
+    counter: models.StateDefinition
+    tracker: models.StateDefinition
+
+
 @pytest.fixture
-def state_defs(db):
+def state_defs(db: None) -> StateDefinitions:
     counter = models.StateDefinition.objects.create(
         organization=_org(),
         name="Counter",
@@ -67,19 +81,19 @@ def state_defs(db):
             }
         ],
     )
-    return SimpleNamespace(counter=counter, tracker=tracker)
+    return StateDefinitions(counter=counter, tracker=tracker)
 
 
-def test_state_match_by_kind(state_defs):
+def test_state_match_by_kind(state_defs: StateDefinitions) -> None:
     ids = managers.get_state_ids_by_demands([pm(kind=PortKind.INT)])
-    assert set(ids) == {state_defs.counter.id}
+    assert set(ids) == {state_defs.counter.pk}
 
 
-def test_state_match_by_identifier(state_defs):
+def test_state_match_by_identifier(state_defs: StateDefinitions) -> None:
     ids = managers.get_state_ids_by_demands([pm(identifier="@mikro/roi")])
-    assert set(ids) == {state_defs.tracker.id}
+    assert set(ids) == {state_defs.tracker.pk}
 
 
-def test_state_match_no_results(state_defs):
+def test_state_match_no_results(state_defs: StateDefinitions) -> None:
     ids = managers.get_state_ids_by_demands([pm(identifier="@mikro/nonexistent")])
     assert ids == []
