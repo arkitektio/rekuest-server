@@ -16,7 +16,7 @@ from .materialized_blok import materialize_blok, delete_materialized_blok, pin_m
 from .action import cleanup_actions
 from .resolution import auto_resolve
 from .space import reset_placement, save_placement
-from .asset_store import asset, asset_policy, bloks_for_model, create_asset, request_asset_upload
+from .asset_store import asset, asset_policy, bloks_for_model, bloks_for_models, create_asset, request_asset_upload
 from .agent import implement_agent, update_agent
 
 __all__ = [
@@ -25,6 +25,7 @@ __all__ = [
     "asset",
     "asset_policy",
     "bloks_for_model",
+    "bloks_for_models",
     "create_asset",
     "request_asset_upload",
     "create_trigger",

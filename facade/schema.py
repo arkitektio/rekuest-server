@@ -89,7 +89,7 @@ class Query:
     my_implementation_at = field(resolver=queries.my_implementation_at, description="Find your implementation at a specific interface.")
     checkout = field(resolver=queries.checkout, description="Materialize the latest state for a specific agent")
     checkout_agent = field(resolver=queries.checkout_agent, description="Materialize the latest states for a specific agent")
-    dashboards: list[types.Dashboard] = field(description="All dashboards.")
+    dashboards: list[types.Dashboard] = field(pagination=True, description="All dashboards.")
     bloks: list[types.Blok] = strawberry_django.field(
         field_cls=types.blok.ListedBloksField,
         extensions=[AuthExtension(scopes=["rekuest_read"])],
@@ -129,6 +129,7 @@ class Query:
     asset = field(resolver=mutations.asset, description="The stored asset of this reference ('sha256:...') in the caller's organization, or null if no agent has uploaded it.")
     asset_policy = field(resolver=mutations.asset_policy, description="The limits each kind of asset is held to when it is added.")
     bloks_for_model = field(resolver=mutations.bloks_for_model, description="The html bloks registered to decorate the model of this reference.")
+    bloks_for_models = field(resolver=mutations.bloks_for_models, description="The html bloks registered to decorate any of these models (each names its own in `forModel`): one request for every model a scene shows.")
 
     sessions: list[types.Session] = field(description="List all sessions.")
     session: types.Session = field(description="Fetch a specific session by ID.")

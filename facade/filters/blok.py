@@ -39,6 +39,10 @@ class BlokFilter:
             return queryset, Q()
         return queryset.filter(Q(**{f"{prefix}name__icontains": value}) | Q(**{f"{prefix}description__icontains": value})), Q()
 
+    @filter_field(description="Only bloks whose name starts with this (case-insensitive): the names a new blok would collide with, e.g. `X panel` and `X panel 2` for `X panel`.")
+    def name_starts_with(self, info: Info, queryset: QuerySet[models.Blok], value: str, prefix: str) -> tuple[QuerySet[models.Blok], Q]:
+        return queryset.filter(**{f"{prefix}name__istartswith": value}), Q()
+
     @filter_field(description="Only bloks that render in one of these contexts: PANEL and SCENE are interfaces to open, LOGO draws an agent or an action.")
     def contexts(self, info: Info, queryset: QuerySet[models.Blok], value: list[renums.ComponentContext], prefix: str) -> tuple[QuerySet[models.Blok], Q]:
         return queryset.filter(**{f"{prefix}context__in": [context.value for context in value]}), Q()

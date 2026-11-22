@@ -66,6 +66,16 @@ class ClientFilter:
     def has_implementations_for(self, info: Info, queryset: QuerySet[Client], value: list[rscalars.ActionHash], prefix: str) -> tuple[QuerySet[Client], Q]:
         return queryset.filter(**{f"{prefix}agents__implementations__action__hash__in": value}).distinct(), Q()
 
+    @filter_field(description="Search by OAuth client id, name, app identifier, release version or device id (case-insensitive substring).")
+    def search(self, info: Info, queryset: QuerySet[Client], value: str | None, prefix: str) -> tuple[QuerySet[Client], Q]:
+        if not value:
+            return queryset, Q()
+        fields = ("client_id", "name", "release__app__identifier", "release__version", "device__device_id")
+        match = Q()
+        for field in fields:
+            match |= Q(**{f"{prefix}{field}__icontains": value})
+        return queryset.filter(match), Q()
+
     @filter_field
     def mine(self, info: Info, queryset: QuerySet[Client], value: bool, prefix: str) -> tuple[QuerySet[Client], Q]:
         return queryset.filter(**{f"{prefix}user_id": info.context.user.id}), Q()

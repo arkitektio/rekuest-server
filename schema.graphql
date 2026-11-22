@@ -1997,6 +1997,11 @@ input BlokFilter {
   search: String
 
   """
+  Only bloks whose name starts with this (case-insensitive): the names a new blok would collide with, e.g. `X panel` and `X panel 2` for `X panel`.
+  """
+  nameStartsWith: String
+
+  """
   Only bloks that render in one of these contexts: PANEL and SCENE are interfaces to open, LOGO draws an agent or an action.
   """
   contexts: [ComponentContext!]
@@ -2508,6 +2513,11 @@ input ClientFilter {
   DISTINCT: Boolean
   ids: [ID!]
   hasImplementationsFor: [ActionHash!]
+
+  """
+  Search by OAuth client id, name, app identifier, release version or device id (case-insensitive substring).
+  """
+  search: String
   mine: Boolean
 }
 
@@ -5744,7 +5754,7 @@ type Query {
   toolboxes(filters: ToolboxFilter, ordering: [ToolboxOrder!]! = [], pagination: OffsetPaginationInput): [Toolbox!]! @auth(required_scopes: ["rekuest_read"])
 
   """All dashboards."""
-  dashboards: [Dashboard!]! @auth(required_scopes: ["rekuest_read"])
+  dashboards(pagination: OffsetPaginationInput): [Dashboard!]! @auth(required_scopes: ["rekuest_read"])
 
   """
   List of UI Blok. Leaves out the bloks a task made from its BSX to show: each goes with its task.
@@ -5906,17 +5916,17 @@ type Query {
   """
   All structures: those the org's action ports reference, and those a service of this hub hosts.
   """
-  structures(search: String = null): [Structure!]! @auth(required_scopes: ["rekuest_read"])
+  structures(search: String = null, pagination: OffsetPaginationInput = null): [Structure!]! @auth(required_scopes: ["rekuest_read"])
 
   """
   All structure packages referenced by the org's action ports (derived, not registered).
   """
-  structurePackages(search: String = null): [StructurePackage!]! @auth(required_scopes: ["rekuest_read"])
+  structurePackages(search: String = null, pagination: OffsetPaginationInput = null): [StructurePackage!]! @auth(required_scopes: ["rekuest_read"])
 
   """
   All interfaces referenced by the org's action ports (derived, not registered).
   """
-  interfaces(search: String = null): [Interface!]! @auth(required_scopes: ["rekuest_read"])
+  interfaces(search: String = null, pagination: OffsetPaginationInput = null): [Interface!]! @auth(required_scopes: ["rekuest_read"])
 
   """Fetch resolved dependencies for a resolution."""
   resolvedImplementations(resolution: ID!, dependencyKey: String = null, methodKey: String = null): [Implementation!]! @auth(required_scopes: ["rekuest_read"])
@@ -5941,6 +5951,11 @@ type Query {
 
   """The html bloks registered to decorate the model of this reference."""
   bloksForModel(ref: String!): [Blok!]! @auth(required_scopes: ["rekuest_read"])
+
+  """
+  The html bloks registered to decorate any of these models (each names its own in `forModel`): one request for every model a scene shows.
+  """
+  bloksForModels(refs: [String!]!): [Blok!]! @auth(required_scopes: ["rekuest_read"])
 
   """Retrieve state for a specific context."""
   stateFor(agent: ID!, stateHash: String = null, demand: StateDemandInput = null): State! @auth(required_scopes: ["rekuest_read"])

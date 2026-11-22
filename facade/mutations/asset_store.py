@@ -93,3 +93,10 @@ def asset_policy(info: Info) -> types.AssetPolicy:
 def bloks_for_model(info: Info, ref: str) -> list[types.Blok]:
     """The html bloks registered to decorate this model, by name."""
     return cast("list[types.Blok]", list(models.Blok.objects.filter(organization=info.context.request.organization, for_model=ref).order_by("name")))
+
+
+def bloks_for_models(info: Info, refs: list[str]) -> list[types.Blok]:
+    """The html bloks registered to decorate any of these models, by model then name: one
+    request for every model a scene shows (each blok says its own with `forModel`)."""
+    queryset = models.Blok.objects.filter(organization=info.context.request.organization, for_model__in=refs).order_by("for_model", "name")
+    return cast("list[types.Blok]", queryset)

@@ -22,6 +22,7 @@ import strawberry
 import strawberry_django
 from asgiref.sync import sync_to_async
 from strawberry.types import Info
+from strawberry_django.pagination import OffsetPaginationInput
 
 from facade import filters, models
 from facade.types.base import row_of
@@ -278,24 +279,35 @@ class Structure:
 # --------------------------------------------------------------------------- #
 # Query resolvers (wired in facade/schema.py)
 # --------------------------------------------------------------------------- #
-async def list_structures(info: Info, search: str | None = None) -> list[Structure]:
-    return await sync_to_async(_find_structures)(info, search=search)
+def _page[T](rows: list[T], pagination: OffsetPaginationInput | None) -> list[T]:
+    """One page of a derived (sorted) list, the way strawberry_django pages a queryset: from
+    ``offset``, at most ``limit`` (a negative or missing limit: all of the rest)."""
+    if pagination is None:
+        return rows
+    offset = max(pagination.offset or 0, 0)
+    limit = pagination.limit if isinstance(pagination.limit, int) and pagination.limit >= 0 else None
+    return rows[offset:] if limit is None else rows[offset : offset + limit]
 
 
-async def list_interfaces(info: Info, search: str | None = None) -> list[Interface]:
+async def list_structures(info: Info, search: str | None = None, pagination: OffsetPaginationInput | None = None) -> list[Structure]:
+    identifiers = await sync_to_async(_distinct_identifiers)(info, "STRUCTURE", search=search)
+    return await sync_to_async(_structures)(_page(identifiers, pagination))
+
+
+async def list_interfaces(info: Info, search: str | None = None, pagination: OffsetPaginationInput | None = None) -> list[Interface]:
     identifiers = await sync_to_async(_distinct_identifiers)(info, "INTERFACE", search=search)
-    return [Interface(identifier=strawberry.ID(identifier)) for identifier in identifiers]
+    return [Interface(identifier=strawberry.ID(identifier)) for identifier in _page(identifiers, pagination)]
 
 
 def _known_packages(info: Info) -> set[str]:
     return {_package_of(identifier) for kind in ("STRUCTURE", "INTERFACE") for identifier in _distinct_identifiers(info, kind)}
 
 
-async def list_structure_packages(info: Info, search: str | None = None) -> list[StructurePackage]:
+async def list_structure_packages(info: Info, search: str | None = None, pagination: OffsetPaginationInput | None = None) -> list[StructurePackage]:
     packages = await sync_to_async(_known_packages)(info)
     if search:
         packages = {package for package in packages if search.lower() in package.lower()}
-    return [StructurePackage(key=key) for key in sorted(packages)]
+    return [StructurePackage(key=strawberry.ID(key)) for key in _page(sorted(packages), pagination)]
 
 
 async def get_structure(info: Info, identifier: strawberry.ID) -> Structure:

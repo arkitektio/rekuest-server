@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional, cast
 
 import strawberry
 import strawberry_django
-from django.db.models import QuerySet
+from django.db.models import Exists, OuterRef, Prefetch, QuerySet
 from kante.types import Info
 
 from embeddings.strawberry import Embedding, embedding_of
@@ -28,6 +28,22 @@ if TYPE_CHECKING:
     from facade.types.testcase import TestCase
     from facade.types.toolbox import Collection, Protocol
     from facade.types.trigger import Trigger
+
+
+def _phase_attr(phase: str) -> str:
+    return f"prefetched_{phase.lower()}_bloks"
+
+
+def _phase_bloks(phase: str) -> Prefetch[str, QuerySet[models.ActionBlok], str]:
+    """One query for the bloks of one phase of every action in a list, kept on each row."""
+    return Prefetch("bloks", queryset=models.ActionBlok.objects.filter(phase=phase).order_by("context"), to_attr=_phase_attr(phase))
+
+
+def _bloks_of(row: models.Action, phase: str) -> list["ActionBlok"]:
+    prefetched: list[models.ActionBlok] | None = getattr(row, _phase_attr(phase), None)  # set by the optimizer's prefetch
+    if prefetched is None:
+        prefetched = list(models.ActionBlok.objects.filter(action_id=row.pk, phase=phase).order_by("context"))
+    return cast("list[ActionBlok]", prefetched)
 
 
 @strawberry_django.type(models.Action, filters=filters.ActionFilter, pagination=True, ordering=filters.ActionOrder, description="Represents an executable action in the system.")
@@ -58,13 +74,19 @@ class Action:
         description="The action logo that draws this action: that of the implementation most recently registered with one (`Action.latest_logo`, kept by takt). Each implementation has its own (`Implementation.logo`); an action without one is drawn by its agent's default logo.",
     )
 
-    @strawberry_django.field(description="The action's own bloks, at most one per context (PANEL for a task panel, SCENE a 3D view, as a `Space` placing the run's dependencies): declared with the action, the latest registration's. Not part of its hash.")
+    @strawberry_django.field(
+        prefetch_related=[lambda info: _phase_bloks("RUN")],
+        description="The action's own bloks, at most one per context (PANEL for a task panel, SCENE a 3D view, as a `Space` placing the run's dependencies): declared with the action, the latest registration's. Not part of its hash.",
+    )
     def bloks(self) -> list["ActionBlok"]:
-        return cast("list[ActionBlok]", list(models.ActionBlok.objects.filter(action_id=row_of(self, models.Action).pk, phase="RUN").order_by("context")))
+        return _bloks_of(row_of(self, models.Action), "RUN")
 
-    @strawberry_django.field(description="The action's own bloks for starting a run of it, at most one per context (phase ASSIGN): shown before there is a task, with the arguments being filled in as `args` and the agents a run would get as `deps`.")
+    @strawberry_django.field(
+        prefetch_related=[lambda info: _phase_bloks("ASSIGN")],
+        description="The action's own bloks for starting a run of it, at most one per context (phase ASSIGN): shown before there is a task, with the arguments being filled in as `args` and the agents a run would get as `deps`.",
+    )
     def assign_bloks(self) -> list["ActionBlok"]:
-        return cast("list[ActionBlok]", list(models.ActionBlok.objects.filter(action_id=row_of(self, models.Action).pk, phase="ASSIGN").order_by("context")))
+        return _bloks_of(row_of(self, models.Action), "ASSIGN")
 
     live_implementations: int = strawberry_django.field(
         description="How many of its implementations sit on an agent that can take work now (connected, or a webhook agent) — one per agent. Kept by the database as agents connect and leave, a moment behind (takt recomputes it on commit); a crashed agent counts until takt's stale sweep notices (seconds)."
@@ -74,9 +96,16 @@ class Action:
     def estimated_runtime_seconds(self) -> float | None:
         return getattr(row_of(self, models.Action), "estimated_seconds", None)
 
-    @strawberry_django.field(description="Whether any implementation states a `Fits`, so which agent takes a task can matter.")
+    @strawberry_django.field(
+        annotate={"has_fits_flag": lambda info: Exists(models.ImplementationFit.objects.filter(implementation__action=OuterRef("pk")))},
+        description="Whether any implementation states a `Fits`, so which agent takes a task can matter.",
+    )
     def has_fits(self) -> bool:
-        return models.ImplementationFit.objects.filter(implementation__action=row_of(self, models.Action)).exists()
+        row = row_of(self, models.Action)
+        flag = getattr(row, "has_fits_flag", None)  # annotated by the optimizer; absent on a row fetched without it
+        if isinstance(flag, bool):
+            return flag
+        return models.ImplementationFit.objects.filter(implementation__action=row).exists()
 
     assignable: bool = strawberry_django.field(description="Whether an agent that can take this action is connected (or is a webhook agent) right now: `liveImplementations > 0`.")
 
