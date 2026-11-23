@@ -45,6 +45,7 @@ pub mod schedule_notices;
 pub mod schedules;
 pub mod schema;
 pub mod service_trust;
+pub mod session;
 pub mod settings;
 pub mod signal_intake;
 pub mod signals;

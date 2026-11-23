@@ -76,6 +76,52 @@ pub struct Settings {
     pub hook_agents: Vec<TrustedInstance>,
     /// The hub's trust bundle (`INSTANCE["TRUST_JWKS_URI"]` / `["TRUST_JWKS"]`).
     pub trust_bundle: Arc<crate::service_trust::TrustBundle>,
+    /// Caller sessions (`/session`, [`crate::session`]).
+    pub session: SessionSettings,
+}
+
+/// How caller sessions behave (`rekuest.session_*`; docs/session-protocol.md).
+#[derive(Debug, Clone)]
+pub struct SessionSettings {
+    /// How long a session whose socket is gone may be taken back (`HELLO` naming it).
+    pub grace: Duration,
+    /// How often a connected session's `last_seen` is written to Postgres (the dead man
+    /// switch reads it): well under the shortest switch.
+    pub beat: Duration,
+    /// Without a frame from the window this long, the socket is closed (the window pings).
+    pub idle_timeout: Duration,
+    /// The most items one replay sends; past it, the topic gets a `RESYNC`.
+    pub replay_max: i64,
+    /// The most rows a list topic's snapshot holds.
+    pub list_snapshot: i64,
+    /// How often a session checks its watched tasks and states against Postgres for an item
+    /// the live feed lost.
+    pub watch_check: Duration,
+    /// How long an answer is kept for a request sent again.
+    pub request_memory: Duration,
+    /// The most pushes kept since the window last said how far it got.
+    pub resume_window: usize,
+    /// The most bytes queued for a window before its slowest topics are sent a `RESYNC`.
+    pub buffer_max: usize,
+    /// The shortest dead man switch accepted, in seconds.
+    pub deadman_min: u32,
+}
+
+impl Default for SessionSettings {
+    fn default() -> Self {
+        Self {
+            grace: Duration::from_secs(60),
+            beat: Duration::from_secs(5),
+            idle_timeout: Duration::from_secs(45),
+            replay_max: 500,
+            list_snapshot: 100,
+            watch_check: Duration::from_secs(30),
+            request_memory: Duration::from_secs(600),
+            resume_window: 4096,
+            buffer_max: 4 * 1024 * 1024,
+            deadman_min: 15,
+        }
+    }
 }
 
 /// One entry of `SERVICES` or `HOOK_AGENTS`, as far as trust needs it: its name there, and the
@@ -142,6 +188,7 @@ impl Default for Settings {
             services: vec![],
             hook_agents: vec![],
             trust_bundle: Arc::default(),
+            session: SessionSettings::default(),
         }
     }
 }

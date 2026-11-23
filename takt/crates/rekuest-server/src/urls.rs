@@ -63,7 +63,9 @@ pub fn router(state: Shared) -> Router {
         .route("/agent/signal/{service}", post(signal_intake))
         .route("/agi", get(agent_socket))
         .route("/agi/http/{agent_id}", post(hook_intake))
-        .route("/agi/signal/{service}", post(signal_intake));
+        .route("/agi/signal/{service}", post(signal_intake))
+        // A person's app window: its caller session (docs/session-protocol.md).
+        .route("/session", get(session_socket));
     prefixed(state, routes)
 }
 
@@ -71,6 +73,12 @@ pub fn router(state: Shared) -> Router {
 async fn agent_socket(State(state): State<Shared>, upgrade: WebSocketUpgrade) -> Response {
     let facade = state.facade.clone();
     upgrade.on_upgrade(move |socket| facade::consumers::agent_protocol::serve(facade, socket))
+}
+
+/// A caller session: one app window's socket (`facade::session`).
+async fn session_socket(State(state): State<Shared>, upgrade: WebSocketUpgrade) -> Response {
+    let facade = state.facade.clone();
+    upgrade.on_upgrade(move |socket| facade::session::serve(facade, socket))
 }
 
 /// The HookAgent intake (`re_dynamicpath(r"agi/http/(?P<agent_id>[^/]+)$", hook_intake)`). Any

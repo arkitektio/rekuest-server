@@ -50,4 +50,5 @@ tokenizers = { version = "0.21", default-features = false, features = ["fancy-re
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["process", "io-util"] }
+tokio-tungstenite = "0.29"
 chrono.workspace = true

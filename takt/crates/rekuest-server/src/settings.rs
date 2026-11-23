@@ -98,5 +98,13 @@ pub fn from_configuration(configuration: &Configuration) -> anyhow::Result<Setti
                 )
             },
         )),
+        session: facade::settings::SessionSettings {
+            grace: Duration::from_secs(rekuest.session_grace),
+            beat: Duration::from_secs(rekuest.session_beat.max(1)),
+            watch_check: Duration::from_secs(rekuest.session_watch_check.max(1)),
+            replay_max: rekuest.session_replay_max.max(1),
+            deadman_min: rekuest.session_deadman_min,
+            ..facade::settings::SessionSettings::default()
+        },
     })
 }

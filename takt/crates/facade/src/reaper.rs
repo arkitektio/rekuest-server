@@ -14,6 +14,7 @@
 //! | `reconcile_unpicked_tasks`        | `Task.dispatched_at` | `pickup_deadline`     |
 //! | `reconcile_unreachable_assigns`   | `Task.dispatched_at` | `pickup_deadline`     |
 //! | `escalate_due_controls`           | `Task.interrupt_at`  | `control_deadline`    |
+//! | `session::deadman::sweep`         | `CallerSession.last_seen` | (the task's `deadman_seconds`) |
 //! | `expire_disconnected_tasks`       | `Task.dispatched_at` | `disconnected_expiry` |
 //! | `retention::sweep` (every 60th tick) | `Task.finished_at`, `Signal.processed_at` | `task_retention`, `ephemeral_task_retention`, `signal_retention` |
 //!
@@ -41,7 +42,7 @@ const PLAN_LIMIT: i64 = 100;
 
 /// The ordered sweeps (`_sweeps`). Agents before tasks: healing a stuck-connected agent is what
 /// makes its work visible to the task sweeps of the same tick.
-pub const SWEEPS: [&str; 10] = [
+pub const SWEEPS: [&str; 11] = [
     "stale agents",
     "disconnected agents",
     // After the agent sweeps, whose revokes it counts; normally a notice drained it already.
@@ -54,6 +55,8 @@ pub const SWEEPS: [&str; 10] = [
     "unpicked tasks",
     "unreachable assigns",
     "due controls",
+    // After the controls: a dead man cancel is a control, escalated by the next tick's sweep.
+    "dead man",
     "expired tasks",
 ];
 
@@ -73,6 +76,7 @@ pub async fn run_sweep(ctx: &Context, name: &str) -> Result<usize, sqlx::Error> 
         "unpicked tasks" => reconcile::reconcile_unpicked_tasks(ctx, SWEEP_LIMIT).await,
         "unreachable assigns" => reconcile::reconcile_unreachable_assigns(ctx, SWEEP_LIMIT).await,
         "due controls" => reconcile::escalate_due_controls(ctx, SWEEP_LIMIT).await,
+        "dead man" => crate::session::deadman::sweep(ctx, SWEEP_LIMIT).await,
         "expired tasks" => reconcile::expire_disconnected_tasks(ctx, SWEEP_LIMIT).await,
         other => unreachable!("no sweep named {other:?}"),
     }

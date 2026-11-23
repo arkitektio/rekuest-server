@@ -197,6 +197,21 @@ pub struct RekuestBlock {
     /// name in the usual compose layout; empty turns upkeep off.
     #[serde(default)]
     pub server_url: Option<String>,
+    /// Caller sessions (`/session`): seconds a gone window may resume within.
+    #[serde(default = "d60")]
+    pub session_grace: u64,
+    /// Seconds between a connected session's `last_seen` writes.
+    #[serde(default = "d5")]
+    pub session_beat: u64,
+    /// Seconds between a session's checks for items the live feed lost.
+    #[serde(default = "d30")]
+    pub session_watch_check: u64,
+    /// The most items one replay sends before the topic is resynced instead.
+    #[serde(default = "d500")]
+    pub session_replay_max: i64,
+    /// The shortest dead man switch accepted, in seconds.
+    #[serde(default = "d15")]
+    pub session_deadman_min: u32,
 }
 
 /// One of this hub's services (`ServiceEntry`): what exists. Its manifest is at `<url>/manifest`.
@@ -225,6 +240,12 @@ impl Default for RekuestBlock {
 
 fn d5() -> u64 {
     5
+}
+fn d15() -> u32 {
+    15
+}
+fn d500() -> i64 {
+    500
 }
 fn d30() -> u64 {
     30
