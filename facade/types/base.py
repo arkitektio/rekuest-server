@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TypeVar
 
+from arkitekt_service.collaborations.guests import object_scope
 from django.db.models import Model, QuerySet
 from kante.types import Info
 
@@ -24,10 +25,13 @@ def row_of(self: object, model: type[M]) -> M:
 def build_prescoped_queryset(
     info: Info, queryset: QuerySet[M], field: str = "organization"
 ) -> QuerySet[M]:
+    """``queryset`` held to the request's organization and, at a root field, for a guest of it,
+    to what is in their collaborations (``rekuest.service``). Below a root field the collaboration
+    gate holds a guest to them."""
     # ``filters`` may be absent, or given as null: both mean "no custom scope".
     if (info.variable_values.get("filters") or {}).get("scope") is None:
         queryset = queryset.filter(**{field: info.context.request.organization})
-        return queryset
+        return object_scope(queryset, info=info)
 
     else:
         raise Exception("Custom scopes not implemented yet")
@@ -44,12 +48,14 @@ def scoped_get(
 
     ``field`` is a lookup path to the organization (e.g. ``"agent__organization"``). Raises
     ``PermissionError`` rather than ``DoesNotExist`` so a wrong-tenant id is indistinguishable
-    from a missing one.
+    from a missing one. A guest of the organization is held to what is in their collaborations:
+    anything else is as missing to them.
     """
     try:
-        return model._default_manager.get(
-            **{"id": pk, field: info.context.request.organization}
-        )
+        return object_scope(
+            model._default_manager.filter(**{field: info.context.request.organization}),
+            info=info,
+        ).get(id=pk)
     except model.DoesNotExist:
         raise PermissionError(
             f"No {model.__name__} {pk} in this organization."

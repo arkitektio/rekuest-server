@@ -2,13 +2,14 @@ import asyncio
 import json
 import os
 import time
-from collections.abc import Awaitable, Callable, Iterator
+from collections.abc import Awaitable, Callable, Iterator, Mapping
 from typing import TYPE_CHECKING, TypeVar
 
 import boto3
 import httpx
 import psycopg
 import pytest
+from authentikate import settings as authentikate_settings
 from authentikate.expand import (
     aexpand_client_from_token,
     aexpand_organization_from_token,
@@ -267,6 +268,39 @@ def authenticated_context(db: None, backend_stack: Deployment) -> HttpContext:
         headers={"Authorization": "Bearer test"},
         type="http",
     )
+
+
+#: ``guest({key: roles})``: a context presenting a guest granted those collaborations.
+GuestFactory = Callable[[Mapping[str, list[str]]], HttpContext]
+
+
+@pytest.fixture
+def guest(db: None, settings: SettingsWrapper) -> Iterator[GuestFactory]:
+    """``guest({key: roles})``: a context presenting a guest of the test organization (sub 20),
+    granted those collaborations by their key, as lok lists them in the token's ``collabs``. The
+    app it came through is granted all of rekuest: what a guest may do is not the app's to say."""
+    from tests.sharing import token_context
+
+    def mint(collaborations: Mapping[str, list[str]]) -> HttpContext:
+        settings.AUTHENTIKATE = {
+            **settings.AUTHENTIKATE,
+            "static_tokens": {
+                **settings.AUTHENTIKATE["static_tokens"],
+                "guest": {
+                    "sub": "20",
+                    "client_id": "guest-client",
+                    "app": "test-app",
+                    "roles": [],
+                    "collabs": dict(collaborations),
+                    "scope": "openid rekuest_all",
+                },
+            },
+        }
+        authentikate_settings.cached_settings = None
+        return token_context("guest")
+
+    yield mint
+    authentikate_settings.cached_settings = None
 
 
 async def waiting_run(schedule: int | str, *, other_than: int | None = None) -> int:

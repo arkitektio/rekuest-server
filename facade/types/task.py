@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, cast
 
 import strawberry
 import strawberry_django
+from arkitekt_service.collaborations.guests import guest_of
 from django.db.models import QuerySet
 from kante.types import Info
 
@@ -85,13 +86,20 @@ def dependency_agents(task: models.Task) -> list[TaskDependencyAgent]:
     ]
 
 
-def task_bloks(task: models.Task) -> list[TaskBlok]:
+def task_bloks(task: models.Task, info: Info | None = None) -> list[TaskBlok]:
     """The bloks ``task`` showed, oldest first, each with where it stands (read off its events).
 
     An ask's ``HELD`` event names its materialization; the ``DECIDED`` that follows it is its
     answer. An inform's ``INFORM`` event names it.
+
+    For a guest (``info`` of their request), only the materializations in their collaborations:
+    those of the bloks the task made from its BSX come with a shared task, those of a blok an
+    implementation declares (shared by every task of it) do not.
     """
     shown = list(task.shown_bloks.all().order_by("id"))
+    guest = guest_of(info) if info is not None else None
+    if guest is not None:
+        shown = [materialized for materialized in shown if guest.sees(materialized)]
     if not shown:
         return []
     events = list(
@@ -245,8 +253,8 @@ class Task:
     @strawberry_django.field(
         description="The bloks this task showed a person, oldest first: asks it holds on (or held on) and informs."
     )
-    def bloks(self) -> list[TaskBlok]:
-        return task_bloks(row_of(self, models.Task))
+    def bloks(self, info: Info) -> list[TaskBlok]:
+        return task_bloks(row_of(self, models.Task), info)
 
     @strawberry_django.field(
         description="Its action's own bloks (`Action.bloks`), at most one per context: how a client shows this run, with each dependency key bound by `dependencyAgents`."

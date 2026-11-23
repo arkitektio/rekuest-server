@@ -16,7 +16,12 @@ import strawberry_django
 from arkitekt_datalayer import mutations as datalayer_mutations
 from arkitekt_datalayer.datalayer import load_config
 from arkitekt_datalayer.scalars import SCALAR_MAP as dscalar_map
-from arkitekt_service.graphql import TelemetryExtension
+from arkitekt_service.collaborations import graphql as collaboration_types
+from arkitekt_service.graphql import (
+    CollaborationGate,
+    TelemetryExtension,
+    annotate_schema,
+)
 from authentikate.catch_alls import declare_catch_alls
 from authentikate.strawberry import (
     AuthentikateExtension,
@@ -39,6 +44,7 @@ from facade.scalars import scalar_map as fscalar_map
 from facade.types.base import scoped_get
 from rekuest.contract import ADMIN, ALL, AUTOMATOR, EDITOR
 from rekuest.logs import QuietErrorsSchema
+from rekuest.service import service as rekuest_service
 from rekuest_core import scalars as rscalars
 from rekuest_core.constants import input_union_types, interface_types
 from rekuest_core.scalars import scalar_map as rscalar_map
@@ -64,6 +70,7 @@ def field(
     scope: str = "rekuest_read",
     *,
     resolver: Callable[..., T],
+    guests: bool = False,
     **kwargs: Unpack[FieldOptions],
 ) -> T: ...
 
@@ -79,13 +86,17 @@ def field(
     scope: str = "rekuest_read",
     *,
     resolver: Resolver | None = None,
+    guests: bool = False,
     **kwargs: Unpack[FieldOptions],
 ) -> object:
     """A field an app needs ``scope`` for (``rekuest_read``, unless it says otherwise).
 
+    ``guests`` opens a root field that hands out no objects to a guest of the organization: the
+    collaboration gate closes such a field to them otherwise.
+
     A ``StrawberryDjangoField``; the overloads say what it passes for.
     """
-    extensions = [AuthExtension(scopes=[scope])]
+    extensions = [AuthExtension(scopes=[scope], allow_scoped=guests)]
     if resolver is None:
         return strawberry_django.field(extensions=extensions, **kwargs)
     return strawberry_django.field(resolver, extensions=extensions, **kwargs)
@@ -165,8 +176,54 @@ def subscription(
     )
 
 
+def _fetch(model: type[models.Task], id: strawberry.ID, info: Info) -> models.Task:
+    """The task a full member names to put in (or take out of) a collaboration, of their organization.
+
+    A task is all rekuest shares (``rekuest.service``): any other model is refused, though no other
+    structure is bound for one to be named.
+    """
+    if model is not models.Task:
+        raise ValueError(f"rekuest shares tasks, not {model.__name__}")
+    return scoped_get(models.Task, info, id, field="agent__organization")
+
+
+#: The collaborations of rekuest's tasks, which a guest of the organization is granted.
+collaboration_api = collaboration_types.resolvers(fetch=_fetch)
+
+
+def share_workflow(
+    info: Info, input: collaboration_types.ShareWorkflowInput
+) -> collaboration_types.WorkflowShare:
+    """Put a workflow's task tree in a collaboration: the root task, of this organization, and every
+    task it caused, as they are now.
+
+    What a workflow made is said by the root's id alone (``rekuest.service``), so the root is
+    looked up here first: one of another organization, or a task that is no root, is refused
+    before anything is read under its id.
+    """
+    root = scoped_get(models.Task, info, input.root_task, field="agent__organization")
+    if root.root_id is not None:
+        raise ValueError(
+            f"Task {root.pk} is part of the workflow of task {root.root_id}: share that one"
+        )
+    return collaboration_api.share_workflow(info, input)
+
+
 @strawberry.type(description="Root query type for fetching entities in the system.")
 class Query:
+    collaborations: list[collaboration_types.Collaboration] = field(
+        resolver=collaboration_api.collaborations,
+        description="List the organization's collaborations that hold tasks here: what a guest granted one sees of rekuest (a guest: the collaborations granted to them)",
+    )
+    collaboration: collaboration_types.Collaboration = field(
+        resolver=collaboration_api.collaboration,
+        description="Get a single collaboration by its key (lok's): what was put in it here",
+    )
+    collaborations_stats: collaboration_types.CollaborationStats = field(
+        resolver=collaboration_api.collaborations_stats,
+        guests=True,
+        description="How many collaborations hold tasks here (a guest: of those granted to them), and how many objects are in them",
+    )
     clients: list[types.Client] = field(description="List all registered clients.")
     agents: list[types.Agent] = field(description="Retrieve all compute agents.")
     actions: list[types.Action] = field(description="List of all available actions.")
@@ -626,6 +683,35 @@ class Query:
     description="Root mutation type for executing write operations on the API."
 )
 class Mutation:
+    """Writes. None is open to a guest of the organization (none opts in with ``allow_scoped``):
+    a guest reads the tasks shared with them, and runs, cancels or answers nothing."""
+
+    add_to_collaboration = mutation(
+        scope="rekuest_share",
+        resolver=collaboration_api.add_to_collaboration,
+        description="Put a task in a collaboration (lok's, by its key), with what it needs to be seen: the action it ran, the tasks it caused as they are now, and the bloks it asked or informed with. Its events and logs are in with it, live. The collaboration's row here is made the first time something is put in",
+    )
+    add_many_to_collaboration = mutation(
+        scope="rekuest_share",
+        resolver=collaboration_api.add_many_to_collaboration,
+        description="Put several tasks in a collaboration (by its key) at once, each with what it needs to be seen: all of them, or none",
+    )
+    share_workflow = mutation(
+        scope="rekuest_share",
+        resolver=share_workflow,
+        description="Put a workflow (its root task, which someone started) in a collaboration, as it is now: the root and every task it caused, with their actions, events and logs. Tasks it causes later are not; `dryRun` only says what would be put in",
+    )
+    remove_from_collaboration = mutation(
+        scope="rekuest_share",
+        resolver=collaboration_api.remove_from_collaboration,
+        description="Take a task out of a collaboration, with what it brought that nothing else there needs",
+    )
+    delete_collaboration = mutation(
+        scope="rekuest_share",
+        resolver=collaboration_api.delete_collaboration,
+        description="Take everything rekuest put in a collaboration (by its key) out of it: whoever was granted it sees nothing of it here any more. lok's collaboration, and its grants, stay",
+    )
+
     create_higher_order_implementation = mutation(
         scope="rekuest_agent",
         resolver=mutations.create_higher_order_implementation,
@@ -1067,8 +1153,9 @@ class Schema(QuietErrorsSchema, kante.Schema):
     """kante.Schema, logging expected resolver errors as one line and bugs with a traceback (see logs.py)."""
 
 
-#: rekuest has no ``arkitekt_service`` Service to ``annotate_schema`` with, so it tells authentikate
-#: its catch-alls itself: ``rekuest_all`` passes every scope check, ``rekuest_admin`` every role check.
+#: ``annotate_schema`` (below) tells authentikate the catch-alls only where the image names its
+#: contract (``ARKITEKT_SERVICE``), so rekuest says them itself, for every process (tests included):
+#: ``rekuest_all`` passes every scope check, ``rekuest_admin`` every role check.
 declare_catch_alls(scope=ALL, role=ADMIN)
 
 schema = Schema(
@@ -1079,6 +1166,9 @@ schema = Schema(
         TelemetryExtension,
         DjangoOptimizerExtension,
         AuthentikateExtension,
+        # A guest of the organization is handed only what is in their collaborations: after
+        # authentikate's extension, which reads the token.
+        CollaborationGate,
     ],
     schema_directives=[unionElementOf],
     types=interface_types + input_union_types,
@@ -1094,3 +1184,6 @@ schema = Schema(
     # all the types here, otherwise the schema will not be able to resolve them
     # and will throw a cryptic error
 )
+
+# Which structure each type is (`@identified`), and, behind the gate, that rekuest lets guests in.
+annotate_schema(schema, rekuest_service)

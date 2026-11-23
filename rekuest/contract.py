@@ -72,6 +72,10 @@ SCOPES = [
         description="As an agent, show you panels it makes while it runs, not only the ones its actions declare.",
     ),
     Scope(
+        key="rekuest_share",
+        description="Share tasks and the workflows they ran with people outside your organization through collaborations.",
+    ),
+    Scope(
         key="rekuest_all",
         description="Do everything in Rekuest on your behalf.",
         is_all_scope=True,
@@ -81,8 +85,9 @@ SCOPES = [
 #: The scope that stands for every other one.
 ALL = "rekuest_all"
 
-#: What rekuest itself hosts: its agents, as something an action can take. It catalogues this
-#: beside its peers' declarations (``facade.service_catalog.catalogue_self``).
+#: What rekuest itself hosts: its agents, as something an action can take, and its tasks, which
+#: a collaboration can hold (``rekuest.service``). It catalogues this beside its peers'
+#: declarations (``facade.service_catalog.catalogue_self``).
 HOSTS = Hosts(
     structures=[
         Structure(
@@ -96,7 +101,12 @@ HOSTS = Hosts(
                     description="The app that provisioned the agent and controls its lifecycle, starting and stopping it (e.g. plugin_engine for a plugin), as lok signed it into the agent's token.",
                 )
             ],
-        )
+        ),
+        Structure(
+            identifier="@rekuest/task",
+            label="Task",
+            description="One run of an action on an agent, with its progress, logs and results. A root task is a workflow someone started; the tasks it caused are its children. What can be shared with a guest through a collaboration.",
+        ),
     ]
 )
 

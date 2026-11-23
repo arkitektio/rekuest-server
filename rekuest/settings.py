@@ -83,6 +83,9 @@ INSTALLED_APPS = [
     "kante",
     "facade",
     "health_check",  # required
+    # Collaborations of rekuest's tasks, which a guest of the organization is granted and held
+    # to (rekuest.service says what is shared).
+    "arkitekt_service.collaborations",
     # What every service is as a Django server: `ensureadmin`, `validate_settings`, and the
     # check that warns about config keys this release does not read. Last, so that a command
     # of the service's own with the same name is the one that runs.

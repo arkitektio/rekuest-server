@@ -8,6 +8,7 @@ import datetime
 
 import strawberry
 import strawberry_django
+from arkitekt_service.collaborations.filters import SharingFilterMixin
 from django.db.models import Q, QuerySet
 from strawberry import auto
 from strawberry.types import Info
@@ -23,7 +24,7 @@ class TaskOrder:
 
 
 @strawberry_django.filter_type(models.Task, description="A way to filter tasks")
-class TaskFilter:
+class TaskFilter(SharingFilterMixin):
     @filter_field(description="Filter by IDs of the tasks")
     def ids(
         self,
@@ -142,6 +143,24 @@ class TaskFilter:
         # points at an intermediate task, so ``parent__isnull`` would not identify roots. This
         # matches ``queries.my_tasks`` and the ``tasks`` subscription.
         return queryset.filter(**{f"{prefix}root__isnull": value}), Q()
+
+    @filter_field(
+        description="Keep only workflows someone started (true): root tasks no schedule ran and no trigger or signal fired, the ones `shareWorkflow` takes. False keeps every other task"
+    )
+    def human_induced(
+        self, info: Info, queryset: QuerySet[models.Task], value: bool, prefix: str
+    ) -> tuple[QuerySet[models.Task], Q]:
+        # ``trigger_depth`` too: a fired task keeps it when its trigger is deleted (SET_NULL).
+        started = Q(
+            **{
+                f"{prefix}root__isnull": True,
+                f"{prefix}schedule__isnull": True,
+                f"{prefix}trigger__isnull": True,
+                f"{prefix}signal__isnull": True,
+                f"{prefix}trigger_depth": 0,
+            }
+        )
+        return queryset, started if value else ~started
 
     @filter_field(description="Filter by whether the task has finished")
     def is_done(
