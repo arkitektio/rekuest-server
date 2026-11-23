@@ -9,6 +9,8 @@
 //! and that id: a request sent again (after a reconnect) is answered with the first answer,
 //! never applied twice.
 
+use std::time::Duration;
+
 use redis::AsyncCommands;
 use serde_json::{json, Value};
 
@@ -59,11 +61,46 @@ fn refused(request: &str, e: BackendError) -> Answer {
     }
 }
 
+/// What a request id is kept as while its call runs.
+const RUNNING: &str = "running";
+
+/// How long a request sent again waits for the first one's answer.
+const AWAIT_FIRST: Duration = Duration::from_secs(60);
+
 /// Run one call and keep its answer. `None` for a frame that is not a call.
+///
+/// The request id is claimed before the call runs (`SET NX`), so the same request sent again
+/// (a window back while its call still ran) waits for the first one's answer instead of doing
+/// the call a second time, and is answered with it.
 pub async fn run(ctx: &Context, who: &Who, frame: ClientFrame) -> Option<Answer> {
     let request = frame.request()?.to_owned();
-    if let Some(answer) = remembered(ctx, who, &request).await {
-        return Some(answer);
+    let key = memory_key(ctx, who, &request);
+    let mut redis = ctx.redis.clone();
+    let seconds = ctx.settings.session.request_memory.as_secs().max(1);
+    let claimed: Option<String> = redis::cmd("SET")
+        .arg(&key)
+        .arg(RUNNING)
+        .arg("NX")
+        .arg("EX")
+        .arg(seconds)
+        .query_async(&mut redis)
+        .await
+        .unwrap_or(None);
+    if claimed.is_none() {
+        // Asked before: its answer, once there.
+        let deadline = tokio::time::Instant::now() + AWAIT_FIRST;
+        loop {
+            if let Some(answer) = remembered(ctx, who, &request).await {
+                return Some(answer);
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Some(Answer::Refused {
+                    request,
+                    error: "This request is still being handled; ask again later.".into(),
+                });
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
     }
     let answer = match call(ctx, who, frame).await {
         Ok(answer) => answer,
@@ -89,8 +126,12 @@ async fn call(ctx: &Context, who: &Who, frame: ClientFrame) -> Result<Answer, Ba
             )
             .await?;
             if let Some(seconds) = deadman {
+                // The task exists whatever arming does: one that already ended has nothing to
+                // be tied to, and an assign is never answered "refused" for a task it made.
                 if assigned.created {
-                    arm(ctx, who, assigned.task, Some(seconds)).await?;
+                    if let Err(e) = arm(ctx, who, assigned.task, Some(seconds)).await {
+                        tracing::info!(task = assigned.task, "the dead man switch was not armed: {e}");
+                    }
                 }
             }
             let record = topics::task_change(ctx, assigned.task).await?;

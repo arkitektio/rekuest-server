@@ -66,6 +66,14 @@ pub async fn sweep(ctx: &Context, limit: i64) -> Result<usize, sqlx::Error> {
         if claimed.rows_affected() == 0 {
             continue;
         }
+        // Cancelled first, said after: a task that ended meanwhile gets no word of a cancel.
+        match backend::request_control(ctx, &task.to_string(), Control::Cancel, None).await {
+            Ok(_) => cancelled += 1,
+            Err(e) => {
+                tracing::info!(task, "the dead man cancel was not taken: {e}");
+                continue;
+            }
+        }
         let why = NewEvent {
             level: Some("INFO".into()),
             ..NewEvent::default()
@@ -76,10 +84,6 @@ pub async fn sweep(ctx: &Context, limit: i64) -> Result<usize, sqlx::Error> {
         match transitions::insert_event(&ctx.db, task, "LOG", &why).await {
             Ok(event) => crate::signals::task_event_created(ctx, event).await,
             Err(e) => tracing::warn!(task, "recording the dead man cancel failed: {e}"),
-        }
-        match backend::request_control(ctx, &task.to_string(), Control::Cancel, None).await {
-            Ok(_) => cancelled += 1,
-            Err(e) => tracing::warn!(task, "the dead man cancel was refused: {e}"),
         }
     }
     Ok(cancelled)

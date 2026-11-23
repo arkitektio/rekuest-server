@@ -46,7 +46,26 @@ const RECOVERY_TICK: Duration = Duration::from_secs(1);
 
 enum Out {
     Text(String),
+    /// A protocol-level ping: the window's socket answers it itself, even while the window's
+    /// own timers are throttled (a minimized Electron window pings about once a minute).
+    Ping,
     Close(u16, String),
+}
+
+/// What the window's socket brought.
+enum Incoming {
+    Frame(Result<ClientFrame, serde_json::Error>),
+    /// A pong (or ping): proof the window is there, nothing to handle.
+    Heard,
+}
+
+/// A task that ends when this is dropped: the session's own timers outlive no return path.
+struct AbortOnDrop(JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
 }
 
 /// What reaches the session task besides the window's frames.
@@ -108,6 +127,11 @@ pub async fn serve(ctx: Context, socket: WebSocket) {
                     let sent = sink.send(Message::Text(text.into())).await.is_ok();
                     writer_queued.fetch_sub(size, Ordering::Relaxed);
                     if !sent {
+                        break;
+                    }
+                }
+                Out::Ping => {
+                    if sink.send(Message::Ping(Vec::new().into())).await.is_err() {
                         break;
                     }
                 }
@@ -187,14 +211,21 @@ pub async fn serve(ctx: Context, socket: WebSocket) {
 }
 
 /// The next frame of the window, `None` when the socket ended.
+async fn next_incoming(stream: &mut SplitStream<WebSocket>) -> Option<Incoming> {
+    match stream.next().await? {
+        Ok(Message::Text(text)) => Some(Incoming::Frame(serde_json::from_str(&text))),
+        Ok(Message::Close(_)) | Err(_) => None,
+        Ok(_) => Some(Incoming::Heard),
+    }
+}
+
+/// The next frame of the window, `None` when the socket ended.
 async fn next_frame(
     stream: &mut SplitStream<WebSocket>,
 ) -> Option<Result<ClientFrame, serde_json::Error>> {
     loop {
-        match stream.next().await? {
-            Ok(Message::Text(text)) => return Some(serde_json::from_str(&text)),
-            Ok(Message::Close(_)) | Err(_) => return None,
-            Ok(_) => continue,
+        if let Incoming::Frame(frame) = next_incoming(stream).await? {
+            return Some(frame);
         }
     }
 }
@@ -405,11 +436,26 @@ impl Session {
         mut inbox: mpsc::UnboundedReceiver<Inbound>,
     ) {
         let settings = self.ctx.settings.session.clone();
-        let mut beat = tokio::time::interval(settings.beat);
+        // `last_seen` on a task of its own: a long replay or a slow query in this loop must
+        // not make a connected window look gone to the dead man switch.
+        let _beat = AbortOnDrop(tokio::spawn({
+            let ctx = self.ctx.clone();
+            let session = self.who.session.clone();
+            let every = settings.beat;
+            async move {
+                let mut beat = tokio::time::interval(every);
+                beat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                loop {
+                    beat.tick().await;
+                    registry::beat(&ctx, &session).await;
+                }
+            }
+        }));
+        let mut pinger = tokio::time::interval((settings.idle_timeout / 3).max(Duration::from_secs(1)));
         let mut check = tokio::time::interval(settings.watch_check);
         let mut refresh = tokio::time::interval(GROUP_REFRESH);
         let mut recovery = tokio::time::interval(RECOVERY_TICK);
-        for timer in [&mut beat, &mut check, &mut refresh, &mut recovery] {
+        for timer in [&mut pinger, &mut check, &mut refresh, &mut recovery] {
             timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             timer.reset();
         }
@@ -420,9 +466,10 @@ impl Session {
                 .to_std()
                 .unwrap_or_default();
             tokio::select! {
-                frame = next_frame(stream) => {
-                    let Some(frame) = frame else { return };
+                incoming = next_incoming(stream) => {
+                    let Some(incoming) = incoming else { return };
                     heard = tokio::time::Instant::now();
+                    let Incoming::Frame(frame) = incoming else { continue };
                     match frame {
                         Ok(frame) => {
                             if !self.on_frame(frame).await {
@@ -452,7 +499,9 @@ impl Session {
                         self.answer(answer);
                     }
                 },
-                _ = beat.tick() => registry::beat(&self.ctx, &self.who.session).await,
+                _ = pinger.tick() => {
+                    let _ = self.out.send(Out::Ping);
+                }
                 _ = check.tick() => self.check_watches().await,
                 _ = refresh.tick() => self.refresh_groups().await,
                 _ = recovery.tick() => self.recover().await,

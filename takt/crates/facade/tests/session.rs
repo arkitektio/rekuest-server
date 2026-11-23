@@ -97,6 +97,7 @@ async fn context(tokens: &Tokens) -> Option<Context> {
     .unwrap();
     let mut settings = Settings::default();
     settings.session.watch_check = Duration::from_millis(300);
+    settings.session.idle_timeout = Duration::from_secs(2);
     Some(Context {
         db,
         redis,
@@ -478,7 +479,7 @@ async fn the_dead_man_switch_fires_on_absence_but_not_after_an_outage() {
             .fetch_all(&ctx.db)
             .await
             .unwrap();
-    assert_eq!(kinds, vec!["LOG", "CANCELLING"]);
+    assert_eq!(kinds, vec!["CANCELLING", "LOG"]);
     let disarmed: Option<i32> =
         sqlx::query_scalar("SELECT deadman_seconds FROM facade_task WHERE id = $1")
             .bind(watched)
@@ -768,4 +769,56 @@ async fn the_latest_run_of_an_action_starts_with_its_record_and_follows_the_next
     let frame = recv(&mut socket).await;
     assert_eq!(frame["type"], "DATA", "{frame}");
     assert_eq!(frame["topic"], format!("latest:{agent}/echo"));
+}
+
+#[tokio::test]
+async fn a_request_sent_again_while_it_runs_is_done_once() {
+    let tokens = Tokens::new();
+    let Some(ctx) = context(&tokens).await else { return };
+    let url = serve(&ctx).await;
+    let (agent, action) = agent(&ctx, &tokens).await;
+    let caller = caller_of(&ctx, &tokens, "caller").await;
+    let task = task(&ctx, agent, action, Some(caller)).await;
+
+    let mut socket = connect(&url).await;
+    hello(&mut socket, &tokens.caller(), None, 0).await;
+    // The same cancel twice, back to back: done again, the second would be refused
+    // ("already cancelling"); claimed once, both get the first one's answer.
+    let cancel = json!({"type": "CANCEL", "request": "c1", "task": task.to_string()});
+    send(&mut socket, cancel.clone()).await;
+    send(&mut socket, cancel).await;
+    let first = recv(&mut socket).await;
+    let second = recv(&mut socket).await;
+    assert_eq!(first["type"], "ACCEPTED", "{first}");
+    assert_eq!(second["type"], "ACCEPTED", "{second}");
+    let cancellings: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM facade_taskevent WHERE task_id = $1 AND kind = 'CANCELLING'",
+    )
+    .bind(task)
+    .fetch_one(&ctx.db)
+    .await
+    .unwrap();
+    assert_eq!(cancellings, 1);
+}
+
+#[tokio::test]
+async fn a_window_whose_timers_sleep_stays_connected_by_answering_pings() {
+    let tokens = Tokens::new();
+    let Some(ctx) = context(&tokens).await else { return };
+    let url = serve(&ctx).await;
+    let mut socket = connect(&url).await;
+    hello(&mut socket, &tokens.reader(), None, 0).await;
+    // No PING of its own for longer than the idle timeout (2 s here): only the socket's
+    // automatic answers to the server's pings.
+    let mut pings = 0;
+    let until = tokio::time::Instant::now() + Duration::from_secs(5);
+    while tokio::time::Instant::now() < until {
+        match tokio::time::timeout(Duration::from_millis(500), socket.next()).await {
+            Ok(Some(Ok(Message::Ping(_)))) => pings += 1,
+            Ok(Some(Ok(Message::Close(frame)))) => panic!("closed: {frame:?}"),
+            Ok(None) | Ok(Some(Err(_))) => panic!("the socket ended"),
+            _ => {}
+        }
+    }
+    assert!(pings >= 2, "{pings} pings");
 }
