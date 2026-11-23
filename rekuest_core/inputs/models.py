@@ -5,7 +5,6 @@ from collections.abc import Callable, Iterator
 from typing import (
     TYPE_CHECKING,
     Annotated,
-    Any,
     ClassVar,
     Literal,
     Optional,
@@ -448,7 +447,7 @@ class EffectInputModel(BaseModel):
 
 
 class ChoiceInputModel(BaseModel):
-    value: Any = Field(
+    value: JsonValue = Field(
         description="The value of the choice (any JSON value); must fit the port's kind. This is the value that is returned when the choice is selected"
     )
     label: str = Field(
@@ -1068,7 +1067,7 @@ class RequiresInputModel(BaseModel):
     operator: enums.DescriptorOperator = Field(
         description="The operator for the requirement"
     )
-    value: Any = Field(
+    value: JsonValue = Field(
         default=None,
         description="The value of the requirement. This can be any JSON serializable value; IN/NOT_IN take a list, LTE/GTE a number, EXISTS none",
     )
@@ -1090,7 +1089,7 @@ class ProvidesInputModel(BaseModel):
     operator: enums.DescriptorOperator = Field(
         description="The operator for the provision"
     )
-    value: Any = Field(
+    value: JsonValue = Field(
         default=None,
         description="The value of the provision. This can be any JSON serializable value; IN/NOT_IN take a list, LTE/GTE a number, EXISTS none",
     )
@@ -1304,7 +1303,7 @@ class ArgPortInputModel(PortInputModel):
     validators: list[ValidatorInputModel] | None = Field(
         default=None, description="The validators for the port"
     )
-    default: Any | None = Field(
+    default: JsonValue = Field(
         default=None,
         description="The default value for the port; must fit the port's kind.",
     )
@@ -1398,7 +1397,9 @@ class PortGroupInputModel(BaseModel):
 
 class DescriptorInputModel(BaseModel):
     key: str = Field(description="The descriptor key, e.g. 'axes'.")
-    value: Any = Field(description="The descriptor value. Any JSON-serializable value.")
+    value: JsonValue = Field(
+        description="The descriptor value. Any JSON-serializable value."
+    )
 
 
 class PortMatchInputModel(BaseModel):
@@ -1896,7 +1897,7 @@ class ImplementationInputModel(BaseModel):
     interface: str = Field(
         description="The interface of the implementation. This is used to group implementations together in the UI"
     )
-    params: dict[str, Any] | None = Field(
+    params: dict[str, JsonValue] | None = Field(
         default=None,
         description="The params of the implementation. This is used to pass parameters to the implementation",
     )
@@ -2215,9 +2216,9 @@ class AgentProbeInputModel(BaseModel):
     @model_serializer(mode="wrap")
     def leave_out_an_unwritten_given(
         self, handler: SerializerFunctionWrapHandler
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """A call without `with` is stored as it always was: `given` is left out, not null."""
-        dumped: dict[str, Any] = handler(self)
+        dumped: dict[str, object] = handler(self)
         if dumped.get("given") is None:
             dumped.pop("given", None)
         return dumped

@@ -7,6 +7,7 @@ included.
 """
 
 import pytest
+from pydantic import JsonValue
 
 from facade import managers, models
 from facade.managers import PortDemand
@@ -23,7 +24,7 @@ IMAGE = {
 STACK = {**IMAGE, "requires": [{"key": "@mikro/z_size", "operator": "GTE", "value": 2}]}
 
 
-def _image(**descriptors: object) -> PortDemand:
+def _image(**descriptors: JsonValue) -> PortDemand:
     match = PortMatchInputModel(
         at=0,
         identifier="@mikro/image",

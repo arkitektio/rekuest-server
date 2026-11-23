@@ -12,6 +12,7 @@ from typing import Literal
 
 import pytest
 from authentikate.models import Organization
+from pydantic import JsonValue
 
 from facade import managers, models
 from facade.descriptors import compile_descriptors_to_jsonpath
@@ -65,7 +66,7 @@ def pm(
     key: str | None = None,
     kind: PortKind | None = None,
     identifier: str | None = None,
-    descriptors: Mapping[str, object] | None = None,
+    descriptors: Mapping[str, JsonValue] | None = None,
     nullable: bool | None = None,
     children: list[PortMatchInputModel] | None = None,
 ) -> PortMatchInputModel:

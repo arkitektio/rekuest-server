@@ -21,7 +21,6 @@ advisory lock), and rows are updated in place.
 from __future__ import annotations
 
 import time
-from typing import Any
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -35,7 +34,7 @@ WAIT_SECONDS = 60.0
 class Command(BaseCommand):
     help = "Catalogue what the hub's services host and emit: from the config where it says, else from each service's manifest."
 
-    def handle(self, *args: Any, **options: Any) -> None:
+    def handle(self, *args: str, **options: object) -> None:
         entries = list(settings.SERVICES)
         if not entries:
             self.stdout.write(

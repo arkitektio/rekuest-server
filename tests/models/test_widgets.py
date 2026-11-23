@@ -19,7 +19,9 @@ def _widget(kind: str, **fields: object) -> imodels._AssignWidgetBase:
 def _port(
     key: str = "foo", kind: str = "STRING", **extra: object
 ) -> imodels.ArgPortInputModel:
-    return imodels.ArgPortInputModel(key=key, kind=kind, nullable=False, **extra)
+    return imodels.ArgPortInputModel.model_validate(
+        {"key": key, "kind": kind, "nullable": False, **extra}
+    )
 
 
 @pytest.mark.parametrize(

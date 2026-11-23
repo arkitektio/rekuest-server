@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import hashlib
 import time
-from typing import Any
 
 from django.core.management.base import CommandError, CommandParser
 from django.core.management.commands.migrate import Command as DjangoMigrate
@@ -56,13 +55,19 @@ class Command(DjangoMigrate):
             help="Seconds to wait for another replica's migrate before giving up (default 900).",
         )
 
-    def handle(self, *args: Any, **options: Any) -> str | None:
-        connection = connections[options.get("database") or DEFAULT_DB_ALIAS]
+    def handle(self, *args: str, **options: object) -> str | None:
+        database = options.get("database")
+        connection = connections[
+            database if isinstance(database, str) and database else DEFAULT_DB_ALIAS
+        ]
         if options.get("no_lock") or connection.vendor != "postgresql":
             return super().handle(*args, **options)
 
+        lock_timeout = options["lock_timeout"]
+        if not isinstance(lock_timeout, int):
+            raise CommandError(f"--lock-timeout takes seconds, not {lock_timeout!r}")
         connection.ensure_connection()
-        deadline = time.monotonic() + options["lock_timeout"]
+        deadline = time.monotonic() + lock_timeout
         waited = 0
         while True:
             with connection.cursor() as cursor:

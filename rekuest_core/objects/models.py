@@ -1,5 +1,5 @@
 import datetime
-from typing import Any, Literal, Optional, TypeAlias
+from typing import Literal, Optional, TypeAlias
 
 import strawberry
 from pydantic import BaseModel, JsonValue, field_validator
@@ -9,7 +9,7 @@ from rekuest_core import enums
 
 class ChoiceModel(BaseModel):
     label: str
-    value: Any
+    value: JsonValue
     image: str | None = None
     description: str | None = None
 
@@ -39,7 +39,7 @@ class CustomAssignWidgetModel(AssignWidgetModel):
     kind: Literal["CUSTOM"]
     component: str
     props: list["ComponentPropModel"] | None = None
-    children: list[Any] | None = None
+    children: list[JsonValue] | None = None
     dependencies: list[str] | None = None
     fallback: Optional["AssignWidgetModelUnion"] = None
 
@@ -178,13 +178,13 @@ class PortMatchModel(BaseModel):
 class RequiresModel(BaseModel):
     key: str
     operator: enums.DescriptorOperator
-    value: Any = None
+    value: JsonValue = None
 
 
 class ProvidesModel(BaseModel):
     key: str
     operator: enums.DescriptorOperator
-    value: Any = None
+    value: JsonValue = None
 
 
 class OptimisticModel(BaseModel):
@@ -211,7 +211,7 @@ class PortModel(BaseModel):
 
 class ArgPortModel(PortModel):
     validators: list[ValidatorModel] | None = None
-    default: Any | None = None
+    default: JsonValue = None
     children: list["ArgPortModel"] | None = None
     widget: AssignWidgetModelUnion | None = None
     requires: list[RequiresModel] | None = None

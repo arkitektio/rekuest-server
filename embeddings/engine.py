@@ -13,7 +13,7 @@ import os
 import threading
 from collections.abc import Sequence
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, TypedDict
 
 import numpy as np
 from django.conf import settings
@@ -49,8 +49,18 @@ class EmbeddingsUnavailable(RuntimeError):
     """
 
 
-def _settings() -> dict[str, Any]:
-    return getattr(settings, "EMBEDDINGS", {})
+class EmbeddingsSettings(TypedDict, total=False):
+    """``settings.EMBEDDINGS``: what of the embeddings stays configuration."""
+
+    ENABLED: bool
+    DISTANCE_THRESHOLD: float
+
+
+def _settings() -> EmbeddingsSettings:
+    configured: EmbeddingsSettings = getattr(
+        settings, "EMBEDDINGS", EmbeddingsSettings()
+    )
+    return configured
 
 
 def enabled() -> bool:
@@ -70,7 +80,10 @@ def dimensions() -> int:
 
 def distance_threshold() -> float:
     """Cosine distance above which a row stops counting as a semantic ``search`` hit."""
-    return float(_settings()["DISTANCE_THRESHOLD"])
+    threshold = _settings().get("DISTANCE_THRESHOLD")
+    if threshold is None:
+        raise KeyError("DISTANCE_THRESHOLD")
+    return float(threshold)
 
 
 @lru_cache(maxsize=1)

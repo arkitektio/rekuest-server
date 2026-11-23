@@ -80,7 +80,8 @@ def _parsed(source: str) -> list[rimodels.ComponentNodeInputModel]:
     """The tree a blok's BSX source describes, parsed by takt (the one server-side BSX parser)."""
     answer = takt.call(takt_api.PARSE_BLOK, takt_api.ParseBlokRequest(source=source))
     return [
-        rimodels.ComponentNodeInputModel(**component) for component in answer.components
+        rimodels.ComponentNodeInputModel.model_validate(component)
+        for component in answer.components
     ]
 
 

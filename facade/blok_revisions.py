@@ -263,7 +263,7 @@ def as_custom(content: BlokContent, key: str) -> BlokContent:
         for component in content.components
     ]
     if components:
-        root = dict(components[0])
+        root: dict[str, object] = dict(components[0])
         root["props"] = [
             {**prop, "static_value": "custom"} if prop.get("key") == "kind" else prop
             for prop in cast("list[dict[str, object]]", root.get("props") or [])

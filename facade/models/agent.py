@@ -1,8 +1,10 @@
-from typing import TYPE_CHECKING, Any
+from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 from authentikate.models import App, Client, Organization, Release, User
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.db.models.base import ModelBase
 from django.db.models.functions import Now
 
 from facade import enums
@@ -201,7 +203,14 @@ class Agent(models.Model):
         {"connected", "last_seen", "active_connection_id", "active_session_id"}
     )
 
-    def save(self, *args: Any, **kwargs: Any) -> None:
+    def save(
+        self,
+        *,
+        force_insert: bool | tuple[ModelBase, ...] = False,
+        force_update: bool = False,
+        using: str | None = None,
+        update_fields: Iterable[str] | None = None,
+    ) -> None:
         """A save that names no fields never touches the lease.
 
         ``agent.save()`` writes EVERY column from whatever snapshot the instance was loaded with.
@@ -212,17 +221,19 @@ class Agent(models.Model):
         is narrowed to everything *except* :attr:`LEASE_FIELDS`. Lease writers are unaffected:
         they always pass ``update_fields``.
         """
-        if (
-            not self._state.adding
-            and kwargs.get("update_fields") is None
-            and not kwargs.get("force_insert")
-        ):
-            kwargs["update_fields"] = [
+        fields = update_fields
+        if not self._state.adding and fields is None and not force_insert:
+            fields = [
                 f.name
                 for f in self._meta.concrete_fields
                 if not f.primary_key and f.name not in self.LEASE_FIELDS
             ]
-        super().save(*args, **kwargs)
+        super().save(
+            force_insert=force_insert,
+            force_update=force_update,
+            using=using,
+            update_fields=fields,
+        )
 
     def __str__(self) -> str:
         return f"{self.name}"

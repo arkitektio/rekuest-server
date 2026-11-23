@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import hashlib
 import json
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 import strawberry
 import strawberry_django
@@ -118,7 +118,7 @@ class ListedMaterializationsField(StrawberryDjangoField):
         self,
         queryset: QuerySet[models.MaterializedBlok],
         info: Info,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> QuerySet[models.MaterializedBlok]:
         hidden = [
             enums.MaterializationScopeChoices.MESSAGE,
@@ -132,7 +132,7 @@ class ListedBloksField(StrawberryDjangoField):
     nor an action's own, which its action shows (``Action.bloks``)."""
 
     def get_queryset(
-        self, queryset: QuerySet[models.Blok], info: Info, **kwargs: Any
+        self, queryset: QuerySet[models.Blok], info: Info, **kwargs: object
     ) -> QuerySet[models.Blok]:
         return super().get_queryset(
             queryset.filter(owner_task__isnull=True, held_by_action=False),

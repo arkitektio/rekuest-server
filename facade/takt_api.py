@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass
-from typing import Any, ClassVar, Generic, TypeVar
+from typing import ClassVar, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
@@ -23,6 +23,7 @@ from facade.inputs import (
     ImplementAgentInputModel,
     ProbeInputModel,
 )
+from facade.json_types import JSON, JSONObject
 
 
 class Request(BaseModel):
@@ -141,7 +142,7 @@ class DecideRequest(Request):
     task: str
     approved: bool
     answer: str | None = None
-    values: dict[str, Any] | None = None
+    values: dict[str, JSON] | None = None
     remember: str | None = None
 
 
@@ -298,7 +299,7 @@ class ParseBlokRequest(Request):
 class ParseBlokAnswer(Answer):
     """The tree a blok's BSX source describes, as its one root."""
 
-    components: list[dict[str, Any]]
+    components: list[JSONObject]
 
 
 # --- schedules and triggers ------------------------------------------------------------------

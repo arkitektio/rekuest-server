@@ -53,8 +53,11 @@ def test_jwks_endpoint_serves_cacheable_document() -> None:
 
 def test_jwks_document_publishes_signing_key() -> None:
     doc = keys.get_jwks_document()
-    assert "keys" in doc and len(doc["keys"]) == 1
-    jwk = doc["keys"][0]
+    assert "keys" in doc
+    published = doc["keys"]
+    assert isinstance(published, list) and len(published) == 1
+    jwk = published[0]
+    assert isinstance(jwk, dict)
     assert jwk["kty"] == "OKP"
     assert jwk["crv"] == "Ed25519"
     assert jwk["kid"] == settings.PROVENANCE["KID"]

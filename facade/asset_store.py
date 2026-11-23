@@ -11,7 +11,7 @@ reader checks the GLB and hashes it) and reads an image back, and holds each to 
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
-from typing import Any, TypeVar
+from typing import TypedDict, TypeVar
 
 from arkitekt_datalayer.datalayer import Datalayer, load_config
 from arkitekt_datalayer.kulisse import KulissePolicy, KulisseRefused, check_ref
@@ -21,6 +21,7 @@ from django.db import IntegrityError, transaction
 
 from facade import models
 from facade.image_validation import ImagePolicy, ImageRefused, validate_image
+from facade.json_types import JSONObject
 from rekuest_core.enums import AssetKind
 
 P = TypeVar("P")
@@ -156,9 +157,26 @@ def _read_object(datalayer: Datalayer, store: MediaStore, limit: int) -> bytes:
     return store.read_bytes(datalayer, max_bytes=limit + 1)
 
 
+class ModelMeta(TypedDict):
+    """What a 3D model's ``Asset.meta`` holds: what the kulisse reader found in the GLB."""
+
+    nodes: list[str]
+    #: ``{nodes, triangles, textures, animations}``, counted.
+    stats: dict[str, int] | None
+    joints: list[JSONObject]
+
+
+class ImageMeta(TypedDict):
+    """What an image's ``Asset.meta`` holds: what its header says."""
+
+    format: str
+    width: int
+    height: int
+
+
 def _finish_model(
     datalayer: Datalayer, store: DatalayerStore, ref: str
-) -> tuple[int, dict[str, Any]]:
+) -> tuple[int, ModelMeta]:
     """Finish a model's kulisse store -- its reader checks the GLB and hashes it -- and hold it to ``ref``."""
     if not isinstance(store, KulisseStore):
         raise AssetRefused(
@@ -186,7 +204,7 @@ def _finish_model(
 
 def _finish_image(
     datalayer: Datalayer, store: DatalayerStore, ref: str, policy: AssetPolicy
-) -> tuple[int, dict[str, Any]]:
+) -> tuple[int, ImageMeta]:
     """Read an image back and hold it to the image rules and ``ref``."""
     if not isinstance(store, MediaStore):
         raise AssetRefused(
@@ -227,6 +245,7 @@ def create_asset(
             store.delete()
         return existing
 
+    meta: ModelMeta | ImageMeta
     try:
         if declared.kind == AssetKind.MODEL_3D.value:
             size, meta = _finish_model(datalayer, store, declared.ref)

@@ -9,7 +9,6 @@ server does, at start), so a management command never pays for it.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
 
 from django.apps import AppConfig, apps
 from django.core.checks import Error, Tags, register
@@ -32,7 +31,7 @@ def embedded_models() -> list[type[EmbeddedDescriptionMixin]]:
 def check_column_dimensions(
     app_configs: Sequence[AppConfig] | None,
     databases: Sequence[str] | None = None,
-    **kwargs: Any,
+    **kwargs: object,
 ) -> list[Error]:
     """``embeddings.E002``: a ``vector(N)`` column whose N is not ``engine.DIMENSIONS``.
 

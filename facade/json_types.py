@@ -1,15 +1,22 @@
 """What JSON is, as a type: for the values that really are open (port values, documents)."""
 
-from typing import TypeAliasType
+from typing import TYPE_CHECKING, TypeAlias, TypeAliasType
 
 from pydantic import TypeAdapter
 
-# The call form of ``type JSON = ...``: the same TypeAliasType at runtime, recursive through
-# the quoted name, which pydantic resolves as it does the statement's.
-JSON = TypeAliasType(
-    "JSON", None | bool | int | float | str | list["JSON"] | dict[str, "JSON"]
-)
-JSONObject = TypeAliasType("JSONObject", dict[str, JSON])
+if TYPE_CHECKING:
+    # What the checker reads: a plain recursive alias, the way pydantic declares ``JsonValue``.
+    # The call form below resolves its quoted self-reference only in some import orders, and
+    # then every ``JSON`` silently turned Unknown.
+    JSON: TypeAlias = None | bool | int | float | str | list["JSON"] | dict[str, "JSON"]
+    JSONObject: TypeAlias = dict[str, JSON]
+else:
+    # The call form of ``type JSON = ...``: the same TypeAliasType at runtime, recursive
+    # through the quoted name, which pydantic resolves as it does the statement's.
+    JSON = TypeAliasType(
+        "JSON", None | bool | int | float | str | list["JSON"] | dict[str, "JSON"]
+    )
+    JSONObject = TypeAliasType("JSONObject", dict[str, JSON])
 
 _VALUE: TypeAdapter[JSON] = TypeAdapter(JSON)
 _OBJECT: TypeAdapter[JSONObject] = TypeAdapter(JSONObject)

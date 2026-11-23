@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Collection
-from typing import Any, ClassVar
+from collections.abc import Collection, Iterable
+from typing import ClassVar
 
 from django.db import models
+from django.db.models.base import ModelBase
 from pgvector.django import VectorField
 
 from embeddings import engine
@@ -104,18 +105,28 @@ class EmbeddedDescriptionMixin(models.Model):
             return
         self._embedding_source_seen = source
 
-    def save(self, *args: Any, **kwargs: Any) -> None:
+    def save(
+        self,
+        *,
+        force_insert: bool | tuple[ModelBase, ...] = False,
+        force_update: bool = False,
+        using: str | None = None,
+        update_fields: Iterable[str] | None = None,
+    ) -> None:
         """Embed before writing whenever the source text may have changed."""
-        update_fields = kwargs.get("update_fields")
-        touches_source = update_fields is None or any(
-            field in update_fields for field in self.embedding_source_fields
+        fields = None if update_fields is None else list(update_fields)
+        touches_source = fields is None or any(
+            field in fields for field in self.embedding_source_fields
         )
         if engine.enabled() and touches_source and self.embedding_needs_refresh():
             self.refresh_embedding()
-            if update_fields is not None:
-                kwargs["update_fields"] = list(
-                    dict.fromkeys([*update_fields, *EMBEDDING_FIELDS])
-                )
-        super().save(*args, **kwargs)
-        if update_fields is None or touches_source:
+            if fields is not None:
+                fields = list(dict.fromkeys([*fields, *EMBEDDING_FIELDS]))
+        super().save(
+            force_insert=force_insert,
+            force_update=force_update,
+            using=using,
+            update_fields=fields,
+        )
+        if fields is None or touches_source:
             self._embedding_source_seen = self.embedding_source_text()

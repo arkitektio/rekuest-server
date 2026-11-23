@@ -1,11 +1,12 @@
 import uuid
-from typing import Any
+from collections.abc import Iterable
 
 from authentikate.models import App, Organization
 from django.contrib.auth import get_user_model
 from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
+from django.db.models.base import ModelBase
 from django.db.models.functions import Now
 from django_choices_field import TextChoicesField
 
@@ -324,7 +325,14 @@ class Task(models.Model):
     def __str__(self) -> str:
         return f"{self.latest_event_kind} for {self.action_id}"
 
-    def save(self, *args: Any, **kwargs: Any) -> None:
+    def save(
+        self,
+        *,
+        force_insert: bool | tuple[ModelBase, ...] = False,
+        force_update: bool = False,
+        using: str | None = None,
+        update_fields: Iterable[str] | None = None,
+    ) -> None:
         """Every update bumps ``revision`` — atomically, in the database.
 
         ``F("revision") + 1`` rather than ``self.revision + 1``: the latter is only right when the
@@ -338,15 +346,17 @@ class Task(models.Model):
         (``dispatched_at``, ``picked_up_at``, ``interrupt_at``) that no
         change feed carries.
         """
-        if not self._state.adding:
-            update_fields = kwargs.get("update_fields")
-            if update_fields is None or len(update_fields) > 0:
-                self.revision = models.F("revision") + 1
-                if update_fields is not None:
-                    kwargs["update_fields"] = list(
-                        {*update_fields, "revision", "updated_at"}
-                    )
-        super().save(*args, **kwargs)
+        fields = None if update_fields is None else list(update_fields)
+        if not self._state.adding and (fields is None or len(fields) > 0):
+            self.revision = models.F("revision") + 1
+            if fields is not None:
+                fields = list({*fields, "revision", "updated_at"})
+        super().save(
+            force_insert=force_insert,
+            force_update=force_update,
+            using=using,
+            update_fields=fields,
+        )
 
     class Meta:
         constraints = [

@@ -1,4 +1,14 @@
-from typing import Annotated, Any, cast
+from collections.abc import Callable
+from typing import (
+    Annotated,
+    Any,
+    TypeAlias,
+    TypedDict,
+    TypeVar,
+    Unpack,
+    cast,
+    overload,
+)
 
 import kante
 import strawberry
@@ -17,6 +27,8 @@ from django.db.models import Q
 from kante.types import Info
 from kante.unions import unionElementOf
 from strawberry.schema.config import StrawberryConfig
+from strawberry.types.field import StrawberryField
+from strawberry_django.mutations.fields import DjangoMutationBase
 from strawberry_django.optimizer import DjangoOptimizerExtension
 
 from embeddings.search import hybrid_search
@@ -31,48 +43,111 @@ from rekuest_core import scalars as rscalars
 from rekuest_core.constants import input_union_types, interface_types
 from rekuest_core.scalars import scalar_map as rscalar_map
 
+T = TypeVar("T")
 
-def field(scope: str = "rekuest_read", **kwargs: Any):  # noqa: ANN201  strawberry types a field as whatever it is assigned to
-    """A field an app needs ``scope`` for (``rekuest_read``, unless it says otherwise)."""
-    return strawberry_django.field(extensions=[AuthExtension(scopes=[scope])], **kwargs)
+#: What a resolver of this schema is: a function strawberry reads the signature of.
+Resolver: TypeAlias = Callable[..., object]
 
 
-def mutation(scope: str, roles: list[str] | None = None, **kwargs: Any):  # noqa: ANN201  as above
+class FieldOptions(TypedDict, total=False):
+    """What a field of this schema is declared with, besides its scope and resolver."""
+
+    description: str
+    name: str
+    pagination: bool
+
+
+# strawberry_django.field's own typing, kept: with a resolver the field passes for what the
+# resolver returns, without one for whatever attribute it is assigned to (Any).
+@overload
+def field(
+    scope: str = "rekuest_read",
+    *,
+    resolver: Callable[..., T],
+    **kwargs: Unpack[FieldOptions],
+) -> T: ...
+
+
+@overload
+def field(
+    scope: str = "rekuest_read",
+    **kwargs: Unpack[FieldOptions],
+) -> Any: ...  # noqa: ANN401  # pyright: ignore[reportExplicitAny]  the library's type for a resolver-less field
+
+
+def field(
+    scope: str = "rekuest_read",
+    *,
+    resolver: Resolver | None = None,
+    **kwargs: Unpack[FieldOptions],
+) -> object:
+    """A field an app needs ``scope`` for (``rekuest_read``, unless it says otherwise).
+
+    A ``StrawberryDjangoField``; the overloads say what it passes for.
+    """
+    extensions = [AuthExtension(scopes=[scope])]
+    if resolver is None:
+        return strawberry_django.field(extensions=extensions, **kwargs)
+    return strawberry_django.field(resolver, extensions=extensions, **kwargs)
+
+
+def mutation(
+    scope: str,
+    roles: list[str] | None = None,
+    *,
+    resolver: Resolver,
+    description: str,
+) -> DjangoMutationBase:
     """A write: an app needs ``scope`` for it, a member one of ``roles`` (``rekuest_editor`` unless it
     says otherwise; ``rekuest_admin`` holds every role)."""
     return strawberry_django.mutation(
+        resolver,
         extensions=[AuthExtension(scopes=[scope], any_role_of=roles or [EDITOR])],
-        **kwargs,
+        description=description,
     )
 
 
-def automation(**kwargs: Any):  # noqa: ANN201  as above
+def automation(*, resolver: Resolver, description: str) -> DjangoMutationBase:
     """A write to what runs actions on the organization's behalf: triggers, schedules and wiregrams.
 
     Only ``rekuest_automator`` may, not every editor: what it sets up runs without anyone there.
     """
-    return mutation(scope="rekuest_automate", roles=[AUTOMATOR], **kwargs)
-
-
-def read_mutation(**kwargs: Any):  # noqa: ANN201  as above
-    """A mutation that changes nothing (it hands out read credentials, or writes a document down): a read."""
-    return strawberry_django.mutation(
-        extensions=[AuthExtension(scopes=["rekuest_read"])], **kwargs
+    return mutation(
+        scope="rekuest_automate",
+        roles=[AUTOMATOR],
+        resolver=resolver,
+        description=description,
     )
 
 
-def upload_mutation(**kwargs: Any):  # noqa: ANN201  as above
+def read_mutation(*, resolver: Resolver, description: str) -> DjangoMutationBase:
+    """A mutation that changes nothing (it hands out read credentials, or writes a document down): a read."""
+    return strawberry_django.mutation(
+        resolver,
+        extensions=[AuthExtension(scopes=["rekuest_read"])],
+        description=description,
+    )
+
+
+def upload_mutation(*, resolver: Resolver, description: str) -> DjangoMutationBase:
     """A datalayer upload: an app needs ``rekuest_write``, a member one of the configured ``upload_roles``
     (``rekuest_editor`` when none are). Read once, at schema build."""
     return mutation(
-        scope="rekuest_write", roles=load_config().upload_roles or [EDITOR], **kwargs
+        scope="rekuest_write",
+        roles=load_config().upload_roles or [EDITOR],
+        resolver=resolver,
+        description=description,
     )
 
 
-def subscription(scope: str = "rekuest_read", **kwargs: Any):  # noqa: ANN201  as above
+def subscription(
+    scope: str = "rekuest_read", *, resolver: Resolver, description: str
+) -> StrawberryField:
     """A subscription: what it streams is read, so an app needs ``rekuest_read`` for it."""
     return strawberry.subscription(
-        extensions=[AuthSubscribeExtension(scopes=[scope])], **kwargs
+        resolver,
+        extensions=[AuthSubscribeExtension(scopes=[scope])],
+        description=description,
     )
 
 
