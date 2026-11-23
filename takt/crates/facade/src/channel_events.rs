@@ -89,6 +89,9 @@ pub struct TaskEventPayload {
     pub value: Option<Value>,
     #[serde(serialize_with = "datetime")]
     pub created_at: DateTime<Utc>,
+    /// The event's number within its task, in commit order (`insert_event`): the cursor a
+    /// caller session replays from. None only for a row written outside `insert_event`.
+    pub task_seq: Option<i64>,
 }
 
 /// `TaskEventCreatedEvent`: a persisted event, or a freshly created root task.

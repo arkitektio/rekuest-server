@@ -314,6 +314,27 @@ async fn every_report_is_recorded_and_the_task_keeps_its_latest() {
     assert_eq!(progress, Some(70));
     assert_eq!(message.as_deref(), Some("almost"));
     assert_eq!(returns, Some(json!({"return0": 2})));
+    // Numbered within the task, in the order recorded, and the task's counter is the last.
+    assert_eq!(task_seqs(&ctx, task).await, vec![1, 2, 3, 4, 5, 6]);
+    assert_eq!(event_seq(&ctx, task).await, 6);
+}
+
+#[tokio::test]
+async fn each_task_numbers_its_own_events() {
+    let Some(ctx) = context().await else { return };
+    let (agent, action) = agent(&ctx).await;
+    let first = task(&ctx, agent, action).await;
+    let second = task(&ctx, agent, action).await;
+    for (task, kind) in [(first, "STARTED"), (second, "STARTED"), (first, "LOG"), (second, "LOG")] {
+        let mut body = json!({"type": kind, "task": task.to_string()});
+        if kind == "LOG" {
+            body["message"] = json!("hi");
+            body["level"] = json!("INFO");
+        }
+        route(&ctx, agent, &frame(body), None).await.unwrap();
+    }
+    assert_eq!(task_seqs(&ctx, first).await, vec![1, 2]);
+    assert_eq!(task_seqs(&ctx, second).await, vec![1, 2]);
 }
 
 #[tokio::test]
@@ -356,6 +377,9 @@ async fn numbered_frames_are_projected_once() {
     .await
     .unwrap();
     assert_eq!(kinds(&ctx, task).await, vec!["STARTED", "LOG"]);
+    // The resend took no number: the counter did not move past the two events.
+    assert_eq!(task_seqs(&ctx, task).await, vec![1, 2]);
+    assert_eq!(event_seq(&ctx, task).await, 2);
     let (pos, step): (Option<i64>, Option<i64>) = sqlx::query_as(
         "SELECT agent_pos, step FROM facade_taskevent WHERE task_id = $1 AND kind = 'LOG'",
     )
@@ -544,4 +568,22 @@ async fn patches_link_own_tasks_and_drop_duplicate_revisions() {
         route(&ctx, agent, &unknown, None).await,
         Err(RouteError::Refused(_))
     ));
+}
+
+/// The task's events' numbers, in id order.
+async fn task_seqs(ctx: &Context, task: i64) -> Vec<i64> {
+    sqlx::query_scalar("SELECT task_seq FROM facade_taskevent WHERE task_id = $1 ORDER BY id")
+        .bind(task)
+        .fetch_all(&ctx.db)
+        .await
+        .unwrap()
+}
+
+/// The task's counter: the number of its newest event.
+async fn event_seq(ctx: &Context, task: i64) -> i64 {
+    sqlx::query_scalar("SELECT event_seq FROM facade_task WHERE id = $1")
+        .bind(task)
+        .fetch_one(&ctx.db)
+        .await
+        .unwrap()
 }

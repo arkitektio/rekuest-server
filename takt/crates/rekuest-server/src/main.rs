@@ -38,6 +38,14 @@ async fn main() -> anyhow::Result<()> {
         .context("connecting to postgres")?;
     // Before anything is served or swept: the tables must be the ones this build was written for.
     facade::schema::wait_until_migrated(&db).await;
+    // Before anything is served: every event has its number in its task, or a caller session
+    // replaying "after task_seq n" could pass over one an older takt wrote without it.
+    let numbered = facade::persist::transitions::number_unnumbered_events(&db)
+        .await
+        .context("numbering the events an older takt wrote")?;
+    if numbered > 0 {
+        tracing::info!(numbered, "numbered events written without a task_seq");
+    }
     let redis_client = redis::Client::open(configuration.redis.url()).context("redis url")?;
     let redis = redis::aio::ConnectionManager::new(redis_client.clone())
         .await

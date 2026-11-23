@@ -238,6 +238,7 @@ struct EventRow {
     level: Option<String>,
     value: Option<Value>,
     created_at: DateTime<Utc>,
+    task_seq: Option<i64>,
     caller_id: Option<i64>,
     root_id: Option<i64>,
     implementation_id: Option<i64>,
@@ -269,7 +270,7 @@ pub async fn task_event_payload(
 ) -> Result<(TaskEventPayload, EventRouting), sqlx::Error> {
     let event: EventRow = sqlx::query_as(
         "SELECT e.id, e.task_id, e.kind, e.message, e.progress, e.returns, e.level, e.value, e.created_at,
-                t.caller_id, t.root_id, t.implementation_id,
+                e.task_seq, t.caller_id, t.root_id, t.implementation_id,
                 pa.id AS calling_agent, pa.connected AS calling_agent_connected
            FROM facade_taskevent e JOIN facade_task t ON t.id = e.task_id
            LEFT JOIN facade_task p ON p.id = t.parent_id AND p.is_done = false
@@ -293,6 +294,7 @@ pub async fn task_event_payload(
             level: event.level.filter(|level| !level.is_empty()),
             value: event.value,
             created_at: event.created_at,
+            task_seq: event.task_seq,
         },
         EventRouting {
             caller: event.caller_id,

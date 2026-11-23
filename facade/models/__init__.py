@@ -53,6 +53,7 @@ from .implementation import (
     ResolvedDependency,
 )
 from .schedule import Schedule
+from .session import CallerSession, SweepBeat
 from .signal import Firing, ObjectDescriptors, Signal, SignalDeclaration, Trigger
 from .state import (
     Patch,
@@ -75,6 +76,9 @@ from .wiregram import Wiregram
 __all__ = [
     # caller
     "Caller",
+    # caller sessions (takt /session)
+    "CallerSession",
+    "SweepBeat",
     # schedule
     "Schedule",
     # signals

@@ -27,6 +27,7 @@ class Task(models.Model):
     signal_id: int | None
     trigger_id: int | None
     space_id: int | None
+    deadman_session_id: str | None
 
     acted_on = ArrayField(
         base_field=models.CharField(max_length=1000),
@@ -237,6 +238,25 @@ class Task(models.Model):
         default=1,
         db_default=1,
         help_text="Monotonic per-task version, bumped by every write to this row (see ``save``). Carried in the task change feeds so a consumer can discard an update that arrives out of order — with several backends writing, channel-layer arrival order is not commit order.",
+    )
+    event_seq = models.PositiveBigIntegerField(
+        default=0,
+        db_default=0,
+        help_text="The task_seq of its newest event. Taken (and incremented) by takt's ``insert_event`` under this row's lock, so a task's events are numbered 1, 2, 3 … in commit order: the cursor a caller session replays from.",
+    )
+    # --- The dead man switch (takt's caller sessions) ------------------------------------
+    deadman_seconds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Cancel this task when ``deadman_session`` has been gone for longer than this. NULL = never: a task does not depend on the window that started it unless it asked to.",
+    )
+    deadman_session = models.ForeignKey(
+        "CallerSession",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="deadman_tasks",
+        help_text="The caller session whose absence cancels this task (with ``deadman_seconds``).",
     )
     # --- Deadline bookkeeping -------------------------------------------------------------
     # Every deadline the server enforces lives in these columns rather than in a process-local
@@ -518,6 +538,11 @@ class TaskEvent(models.Model):
         blank=True,
         help_text="EFFECT events: the value taken (NOW: epoch seconds, RANDOM: hex, SLEEP: the deadline in epoch seconds), which a replay returns instead of taking a new one.",
     )
+    task_seq = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        help_text="The event's number within its task (1, 2, 3 …), in commit order: unlike the id, 'every event after task_seq n' misses none. Set by takt's ``insert_event``; NULL only for rows written outside it (tests).",
+    )
 
     class Meta:
         constraints = [
@@ -536,6 +561,12 @@ class TaskEvent(models.Model):
                     agent_session__isnull=False, agent_pos__isnull=False
                 ),
                 name="task_event_one_per_report",
+            ),
+            # One event per number: also the index a replay "after task_seq n" reads.
+            models.UniqueConstraint(
+                fields=["task", "task_seq"],
+                condition=models.Q(task_seq__isnull=False),
+                name="task_event_one_per_seq",
             ),
         ]
 

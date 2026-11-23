@@ -7739,7 +7739,7 @@ type Subscription {
   """
   One task's events, whoever started it: those already recorded (all, or those newer than `after`), oldest first, then each new one as it is recorded, logs included. Replaces polling a task's event history.
   """
-  taskEvents(task: ID!, after: ID = null): TaskEventChange! @auth(required_scopes: ["rekuest_read"])
+  taskEvents(task: ID!, after: ID = null, afterSeq: Int = null): TaskEventChange! @auth(required_scopes: ["rekuest_read"])
 
   """
   Stream the events of one probe (caller-scoped, payload-carrying). Emits a state snapshot first when events already happened.
@@ -7840,6 +7840,11 @@ type Task {
   latestReturns: AnyDefault
 
   """
+  The dead man switch: the task is cancelled when the window holding it has been gone this many seconds. Null: it never depends on a window.
+  """
+  deadmanSeconds: Int
+
+  """
   The space the caller started this run in (the assign's `space`): where a client draws the action's overlay. Null when none was named, or the space is gone.
   """
   space: Space
@@ -7875,6 +7880,11 @@ type Task {
 
   """The method of the dependency that caused this task, if applicable."""
   dependencyMethod: String
+
+  """
+  Whether a window's session holds the task's dead man switch (it is armed).
+  """
+  deadmanArmed: Boolean!
 
   """
   The bloks this task showed a person, oldest first: asks it holds on (or held on) and informs.
@@ -8035,6 +8045,11 @@ type TaskEvent {
   agentTs: DateTime
 
   """
+  The event's number within its task (1, 2, 3 …) in commit order; the cursor to resume a task's events from.
+  """
+  taskSeq: Int
+
+  """
   The report's step within its task; a task's history in step order. Null for server-written events.
   """
   step: Int
@@ -8073,6 +8088,11 @@ type TaskEventChange {
   """
   value: AnyDefault
   createdAt: DateTime!
+
+  """
+  The event's number within its task (1, 2, 3 …) in commit order: resume from it with `afterSeq`, never from the id.
+  """
+  taskSeq: Int
 }
 
 """A way to filter task events"""

@@ -94,6 +94,10 @@ class TaskEventChange:
         description="EFFECT: the value taken. LOST: what is known (started, last_progress, effects, reason).",
     )
     created_at: datetime.datetime
+    task_seq: int | None = strawberry.field(
+        default=None,
+        description="The event's number within its task (1, 2, 3 …) in commit order: resume from it with `afterSeq`, never from the id.",
+    )
 
     @classmethod
     def from_model(cls, e: models.TaskEvent) -> "TaskEventChange":
@@ -106,6 +110,7 @@ class TaskEventChange:
             returns=e.returns,
             value=e.value,
             created_at=e.created_at,
+            task_seq=e.task_seq,
         )
 
     @classmethod
@@ -119,6 +124,7 @@ class TaskEventChange:
             returns=rscalars.AnyDefault(p.returns) if p.returns is not None else None,
             value=rscalars.AnyDefault(p.value) if p.value is not None else None,
             created_at=p.created_at,
+            task_seq=p.task_seq,
         )
 
 
@@ -352,13 +358,30 @@ def read_task_events(task: int, after: int) -> list[TaskEventChange]:
     ]
 
 
+def read_task_events_after_seq(task: int, after_seq: int) -> list[TaskEventChange]:
+    """The task's recorded events numbered after ``after_seq`` (0 for all), in task_seq order.
+
+    The safe cursor: task_seq is taken in commit order, so nothing committed later can carry
+    a number at or below one already seen (unlike an id).
+    """
+    return [
+        TaskEventChange.from_model(event)
+        for event in models.TaskEvent.objects.filter(
+            task_id=task, task_seq__gt=after_seq
+        ).order_by("task_seq")
+    ]
+
+
 async def task_events(
     self: object,
     info: Info,
     task: strawberry.ID,
     after: strawberry.ID | None = None,
+    after_seq: int | None = None,
 ) -> AsyncGenerator[TaskEventChange, None]:
-    """One task's events: those already recorded (newer than ``after``), then each new one as it is recorded."""
+    """One task's events: those already recorded (numbered after ``after_seq``, or else newer
+    than event ``after``), then each new one as it is recorded. Resume with ``after_seq``: an
+    id cursor can skip an event that committed after a newer id was seen."""
     found = await sync_to_async(scoped_get)(
         models.Task, info, task, field="agent__organization"
     )
@@ -368,8 +391,12 @@ async def task_events(
     async with info.context.consumer.listen_to_channel(  # type: ignore[union-attr]
         task_event_channel.message_type, groups=[task_events_group(found.pk)]
     ) as messages:
-        floor = int(after) if after is not None else 0
-        history = await sync_to_async(read_task_events)(found.pk, floor)
+        floor = int(after) if after is not None and after_seq is None else 0
+        history = (
+            await sync_to_async(read_task_events_after_seq)(found.pk, after_seq)
+            if after_seq is not None
+            else await sync_to_async(read_task_events)(found.pk, floor)
+        )
         # By id, not by "newest seen": events of one task may be published out of id order.
         replayed = {int(event.id) for event in history}
         for event in history:
@@ -381,5 +408,8 @@ async def task_events(
                 continue
             event_id = int(message.event.id)
             if event_id <= floor or event_id in replayed:
+                continue
+            seq = message.event.task_seq
+            if after_seq is not None and seq is not None and seq <= after_seq:
                 continue
             yield TaskEventChange.from_payload(message.event)

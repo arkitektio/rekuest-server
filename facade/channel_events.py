@@ -147,6 +147,9 @@ class TaskEventPayload(BaseModel):
     # EFFECT: the value taken; LOST: what is known (started, last progress, effects).
     value: JSON = None
     created_at: datetime.datetime
+    # The event's number within its task, in commit order (takt's ``insert_event``): the
+    # cursor a caller session replays from. None from a takt older than 0028.
+    task_seq: int | None = None
 
     @classmethod
     def from_event(cls, e: models.TaskEvent) -> TaskEventPayload:
@@ -160,6 +163,7 @@ class TaskEventPayload(BaseModel):
             level=_kind_value(e.level) if e.level else None,
             value=e.value,
             created_at=e.created_at,
+            task_seq=e.task_seq,
         )
 
 

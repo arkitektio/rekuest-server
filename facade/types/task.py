@@ -231,6 +231,16 @@ class Task:
     latest_returns: rscalars.AnyDefault | None = strawberry_django.field(
         description="Returns of the latest YIELD event."
     )
+    deadman_seconds: int | None = strawberry_django.field(
+        description="The dead man switch: the task is cancelled when the window holding it has been gone this many seconds. Null: it never depends on a window."
+    )
+
+    @strawberry_django.field(
+        description="Whether a window's session holds the task's dead man switch (it is armed)."
+    )
+    def deadman_armed(self) -> bool:
+        task = row_of(self, models.Task)
+        return task.deadman_seconds is not None and task.deadman_session_id is not None
 
     @strawberry_django.field(
         description="The bloks this task showed a person, oldest first: asks it holds on (or held on) and informs."
@@ -348,6 +358,9 @@ class TaskEvent:
     )
     agent_ts: datetime.datetime | None = strawberry_django.field(
         description="When the agent recorded the report; null for server-written events and agents without numbering."
+    )
+    task_seq: int | None = strawberry_django.field(
+        description="The event's number within its task (1, 2, 3 …) in commit order; the cursor to resume a task's events from."
     )
     step: int | None = strawberry_django.field(
         description="The report's step within its task; a task's history in step order. Null for server-written events."

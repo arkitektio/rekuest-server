@@ -294,8 +294,11 @@ def _build_task_event(
     message: str | None = None,
     progress: int | None = None,
     returns: dict[str, object] | None = None,
+    task_seq: int | None = None,
 ) -> TaskEvent:
     """Persist a ``TaskEvent`` on a task, firing the same ``post_save`` fan-out as real dispatch.
+
+    ``task_seq`` is takt's number for it (``insert_event``); left out, the row has none.
 
     On a root task this drives a ``mytasks`` / ``tasks`` ``event`` over the change feeds.
     """
@@ -306,6 +309,7 @@ def _build_task_event(
         message=message,
         progress=progress,
         returns=returns,
+        task_seq=task_seq,
     )
 
 

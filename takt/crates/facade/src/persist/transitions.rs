@@ -114,6 +114,14 @@ impl NewEvent {
 /// no caller is left waiting for an end that was recorded. `PROGRESS` is the exception: its
 /// fan-out is thinned (`progress_gate`), and what is thinned is decided after the commit
 /// (`signals::task_event_created`). A `LOG` is only kept for an agent that listens.
+///
+/// Every event is numbered within its task (`task_seq`, 1, 2, 3 …) in commit order: the task
+/// row is updated (its `event_seq` taken, its latest report kept) **before** the event is
+/// inserted, so the row's lock is held from the moment the number is taken until commit, and
+/// the next writer of the task waits and takes the number after. That is what makes "every
+/// event after `task_seq` n" a cursor that misses none (a caller session's, `session/`), where
+/// "after id n" could skip one that committed late. A report sent again is found first and
+/// takes no number.
 pub async fn insert_event(
     executor: impl sqlx::PgExecutor<'_>,
     task: i64,
@@ -121,22 +129,28 @@ pub async fn insert_event(
     event: &NewEvent,
 ) -> Result<i64, sqlx::Error> {
     sqlx::query_scalar(
-        "WITH event AS (
+        "WITH existing AS (
+            SELECT id FROM facade_taskevent
+             WHERE task_id = $1 AND agent_session = $14 AND agent_pos = $7
+             LIMIT 1
+         ), numbered AS (
+            UPDATE facade_task t
+               SET event_seq = t.event_seq + 1,
+                   latest_progress = CASE WHEN $2 = 'PROGRESS' AND $5::int IS NOT NULL
+                                          THEN $5::int ELSE t.latest_progress END,
+                   latest_message = COALESCE($3, t.latest_message),
+                   latest_returns = CASE WHEN $2 = 'YIELD' THEN $4::jsonb ELSE t.latest_returns END
+             WHERE t.id = $1 AND NOT EXISTS (SELECT 1 FROM existing)
+             RETURNING t.event_seq
+         ), event AS (
             INSERT INTO facade_taskevent
                 (task_id, kind, message, returns, progress, level, agent_pos, agent_ts, step, effect,
-                 key, value, delegated_to_id, agent_session)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                 key, value, delegated_to_id, agent_session, task_seq)
+            SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, numbered.event_seq
+              FROM numbered
              ON CONFLICT (task_id, agent_session, agent_pos)
                 WHERE agent_session IS NOT NULL AND agent_pos IS NOT NULL DO NOTHING
              RETURNING id, task_id, kind, message, returns, progress
-         ), kept AS (
-            UPDATE facade_task t
-               SET latest_progress = CASE WHEN event.kind = 'PROGRESS' AND event.progress IS NOT NULL
-                                          THEN event.progress ELSE t.latest_progress END,
-                   latest_message = COALESCE(event.message, t.latest_message),
-                   latest_returns = CASE WHEN event.kind = 'YIELD' THEN event.returns ELSE t.latest_returns END
-              FROM event
-             WHERE t.id = event.task_id
          ), mirrored AS (
             INSERT INTO facade_command (agent_id, kind, task, event)
             SELECT pa.id, 'EVENT', event.task_id, event.id
@@ -152,8 +166,7 @@ pub async fn insert_event(
          )
          SELECT id FROM event
          UNION ALL
-         SELECT id FROM facade_taskevent
-          WHERE task_id = $1 AND agent_session = $14 AND agent_pos = $7
+         SELECT id FROM existing
           LIMIT 1",
     )
     .bind(task)
@@ -178,6 +191,33 @@ pub async fn insert_event(
     .bind(crate::caller_events::MIRRORED_KINDS)
     .fetch_one(executor)
     .await
+}
+
+/// Number the events written without a `task_seq` (by a takt older than this one, between the
+/// migration and this start), after their task's counter, in id order; moves each counter on.
+/// Run once at start, before anything is served: a caller session's replay reads by
+/// `task_seq`, and must never pass over a row that has none. How many were numbered.
+pub async fn number_unnumbered_events(db: &sqlx::PgPool) -> Result<u64, sqlx::Error> {
+    let done = sqlx::query(
+        "WITH pending AS (
+            SELECT e.id, e.task_id, row_number() OVER (PARTITION BY e.task_id ORDER BY e.id) AS rn
+              FROM facade_taskevent e
+             WHERE e.task_seq IS NULL
+         ), bumped AS (
+            UPDATE facade_task t
+               SET event_seq = t.event_seq + c.n
+              FROM (SELECT task_id, count(*) AS n FROM pending GROUP BY task_id) c
+             WHERE t.id = c.task_id
+            RETURNING t.id, t.event_seq - c.n AS base
+         )
+         UPDATE facade_taskevent e
+            SET task_seq = b.base + p.rn
+           FROM pending p JOIN bumped b ON b.id = p.task_id
+          WHERE e.id = p.id",
+    )
+    .execute(db)
+    .await?;
+    Ok(done.rows_affected())
 }
 
 /// Move a task's `latest_event_kind` (and, `done`, finish it), bumping `revision` and

@@ -65,13 +65,17 @@ class Consumer:
 
 
 async def _watch(
-    task: models.Task, consumer: Consumer, token: str = "test", after: str | None = None
+    task: models.Task,
+    consumer: Consumer,
+    token: str = "test",
+    after: str | None = None,
+    after_seq: int | None = None,
 ) -> AsyncGenerator[TaskEventChange, None]:
     context = (await sync_to_async(tenant_context)(token))[0]
     info = SimpleNamespace(
         context=SimpleNamespace(request=context.request, consumer=consumer)
     )
-    return task_events(None, info, str(task.pk), after)  # type: ignore[arg-type]
+    return task_events(None, info, str(task.pk), after, after_seq)  # type: ignore[arg-type]
 
 
 async def _drain(
@@ -116,6 +120,24 @@ class TestTaskEvents:
         feed = await _watch(task, consumer := Consumer(), after=str(seen.pk))
         assert (await anext(feed)).id == str(newer.pk)
         consumer.queue.put_nowait(_message(seen))  # a late copy of what the client had
+        assert await _drain(feed, consumer) == []
+
+    async def test_after_seq_replays_an_event_that_committed_late(self) -> None:
+        # Events 1 and 3 were seen; 2 committed after 3 (a higher id, a lower number). An id
+        # cursor at 3's id would skip 2; the task_seq cursor at 1 does not.
+        agent = await seed_agent("task-events")
+        task = await build_task_for_agent_caller(agent.pk, "te-after-seq")
+        await build_task_event(task.pk, kind="LOG", message="one", task_seq=1)
+        third = await build_task_event(task.pk, kind="LOG", message="three", task_seq=3)
+        second = await build_task_event(task.pk, kind="LOG", message="two", task_seq=2)
+
+        feed = await _watch(task, consumer := Consumer(), after_seq=1)
+        replayed = [await anext(feed) for _ in range(2)]
+        assert [(event.id, event.task_seq) for event in replayed] == [
+            (str(second.pk), 2),
+            (str(third.pk), 3),
+        ]
+        consumer.queue.put_nowait(_message(second))  # a late copy: already replayed
         assert await _drain(feed, consumer) == []
 
     async def test_another_organizations_task_is_not_watched(self) -> None:
