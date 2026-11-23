@@ -561,3 +561,112 @@ fn every_frame_in_the_wire_examples_reads_and_writes_back() {
         assert_eq!(&serde_json::to_value(&parsed).unwrap(), frame);
     }
 }
+
+/// The first frame a fresh WATCH of `topic` gets.
+async fn first_frame(socket: &mut Socket, topic: &str) -> Value {
+    send(socket, json!({"type": "WATCH", "topic": topic})).await;
+    let frame = recv(socket).await;
+    assert_eq!(frame["type"], "RESYNC", "{topic}: {frame}");
+    assert_eq!(frame["topic"], topic);
+    frame
+}
+
+#[tokio::test]
+async fn every_list_topic_starts_with_its_rows_and_follows() {
+    let tokens = Tokens::new();
+    let Some(ctx) = context(&tokens).await else { return };
+    let url = serve(&ctx).await;
+    let (agent, action) = agent(&ctx, &tokens).await;
+    let caller = caller_of(&ctx, &tokens, "caller").await;
+    let root = task(&ctx, agent, action, Some(caller)).await;
+    let child = task(&ctx, agent, action, Some(caller)).await;
+    sqlx::query("UPDATE facade_task SET parent_id = $2, root_id = $2 WHERE id = $1")
+        .bind(child)
+        .bind(root)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+
+    let mut socket = connect(&url).await;
+    hello(&mut socket, &tokens.caller(), None, 0).await;
+
+    let mine = first_frame(&mut socket, "tasks:mine").await;
+    let ids: Vec<&str> = mine["snapshot"]["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["id"].as_str().unwrap())
+        .collect();
+    assert!(ids.contains(&root.to_string().as_str()), "{ids:?}");
+    assert!(!ids.contains(&child.to_string().as_str()), "a child is no root: {ids:?}");
+
+    let org = first_frame(&mut socket, "tasks:org").await;
+    assert!(org["snapshot"]["rows"].as_array().unwrap().iter().any(|r| r["id"].as_str() == Some(root.to_string().as_str())));
+    let children = first_frame(&mut socket, &format!("children:{root}")).await;
+    assert_eq!(children["snapshot"]["rows"][0]["id"], child.to_string());
+    let agent_tasks = first_frame(&mut socket, &format!("agent:{agent}/tasks")).await;
+    assert_eq!(agent_tasks["snapshot"]["rows"].as_array().unwrap().len(), 2);
+    let agents = first_frame(&mut socket, "agents:org").await;
+    assert_eq!(agents["snapshot"]["rows"][0]["id"], agent.to_string());
+
+    // A report on the root reaches my tasks (and the org's), as the feeds carry it.
+    report(&ctx, agent, json!({"type": "STARTED", "task": root.to_string()})).await;
+    // The agent's tasks hear of it too: the task changed (its latest kind).
+    let mut by_topic = std::collections::HashMap::new();
+    while by_topic.len() < 3 {
+        let frame = recv(&mut socket).await;
+        assert_eq!(frame["type"], "DATA", "{frame}");
+        by_topic.insert(frame["topic"].as_str().unwrap().to_owned(), frame["item"].clone());
+    }
+    assert_eq!(by_topic["tasks:mine"]["event"]["kind"], "STARTED");
+    assert_eq!(by_topic["tasks:org"]["event"]["kind"], "STARTED");
+    assert_eq!(by_topic[&format!("agent:{agent}/tasks")]["update"]["id"], root.to_string());
+}
+
+#[tokio::test]
+async fn a_state_starts_with_its_checkpoint_and_patches_and_follows() {
+    let tokens = Tokens::new();
+    let Some(ctx) = context(&tokens).await else { return };
+    let url = serve(&ctx).await;
+    let (agent, _) = agent(&ctx, &tokens).await;
+    sqlx::query(
+        "WITH d AS (
+            INSERT INTO facade_statedefinition (name, hash, ports, description, organization_id)
+            SELECT 'plate', $2, '[]', 'A state definition', organization_id FROM facade_agent WHERE id = $1 RETURNING id)
+         INSERT INTO facade_state (interface, created_at, updated_at, agent_id, definition_id)
+         SELECT 'plate', now(), now(), $1, d.id FROM d",
+    )
+    .bind(agent)
+    .bind(uuid::Uuid::new_v4().to_string())
+    .execute(&ctx.db)
+    .await
+    .unwrap();
+    let patch = |rev: u64, value: &str| {
+        json!({"type": "STATE_PATCH", "session_id": "s1", "global_rev": rev, "state_name": "plate",
+               "ts": 1.0, "op": "replace", "path": "/barcode", "value": value, "old_value": null})
+    };
+    report(&ctx, agent, json!({"type": "SESSION_INIT", "session_id": "s1", "states": {"plate": {"barcode": "A0"}}})).await;
+    report(&ctx, agent, patch(1, "A1")).await;
+    report(&ctx, agent, patch(2, "A2")).await;
+
+    let mut socket = connect(&url).await;
+    hello(&mut socket, &tokens.reader(), None, 0).await;
+    let one = first_frame(&mut socket, &format!("state:{agent}/plate")).await;
+    let plate = &one["snapshot"]["states"]["plate"]["value"];
+    assert_eq!(plate["base"], json!({"barcode": "A0"}));
+    assert_eq!(plate["patches"].as_array().unwrap().len(), 2);
+    assert_eq!(one["snapshot"]["global_rev"], 2);
+    let all = first_frame(&mut socket, &format!("states:{agent}")).await;
+    assert_eq!(all["snapshot"]["global_rev"], 2);
+
+    report(&ctx, agent, patch(3, "A3")).await;
+    let mut topics = std::collections::HashSet::new();
+    for _ in 0..2 {
+        let frame = recv(&mut socket).await;
+        assert_eq!(frame["type"], "DATA", "{frame}");
+        assert_eq!(frame["item"]["global_rev"], 3);
+        assert_eq!(frame["item"]["ops"][0]["value"], "A3");
+        topics.insert(frame["topic"].as_str().unwrap().to_owned());
+    }
+    assert_eq!(topics, [format!("state:{agent}/plate"), format!("states:{agent}")].into());
+}
