@@ -49,7 +49,42 @@ pub async fn load(ctx: &Context, session: &str) -> Option<Saved> {
     serde_json::from_str(&text?).ok()
 }
 
-/// Keep `saved` for a grace (and a little more, so a grace watcher still finds it).
+/// Keep `saved` as long as `saved.connection` still holds the session; whether it does. A
+/// connection another one took the session over from (a window back before this one was seen
+/// to be gone) learns so here, and must stop.
+pub async fn save_held(ctx: &Context, session: &str, saved: &Saved) -> bool {
+    let Ok(text) = serde_json::to_string(saved) else {
+        return true;
+    };
+    let seconds = ctx.settings.session.grace.as_secs() + 60;
+    let script = redis::Script::new(
+        r"local held = redis.call('GET', KEYS[1])
+          if held then
+            local ok, record = pcall(cjson.decode, held)
+            if ok and record.connection ~= ARGV[1] then return 0 end
+          end
+          redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
+          return 1",
+    );
+    let mut redis = ctx.redis.clone();
+    match script
+        .key(key(ctx, session))
+        .arg(&saved.connection)
+        .arg(text)
+        .arg(seconds)
+        .invoke_async::<i64>(&mut redis)
+        .await
+    {
+        Ok(held) => held == 1,
+        Err(e) => {
+            tracing::warn!(session, "keeping the session failed: {e}");
+            true
+        }
+    }
+}
+
+/// Keep `saved` for a grace (and a little more, so a grace watcher still finds it), whoever
+/// held the session before: what a connection that opens or takes over a session writes first.
 pub async fn save(ctx: &Context, session: &str, saved: &Saved) {
     let Ok(text) = serde_json::to_string(saved) else {
         return;

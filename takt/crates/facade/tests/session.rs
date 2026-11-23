@@ -822,3 +822,121 @@ async fn a_window_whose_timers_sleep_stays_connected_by_answering_pings() {
     }
     assert!(pings >= 2, "{pings} pings");
 }
+
+#[tokio::test]
+async fn a_window_back_on_a_new_socket_takes_its_session_over_from_the_old_one() {
+    let tokens = Tokens::new();
+    let Some(ctx) = context(&tokens).await else { return };
+    let url = serve(&ctx).await;
+
+    let mut old = connect(&url).await;
+    let session = hello(&mut old, &tokens.reader(), None, 0).await["session"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // The old socket is still open as far as takt knows (its window lost it unnoticed).
+    let mut new = connect(&url).await;
+    let welcome = hello(&mut new, &tokens.reader(), Some(&session), 0).await;
+    assert_eq!(welcome["resumed"], true, "{welcome}");
+    assert_eq!(welcome["session"], session);
+
+    // The old connection learns it at its next write, and ends.
+    send(&mut old, json!({"type": "PING", "pos": 0})).await;
+    let mut closed = None;
+    let until = tokio::time::Instant::now() + Duration::from_secs(5);
+    while tokio::time::Instant::now() < until && closed.is_none() {
+        match tokio::time::timeout(Duration::from_millis(500), old.next()).await {
+            Ok(Some(Ok(Message::Close(Some(frame))))) => closed = Some(u16::from(frame.code)),
+            Ok(None) | Ok(Some(Err(_))) => break,
+            _ => {}
+        }
+    }
+    assert_eq!(closed, Some(4409));
+    // The new one goes on.
+    send(&mut new, json!({"type": "WATCH", "topic": "tasks:mine"})).await;
+    assert_eq!(recv(&mut new).await["type"], "RESYNC");
+}
+
+/// An agent of the tests' organization with a state `plate` and a state session `s1` at rev 1.
+async fn agent_with_state(ctx: &Context, tokens: &Tokens) -> (i64, i64, i64) {
+    let (agent, _) = agent(ctx, tokens).await;
+    let state: i64 = sqlx::query_scalar(
+        "WITH d AS (
+            INSERT INTO facade_statedefinition (name, hash, ports, description, organization_id)
+            SELECT 'plate', $2, '[]', 'A state definition', organization_id FROM facade_agent WHERE id = $1 RETURNING id)
+         INSERT INTO facade_state (interface, created_at, updated_at, agent_id, definition_id)
+         SELECT 'plate', now(), now(), $1, d.id FROM d RETURNING id",
+    )
+    .bind(agent)
+    .bind(uuid::Uuid::new_v4().to_string())
+    .fetch_one(&ctx.db)
+    .await
+    .unwrap();
+    report(ctx, agent, json!({"type": "SESSION_INIT", "session_id": "s1", "states": {"plate": {"barcode": "A0"}}})).await;
+    report(ctx, agent, state_patch(1, "A1")).await;
+    let session: i64 = sqlx::query_scalar("SELECT id FROM facade_session WHERE agent_id = $1")
+        .bind(agent)
+        .fetch_one(&ctx.db)
+        .await
+        .unwrap();
+    (agent, state, session)
+}
+
+fn state_patch(rev: u64, value: &str) -> Value {
+    json!({"type": "STATE_PATCH", "session_id": "s1", "global_rev": rev, "state_name": "plate",
+           "ts": 1.0, "op": "replace", "path": "/barcode", "value": value, "old_value": null})
+}
+
+#[tokio::test]
+async fn a_lost_state_patch_is_read_back_before_the_next() {
+    let tokens = Tokens::new();
+    let Some(ctx) = context(&tokens).await else { return };
+    let url = serve(&ctx).await;
+    let (agent, state, session) = agent_with_state(&ctx, &tokens).await;
+
+    let mut socket = connect(&url).await;
+    hello(&mut socket, &tokens.reader(), None, 0).await;
+    let snapshot = first_frame(&mut socket, &format!("states:{agent}")).await;
+    assert_eq!(snapshot["snapshot"]["global_rev"], 1);
+
+    // Revision 2 recorded, its broadcast lost; revision 3 arrives.
+    sqlx::query(
+        "INSERT INTO facade_patch (interface, timestamp, global_rev, agent_id, session_id, state_id, ops, qualifiers)
+         VALUES ('plate', now(), 2, $1, $2, $3, '[{\"op\": \"replace\", \"path\": \"/barcode\", \"value\": \"A2\"}]', '[]')",
+    )
+    .bind(agent)
+    .bind(session)
+    .bind(state)
+    .execute(&ctx.db)
+    .await
+    .unwrap();
+    report(&ctx, agent, state_patch(3, "A3")).await;
+
+    let two = recv(&mut socket).await;
+    let three = recv(&mut socket).await;
+    assert_eq!((two["item"]["global_rev"].as_i64(), three["item"]["global_rev"].as_i64()), (Some(2), Some(3)));
+}
+
+#[tokio::test]
+async fn a_state_patch_after_a_newer_one_resends_the_state_whole() {
+    let tokens = Tokens::new();
+    let Some(ctx) = context(&tokens).await else { return };
+    let url = serve(&ctx).await;
+    let (agent, state, session) = agent_with_state(&ctx, &tokens).await;
+
+    let mut socket = connect(&url).await;
+    hello(&mut socket, &tokens.reader(), None, 0).await;
+    first_frame(&mut socket, &format!("state:{agent}/plate")).await;
+    report(&ctx, agent, state_patch(3, "A3")).await;
+    assert_eq!(recv(&mut socket).await["item"]["global_rev"], 3);
+
+    // Revision 2 broadcast only now: after 3.
+    let late = json!({"create": 0, "state": state, "agent": agent, "interface": "plate",
+                      "ops": [{"op": "replace", "path": "/barcode", "value": "A2"}], "global_rev": 2,
+                      "session": session, "timestamp": null, "task": null, "lifecycle": null, "qualifiers": []});
+    kante::channel::broadcast(&ctx.channel_layer, facade::channels::PATCH, &late, &[format!("patches_state_{state}")])
+        .await
+        .unwrap();
+    let resync = recv(&mut socket).await;
+    assert_eq!((resync["type"].as_str(), resync["reason"].as_str()), (Some("RESYNC"), Some("out_of_order")), "{resync}");
+}

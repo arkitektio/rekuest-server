@@ -587,3 +587,28 @@ async fn event_seq(ctx: &Context, task: i64) -> i64 {
         .await
         .unwrap()
 }
+
+#[tokio::test]
+async fn an_event_an_older_takt_wrote_is_numbered_after_its_task() {
+    let Some(ctx) = context().await else { return };
+    let (agent, action) = agent(&ctx).await;
+    let task = task(&ctx, agent, action).await;
+    let t = task.to_string();
+    route(&ctx, agent, &frame(json!({"type": "STARTED", "task": t})), None)
+        .await
+        .unwrap();
+    // As a takt from before task_seq writes it: no number, the counter untouched.
+    sqlx::query("INSERT INTO facade_taskevent (task_id, kind, message) VALUES ($1, 'LOG', 'old')")
+        .bind(task)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    facade::reaper::run_sweep(&ctx, "unnumbered events").await.unwrap();
+    assert_eq!(task_seqs(&ctx, task).await, vec![1, 2]);
+    assert_eq!(event_seq(&ctx, task).await, 2);
+    // The next event takes the number after it.
+    route(&ctx, agent, &frame(json!({"type": "LOG", "task": t, "message": "new", "level": "INFO"})), None)
+        .await
+        .unwrap();
+    assert_eq!(task_seqs(&ctx, task).await, vec![1, 2, 3]);
+}

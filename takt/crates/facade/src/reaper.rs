@@ -15,6 +15,7 @@
 //! | `reconcile_unreachable_assigns`   | `Task.dispatched_at` | `pickup_deadline`     |
 //! | `escalate_due_controls`           | `Task.interrupt_at`  | `control_deadline`    |
 //! | `session::deadman::sweep`         | `CallerSession.last_seen` | (the task's `deadman_seconds`) |
+//! | `number_unnumbered_events`        | `TaskEvent.task_seq IS NULL` | —                  |
 //! | `expire_disconnected_tasks`       | `Task.dispatched_at` | `disconnected_expiry` |
 //! | `retention::sweep` (every 60th tick) | `Task.finished_at`, `Signal.processed_at` | `task_retention`, `ephemeral_task_retention`, `signal_retention` |
 //!
@@ -42,7 +43,7 @@ const PLAN_LIMIT: i64 = 100;
 
 /// The ordered sweeps (`_sweeps`). Agents before tasks: healing a stuck-connected agent is what
 /// makes its work visible to the task sweeps of the same tick.
-pub const SWEEPS: [&str; 11] = [
+pub const SWEEPS: [&str; 12] = [
     "stale agents",
     "disconnected agents",
     // After the agent sweeps, whose revokes it counts; normally a notice drained it already.
@@ -58,6 +59,9 @@ pub const SWEEPS: [&str; 11] = [
     // After the controls: a dead man cancel is a control, escalated by the next tick's sweep.
     "dead man",
     "expired tasks",
+    // An older takt still writing during a rolling deploy leaves events without a number; a
+    // session's replay reads by number, and its check finds them once they have one.
+    "unnumbered events",
 ];
 
 /// Retention runs on every Nth tick: the deadlines above want responsiveness, a retention
@@ -77,6 +81,9 @@ pub async fn run_sweep(ctx: &Context, name: &str) -> Result<usize, sqlx::Error> 
         "unreachable assigns" => reconcile::reconcile_unreachable_assigns(ctx, SWEEP_LIMIT).await,
         "due controls" => reconcile::escalate_due_controls(ctx, SWEEP_LIMIT).await,
         "dead man" => crate::session::deadman::sweep(ctx, SWEEP_LIMIT).await,
+        "unnumbered events" => crate::persist::transitions::number_unnumbered_events(&ctx.db)
+            .await
+            .map(|numbered| numbered as usize),
         "expired tasks" => reconcile::expire_disconnected_tasks(ctx, SWEEP_LIMIT).await,
         other => unreachable!("no sweep named {other:?}"),
     }

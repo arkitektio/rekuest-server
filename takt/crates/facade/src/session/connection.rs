@@ -86,7 +86,15 @@ struct Watch {
     cursor: Cursor,
     generation: u64,
     forwarder: JoinHandle<()>,
+    /// State topics: the revision the window holds whole (its snapshot, or where a replay
+    /// started), and the revisions sent since: a patch at or below the cursor that is neither
+    /// arrived out of order, and the window's state can no longer be patched into shape.
+    state_floor: i64,
+    state_sent: VecDeque<i64>,
 }
+
+/// How many state revisions a watch remembers having sent.
+const STATE_SENT_LIMIT: usize = 1024;
 
 /// What a token grants a session.
 #[derive(Debug, Clone, Copy)]
@@ -196,6 +204,7 @@ pub async fn serve(ctx: Context, socket: WebSocket) {
         generation: 0,
         probes: Vec::new(),
         backed_up: HashSet::new(),
+        taken_over: false,
     };
     if let Err(e) = session.open(named, last_pos, &client_info).await {
         tracing::error!("opening a caller session failed: {e}");
@@ -292,6 +301,8 @@ struct Session {
     probes: Vec<String>,
     /// Topics whose items are held back while the window cannot keep up.
     backed_up: HashSet<String>,
+    /// Another connection took this session over.
+    taken_over: bool,
 }
 
 impl Session {
@@ -306,11 +317,13 @@ impl Session {
     ) -> Result<(), sqlx::Error> {
         let grace = chrono::Duration::from_std(self.ctx.settings.session.grace).unwrap_or_default();
         if let Some(named) = named.filter(|named| !named.is_empty()) {
+            // Gone within its grace, or still held by a connection not yet seen to be gone (a
+            // window back before its dead socket timed out): taken over either way.
             let resumable = registry::load(&self.ctx, &named).await.filter(|saved| {
                 saved.caller == self.who.caller
                     && saved
                         .left_at
-                        .is_some_and(|left| Utc::now() - left <= grace)
+                        .is_none_or(|left| Utc::now() - left <= grace)
             });
             if let Some(saved) = resumable {
                 self.who.session = named;
@@ -336,7 +349,7 @@ impl Session {
             self.who.session = uuid::Uuid::new_v4().to_string();
             registry::open_row(&self.ctx, &self.who.session, self.who.caller, client_info).await?;
         }
-        self.persist(None).await;
+        self.claim().await;
         self.welcome(false);
         Ok(())
     }
@@ -345,7 +358,7 @@ impl Session {
         self.next_pos = saved.next_pos.max(1);
         self.acked_pos = saved.acked_pos;
         self.probes = saved.probes;
-        self.persist(None).await;
+        self.claim().await;
         self.welcome(true);
         // What the window may not have received: answered again (it knows them by request).
         for (pos, answer) in saved.answers {
@@ -379,9 +392,14 @@ impl Session {
         for (_, watch) in self.watches.drain() {
             drop_watch(&self.ctx, watch).await;
         }
+        if self.taken_over {
+            return; // the session is another connection's now
+        }
         registry::beat(&self.ctx, &self.who.session).await;
         let watched: Vec<String> = self.acked.keys().cloned().collect();
-        self.persist_watching(Some(Utc::now()), watched).await;
+        if !self.persist_watching(Some(Utc::now()), watched, false).await {
+            return;
+        }
         let ctx = self.ctx.clone();
         let who = self.who.clone();
         let connection = self.connection.clone();
@@ -402,12 +420,24 @@ impl Session {
         });
     }
 
-    async fn persist(&self, left_at: Option<DateTime<Utc>>) {
+    /// Keep the session for a resume; false when another connection took it over.
+    async fn persist(&self, left_at: Option<DateTime<Utc>>) -> bool {
         let watched: Vec<String> = self.watches.keys().cloned().collect();
-        self.persist_watching(left_at, watched).await;
+        self.persist_watching(left_at, watched, false).await
     }
 
-    async fn persist_watching(&self, left_at: Option<DateTime<Utc>>, watched: Vec<String>) {
+    /// The first write of a connection that opened or took over the session.
+    async fn claim(&self) {
+        let watched: Vec<String> = self.watches.keys().cloned().collect();
+        self.persist_watching(None, watched, true).await;
+    }
+
+    async fn persist_watching(
+        &self,
+        left_at: Option<DateTime<Utc>>,
+        watched: Vec<String>,
+        claim: bool,
+    ) -> bool {
         let saved = Saved {
             caller: self.who.caller,
             connection: self.connection.clone(),
@@ -424,7 +454,20 @@ impl Session {
             answers: self.answers.iter().cloned().collect(),
             probes: self.probes.clone(),
         };
-        registry::save(&self.ctx, &self.who.session, &saved).await;
+        if claim {
+            registry::save(&self.ctx, &self.who.session, &saved).await;
+            return true;
+        }
+        registry::save_held(&self.ctx, &self.who.session, &saved).await
+    }
+
+    /// Another connection took the session over: this one ends without touching it.
+    fn superseded(&mut self) {
+        self.taken_over = true;
+        self.send(&ServerFrame::Closing {
+            reason: "superseded".into(),
+        });
+        let _ = self.out.send(Out::Close(close::SUPERSEDED, "taken over".into()));
     }
 
     // -----------------------------------------------------------------------------------------
@@ -542,7 +585,10 @@ impl Session {
                 self.send(&ServerFrame::Pong);
                 if let Some(pos) = pos {
                     self.ack(pos);
-                    self.persist(None).await;
+                    if !self.persist(None).await {
+                        self.superseded();
+                        return false;
+                    }
                 }
             }
             ClientFrame::Watch { topic } => {
@@ -554,7 +600,10 @@ impl Session {
                     return true;
                 }
                 self.watch(topic, None).await;
-                self.persist(None).await;
+                if !self.persist(None).await {
+                    self.superseded();
+                    return false;
+                }
             }
             ClientFrame::Unwatch { topic } => {
                 if let Some(watch) = self.watches.remove(&topic) {
@@ -562,7 +611,10 @@ impl Session {
                 }
                 self.acked.remove(&topic);
                 self.backed_up.remove(&topic);
-                self.persist(None).await;
+                if !self.persist(None).await {
+                    self.superseded();
+                    return false;
+                }
             }
             call => {
                 let Some(request) = call.request().map(str::to_owned) else {
@@ -627,6 +679,12 @@ impl Session {
         self.record(pos, Some(topic.to_owned()), Some(cursor));
         if let Some(watch) = self.watches.get_mut(topic) {
             watch.cursor = cursor;
+            if let Cursor::State { rev, .. } = cursor {
+                watch.state_sent.push_back(rev);
+                if watch.state_sent.len() > STATE_SENT_LIMIT {
+                    watch.state_sent.pop_front();
+                }
+            }
         }
     }
 
@@ -641,6 +699,10 @@ impl Session {
         self.record(pos, Some(topic.to_owned()), Some(cursor));
         if let Some(watch) = self.watches.get_mut(topic) {
             watch.cursor = cursor;
+            if let Cursor::State { rev, .. } = cursor {
+                watch.state_floor = rev;
+                watch.state_sent.clear();
+            }
         }
     }
 
@@ -761,6 +823,8 @@ impl Session {
                 cursor: Cursor::List,
                 generation,
                 forwarder,
+                state_floor: 0,
+                state_sent: VecDeque::new(),
             },
         );
         self.acked.entry(name.clone()).or_insert(None);
@@ -817,6 +881,9 @@ impl Session {
                         match topics::patches_after(&self.ctx, &bound, session, rev, limit).await {
                             Ok(Some(patches)) => {
                                 self.cursor_into(name, Cursor::State { session: Some(session), rev });
+                                if let Some(watch) = self.watches.get_mut(name) {
+                                    watch.state_floor = watch.state_floor.max(rev);
+                                }
                                 for patch in patches {
                                     let rev = patch["global_rev"].as_i64().unwrap_or(rev);
                                     self.data(name, patch, Cursor::State { session: Some(session), rev });
@@ -952,9 +1019,45 @@ impl Session {
                 let patch_rev = patch.get("global_rev").and_then(Value::as_i64).unwrap_or(0);
                 if patch_session != session {
                     self.snapshot(name, reason::AGENT_RESTARTED).await;
-                } else if patch_rev > rev {
-                    self.data(name, patch, Cursor::State { session, rev: patch_rev });
+                    return;
                 }
+                if patch_rev <= rev {
+                    // Late: fine if it was sent (a seam's duplicate) or the snapshot held it;
+                    // otherwise it came after a newer one, and patching on is no longer right.
+                    let known = self.watches.get(name).is_some_and(|watch| {
+                        patch_rev <= watch.state_floor || watch.state_sent.contains(&patch_rev)
+                    });
+                    if !known {
+                        self.snapshot(name, reason::OUT_OF_ORDER).await;
+                    }
+                    return;
+                }
+                // An agent's revisions run 1, 2, 3 … across its states: a jump in `states:` is a
+                // patch the feed lost, read back before this one (a `state:` follows one state,
+                // whose revisions skip the others', so only its check finds a lost one).
+                if matches!(topic, Topic::States(_)) && patch_rev > rev + 1 {
+                    let Some(session_id) = session else { return };
+                    let limit = self.ctx.settings.session.replay_max;
+                    let bound = self.watches.get(name).map(|w| w.bound.clone());
+                    let Some(bound) = bound else { return };
+                    match topics::patches_after(&self.ctx, &bound, session_id, rev, limit).await {
+                        Ok(Some(missed)) => {
+                            for item in missed {
+                                let missed_rev = item["global_rev"].as_i64().unwrap_or(rev);
+                                if missed_rev >= patch_rev {
+                                    break;
+                                }
+                                self.data(name, item, Cursor::State { session, rev: missed_rev });
+                            }
+                        }
+                        Ok(None) => {
+                            self.snapshot(name, reason::TOO_FAR_BEHIND).await;
+                            return;
+                        }
+                        Err(e) => tracing::error!(topic = name, "filling a state gap failed: {e}"),
+                    }
+                }
+                self.data(name, patch, Cursor::State { session, rev: patch_rev });
             }
         }
     }

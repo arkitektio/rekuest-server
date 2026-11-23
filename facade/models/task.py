@@ -579,6 +579,15 @@ class TaskEvent(models.Model):
                 name="task_event_one_per_seq",
             ),
         ]
+        indexes = [
+            # Events written without a number (by a takt older than task_seq, during a rolling
+            # deploy): what takt's reaper numbers, found without reading the whole table.
+            models.Index(
+                fields=["task"],
+                condition=models.Q(task_seq__isnull=True),
+                name="task_event_unnumbered",
+            ),
+        ]
 
 
 class TaskInstruct(models.Model):

@@ -237,6 +237,8 @@ pub mod reason {
     pub const SLOW_CONSUMER: &str = "slow_consumer";
     /// The state's record changed beyond a patch (a new snapshot, a new definition).
     pub const STATE_REPLACED: &str = "state_replaced";
+    /// A state's patch arrived after a newer one: the state is sent whole instead.
+    pub const OUT_OF_ORDER: &str = "out_of_order";
 }
 
 /// Close codes of a session socket (4400–4499: the window should not retry blindly).
@@ -247,6 +249,8 @@ pub mod close {
     pub const UNAUTHORIZED: u16 = 4401;
     /// Nothing heard from the window for `idle_timeout`.
     pub const IDLE: u16 = 4408;
+    /// Another connection took the session over (the window came back on a new socket).
+    pub const SUPERSEDED: u16 = 4409;
     /// The server's own trouble: retry later.
     pub const UNAVAILABLE: u16 = 4503;
 }
