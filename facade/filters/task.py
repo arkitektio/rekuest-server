@@ -145,7 +145,7 @@ class TaskFilter(SharingFilterMixin):
         return queryset.filter(**{f"{prefix}root__isnull": value}), Q()
 
     @filter_field(
-        description="Keep only workflows someone started (true): root tasks no schedule ran and no trigger or signal fired, the ones `shareWorkflow` takes. False keeps every other task"
+        description="Keep only workflows someone started (true): root tasks no schedule ran and no trigger or signal fired: what a person would share (`shareWorkflow` takes any root task). False keeps every other task"
     )
     def human_induced(
         self, info: Info, queryset: QuerySet[models.Task], value: bool, prefix: str

@@ -5040,7 +5040,7 @@ type Mutation {
   addManyToCollaboration(input: AddManyToCollaborationInput!): Collaboration! @auth(required_scopes: ["rekuest_share"], any_role_of: ["rekuest_editor"])
 
   """
-  Put a workflow (its root task, which someone started) in a collaboration, as it is now: the root and every task it caused, with their actions, events and logs. Tasks it causes later are not; `dryRun` only says what would be put in
+  Put a workflow (a root task of the organization: one someone started, or a schedule or trigger did) in a collaboration, as it is now: the root and every task it caused, with their actions, events and logs. Tasks it causes later are not; `dryRun` only says what would be put in
   """
   shareWorkflow(input: ShareWorkflowInput!): WorkflowShare! @auth(required_scopes: ["rekuest_share"], any_role_of: ["rekuest_editor"])
 
@@ -8412,7 +8412,7 @@ input TaskFilter {
   rootIsnull: Boolean
 
   """
-  Keep only workflows someone started (true): root tasks no schedule ran and no trigger or signal fired, the ones `shareWorkflow` takes. False keeps every other task
+  Keep only workflows someone started (true): root tasks no schedule ran and no trigger or signal fired: what a person would share (`shareWorkflow` takes any root task). False keeps every other task
   """
   humanInduced: Boolean
 

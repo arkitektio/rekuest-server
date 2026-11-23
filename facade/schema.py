@@ -699,7 +699,7 @@ class Mutation:
     share_workflow = mutation(
         scope="rekuest_share",
         resolver=share_workflow,
-        description="Put a workflow (its root task, which someone started) in a collaboration, as it is now: the root and every task it caused, with their actions, events and logs. Tasks it causes later are not; `dryRun` only says what would be put in",
+        description="Put a workflow (a root task of the organization: one someone started, or a schedule or trigger did) in a collaboration, as it is now: the root and every task it caused, with their actions, events and logs. Tasks it causes later are not; `dryRun` only says what would be put in",
     )
     remove_from_collaboration = mutation(
         scope="rekuest_share",
