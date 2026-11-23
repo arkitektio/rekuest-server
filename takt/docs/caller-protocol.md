@@ -9,9 +9,10 @@ over the **same WebSocket it registered on**: assign a child task, drive its lif
 mirrors. This document is that side of the wire: **what you send, what you get back.**
 
 > **Roots are not assignable here.** Every socket assign must carry a `parent`. A root task must
-> trace to an accountable human, so roots originate solely from the GraphQL `assign` mutation — see
-> the human-root invariant in [provenance.md](provenance.md). There is no caller/observer
-> connection mode and no capability layer: everyone on `/agi` is an agent.
+> trace to an accountable human, so roots originate solely from a human-authenticated caller
+> session: a person's app window on `/session` ([session-protocol.md](session-protocol.md)), or
+> the GraphQL `assign` mutation, a one-shot session — see the human-root invariant in
+> [provenance.md](provenance.md). Everyone on `/agi` is an agent.
 
 It is the companion to [agent-protocol.md](agent-protocol.md) (the execution side — same socket,
 same framing). Read that first for connect/register/heartbeat mechanics; this doc only covers
@@ -61,7 +62,7 @@ tasks (fields mirror the server's `AssignInputModel`):
 | `reference` | **Idempotency key**, stable for a logical request. A resend (e.g. after reconnect) returns the *same* task with `created=false` rather than creating a duplicate. |
 | `args` | The input ports → values map. |
 | `action` / `action_hash` / `implementation` / `agent`+`interface` | **Targeting** — pick one: assign by action (the backend routes to a providing agent), by action hash, by a direct implementation id, or directly to an agent+interface. |
-| `parent` | The parent task id — **required**. Omitting it is a parentless (root) assign and is refused: roots come only from the GraphQL `assign` mutation. |
+| `parent` | The parent task id — **required**. Omitting it is a parentless (root) assign and is refused: roots come only from a person's caller session (`/session`, or the GraphQL `assign` mutation). |
 | `dependency` / `method` / `resolution` | Resolve a dependency when running inside a resolved task. |
 | `step` / `capture` / `hooks` | Stop at first breakpoint / debug-capture mode / lifecycle hooks. |
 

@@ -240,6 +240,11 @@ server.
 | `task_retention` | `REKUEST__TASK_RETENTION` | int | `0` | takt | Seconds to keep terminal root task trees before the retention sweep deletes them; `0` disables. Deleting past runs also removes them from replay discovery (`reusableTaskFor`), so it is an explicit opt-in. Suggested production value: `2592000` (30 days). |
 | `probe_ttl` | `REKUEST__PROBE_TTL` | int | `3600` | takt | Lifetime (seconds) of a probe's redis state while it is live. |
 | `probe_linger` | `REKUEST__PROBE_LINGER` | int | `300` | takt | How long (seconds) a finished probe's state lingers so a late subscriber can still read its outcome. |
+| `session_grace` | `REKUEST__SESSION_GRACE` | int | `60` | takt | How long (seconds) a caller session whose socket is gone may be resumed (`/session`). |
+| `session_beat` | `REKUEST__SESSION_BEAT` | int | `5` | takt | Seconds between a connected session's `last_seen` writes; the dead man switch reads them. |
+| `session_watch_check` | `REKUEST__SESSION_WATCH_CHECK` | int | `30` | takt | Seconds between a session's checks for task events and state patches the live feed lost. |
+| `session_replay_max` | `REKUEST__SESSION_REPLAY_MAX` | int | `500` | takt | The most items one resume replays for a topic; past it the topic is resent whole. |
+| `session_deadman_min` | `REKUEST__SESSION_DEADMAN_MIN` | int | `15` | takt | The shortest dead man switch accepted, in seconds. |
 | `probe_max_inflight` | `REKUEST__PROBE_MAX_INFLIGHT` | int | `32` | both | Maximum concurrent probes per caller. takt refuses a probe beyond it rather than queueing it (probes are hover-grade work); the server reports the cap in `probeStats`. |
 
 None of the deadlines is a timer. Each starts at a database column and is enforced by takt's

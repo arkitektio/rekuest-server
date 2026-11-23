@@ -8,6 +8,9 @@ server's repository and is released with it, under the same version, as the
 
 The whole agent protocol:
 
+- caller sessions: a person's app window on `/session` (watch tasks and states, resumed exactly
+  after a drop; assign and steer tasks; the dead man switch), see
+  [`docs/session-protocol.md`](docs/session-protocol.md);
 - the agent websocket `/agent`, the HookAgent HTTP intake `/agent/http/{agent_id}` and the
   signal intake `/agent/signal/{service}` (each also under its former name, `/agi`);
 - registration: an agent's `REGISTER` carries its declaration, and takt reconciles its
@@ -50,7 +53,7 @@ hub services ─POST /agent/signal┤
 Postgres holds the schema the rekuest server migrates; takt never migrates. Redis holds the
 agent queues, probe state and the `channels_redis` groups both programs publish on.
 
-A gateway routes `<script name>/agent*` and `<script name>/agi*` to takt and everything else to the server. Hub services
+A gateway routes `<script name>/agent*`, `<script name>/agi*` and `<script name>/session` to takt and everything else to the server. Hub services
 POST their HookAgent reports and signals to takt, so their `rekuest_url` points here.
 
 ## Configuration

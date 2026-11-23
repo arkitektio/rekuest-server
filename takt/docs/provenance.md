@@ -66,7 +66,10 @@ Rekuest enforces it at mint time, using its broker position and the existing `Ta
 lineage (the root is found by **walking the `parent` chain** to the task that has no parent,
 `resolve_root` in `provenance/mint.rs`):
 
-- **Top-level assignment** (no parent): the initiator must be a human. Rekuest classifies the
+- **Top-level assignment** (no parent): the initiator must be a human. A root is only ever
+  assigned from a human-authenticated caller session — a person's app window on takt's
+  `/session` ([session-protocol.md](session-protocol.md)) or the GraphQL `assign` mutation (a
+  one-shot session); the agent socket refuses a parentless assign. Rekuest classifies the
   current request principal from its roles (see *Human classification* below). The token sets
   `rcb = sub = <the initiating human>`, and `rtk = tsk` (the root is itself).
 - **Sub-assignment** (has a parent): Rekuest walks to the root and **inherits** the root human and

@@ -247,6 +247,25 @@ class RekuestBlock(BaseModel):
     probe_max_inflight: int = Field(
         default=32, description="Maximum concurrent probes per caller."
     )
+    session_grace: int = Field(
+        default=60,
+        description="How long (seconds) a caller session whose socket is gone may be resumed (takt `/session`).",
+    )
+    session_beat: int = Field(
+        default=5,
+        description="Seconds between a connected caller session's `last_seen` writes; the dead man switch reads them.",
+    )
+    session_watch_check: int = Field(
+        default=30,
+        description="Seconds between a caller session's checks for task events and state patches the live feed lost.",
+    )
+    session_replay_max: int = Field(
+        default=500,
+        description="The most items one caller-session resume replays for a topic; past it the topic is resent whole.",
+    )
+    session_deadman_min: int = Field(
+        default=15, description="The shortest dead man switch accepted, in seconds."
+    )
 
 
 class ProvenanceBlock(BaseModel):

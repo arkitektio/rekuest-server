@@ -141,6 +141,16 @@ The `global_rev` revision counter on patches and snapshots lets the client order
 whether it has a contiguous view. State semantics (definitions, patches, snapshots, retention) are
 in [domain-model.md](domain-model.md).
 
+## Caller sessions (takt)
+
+A person's app window also listens on these groups, without GraphQL: takt's caller session
+(`/session`, [session-protocol.md](../../takt/docs/session-protocol.md)) joins, per watched topic,
+the same groups the subscriptions above use, and adds what the subscriptions cannot: every event of
+a task carries its `task_seq` (numbered in commit order by takt's `insert_event`), so a window that
+drops and comes back is sent exactly what it missed, and a broadcast the channel layer lost is read
+back from Postgres. The subscriptions stay for every other client (`taskEvents(afterSeq:)` resumes
+by the same number).
+
 ## Why two transports
 
 It is worth restating the split:

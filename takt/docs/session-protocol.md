@@ -1,6 +1,10 @@
 # Caller sessions: the human side of the wire (`/session`)
 
-> **Status: design draft, nothing here is built yet.** Decided: takt owns caller sessions; the
+> **Status: implemented (v1, 2026-11-23)** in `crates/facade/src/session/` (frames, topics, calls,
+> registry, connection, the dead man sweep), tested in `crates/facade/tests/session.rs` with the wire
+> contract `tests/fixtures/session_wire_examples.json`; the orkestrator's client is
+> `rekuest/session/`. Not built yet: `ASK` (§7), the shared request types for `/internal/*` (§1),
+> the benchmark (§11). Decided: takt owns caller sessions; the
 > WebSocket below is the primary way a person's app calls actions and follows tasks, agents and
 > states; GraphQL call mutations become a secondary adapter onto the same logic. One socket per
 > app window. The frontend is (nearly) stateless: takt keeps what a session watches and how far
@@ -26,7 +30,10 @@ it). A front door only turns its input into caller requests and their answers ba
 | `/internal/*` (unix socket) | the Python GraphQL server | the same requests as `/session`, one at a time |
 | `/agent/http` | hook agents, hub services | the agent frames, HMAC-signed |
 
-**GraphQL becomes an adapter.** `/internal/*` takes the **same request types** as the session
+**GraphQL becomes an adapter.** *(v1: the session's calls and the internal API's handlers call the
+same backend functions — `assign_with_status`, `request_control`, `decide_remembering`, `inquire`,
+the probe backend — so validation, ownership and provenance are already one implementation; the
+shared request types below are still to do.)* `/internal/*` takes the **same request types** as the session
 frames and goes through the same routing function, the way `message_router::route` serves both
 the agent socket and the HTTP intake. A GraphQL `assign` is a one-shot session: one request in, one
 answer out, no watches. There is then one implementation of validation, idempotency, ownership and
@@ -279,7 +286,7 @@ state) keep reading the same cache.
 
 ## 7. What takt can do because it owns the sessions
 
-- **Asking the right person.** A task that becomes HELD waiting for a person is sent as `ASK` to
+- **Asking the right person** *(not built in v1; the frame is reserved).* A task that becomes HELD waiting for a person is sent as `ASK` to
   that person's live sessions, instead of waiting for someone to open the page. No live session:
   it stays a notification, as today.
 - **Tasks do not depend on windows.** Closing, reloading or crashing a window changes nothing
@@ -322,11 +329,14 @@ the root human) do not change. The agent socket stays unable to assign roots.
 ## 9. Replicas and fan-out
 
 Sessions and the agents whose events they watch are generally on different takt replicas. Live
-items cross replicas over redis; takt's `kante` broadcasts today but has no listen side, which this
-needs. Writes that only the Python server makes (implementations, schedules, triggers, assets,
-organizations) broadcast from Python on the channel layer; takt listens to those groups too, or
-the first version covers tasks, agents and states only. Postgres stays the source for every
-cursor, so the fan-out carries no guarantee of its own (§5.3).
+items cross replicas on the channel layer, as they always did: each watched topic gets a channel of
+its own (`kante::ChannelLayer::subscribe`) joined to the groups the GraphQL subscriptions listen on
+(`root_tasks_caller_*`, `task_events_*`, `child_tasks_*`, `agent_tasks_*`, `agents_for_*`,
+`patches_state_*`, `patches_agent_*`, `state_*`, `probe_events_*`), so a message's topic is the
+channel it came in on, and nothing new is published. Groups are re-joined every hour, as the agent
+socket's caller group is, and left on `UNWATCH` and close. Whatever writes to those groups (takt, or
+the Python server) reaches sessions too. Postgres stays the source for every cursor, so the fan-out
+carries no guarantee of its own (§5.3).
 
 ## 10. Scoping
 
@@ -357,12 +367,12 @@ subscriptions first and the session second. The read side (watches) ships only i
 
 1. `session_grace` and `request_memory`: 60 s and 10 min are guesses; the benchmark and real
    laptop sleeps should set them.
-2. Dead man switch: should a held task (waiting for a person) count its `deadman` while held, or
-   only once it runs? And should the GraphQL `assign` offer it at all (a one-shot session has no
-   socket to lose)? Proposed: counts only while running; GraphQL does not offer it.
+2. ~~Dead man switch while held~~ — decided: a HELD task is not cancelled (it is not running), and
+   the GraphQL `assign` does not offer the switch (a one-shot session has no socket to lose).
 3. Lists with a cursor: if a list's snapshot turns out expensive on every reconnect (large org
    task lists), a per-caller change feed with its own sequence would let lists replay too.
-4. Where the resume record lives: writing `(pos, topic, cursor)` to redis on every push adds
+4. ~~Where the resume record lives~~ — decided as below: the record stays in the serving
+   replica's memory; cursors as of the last reported `pos` go to redis on each `PING`. Writing `(pos, topic, cursor)` to redis on every push adds
    writes to the path this is meant to speed up. Alternative: the record stays in the serving
    replica's memory, and only "cursors as of the last reported `pos`" go to redis on each `PING`.
    A replica dying then widens the replayed overlap (duplicates, applied idempotently), never
