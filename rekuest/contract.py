@@ -93,7 +93,7 @@ HOSTS = Hosts(
                 Descriptor(
                     key="@rekuest/supervisor",
                     type="STRING",
-                    description="The app the agent says controls its lifecycle, starting and stopping it (e.g. plugin_engine for a plugin). Self-declared at registration: a hint, never authority.",
+                    description="The app that provisioned the agent and controls its lifecycle, starting and stopping it (e.g. plugin_engine for a plugin), as lok signed it into the agent's token.",
                 )
             ],
         )

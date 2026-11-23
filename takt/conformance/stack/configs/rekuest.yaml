@@ -683,6 +683,8 @@ authentikate:
       client_id: conf_66
       roles: [rekuest_admin]
       scope: openid rekuest_all
+      # A client the plugin engine provisioned: lok signs its app into `act`.
+      act: {client_app: plugin_engine, mandate: 45}
     conf_67:
       sub: 167
       iss: lok
@@ -741,6 +743,16 @@ authentikate:
       client_app: conf_72
       client_release: v0.0.1
       client_id: conf_72
+      roles: [rekuest_admin]
+      scope: openid rekuest_all
+    conf_73:
+      sub: 173
+      iss: lok
+      active_org: conformance
+      client_device: conf_73_device
+      client_app: conf_73
+      client_release: v0.0.1
+      client_id: conf_73
       roles: [rekuest_admin]
       scope: openid rekuest_all
     test:

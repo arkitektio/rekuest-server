@@ -357,9 +357,11 @@ async fn register(
         return Err(Refused::close(codes::AGENT_IS_BLOCKED_CODE));
     }
 
-    // The supervisor rides every REGISTER, outside the declaration: a hash-equal reconnect
-    // skips the reconciliation below, and must still say who supervises it now.
-    registration::set_supervisor(&ctx.db, agent, declaration.supervisor.as_deref())
+    // The supervisor is the app that provisioned the client, as lok signed it into the token
+    // (`act.client_app`); what the REGISTER says (`declaration.supervisor`) is not read. Written
+    // on every REGISTER, outside the declaration: a hash-equal reconnect skips the
+    // reconciliation below, and must still say who supervises it now.
+    registration::set_supervisor(&ctx.db, agent, decoded.provisioned_by())
         .await
         .map_err(|e| fail(&e))?;
     // So does its hardware: it may have come back on another machine.

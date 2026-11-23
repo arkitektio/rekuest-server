@@ -95,9 +95,50 @@ pub struct JwtToken {
     /// member. This service serves no guests: a token carrying it is refused.
     #[serde(default)]
     pub collabs: Option<Value>,
+    /// Who provisioned the client (RFC 8693 `act`): set by lok for a client logging in with a
+    /// mandate key an app handed out. Signed, unlike anything the client says of itself.
+    #[serde(default, deserialize_with = "lenient_actor")]
+    pub act: Option<Actor>,
+}
+
+/// The `act` claim lok writes for a client logging in with a mandate key an app issued:
+/// `client_app` is the issuing app (the agent, for a key issued under an agent mandate),
+/// `mandate` the agent mandate the key was issued under, else the key's own.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct Actor {
+    #[serde(default)]
+    pub client_app: Option<String>,
+    #[serde(default, deserialize_with = "optional_string_or_number")]
+    pub mandate: Option<String>,
+}
+
+/// An `act` of another shape (another issuer's, a nested actor chain) is no actor lok wrote:
+/// read as none, never a reason to refuse the token.
+fn lenient_actor<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Actor>, D::Error> {
+    let value = Option::<Value>::deserialize(deserializer)?;
+    Ok(value.and_then(|value| serde_json::from_value(value).ok()))
+}
+
+fn optional_string_or_number<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error> {
+    Ok(match Option::<Value>::deserialize(deserializer)? {
+        Some(Value::String(s)) => Some(s),
+        Some(Value::Number(n)) => Some(n.to_string()),
+        _ => None,
+    })
 }
 
 impl JwtToken {
+    /// The app that provisioned the client, as lok signed it in `act` (e.g. `plugin_engine`
+    /// for a container the plugin engine started); None for a client nobody handed a key.
+    pub fn provisioned_by(&self) -> Option<&str> {
+        self.act
+            .as_ref()
+            .and_then(|act| act.client_app.as_deref())
+            .filter(|app| !app.is_empty())
+    }
+
     /// The organization the token acts in, unique across issuers: `"<iss>#<org>"`
     /// (`JWTToken.org_identifier`). Two issuers may both have an org `1`; this says whose.
     pub fn org_identifier(&self) -> Option<String> {
@@ -188,6 +229,8 @@ pub struct StaticToken {
     pub profile: Profile,
     #[serde(default)]
     pub collabs: Option<Value>,
+    #[serde(default, deserialize_with = "lenient_actor")]
+    pub act: Option<Actor>,
 }
 
 fn static_iss() -> String {
@@ -243,6 +286,7 @@ impl StaticToken {
             client_device: Some(self.client_device.clone()),
             profile: self.profile.clone(),
             collabs: self.collabs.clone(),
+            act: self.act.clone(),
         }
     }
 }
@@ -483,6 +527,7 @@ mod tests {
             client_device: None,
             profile: Profile::default(),
             collabs: None,
+            act: None,
         };
         let nothing = r#"{"name":null,"given_name":null,"family_name":null,"nickname":null,"email":null,"email_verified":null,"picture":null,"locale":null,"zoneinfo":null}"#;
         assert_eq!(
@@ -522,6 +567,34 @@ mod tests {
         );
         assert_eq!(token.client_app.as_deref(), Some("static_app"));
         assert_eq!(token.roles, vec!["admin"]);
+    }
+
+    #[test]
+    fn the_actor_is_read_from_act_and_an_unknown_shape_is_none() {
+        let claims = |act: Value| {
+            serde_json::json!({
+                "sub": "1", "iss": "lok", "exp": 2_000_000_000, "iat": 1_000_000_000,
+                "client_id": "c", "preferred_username": "u", "roles": [], "scope": "openid",
+                "aud": "rekuest", "act": act,
+            })
+        };
+        let read = |act: Value| serde_json::from_value::<JwtToken>(claims(act)).unwrap();
+
+        let engine = read(serde_json::json!({"client_app": "plugin_engine", "mandate": 45}));
+        assert_eq!(engine.provisioned_by(), Some("plugin_engine"));
+        assert_eq!(engine.act.unwrap().mandate.as_deref(), Some("45"));
+        // Another issuer's actor (RFC 8693 `sub`), or no object at all: no provisioner, and
+        // the token still reads.
+        assert_eq!(read(serde_json::json!({"sub": "x"})).provisioned_by(), None);
+        assert_eq!(
+            read(serde_json::json!("plugin_engine")).provisioned_by(),
+            None
+        );
+        assert_eq!(read(Value::Null).provisioned_by(), None);
+        assert_eq!(
+            read(serde_json::json!({"client_app": ""})).provisioned_by(),
+            None
+        );
     }
 
     #[test]

@@ -671,7 +671,7 @@ type Agent {
   description: String
 
   """
-  The app this agent says controls its lifecycle (e.g. 'plugin_engine'), as stated on its last registration. Self-declared: a hint for pickers (descriptor @rekuest/supervisor), never authority.
+  The app that provisioned this agent's client (e.g. 'plugin_engine'), as lok signed it into the token of its last registration. Null for an agent whose client nobody provisioned. Pickers match it as the descriptor @rekuest/supervisor.
   """
   supervisor: String
 
@@ -909,9 +909,14 @@ input AgentFilter {
   kind: AgentKind
 
   """
-  Agents whose self-declared supervisor is this app (e.g. 'plugin_engine').
+  Agents whose client this app provisioned (e.g. 'plugin_engine'), as lok signed it into their token.
   """
   supervisor: String
+
+  """
+  Agents whose client an app provisioned (true), or nobody (false), as of their last registration.
+  """
+  supervised: Boolean
 
   """
   Agents meeting a port's descriptor constraints (a picker hands them in as $requires). The only descriptor of @rekuest/agent is @rekuest/supervisor; any other key is refused.

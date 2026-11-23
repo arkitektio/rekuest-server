@@ -145,7 +145,7 @@ class Agent:
         description="What this agent is, in a sentence. Client-declared at registration; null for an agent that never declared one."
     )
     supervisor: str | None = strawberry_django.field(
-        description="The app this agent says controls its lifecycle (e.g. 'plugin_engine'), as stated on its last registration. Self-declared: a hint for pickers (descriptor @rekuest/supervisor), never authority."
+        description="The app that provisioned this agent's client (e.g. 'plugin_engine'), as lok signed it into the token of its last registration. Null for an agent whose client nobody provisioned. Pickers match it as the descriptor @rekuest/supervisor."
     )
     spec_version: str | None = strawberry_django.field(
         description="The arkitekt-spec this agent said on its last registration it runs (e.g. '8.0.0'). Null for an agent that sends no REGISTER, such as a hook agent. What may be sent to it is decided by its features, not by this."

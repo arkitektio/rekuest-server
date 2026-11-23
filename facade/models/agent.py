@@ -95,7 +95,7 @@ class Agent(models.Model):
         max_length=1000,
         null=True,
         blank=True,
-        help_text="The app this agent says controls its lifecycle (e.g. 'plugin_engine'), as it stated on its last registration. A self-declared hint for narrowing pickers, never authority: a supervisor maps the agent to its own records before acting.",
+        help_text="The app that provisioned this agent's client (e.g. 'plugin_engine'), as lok signed it into the token of its last registration (the `act` claim of a mandate key an app issued). Null for an agent whose client nobody provisioned.",
     )
     hardware = models.JSONField(
         null=True,

@@ -60,26 +60,29 @@ async def test_an_unknown_token_is_refused(agents) -> None:  # noqa: ANN001
     assert await agent.expect_close() == SCHEMA
 
 
-async def test_every_register_states_the_supervisor(agents, graphql) -> None:  # noqa: ANN001
-    """The supervisor rides every REGISTER, outside the declaration: a reconnect that declares
-    nothing new still replaces it, and one that names none clears it."""
-    api = graphql("conf_66")
+async def test_the_supervisor_is_the_app_the_token_says_provisioned_it(agents, graphql) -> None:  # noqa: ANN001
+    """The supervisor is lok's `act.client_app`, written on every REGISTER; a `supervisor` the
+    REGISTER names is what an older agent says of itself and is never read."""
     query = "query ($id: ID!) { agent(id: $id) { supervisor } }"
 
+    # conf_66's token carries act.client_app = plugin_engine.
+    provisioned = graphql("conf_66")
     first = await agents()
-    agent_id = (await first.register("conf_66", session_id=session_id(), supervisor="plugin_engine"))["agent"]
+    agent_id = (await first.register("conf_66", session_id=session_id()))["agent"]
     await first.close()
-    assert (await api(query, id=agent_id))["agent"]["supervisor"] == "plugin_engine"
+    assert (await provisioned(query, id=agent_id))["agent"]["supervisor"] == "plugin_engine"
 
     again = await agents()
     await again.register("conf_66", session_id=session_id(), supervisor="local_launcher")
     await again.close()
-    assert (await api(query, id=agent_id))["agent"]["supervisor"] == "local_launcher"
+    assert (await provisioned(query, id=agent_id))["agent"]["supervisor"] == "plugin_engine"
 
-    unsupervised = await agents()
-    await unsupervised.register("conf_66", session_id=session_id())
-    await unsupervised.close()
-    assert (await api(query, id=agent_id))["agent"]["supervisor"] is None
+    # conf_73's token carries no act: whatever it claims, nobody provisioned it.
+    unprovisioned = graphql("conf_73")
+    claims = await agents()
+    claimed_id = (await claims.register("conf_73", session_id=session_id(), supervisor="plugin_engine"))["agent"]
+    await claims.close()
+    assert (await unprovisioned(query, id=claimed_id))["agent"]["supervisor"] is None
 
 
 async def test_an_agent_that_names_no_spec_is_refused(agents) -> None:  # noqa: ANN001

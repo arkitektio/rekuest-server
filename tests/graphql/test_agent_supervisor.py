@@ -1,4 +1,4 @@
-"""An agent's self-declared supervisor: the ``supervisor`` field, and the filters pickers use.
+"""An agent's supervisor (the app that provisioned its client): the ``supervisor`` field, and the filters pickers use.
 
 ``@rekuest/agent`` carries one descriptor, ``@rekuest/supervisor``. A picker hands a port's
 constraints in as ``requires``; any other key is refused, never ignored.
@@ -31,7 +31,7 @@ def _make_agent(context: HttpContext, name: str, supervisor: str | None) -> str:
     client = Client.objects.create(client_id=f"{name}-client", device=device)
     app = App.objects.create(identifier=f"{name}-app")
     release = Release.objects.create(app=app, version="1.0.0")
-    # takt writes the supervisor from REGISTER; here the row is made directly.
+    # takt writes the supervisor from the token's `act` claim; here the row is made directly.
     agent = Agent.objects.create(
         app=app,
         release=release,
@@ -111,6 +111,22 @@ class TestAgentSupervisor:
         assert await _ids(
             authenticated_context, {"supervisor": "local_launcher"}
         ) & mine == {elsewhere}
+
+    async def test_supervised_splits_agents_by_whether_they_declared_one(
+        self, authenticated_context: HttpContext
+    ) -> None:
+        managed = await _agent(authenticated_context, "managed", "plugin_engine")
+        elsewhere = await _agent(authenticated_context, "elsewhere", "local_launcher")
+        free = await _agent(authenticated_context, "free", None)
+        mine = {managed, elsewhere, free}
+
+        assert await _ids(authenticated_context, {"supervised": True}) & mine == {
+            managed,
+            elsewhere,
+        }
+        assert await _ids(authenticated_context, {"supervised": False}) & mine == {
+            free
+        }
 
     async def test_a_key_the_agent_does_not_carry_is_refused(
         self, authenticated_context: HttpContext

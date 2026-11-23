@@ -47,11 +47,11 @@ pub struct RegisterDeclaration {
     pub bloks: Option<Vec<Value>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assets: Option<Vec<Value>>,
-    /// The app the agent says controls its lifecycle (e.g. `plugin_engine`). A self-declared
-    /// hint written on every `REGISTER`; not part of the declaration (or its hash).
+    /// What an older agent says controls its lifecycle. Accepted and never read: the
+    /// supervisor is the app that provisioned the client, from the token's `act` claim.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub supervisor: Option<String>,
-    /// What the agent's machine has. Written on every `REGISTER`, like the supervisor, and not
+    /// What the agent's machine has. Written on every `REGISTER`, and not
     /// part of the declaration (or its hash): moving machines declares nothing new.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hardware: Option<AgentHardware>,

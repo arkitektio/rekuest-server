@@ -16,7 +16,7 @@ from rekuest_core import enums as rcenums
 from rekuest_core.inputs import types as ritypes
 
 SUPERVISOR_DESCRIPTOR = "@rekuest/supervisor"
-"""The one descriptor ``@rekuest/agent`` carries: the agent's self-declared supervisor."""
+"""The one descriptor ``@rekuest/agent`` carries: the app that provisioned the agent's client."""
 
 
 def _implementing(protocols: list[str]) -> QuerySet[models.Implementation]:
@@ -100,12 +100,20 @@ class AgentFilter:
         return queryset.filter(**{f"{prefix}kind": value.value}), Q()
 
     @filter_field(
-        description="Agents whose self-declared supervisor is this app (e.g. 'plugin_engine')."
+        description="Agents whose client this app provisioned (e.g. 'plugin_engine'), as lok signed it into their token."
     )
     def supervisor(
         self, info: Info, queryset: QuerySet[models.Agent], value: str, prefix: str
     ) -> tuple[QuerySet[models.Agent], Q]:
         return queryset.filter(**{f"{prefix}supervisor": value}), Q()
+
+    @filter_field(
+        description="Agents whose client an app provisioned (true), or nobody (false), as of their last registration."
+    )
+    def supervised(
+        self, info: Info, queryset: QuerySet[models.Agent], value: bool, prefix: str
+    ) -> tuple[QuerySet[models.Agent], Q]:
+        return queryset.filter(**{f"{prefix}supervisor__isnull": not value}), Q()
 
     @filter_field(
         description="Agents meeting a port's descriptor constraints (a picker hands them in as $requires). The only descriptor of @rekuest/agent is @rekuest/supervisor; any other key is refused."

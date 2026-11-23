@@ -111,12 +111,13 @@ process holds, see "Pickup, and asking") and the agent's **declaration** —
 `ImplementAgentInput`. Registering *is* implementing (see the lifecycle below); a `Register`
 without a declaration only ensures the agent exists.
 
-An optional `supervisor` names the app the agent says controls its lifecycle (e.g.
-`plugin_engine`, set by the engine that started its container as `ARKITEKT_SUPERVISOR`). It is
-not part of the declaration or its hash: every `Register` writes it to `Agent.supervisor` (none
-clears it), including the hash-equal fast path. It is self-declared, so it is a hint (the
-descriptor `@rekuest/supervisor` of `@rekuest/agent`, for pickers), never authority: a
-supervisor maps the agent to its own records before acting on it.
+The agent's supervisor is the app that provisioned its client: lok signs it into the token of
+a client logging in with a mandate key an app handed out, as `act.client_app` (e.g.
+`plugin_engine` for a container the plugin engine started with a key issued under its agent
+mandate). Every `Register` writes it to `Agent.supervisor` (a token without `act` clears it),
+including the hash-equal fast path. It is what the descriptor `@rekuest/supervisor` of
+`@rekuest/agent` matches, for pickers. A `supervisor` in the `Register` itself is what older
+agents say of themselves: accepted and never read.
 
 ### Authentication — ensure semantics
 

@@ -44,8 +44,8 @@ pub async fn ensure_agent(
     Ok(agent)
 }
 
-/// Record the supervisor the agent stated on this registration (none clears it). A hint for
-/// pickers, never authority; written only when it changed.
+/// Record the app that provisioned the agent's client, from the token of this registration
+/// (none clears it); written only when it changed.
 pub async fn set_supervisor(
     db: &PgPool,
     agent: i64,
