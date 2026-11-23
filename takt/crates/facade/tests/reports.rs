@@ -325,7 +325,12 @@ async fn each_task_numbers_its_own_events() {
     let (agent, action) = agent(&ctx).await;
     let first = task(&ctx, agent, action).await;
     let second = task(&ctx, agent, action).await;
-    for (task, kind) in [(first, "STARTED"), (second, "STARTED"), (first, "LOG"), (second, "LOG")] {
+    for (task, kind) in [
+        (first, "STARTED"),
+        (second, "STARTED"),
+        (first, "LOG"),
+        (second, "LOG"),
+    ] {
         let mut body = json!({"type": kind, "task": task.to_string()});
         if kind == "LOG" {
             body["message"] = json!("hi");
@@ -594,21 +599,33 @@ async fn an_event_an_older_takt_wrote_is_numbered_after_its_task() {
     let (agent, action) = agent(&ctx).await;
     let task = task(&ctx, agent, action).await;
     let t = task.to_string();
-    route(&ctx, agent, &frame(json!({"type": "STARTED", "task": t})), None)
-        .await
-        .unwrap();
+    route(
+        &ctx,
+        agent,
+        &frame(json!({"type": "STARTED", "task": t})),
+        None,
+    )
+    .await
+    .unwrap();
     // As a takt from before task_seq writes it: no number, the counter untouched.
     sqlx::query("INSERT INTO facade_taskevent (task_id, kind, message) VALUES ($1, 'LOG', 'old')")
         .bind(task)
         .execute(&ctx.db)
         .await
         .unwrap();
-    facade::reaper::run_sweep(&ctx, "unnumbered events").await.unwrap();
+    facade::reaper::run_sweep(&ctx, "unnumbered events")
+        .await
+        .unwrap();
     assert_eq!(task_seqs(&ctx, task).await, vec![1, 2]);
     assert_eq!(event_seq(&ctx, task).await, 2);
     // The next event takes the number after it.
-    route(&ctx, agent, &frame(json!({"type": "LOG", "task": t, "message": "new", "level": "INFO"})), None)
-        .await
-        .unwrap();
+    route(
+        &ctx,
+        agent,
+        &frame(json!({"type": "LOG", "task": t, "message": "new", "level": "INFO"})),
+        None,
+    )
+    .await
+    .unwrap();
     assert_eq!(task_seqs(&ctx, task).await, vec![1, 2, 3]);
 }

@@ -80,7 +80,9 @@ impl Tokens {
 async fn context(tokens: &Tokens) -> Option<Context> {
     let db_url = std::env::var("TAKT_TEST_DATABASE_URL").ok()?;
     let redis_url = std::env::var("TAKT_TEST_REDIS_URL").ok()?;
-    let db = sqlx::PgPool::connect(&db_url).await.expect("the test database answers");
+    let db = sqlx::PgPool::connect(&db_url)
+        .await
+        .expect("the test database answers");
     let redis_client = redis::Client::open(redis_url).unwrap();
     let redis = redis::aio::ConnectionManager::new(redis_client.clone())
         .await
@@ -165,7 +167,8 @@ async fn hello(socket: &mut Socket, token: &str, session: Option<&str>, last_pos
 
 /// An agent of the tests' organization, and an action.
 async fn agent(ctx: &Context, tokens: &Tokens) -> (i64, i64) {
-    let spec: StaticToken = serde_json::from_value(tokens.spec("agent", "o", "rekuest_agent")).unwrap();
+    let spec: StaticToken =
+        serde_json::from_value(tokens.spec("agent", "o", "rekuest_agent")).unwrap();
     let token = spec.to_token(chrono::Utc::now(), "raw");
     let identity = authentikate::expand::expand_token_context(&ctx.db, &token)
         .await
@@ -256,7 +259,9 @@ fn seqs(frames: &[Value]) -> Vec<i64> {
 #[tokio::test]
 async fn a_followed_task_resumes_with_exactly_what_was_missed() {
     let tokens = Tokens::new();
-    let Some(ctx) = context(&tokens).await else { return };
+    let Some(ctx) = context(&tokens).await else {
+        return;
+    };
     let url = serve(&ctx).await;
     let (agent, action) = agent(&ctx, &tokens).await;
     let task = task(&ctx, agent, action, None).await;
@@ -267,7 +272,11 @@ async fn a_followed_task_resumes_with_exactly_what_was_missed() {
     assert_eq!(welcome["resumed"], false);
     let session = welcome["session"].as_str().unwrap().to_owned();
 
-    send(&mut socket, json!({"type": "WATCH", "topic": format!("task:{t}")})).await;
+    send(
+        &mut socket,
+        json!({"type": "WATCH", "topic": format!("task:{t}")}),
+    )
+    .await;
     let snapshot = recv(&mut socket).await;
     assert_eq!(
         (snapshot["type"].as_str(), snapshot["reason"].as_str()),
@@ -277,7 +286,12 @@ async fn a_followed_task_resumes_with_exactly_what_was_missed() {
     assert_eq!(snapshot["snapshot"]["task_seq"], 0);
 
     report(&ctx, agent, json!({"type": "STARTED", "task": t})).await;
-    report(&ctx, agent, json!({"type": "LOG", "task": t, "message": "one", "level": "INFO"})).await;
+    report(
+        &ctx,
+        agent,
+        json!({"type": "LOG", "task": t, "message": "one", "level": "INFO"}),
+    )
+    .await;
     let live = vec![recv(&mut socket).await, recv(&mut socket).await];
     assert_eq!(seqs(&live), vec![1, 2]);
     let last = live[1]["pos"].as_u64().unwrap();
@@ -288,7 +302,12 @@ async fn a_followed_task_resumes_with_exactly_what_was_missed() {
     tokio::time::sleep(Duration::from_millis(300)).await;
 
     // Recorded while nobody watched.
-    report(&ctx, agent, json!({"type": "YIELD", "task": t, "returns": {"n": 1}})).await;
+    report(
+        &ctx,
+        agent,
+        json!({"type": "YIELD", "task": t, "returns": {"n": 1}}),
+    )
+    .await;
     report(&ctx, agent, json!({"type": "COMPLETED", "task": t})).await;
 
     let mut socket = connect(&url).await;
@@ -305,7 +324,9 @@ async fn a_followed_task_resumes_with_exactly_what_was_missed() {
 #[tokio::test]
 async fn an_event_whose_broadcast_was_lost_is_sent_before_the_next() {
     let tokens = Tokens::new();
-    let Some(ctx) = context(&tokens).await else { return };
+    let Some(ctx) = context(&tokens).await else {
+        return;
+    };
     let url = serve(&ctx).await;
     let (agent, action) = agent(&ctx, &tokens).await;
     let task = task(&ctx, agent, action, None).await;
@@ -313,7 +334,11 @@ async fn an_event_whose_broadcast_was_lost_is_sent_before_the_next() {
 
     let mut socket = connect(&url).await;
     hello(&mut socket, &tokens.reader(), None, 0).await;
-    send(&mut socket, json!({"type": "WATCH", "topic": format!("task:{t}")})).await;
+    send(
+        &mut socket,
+        json!({"type": "WATCH", "topic": format!("task:{t}")}),
+    )
+    .await;
     assert_eq!(recv(&mut socket).await["type"], "RESYNC");
 
     // Recorded, but its broadcast never went out.
@@ -321,7 +346,12 @@ async fn an_event_whose_broadcast_was_lost_is_sent_before_the_next() {
     transitions::insert_event(&ctx.db, task, "LOG", &silent)
         .await
         .unwrap();
-    report(&ctx, agent, json!({"type": "LOG", "task": t, "message": "loud", "level": "INFO"})).await;
+    report(
+        &ctx,
+        agent,
+        json!({"type": "LOG", "task": t, "message": "loud", "level": "INFO"}),
+    )
+    .await;
 
     let frames = vec![recv(&mut socket).await, recv(&mut socket).await];
     assert_eq!(seqs(&frames), vec![1, 2]);
@@ -332,14 +362,20 @@ async fn an_event_whose_broadcast_was_lost_is_sent_before_the_next() {
 #[tokio::test]
 async fn a_quiet_task_is_checked_for_what_the_feed_lost() {
     let tokens = Tokens::new();
-    let Some(ctx) = context(&tokens).await else { return };
+    let Some(ctx) = context(&tokens).await else {
+        return;
+    };
     let url = serve(&ctx).await;
     let (agent, action) = agent(&ctx, &tokens).await;
     let task = task(&ctx, agent, action, None).await;
 
     let mut socket = connect(&url).await;
     hello(&mut socket, &tokens.reader(), None, 0).await;
-    send(&mut socket, json!({"type": "WATCH", "topic": format!("task:{task}")})).await;
+    send(
+        &mut socket,
+        json!({"type": "WATCH", "topic": format!("task:{task}")}),
+    )
+    .await;
     assert_eq!(recv(&mut socket).await["type"], "RESYNC");
 
     // The last event, and its broadcast lost: nothing follows to reveal the gap.
@@ -354,18 +390,27 @@ async fn a_quiet_task_is_checked_for_what_the_feed_lost() {
 #[tokio::test]
 async fn a_session_sees_only_its_organization() {
     let tokens = Tokens::new();
-    let Some(ctx) = context(&tokens).await else { return };
+    let Some(ctx) = context(&tokens).await else {
+        return;
+    };
     let url = serve(&ctx).await;
     let (agent, action) = agent(&ctx, &tokens).await;
     let task = task(&ctx, agent, action, None).await;
 
     let mut socket = connect(&url).await;
     hello(&mut socket, &tokens.stranger(), None, 0).await;
-    send(&mut socket, json!({"type": "WATCH", "topic": format!("task:{task}")})).await;
+    send(
+        &mut socket,
+        json!({"type": "WATCH", "topic": format!("task:{task}")}),
+    )
+    .await;
     let refused = recv(&mut socket).await;
     assert_eq!(refused["type"], "REFUSED");
     assert_eq!(refused["topic"], format!("task:{task}"));
-    assert_eq!(refused["error"], format!("No Task {task} in this organization."));
+    assert_eq!(
+        refused["error"],
+        format!("No Task {task} in this organization.")
+    );
 
     // A token the server does not know never gets a session.
     let mut socket = connect(&url).await;
@@ -382,7 +427,9 @@ async fn a_session_sees_only_its_organization() {
 #[tokio::test]
 async fn calls_need_their_scope_and_are_answered_once() {
     let tokens = Tokens::new();
-    let Some(ctx) = context(&tokens).await else { return };
+    let Some(ctx) = context(&tokens).await else {
+        return;
+    };
     let url = serve(&ctx).await;
     let (agent, action) = agent(&ctx, &tokens).await;
     let caller = caller_of(&ctx, &tokens, "caller").await;
@@ -396,22 +443,25 @@ async fn calls_need_their_scope_and_are_answered_once() {
     )
     .await;
     let refused = recv(&mut reader).await;
-    assert_eq!((refused["type"].as_str(), refused["request"].as_str()), (Some("REFUSED"), Some("r1")));
+    assert_eq!(
+        (refused["type"].as_str(), refused["request"].as_str()),
+        (Some("REFUSED"), Some("r1"))
+    );
 
     let mut socket = connect(&url).await;
     let welcome = hello(&mut socket, &tokens.caller(), None, 0).await;
     let session = welcome["session"].as_str().unwrap().to_owned();
-    let arm = json!({"type": "DEADMAN", "request": "arm-1", "task": task.to_string(), "seconds": 60});
+    let arm =
+        json!({"type": "DEADMAN", "request": "arm-1", "task": task.to_string(), "seconds": 60});
     send(&mut socket, arm.clone()).await;
     let first = recv(&mut socket).await;
     assert_eq!(first["type"], "ACCEPTED", "{first}");
-    let armed: (Option<i32>, Option<String>) = sqlx::query_as(
-        "SELECT deadman_seconds, deadman_session_id FROM facade_task WHERE id = $1",
-    )
-    .bind(task)
-    .fetch_one(&ctx.db)
-    .await
-    .unwrap();
+    let armed: (Option<i32>, Option<String>) =
+        sqlx::query_as("SELECT deadman_seconds, deadman_session_id FROM facade_task WHERE id = $1")
+            .bind(task)
+            .fetch_one(&ctx.db)
+            .await
+            .unwrap();
     assert_eq!(armed, (Some(60), Some(session)));
 
     // Sent again (after a reconnect, say): the same answer, applied once.
@@ -436,7 +486,9 @@ async fn calls_need_their_scope_and_are_answered_once() {
 #[tokio::test]
 async fn the_dead_man_switch_fires_on_absence_but_not_after_an_outage() {
     let tokens = Tokens::new();
-    let Some(ctx) = context(&tokens).await else { return };
+    let Some(ctx) = context(&tokens).await else {
+        return;
+    };
     let url = serve(&ctx).await;
     let (agent, action) = agent(&ctx, &tokens).await;
     let caller = caller_of(&ctx, &tokens, "caller").await;
@@ -461,17 +513,21 @@ async fn the_dead_man_switch_fires_on_absence_but_not_after_an_outage() {
 
     // takt was serving all along (a fresh beat), and the window has been gone a minute.
     facade::session::deadman::sweep(&ctx, 100).await.unwrap();
-    sqlx::query("UPDATE facade_callersession SET last_seen = now() - interval '60 seconds' WHERE id = $1")
-        .bind(&session)
-        .execute(&ctx.db)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE facade_callersession SET last_seen = now() - interval '60 seconds' WHERE id = $1",
+    )
+    .bind(&session)
+    .execute(&ctx.db)
+    .await
+    .unwrap();
     // Only `watched` is due: `other` was disarmed meanwhile.
-    sqlx::query("UPDATE facade_task SET deadman_seconds = NULL, deadman_session_id = NULL WHERE id = $1")
-        .bind(other)
-        .execute(&ctx.db)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE facade_task SET deadman_seconds = NULL, deadman_session_id = NULL WHERE id = $1",
+    )
+    .bind(other)
+    .execute(&ctx.db)
+    .await
+    .unwrap();
     facade::session::deadman::sweep(&ctx, 100).await.unwrap();
     let kinds: Vec<String> =
         sqlx::query_scalar("SELECT kind FROM facade_taskevent WHERE task_id = $1 ORDER BY id")
@@ -505,22 +561,28 @@ async fn the_dead_man_switch_fires_on_absence_but_not_after_an_outage() {
     .execute(&ctx.db)
     .await
     .unwrap();
-    sqlx::query("UPDATE facade_callersession SET last_seen = now() - interval '60 seconds' WHERE id = $1")
-        .bind(&session)
-        .execute(&ctx.db)
-        .await
-        .unwrap();
-    sqlx::query("UPDATE facade_sweepbeat SET at = now() - interval '10 minutes' WHERE name = 'reaper'")
-        .execute(&ctx.db)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE facade_callersession SET last_seen = now() - interval '60 seconds' WHERE id = $1",
+    )
+    .bind(&session)
+    .execute(&ctx.db)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE facade_sweepbeat SET at = now() - interval '10 minutes' WHERE name = 'reaper'",
+    )
+    .execute(&ctx.db)
+    .await
+    .unwrap();
     assert_eq!(facade::session::deadman::sweep(&ctx, 100).await.unwrap(), 0);
 }
 
 #[tokio::test]
 async fn a_window_back_after_its_grace_keeps_its_dead_man_runs() {
     let tokens = Tokens::new();
-    let Some(ctx) = context(&tokens).await else { return };
+    let Some(ctx) = context(&tokens).await else {
+        return;
+    };
     let url = serve(&ctx).await;
     let (agent, action) = agent(&ctx, &tokens).await;
     let caller = caller_of(&ctx, &tokens, "caller").await;
@@ -584,7 +646,9 @@ async fn first_frame(socket: &mut Socket, topic: &str) -> Value {
 #[tokio::test]
 async fn every_list_topic_starts_with_its_rows_and_follows() {
     let tokens = Tokens::new();
-    let Some(ctx) = context(&tokens).await else { return };
+    let Some(ctx) = context(&tokens).await else {
+        return;
+    };
     let url = serve(&ctx).await;
     let (agent, action) = agent(&ctx, &tokens).await;
     let caller = caller_of(&ctx, &tokens, "caller").await;
@@ -608,10 +672,17 @@ async fn every_list_topic_starts_with_its_rows_and_follows() {
         .map(|row| row["id"].as_str().unwrap())
         .collect();
     assert!(ids.contains(&root.to_string().as_str()), "{ids:?}");
-    assert!(!ids.contains(&child.to_string().as_str()), "a child is no root: {ids:?}");
+    assert!(
+        !ids.contains(&child.to_string().as_str()),
+        "a child is no root: {ids:?}"
+    );
 
     let org = first_frame(&mut socket, "tasks:org").await;
-    assert!(org["snapshot"]["rows"].as_array().unwrap().iter().any(|r| r["id"].as_str() == Some(root.to_string().as_str())));
+    assert!(org["snapshot"]["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|r| r["id"].as_str() == Some(root.to_string().as_str())));
     let children = first_frame(&mut socket, &format!("children:{root}")).await;
     assert_eq!(children["snapshot"]["rows"][0]["id"], child.to_string());
     let agent_tasks = first_frame(&mut socket, &format!("agent:{agent}/tasks")).await;
@@ -620,23 +691,36 @@ async fn every_list_topic_starts_with_its_rows_and_follows() {
     assert_eq!(agents["snapshot"]["rows"][0]["id"], agent.to_string());
 
     // A report on the root reaches my tasks (and the org's), as the feeds carry it.
-    report(&ctx, agent, json!({"type": "STARTED", "task": root.to_string()})).await;
+    report(
+        &ctx,
+        agent,
+        json!({"type": "STARTED", "task": root.to_string()}),
+    )
+    .await;
     // The agent's tasks hear of it too: the task changed (its latest kind).
     let mut by_topic = std::collections::HashMap::new();
     while by_topic.len() < 3 {
         let frame = recv(&mut socket).await;
         assert_eq!(frame["type"], "DATA", "{frame}");
-        by_topic.insert(frame["topic"].as_str().unwrap().to_owned(), frame["item"].clone());
+        by_topic.insert(
+            frame["topic"].as_str().unwrap().to_owned(),
+            frame["item"].clone(),
+        );
     }
     assert_eq!(by_topic["tasks:mine"]["event"]["kind"], "STARTED");
     assert_eq!(by_topic["tasks:org"]["event"]["kind"], "STARTED");
-    assert_eq!(by_topic[&format!("agent:{agent}/tasks")]["update"]["id"], root.to_string());
+    assert_eq!(
+        by_topic[&format!("agent:{agent}/tasks")]["update"]["id"],
+        root.to_string()
+    );
 }
 
 #[tokio::test]
 async fn a_state_starts_with_its_checkpoint_and_patches_and_follows() {
     let tokens = Tokens::new();
-    let Some(ctx) = context(&tokens).await else { return };
+    let Some(ctx) = context(&tokens).await else {
+        return;
+    };
     let url = serve(&ctx).await;
     let (agent, _) = agent(&ctx, &tokens).await;
     sqlx::query(
@@ -655,7 +739,12 @@ async fn a_state_starts_with_its_checkpoint_and_patches_and_follows() {
         json!({"type": "STATE_PATCH", "session_id": "s1", "global_rev": rev, "state_name": "plate",
                "ts": 1.0, "op": "replace", "path": "/barcode", "value": value, "old_value": null})
     };
-    report(&ctx, agent, json!({"type": "SESSION_INIT", "session_id": "s1", "states": {"plate": {"barcode": "A0"}}})).await;
+    report(
+        &ctx,
+        agent,
+        json!({"type": "SESSION_INIT", "session_id": "s1", "states": {"plate": {"barcode": "A0"}}}),
+    )
+    .await;
     report(&ctx, agent, patch(1, "A1")).await;
     report(&ctx, agent, patch(2, "A2")).await;
 
@@ -678,13 +767,18 @@ async fn a_state_starts_with_its_checkpoint_and_patches_and_follows() {
         assert_eq!(frame["item"]["ops"][0]["value"], "A3");
         topics.insert(frame["topic"].as_str().unwrap().to_owned());
     }
-    assert_eq!(topics, [format!("state:{agent}/plate"), format!("states:{agent}")].into());
+    assert_eq!(
+        topics,
+        [format!("state:{agent}/plate"), format!("states:{agent}")].into()
+    );
 }
 
 #[tokio::test]
 async fn the_catch_all_scope_and_admin_role_pass_as_in_graphql() {
     let tokens = Tokens::new();
-    let Some(ctx) = context(&tokens).await else { return };
+    let Some(ctx) = context(&tokens).await else {
+        return;
+    };
     let url = serve(&ctx).await;
     let (agent, action) = agent(&ctx, &tokens).await;
     let admin = {
@@ -695,11 +789,21 @@ async fn the_catch_all_scope_and_admin_role_pass_as_in_graphql() {
         }))
         .unwrap();
         let token = spec.to_token(chrono::Utc::now(), "raw");
-        let identity = authentikate::expand::expand_token_context(&ctx.db, &token).await.unwrap();
-        let principal = CallerContext::load(&ctx.db, identity.user, identity.client, Some(identity.organization), vec![])
+        let identity = authentikate::expand::expand_token_context(&ctx.db, &token)
             .await
             .unwrap();
-        facade::backend::get_caller_for_context(&ctx.db, &principal).await.unwrap()
+        let principal = CallerContext::load(
+            &ctx.db,
+            identity.user,
+            identity.client,
+            Some(identity.organization),
+            vec![],
+        )
+        .await
+        .unwrap();
+        facade::backend::get_caller_for_context(&ctx.db, &principal)
+            .await
+            .unwrap()
     };
     let task = task(&ctx, agent, action, Some(admin)).await;
 
@@ -718,7 +822,9 @@ async fn the_catch_all_scope_and_admin_role_pass_as_in_graphql() {
 #[tokio::test]
 async fn the_latest_run_of_an_action_starts_with_its_record_and_follows_the_next() {
     let tokens = Tokens::new();
-    let Some(ctx) = context(&tokens).await else { return };
+    let Some(ctx) = context(&tokens).await else {
+        return;
+    };
     let url = serve(&ctx).await;
     let (agent, action) = agent(&ctx, &tokens).await;
     let implementation: i64 = sqlx::query_scalar(
@@ -742,14 +848,32 @@ async fn the_latest_run_of_an_action_starts_with_its_record_and_follows_the_next
         .execute(&ctx.db)
         .await
         .unwrap();
-    report(&ctx, agent, json!({"type": "PROGRESS", "task": first.to_string(), "progress": 10})).await;
-    report(&ctx, agent, json!({"type": "PROGRESS", "task": first.to_string(), "progress": 50})).await;
-    report(&ctx, agent, json!({"type": "YIELD", "task": first.to_string(), "returns": {"n": 1}})).await;
+    report(
+        &ctx,
+        agent,
+        json!({"type": "PROGRESS", "task": first.to_string(), "progress": 10}),
+    )
+    .await;
+    report(
+        &ctx,
+        agent,
+        json!({"type": "PROGRESS", "task": first.to_string(), "progress": 50}),
+    )
+    .await;
+    report(
+        &ctx,
+        agent,
+        json!({"type": "YIELD", "task": first.to_string(), "returns": {"n": 1}}),
+    )
+    .await;
 
     let mut socket = connect(&url).await;
     hello(&mut socket, &tokens.reader(), None, 0).await;
     let snapshot = first_frame(&mut socket, &format!("latest:{agent}/echo")).await;
-    assert_eq!(snapshot["snapshot"]["implementation"], implementation.to_string());
+    assert_eq!(
+        snapshot["snapshot"]["implementation"],
+        implementation.to_string()
+    );
     assert_eq!(snapshot["snapshot"]["latest"]["id"], first.to_string());
     let kinds: Vec<(&str, Option<i64>)> = snapshot["snapshot"]["events"]
         .as_array()
@@ -765,7 +889,12 @@ async fn the_latest_run_of_an_action_starts_with_its_record_and_follows_the_next
     assert_eq!(none["snapshot"]["implementation"], Value::Null);
 
     // The next run's events reach the topic.
-    report(&ctx, agent, json!({"type": "COMPLETED", "task": first.to_string()})).await;
+    report(
+        &ctx,
+        agent,
+        json!({"type": "COMPLETED", "task": first.to_string()}),
+    )
+    .await;
     let frame = recv(&mut socket).await;
     assert_eq!(frame["type"], "DATA", "{frame}");
     assert_eq!(frame["topic"], format!("latest:{agent}/echo"));
@@ -774,7 +903,9 @@ async fn the_latest_run_of_an_action_starts_with_its_record_and_follows_the_next
 #[tokio::test]
 async fn a_request_sent_again_while_it_runs_is_done_once() {
     let tokens = Tokens::new();
-    let Some(ctx) = context(&tokens).await else { return };
+    let Some(ctx) = context(&tokens).await else {
+        return;
+    };
     let url = serve(&ctx).await;
     let (agent, action) = agent(&ctx, &tokens).await;
     let caller = caller_of(&ctx, &tokens, "caller").await;
@@ -804,7 +935,9 @@ async fn a_request_sent_again_while_it_runs_is_done_once() {
 #[tokio::test]
 async fn a_window_whose_timers_sleep_stays_connected_by_answering_pings() {
     let tokens = Tokens::new();
-    let Some(ctx) = context(&tokens).await else { return };
+    let Some(ctx) = context(&tokens).await else {
+        return;
+    };
     let url = serve(&ctx).await;
     let mut socket = connect(&url).await;
     hello(&mut socket, &tokens.reader(), None, 0).await;
@@ -826,7 +959,9 @@ async fn a_window_whose_timers_sleep_stays_connected_by_answering_pings() {
 #[tokio::test]
 async fn a_window_back_on_a_new_socket_takes_its_session_over_from_the_old_one() {
     let tokens = Tokens::new();
-    let Some(ctx) = context(&tokens).await else { return };
+    let Some(ctx) = context(&tokens).await else {
+        return;
+    };
     let url = serve(&ctx).await;
 
     let mut old = connect(&url).await;
@@ -872,7 +1007,12 @@ async fn agent_with_state(ctx: &Context, tokens: &Tokens) -> (i64, i64, i64) {
     .fetch_one(&ctx.db)
     .await
     .unwrap();
-    report(ctx, agent, json!({"type": "SESSION_INIT", "session_id": "s1", "states": {"plate": {"barcode": "A0"}}})).await;
+    report(
+        ctx,
+        agent,
+        json!({"type": "SESSION_INIT", "session_id": "s1", "states": {"plate": {"barcode": "A0"}}}),
+    )
+    .await;
     report(ctx, agent, state_patch(1, "A1")).await;
     let session: i64 = sqlx::query_scalar("SELECT id FROM facade_session WHERE agent_id = $1")
         .bind(agent)
@@ -890,7 +1030,9 @@ fn state_patch(rev: u64, value: &str) -> Value {
 #[tokio::test]
 async fn a_lost_state_patch_is_read_back_before_the_next() {
     let tokens = Tokens::new();
-    let Some(ctx) = context(&tokens).await else { return };
+    let Some(ctx) = context(&tokens).await else {
+        return;
+    };
     let url = serve(&ctx).await;
     let (agent, state, session) = agent_with_state(&ctx, &tokens).await;
 
@@ -914,13 +1056,21 @@ async fn a_lost_state_patch_is_read_back_before_the_next() {
 
     let two = recv(&mut socket).await;
     let three = recv(&mut socket).await;
-    assert_eq!((two["item"]["global_rev"].as_i64(), three["item"]["global_rev"].as_i64()), (Some(2), Some(3)));
+    assert_eq!(
+        (
+            two["item"]["global_rev"].as_i64(),
+            three["item"]["global_rev"].as_i64()
+        ),
+        (Some(2), Some(3))
+    );
 }
 
 #[tokio::test]
 async fn a_state_patch_after_a_newer_one_resends_the_state_whole() {
     let tokens = Tokens::new();
-    let Some(ctx) = context(&tokens).await else { return };
+    let Some(ctx) = context(&tokens).await else {
+        return;
+    };
     let url = serve(&ctx).await;
     let (agent, state, session) = agent_with_state(&ctx, &tokens).await;
 
@@ -934,9 +1084,18 @@ async fn a_state_patch_after_a_newer_one_resends_the_state_whole() {
     let late = json!({"create": 0, "state": state, "agent": agent, "interface": "plate",
                       "ops": [{"op": "replace", "path": "/barcode", "value": "A2"}], "global_rev": 2,
                       "session": session, "timestamp": null, "task": null, "lifecycle": null, "qualifiers": []});
-    kante::channel::broadcast(&ctx.channel_layer, facade::channels::PATCH, &late, &[format!("patches_state_{state}")])
-        .await
-        .unwrap();
+    kante::channel::broadcast(
+        &ctx.channel_layer,
+        facade::channels::PATCH,
+        &late,
+        &[format!("patches_state_{state}")],
+    )
+    .await
+    .unwrap();
     let resync = recv(&mut socket).await;
-    assert_eq!((resync["type"].as_str(), resync["reason"].as_str()), (Some("RESYNC"), Some("out_of_order")), "{resync}");
+    assert_eq!(
+        (resync["type"].as_str(), resync["reason"].as_str()),
+        (Some("RESYNC"), Some("out_of_order")),
+        "{resync}"
+    );
 }

@@ -282,7 +282,8 @@ struct TaskRow {
     revision: i64,
 }
 
-const TASK_COLUMNS: &str = "t.id, t.reference, t.is_done, t.latest_event_kind, t.latest_instruct_kind,
+const TASK_COLUMNS: &str =
+    "t.id, t.reference, t.is_done, t.latest_event_kind, t.latest_instruct_kind,
     t.action_id, t.implementation_id, t.agent_id, t.root_id, t.parent_id, t.created_at,
     t.updated_at, t.finished_at, t.revision::bigint AS revision";
 
@@ -639,7 +640,9 @@ pub async fn latest_snapshot(
     .fetch_optional(&ctx.db)
     .await?;
     let Some(latest) = latest else {
-        return Ok(json!({"implementation": implementation.to_string(), "latest": null, "events": []}));
+        return Ok(
+            json!({"implementation": implementation.to_string(), "latest": null, "events": []}),
+        );
     };
     let task = latest.id;
     let mut rows: Vec<EventRow> = sqlx::query_as(&format!(
@@ -760,14 +763,18 @@ pub async fn state_snapshot(ctx: &Context, bound: &Bound) -> Result<(Value, Curs
         ));
     };
     let states: Vec<(i64, String)> = match bound.state {
-        Some(state) => sqlx::query_as("SELECT id, interface FROM facade_state WHERE id = $1")
-            .bind(state)
-            .fetch_all(&ctx.db)
-            .await?,
-        None => sqlx::query_as("SELECT id, interface FROM facade_state WHERE agent_id = $1")
-            .bind(agent)
-            .fetch_all(&ctx.db)
-            .await?,
+        Some(state) => {
+            sqlx::query_as("SELECT id, interface FROM facade_state WHERE id = $1")
+                .bind(state)
+                .fetch_all(&ctx.db)
+                .await?
+        }
+        None => {
+            sqlx::query_as("SELECT id, interface FROM facade_state WHERE agent_id = $1")
+                .bind(agent)
+                .fetch_all(&ctx.db)
+                .await?
+        }
     };
     let mut out = serde_json::Map::new();
     let mut rev = 0;
@@ -835,7 +842,15 @@ mod tests {
         ] {
             assert_eq!(Topic::parse(name).map(|t| t.name()).as_deref(), Some(name));
         }
-        for bad in ["", "task:", "task:x", "agent:3", "state:3/", "tasks:all", "nope"] {
+        for bad in [
+            "",
+            "task:",
+            "task:x",
+            "agent:3",
+            "state:3/",
+            "tasks:all",
+            "nope",
+        ] {
             assert_eq!(Topic::parse(bad), None, "{bad}");
         }
     }
@@ -851,7 +866,10 @@ mod tests {
             e(5, "PROGRESS"),
             e(6, "PROGRESS"),
         ]);
-        let seqs: Vec<i64> = kept.iter().map(|e| e["task_seq"].as_i64().unwrap()).collect();
+        let seqs: Vec<i64> = kept
+            .iter()
+            .map(|e| e["task_seq"].as_i64().unwrap())
+            .collect();
         assert_eq!(seqs, vec![1, 3, 4, 6]);
     }
 }

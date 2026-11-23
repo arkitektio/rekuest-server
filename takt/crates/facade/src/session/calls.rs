@@ -118,19 +118,18 @@ async fn call(ctx: &Context, who: &Who, frame: ClientFrame) -> Result<Answer, Ba
             input,
             deadman,
         } => {
-            let assigned = backend::assign_with_status(
-                ctx,
-                &who.principal,
-                &input,
-                AssignOrigin::default(),
-            )
-            .await?;
+            let assigned =
+                backend::assign_with_status(ctx, &who.principal, &input, AssignOrigin::default())
+                    .await?;
             if let Some(seconds) = deadman {
                 // The task exists whatever arming does: one that already ended has nothing to
                 // be tied to, and an assign is never answered "refused" for a task it made.
                 if assigned.created {
                     if let Err(e) = arm(ctx, who, assigned.task, Some(seconds)).await {
-                        tracing::info!(task = assigned.task, "the dead man switch was not armed: {e}");
+                        tracing::info!(
+                            task = assigned.task,
+                            "the dead man switch was not armed: {e}"
+                        );
                     }
                 }
             }
@@ -226,7 +225,12 @@ async fn call(ctx: &Context, who: &Who, frame: ClientFrame) -> Result<Answer, Ba
 }
 
 /// A control, as the GraphQL mutations ask for it: the caller must own the task.
-async fn control(ctx: &Context, who: &Who, task: &str, control: Control) -> Result<(), BackendError> {
+async fn control(
+    ctx: &Context,
+    who: &Who,
+    task: &str,
+    control: Control,
+) -> Result<(), BackendError> {
     backend::request_control(ctx, task, control, Some(who.caller)).await?;
     Ok(())
 }

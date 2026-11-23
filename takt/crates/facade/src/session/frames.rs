@@ -27,10 +27,16 @@ pub enum ClientFrame {
         client_info: Value,
     },
     /// A fresh token for a socket that outlives the one it opened with.
-    Reauth { token: String },
+    Reauth {
+        token: String,
+    },
     /// Follow a topic (§4): a `RESYNC` with its snapshot comes back, then its items.
-    Watch { topic: String },
-    Unwatch { topic: String },
+    Watch {
+        topic: String,
+    },
+    Unwatch {
+        topic: String,
+    },
     /// Start a task (the GraphQL `assign`'s input). `deadman`: the switch, in seconds (§7).
     Assign {
         request: String,
@@ -38,9 +44,18 @@ pub enum ClientFrame {
         #[serde(default)]
         deadman: Option<u32>,
     },
-    Cancel { request: String, task: String },
-    Interrupt { request: String, task: String },
-    Pause { request: String, task: String },
+    Cancel {
+        request: String,
+        task: String,
+    },
+    Interrupt {
+        request: String,
+        task: String,
+    },
+    Pause {
+        request: String,
+        task: String,
+    },
     Resume {
         request: String,
         task: String,
@@ -60,7 +75,10 @@ pub enum ClientFrame {
         remember: Option<String>,
     },
     /// Ask a task's agent whether it is still on it.
-    Inquire { request: String, task: String },
+    Inquire {
+        request: String,
+        task: String,
+    },
     /// Arm the dead man switch on this session (`seconds`), or disarm it (`null`).
     Deadman {
         request: String,
@@ -71,9 +89,18 @@ pub enum ClientFrame {
         request: String,
         input: Box<ProbeInput>,
     },
-    ProbeCancel { request: String, probe: String },
-    ProbePause { request: String, probe: String },
-    ProbeResume { request: String, probe: String },
+    ProbeCancel {
+        request: String,
+        probe: String,
+    },
+    ProbePause {
+        request: String,
+        probe: String,
+    },
+    ProbeResume {
+        request: String,
+        probe: String,
+    },
     /// Liveness, and how far the window got (the newest `pos` it received).
     Ping {
         #[serde(default)]
@@ -189,7 +216,11 @@ pub enum ServerFrame {
         limits: Limits,
     },
     /// One item of a watched topic.
-    Data { pos: u64, topic: String, item: Value },
+    Data {
+        pos: u64,
+        topic: String,
+        item: Value,
+    },
     /// Replace what you hold for this topic with `snapshot` (§5).
     Resync {
         pos: u64,
@@ -222,7 +253,9 @@ pub enum ServerFrame {
     },
     Pong,
     /// The server is about to close the socket (`token_expired`, `shutting_down`, …).
-    Closing { reason: String },
+    Closing {
+        reason: String,
+    },
 }
 
 /// `RESYNC` reasons (§5.2).

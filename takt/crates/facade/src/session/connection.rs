@@ -109,9 +109,8 @@ impl Grants {
     /// catch-all scope for any scope, the admin role for any role.
     fn of(token: &authentikate::base_models::JwtToken, enforce_scopes: bool) -> Self {
         let scopes = token.scopes();
-        let scoped = |scope: &str| {
-            !enforce_scopes || scopes.contains(&ALL_SCOPE) || scopes.contains(&scope)
-        };
+        let scoped =
+            |scope: &str| !enforce_scopes || scopes.contains(&ALL_SCOPE) || scopes.contains(&scope);
         let admin = token.roles.iter().any(|role| role == ADMIN_ROLE);
         Self {
             read: scoped(READ_SCOPE),
@@ -240,10 +239,7 @@ async fn next_frame(
 }
 
 /// The token's principal, caller and grants, or the close code refusing it.
-async fn authenticate(
-    ctx: &Context,
-    token: &str,
-) -> Result<(CallerContext, i64, Grants), u16> {
+async fn authenticate(ctx: &Context, token: &str) -> Result<(CallerContext, i64, Grants), u16> {
     let decoded = authentikate::authenticate_token(&ctx.verifier, token)
         .await
         .map_err(|e| {
@@ -321,9 +317,7 @@ impl Session {
             // window back before its dead socket timed out): taken over either way.
             let resumable = registry::load(&self.ctx, &named).await.filter(|saved| {
                 saved.caller == self.who.caller
-                    && saved
-                        .left_at
-                        .is_none_or(|left| Utc::now() - left <= grace)
+                    && saved.left_at.is_none_or(|left| Utc::now() - left <= grace)
             });
             if let Some(saved) = resumable {
                 self.who.session = named;
@@ -335,13 +329,9 @@ impl Session {
             // runs the old one held by their dead man switch.
             self.who.session = uuid::Uuid::new_v4().to_string();
             registry::open_row(&self.ctx, &self.who.session, self.who.caller, client_info).await?;
-            let moved = registry::hand_over_deadman(
-                &self.ctx,
-                &named,
-                &self.who.session,
-                self.who.caller,
-            )
-            .await?;
+            let moved =
+                registry::hand_over_deadman(&self.ctx, &named, &self.who.session, self.who.caller)
+                    .await?;
             if moved > 0 {
                 tracing::info!(moved, "a returning window took over its dead man switches");
             }
@@ -397,7 +387,10 @@ impl Session {
         }
         registry::beat(&self.ctx, &self.who.session).await;
         let watched: Vec<String> = self.acked.keys().cloned().collect();
-        if !self.persist_watching(Some(Utc::now()), watched, false).await {
+        if !self
+            .persist_watching(Some(Utc::now()), watched, false)
+            .await
+        {
             return;
         }
         let ctx = self.ctx.clone();
@@ -467,7 +460,9 @@ impl Session {
         self.send(&ServerFrame::Closing {
             reason: "superseded".into(),
         });
-        let _ = self.out.send(Out::Close(close::SUPERSEDED, "taken over".into()));
+        let _ = self
+            .out
+            .send(Out::Close(close::SUPERSEDED, "taken over".into()));
     }
 
     // -----------------------------------------------------------------------------------------
@@ -494,7 +489,8 @@ impl Session {
                 }
             }
         }));
-        let mut pinger = tokio::time::interval((settings.idle_timeout / 3).max(Duration::from_secs(1)));
+        let mut pinger =
+            tokio::time::interval((settings.idle_timeout / 3).max(Duration::from_secs(1)));
         let mut check = tokio::time::interval(settings.watch_check);
         let mut refresh = tokio::time::interval(GROUP_REFRESH);
         let mut recovery = tokio::time::interval(RECOVERY_TICK);
@@ -880,13 +876,26 @@ impl Session {
                     Ok(Some(current)) if current == session => {
                         match topics::patches_after(&self.ctx, &bound, session, rev, limit).await {
                             Ok(Some(patches)) => {
-                                self.cursor_into(name, Cursor::State { session: Some(session), rev });
+                                self.cursor_into(
+                                    name,
+                                    Cursor::State {
+                                        session: Some(session),
+                                        rev,
+                                    },
+                                );
                                 if let Some(watch) = self.watches.get_mut(name) {
                                     watch.state_floor = watch.state_floor.max(rev);
                                 }
                                 for patch in patches {
                                     let rev = patch["global_rev"].as_i64().unwrap_or(rev);
-                                    self.data(name, patch, Cursor::State { session: Some(session), rev });
+                                    self.data(
+                                        name,
+                                        patch,
+                                        Cursor::State {
+                                            session: Some(session),
+                                            rev,
+                                        },
+                                    );
                                 }
                             }
                             Ok(None) => self.snapshot(name, reason::TOO_FAR_BEHIND).await,
@@ -1047,7 +1056,14 @@ impl Session {
                                 if missed_rev >= patch_rev {
                                     break;
                                 }
-                                self.data(name, item, Cursor::State { session, rev: missed_rev });
+                                self.data(
+                                    name,
+                                    item,
+                                    Cursor::State {
+                                        session,
+                                        rev: missed_rev,
+                                    },
+                                );
                             }
                         }
                         Ok(None) => {
@@ -1057,7 +1073,14 @@ impl Session {
                         Err(e) => tracing::error!(topic = name, "filling a state gap failed: {e}"),
                     }
                 }
-                self.data(name, patch, Cursor::State { session, rev: patch_rev });
+                self.data(
+                    name,
+                    patch,
+                    Cursor::State {
+                        session,
+                        rev: patch_rev,
+                    },
+                );
             }
         }
     }
@@ -1078,7 +1101,14 @@ impl Session {
         };
         if kind == "PROGRESS" {
             if seq > max {
-                self.data(name, event, Cursor::Seq { confirmed, max: seq });
+                self.data(
+                    name,
+                    event,
+                    Cursor::Seq {
+                        confirmed,
+                        max: seq,
+                    },
+                );
             }
             return;
         }
@@ -1117,7 +1147,8 @@ impl Session {
             if self.backed_up.contains(&name) {
                 continue;
             }
-            let Some((bound, cursor)) = self.watches.get(&name).map(|w| (w.bound.clone(), w.cursor))
+            let Some((bound, cursor)) =
+                self.watches.get(&name).map(|w| (w.bound.clone(), w.cursor))
             else {
                 continue;
             };
@@ -1136,14 +1167,23 @@ impl Session {
                                 cursor = advance(cursor, &item);
                                 self.data(&name, item, cursor);
                             }
-                            let Cursor::Seq { max, .. } = cursor else { continue };
-                            self.cursor_into(&name, Cursor::Seq { confirmed: upto, max: max.max(upto) });
+                            let Cursor::Seq { max, .. } = cursor else {
+                                continue;
+                            };
+                            self.cursor_into(
+                                &name,
+                                Cursor::Seq {
+                                    confirmed: upto,
+                                    max: max.max(upto),
+                                },
+                            );
                         }
                         Err(e) => tracing::error!(task, "checking a task failed: {e}"),
                     }
                 }
                 (Topic::State { .. } | Topic::States(_), Cursor::State { session, rev }) => {
-                    self.catch_up(&name, Some(Cursor::State { session, rev })).await;
+                    self.catch_up(&name, Some(Cursor::State { session, rev }))
+                        .await;
                 }
                 _ => {}
             }
@@ -1153,7 +1193,12 @@ impl Session {
     async fn refresh_groups(&self) {
         for watch in self.watches.values() {
             for group in &watch.bound.groups {
-                if let Err(e) = self.ctx.channel_layer.group_add(group, &watch.channel).await {
+                if let Err(e) = self
+                    .ctx
+                    .channel_layer
+                    .group_add(group, &watch.channel)
+                    .await
+                {
                     tracing::error!(group, "refreshing a group failed: {e}");
                 }
             }

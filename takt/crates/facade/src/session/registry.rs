@@ -126,11 +126,10 @@ pub async fn open_row(
 
 /// The window was heard from: what the dead man switch reads.
 pub async fn beat(ctx: &Context, session: &str) {
-    if let Err(e) =
-        sqlx::query("UPDATE facade_callersession SET last_seen = now() WHERE id = $1")
-            .bind(session)
-            .execute(&ctx.db)
-            .await
+    if let Err(e) = sqlx::query("UPDATE facade_callersession SET last_seen = now() WHERE id = $1")
+        .bind(session)
+        .execute(&ctx.db)
+        .await
     {
         tracing::warn!(session, "writing the session's last_seen failed: {e}");
     }
