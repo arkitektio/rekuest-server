@@ -141,13 +141,27 @@ def upload_mutation(*, resolver: Resolver, description: str) -> DjangoMutationBa
 
 
 def subscription(
-    scope: str = "rekuest_read", *, resolver: Resolver, description: str
+    scope: str = "rekuest_read",
+    *,
+    resolver: Resolver,
+    description: str,
+    session_topic: str | None = None,
 ) -> StrawberryField:
-    """A subscription: what it streams is read, so an app needs ``rekuest_read`` for it."""
+    """A subscription: what it streams is read, so an app needs ``rekuest_read`` for it.
+
+    ``session_topic``: the topic of takt's caller session (``/session``) that follows the same
+    thing, gap-free and resumed after a drop. Naming one deprecates the subscription: task
+    assignment and watching moved to the session; what is not task or agent critical stays.
+    """
     return strawberry.subscription(
         resolver,
         extensions=[AuthSubscribeExtension(scopes=[scope])],
         description=description,
+        deprecation_reason=(
+            f"Follow the caller session's `{session_topic}` topic on takt (`/session`) instead."
+            if session_topic
+            else None
+        ),
     )
 
 
@@ -966,14 +980,17 @@ class Mutation:
 class Subscription:
     mytasks = subscription(
         resolver=subscriptions.mytasks,
+        session_topic="tasks:mine",
         description="Subscribe to root tasks created by this client (caller-scoped).",
     )
     tasks = subscription(
         resolver=subscriptions.tasks,
+        session_topic="tasks:org",
         description="Subscribe to root task changes across the whole organization.",
     )
     agents = subscription(
         resolver=subscriptions.agents,
+        session_topic="agents:org",
         description="Subscribe to updates on agent connections and statuses.",
     )
     assets = subscription(
@@ -1002,34 +1019,42 @@ class Subscription:
     )
     state_update_events = subscription(
         resolver=subscriptions.state_update_events,
+        session_topic="state:<agent>/<interface>",
         description="Subscribe to updates of state values and patches.",
     )
     watch_state = subscription(
         resolver=subscriptions.watch_state,
+        session_topic="state:<agent>/<interface>",
         description="Watch a state: yields the current snapshot then streams patches.",
     )
     watch_agent = subscription(
         resolver=subscriptions.watch_agent,
+        session_topic="states:<agent>",
         description="Watch an agent: yields snapshots for all states then streams patches.",
     )
     child_tasks = subscription(
         resolver=subscriptions.child_tasks,
+        session_topic="children:<task>",
         description="Subscribe to all descendant task changes of a task.",
     )
     agent_tasks = subscription(
         resolver=subscriptions.agent_tasks,
+        session_topic="agent:<agent>/tasks",
         description="Subscribe to task create/update for a specific agent.",
     )
     latest_task = subscription(
         resolver=subscriptions.latest_task,
+        session_topic="latest:<agent>/<interface>",
         description="The task an agent's action last ran as, whoever started it, kept current. Yields a `LatestTaskSnapshot` first, then that task's events (`TaskEventChange`: progress, results, its end) and, as a `TaskChange`, every task of the action that starts or ends: a started one with a higher id is the latest from then on. A snapshot without an implementation means the agent offers no action under that interface, and nothing follows.",
     )
     task_events = subscription(
         resolver=subscriptions.task_events,
+        session_topic="task:<task>",
         description="One task's events, whoever started it: those already recorded (all, or those newer than `after`), oldest first, then each new one as it is recorded, logs included. Replaces polling a task's event history.",
     )
     probe_events = subscription(
         resolver=subscriptions.probe_events,
+        session_topic="probe:<probe>",
         description="Stream the events of one probe (caller-scoped, payload-carrying). Emits a state snapshot first when events already happened.",
     )
 

@@ -40,9 +40,14 @@ answer out, no watches. There is then one implementation of validation, idempote
 provenance, and the two paths cannot drift. The answer carries the task record takt already has,
 so the Python resolver need not read it again.
 
-GraphQL **queries** (catalogue, lists, detail pages) stay in Python. GraphQL **subscriptions** are
-frozen: kept for their current consumers (Python clients, data-borne blok queries), not extended.
-The orkestrator moves off them.
+GraphQL **queries** (catalogue, lists, detail pages) stay in Python. GraphQL **subscriptions**
+for task assignment and watching, and for agents and their states, are **deprecated** (each names
+its session topic in its `@deprecated` reason) but still served: `mytasks`, `tasks`, `childTasks`,
+`agentTasks`, `taskEvents`, `latestTask`, `probeEvents`, `agents`, `watchState`, `watchAgent`,
+`stateUpdateEvents`. The orkestrator and the Python client (`SessionPostman`) use the session only.
+What is neither task nor agent critical stays a plain GraphQL subscription: `implementations`,
+`implementationChange`, `assets`, `schedules`, `triggers`, `signals`. Other services keep their
+subscriptions.
 
 ## 2. Connection and session lifecycle
 
@@ -126,6 +131,7 @@ session and topic, the window never sees it. Each topic has **one** cursor kind,
 | `state:{agent}/{interface}` | patches of one state | `(agent_session, global_rev)` | `facade_patch`, `facade_snapshot` |
 | `states:{agent}` | patches of all its states | `(agent_session, global_rev)` | as above |
 | `probe:{id}` | a probe's events | per-probe counter | redis, while the probe lives |
+| `latest:{agent}/{interface}` | the task the agent's action last ran as, and what changes it | none: snapshot on (re)watch | `facade_task`, `facade_taskevent` |
 
 Lists (`tasks:*`, `agents:org`, `agent:*/tasks`) carry no cursor on purpose: what a list needs
 after a gap is its **current** rows, not every change it missed. A resume sends the window's

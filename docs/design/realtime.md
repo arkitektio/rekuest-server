@@ -149,7 +149,9 @@ the same groups the subscriptions above use, and adds what the subscriptions can
 a task carries its `task_seq` (numbered in commit order by takt's `insert_event`), so a window that
 drops and comes back is sent exactly what it missed, and a broadcast the channel layer lost is read
 back from Postgres. The subscriptions stay for every other client (`taskEvents(afterSeq:)` resumes
-by the same number).
+by the same number). Task and agent subscriptions are deprecated in favour of the session (their
+`@deprecated` reason names the topic); `implementations`, `implementationChange`, `assets`,
+`schedules`, `triggers` and `signals` are not task or agent critical and stay.
 
 ## Why two transports
 
