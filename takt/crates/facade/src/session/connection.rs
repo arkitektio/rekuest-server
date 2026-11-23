@@ -845,7 +845,7 @@ impl Session {
                 };
                 self.on_task_event(name, task, event, cursor).await;
             }
-            Topic::TasksMine | Topic::TasksOrg => {
+            Topic::TasksMine | Topic::TasksOrg | Topic::Latest { .. } => {
                 if let Some(payload) = kante::channel::payload_of(&message, channels::TASK_EVENT) {
                     self.data(name, payload.clone(), Cursor::List);
                 }

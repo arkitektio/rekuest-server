@@ -44,6 +44,8 @@ pub enum Topic {
     States(i64),
     /// One probe's events (`probeEvents`).
     Probe(String),
+    /// The task an agent's action last ran as, kept current (`latestTask`).
+    Latest { agent: i64, interface: String },
 }
 
 impl Topic {
@@ -70,6 +72,14 @@ impl Topic {
                     interface: interface.to_owned(),
                 })
             }
+            Some(("latest", rest)) => {
+                let (agent, interface) = rest.split_once('/')?;
+                (!interface.is_empty()).then_some(())?;
+                Some(Topic::Latest {
+                    agent: id(agent)?,
+                    interface: interface.to_owned(),
+                })
+            }
             _ => None,
         }
     }
@@ -85,13 +95,16 @@ impl Topic {
             Topic::State { agent, interface } => format!("state:{agent}/{interface}"),
             Topic::States(id) => format!("states:{id}"),
             Topic::Probe(id) => format!("probe:{id}"),
+            Topic::Latest { agent, interface } => format!("latest:{agent}/{interface}"),
         }
     }
 
     /// The channel its messages come on (`kante::channel::payload_of`).
     pub fn channels(&self) -> &'static [&'static str] {
         match self {
-            Topic::TasksMine | Topic::TasksOrg | Topic::Task(_) => &[channels::TASK_EVENT],
+            Topic::TasksMine | Topic::TasksOrg | Topic::Task(_) | Topic::Latest { .. } => {
+                &[channels::TASK_EVENT]
+            }
             Topic::Children(_) => &[channels::CHILD_TASK],
             Topic::AgentTasks(_) => &[channels::AGENT_TASK],
             Topic::AgentsOrg => &[channels::AGENT_UPDATED],
@@ -108,6 +121,9 @@ pub struct Bound {
     pub topic: Topic,
     /// The state's id (`Topic::State`).
     pub state: Option<i64>,
+    /// The implementation the agent offers under the interface (`Topic::Latest`); none: the
+    /// interface is no action of it, and nothing follows.
+    pub implementation: Option<i64>,
     pub groups: Vec<String>,
 }
 
@@ -130,6 +146,7 @@ fn not_visible(what: &str, id: impl std::fmt::Display) -> WatchError {
 /// Whether `who` may follow `topic`, and its groups.
 pub async fn bind(ctx: &Context, who: &Who, topic: Topic) -> Result<Bound, WatchError> {
     let org = who.organization;
+    let mut implementation = None;
     let (state, groups) = match &topic {
         Topic::TasksMine => (None, vec![format!("root_tasks_caller_{}", who.caller)]),
         Topic::TasksOrg => (None, vec![format!("root_tasks_org_{org}")]),
@@ -179,6 +196,20 @@ pub async fn bind(ctx: &Context, who: &Who, topic: Topic) -> Result<Bound, Watch
                 vec![format!("patches_state_{state}"), format!("state_{state}")],
             )
         }
+        Topic::Latest { agent, interface } => {
+            agent_visible(ctx, *agent, org).await?;
+            implementation = sqlx::query_scalar(
+                "SELECT id FROM facade_implementation WHERE agent_id = $1 AND interface = $2",
+            )
+            .bind(agent)
+            .bind(interface)
+            .fetch_optional(&ctx.db)
+            .await?;
+            let groups = implementation
+                .map(|id| vec![crate::signals::implementation_task_events(id)])
+                .unwrap_or_default();
+            (None, groups)
+        }
         Topic::Probe(probe) => {
             let Some(found) = probes::store::get(ctx, probe).await? else {
                 return Err(WatchError::Refused(format!(
@@ -196,6 +227,7 @@ pub async fn bind(ctx: &Context, who: &Who, topic: Topic) -> Result<Bound, Watch
     Ok(Bound {
         topic,
         state,
+        implementation,
         groups,
     })
 }
@@ -502,6 +534,7 @@ pub async fn list_snapshot(ctx: &Context, who: &Who, bound: &Bound) -> Result<Va
             .await?
         }
         Topic::AgentsOrg => agent_rows(ctx, who.organization, limit).await?,
+        Topic::Latest { .. } => return Ok(latest_snapshot(ctx, bound.implementation).await?),
         Topic::Probe(probe) => {
             let state = probes::store::get(ctx, probe).await?;
             return Ok(json!({ "probe": state }));
@@ -574,6 +607,56 @@ pub async fn agent_change(ctx: &Context, agent: i64) -> Result<Value, sqlx::Erro
     .fetch_optional(&ctx.db)
     .await?;
     Ok(row.map(AgentRow::change).unwrap_or(Value::Null))
+}
+
+/// The kinds a task's record is made of: how far it is, what it returned, how it ended.
+const REPORTED_KINDS: &[&str] = &[
+    "PROGRESS",
+    "YIELD",
+    "COMPLETED",
+    "CANCELLED",
+    "INTERRUPTED",
+    "FAILED",
+    "CRITICAL",
+    "LOST",
+    "DENIED",
+];
+
+/// The task an implementation last ran as, and the newest event of each kind its record is made
+/// of, oldest first (as `latestTask`'s first message: `facade/subscriptions/task.py`).
+pub async fn latest_snapshot(
+    ctx: &Context,
+    implementation: Option<i64>,
+) -> Result<Value, sqlx::Error> {
+    let Some(implementation) = implementation else {
+        return Ok(json!({"implementation": null, "latest": null, "events": []}));
+    };
+    let latest: Option<TaskRow> = sqlx::query_as(&format!(
+        "SELECT {TASK_COLUMNS} FROM facade_task t WHERE t.implementation_id = $1
+          ORDER BY t.created_at DESC, t.id DESC LIMIT 1"
+    ))
+    .bind(implementation)
+    .fetch_optional(&ctx.db)
+    .await?;
+    let Some(latest) = latest else {
+        return Ok(json!({"implementation": implementation.to_string(), "latest": null, "events": []}));
+    };
+    let task = latest.id;
+    let mut rows: Vec<EventRow> = sqlx::query_as(&format!(
+        "SELECT DISTINCT ON (kind) {EVENT_COLUMNS} FROM facade_taskevent
+          WHERE task_id = $1 AND kind = ANY($2) ORDER BY kind, id DESC"
+    ))
+    .bind(task)
+    .bind(REPORTED_KINDS)
+    .fetch_all(&ctx.db)
+    .await?;
+    rows.sort_by_key(|row| row.id);
+    let events: Vec<Value> = rows.into_iter().map(EventRow::payload).collect();
+    Ok(json!({
+        "implementation": implementation.to_string(),
+        "latest": latest.change(),
+        "events": events,
+    }))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -748,6 +831,7 @@ mod tests {
             "state:3/camera/position",
             "states:3",
             "probe:p-abc",
+            "latest:3/segment_cells",
         ] {
             assert_eq!(Topic::parse(name).map(|t| t.name()).as_deref(), Some(name));
         }

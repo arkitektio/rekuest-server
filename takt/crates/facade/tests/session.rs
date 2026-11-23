@@ -713,3 +713,59 @@ async fn the_catch_all_scope_and_admin_role_pass_as_in_graphql() {
     let answer = recv(&mut socket).await;
     assert_eq!(answer["type"], "ACCEPTED", "{answer}");
 }
+
+#[tokio::test]
+async fn the_latest_run_of_an_action_starts_with_its_record_and_follows_the_next() {
+    let tokens = Tokens::new();
+    let Some(ctx) = context(&tokens).await else { return };
+    let url = serve(&ctx).await;
+    let (agent, action) = agent(&ctx, &tokens).await;
+    let implementation: i64 = sqlx::query_scalar(
+        "INSERT INTO facade_implementation (interface, higher_order_config, params, created_at,
+                                            updated_at, diagnostics, needs_token, provenance_audience,
+                                            effects, execution, action_id, agent_id,
+                                            dynamic_asks, dynamic_calls, dynamic_informs)
+         VALUES ('echo', '{}', '{}', now(), now(), '[]', true, '[]', 'UNKNOWN', 'PLAIN',
+                 $2, $1, true, true, true)
+         RETURNING id",
+    )
+    .bind(agent)
+    .bind(action)
+    .fetch_one(&ctx.db)
+    .await
+    .unwrap();
+    let first = task(&ctx, agent, action, None).await;
+    sqlx::query("UPDATE facade_task SET implementation_id = $2 WHERE id = $1")
+        .bind(first)
+        .bind(implementation)
+        .execute(&ctx.db)
+        .await
+        .unwrap();
+    report(&ctx, agent, json!({"type": "PROGRESS", "task": first.to_string(), "progress": 10})).await;
+    report(&ctx, agent, json!({"type": "PROGRESS", "task": first.to_string(), "progress": 50})).await;
+    report(&ctx, agent, json!({"type": "YIELD", "task": first.to_string(), "returns": {"n": 1}})).await;
+
+    let mut socket = connect(&url).await;
+    hello(&mut socket, &tokens.reader(), None, 0).await;
+    let snapshot = first_frame(&mut socket, &format!("latest:{agent}/echo")).await;
+    assert_eq!(snapshot["snapshot"]["implementation"], implementation.to_string());
+    assert_eq!(snapshot["snapshot"]["latest"]["id"], first.to_string());
+    let kinds: Vec<(&str, Option<i64>)> = snapshot["snapshot"]["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| (e["kind"].as_str().unwrap(), e["progress"].as_i64()))
+        .collect();
+    // The newest of each kind its record is made of, oldest first.
+    assert_eq!(kinds, vec![("PROGRESS", Some(50)), ("YIELD", None)]);
+
+    // An action of no implementation: a snapshot that says so.
+    let none = first_frame(&mut socket, &format!("latest:{agent}/nope")).await;
+    assert_eq!(none["snapshot"]["implementation"], Value::Null);
+
+    // The next run's events reach the topic.
+    report(&ctx, agent, json!({"type": "COMPLETED", "task": first.to_string()})).await;
+    let frame = recv(&mut socket).await;
+    assert_eq!(frame["type"], "DATA", "{frame}");
+    assert_eq!(frame["topic"], format!("latest:{agent}/echo"));
+}
