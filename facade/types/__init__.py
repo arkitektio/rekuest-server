@@ -103,6 +103,7 @@ from .structure import (
     StructureDescriptor,
     StructurePackage,
 )
+from .supervisor import Supervisor, supervisors
 from .task import (
     ActionAllowance,
     Task,
@@ -166,6 +167,8 @@ __all__ = [
     "TaskInquiry",
     "TaskStats",
     "task_stats",
+    "Supervisor",
+    "supervisors",
     "TaskEvent",
     "TaskInstruct",
     "ActionAllowance",

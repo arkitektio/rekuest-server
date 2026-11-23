@@ -5845,6 +5845,11 @@ type Query {
   taskStats(filters: TaskFilter = null): TaskStats! @auth(required_scopes: ["rekuest_read"])
 
   """
+  The apps that provisioned the organization's agents (e.g. 'plugin_engine'), as lok signed them into their tokens, with how many agents each (narrowed by filters, e.g. connected).
+  """
+  supervisors(filters: AgentFilter = null): [Supervisor!]! @auth(required_scopes: ["rekuest_read"])
+
+  """
   Statistics about agents: how many (narrowed by filters, e.g. connected or kind) and when they registered or were last seen.
   """
   agentStats(filters: AgentFilter = null): AgentStats! @auth(required_scopes: ["rekuest_read"])
@@ -7750,6 +7755,24 @@ type Subscription {
   Stream the events of one probe (caller-scoped, payload-carrying). Emits a state snapshot first when events already happened.
   """
   probeEvents(probe: ID!): ProbeEvent! @auth(required_scopes: ["rekuest_read"]) @deprecated(reason: "Follow the caller session's `probe:<probe>` topic on takt (`/session`) instead.")
+}
+
+"""
+An app that provisioned agents of the organization (a plugin engine, a launcher), as lok signed it into their tokens. Its agents are `agents(filters: {supervisor: identifier})`.
+"""
+type Supervisor {
+  """
+  The app's identifier, as the agents carry it in `supervisor` (e.g. 'plugin_engine').
+  """
+  identifier: String!
+
+  """
+  How many of the organization's agents it provisioned (of those the filters keep).
+  """
+  agentCount: Int!
+
+  """How many of those have a live connection now."""
+  connectedCount: Int!
 }
 
 """Tracks the assignment of an implementation to a specific task."""

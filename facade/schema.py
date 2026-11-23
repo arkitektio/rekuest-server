@@ -334,6 +334,10 @@ class Query:
         resolver=types.task_stats,
         description="Statistics about tasks and their states.",
     )
+    supervisors: list[types.Supervisor] = field(
+        resolver=types.supervisors,
+        description="The apps that provisioned the organization's agents (e.g. 'plugin_engine'), as lok signed them into their tokens, with how many agents each (narrowed by filters, e.g. connected).",
+    )
     agentStats: types.AgentStats = field(
         resolver=types.agent_stats,
         description="Statistics about agents: how many (narrowed by filters, e.g. connected or kind) and when they registered or were last seen.",
