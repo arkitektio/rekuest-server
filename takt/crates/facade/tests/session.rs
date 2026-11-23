@@ -47,6 +47,9 @@ impl Tokens {
     fn agent(&self) -> String {
         format!("agent-{}", self.unique)
     }
+    fn admin(&self) -> String {
+        format!("admin-{}", self.unique)
+    }
     fn spec(&self, who: &str, org: &str, scope: &str) -> Value {
         json!({
             "sub": format!("{who}-{}", self.unique), "iss": "session-tests",
@@ -63,6 +66,12 @@ impl Tokens {
                 self.reader(): self.spec("reader", "o", "rekuest_read"),
                 self.stranger(): self.spec("stranger", "elsewhere", "rekuest_read rekuest_root_call"),
                 self.agent(): self.spec("agent", "o", "rekuest_agent"),
+                self.admin(): {
+                    "sub": format!("admin-{}", self.unique), "iss": "session-tests",
+                    "org": format!("o-{}", self.unique), "client_id": format!("c-admin-{}", self.unique),
+                    "client_app": format!("a-admin-{}", self.unique), "client_release": "1",
+                    "scope": "openid rekuest_all", "roles": ["rekuest_admin"],
+                },
             }
         })
     }
@@ -669,4 +678,38 @@ async fn a_state_starts_with_its_checkpoint_and_patches_and_follows() {
         topics.insert(frame["topic"].as_str().unwrap().to_owned());
     }
     assert_eq!(topics, [format!("state:{agent}/plate"), format!("states:{agent}")].into());
+}
+
+#[tokio::test]
+async fn the_catch_all_scope_and_admin_role_pass_as_in_graphql() {
+    let tokens = Tokens::new();
+    let Some(ctx) = context(&tokens).await else { return };
+    let url = serve(&ctx).await;
+    let (agent, action) = agent(&ctx, &tokens).await;
+    let admin = {
+        let spec: StaticToken = serde_json::from_value(json!({
+            "sub": format!("admin-{}", tokens.unique), "iss": "session-tests",
+            "org": format!("o-{}", tokens.unique), "client_id": format!("c-admin-{}", tokens.unique),
+            "client_app": format!("a-admin-{}", tokens.unique), "client_release": "1",
+        }))
+        .unwrap();
+        let token = spec.to_token(chrono::Utc::now(), "raw");
+        let identity = authentikate::expand::expand_token_context(&ctx.db, &token).await.unwrap();
+        let principal = CallerContext::load(&ctx.db, identity.user, identity.client, Some(identity.organization), vec![])
+            .await
+            .unwrap();
+        facade::backend::get_caller_for_context(&ctx.db, &principal).await.unwrap()
+    };
+    let task = task(&ctx, agent, action, Some(admin)).await;
+
+    let mut socket = connect(&url).await;
+    hello(&mut socket, &tokens.admin(), None, 0).await;
+    first_frame(&mut socket, &format!("task:{task}")).await;
+    send(
+        &mut socket,
+        json!({"type": "DEADMAN", "request": "a1", "task": task.to_string(), "seconds": 60}),
+    )
+    .await;
+    let answer = recv(&mut socket).await;
+    assert_eq!(answer["type"], "ACCEPTED", "{answer}");
 }

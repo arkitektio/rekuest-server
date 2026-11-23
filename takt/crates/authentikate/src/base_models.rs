@@ -336,10 +336,18 @@ pub struct AuthentikateSettings {
     pub allowed_organizations: Option<Vec<String>>,
     #[serde(default, alias = "ALLOW_STATIC_TOKENS_IN_PRODUCTION")]
     pub allow_static_tokens_in_production: bool,
+    /// Whether a field's required scopes are checked against the token's (`enforce_scopes`,
+    /// on by default as in Python). Off, only roles are checked.
+    #[serde(default = "enforce_scopes_default", alias = "ENFORCE_SCOPES")]
+    pub enforce_scopes: bool,
     /// When the settings were read: a static token without its own `iat`/`exp` was issued
     /// then and expires a day later, as the Python defaults (evaluated once, at load) do.
     #[serde(skip, default = "Utc::now")]
     pub loaded_at: DateTime<Utc>,
+}
+
+fn enforce_scopes_default() -> bool {
+    true
 }
 
 fn default_algorithms() -> Vec<String> {

@@ -35,6 +35,10 @@ const READ_SCOPE: &str = "rekuest_read";
 /// What a window must hold to call (and one of the roles).
 const CALL_SCOPE: &str = "rekuest_root_call";
 const CALL_ROLES: &[&str] = &["rekuest_editor"];
+/// The scope and the role that stand for every other one of rekuest (`rekuest/contract.py`,
+/// declared to authentikate in `facade/schema.py`): they pass every check, as in GraphQL.
+const ALL_SCOPE: &str = "rekuest_all";
+const ADMIN_ROLE: &str = "rekuest_admin";
 /// How long the first frame may take.
 const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 /// How often a backed-up window is looked at again.
@@ -74,11 +78,17 @@ struct Grants {
 }
 
 impl Grants {
-    fn of(token: &authentikate::base_models::JwtToken) -> Self {
+    /// As the GraphQL `@auth` directive decides it: scopes only where they are enforced, the
+    /// catch-all scope for any scope, the admin role for any role.
+    fn of(token: &authentikate::base_models::JwtToken, enforce_scopes: bool) -> Self {
         let scopes = token.scopes();
+        let scoped = |scope: &str| {
+            !enforce_scopes || scopes.contains(&ALL_SCOPE) || scopes.contains(&scope)
+        };
+        let admin = token.roles.iter().any(|role| role == ADMIN_ROLE);
         Self {
-            read: scopes.contains(&READ_SCOPE),
-            call: scopes.contains(&CALL_SCOPE) && token.has_any_role(CALL_ROLES),
+            read: scoped(READ_SCOPE),
+            call: scoped(CALL_SCOPE) && (admin || token.has_any_role(CALL_ROLES)),
             expires: token.exp,
         }
     }
@@ -225,7 +235,8 @@ async fn authenticate(
     let caller = backend::get_caller_for_context(&ctx.db, &principal)
         .await
         .map_err(|_| close::UNAVAILABLE)?;
-    Ok((principal, caller, Grants::of(&decoded)))
+    let grants = Grants::of(&decoded, ctx.verifier.settings.enforce_scopes);
+    Ok((principal, caller, grants))
 }
 
 struct Session {
