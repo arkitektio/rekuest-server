@@ -45,6 +45,21 @@ def blok_hash(row: models.Blok | models.BlokRevision) -> str:
 RENDERING_FIELDS = ["components", "context", "vocab", "catalogs", "demo"]
 
 
+LOGO_COMPONENT = "logo"
+"""A blok's own logo: a child of its `<Blok>` (arkitekt-spec's `declared_logo`)."""
+
+
+def blok_has_logo(components: object) -> bool:
+    """Whether a stored tree (a list holding its one `<Blok>` root) declares its own `<logo>`."""
+    roots = components if isinstance(components, list) else [components]
+    return any(
+        isinstance(child, dict) and child.get("component") == LOGO_COMPONENT
+        for root in roots
+        if isinstance(root, dict)
+        for child in root.get("children") or ()
+    )
+
+
 def _tree_queries(components: list[dict]) -> list[rtypes.BlokQuery]:
     """The ``<query>`` declarations of a stored tree, as ``Blok.queries`` lists them."""
     from rekuest_core.vocabulary import declared_queries
@@ -259,6 +274,13 @@ class Blok:
     )
     def component_tree(self) -> rscalars.AnyDefault:
         return cast("rscalars.AnyDefault", self.components)
+
+    @strawberry_django.field(
+        description="Whether the blok declares a logo of its own (`<logo>`, a child of its `<Blok>`): what lists, pins and tabs draw for it instead of its context's icon. Read it before asking for the tree, which a list never needs otherwise.",
+        only=["components"],
+    )
+    def has_logo(self) -> bool:
+        return blok_has_logo(self.components)
 
     @strawberry_django.field(description="The typed component tree of this blok.")
     def components(self) -> list[rtypes.ComponentNode]:

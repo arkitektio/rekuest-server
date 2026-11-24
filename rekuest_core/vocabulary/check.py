@@ -69,6 +69,7 @@ from rekuest_core.vocabulary.declared import (
     DEPENDENCIES_COMPONENT,
     LIKE_PROP,
     LOCAL_COMPONENT,
+    LOGO_COMPONENT,
     NAME_PROP,
     PICK_FUNCTION,
     PICK_VERB,
@@ -80,6 +81,7 @@ from rekuest_core.vocabulary.declared import (
     BlokHeader,
     DeclaredDependencies,
     blok_header,
+    blok_logo_tree,
     content,
     declaration_problem,
     declared_dependencies,
@@ -491,6 +493,35 @@ class _Checker:
 
     # -- declarations
 
+    def check_logo_declaration(self, tree: ComponentNodeInputModel) -> None:
+        """The blok's own ``<logo>``: a child of its ``<Blok>``, one, in a blok that is no logo,
+        and a fixed drawing. What it draws is checked as a logo blok (:func:`check_blok_tree`)."""
+        own = 0
+        for node, ancestors in iter_with_parents(tree):
+            if node.component != LOGO_COMPONENT:
+                continue
+            if len(ancestors) != 1:
+                self.add("logo.misplaced", node.id)
+                continue
+            own += 1
+            if own > 1:
+                self.add("logo.twice", node.id)
+            elif self.header.context == LOGO:
+                self.add("logo.in_logo", node.id)
+            for drawn, _ in iter_with_parents(node):
+                for prop in drawn.props or ():
+                    if (
+                        prop.dynamic_value is not None
+                        or prop.agent_call is not None
+                        or prop.util_call is not None
+                    ):
+                        self.add(
+                            "logo.dynamic",
+                            drawn.id,
+                            component=drawn.component,
+                            prop=prop.key,
+                        )
+
     def check_declarations(self, tree: ComponentNodeInputModel) -> None:
         vocabulary = self.vocabulary
         header = self.header
@@ -540,6 +571,7 @@ class _Checker:
         self.check_dependencies(tree)
         self.check_local_positions(tree)
         self.check_queries(tree)
+        self.check_logo_declaration(tree)
         for name, sites in into_sites(tree).items():
             self.into.add(name)
             if name in vocabulary.reserved:
@@ -2179,6 +2211,11 @@ def check_blok_tree(
     walk_tree(tree, checker)
     if header.context == LOGO:
         checker.findings.extend(check_logo(tree, scope.demo))
+    else:
+        # The blok's own <logo>, checked as the logo blok it stands for.
+        logo = blok_logo_tree(tree)
+        if logo is not None:
+            checker.findings.extend(check_blok_tree(logo, BlokScope()))
     checker.finish()
     return checker.findings
 

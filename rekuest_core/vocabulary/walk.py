@@ -27,7 +27,7 @@ from rekuest_core.inputs.models import (
     ComponentPropInputModel,
     UtilCallInputModel,
 )
-from rekuest_core.vocabulary.declared import LOCAL_COMPONENT, NAME_PROP
+from rekuest_core.vocabulary.declared import LOCAL_COMPONENT, LOGO_COMPONENT, NAME_PROP
 from rekuest_core.vocabulary.vocabulary import load_vocabulary
 
 FOREACH_COMPONENT = "foreach"
@@ -272,6 +272,10 @@ def _walk_node(
         if name is not None:
             inner[name] = visitor.bind_local(name, child, dict(inner))
     for child in children:
+        # A blok's own <logo> draws nothing in it and reads nothing: it is checked as a logo
+        # blok of its own (`blok_logo_tree`), never as part of the blok it stands for.
+        if child.component == LOGO_COMPONENT:
+            continue
         _walk_node(child, visitor, inner, (*ancestors, node), in_slot)
 
 

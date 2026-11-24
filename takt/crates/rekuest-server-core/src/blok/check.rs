@@ -29,10 +29,11 @@ use regex::Regex;
 use serde_json::Value;
 
 use super::declared::{
-    blok_header, content, declaration_problem, declared_dependencies, declared_queries,
-    declared_subscriptions, header_problem, iter_with_parents, local_declared, local_name,
-    local_problem, BlokHeader, DeclaredDependencies, DEPENDENCIES_COMPONENT, KEY_PROP, LIKE_PROP,
-    LOCAL_COMPONENT, NAME_PROP, QUERY_COMPONENT, SUBSCRIPTION_COMPONENT, VAR_COMPONENT,
+    blok_header, blok_logo_tree, content, declaration_problem, declared_dependencies,
+    declared_queries, declared_subscriptions, header_problem, iter_with_parents, local_declared,
+    local_name, local_problem, BlokHeader, DeclaredDependencies, DEPENDENCIES_COMPONENT, KEY_PROP,
+    LIKE_PROP, LOCAL_COMPONENT, LOGO_COMPONENT, NAME_PROP, QUERY_COMPONENT, SUBSCRIPTION_COMPONENT,
+    VAR_COMPONENT,
 };
 use super::expr::{s, AGENTS_ROOT, PICK_VERB, REFERENCE_SEPARATOR};
 use super::infer::{resolve_locals, ArgPorts, ResolvedLocal};
@@ -1036,6 +1037,7 @@ impl<'a> Checker<'a> {
         self.check_dependencies(tree);
         self.check_local_positions(tree);
         self.check_queries(tree);
+        self.check_logo_declaration(tree);
         for (name, sites) in into_sites(tree) {
             self.into.insert(name.clone());
             if vocabulary.is_reserved(&name) {
@@ -1052,6 +1054,42 @@ impl<'a> Checker<'a> {
                     ("second", s(sites[1].1.clone())),
                 ];
                 self.add("into.twice", Some(&sites[1].1), &fields);
+            }
+        }
+    }
+
+    /// The blok's own `<logo>`: a child of its `<Blok>`, one, in a blok that is no logo, and a
+    /// fixed drawing. What it draws is checked as a logo blok ([`check_blok`]). The port of
+    /// arkitekt-spec's `check_logo_declaration`.
+    fn check_logo_declaration(&mut self, tree: &'a ComponentNodeInputModel) {
+        let mut own = 0;
+        for (node, ancestors) in iter_with_parents(tree) {
+            if node.component != LOGO_COMPONENT {
+                continue;
+            }
+            if ancestors.len() != 1 {
+                self.add("logo.misplaced", Some(&node.id), &[]);
+                continue;
+            }
+            own += 1;
+            if own > 1 {
+                self.add("logo.twice", Some(&node.id), &[]);
+            } else if self.header.context == LOGO {
+                self.add("logo.in_logo", Some(&node.id), &[]);
+            }
+            for (drawn, _) in iter_with_parents(node) {
+                for prop in drawn.props.iter().flatten() {
+                    if prop.dynamic_value.is_some()
+                        || prop.agent_call.is_some()
+                        || prop.util_call.is_some()
+                    {
+                        let fields = [
+                            ("component", s(drawn.component.clone())),
+                            ("prop", s(prop.key.clone())),
+                        ];
+                        self.add("logo.dynamic", Some(&drawn.id), &fields);
+                    }
+                }
             }
         }
     }
@@ -1454,6 +1492,11 @@ impl<'a> Checker<'a> {
         }
         ancestors.push(node);
         for child in children {
+            // A blok's own <logo> draws nothing in it and reads nothing: it is checked as a logo
+            // blok of its own (`blok_logo_tree`), never as part of the blok it stands for.
+            if child.component == LOGO_COMPONENT {
+                continue;
+            }
             self.walk_node(child, &inner, ancestors, in_slot);
         }
         ancestors.pop();
@@ -2837,6 +2880,12 @@ pub fn check_blok(
     if checker.header.context == LOGO {
         let demo = scope.demo.as_ref();
         checker.findings.extend(check_logo(tree, demo));
+    } else if let Some(logo) = blok_logo_tree(tree) {
+        // The blok's own <logo>, checked as the logo blok it stands for: the pens, the logo
+        // limits.
+        checker
+            .findings
+            .extend(check_blok_tree(&logo, &BlokScope::default()));
     }
     checker.finish();
     (checker.findings, checker.resolved)

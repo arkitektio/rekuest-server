@@ -37,6 +37,8 @@ VAR_COMPONENT = "var"
 TEXT_NODE = "#text"
 """The component a run of text is stored as."""
 DEPENDENCIES_COMPONENT = "dependencies"
+LOGO_COMPONENT = "logo"
+"""A blok's own logo: a child of its ``<Blok>`` holding a drawing of the logo catalog."""
 DECLARATION_COMPONENTS = frozenset(
     {
         LOCAL_COMPONENT,
@@ -44,8 +46,21 @@ DECLARATION_COMPONENTS = frozenset(
         SUBSCRIPTION_COMPONENT,
         VAR_COMPONENT,
         DEPENDENCIES_COMPONENT,
+        LOGO_COMPONENT,
     }
 )
+LOGO_VIEW_BOX = "0 0 24 24"
+"""A logo's grid when its ``<logo>`` names none: 24 units, the grid of the action logos."""
+LOGO_KIND = "agent"
+"""The kind a ``<logo>`` is drawn as (:func:`blok_logo_tree`): one drawn in the logo context."""
+LOGO_PEN: tuple[tuple[str, str], ...] = (
+    ("fill", "none"),
+    ("stroke", "ink"),
+    ("strokeWidth", "1.8"),
+    ("strokeLinecap", "round"),
+    ("strokeLinejoin", "round"),
+)
+"""The pen a ``<logo>`` draws with unless a shape says otherwise: the action logos' pen."""
 REFERENCE_SEPARATOR = "__"
 """How a read through a declared ``<dependencies key="cells" />`` is stored: ``cells.microscope``
 is the dependency ``cells__microscope`` of the blok (``deps.cells__microscope``), one segment."""
@@ -535,7 +550,61 @@ def field_path_problem(path: str) -> bool:
     return _FIELD_PATH.fullmatch(path) is None
 
 
+def declared_logo(tree: ComponentNodeInputModel) -> ComponentNodeInputModel | None:
+    """The blok's own ``<logo>``: the first among the children of its ``<Blok>``, or None.
+
+    The server's port of arkitekt-spec's ``declared_logo``.
+    """
+    return next(
+        (child for child in tree.children or () if child.component == LOGO_COMPONENT),
+        None,
+    )
+
+
+def blok_logo_tree(tree: ComponentNodeInputModel) -> ComponentNodeInputModel | None:
+    """The blok's ``<logo>`` as a logo blok of its own, or None when it declares none.
+
+    ``<Blok kind="agent" context="logo"><Logo viewBox title><G pen>...</G></Logo></Blok>``: what is
+    checked for it (the pens, the logo limits). The server's port of arkitekt-spec's
+    ``blok_logo_tree``: the drawing's nodes are the ``<logo>``'s own, the frame takes its id.
+    """
+    logo = declared_logo(tree)
+    if logo is None:
+        return None
+    props = {prop.key: prop for prop in logo.props or ()}
+    drawing_props = [
+        props.get("viewBox")
+        or ComponentPropInputModel(key="viewBox", static_value=LOGO_VIEW_BOX)
+    ]
+    if "title" in props:
+        drawing_props.append(props["title"])
+    pen = ComponentNodeInputModel(
+        id=f"{logo.id}.pen",
+        component="G",
+        props=[
+            ComponentPropInputModel(key=key, static_value=value)
+            for key, value in LOGO_PEN
+        ],
+        children=list(logo.children or ()),
+    )
+    drawing = ComponentNodeInputModel(
+        id=f"{logo.id}.drawing", component="Logo", props=drawing_props, children=[pen]
+    )
+    return ComponentNodeInputModel(
+        id=logo.id,
+        component=BLOK_COMPONENT,
+        props=[
+            ComponentPropInputModel(key=KIND_ATTRIBUTE, static_value=LOGO_KIND),
+            ComponentPropInputModel(key=CONTEXT_ATTRIBUTE, static_value="logo"),
+        ],
+        children=[drawing],
+    )
+
+
 __all__ = [
+    "LOGO_COMPONENT",
+    "blok_logo_tree",
+    "declared_logo",
     "BLOK_COMPONENT",
     "DECLARATION_COMPONENTS",
     "LIKE_PROP",

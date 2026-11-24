@@ -1,6 +1,6 @@
 {
  "vocab": 2,
- "minor": 7,
+ "minor": 8,
  "description": "The blok language, version 2: what a blok may read, call and store. The spec's parser, the server (rekuest_core, takt) and the renderer (orkestrator) load this file or are generated from it. The design is the blok-vocab-v2 proposal of 2026-10-25. Three layers, each versioned on its own: this language (vocab, and minor for what it gained since); the base catalog, everything every renderer draws; and the app catalogs that extend it with what one frontend draws beyond (see catalogs). A server holds a blok to the language alone, never to a catalog: whoever draws a blok checks it against the catalog it has, and an author's tooling checks it when asked.",
  "roots": {
   "data": {
@@ -99,6 +99,7 @@
    "query": "<query name=\"x\" service=\"mikro\" document=\"query (...) {...}\" poll={5} more=\"items\"><var key=\"k\" value={...} /></query>: a declared read, queries.<name>. A child of <Blok>, before its content.",
    "subscription": "<subscription name=\"x\" service=\"mikro\" document=\"subscription (...) {...}\" keep={10} history=\"q\"><var key=\"k\" value={...} /></subscription>: a declared stream, subscriptions.<name>. A child of <Blok>, before its content.",
    "dependencies": "<dependencies key=\"cells\" like=\"self.<action>\" />: the dependencies of one of the app's own actions, for an agent blok to read, call and hand to a run of it. A custom blok declares those of an action of an agent it is bound to: like=\"agents.<name>.<action>\" (stored deps.<name>.<action>). Each is read through the key, bare: cells.<dependency>.<state>.<field>, cells.<dependency>.<action>(...), cells.<dependency>.connected (stored as the blok's dependency deps.cells__<dependency>). cells.options.<dependency> lists the agents that fit one ({id, name, connected, picked}) and cells.pick(<dependency>: <agent id>) binds it; <deppicker key=\"cells.<dependency>\" /> is the ready-made picker. Which agent each is bound to is the viewer's own choice, kept on their device and never on a server; until they choose it is seeded once, with the agent the latest run of the action had, else the only one that fits. A child of <Blok>, after its locals and before what reads through it; an agent blok only. An action whose dependency is called options or pick cannot be read through one.",
+   "logo": "<logo title=\"Microscope\"><Circle cx=\"12\" cy=\"12\" r=\"7\" /></logo>: the blok's own logo, standing for it in lists, pins and tabs. A child of <Blok>, one, in a blok that is no logo. It holds a drawing of the logo catalog on a 24-unit grid (viewBox=\"0 0 24 24\" unless it says otherwise), painted with the logo pens and drawn with the action logos' pen (fill none, stroke ink, round) unless a shape says otherwise. title and viewBox are literals, and so is everything it draws: a fixed drawing that reads nothing. It is checked and drawn as a logo blok of its own.",
    "var": "<var key=\"k\" value={expression or literal} />: one variable of a query or subscription; an expression over args, blok-level locals and agents."
   }
  },
@@ -544,6 +545,10 @@
   "calls.not_in_kind": {"level": "error", "message": "{path}: a{n} {kind} blok calls no agent.", "hint": "A port blok is a field of a form: read the agent's state and write the port (port.set(...), bind={{port.value}}). What starts a task belongs in the action's assign blok."},
   "assign.kind": {"level": "error", "message": "{what} belongs to starting a run, so only an action's assign blok holds it, not a{n} {kind} blok.", "hint": "Make it <Blok kind=\"assign\"> in the action's bloks=[...]."},
   "logo.complexity": {"level": "error", "message": "{detail}"},
+  "logo.misplaced": {"level": "error", "message": "A <logo> is a child of the <Blok> it stands for, not inside another element.", "hint": "Move it to the top of the blok, beside its queries."},
+  "logo.twice": {"level": "error", "message": "A blok has one <logo>; this is a second one."},
+  "logo.in_logo": {"level": "error", "message": "A logo blok is a logo already: it declares no <logo> of its own.", "hint": "Draw it in the blok's <Logo> instead."},
+  "logo.dynamic": {"level": "warning", "message": "<{component}> sets {prop} with an expression; a <logo> is a fixed drawing that reads nothing, so it is drawn without it.", "hint": "Write the value as a literal."},
   "catalog.unknown_component": {"level": "warning", "message": "<{component}> is not in the catalog the blok is written for ({catalogs}).", "hint": "Look the component up in the catalog; names are case-sensitive."},
   "catalog.children": {"level": "warning", "message": "<{component}> takes no children.", "hint": "Close <{component}> without children (<{component} ... />), or put them beside it."},
   "catalog.text": {"level": "warning", "message": "<{component}> {detail}", "hint": "Put the text in a component that draws it (<Text>, <p>, <span>), or set it once."},

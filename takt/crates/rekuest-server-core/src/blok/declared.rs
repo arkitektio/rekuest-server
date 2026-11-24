@@ -27,13 +27,30 @@ pub const QUERY_COMPONENT: &str = "query";
 pub const SUBSCRIPTION_COMPONENT: &str = "subscription";
 pub const VAR_COMPONENT: &str = "var";
 pub const DEPENDENCIES_COMPONENT: &str = "dependencies";
+/// A blok's own logo: a child of its `<Blok>` holding a drawing of the logo catalog.
+pub const LOGO_COMPONENT: &str = "logo";
 /// The components that declare what a blok owns and draw nothing.
-pub const DECLARATION_COMPONENTS: [&str; 5] = [
+pub const DECLARATION_COMPONENTS: [&str; 6] = [
     LOCAL_COMPONENT,
     QUERY_COMPONENT,
     SUBSCRIPTION_COMPONENT,
     VAR_COMPONENT,
     DEPENDENCIES_COMPONENT,
+    LOGO_COMPONENT,
+];
+const LOGO_TITLE_PROP: &str = "title";
+const LOGO_VIEW_BOX_PROP: &str = "viewBox";
+/// A logo's grid when its `<logo>` names none: 24 units, the grid of the action logos.
+pub const LOGO_VIEW_BOX: &str = "0 0 24 24";
+/// The kind a `<logo>` is drawn as ([`blok_logo_tree`]): one drawn in the logo context.
+pub const LOGO_KIND: &str = "agent";
+/// The pen a `<logo>` draws with unless a shape says otherwise: the action logos' pen.
+pub const LOGO_PEN: [(&str, &str); 5] = [
+    ("fill", "none"),
+    ("stroke", "ink"),
+    ("strokeWidth", "1.8"),
+    ("strokeLinecap", "round"),
+    ("strokeLinejoin", "round"),
 ];
 /// The name a local, a query or a subscription is read by.
 pub const NAME_PROP: &str = "name";
@@ -360,6 +377,70 @@ pub fn declared_dependencies(tree: &ComponentNodeInputModel) -> Vec<DeclaredDepe
             })
         })
         .collect()
+}
+
+/// The blok's own `<logo>`: the first among the children of its `<Blok>`, or None. A `<logo>`
+/// anywhere else, or a second one, stands for nothing (`logo.misplaced`, `logo.twice`). The
+/// port of arkitekt-spec's `declared_logo`.
+pub fn declared_logo(tree: &ComponentNodeInputModel) -> Option<&ComponentNodeInputModel> {
+    tree.children
+        .iter()
+        .flatten()
+        .find(|child| child.component == LOGO_COMPONENT)
+}
+
+fn literal(key: &str, value: &str) -> ComponentPropInputModel {
+    ComponentPropInputModel {
+        key: key.to_owned(),
+        static_value: Some(Value::String(value.to_owned())),
+        dynamic_value: None,
+        declares_value: None,
+        agent_call: None,
+        util_call: None,
+    }
+}
+
+/// The blok's `<logo>` as a logo blok of its own, or None when it declares none:
+/// `<Blok kind="agent" context="logo"><Logo viewBox title><G pen>...</G></Logo></Blok>`. What is
+/// checked (the pens, the logo limits) for it; its kind is `agent` whatever the blok's, since a
+/// `<logo>` is literals only and reads nothing. The drawing's nodes are the `<logo>`'s own, the
+/// frame takes its id (and two made from it). The port of arkitekt-spec's `blok_logo_tree`.
+pub fn blok_logo_tree(tree: &ComponentNodeInputModel) -> Option<ComponentNodeInputModel> {
+    let logo = declared_logo(tree)?;
+    let props = logo.props.as_deref().unwrap_or_default();
+    let find = |key: &str| props.iter().find(|prop| prop.key == key).cloned();
+    let mut drawing_props = vec![
+        find(LOGO_VIEW_BOX_PROP).unwrap_or_else(|| literal(LOGO_VIEW_BOX_PROP, LOGO_VIEW_BOX))
+    ];
+    if let Some(title) = find(LOGO_TITLE_PROP) {
+        drawing_props.push(title);
+    }
+    let pen = ComponentNodeInputModel {
+        id: format!("{}.pen", logo.id),
+        component: "G".to_owned(),
+        props: Some(
+            LOGO_PEN
+                .iter()
+                .map(|(key, value)| literal(key, value))
+                .collect(),
+        ),
+        children: Some(logo.children.clone().unwrap_or_default()),
+    };
+    let drawing = ComponentNodeInputModel {
+        id: format!("{}.drawing", logo.id),
+        component: "Logo".to_owned(),
+        props: Some(drawing_props),
+        children: Some(vec![pen]),
+    };
+    Some(ComponentNodeInputModel {
+        id: logo.id.clone(),
+        component: BLOK_COMPONENT.to_owned(),
+        props: Some(vec![
+            literal(KIND_ATTRIBUTE, LOGO_KIND),
+            literal(CONTEXT_ATTRIBUTE, "logo"),
+        ]),
+        children: Some(vec![drawing]),
+    })
 }
 
 /// Every node of `tree` with its ancestors, depth first.

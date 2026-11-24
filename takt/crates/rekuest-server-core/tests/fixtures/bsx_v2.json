@@ -1,6 +1,6 @@
 {
  "vocab": 2,
- "minor": 7,
+ "minor": 8,
  "catalogs": {
   "base": "https://arkitekt.live/catalogs/base/v4",
   "bundled": {
@@ -13353,6 +13353,506 @@
     },
     "codes": [
      "palette.logo_paint"
+    ]
+   }
+  },
+  {
+   "name": "a panel says what it looks like",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><logo title=\"Scope\"><Circle cx=\"12\" cy=\"12\" r=\"7\" /><Path d=\"M12 5v14\" /></logo><Card><Text text=\"hi\" /></Card></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/logo[0]",
+      "component": "logo",
+      "props": [
+       {
+        "key": "title",
+        "static_value": "Scope"
+       }
+      ],
+      "children": [
+       {
+        "id": "Blok[0]/logo[0]/Circle[0]",
+        "component": "Circle",
+        "props": [
+         {
+          "key": "cx",
+          "static_value": "12"
+         },
+         {
+          "key": "cy",
+          "static_value": "12"
+         },
+         {
+          "key": "r",
+          "static_value": "7"
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/logo[0]/Path[0]",
+        "component": "Path",
+        "props": [
+         {
+          "key": "d",
+          "static_value": "M12 5v14"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card",
+      "children": [
+       {
+        "id": "Blok[0]/Card[0]/Text[0]",
+        "component": "Text",
+        "props": [
+         {
+          "key": "text",
+          "static_value": "hi"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "a custom blok and a scene have a logo too",
+   "source": "<Blok kind=\"custom\" context=\"scene\"><logo><Circle r=\"4\" /></logo><Scene /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "custom"
+     },
+     {
+      "key": "context",
+      "static_value": "scene"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/logo[0]",
+      "component": "logo",
+      "children": [
+       {
+        "id": "Blok[0]/logo[0]/Circle[0]",
+        "component": "Circle",
+        "props": [
+         {
+          "key": "r",
+          "static_value": "4"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Scene[0]",
+      "component": "Scene"
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "a blok's own logo paints with pens",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><logo><Circle r=\"4\" fill=\"#ff0000\" /></logo><Card /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/logo[0]",
+      "component": "logo",
+      "children": [
+       {
+        "id": "Blok[0]/logo[0]/Circle[0]",
+        "component": "Circle",
+        "props": [
+         {
+          "key": "r",
+          "static_value": "4"
+         },
+         {
+          "key": "fill",
+          "static_value": "#ff0000"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card"
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "palette.logo_paint"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "palette.logo_paint"
+    ]
+   }
+  },
+  {
+   "name": "a logo is a child of its blok",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><Card><logo><Circle r=\"4\" /></logo></Card></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card",
+      "children": [
+       {
+        "id": "Blok[0]/Card[0]/logo[0]",
+        "component": "logo",
+        "children": [
+         {
+          "id": "Blok[0]/Card[0]/logo[0]/Circle[0]",
+          "component": "Circle",
+          "props": [
+           {
+            "key": "r",
+            "static_value": "4"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "logo.misplaced"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "logo.misplaced"
+    ]
+   }
+  },
+  {
+   "name": "a blok has one logo",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><logo><Circle r=\"4\" /></logo><logo><Circle r=\"4\" /></logo><Card /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/logo[0]",
+      "component": "logo",
+      "children": [
+       {
+        "id": "Blok[0]/logo[0]/Circle[0]",
+        "component": "Circle",
+        "props": [
+         {
+          "key": "r",
+          "static_value": "4"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/logo[1]",
+      "component": "logo",
+      "children": [
+       {
+        "id": "Blok[0]/logo[1]/Circle[0]",
+        "component": "Circle",
+        "props": [
+         {
+          "key": "r",
+          "static_value": "4"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card"
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "logo.twice"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "logo.twice"
+    ]
+   }
+  },
+  {
+   "name": "a logo blok declares no logo",
+   "source": "<Blok kind=\"agent\" context=\"logo\"><logo><Circle r=\"4\" /></logo><Logo><Circle r=\"4\" /></Logo></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "logo"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/logo[0]",
+      "component": "logo",
+      "children": [
+       {
+        "id": "Blok[0]/logo[0]/Circle[0]",
+        "component": "Circle",
+        "props": [
+         {
+          "key": "r",
+          "static_value": "4"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Logo[0]",
+      "component": "Logo",
+      "children": [
+       {
+        "id": "Blok[0]/Logo[0]/Circle[0]",
+        "component": "Circle",
+        "props": [
+         {
+          "key": "r",
+          "static_value": "4"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "logo.in_logo"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "logo.in_logo"
+    ]
+   }
+  },
+  {
+   "name": "a blok's own logo is a fixed drawing",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><logo><Circle r={viewer.name} /></logo><Card /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/logo[0]",
+      "component": "logo",
+      "children": [
+       {
+        "id": "Blok[0]/logo[0]/Circle[0]",
+        "component": "Circle",
+        "props": [
+         {
+          "key": "r",
+          "dynamic_value": {
+           "path": "viewer.name"
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card"
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "logo.dynamic",
+    "path.unknown"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": [
+     "logo.dynamic",
+     "path.unknown"
     ]
    }
   },

@@ -1810,6 +1810,11 @@ type Blok {
   """
   componentTree: AnyDefault!
 
+  """
+  Whether the blok declares a logo of its own (`<logo>`, a child of its `<Blok>`): what lists, pins and tabs draw for it instead of its context's icon. Read it before asking for the tree, which a list never needs otherwise.
+  """
+  hasLogo: Boolean!
+
   """The typed component tree of this blok."""
   components: [ComponentNode!]!
 
