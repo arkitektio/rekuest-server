@@ -47,9 +47,23 @@ wire_enum!(
         MODEL,
         MEMORY_STRUCTURE,
         INTERFACE,
-        QUANTITY
+        QUANTITY,
+        CALLBACK,
+        ASSET,
+        BINDING
     }
 );
+
+impl PortKind {
+    /// CALLBACK, ASSET, BINDING: only a catalog types a prop by them, never an agent's port.
+    pub fn is_catalog_only(self) -> bool {
+        matches!(
+            self,
+            PortKind::CALLBACK | PortKind::ASSET | PortKind::BINDING
+        )
+    }
+}
+
 wire_enum!(
     /// A blok local's kind: a port kind, or ANY (an untyped value; no action port is ever ANY).
     LocalKind {
@@ -111,6 +125,8 @@ impl From<PortKind> for LocalKind {
             PortKind::MEMORY_STRUCTURE => LocalKind::MEMORY_STRUCTURE,
             PortKind::INTERFACE => LocalKind::INTERFACE,
             PortKind::QUANTITY => LocalKind::QUANTITY,
+            // Never an agent's port (refused at parse): untyped, should one get here.
+            PortKind::CALLBACK | PortKind::ASSET | PortKind::BINDING => LocalKind::ANY,
         }
     }
 }
@@ -182,20 +198,6 @@ wire_enum!(
         DESCRIPTION,
         LOGO,
         VALUE
-    }
-);
-wire_enum!(
-    /// What a catalog component prop accepts, or an operation argument carries.
-    CatalogValueKind {
-        STRING,
-        INT,
-        FLOAT,
-        BOOL,
-        DICT,
-        LIST,
-        ANY,
-        CALLBACK,
-        ASSET
     }
 );
 wire_enum!(

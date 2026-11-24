@@ -27,6 +27,13 @@ class PortKind(str, Enum):
     MEMORY_STRUCTURE = "MEMORY_STRUCTURE"
     INTERFACE = "INTERFACE"
     QUANTITY = "QUANTITY"
+    CALLBACK = "CALLBACK"
+    ASSET = "ASSET"
+    BINDING = "BINDING"
+
+
+CATALOG_ONLY_KINDS = frozenset({PortKind.CALLBACK, PortKind.ASSET, PortKind.BINDING})
+"""Kinds only a catalog types a prop by; no agent port (action, state, local, demand) declares them."""
 
 
 # Per-member SDL descriptions. Set on the strawberry definition rather than via
@@ -47,13 +54,16 @@ _PORT_KIND_DESCRIPTIONS = {
     "MEMORY_STRUCTURE": "A reference to an object that lives in the agent's memory, typed by `identifier` (required). Makes the action LOCAL-scoped. No children.",
     "INTERFACE": "A reference to any object implementing an interface, typed by `identifier` (required). No children.",
     "QUANTITY": "A physical quantity with a unit; `reference_unit` required, `dimension` derived. No children.",
+    "CALLBACK": "A catalog prop that holds a call (onClick); its children are the payload it is called with. Never an agent's port.",
+    "ASSET": "A catalog prop that names a file an app registered (`self.assets.<name>`). No children. Never an agent's port.",
+    "BINDING": "A catalog prop that reads and writes a local (`bind`); its one child, keyed '...', is what it writes. Never an agent's port.",
 }
 for _port_kind_value in PortKind.__strawberry_definition__.values:
     _port_kind_value.description = _PORT_KIND_DESCRIPTIONS[_port_kind_value.name]
 
 
 @strawberry.enum(
-    description="The kind of a blok local: a port kind, or ANY (an untyped value, which skips the bind and argument kind checks). No action port is ever ANY."
+    description="The kind of a blok local: a port kind (never CALLBACK, ASSET or BINDING, which only a catalog types by), or ANY (an untyped value, which skips the bind and argument kind checks). No action port is ever ANY."
 )
 class LocalKind(str, Enum):
     INT = "INT"
@@ -158,21 +168,6 @@ class OptionKey(str, Enum):
     DESCRIPTION = "DESCRIPTION"
     LOGO = "LOGO"
     VALUE = "VALUE"
-
-
-@strawberry.enum(
-    description="The kind of value a catalog component prop accepts or a catalog operation argument/return carries."
-)
-class CatalogValueKind(str, Enum):
-    STRING = "STRING"
-    INT = "INT"
-    FLOAT = "FLOAT"
-    BOOL = "BOOL"
-    DICT = "DICT"
-    LIST = "LIST"
-    ANY = "ANY"
-    CALLBACK = "CALLBACK"
-    ASSET = "ASSET"
 
 
 @strawberry.enum(

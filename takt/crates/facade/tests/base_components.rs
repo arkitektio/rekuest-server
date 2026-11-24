@@ -43,7 +43,7 @@ fn the_orkestrators_registration_never_replaces_the_spec() {
     let tree = vec![parse_bsx_default(PICKER).unwrap()];
     let older = catalog(
         "orkestrator",
-        json!([{"name": "Button", "props": [{"key": "label", "kind": "STRING"}]}]),
+        json!([{"name": "Button", "props": [{"key": "label", "port": {"kind": "STRING"}}]}]),
     );
     let found = validate_blok_against_catalog(&older, Some(&tree), &agent())
         .unwrap()
@@ -57,7 +57,7 @@ fn what_a_module_registered_is_not_read() {
     // Its Button takes no label: that is the catalog's to say, to whoever draws the blok.
     let mine = catalog(
         "mine",
-        json!([{"name": "Button", "props": [{"key": "tone", "kind": "STRING"}]}]),
+        json!([{"name": "Button", "props": [{"key": "tone", "port": {"kind": "STRING"}}]}]),
     );
     let found = validate_blok_against_catalog(&mine, Some(&tree), &agent())
         .unwrap()

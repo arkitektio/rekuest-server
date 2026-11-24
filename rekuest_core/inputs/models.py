@@ -1157,8 +1157,17 @@ _CHOICE_KINDS = {
 }
 
 
+def reject_catalog_only_kind(kind: object, owner: str) -> None:
+    """Refuse CALLBACK, ASSET and BINDING on an agent's port (``port.catalog_only``)."""
+    if kind in enums.CATALOG_ONLY_KINDS:
+        raise ValueError(
+            f"{owner} is a {kind.value} port: CALLBACK, ASSET and BINDING type a catalog's props, never an action's, a state's or a local's (port.catalog_only)"  # type: ignore[attr-defined]
+        )
+
+
 def _check_port_shape(port: "PortInputModel") -> None:
     """The per-kind structure table: children, identifier and choices."""
+    reject_catalog_only_kind(port.kind, f"Port {port.key!r}")
     owner = f"Port {port.key!r} of kind {port.kind.value}"
     children = port.children or []
 
@@ -1425,6 +1434,11 @@ class PortMatchInputModel(BaseModel):
     children: list["PortMatchInputModel"] | None = Field(
         default=None, description="The matches for the children of the port to match."
     )
+
+    @model_validator(mode="after")
+    def _no_catalog_only_kind(self) -> "PortMatchInputModel":
+        reject_catalog_only_kind(self.kind, f"Port match {self.key or self.at!r}")
+        return self
 
 
 class ActionDemandInputModel(BaseModel):
@@ -3146,6 +3160,7 @@ class WidgetDefaultInputModel(BaseModel):
     @model_validator(mode="after")
     def check_selector_and_widget(self) -> "WidgetDefaultInputModel":
         """A default needs something to match on and something to render."""
+        reject_catalog_only_kind(self.kind, "WidgetDefault")
         if self.kind is None and self.identifier is None:
             raise ValueError(
                 "WidgetDefault needs a kind and/or an identifier to match ports on"
@@ -3178,22 +3193,109 @@ ImplementationInputModel.model_rebuild()
 # ============================================================================
 # UI catalog registry: what a UI app can render (components) and evaluate (operations)
 # ============================================================================
-class CatalogEventFieldInputModel(BaseModel):
-    key: str = Field(
-        min_length=1, description="The field a callback reads as `event.<key>`."
+class CatalogChoiceInputModel(BaseModel):
+    value: JsonValue = Field(
+        description="The value (any JSON value fitting the port's kind)."
     )
-    kind: enums.CatalogValueKind = Field(description="The value kind of the field.")
-    description: str | None = Field(
-        default=None, description="Human-readable description of the field."
+    label: str | None = Field(default=None, description="How it is shown.")
+    description: str | None = Field(default=None, description="What it means.")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+OPEN_IDENTIFIER = "*"
+"""A catalog port's identifier for any structure (catalog-only)."""
+_CATALOG_IDENTIFIED = _IDENTIFIED_KINDS
+_CATALOG_LEAVES = {
+    enums.PortKind.INT,
+    enums.PortKind.STRING,
+    enums.PortKind.BOOL,
+    enums.PortKind.FLOAT,
+    enums.PortKind.DATE,
+    enums.PortKind.ENUM,
+    enums.PortKind.QUANTITY,
+    enums.PortKind.ASSET,
+    *_IDENTIFIED_KINDS,
+}
+
+
+class CatalogPortInputModel(BaseModel):
+    """The port a catalog types a prop, an operation argument or a result by: an action's
+    port plus the catalog-only kinds (CALLBACK, ASSET, BINDING) and the open identifier ``*``.
+    ``kind`` None is open: any value."""
+
+    kind: enums.PortKind | None = Field(
+        default=None, description="Its kind; none: open (any value)."
     )
+    identifier: str | None = Field(
+        default=None,
+        description="STRUCTURE, MEMORY_STRUCTURE, INTERFACE: what it references (`*`: any).",
+    )
+    nullable: bool = Field(default=False, description="Whether it takes null.")
+    choices: list[CatalogChoiceInputModel] | None = Field(
+        default=None, description="The values it takes (required for ENUM)."
+    )
+    children: list["CatalogChildPortInputModel"] | None = Field(
+        default=None,
+        description="LIST/BINDING: its one item, keyed '...'; DICT/MODEL: its fields; UNION: its variants; CALLBACK: its payload.",
+    )
+    default: JsonValue = Field(default=None, description="Its default value.")
+    reference_unit: str | None = Field(
+        default=None, description="For a QUANTITY: its reference unit."
+    )
+    proposed_units: list[str] | None = Field(
+        default=None, description="For a QUANTITY: the units offered."
+    )
+    dimension: str | None = Field(
+        default=None, description="For a QUANTITY: its dimensionality."
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def check_shape(self) -> "CatalogPortInputModel":
+        """What its kind needs (the spec's ``check_shape``)."""
+        check_catalog_port_shape(self, getattr(self, "key", None) or "port")
+        return self
+
+
+class CatalogChildPortInputModel(CatalogPortInputModel):
+    """A port below another: an item (``...``), a field, a variant, a payload field."""
+
+    key: str = Field(min_length=1, description="Its key (may be `value`).")
+    description: str | None = Field(default=None, description="What it is.")
+
+
+def check_catalog_port_shape(port: CatalogPortInputModel, where: str) -> None:
+    """Children, identifier and choices as the kind needs them; an open port needs nothing."""
+    kind = port.kind
+    if kind is None:
+        return
+    children = port.children or []
+    count = len(children)
+    owner = f"{where}: a {kind.value} port"
+    if kind in _CATALOG_LEAVES and count:
+        raise ValueError(f"{owner} has no children")
+    if kind in _CATALOG_IDENTIFIED and not port.identifier:
+        raise ValueError(f"{owner} names its identifier")
+    if kind == enums.PortKind.ENUM and not port.choices:
+        raise ValueError(f"{owner} lists its choices")
+    if kind == enums.PortKind.LIST and count != 1:
+        raise ValueError(f"{owner} has exactly one child, its item")
+    if kind in (enums.PortKind.DICT, enums.PortKind.MODEL) and count == 0:
+        raise ValueError(f"{owner} has children")
+    if kind == enums.PortKind.UNION and count < 2:
+        raise ValueError(f"{owner} has at least two variants")
+    if kind == enums.PortKind.BINDING and (count != 1 or children[0].key != ITEM_KEY):
+        raise ValueError(f"{owner} has one child, keyed '...': the value it writes")
+    keys = [child.key for child in children]
+    if kind != enums.PortKind.UNION and len(set(keys)) != len(keys):
+        raise ValueError(f"{owner}: child keys repeat")
 
 
 class CatalogPropInputModel(BaseModel):
     key: str = Field(
         min_length=1, description="The prop key a ComponentProp.key must match."
-    )
-    kind: enums.CatalogValueKind = Field(
-        description="The value kind this prop accepts. CALLBACK props hold one task call or one effect. On `bind`, the kind the control writes (`locals.bind_kinds`)."
     )
     required: bool = Field(
         default=False,
@@ -3202,10 +3304,15 @@ class CatalogPropInputModel(BaseModel):
     description: str | None = Field(
         default=None, description="Human-readable description of the prop."
     )
-    event: list[CatalogEventFieldInputModel] | None = Field(
-        default=None,
-        description="For a CALLBACK prop: the fields of the event it hands its callback (`event.<key>`); none when it hands none.",
+    since: int = Field(
+        default=0, description="The catalog minor that added it; 0: from the start."
     )
+    port: CatalogPortInputModel | None = Field(
+        default=None,
+        description="What it takes; none: open (the language's own props). CALLBACK props hold one task call or one effect; `bind` is a BINDING.",
+    )
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class CatalogComponentInputModel(BaseModel):
@@ -3263,13 +3370,17 @@ class CatalogArgumentInputModel(BaseModel):
     key: str = Field(
         min_length=1, description="The argument key a UtilCall argument must use."
     )
-    kind: enums.CatalogValueKind = Field(description="The value kind of the argument.")
+    port: CatalogPortInputModel | None = Field(
+        default=None, description="What it takes; none: open (any value)."
+    )
     required: bool = Field(
         default=True, description="Whether every call must pass this argument."
     )
     description: str | None = Field(
         default=None, description="Human-readable description of the argument."
     )
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class CatalogOperationInputModel(BaseModel):
@@ -3282,12 +3393,18 @@ class CatalogOperationInputModel(BaseModel):
     arguments: list[CatalogArgumentInputModel] = Field(
         default_factory=list, description="The arguments the operation accepts."
     )
-    returns: enums.CatalogValueKind = Field(
-        description="The kind of value the operation returns (BOOL for effect and validator calls)."
+    returns: CatalogPortInputModel | None = Field(
+        default=None,
+        description="What it returns (BOOL for effect and validator calls); none: open.",
     )
+
+    model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
     def check_unique_arguments(self) -> "CatalogOperationInputModel":
         """Argument keys are unique per operation."""
         _check_unique(self.arguments, "key", f"catalog operation {self.name}")
         return self
+
+
+CatalogPortInputModel.model_rebuild()

@@ -16958,6 +16958,125 @@
   "error": "Widget PROXY in port s names undeclared agent dependency 'd'",
   "error_type": "value_error"
  },
+ "callback argument": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [
+       {
+        "key": "on",
+        "kind": "CALLBACK"
+       }
+      ],
+      "returns": []
+     }
+    }
+   ]
+  },
+  "error": "Port 'on' is a CALLBACK port: CALLBACK, ASSET and BINDING type a catalog's props, never an action's, a state's or a local's (port.catalog_only)",
+  "error_type": "value_error"
+ },
+ "binding inside a return": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": [
+       {
+        "key": "l",
+        "kind": "LIST",
+        "children": [
+         {
+          "key": "...",
+          "kind": "BINDING",
+          "children": [
+           {
+            "key": "...",
+            "kind": "STRING"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "error": "Port '...' is a BINDING port: CALLBACK, ASSET and BINDING type a catalog's props, never an action's, a state's or a local's (port.catalog_only)",
+  "error_type": "value_error"
+ },
+ "asset in a demand's match": {
+  "input": {
+   "implementations": [
+    {
+     "interface": "act",
+     "definition": {
+      "key": "act",
+      "name": "Act",
+      "kind": "FUNCTION",
+      "args": [],
+      "returns": []
+     },
+     "dependencies": [
+      {
+       "key": "d",
+       "action_dependencies": [
+        {
+         "key": "a",
+         "demand": {
+          "arg_matches": [
+           {
+            "key": "f",
+            "kind": "LIST",
+            "children": [
+             {
+              "kind": "ASSET"
+             }
+            ]
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "error": "Port match None is a ASSET port: CALLBACK, ASSET and BINDING type a catalog's props, never an action's, a state's or a local's (port.catalog_only)",
+  "error_type": "value_error"
+ },
+ "state of a callback port": {
+  "input": {
+   "states": [
+    {
+     "interface": "s",
+     "definition": {
+      "name": "s",
+      "ports": [
+       {
+        "key": "on",
+        "kind": "CALLBACK"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "error": "Port 'on' is a CALLBACK port: CALLBACK, ASSET and BINDING type a catalog's props, never an action's, a state's or a local's (port.catalog_only)",
+  "error_type": "value_error"
+ },
  "asset held by the agent": {
   "input": {
    "assets": [
@@ -18416,6 +18535,78 @@
    ]
   },
   "error": "local-form: local 'form': its port is no valid port (local 'form': its port is no valid port: Value error, Port 'form' of kind DICT must have at least 1 children, got 0. [local.attribute]). [local.attribute]",
+  "error_type": "value_error"
+ },
+ "blok with a binding in a local": {
+  "input": {
+   "bloks": [
+    {
+     "key": "inspector",
+     "vocab": 2,
+     "components": [
+      {
+       "id": "Blok[0]",
+       "component": "Blok",
+       "props": [
+        {
+         "key": "kind",
+         "static_value": "agent"
+        },
+        {
+         "key": "context",
+         "static_value": "panel"
+        }
+       ],
+       "children": [
+        {
+         "id": "local-form",
+         "component": "local",
+         "props": [
+          {
+           "key": "name",
+           "static_value": "form",
+           "declares_value": "form"
+          },
+          {
+           "key": "kind",
+           "static_value": "LIST"
+          },
+          {
+           "key": "children",
+           "static_value": [
+            {
+             "key": "...",
+             "kind": "BINDING",
+             "children": [
+              {
+               "key": "...",
+               "kind": "STRING"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "Box[0]",
+         "component": "Box",
+         "props": [
+          {
+           "key": "label",
+           "dynamic_value": {
+            "path": "args.image"
+           }
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "error": "local-form: local 'form': its port is no valid port (local 'form': its port is no valid port: Value error, Port '...' is a BINDING port: CALLBACK, ASSET and BINDING type a catalog's props, never an action's, a state's or a local's (port.catalog_only). [local.attribute]). [local.attribute]",
   "error_type": "value_error"
  },
  "blok with a local after its content": {

@@ -346,18 +346,38 @@ OptimisticModel.model_rebuild()
 # ============================================================================
 # UI catalog registry
 # ============================================================================
-class CatalogEventFieldModel(BaseModel):
-    key: str
-    kind: enums.CatalogValueKind
+class CatalogChoiceModel(BaseModel):
+    value: JsonValue
+    label: str | None = None
     description: str | None = None
+
+
+class CatalogPortModel(BaseModel):
+    kind: enums.PortKind | None = None
+    identifier: str | None = None
+    nullable: bool = False
+    choices: list[CatalogChoiceModel] | None = None
+    children: list["CatalogChildPortModel"] | None = None
+    default: JsonValue = None
+    reference_unit: str | None = None
+    proposed_units: list[str] | None = None
+    dimension: str | None = None
+
+
+class CatalogChildPortModel(CatalogPortModel):
+    key: str
+    description: str | None = None
+
+
+CatalogPortModel.model_rebuild()
 
 
 class CatalogPropModel(BaseModel):
     key: str
-    kind: enums.CatalogValueKind
     required: bool = False
     description: str | None = None
-    event: list[CatalogEventFieldModel] | None = None
+    since: int = 0
+    port: CatalogPortModel | None = None
 
 
 class CatalogComponentModel(BaseModel):
@@ -376,7 +396,7 @@ class CatalogComponentModel(BaseModel):
 
 class CatalogArgumentModel(BaseModel):
     key: str
-    kind: enums.CatalogValueKind
+    port: CatalogPortModel | None = None
     required: bool = True
     description: str | None = None
 
@@ -385,7 +405,7 @@ class CatalogOperationModel(BaseModel):
     name: str
     description: str | None = None
     arguments: list[CatalogArgumentModel] = []
-    returns: enums.CatalogValueKind
+    returns: CatalogPortModel | None = None
 
 
 class BlokLocalModel(BaseModel):

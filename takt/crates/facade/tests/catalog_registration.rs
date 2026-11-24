@@ -10,7 +10,7 @@ use rekuest_core::inputs::ImplementAgentInputModel;
 use serde_json::{json, Value};
 use sqlx::PgPool;
 
-const CLAMP: &str = r#"{"name": "clamp", "arguments": [{"key": "a", "kind": "FLOAT"}, {"key": "b", "kind": "FLOAT"}], "returns": "FLOAT"}"#;
+const CLAMP: &str = r#"{"name": "clamp", "arguments": [{"key": "a", "port": {"kind": "FLOAT"}}, {"key": "b", "port": {"kind": "FLOAT"}}], "returns": {"kind": "FLOAT"}}"#;
 
 struct Tenant {
     db: PgPool,
@@ -292,7 +292,7 @@ async fn agent_declared_bloks_are_held_to_the_language_not_to_their_catalog() {
     t.catalog(
         "electron",
         json!([]),
-        json!([{"name": "Box", "props": [{"key": "v", "kind": "ANY"}]}]),
+        json!([{"name": "Box", "props": [{"key": "v", "port": null}]}]),
     )
     .await;
     let knob = json!([{"key": "panel", "vocab": 2, "module": "electron", "components": [
@@ -683,7 +683,7 @@ async fn multiple_catalogs_are_unioned_with_base() {
     .await;
     t.catalog(
         "web",
-        json!([{"name": "fmt", "arguments": [{"key": "a", "kind": "ANY"}, {"key": "b", "kind": "ANY"}], "returns": "STRING"}]),
+        json!([{"name": "fmt", "arguments": [{"key": "a", "port": null}, {"key": "b", "port": null}], "returns": {"kind": "STRING"}}]),
         json!([]),
     )
     .await;
@@ -717,7 +717,7 @@ async fn conflicting_catalogs_are_a_finding_and_identical_ones_tolerated() {
         .await;
     t.catalog("twin", json!([clamp.clone()]), json!([])).await;
     let mut rival = clamp.clone();
-    rival["arguments"] = json!([{"key": "v", "kind": "FLOAT"}]);
+    rival["arguments"] = json!([{"key": "v", "port": {"kind": "FLOAT"}}]);
     t.catalog("rival", json!([rival]), json!([])).await;
     assert!(t
         .register(call(&["electron", "twin"], "clamp"))
@@ -779,7 +779,7 @@ async fn a_custom_widget_component_is_checked_once_the_catalog_registers_compone
     t.catalog(
         "electron",
         json!([]),
-        json!([{"name": "Knob", "props": [{"key": "value", "kind": "FLOAT"}]}]),
+        json!([{"name": "Knob", "props": [{"key": "value", "port": {"kind": "FLOAT"}}]}]),
     )
     .await;
     assert!(t
@@ -1281,7 +1281,7 @@ async fn a_blok_may_be_registered_as_its_bsx_source() {
     t.catalog(
         "electron",
         json!([]),
-        json!([{"name": "Frame"}, {"name": "Caption", "accepts_children": false, "props": [{"key": "text", "kind": "STRING"}]}]),
+        json!([{"name": "Frame"}, {"name": "Caption", "accepts_children": false, "props": [{"key": "text", "port": {"kind": "STRING"}}]}]),
     )
     .await;
     let stored = || async {

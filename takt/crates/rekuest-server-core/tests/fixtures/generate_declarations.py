@@ -109,6 +109,38 @@ BROKEN = {
     "protocol hint empty": impl(protocols=[""]),
     "protocol hint twice": impl(protocols=["on_scene_init", "on_scene_init"]),
     "proxy undeclared dependency": impl(args=[port("s", "STRING", widget={"kind": "PROXY", "target_port": "p", "target_action": "a", "target_dependency": "d"})]),
+    "callback argument": impl(args=[port("on", "CALLBACK")]),
+    "binding inside a return": impl(
+        returns=[
+            port(
+                "l",
+                "LIST",
+                children=[port("...", "BINDING", children=[port("...", "STRING")])],
+            )
+        ]
+    ),
+    "asset in a demand's match": {
+        **impl(),
+        "dependencies": [
+            {
+                "key": "d",
+                "action_dependencies": [
+                    {
+                        "key": "a",
+                        "demand": {
+                            "arg_matches": [
+                                {
+                                    "key": "f",
+                                    "kind": "LIST",
+                                    "children": [{"kind": "ASSET"}],
+                                }
+                            ]
+                        },
+                    }
+                ],
+            }
+        ],
+    },
 }
 
 VALID_EXTRA = {
@@ -236,6 +268,19 @@ BLOKS = {
     "blok with a local of no kind": blok(local("zoom", default=1)),
     "blok with a local whose default does not fit": blok(local("zoom", kind="INT", default="1")),
     "blok with a local of a bad shape": blok(local("form", kind="DICT")),
+    "blok with a binding in a local": blok(
+        local(
+            "form",
+            kind="LIST",
+            children=[
+                {
+                    "key": "...",
+                    "kind": "BINDING",
+                    "children": [{"key": "...", "kind": "STRING"}],
+                }
+            ],
+        )
+    ),
     "blok with a local after its content": {"key": "inspector", "vocab": 2, "components": root("agent", "panel", BOX, local("zoom", kind="INT"))},
     "blok with a local out of scope": {"key": "inspector", "vocab": 2, "components": root("agent", "panel", {"id": "Card[0]", "component": "Card", "children": [local("open", default=False)]}, text("open"))},
     "blok with a catalog badly spelled": blok(catalogs=["ui"]),
@@ -341,6 +386,17 @@ for name, declaration in json.loads((HERE / "app_declarations.json").read_text()
     cases[f"app {name}"] = record(declaration)
 for name, implementation in {**VALID_EXTRA, **BROKEN}.items():
     cases[name] = record({"implementations": [implementation]})
+
+cases["state of a callback port"] = record(
+    {
+        "states": [
+            {
+                "interface": "s",
+                "definition": {"name": "s", "ports": [port("on", "CALLBACK")]},
+            }
+        ]
+    }
+)
 
 for name, declared in ASSETS.items():
     cases[name] = record({"assets": [declared]})

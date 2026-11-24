@@ -20,8 +20,8 @@ REGISTER_UI_CATALOG = """
             name
             description
             isRegistered
-            components { name props { key kind required } acceptsChildren }
-            operations { name arguments { key kind required } returns }
+            components { name props { key required port { kind children { key kind } tree } } acceptsChildren }
+            operations { name arguments { key required port { kind } } returns { kind } }
         }
     }
 """
@@ -36,8 +36,14 @@ CATALOG = {
         {
             "name": "Dial",
             "props": [
-                {"key": "value", "kind": "FLOAT", "required": True},
-                {"key": "onChange", "kind": "CALLBACK"},
+                {"key": "value", "port": {"kind": "FLOAT"}, "required": True},
+                {
+                    "key": "onChange",
+                    "port": {
+                        "kind": "CALLBACK",
+                        "children": [{"key": "value", "kind": "FLOAT"}],
+                    },
+                },
             ],
             "acceptsChildren": False,
         },
@@ -46,18 +52,21 @@ CATALOG = {
     "operations": [
         {
             "name": "clamp",
-            "arguments": [{"key": "a", "kind": "FLOAT"}, {"key": "b", "kind": "FLOAT"}],
-            "returns": "FLOAT",
+            "arguments": [
+                {"key": "a", "port": {"kind": "FLOAT"}},
+                {"key": "b", "port": {"kind": "FLOAT"}},
+            ],
+            "returns": {"kind": "FLOAT"},
         },
         {
             "name": "fmt.dial",
-            "arguments": [{"key": "v", "kind": "ANY"}],
-            "returns": "STRING",
+            "arguments": [{"key": "v", "port": None}],
+            "returns": {"kind": "STRING"},
         },
     ],
 }
 
-BASE_CATALOG = "query { baseCatalog { name version operations { name returns arguments { key kind required } } } }"
+BASE_CATALOG = "query { baseCatalog { name version operations { name returns { kind } arguments { key required port { kind } } } } }"
 
 
 async def _blok_diagnostics(name: str = "catalogued") -> list[dict]:
@@ -144,12 +153,18 @@ class TestUiCatalog:
         first = await _register(authenticated_context)
         assert first["isRegistered"] is True
         assert {c["name"] for c in first["components"]} == {"Dial", "Frame"}
-        assert first["components"][0]["props"][0] == {
+        value, on_change = first["components"][0]["props"]
+        assert value == {
             "key": "value",
-            "kind": "FLOAT",
             "required": True,
+            "port": {"kind": "FLOAT", "children": None, "tree": {"kind": "FLOAT"}},
         }
-        assert first["operations"][0]["returns"] == "FLOAT"
+        assert on_change["port"]["tree"] == {
+            "kind": "CALLBACK",
+            "children": [{"key": "value", "kind": "FLOAT"}],
+        }
+        assert first["operations"][0]["returns"] == {"kind": "FLOAT"}
+        assert first["operations"][1]["arguments"][0]["port"] is None
 
         second = await _register(
             authenticated_context,
@@ -672,7 +687,7 @@ class TestUiCatalog:
                     {"name": "Frame"},
                     {
                         "name": "Caption",
-                        "props": [{"key": "text", "kind": "STRING"}],
+                        "props": [{"key": "text", "port": {"kind": "STRING"}}],
                         "acceptsChildren": False,
                     },
                 ],
@@ -935,7 +950,9 @@ class TestUiCatalog:
             variable_values={
                 "input": {
                     **CATALOG,
-                    "operations": [{"name": "gt", "arguments": [], "returns": "BOOL"}],
+                    "operations": [
+                        {"name": "gt", "arguments": [], "returns": {"kind": "BOOL"}}
+                    ],
                 }
             },
         )
@@ -952,7 +969,7 @@ class TestUiCatalog:
         base = result.data["baseCatalog"]
         assert base["name"] == "base" and base["version"] == 1
         gt = next(op for op in base["operations"] if op["name"] == "gt")
-        assert gt["returns"] == "BOOL"
+        assert gt["returns"] == {"kind": "BOOL"}
         assert [a["key"] for a in gt["arguments"]] == ["a", "b"]
         len_between = next(
             op for op in base["operations"] if op["name"] == "len_between"
@@ -1263,7 +1280,15 @@ class TestResolvedBloks:
                 "components": [
                     {
                         "name": "Slider",
-                        "props": [{"key": "bind", "kind": "STRING"}],
+                        "props": [
+                            {
+                                "key": "bind",
+                                "port": {
+                                    "kind": "BINDING",
+                                    "children": [{"key": "...", "kind": "STRING"}],
+                                },
+                            }
+                        ],
                         "acceptsChildren": False,
                     }
                 ],

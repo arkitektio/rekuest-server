@@ -135,7 +135,9 @@ _OPAQUE_KINDS = frozenset({"STRUCTURE", "MEMORY_STRUCTURE", "INTERFACE", "UNION"
 
 Match = PortMatchInputModel | None
 
-_KINDS = {kind.value: kind for kind in enums.PortKind}
+_KINDS = {
+    kind.value: kind for kind in enums.PortKind if kind not in enums.CATALOG_ONLY_KINDS
+}
 RETURNS_FIELD = "returns"
 _UNNAMED_RETURN = re.compile(r"return[0-9]+")
 
@@ -298,14 +300,6 @@ def _colour_pattern(vocabulary: Vocabulary) -> re.Pattern[str]:
 _ARBITRARY_COLOUR = re.compile(
     r"^(?P<utility>bg|text|border|ring|fill|stroke|from|via|to|outline|decoration|shadow)-\[(#|rgb|hsl|oklch|color)"
 )
-LITERAL_KINDS = (
-    enums.CatalogValueKind.BOOL,
-    enums.CatalogValueKind.INT,
-    enums.CatalogValueKind.FLOAT,
-)
-"""Prop kinds a string literal never fits: ``fullWidth="true"`` is the string, write ``fullWidth={true}``."""
-CALLBACK_KIND = enums.CatalogValueKind.CALLBACK
-ASSET_KIND = enums.CatalogValueKind.ASSET
 
 
 RUN_KINDS = ("action", "assign")

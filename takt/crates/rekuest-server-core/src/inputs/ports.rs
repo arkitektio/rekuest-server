@@ -794,6 +794,19 @@ fn check_unique<'a>(
     Ok(())
 }
 
+/// Refuse CALLBACK, ASSET and BINDING on an agent's port (`port.catalog_only`).
+pub fn reject_catalog_only_kind(
+    kind: Option<PortKind>,
+    owner: &str,
+) -> Result<(), ValidationError> {
+    match kind {
+        Some(kind) if kind.is_catalog_only() => Err(ValidationError(format!(
+            "{owner} is a {kind} port: CALLBACK, ASSET and BINDING type a catalog's props, never an action's, a state's or a local's (port.catalog_only)"
+        ))),
+        _ => Ok(()),
+    }
+}
+
 pub fn check_unique_keys<'a>(
     keys: impl Iterator<Item = &'a str>,
     owner: &str,
@@ -818,6 +831,7 @@ impl PortCommon<'_> {
             effect.validate()?;
         }
         check_port_key(self.key, "Port")?;
+        reject_catalog_only_kind(Some(self.kind), &format!("Port {}", repr_str(self.key)))?;
 
         let owner = format!("Port {} of kind {}", repr_str(self.key), self.kind);
         let bounds = match self.kind {

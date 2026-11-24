@@ -969,13 +969,50 @@ class ActionBlokInput:
 
 
 @pydantic.input(
-    models.CatalogEventFieldInputModel,
-    description="A field of the event a CALLBACK prop hands its callback (`event.<key>`).",
+    models.CatalogChoiceInputModel, description="A value a catalog port takes."
 )
-class CatalogEventFieldInput:
-    key: str
-    kind: enums.CatalogValueKind
+class CatalogChoiceInput:
+    value: scalars.AnyDefault
+    label: str | None = None
     description: str | None = None
+
+
+@pydantic.input(
+    models.CatalogPortInputModel,
+    description="The port a catalog types a prop, an operation argument or a result by: an action's port, plus CALLBACK, ASSET and BINDING and the open identifier `*`. No kind: open (any value).",
+)
+class CatalogPortInput:
+    kind: enums.PortKind | None = None
+    identifier: str | None = None
+    nullable: bool = False
+    choices: list[CatalogChoiceInput] | None = None
+    children: (
+        list[Annotated["CatalogChildPortInput", strawberry.lazy(__name__)]] | None
+    ) = None
+    default: scalars.AnyDefault | None = None
+    reference_unit: str | None = None
+    proposed_units: list[str] | None = None
+    dimension: str | None = None
+
+
+@pydantic.input(
+    models.CatalogChildPortInputModel,
+    description="A catalog port below another: an item ('...'), a field, a variant, a payload field.",
+)
+class CatalogChildPortInput:
+    key: str
+    description: str | None = None
+    kind: enums.PortKind | None = None
+    identifier: str | None = None
+    nullable: bool = False
+    choices: list[CatalogChoiceInput] | None = None
+    children: (
+        list[Annotated["CatalogChildPortInput", strawberry.lazy(__name__)]] | None
+    ) = None
+    default: scalars.AnyDefault | None = None
+    reference_unit: str | None = None
+    proposed_units: list[str] | None = None
+    dimension: str | None = None
 
 
 @pydantic.input(
@@ -983,10 +1020,10 @@ class CatalogEventFieldInput:
 )
 class CatalogPropInput:
     key: str
-    kind: enums.CatalogValueKind
     required: bool = False
     description: str | None = None
-    event: list[CatalogEventFieldInput] | None = None
+    since: int = 0
+    port: CatalogPortInput | None = None
 
 
 @pydantic.input(
@@ -1013,7 +1050,7 @@ class CatalogComponentInput:
 )
 class CatalogArgumentInput:
     key: str
-    kind: enums.CatalogValueKind
+    port: CatalogPortInput | None = None
     required: bool = True
     description: str | None = None
 
@@ -1026,7 +1063,7 @@ class CatalogOperationInput:
     name: str
     description: str | None = None
     arguments: list[CatalogArgumentInput] = strawberry.field(default_factory=list)
-    returns: enums.CatalogValueKind
+    returns: CatalogPortInput | None = None
 
 
 @pydantic.input(

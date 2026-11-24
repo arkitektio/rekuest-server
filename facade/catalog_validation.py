@@ -293,9 +293,12 @@ def _check_component(
     for prop in node.props or []:
         prop_owner = f"prop {prop.key!r} of {owner}"
         if spec is not None:
-            kind = next((p.kind for p in spec.props if p.key == prop.key), None)
+            kind = next(
+                (p.port.kind for p in spec.props if p.key == prop.key and p.port),
+                None,
+            )
             if (
-                kind == enums.CatalogValueKind.CALLBACK
+                kind == enums.PortKind.CALLBACK
                 and prop.agent_call is None
                 and prop.util_call is None
             ):
@@ -314,12 +317,12 @@ def _check_component(
 
 
 def _check_asset_prop(
-    kind: enums.CatalogValueKind | None,
+    kind: enums.PortKind | None,
     prop: rimodels.ComponentPropInputModel,
     prop_owner: str,
 ) -> None:
     """An ASSET prop names a file an app registered: it is bound to ``<dependency>.assets.<name>``."""
-    if kind != enums.CatalogValueKind.ASSET:
+    if kind != enums.PortKind.ASSET:
         return
     path = prop.dynamic_value.path if prop.dynamic_value is not None else None
     if path is None or rimodels.blok_asset_path(path) is None:

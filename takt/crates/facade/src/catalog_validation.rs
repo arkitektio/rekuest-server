@@ -17,7 +17,7 @@ use rekuest_core::blok::{check_blok, BlokScope, Finding};
 use rekuest_core::catalogs::{
     base_components, base_operations, base_version_named, BASE_CATALOG_ID, BASE_CATALOG_VERSION,
 };
-use rekuest_core::enums::CatalogValueKind;
+use rekuest_core::enums::PortKind;
 use rekuest_core::inputs::{
     blok_asset_path, iter_component_nodes, iter_util_calls, ArgPortInputModel,
     AssignWidgetInputModel, CatalogComponentInputModel, CatalogOperationInputModel,
@@ -414,8 +414,9 @@ fn check_component(
                 .props
                 .iter()
                 .find(|p| p.key == prop.key)
-                .map(|p| p.kind);
-            if kind == Some(CatalogValueKind::CALLBACK)
+                .and_then(|p| p.port.as_ref())
+                .and_then(|port| port.kind);
+            if kind == Some(PortKind::CALLBACK)
                 && prop.agent_call.is_none()
                 && prop.util_call.is_none()
             {
@@ -442,11 +443,11 @@ fn check_component(
 /// An ASSET prop names a file an app registered: it is bound to `<dependency>.assets.<name>`
 /// (`_check_asset_prop`).
 fn check_asset_prop(
-    kind: Option<CatalogValueKind>,
+    kind: Option<PortKind>,
     prop: &ComponentPropInputModel,
     prop_owner: &str,
 ) -> Result<(), String> {
-    if kind != Some(CatalogValueKind::ASSET) {
+    if kind != Some(PortKind::ASSET) {
         return Ok(());
     }
     let named = prop

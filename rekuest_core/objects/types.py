@@ -1,6 +1,6 @@
 import dataclasses
 import datetime
-from typing import Annotated
+from typing import Annotated, cast
 
 import strawberry
 import strawberry_django
@@ -572,6 +572,104 @@ class ComponentNode:
     )
 
 
+@pydantic.type(models.CatalogChoiceModel, description="A value a catalog port takes.")
+class CatalogChoice:
+    value: scalars.AnyDefault = strawberry.field(description="The value.")
+    label: str | None = strawberry.field(default=None, description="How it is shown.")
+    description: str | None = strawberry.field(
+        default=None, description="What it means."
+    )
+
+
+def catalog_port_tree(port: object) -> dict[str, object]:
+    """A port as a catalog writes it (camelCase, empty fields left out), children at every depth."""
+    kind = getattr(port, "kind", None)
+    out: dict[str, object] = {"kind": kind.value if kind is not None else None}
+    if getattr(port, "identifier", None):
+        out["identifier"] = port.identifier  # type: ignore[attr-defined]
+    if getattr(port, "nullable", False):
+        out["nullable"] = True
+    choices = getattr(port, "choices", None)
+    if choices is not None:
+        out["choices"] = [
+            {
+                name: value
+                for name in ("value", "label", "description")
+                if (value := getattr(choice, name)) is not None
+            }
+            for choice in choices
+        ]
+    children = getattr(port, "children", None)
+    if children:
+        out["children"] = [
+            {
+                "key": child.key,
+                **catalog_port_tree(child),
+                **({"description": child.description} if child.description else {}),
+            }
+            for child in children
+        ]
+    if getattr(port, "default", None) is not None:
+        out["default"] = port.default  # type: ignore[attr-defined]
+    if getattr(port, "reference_unit", None):
+        out["referenceUnit"] = port.reference_unit  # type: ignore[attr-defined]
+    if getattr(port, "proposed_units", None):
+        out["proposedUnits"] = list(port.proposed_units)  # type: ignore[attr-defined]
+    if getattr(port, "dimension", None):
+        out["dimension"] = port.dimension  # type: ignore[attr-defined]
+    return out
+
+
+@pydantic.type(
+    models.CatalogPortModel,
+    description="The port a catalog types a prop, an operation argument or a result by: an action's port, plus CALLBACK, ASSET and BINDING and the open identifier `*`. No kind: open (any value).",
+)
+class CatalogPort:
+    kind: enums.PortKind | None = strawberry.field(
+        default=None, description="Its kind; none: open (any value)."
+    )
+    identifier: str | None = strawberry.field(
+        default=None, description="What a STRUCTURE references (`*`: any)."
+    )
+    nullable: bool = strawberry.field(description="Whether it takes null.")
+    choices: list[CatalogChoice] | None = strawberry.field(
+        default=None, description="The values it takes."
+    )
+    children: list[Annotated["CatalogChildPort", strawberry.lazy(__name__)]] | None = (
+        strawberry.field(
+            default=None,
+            description="LIST/BINDING: its item ('...'); DICT/MODEL: its fields; UNION: its variants; CALLBACK: its payload.",
+        )
+    )
+    default: scalars.AnyDefault | None = strawberry.field(
+        default=None, description="Its default value."
+    )
+    reference_unit: str | None = strawberry.field(
+        default=None, description="For a QUANTITY: its reference unit."
+    )
+    proposed_units: list[str] | None = strawberry.field(
+        default=None, description="For a QUANTITY: the units offered."
+    )
+    dimension: str | None = strawberry.field(
+        default=None, description="For a QUANTITY: its dimensionality."
+    )
+
+    @strawberry.field(
+        description="The whole port, children at every depth, as a catalog writes it (camelCase, empty fields left out): what a client compares a catalog by."
+    )
+    def tree(self) -> scalars.JSONSerializable:
+        return cast(scalars.JSONSerializable, catalog_port_tree(self))
+
+
+@pydantic.type(
+    models.CatalogChildPortModel,
+    description="A catalog port below another: an item ('...'), a field, a variant, a payload field.",
+)
+class CatalogChildPort(CatalogPort):
+    key: str = strawberry.field(description="Its key (may be `value`).")
+    description: str | None = strawberry.field(default=None, description="What it is.")
+
+
 @pydantic.type(
     models.CatalogPropModel, description="A prop a catalog component accepts."
 )
@@ -579,32 +677,18 @@ class CatalogProp:
     key: str = strawberry.field(
         description="The prop key a ComponentProp.key must match."
     )
-    kind: enums.CatalogValueKind = strawberry.field(
-        description="The value kind this prop accepts."
-    )
     required: bool = strawberry.field(
         description="Whether every component instance must set this prop."
     )
     description: str | None = strawberry.field(
         default=None, description="Human-readable description of the prop."
     )
-    event: list[Annotated["CatalogEventField", strawberry.lazy(__name__)]] | None = (
-        strawberry.field(
-            default=None,
-            description="For a CALLBACK prop: the fields of the event it hands its callback (`event.<key>`).",
-        )
+    since: int = strawberry.field(
+        description="The catalog minor that added it; 0: from the start."
     )
-
-
-@pydantic.type(
-    models.CatalogEventFieldModel,
-    description="A field of the event a CALLBACK prop hands its callback.",
-)
-class CatalogEventField:
-    key: str = strawberry.field(description="The field, read as `event.<key>`.")
-    kind: enums.CatalogValueKind = strawberry.field(description="Its value kind.")
-    description: str | None = strawberry.field(
-        default=None, description="Human-readable description of the field."
+    port: CatalogPort | None = strawberry.field(
+        default=None,
+        description="What it takes; none: open (the language's own props).",
     )
 
 
@@ -782,8 +866,8 @@ class CatalogArgument:
     key: str = strawberry.field(
         description="The argument key a UtilCall argument must use."
     )
-    kind: enums.CatalogValueKind = strawberry.field(
-        description="The value kind of the argument."
+    port: CatalogPort | None = strawberry.field(
+        default=None, description="What it takes; none: open (any value)."
     )
     required: bool = strawberry.field(
         description="Whether every call must pass this argument."
@@ -807,8 +891,8 @@ class CatalogOperation:
     arguments: list[CatalogArgument] = strawberry.field(
         description="The arguments the operation accepts."
     )
-    returns: enums.CatalogValueKind = strawberry.field(
-        description="The kind of value the operation returns."
+    returns: CatalogPort | None = strawberry.field(
+        default=None, description="What it returns; none: open."
     )
 
 

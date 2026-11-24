@@ -2638,22 +2638,6 @@
             {
                 "code": "reportArgumentType",
                 "range": {
-                    "startColumn": 77,
-                    "endColumn": 83,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 79,
-                    "endColumn": 87,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
                     "startColumn": 69,
                     "endColumn": 84,
                     "lineCount": 1

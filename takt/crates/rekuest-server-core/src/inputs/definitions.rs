@@ -12,7 +12,7 @@ use super::bloks::{
     BlokDemoInputModel,
 };
 use super::calls::{
-    check_pure_call, iter_component_nodes, ComponentNodeInputModel, UtilCallInputModel,
+    check_pure_call, iter_component_nodes, ComponentNodeInputModel, UtilCallInputModel, ITEM_KEY,
     PORT_PATH_SEPARATOR,
 };
 use super::formula::{EstimatedRuntimeInputModel, FitsInputModel};
@@ -26,8 +26,7 @@ use crate::blok::declared::blok_catalog;
 use crate::blok::reads::{port_match, self_dependency, self_reads};
 use crate::blok::{blok_header, BlokScope, Finding};
 use crate::enums::{
-    ActionBlokPhase, ActionKind, AssetKind, CatalogValueKind, ComponentContext, Effects, Execution,
-    PortKind,
+    ActionBlokPhase, ActionKind, AssetKind, ComponentContext, Effects, Execution, PortKind,
 };
 use crate::pyjson::{dumps, repr_str};
 
@@ -87,6 +86,22 @@ pub struct PortMatchInputModel {
     pub descriptors: Option<Vec<DescriptorInputModel>>,
     #[serde(default)]
     pub children: Option<Vec<PortMatchInputModel>>,
+}
+
+impl PortMatchInputModel {
+    /// No catalog-only kind, at any depth (`port.catalog_only`).
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        let owner = match (&self.key, self.at) {
+            (Some(key), _) => format!("Port match {}", repr_str(key)),
+            (None, Some(at)) => format!("Port match {at}"),
+            (None, None) => "Port match None".to_owned(),
+        };
+        super::ports::reject_catalog_only_kind(self.kind, &owner)?;
+        for child in self.children.iter().flatten() {
+            child.validate()?;
+        }
+        Ok(())
+    }
 }
 
 /// The criteria a demanded action satisfies (`ActionDemandInputModel`).
@@ -195,6 +210,38 @@ pub struct AgentDependencyInputModel {
     pub max_viable_instances: Option<i64>,
     #[serde(default)]
     pub prefered_instances: Option<i64>,
+}
+
+impl AgentDependencyInputModel {
+    /// Its demands' port matches (`PortMatchInputModel.validate`).
+    pub fn check_matches(&self) -> Result<(), ValidationError> {
+        let actions = self
+            .action_dependencies
+            .iter()
+            .flatten()
+            .filter_map(|a| a.demand.as_ref());
+        let states = self
+            .state_dependencies
+            .iter()
+            .flatten()
+            .filter_map(|s| s.demand.as_ref());
+        for demand in actions {
+            for port in demand
+                .arg_matches
+                .iter()
+                .chain(&demand.return_matches)
+                .flatten()
+            {
+                port.validate()?;
+            }
+        }
+        for demand in states {
+            for port in demand.matches.iter().flatten() {
+                port.validate()?;
+            }
+        }
+        Ok(())
+    }
 }
 
 /// The action(s) a test action tests (`TestTargetInputModel`).
@@ -680,6 +727,9 @@ pub struct ImplementationInputModel {
 impl ImplementationInputModel {
     pub fn validate(&mut self) -> Result<(), ValidationError> {
         self.definition.validate()?;
+        for dependency in &self.dependencies {
+            dependency.check_matches()?;
+        }
         if let Some(estimate) = &self.estimated_runtime {
             estimate.check(&self.definition.args, &self.interface)?;
         }
@@ -1272,6 +1322,9 @@ impl BlokImplementationInputModel {
         for port in &mut self.returns {
             port.validate()?;
         }
+        for dependency in &self.dependencies {
+            dependency.check_matches()?;
+        }
         let keys: Vec<&str> = self.dependencies.iter().map(|d| d.key.as_str()).collect();
         check_blok_declarations(BlokDeclarations {
             catalogs: &self.catalogs,
@@ -1632,6 +1685,7 @@ impl WidgetDefaultInputModel {
         if let Some(widget) = self.return_widget.as_mut() {
             widget.validate()?;
         }
+        super::ports::reject_catalog_only_kind(self.kind, "WidgetDefault")?;
         if self.kind.is_none() && self.identifier.is_none() {
             return Err(ValidationError(
                 "WidgetDefault needs a kind and/or an identifier to match ports on".into(),
@@ -1646,27 +1700,197 @@ impl WidgetDefaultInputModel {
     }
 }
 
+/// A value a catalog port takes (`CatalogChoiceInputModel`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CatalogChoiceInputModel {
+    pub value: Value,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+/// The port a catalog types a prop, an argument or a result by (`CatalogPortInputModel`): an
+/// action's port plus CALLBACK, ASSET, BINDING and the open identifier `*`. No kind: open.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CatalogPortInputModel {
+    #[serde(default)]
+    pub kind: Option<PortKind>,
+    #[serde(default)]
+    pub identifier: Option<String>,
+    #[serde(default)]
+    pub nullable: bool,
+    #[serde(default)]
+    pub choices: Option<Vec<CatalogChoiceInputModel>>,
+    #[serde(default)]
+    pub children: Option<Vec<CatalogChildPortInputModel>>,
+    #[serde(default)]
+    pub default: Value,
+    #[serde(default)]
+    pub reference_unit: Option<String>,
+    #[serde(default)]
+    pub proposed_units: Option<Vec<String>>,
+    #[serde(default)]
+    pub dimension: Option<String>,
+}
+
+/// A catalog port below another: an item (`...`), a field, a variant, a payload field
+/// (`CatalogChildPortInputModel`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CatalogChildPortInputModel {
+    pub key: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub kind: Option<PortKind>,
+    #[serde(default)]
+    pub identifier: Option<String>,
+    #[serde(default)]
+    pub nullable: bool,
+    #[serde(default)]
+    pub choices: Option<Vec<CatalogChoiceInputModel>>,
+    #[serde(default)]
+    pub children: Option<Vec<CatalogChildPortInputModel>>,
+    #[serde(default)]
+    pub default: Value,
+    #[serde(default)]
+    pub reference_unit: Option<String>,
+    #[serde(default)]
+    pub proposed_units: Option<Vec<String>>,
+    #[serde(default)]
+    pub dimension: Option<String>,
+}
+
+impl CatalogChildPortInputModel {
+    /// Its port, without its key and description.
+    pub fn port(&self) -> CatalogPortInputModel {
+        CatalogPortInputModel {
+            kind: self.kind,
+            identifier: self.identifier.clone(),
+            nullable: self.nullable,
+            choices: self.choices.clone(),
+            children: self.children.clone(),
+            default: self.default.clone(),
+            reference_unit: self.reference_unit.clone(),
+            proposed_units: self.proposed_units.clone(),
+            dimension: self.dimension.clone(),
+        }
+    }
+}
+
+impl CatalogPortInputModel {
+    /// An open port: any value.
+    pub fn open() -> Self {
+        Self::default()
+    }
+
+    /// The child keyed `key`.
+    pub fn child(&self, key: &str) -> Option<&CatalogChildPortInputModel> {
+        self.children
+            .iter()
+            .flatten()
+            .find(|child| child.key == key)
+    }
+
+    /// What its kind needs, at every depth (`check_catalog_port_shape`).
+    pub fn validate(&self, place: &str) -> Result<(), ValidationError> {
+        check_catalog_port_shape(
+            self.kind,
+            self.identifier.as_deref(),
+            self.choices.as_deref(),
+            self.children.as_deref().unwrap_or_default(),
+            place,
+        )
+    }
+}
+
+fn check_catalog_port_shape(
+    kind: Option<PortKind>,
+    identifier: Option<&str>,
+    choices: Option<&[CatalogChoiceInputModel]>,
+    children: &[CatalogChildPortInputModel],
+    place: &str,
+) -> Result<(), ValidationError> {
+    for child in children {
+        min_length(&child.key, "key")?;
+        check_catalog_port_shape(
+            child.kind,
+            child.identifier.as_deref(),
+            child.choices.as_deref(),
+            child.children.as_deref().unwrap_or_default(),
+            &child.key,
+        )?;
+    }
+    let Some(kind) = kind else {
+        return Ok(());
+    };
+    let owner = format!("{place}: a {kind} port");
+    let count = children.len();
+    let fail = |what: &str| Err(ValidationError(format!("{owner} {what}")));
+    let identified = matches!(
+        kind,
+        PortKind::STRUCTURE | PortKind::MEMORY_STRUCTURE | PortKind::INTERFACE
+    );
+    let leaf = identified
+        || matches!(
+            kind,
+            PortKind::INT
+                | PortKind::STRING
+                | PortKind::BOOL
+                | PortKind::FLOAT
+                | PortKind::DATE
+                | PortKind::ENUM
+                | PortKind::QUANTITY
+                | PortKind::ASSET
+        );
+    if leaf && count > 0 {
+        return fail("has no children");
+    }
+    if identified && identifier.is_none_or(str::is_empty) {
+        return fail("names its identifier");
+    }
+    if kind == PortKind::ENUM && choices.is_none_or(<[_]>::is_empty) {
+        return fail("lists its choices");
+    }
+    if kind == PortKind::LIST && count != 1 {
+        return fail("has exactly one child, its item");
+    }
+    if matches!(kind, PortKind::DICT | PortKind::MODEL) && count == 0 {
+        return fail("has children");
+    }
+    if kind == PortKind::UNION && count < 2 {
+        return fail("has at least two variants");
+    }
+    if kind == PortKind::BINDING && (count != 1 || children[0].key != ITEM_KEY) {
+        return fail("has one child, keyed '...': the value it writes");
+    }
+    if kind != PortKind::UNION {
+        let mut seen = HashSet::new();
+        if !children.iter().all(|child| seen.insert(child.key.as_str())) {
+            return Err(ValidationError(format!("{owner}: child keys repeat")));
+        }
+    }
+    Ok(())
+}
+
 /// A prop a catalog component accepts (`CatalogPropInputModel`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CatalogPropInputModel {
     pub key: String,
-    pub kind: CatalogValueKind,
     #[serde(default)]
     pub required: bool,
     #[serde(default)]
     pub description: Option<String>,
-    /// For a CALLBACK prop: the fields of the event it hands its callback (`event.<key>`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub event: Option<Vec<CatalogEventFieldInputModel>>,
-}
-
-/// A field of the event a CALLBACK prop hands its callback (`CatalogEventFieldInputModel`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct CatalogEventFieldInputModel {
-    pub key: String,
-    pub kind: CatalogValueKind,
+    /// The catalog minor that added it; 0: from the start.
     #[serde(default)]
-    pub description: Option<String>,
+    pub since: i64,
+    /// What it takes; none: open (the language's own props).
+    #[serde(default)]
+    pub port: Option<CatalogPortInputModel>,
 }
 
 /// A component a UI can render (`CatalogComponentInputModel`).
@@ -1715,6 +1939,9 @@ impl CatalogComponentInputModel {
         min_length(&self.name, "name")?;
         for prop in &self.props {
             min_length(&prop.key, "key")?;
+            if let Some(port) = &prop.port {
+                port.validate(&prop.key)?;
+            }
         }
         check_unique_keys(
             self.props.iter().map(|p| p.key.as_str()),
@@ -1725,9 +1952,12 @@ impl CatalogComponentInputModel {
 
 /// An argument a catalog operation takes (`CatalogArgumentInputModel`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CatalogArgumentInputModel {
     pub key: String,
-    pub kind: CatalogValueKind,
+    /// What it takes; none: open.
+    #[serde(default)]
+    pub port: Option<CatalogPortInputModel>,
     #[serde(default = "true_")]
     pub required: bool,
     #[serde(default)]
@@ -1742,7 +1972,9 @@ pub struct CatalogOperationInputModel {
     pub description: Option<String>,
     #[serde(default)]
     pub arguments: Vec<CatalogArgumentInputModel>,
-    pub returns: CatalogValueKind,
+    /// What it returns; none: open.
+    #[serde(default)]
+    pub returns: Option<CatalogPortInputModel>,
 }
 
 impl CatalogOperationInputModel {
@@ -1750,6 +1982,12 @@ impl CatalogOperationInputModel {
         min_length(&self.name, "name")?;
         for argument in &self.arguments {
             min_length(&argument.key, "key")?;
+            if let Some(port) = &argument.port {
+                port.validate(&argument.key)?;
+            }
+        }
+        if let Some(port) = &self.returns {
+            port.validate(&format!("{} returns", self.name))?;
         }
         check_unique_keys(
             self.arguments.iter().map(|a| a.key.as_str()),

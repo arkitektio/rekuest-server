@@ -79,7 +79,7 @@ impl Fleet {
              VALUES ('electron', $1, '[]', '[]', $2)",
         )
         .bind(json!([
-            {"name": "Box", "props": [{"key": "label", "kind": "STRING", "required": false}]},
+            {"name": "Box", "props": [{"key": "label", "port": {"kind": "STRING"}, "required": false}]},
         ]))
         .bind(self.organization)
         .execute(&self.db)

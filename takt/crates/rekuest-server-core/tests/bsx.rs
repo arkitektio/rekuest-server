@@ -358,3 +358,27 @@ fn the_deps_unknown_hint_says_what_the_kind_does() {
         r#"declare it in the blok: <dependencies key="laser" like="self.<action>" />, then read laser.<dependency>"#
     );
 }
+
+/// The catalog's type check answers each `fits` case as the spec's `fits` does.
+#[test]
+fn every_fit_is_answered_as_the_spec_answers_it() {
+    use rekuest_core::fit::fits;
+    use rekuest_core::inputs::CatalogPortInputModel;
+
+    let corpus = corpus();
+    let cases = corpus["fits"].as_array().expect("fits");
+    assert!(cases.len() >= 20, "the corpus has its fits");
+    let mut differences = vec![];
+    for case in cases {
+        let source: CatalogPortInputModel = typed(&case["source"]);
+        let target: CatalogPortInputModel = typed(&case["target"]);
+        let found = fits(&source, &target).status.as_str();
+        if found != case["status"] {
+            differences.push(format!(
+                "{}: takt {found}, spec {}",
+                case["name"], case["status"]
+            ));
+        }
+    }
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+}

@@ -1,6 +1,6 @@
 {
  "vocab": 2,
- "minor": 8,
+ "minor": 9,
  "catalogs": {
   "base": "https://arkitekt.live/catalogs/base/v4",
   "bundled": {
@@ -12324,7 +12324,198 @@
    }
   },
   {
-   "name": "an ANY control binds any local",
+   "name": "a toggle group binds a string local",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><local name=\"choice\" kind=\"STRING\" default={\"a\"} /><ToggleGroup bind={choice} /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/local[0]",
+      "component": "local",
+      "props": [
+       {
+        "key": "name",
+        "static_value": "choice",
+        "declares_value": "choice"
+       },
+       {
+        "key": "kind",
+        "static_value": "STRING"
+       },
+       {
+        "key": "default",
+        "static_value": "a"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/ToggleGroup[0]",
+      "component": "ToggleGroup",
+      "props": [
+       {
+        "key": "bind",
+        "dynamic_value": {
+         "path": "choice"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {
+     "Blok[0]/local[0]": {
+      "key": "choice",
+      "nullable": false,
+      "default": "a",
+      "kind": "STRING",
+      "persist": false
+     }
+    }
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": {
+      "Blok[0]/local[0]": {
+       "key": "choice",
+       "nullable": false,
+       "default": "a",
+       "kind": "STRING",
+       "persist": false
+      }
+     }
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "a toggle group binds a list local",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><local name=\"choices\" kind=\"LIST\" children={[{\"key\": \"...\", \"kind\": \"STRING\"}]} /><ToggleGroup multiple bind={choices} /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/local[0]",
+      "component": "local",
+      "props": [
+       {
+        "key": "name",
+        "static_value": "choices",
+        "declares_value": "choices"
+       },
+       {
+        "key": "kind",
+        "static_value": "LIST"
+       },
+       {
+        "key": "children",
+        "static_value": [
+         {
+          "key": "...",
+          "kind": "STRING"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/ToggleGroup[0]",
+      "component": "ToggleGroup",
+      "props": [
+       {
+        "key": "multiple",
+        "static_value": true
+       },
+       {
+        "key": "bind",
+        "dynamic_value": {
+         "path": "choices"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {
+     "Blok[0]/local[0]": {
+      "key": "choices",
+      "nullable": false,
+      "children": [
+       {
+        "key": "...",
+        "nullable": false,
+        "kind": "STRING"
+       }
+      ],
+      "kind": "LIST",
+      "persist": false
+     }
+    }
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": {
+      "Blok[0]/local[0]": {
+       "key": "choices",
+       "nullable": false,
+       "children": [
+        {
+         "key": "...",
+         "nullable": false,
+         "kind": "STRING"
+        }
+       ],
+       "kind": "LIST",
+       "persist": false
+      }
+     }
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "a LIST control binds no INT local",
    "source": "<Blok kind=\"agent\" context=\"panel\"><local name=\"iterations\" kind=\"INT\" default={15} /><ToggleGroup bind={iterations} /></Blok>",
    "tree": {
     "id": "Blok[0]",
@@ -12392,7 +12583,9 @@
      }
     }
    },
-   "codes": [],
+   "codes": [
+    "local.bind_kind"
+   ],
    "language": {
     "resolved": {
      "locals": {
@@ -17408,6 +17601,274 @@
     "locals": {}
    },
    "codes": [],
+   "language": {
+    "resolved": {
+     "locals": {}
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "a local of the wrong type on a typed prop",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><local name=\"label\" kind=\"STRING\" default={\"x\"} /><Button disabled={label} /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/local[0]",
+      "component": "local",
+      "props": [
+       {
+        "key": "name",
+        "static_value": "label",
+        "declares_value": "label"
+       },
+       {
+        "key": "kind",
+        "static_value": "STRING"
+       },
+       {
+        "key": "default",
+        "static_value": "x"
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Button[0]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "disabled",
+        "dynamic_value": {
+         "path": "label"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {
+     "Blok[0]/local[0]": {
+      "key": "label",
+      "nullable": false,
+      "default": "x",
+      "kind": "STRING",
+      "persist": false
+     }
+    }
+   },
+   "codes": [
+    "props.type"
+   ],
+   "language": {
+    "resolved": {
+     "locals": {
+      "Blok[0]/local[0]": {
+       "key": "label",
+       "nullable": false,
+       "default": "x",
+       "kind": "STRING",
+       "persist": false
+      }
+     }
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "an int local on a float prop, and on a text prop",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><local name=\"n\" kind=\"INT\" default={3} /><Card><Progress value={n} /><Text text={n} /></Card></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/local[0]",
+      "component": "local",
+      "props": [
+       {
+        "key": "name",
+        "static_value": "n",
+        "declares_value": "n"
+       },
+       {
+        "key": "kind",
+        "static_value": "INT"
+       },
+       {
+        "key": "default",
+        "static_value": 3
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Card[0]",
+      "component": "Card",
+      "children": [
+       {
+        "id": "Blok[0]/Card[0]/Progress[0]",
+        "component": "Progress",
+        "props": [
+         {
+          "key": "value",
+          "dynamic_value": {
+           "path": "n"
+          }
+         }
+        ]
+       },
+       {
+        "id": "Blok[0]/Card[0]/Text[0]",
+        "component": "Text",
+        "props": [
+         {
+          "key": "text",
+          "dynamic_value": {
+           "path": "n"
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": [],
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {
+     "Blok[0]/local[0]": {
+      "key": "n",
+      "nullable": false,
+      "default": 3,
+      "kind": "INT",
+      "persist": false
+     }
+    }
+   },
+   "codes": [],
+   "language": {
+    "resolved": {
+     "locals": {
+      "Blok[0]/local[0]": {
+       "key": "n",
+       "nullable": false,
+       "default": 3,
+       "kind": "INT",
+       "persist": false
+      }
+     }
+    },
+    "codes": []
+   }
+  },
+  {
+   "name": "a callback's payload is typed by its port",
+   "source": "<Blok kind=\"agent\" context=\"panel\"><Switch onChange={self.toggle(on: event.value)} /><Button onClick={self.toggle(on: event.nothing)} /></Blok>",
+   "tree": {
+    "id": "Blok[0]",
+    "component": "Blok",
+    "props": [
+     {
+      "key": "kind",
+      "static_value": "agent"
+     },
+     {
+      "key": "context",
+      "static_value": "panel"
+     }
+    ],
+    "children": [
+     {
+      "id": "Blok[0]/Switch[0]",
+      "component": "Switch",
+      "props": [
+       {
+        "key": "onChange",
+        "agent_call": {
+         "dependency": "self",
+         "operation": "toggle",
+         "arguments": [
+          {
+           "key": "on",
+           "value_path": "event.value"
+          }
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "id": "Blok[0]/Button[0]",
+      "component": "Button",
+      "props": [
+       {
+        "key": "onClick",
+        "agent_call": {
+         "dependency": "self",
+         "operation": "toggle",
+         "arguments": [
+          {
+           "key": "on",
+           "value_path": "event.nothing"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "mount": {
+    "kinds": [],
+    "dependencies": null,
+    "args": null,
+    "catalog": true,
+    "port": null,
+    "workflows": null
+   },
+   "resolved": {
+    "locals": {}
+   },
+   "codes": [
+    "callback.event_field"
+   ],
    "language": {
     "resolved": {
      "locals": {}
@@ -23690,6 +24151,447 @@
     },
     "codes": []
    }
+  }
+ ],
+ "fits": [
+  {
+   "name": "the same kind",
+   "source": {
+    "kind": "STRING"
+   },
+   "target": {
+    "kind": "STRING"
+   },
+   "status": "ok"
+  },
+  {
+   "name": "an int is a float",
+   "source": {
+    "kind": "INT"
+   },
+   "target": {
+    "kind": "FLOAT"
+   },
+   "status": "ok"
+  },
+  {
+   "name": "a float is no int",
+   "source": {
+    "kind": "FLOAT"
+   },
+   "target": {
+    "kind": "INT"
+   },
+   "status": "mismatch"
+  },
+  {
+   "name": "a quantity is a float",
+   "source": {
+    "kind": "QUANTITY",
+    "reference_unit": "V"
+   },
+   "target": {
+    "kind": "FLOAT"
+   },
+   "status": "ok"
+  },
+  {
+   "name": "an enum is a string",
+   "source": {
+    "kind": "ENUM",
+    "choices": [
+     {
+      "value": "a"
+     }
+    ]
+   },
+   "target": {
+    "kind": "STRING"
+   },
+   "status": "ok"
+  },
+  {
+   "name": "a date is a string",
+   "source": {
+    "kind": "DATE"
+   },
+   "target": {
+    "kind": "STRING"
+   },
+   "status": "ok"
+  },
+  {
+   "name": "a model is a dict",
+   "source": {
+    "kind": "MODEL",
+    "children": [
+     {
+      "key": "x",
+      "kind": "INT"
+     }
+    ]
+   },
+   "target": {
+    "kind": "DICT",
+    "children": [
+     {
+      "key": "...",
+      "kind": "FLOAT"
+     }
+    ]
+   },
+   "status": "ok"
+  },
+  {
+   "name": "a structure is read as a dict",
+   "source": {
+    "kind": "STRUCTURE",
+    "identifier": "@mikro/image"
+   },
+   "target": {
+    "kind": "DICT",
+    "children": [
+     {
+      "key": "...",
+      "kind": null
+     }
+    ]
+   },
+   "status": "open"
+  },
+  {
+   "name": "an open side says nothing",
+   "source": {
+    "kind": null
+   },
+   "target": {
+    "kind": "BOOL"
+   },
+   "status": "open"
+  },
+  {
+   "name": "anything is text",
+   "source": {
+    "kind": "INT"
+   },
+   "target": {
+    "kind": "UNION",
+    "children": [
+     {
+      "key": "0",
+      "kind": "STRING"
+     },
+     {
+      "key": "1",
+      "kind": "INT"
+     },
+     {
+      "key": "2",
+      "kind": "FLOAT"
+     },
+     {
+      "key": "3",
+      "kind": "BOOL"
+     }
+    ]
+   },
+   "status": "ok"
+  },
+  {
+   "name": "a list is no text",
+   "source": {
+    "kind": "LIST",
+    "children": [
+     {
+      "key": "...",
+      "kind": "STRING"
+     }
+    ]
+   },
+   "target": {
+    "kind": "UNION",
+    "children": [
+     {
+      "key": "0",
+      "kind": "STRING"
+     },
+     {
+      "key": "1",
+      "kind": "INT"
+     },
+     {
+      "key": "2",
+      "kind": "FLOAT"
+     },
+     {
+      "key": "3",
+      "kind": "BOOL"
+     }
+    ]
+   },
+   "status": "mismatch"
+  },
+  {
+   "name": "a union fits when each variant does",
+   "source": {
+    "kind": "UNION",
+    "children": [
+     {
+      "key": "0",
+      "kind": "INT"
+     },
+     {
+      "key": "1",
+      "kind": "FLOAT"
+     }
+    ]
+   },
+   "target": {
+    "kind": "FLOAT"
+   },
+   "status": "ok"
+  },
+  {
+   "name": "a union fits not when one variant does not",
+   "source": {
+    "kind": "UNION",
+    "children": [
+     {
+      "key": "0",
+      "kind": "INT"
+     },
+     {
+      "key": "1",
+      "kind": "STRING"
+     }
+    ]
+   },
+   "target": {
+    "kind": "FLOAT"
+   },
+   "status": "mismatch"
+  },
+  {
+   "name": "lists by their items",
+   "source": {
+    "kind": "LIST",
+    "children": [
+     {
+      "key": "...",
+      "kind": "INT"
+     }
+    ]
+   },
+   "target": {
+    "kind": "LIST",
+    "children": [
+     {
+      "key": "...",
+      "kind": "FLOAT"
+     }
+    ]
+   },
+   "status": "ok"
+  },
+  {
+   "name": "lists of the wrong item",
+   "source": {
+    "kind": "LIST",
+    "children": [
+     {
+      "key": "...",
+      "kind": "STRING"
+     }
+    ]
+   },
+   "target": {
+    "kind": "LIST",
+    "children": [
+     {
+      "key": "...",
+      "kind": "FLOAT"
+     }
+    ]
+   },
+   "status": "mismatch"
+  },
+  {
+   "name": "an open item",
+   "source": {
+    "kind": "LIST",
+    "children": [
+     {
+      "key": "...",
+      "kind": null
+     }
+    ]
+   },
+   "target": {
+    "kind": "LIST",
+    "children": [
+     {
+      "key": "...",
+      "kind": "FLOAT"
+     }
+    ]
+   },
+   "status": "open"
+  },
+  {
+   "name": "a structure by its identifier",
+   "source": {
+    "kind": "STRUCTURE",
+    "identifier": "@lovekit/stream"
+   },
+   "target": {
+    "kind": "STRUCTURE",
+    "identifier": "@lovekit/stream"
+   },
+   "status": "ok"
+  },
+  {
+   "name": "any structure",
+   "source": {
+    "kind": "STRUCTURE",
+    "identifier": "@lovekit/stream"
+   },
+   "target": {
+    "kind": "STRUCTURE",
+    "identifier": "*"
+   },
+   "status": "ok"
+  },
+  {
+   "name": "another structure",
+   "source": {
+    "kind": "STRUCTURE",
+    "identifier": "@mikro/image"
+   },
+   "target": {
+    "kind": "STRUCTURE",
+    "identifier": "@lovekit/stream"
+   },
+   "status": "mismatch"
+  },
+  {
+   "name": "a model by its fields",
+   "source": {
+    "kind": "MODEL",
+    "children": [
+     {
+      "key": "kind",
+      "kind": "STRING"
+     },
+     {
+      "key": "scale",
+      "kind": "LIST",
+      "children": [
+       {
+        "key": "...",
+        "kind": "FLOAT"
+       }
+      ]
+     }
+    ]
+   },
+   "target": {
+    "kind": "MODEL",
+    "children": [
+     {
+      "key": "kind",
+      "kind": "STRING"
+     },
+     {
+      "key": "scale",
+      "kind": "LIST",
+      "children": [
+       {
+        "key": "...",
+        "kind": "FLOAT"
+       }
+      ]
+     }
+    ]
+   },
+   "status": "ok"
+  },
+  {
+   "name": "a model lacking a field",
+   "source": {
+    "kind": "MODEL",
+    "children": [
+     {
+      "key": "kind",
+      "kind": "STRING"
+     }
+    ]
+   },
+   "target": {
+    "kind": "MODEL",
+    "children": [
+     {
+      "key": "kind",
+      "kind": "STRING"
+     },
+     {
+      "key": "scale",
+      "kind": "LIST",
+      "children": [
+       {
+        "key": "...",
+        "kind": "FLOAT"
+       }
+      ]
+     }
+    ]
+   },
+   "status": "mismatch"
+  },
+  {
+   "name": "choices within choices",
+   "source": {
+    "kind": "STRING",
+    "choices": [
+     {
+      "value": "a"
+     }
+    ]
+   },
+   "target": {
+    "kind": "STRING",
+    "choices": [
+     {
+      "value": "a"
+     },
+     {
+      "value": "b"
+     }
+    ]
+   },
+   "status": "ok"
+  },
+  {
+   "name": "a choice outside",
+   "source": {
+    "kind": "STRING",
+    "choices": [
+     {
+      "value": "c"
+     }
+    ]
+   },
+   "target": {
+    "kind": "STRING",
+    "choices": [
+     {
+      "value": "a"
+     },
+     {
+      "value": "b"
+     }
+    ]
+   },
+   "status": "mismatch"
   }
  ]
 }

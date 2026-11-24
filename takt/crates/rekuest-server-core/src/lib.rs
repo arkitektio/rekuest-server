@@ -5,6 +5,7 @@ pub mod blok;
 pub mod bsx;
 pub mod catalogs;
 pub mod enums;
+pub mod fit;
 pub mod inputs;
 pub mod pyjson;
 pub mod units;

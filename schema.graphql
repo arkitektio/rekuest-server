@@ -2273,7 +2273,7 @@ input CancelProbeInput {
 """An argument a catalog operation accepts."""
 type CatalogArgument {
   key: String!
-  kind: CatalogValueKind!
+  port: CatalogPort
   required: Boolean!
   description: String
 }
@@ -2283,13 +2283,93 @@ input CatalogArgumentInput {
   """The argument key a UtilCall argument must use."""
   key: String!
 
-  """The value kind of the argument."""
-  kind: CatalogValueKind!
+  """What it takes; none: open (any value)."""
+  port: CatalogPortInput = null
 
   """Whether every call must pass this argument."""
   required: Boolean! = true
 
   """Human-readable description of the argument."""
+  description: String = null
+}
+
+"""
+A catalog port below another: an item ('...'), a field, a variant, a payload field.
+"""
+type CatalogChildPort {
+  """
+  The whole port, children at every depth, as a catalog writes it (camelCase, empty fields left out): what a client compares a catalog by.
+  """
+  tree: JSONSerializable!
+  kind: PortKind
+  identifier: String
+  nullable: Boolean!
+  choices: [CatalogChoice!]
+  children: [CatalogChildPort!]
+  default: AnyDefault
+  referenceUnit: String
+  proposedUnits: [String!]
+  dimension: String
+  key: String!
+  description: String
+}
+
+"""
+A catalog port below another: an item ('...'), a field, a variant, a payload field.
+"""
+input CatalogChildPortInput {
+  """Its kind; none: open (any value)."""
+  kind: PortKind = null
+
+  """STRUCTURE, MEMORY_STRUCTURE, INTERFACE: what it references (`*`: any)."""
+  identifier: String = null
+
+  """Whether it takes null."""
+  nullable: Boolean! = false
+
+  """The values it takes (required for ENUM)."""
+  choices: [CatalogChoiceInput!] = null
+
+  """
+  LIST/BINDING: its one item, keyed '...'; DICT/MODEL: its fields; UNION: its variants; CALLBACK: its payload.
+  """
+  children: [CatalogChildPortInput!] = null
+
+  """Its default value."""
+  default: AnyDefault = null
+
+  """For a QUANTITY: its reference unit."""
+  referenceUnit: String = null
+
+  """For a QUANTITY: the units offered."""
+  proposedUnits: [String!] = null
+
+  """For a QUANTITY: its dimensionality."""
+  dimension: String = null
+
+  """Its key (may be `value`)."""
+  key: String!
+
+  """What it is."""
+  description: String = null
+}
+
+"""A value a catalog port takes."""
+type CatalogChoice {
+  value: AnyDefault!
+  label: String
+  description: String
+}
+
+"""A value a catalog port takes."""
+input CatalogChoiceInput {
+  """The value (any JSON value fitting the port's kind)."""
+  value: AnyDefault!
+
+  """How it is shown."""
+  label: String = null
+
+  """What it means."""
   description: String = null
 }
 
@@ -2356,33 +2436,12 @@ input CatalogComponentInput {
   catalog: String = null
 }
 
-"""A field of the event a CALLBACK prop hands its callback."""
-type CatalogEventField {
-  key: String!
-  kind: CatalogValueKind!
-  description: String
-}
-
-"""
-A field of the event a CALLBACK prop hands its callback (`event.<key>`).
-"""
-input CatalogEventFieldInput {
-  """The field a callback reads as `event.<key>`."""
-  key: String!
-
-  """The value kind of the field."""
-  kind: CatalogValueKind!
-
-  """Human-readable description of the field."""
-  description: String = null
-}
-
 """A pure operation a UI catalog can evaluate for UtilCalls."""
 type CatalogOperation {
   name: String!
   description: String
   arguments: [CatalogArgument!]!
-  returns: CatalogValueKind!
+  returns: CatalogPort
 }
 
 """A pure operation a UI catalog can evaluate for UtilCalls."""
@@ -2396,19 +2455,70 @@ input CatalogOperationInput {
   """The arguments the operation accepts."""
   arguments: [CatalogArgumentInput!]! = []
 
+  """What it returns (BOOL for effect and validator calls); none: open."""
+  returns: CatalogPortInput = null
+}
+
+"""
+The port a catalog types a prop, an operation argument or a result by: an action's port, plus CALLBACK, ASSET and BINDING and the open identifier `*`. No kind: open (any value).
+"""
+type CatalogPort {
   """
-  The kind of value the operation returns (BOOL for effect and validator calls).
+  The whole port, children at every depth, as a catalog writes it (camelCase, empty fields left out): what a client compares a catalog by.
   """
-  returns: CatalogValueKind!
+  tree: JSONSerializable!
+  kind: PortKind
+  identifier: String
+  nullable: Boolean!
+  choices: [CatalogChoice!]
+  children: [CatalogChildPort!]
+  default: AnyDefault
+  referenceUnit: String
+  proposedUnits: [String!]
+  dimension: String
+}
+
+"""
+The port a catalog types a prop, an operation argument or a result by: an action's port, plus CALLBACK, ASSET and BINDING and the open identifier `*`. No kind: open (any value).
+"""
+input CatalogPortInput {
+  """Its kind; none: open (any value)."""
+  kind: PortKind = null
+
+  """STRUCTURE, MEMORY_STRUCTURE, INTERFACE: what it references (`*`: any)."""
+  identifier: String = null
+
+  """Whether it takes null."""
+  nullable: Boolean! = false
+
+  """The values it takes (required for ENUM)."""
+  choices: [CatalogChoiceInput!] = null
+
+  """
+  LIST/BINDING: its one item, keyed '...'; DICT/MODEL: its fields; UNION: its variants; CALLBACK: its payload.
+  """
+  children: [CatalogChildPortInput!] = null
+
+  """Its default value."""
+  default: AnyDefault = null
+
+  """For a QUANTITY: its reference unit."""
+  referenceUnit: String = null
+
+  """For a QUANTITY: the units offered."""
+  proposedUnits: [String!] = null
+
+  """For a QUANTITY: its dimensionality."""
+  dimension: String = null
 }
 
 """A prop a catalog component accepts."""
 type CatalogProp {
   key: String!
-  kind: CatalogValueKind!
   required: Boolean!
   description: String
-  event: [CatalogEventField!]
+  since: Int!
+  port: CatalogPort
 }
 
 """A prop a catalog component accepts."""
@@ -2416,36 +2526,19 @@ input CatalogPropInput {
   """The prop key a ComponentProp.key must match."""
   key: String!
 
-  """
-  The value kind this prop accepts. CALLBACK props hold one task call or one effect. On `bind`, the kind the control writes (`locals.bind_kinds`).
-  """
-  kind: CatalogValueKind!
-
   """Whether every component instance must set this prop."""
   required: Boolean! = false
 
   """Human-readable description of the prop."""
   description: String = null
 
-  """
-  For a CALLBACK prop: the fields of the event it hands its callback (`event.<key>`); none when it hands none.
-  """
-  event: [CatalogEventFieldInput!] = null
-}
+  """The catalog minor that added it; 0: from the start."""
+  since: Int! = 0
 
-"""
-The kind of value a catalog component prop accepts or a catalog operation argument/return carries.
-"""
-enum CatalogValueKind {
-  STRING
-  INT
-  FLOAT
-  BOOL
-  DICT
-  LIST
-  ANY
-  CALLBACK
-  ASSET
+  """
+  What it takes; none: open (the language's own props). CALLBACK props hold one task call or one effect; `bind` is a BINDING.
+  """
+  port: CatalogPortInput = null
 }
 
 type ChildTaskEvent {
@@ -4546,7 +4639,7 @@ type LatestTaskSnapshot {
 union LatestTaskSnapshotTaskChangeTaskEventChange = LatestTaskSnapshot | TaskChange | TaskEventChange
 
 """
-The kind of a blok local: a port kind, or ANY (an untyped value, which skips the bind and argument kind checks). No action port is ever ANY.
+The kind of a blok local: a port kind (never CALLBACK, ASSET or BINDING, which only a catalog types by), or ANY (an untyped value, which skips the bind and argument kind checks). No action port is ever ANY.
 """
 enum LocalKind {
   """An integer. No children; choices optional."""
@@ -5621,6 +5714,21 @@ enum PortKind {
   A physical quantity with a unit; `reference_unit` required, `dimension` derived. No children.
   """
   QUANTITY
+
+  """
+  A catalog prop that holds a call (onClick); its children are the payload it is called with. Never an agent's port.
+  """
+  CALLBACK
+
+  """
+  A catalog prop that names a file an app registered (`self.assets.<name>`). No children. Never an agent's port.
+  """
+  ASSET
+
+  """
+  A catalog prop that reads and writes a local (`bind`); its one child, keyed '...', is what it writes. Never an agent's port.
+  """
+  BINDING
 }
 
 type PortMatch {

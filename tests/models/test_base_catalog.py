@@ -154,7 +154,9 @@ def test_boolean_operations_return_bool() -> None:
     """Everything a validator or effect can use returns BOOL; the value-shaped ones do not."""
     ops = base_operations()
     non_bool = {
-        name for name, op in ops.items() if name in V1_NAMES and op.returns != "BOOL"
+        name
+        for name, op in ops.items()
+        if name in V1_NAMES and (op.returns is None or op.returns.kind != "BOOL")
     }
     assert non_bool == {
         "if",
@@ -198,8 +200,8 @@ def test_resolve_operations_unions_extension() -> None:
         operations=[
             {
                 "name": "clamp",
-                "arguments": [{"key": "v", "kind": "FLOAT"}],
-                "returns": "FLOAT",
+                "arguments": [{"key": "v", "port": {"kind": "FLOAT"}}],
+                "returns": {"kind": "FLOAT"},
             }
         ],
     )
@@ -225,8 +227,12 @@ def test_base_version_names() -> None:
 
 def test_extension_cannot_shadow_base() -> None:
     """Extension cannot shadow base."""
-    gt = imodels.CatalogOperationInputModel(name="gt", arguments=[], returns="BOOL")
-    fmt = imodels.CatalogOperationInputModel(name="fmt", arguments=[], returns="STRING")
+    gt = imodels.CatalogOperationInputModel.model_validate(
+        {"name": "gt", "arguments": [], "returns": {"kind": "BOOL"}}
+    )
+    fmt = imodels.CatalogOperationInputModel.model_validate(
+        {"name": "fmt", "arguments": [], "returns": {"kind": "STRING"}}
+    )
     check_extension_does_not_shadow_base([fmt], "electron")
     with pytest.raises(
         ValueError, match=r"catalog 'electron' cannot redefine base operations \['gt'\]"
@@ -302,7 +308,7 @@ def test_resolve_components_is_none_until_a_catalog_registers_components() -> No
             [
                 models.Module(
                     name="a",
-                    operations=[{"name": "x", "arguments": [], "returns": "ANY"}],
+                    operations=[{"name": "x", "arguments": [], "returns": None}],
                 )
             ]
         )
@@ -313,7 +319,12 @@ def test_resolve_components_is_none_until_a_catalog_registers_components() -> No
     knob = {
         "name": "Knob",
         "props": [
-            {"key": "value", "kind": "FLOAT", "required": False, "description": None}
+            {
+                "key": "value",
+                "port": {"kind": "FLOAT"},
+                "required": False,
+                "description": None,
+            }
         ],
         "accepts_children": False,
         "description": None,
@@ -362,7 +373,7 @@ def test_base_components_win_over_an_older_registration() -> None:
         name="electron",
         organization=org,
         components=[{"name": "foreach", "props": []}, {"name": "Button", "props": []}],
-        operations=[{"name": "list.first", "arguments": [], "returns": "ANY"}],
+        operations=[{"name": "list.first", "arguments": [], "returns": None}],
     )
     components = resolve_components([catalog])
     assert components is not None
