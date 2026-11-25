@@ -178,6 +178,33 @@ class TestCrossTenantIsolation:
             "org A fetched org B's State by id"
         )
 
+    async def test_states_are_scoped_to_the_callers_organization(
+        self, authenticated_context: HttpContext
+    ) -> None:
+        """The root `states` list hands out the caller's organization's states only."""
+        t = await _seed_two_tenants("xt-states")
+
+        result = await schema.execute(
+            "query { states(pagination: {limit: 1000}) { id interface } }",
+            context_value=t["a"].context,
+        )
+
+        assert not result.errors, result.errors
+        assert result.data is not None
+        returned = {row["id"] for row in result.data["states"]}
+        assert str(t["a"].state.pk) in returned, "org A does not see its own State"
+        assert str(t["b"].state.pk) not in returned, "org A can see org B's States"
+
+        # Asking for org B's agent by id changes nothing: the scope comes first.
+        filtered = await schema.execute(
+            "query Q($agent: ID!) { states(filters: {agent: $agent}) { id } }",
+            context_value=t["a"].context,
+            variable_values={"agent": str(t["b"].agent.pk)},
+        )
+        assert not filtered.errors, filtered.errors
+        assert filtered.data is not None
+        assert filtered.data["states"] == [], "org A can see org B's States by agent"
+
     async def test_an_implementation_of_another_organization_cannot_be_deleted(
         self, authenticated_context: HttpContext, takt: str
     ) -> None:

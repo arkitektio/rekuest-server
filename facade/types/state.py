@@ -11,7 +11,7 @@ import strawberry_django
 from django.db.models import QuerySet
 from kante.types import Info
 
-from facade import enums, models, scalars
+from facade import enums, filters, models, scalars
 from facade.types.base import build_prescoped_queryset, row_of
 from rekuest_core.objects import models as rmodels
 from rekuest_core.objects import types as rtypes
@@ -42,7 +42,13 @@ class StateDefinition:
         return build_prescoped_queryset(info, queryset, field="organization")
 
 
-@strawberry_django.type(models.State)
+@strawberry_django.type(
+    models.State,
+    filters=filters.StateFilter,
+    pagination=True,
+    ordering=filters.StateOrder,
+    description="A state an agent keeps up to date and shares, such as a stage's position.",
+)
 class State:
     id: strawberry.ID
     definition: StateDefinition = strawberry_django.field(

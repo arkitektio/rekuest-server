@@ -304,6 +304,9 @@ class Query:
         resolver=types.dashboard.base_catalog,
         description="The built-in base catalog every definition and blok is validated against before any registered UI catalog (virtual: shipped with the server, not registered).",
     )
+    states: list[types.State] = field(
+        description="The states of the agents in the caller's organization."
+    )
     memory_shelves: list[types.MemoryShelve] = field(description="All memory shelves.")
     memory_drawers: list[types.MemoryDrawer] = field(description="All memory drawers.")
     descriptors: list[types.StructureDescriptor] = field(

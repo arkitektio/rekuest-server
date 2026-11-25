@@ -697,7 +697,7 @@ type Agent {
   specVersion: String
 
   """Current and historical states associated with the agent."""
-  states: [State!]!
+  states(filters: StateFilter, ordering: [StateOrder!]! = [], pagination: OffsetPaginationInput): [State!]!
 
   """Kind of the agent."""
   kind: AgentKind!
@@ -4052,7 +4052,7 @@ type Implementation {
   dependencies(filters: DependencyFilter, pagination: OffsetPaginationInput): [Dependency!]!
 
   """States that this implementation manipulates."""
-  manipulates: [State!]!
+  manipulates(filters: StateFilter, ordering: [StateOrder!]! = [], pagination: OffsetPaginationInput): [State!]!
 
   """
   If this is a higher-order (wrapper) implementation, the lower implementation it wraps.
@@ -6027,6 +6027,9 @@ type Query {
   """
   modules: [Module!]! @auth(required_scopes: ["rekuest_read"])
 
+  """The states of the agents in the caller's organization."""
+  states(filters: StateFilter, ordering: [StateOrder!]! = [], pagination: OffsetPaginationInput): [State!]! @auth(required_scopes: ["rekuest_read"])
+
   """All memory shelves."""
   memoryShelves(filters: MemoryShelveFilter, ordering: [MemoryShelveOrder!]! = [], pagination: OffsetPaginationInput): [MemoryShelve!]! @auth(required_scopes: ["rekuest_read"])
 
@@ -7492,6 +7495,9 @@ input SpaceOrder @oneOf {
   name: Ordering
 }
 
+"""
+A state an agent keeps up to date and shares, such as a stage's position.
+"""
 type State {
   id: ID!
 
@@ -7702,6 +7708,28 @@ input StateDependencyInput {
   allowInactive: Boolean = true
 }
 
+"""A way to filter states"""
+input StateFilter {
+  AND: StateFilter
+  OR: StateFilter
+  NOT: StateFilter
+  DISTINCT: Boolean
+
+  """Filter by IDs"""
+  ids: [ID!]
+
+  """Only the states of this agent."""
+  agent: ID
+
+  """Only the states of the app with this identifier."""
+  appIdentifier: String
+
+  """
+  Search by interface, key or the agent's name (case-insensitive substring).
+  """
+  search: String
+}
+
 """
 A state implementation is a blueprint for a state. It is composed of a definition, a list of dependencies, and a list of params.
 """
@@ -7725,6 +7753,11 @@ input StateImplementationInput {
   The schema of the state implementation. This is used to define the structure of the state
   """
   definition: StateDefinitionInput!
+}
+
+input StateOrder @oneOf {
+  createdAt: Ordering
+  updatedAt: Ordering
 }
 
 """

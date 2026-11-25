@@ -18,6 +18,7 @@ from . import (
     implementation,
     session,
     shelve,
+    state,
     structure,
     task,
     testcase,
@@ -68,6 +69,7 @@ from .shelve import (
     MemoryShelveFilter,
     MemoryShelveOrder,
 )
+from .state import StateFilter, StateOrder
 from .structure import (
     HostedStructureFilter,
     HostedStructureOrder,
@@ -156,6 +158,8 @@ __all__ = [
     "StructureDescriptorOrder",
     "HostedStructureFilter",
     "HostedStructureOrder",
+    "StateFilter",
+    "StateOrder",
 ]
 
 # --- Nested-filter reference resolution -------------------------------------------
@@ -175,6 +179,7 @@ _SUBMODULES = (
     implementation,
     session,
     shelve,
+    state,
     testcase,
     threed,
     toolbox,
